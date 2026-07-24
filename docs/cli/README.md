@@ -19,9 +19,17 @@ uv pip install -e ".[all,dev]"
 
 ## Basic Usage
 
+After the editable install, prefer the Windows virtual-environment console
+wrapper for normal CLI operations:
+
 ```powershell
-scopes-tool identify --simulate --json
-python -m scopes_tool_cli.cli identify --simulate --json
+.\.venv\Scripts\scopes-tool.exe identify --simulate --json
+```
+
+The module form remains supported as a development or fallback entry point:
+
+```powershell
+.\.venv\Scripts\python.exe -m scopes_tool_cli.cli identify --simulate --json
 ```
 
 Commands that accept instrument access support dry-run, simulate, and live
@@ -260,17 +268,17 @@ For live workers, `--model` is an expected canonical physical model ID and a
 mismatch fails before command-specific SCPI.
 
 ```powershell
-uv run python -m scopes_tool_cli.cli identify --dry-run --json
-uv run python -m scopes_tool_cli.cli identify --simulate --json
-uv run python -m scopes_tool_cli.cli acquisition-points --query --dry-run --json --model keysight-dsox4024a
-uv run python -m scopes_tool_cli.cli acquisition-points --query --simulate --json --model keysight-dsox4024a
-uv run python -m scopes_tool_cli.cli record-length --query --simulate --json --model keysight-dsox4024a
-uv run python -m scopes_tool_cli.cli capture --simulate --json --simulate-preset phase-shifted-pair --channel 1 --channel 2 --csv .tmp_tests\preset.csv
-uv run python -m scopes_tool_cli.cli measure --simulate --json --simulate-scenario path\to\scenario.json --channel 1 --item frequency
-uv run python -m scopes_tool_cli.cli measure --simulate --json --simulate-signal CH1:square:1000:1.0:0:0:0.02 --channel 1 --item vpp
-uv run python -m scopes_tool_cli.cli capture --simulate --json --simulate-binary-transfer-failure --channel 1 --csv .tmp_tests\failure.csv
-uv run python -m scopes_tool_cli.cli capture-batch --simulate --json --channel 1 --count 2 --output-dir .tmp_tests\sim_batch
-uv run python -m scopes_tool_cli.cli measure-log --simulate --json --channel 1 --items vpp,frequency --count 2 --output-dir .tmp_tests\sim_measure_log
+.\.venv\Scripts\scopes-tool.exe identify --dry-run --json
+.\.venv\Scripts\scopes-tool.exe identify --simulate --json
+.\.venv\Scripts\scopes-tool.exe acquisition-points --query --dry-run --json --model keysight-dsox4024a
+.\.venv\Scripts\scopes-tool.exe acquisition-points --query --simulate --json --model keysight-dsox4024a
+.\.venv\Scripts\scopes-tool.exe record-length --query --simulate --json --model keysight-dsox4024a
+.\.venv\Scripts\scopes-tool.exe capture --simulate --json --simulate-preset phase-shifted-pair --channel 1 --channel 2 --csv .tmp_tests\preset.csv
+.\.venv\Scripts\scopes-tool.exe measure --simulate --json --simulate-scenario path\to\scenario.json --channel 1 --item frequency
+.\.venv\Scripts\scopes-tool.exe measure --simulate --json --simulate-signal CH1:square:1000:1.0:0:0:0.02 --channel 1 --item vpp
+.\.venv\Scripts\scopes-tool.exe capture --simulate --json --simulate-binary-transfer-failure --channel 1 --csv .tmp_tests\failure.csv
+.\.venv\Scripts\scopes-tool.exe capture-batch --simulate --json --channel 1 --count 2 --output-dir .tmp_tests\sim_batch
+.\.venv\Scripts\scopes-tool.exe measure-log --simulate --json --channel 1 --items vpp,frequency --count 2 --output-dir .tmp_tests\sim_measure_log
 ```
 
 Automation and orchestrator contracts live under `docs/contracts/`; start with
@@ -286,7 +294,7 @@ resource for live commands.
 List VISA resource strings reported by the selected backend:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli list-resources
+.\.venv\Scripts\scopes-tool.exe list-resources
 ```
 
 This is passive discovery only: a resource string can appear here even when the
@@ -296,7 +304,7 @@ the listed resources or send SCPI.
 List only resources that can be opened and queried with `*IDN?`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli list-resources --live-only
+.\.venv\Scripts\scopes-tool.exe list-resources --live-only
 ```
 
 This opens each listed resource and sends `*IDN?`. Resources that cannot be
@@ -313,7 +321,7 @@ For ASRL live discovery only, serial termination can be set when needed for a
 specific adapter or instrument:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli list-resources --live-only --serial-read-termination CRLF --serial-write-termination NONE
+.\.venv\Scripts\scopes-tool.exe list-resources --live-only --serial-read-termination CRLF --serial-write-termination NONE
 ```
 
 Supported values are `CRLF`, `LF`, `CR`, and `NONE`. Omitted options leave the
@@ -332,37 +340,37 @@ the placeholder with the resource string selected by the operator.
 Verify that one resource can be opened and queried with `*IDN?`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli identify --resource "$env:SCOPES_TOOL_RESOURCE"
+.\.venv\Scripts\scopes-tool.exe identify --resource "$env:SCOPES_TOOL_RESOURCE"
 ```
 
 Add `--log-scpi` to print the SCPI command log for manual hardware checks:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli identify --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe identify --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
 ```
 
 Read one system error queue entry:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli check-error --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe check-error --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
 ```
 
 Drain the system error queue until no error is reported or the read limit is
 hit:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli check-error --resource "$env:SCOPES_TOOL_RESOURCE" --all --log-scpi
+.\.venv\Scripts\scopes-tool.exe check-error --resource "$env:SCOPES_TOOL_RESOURCE" --all --log-scpi
 ```
 
 Use the low-risk System/Status Pack v1 primitives in dry-run or simulation:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli system-clear-status --dry-run --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli system-opc --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli system-status-byte --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli system-standard-event --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli system-operation-status --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli system-options --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe system-clear-status --dry-run --json
+.\.venv\Scripts\scopes-tool.exe system-opc --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe system-status-byte --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe system-standard-event --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe system-operation-status --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe system-options --query --simulate --json
 ```
 
 `system-clear-status` sends `*CLS` and takes no command-specific arguments.
@@ -387,9 +395,9 @@ added.
 Send basic acquisition control commands:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli stop-acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli run --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli single --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe stop-acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe run --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe single --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
 ```
 
 The library methods `stop()`, `run()`, and `single()` each send only one SCPI
@@ -400,9 +408,9 @@ by querying one `:SYSTem:ERRor?` entry and printing the result. The
 Force one trigger event explicitly:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli force-trigger --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli force-trigger --dry-run --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli force-trigger --simulate --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe force-trigger --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe force-trigger --dry-run --json
+.\.venv\Scripts\scopes-tool.exe force-trigger --simulate --json --log-scpi
 ```
 
 `force-trigger` is an explicit state-changing one-shot action. It first
@@ -427,17 +435,17 @@ compatibility.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command force-trigger --arguments-json "{}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command force-trigger --arguments-json "{}" --json
 ```
 
 Configure or query acquisition type and average count:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --type normal --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --type average --count 16 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --type high_resolution --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --type peak --log-scpi
+.\.venv\Scripts\scopes-tool.exe acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --type normal --log-scpi
+.\.venv\Scripts\scopes-tool.exe acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --type average --count 16 --log-scpi
+.\.venv\Scripts\scopes-tool.exe acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --type high_resolution --log-scpi
+.\.venv\Scripts\scopes-tool.exe acquisition --resource "$env:SCOPES_TOOL_RESOURCE" --type peak --log-scpi
 ```
 
 The `acquisition` command first queries `*IDN?`, then sends only the requested
@@ -452,13 +460,13 @@ acquisition mode, run/stop state, or return-to-local behavior.
 Query the current analog acquisition sample rate:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli sample-rate --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe sample-rate --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 Query the maximum analog acquisition sample rate:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli sample-rate --resource "$env:SCOPES_TOOL_RESOURCE" --query --maximum --log-scpi
+.\.venv\Scripts\scopes-tool.exe sample-rate --resource "$env:SCOPES_TOOL_RESOURCE" --query --maximum --log-scpi
 ```
 
 The `sample-rate` command is query-only and requires `--query`. It first
@@ -476,14 +484,14 @@ compatibility.
 Worker usage requires the same query-only intent:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command sample-rate --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command sample-rate --arguments-json "{\"query\":true,\"maximum\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command sample-rate --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command sample-rate --arguments-json "{\"query\":true,\"maximum\":true}" --json
 ```
 
 Query the current analog acquisition points:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition-points --query --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe acquisition-points --query --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
 ```
 
 The `acquisition-points` command is query-only and requires `--query`. It first
@@ -499,13 +507,13 @@ count.
 Worker usage requires the same query-only intent:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command acquisition-points --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command acquisition-points --arguments-json "{\"query\":true}" --json
 ```
 
 Query the current analog acquisition record length:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli record-length --query --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe record-length --query --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
 ```
 
 The `record-length` command is query-only and requires `--query`. It first
@@ -521,16 +529,16 @@ waveform transfer point count.
 Worker usage requires the same query-only intent:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command record-length --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command record-length --arguments-json "{\"query\":true}" --json
 ```
 
 Run the acquisition configuration validation workflow and write a report
 directory:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition-check --dry-run --json --model keysight-dsox4034a
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition-check --simulate --json --model keysight-dsox4034a --output-dir .tmp_tests\acquisition_check
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli acquisition-check --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe acquisition-check --dry-run --json --model keysight-dsox4034a
+.\.venv\Scripts\scopes-tool.exe acquisition-check --simulate --json --model keysight-dsox4034a --output-dir .tmp_tests\acquisition_check
+.\.venv\Scripts\scopes-tool.exe acquisition-check --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
 ```
 
 `acquisition-check` runs the fixed validation sequence
@@ -545,9 +553,9 @@ restore write.
 Enable, disable, or query one analog channel display:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-display --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --on --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-display --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-display --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --off --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-display --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --on --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-display --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-display --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --off --log-scpi
 ```
 
 The `channel-display` command first queries `*IDN?` so the channel number can be
@@ -559,15 +567,15 @@ post-check. `--query` only reads back the current display state with
 Set or query one analog channel vertical scale:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-scale --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --volts-per-division 0.5 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-scale --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-scale --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --volts-per-division 0.5 --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-scale --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
 ```
 
 Set or query one analog channel vertical offset:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-offset --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --volts 0 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-offset --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-offset --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --volts 0 --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-offset --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
 ```
 
 Scale must be a positive finite number in volts per division. Offset must be a
@@ -578,23 +586,23 @@ channel number against the detected model, then perform one
 Set or query one analog channel input coupling:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --coupling dc --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --coupling dc --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
 ```
 
 Set or query one analog channel probe attenuation ratio:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-probe --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --ratio 10 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-probe --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-probe --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --ratio 10 --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-probe --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
 ```
 
 Enable, disable, or query one analog channel bandwidth limit:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-bandwidth-limit --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --on --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-bandwidth-limit --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-bandwidth-limit --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --off --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-bandwidth-limit --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --on --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-bandwidth-limit --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-bandwidth-limit --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --off --log-scpi
 ```
 
 Channel coupling supports `ac` and `dc`. Probe ratio must be a positive finite
@@ -605,19 +613,19 @@ perform one `:SYSTem:ERRor?` post-check.
 Set or query additional analog channel settings:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-impedance --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --impedance one-meg --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-impedance --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --impedance fifty --allow-50-ohm --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-impedance --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-invert --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --on --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-invert --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-range --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --volts-full-scale 4 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-range --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --units volt --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-vernier --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --off --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-vernier --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-probe-skew --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --seconds 1e-9 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-probe-skew --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-impedance --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --impedance one-meg --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-impedance --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --impedance fifty --allow-50-ohm --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-impedance --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-invert --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --on --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-invert --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-range --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --volts-full-scale 4 --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-range --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --units volt --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-vernier --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --off --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-vernier --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-probe-skew --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --seconds 1e-9 --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-probe-skew --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
 ```
 
 These commands first query `*IDN?`, validate the channel number against the
@@ -638,8 +646,8 @@ names as JSON keys without leading dashes. For example, `channel-range` uses
 Set or query one analog channel label:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-label --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --text "Input A" --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli channel-label --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-label --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --text "Input A" --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-label --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
 ```
 
 Channel labels accept printable ASCII text without double quotes or control
@@ -651,21 +659,21 @@ as returned by SCPI parsing.
 Enable, disable, or query front-panel label display:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-label --resource "$env:SCOPES_TOOL_RESOURCE" --on --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-label --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-label --resource "$env:SCOPES_TOOL_RESOURCE" --on --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-label --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 Run common display one-shot commands:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-clear --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-persistence --resource "$env:SCOPES_TOOL_RESOURCE" --mode minimum --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-persistence --resource "$env:SCOPES_TOOL_RESOURCE" --seconds 1.0 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-persistence --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-intensity --resource "$env:SCOPES_TOOL_RESOURCE" --value 75 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-intensity --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-vectors --resource "$env:SCOPES_TOOL_RESOURCE" --on --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli display-vectors --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-clear --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-persistence --resource "$env:SCOPES_TOOL_RESOURCE" --mode minimum --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-persistence --resource "$env:SCOPES_TOOL_RESOURCE" --seconds 1.0 --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-persistence --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-intensity --resource "$env:SCOPES_TOOL_RESOURCE" --value 75 --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-intensity --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-vectors --resource "$env:SCOPES_TOOL_RESOURCE" --on --log-scpi
+.\.venv\Scripts\scopes-tool.exe display-vectors --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 These commands first query `*IDN?`, then send the target display command or
@@ -681,9 +689,9 @@ guarded 2000X-only command with its own validation plan.
 Set, clear, or query display annotations:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli annotation --resource "$env:SCOPES_TOOL_RESOURCE" --on --text "Run note" --color white --background opaque --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli annotation --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli annotation --resource "$env:SCOPES_TOOL_RESOURCE" --model keysight-dsox4024a --slot 2 --text "Run note" --x 10 --y 20 --log-scpi
+.\.venv\Scripts\scopes-tool.exe annotation --resource "$env:SCOPES_TOOL_RESOURCE" --on --text "Run note" --color white --background opaque --log-scpi
+.\.venv\Scripts\scopes-tool.exe annotation --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe annotation --resource "$env:SCOPES_TOOL_RESOURCE" --model keysight-dsox4024a --slot 2 --text "Run note" --x 10 --y 20 --log-scpi
 ```
 
 `annotation --query` cannot be combined with setters. Non-query annotation
@@ -715,15 +723,15 @@ using the same argument names as the CLI options without leading dashes.
 Set or query the horizontal timebase scale:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli timebase-scale --resource "$env:SCOPES_TOOL_RESOURCE" --seconds-per-division 0.001 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli timebase-scale --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe timebase-scale --resource "$env:SCOPES_TOOL_RESOURCE" --seconds-per-division 0.001 --log-scpi
+.\.venv\Scripts\scopes-tool.exe timebase-scale --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 Set or query the horizontal timebase position:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli timebase-position --resource "$env:SCOPES_TOOL_RESOURCE" --seconds 0 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli timebase-position --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe timebase-position --resource "$env:SCOPES_TOOL_RESOURCE" --seconds 0 --log-scpi
+.\.venv\Scripts\scopes-tool.exe timebase-position --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 Timebase scale must be a positive finite number in seconds per division.
@@ -735,10 +743,10 @@ Configure or query analog edge trigger source, level, and slope with the
 canonical `trigger-edge` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --level 0.25 --slope positive --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge --dry-run --json --model keysight-dsox4024a --query
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge --simulate --json --model keysight-dsox4024a --source-channel 1 --level 0.5 --slope positive
+.\.venv\Scripts\scopes-tool.exe trigger-edge --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --level 0.25 --slope positive --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge --dry-run --json --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-edge --simulate --json --model keysight-dsox4024a --source-channel 1 --level 0.5 --slope positive
 ```
 
 The configure command sends `:TRIGger:MODE EDGE`, then sets source, level, and
@@ -751,8 +759,8 @@ command name is not accepted.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge --arguments-json "{\"source_channel\":1,\"level\":0.5,\"slope\":\"positive\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge --arguments-json "{\"source_channel\":1,\"level\":0.5,\"slope\":\"positive\"}" --json
 ```
 
 Worker JSON for `trigger-edge` accepts only `query`, `source_channel`,
@@ -763,10 +771,10 @@ Configure or query only the Edge Trigger source with the canonical
 `trigger-edge-source` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-source --dry-run --json --model keysight-dsox2004a --source-channel 1
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-source --simulate --json --model keysight-dsox3024a --source external
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-source --simulate --json --model keysight-dsox4024a --source line
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-source --simulate --json --model keysight-dsox4034a --query
+.\.venv\Scripts\scopes-tool.exe trigger-edge-source --dry-run --json --model keysight-dsox2004a --source-channel 1
+.\.venv\Scripts\scopes-tool.exe trigger-edge-source --simulate --json --model keysight-dsox3024a --source external
+.\.venv\Scripts\scopes-tool.exe trigger-edge-source --simulate --json --model keysight-dsox4024a --source line
+.\.venv\Scripts\scopes-tool.exe trigger-edge-source --simulate --json --model keysight-dsox4034a --query
 ```
 
 Exactly one operation is required: `--query`, `--source-channel <int>`, or
@@ -790,10 +798,10 @@ normalized source fields without failing solely for that readback.
 Worker usage accepts only canonical JSON:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-source --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-source --arguments-json "{\"source_channel\":1}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-source --arguments-json "{\"source\":\"external\"}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-source --arguments-json "{\"source\":\"line\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-source --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-source --arguments-json "{\"source_channel\":1}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-source --arguments-json "{\"source\":\"external\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-source --arguments-json "{\"source\":\"line\"}" --json
 ```
 
 Worker validation requires exactly one operation, lowercase `external` or
@@ -809,8 +817,8 @@ commands. `trigger-edge-slope` accepts exactly one of `--query` or
 `--slope positive|negative|either|alternate`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-slope --dry-run --json --model keysight-dsox2004a --slope positive
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-slope --simulate --json --model keysight-dsox4034a --query
+.\.venv\Scripts\scopes-tool.exe trigger-edge-slope --dry-run --json --model keysight-dsox2004a --slope positive
+.\.venv\Scripts\scopes-tool.exe trigger-edge-slope --simulate --json --model keysight-dsox4034a --query
 ```
 
 Its configure mappings are `positive` to `:TRIGger:EDGE:SLOPe POSitive`,
@@ -824,8 +832,8 @@ queries nor changes trigger mode, and it does not redirect to TV polarity.
 exactly one of `--query` or `--level-volts <number>`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-level --dry-run --json --model keysight-dsox2004a --source-channel 1 --level-volts 0.5
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-level --simulate --json --model keysight-dsox4034a --source-channel 2 --query
+.\.venv\Scripts\scopes-tool.exe trigger-edge-level --dry-run --json --model keysight-dsox2004a --source-channel 1 --level-volts 0.5
+.\.venv\Scripts\scopes-tool.exe trigger-edge-level --simulate --json --model keysight-dsox4034a --source-channel 2 --query
 ```
 
 Configure sends `:TRIGger:EDGE:LEVel <level>,CHANnel<n>` and query sends
@@ -853,8 +861,8 @@ Phase 14 adds two independent External-input controls. `external-trigger-range`
 accepts exactly one of `--query` or `--range-volts <finite-positive-number>`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli external-trigger-range --dry-run --json --model keysight-dsox2004a --range-volts 8.0
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli external-trigger-range --simulate --json --model keysight-dsox4034a --query
+.\.venv\Scripts\scopes-tool.exe external-trigger-range --dry-run --json --model keysight-dsox2004a --range-volts 8.0
+.\.venv\Scripts\scopes-tool.exe external-trigger-range --simulate --json --model keysight-dsox4034a --query
 ```
 
 It sends only `:EXTernal:RANGe <range>` or `:EXTernal:RANGe?`; it does not
@@ -871,8 +879,8 @@ emulate every model/probe-dependent range rejection.
 `--level-volts <finite-number>`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-external-level --dry-run --json --model keysight-dsox2004a --level-volts 0.5
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-external-level --simulate --json --model keysight-dsox4034a --query
+.\.venv\Scripts\scopes-tool.exe trigger-edge-external-level --dry-run --json --model keysight-dsox2004a --level-volts 0.5
+.\.venv\Scripts\scopes-tool.exe trigger-edge-external-level --simulate --json --model keysight-dsox4034a --query
 ```
 
 It always sends `:TRIGger:EDGE:LEVel <level>,EXTernal` or
@@ -926,18 +934,18 @@ worker-live validation have not been run.
 Configure or query common trigger general settings:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --mode auto --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --mode normal --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-noise-reject --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-noise-reject --resource "$env:SCOPES_TOOL_RESOURCE" --enabled true --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-noise-reject --resource "$env:SCOPES_TOOL_RESOURCE" --enabled false --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-hf-reject --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-hf-reject --resource "$env:SCOPES_TOOL_RESOURCE" --enabled true --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-hf-reject --resource "$env:SCOPES_TOOL_RESOURCE" --enabled false --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-sweep --dry-run --json --model keysight-dsox4024a --query
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-noise-reject --simulate --json --model keysight-dsox4024a --query
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-hf-reject --simulate --json --model keysight-dsox4024a --enabled true
+.\.venv\Scripts\scopes-tool.exe trigger-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --mode auto --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --mode normal --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-noise-reject --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-noise-reject --resource "$env:SCOPES_TOOL_RESOURCE" --enabled true --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-noise-reject --resource "$env:SCOPES_TOOL_RESOURCE" --enabled false --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-hf-reject --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-hf-reject --resource "$env:SCOPES_TOOL_RESOURCE" --enabled true --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-hf-reject --resource "$env:SCOPES_TOOL_RESOURCE" --enabled false --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-sweep --dry-run --json --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-noise-reject --simulate --json --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-hf-reject --simulate --json --model keysight-dsox4024a --enabled true
 ```
 
 `trigger-sweep` uses `:TRIGger:SWEep` and accepts only `--mode auto` or
@@ -961,12 +969,12 @@ remains pending and is not abandoned.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-sweep --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-sweep --arguments-json "{\"mode\":\"normal\"}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-noise-reject --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-noise-reject --arguments-json "{\"enabled\":false}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-hf-reject --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-hf-reject --arguments-json "{\"enabled\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-sweep --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-sweep --arguments-json "{\"mode\":\"normal\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-noise-reject --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-noise-reject --arguments-json "{\"enabled\":false}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-hf-reject --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-hf-reject --arguments-json "{\"enabled\":true}" --json
 ```
 
 Worker JSON for `trigger-sweep` accepts only `query` or `mode`. Worker JSON for
@@ -980,10 +988,10 @@ enqueue, artifact creation, simulator/VISA session open, or SCPI.
 Set or query fixed trigger holdoff:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-holdoff --query --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-holdoff --seconds 1e-6 --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-holdoff --dry-run --json --model keysight-dsox4024a --seconds 1e-6
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-holdoff --simulate --json --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-holdoff --query --json
+.\.venv\Scripts\scopes-tool.exe trigger-holdoff --seconds 1e-6 --json
+.\.venv\Scripts\scopes-tool.exe trigger-holdoff --dry-run --json --model keysight-dsox4024a --seconds 1e-6
+.\.venv\Scripts\scopes-tool.exe trigger-holdoff --simulate --json --model keysight-dsox4024a --query
 ```
 
 `trigger-holdoff --seconds` is an explicit state-changing command. It disables
@@ -1001,15 +1009,15 @@ SCPI. Random holdoff and minimum/maximum holdoff commands are not implemented.
 Configure or query Keysight Edge Trigger Coupling and Reject filter settings with the canonical `trigger-edge-coupling` and `trigger-edge-reject` commands:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --coupling ac --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --coupling dc --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --coupling lf-reject --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --coupling ac --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --coupling dc --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --coupling lf-reject --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-coupling --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-reject --resource "$env:SCOPES_TOOL_RESOURCE" --reject off --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-reject --resource "$env:SCOPES_TOOL_RESOURCE" --reject lf-reject --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-reject --resource "$env:SCOPES_TOOL_RESOURCE" --reject hf-reject --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-reject --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-reject --resource "$env:SCOPES_TOOL_RESOURCE" --reject off --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-reject --resource "$env:SCOPES_TOOL_RESOURCE" --reject lf-reject --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-reject --resource "$env:SCOPES_TOOL_RESOURCE" --reject hf-reject --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-reject --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 `trigger-edge-coupling` uses `:TRIGger:EDGE:COUPling` and accepts only `--coupling ac`, `--coupling dc`, or `--coupling lf-reject`. `trigger-edge-reject` uses `:TRIGger:EDGE:REJect` and accepts only `--reject off`, `--reject lf-reject`, or `--reject hf-reject`.
@@ -1025,10 +1033,10 @@ The Phase 11 common command `trigger-hf-reject` uses `:TRIGger:HFReject` and rep
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-coupling --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-coupling --arguments-json "{\"coupling\":\"ac\"}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-reject --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-reject --arguments-json "{\"reject\":\"hf-reject\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-coupling --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-coupling --arguments-json "{\"coupling\":\"ac\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-reject --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-reject --arguments-json "{\"reject\":\"hf-reject\"}" --json
 ```
 
 Worker JSON for `trigger-edge-coupling` accepts only `query` or `coupling`. Worker JSON for `trigger-edge-reject` accepts only `query` or `reject`. Invalid inputs, uppercase value strings, unknown fields, and alias commands/keys (such as `edge-trigger-coupling`, `edge-trigger-reject`, `couple`, `reject_mode`, `filter`, etc.) are rejected before enqueue, artifact creation, simulator/VISA session open, or SCPI.
@@ -1038,10 +1046,10 @@ Configure or query Keysight pulse-width trigger settings with the canonical
 `trigger-pulse-width` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-pulse-width --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity positive --qualifier less-than --time-seconds 1e-6 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-pulse-width --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity negative --qualifier greater-than --time-seconds 5e-6 --level-volts 0.5 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-pulse-width --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity positive --qualifier range --min-time-seconds 1e-6 --max-time-seconds 10e-6 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-pulse-width --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-pulse-width --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity positive --qualifier less-than --time-seconds 1e-6 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-pulse-width --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity negative --qualifier greater-than --time-seconds 5e-6 --level-volts 0.5 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-pulse-width --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity positive --qualifier range --min-time-seconds 1e-6 --max-time-seconds 10e-6 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-pulse-width --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 `trigger-pulse-width` configures and queries the Keysight Pulse Width trigger
@@ -1063,17 +1071,17 @@ and model/transport-specific.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-pulse-width --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-pulse-width --arguments-json "{\"channel\":1,\"polarity\":\"positive\",\"qualifier\":\"less_than\",\"time_seconds\":0.000001}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-pulse-width --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-pulse-width --arguments-json "{\"channel\":1,\"polarity\":\"positive\",\"qualifier\":\"less_than\",\"time_seconds\":0.000001}" --json
 ```
 
 Configure or query analog runt trigger settings with the canonical
 `trigger-runt` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-runt --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity either --qualifier none --low-level-volts -0.5 --high-level-volts 0.5 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-runt --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity positive --qualifier greater-than --time-seconds 5e-6 --low-level-volts -0.25 --high-level-volts 0.75 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-runt --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-runt --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity either --qualifier none --low-level-volts -0.5 --high-level-volts 0.5 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-runt --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --polarity positive --qualifier greater-than --time-seconds 5e-6 --low-level-volts -0.25 --high-level-volts 0.75 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-runt --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 `trigger-runt` configures and queries the Keysight Runt trigger using
@@ -1099,18 +1107,18 @@ not been run for `trigger-runt`.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-runt --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-runt --arguments-json "{\"channel\":1,\"polarity\":\"either\",\"qualifier\":\"none\",\"low_level_volts\":-0.5,\"high_level_volts\":0.5}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-runt --arguments-json "{\"channel\":1,\"polarity\":\"positive\",\"qualifier\":\"greater_than\",\"time_seconds\":0.000005,\"low_level_volts\":-0.25,\"high_level_volts\":0.75}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-runt --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-runt --arguments-json "{\"channel\":1,\"polarity\":\"either\",\"qualifier\":\"none\",\"low_level_volts\":-0.5,\"high_level_volts\":0.5}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-runt --arguments-json "{\"channel\":1,\"polarity\":\"positive\",\"qualifier\":\"greater_than\",\"time_seconds\":0.000005,\"low_level_volts\":-0.25,\"high_level_volts\":0.75}" --json
 ```
 
 Configure or query analog transition trigger settings with the canonical
 `trigger-transition` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-transition --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --slope positive --qualifier greater-than --time-seconds 5e-6 --low-level-volts -0.5 --high-level-volts 0.5 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-transition --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --slope negative --qualifier less-than --time-seconds 2e-6 --low-level-volts -0.25 --high-level-volts 0.75 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-transition --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-transition --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --slope positive --qualifier greater-than --time-seconds 5e-6 --low-level-volts -0.5 --high-level-volts 0.5 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-transition --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --slope negative --qualifier less-than --time-seconds 2e-6 --low-level-volts -0.25 --high-level-volts 0.75 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-transition --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
 `trigger-transition` configures and queries the Keysight Transition trigger
@@ -1139,18 +1147,18 @@ source validation, and broader trigger-tree validation have not been run.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-transition --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-transition --arguments-json "{\"channel\":1,\"slope\":\"positive\",\"qualifier\":\"greater_than\",\"time_seconds\":0.000005,\"low_level_volts\":-0.5,\"high_level_volts\":0.5}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-transition --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-transition --arguments-json "{\"channel\":1,\"slope\":\"positive\",\"qualifier\":\"greater_than\",\"time_seconds\":0.000005,\"low_level_volts\":-0.5,\"high_level_volts\":0.5}" --json
 ```
 
 Configure or query analog-channel Edge Then Edge / Delay trigger settings with
 the canonical `trigger-delay` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-delay --resource "$env:SCOPES_TOOL_RESOURCE" --arm-channel 1 --arm-slope positive --trigger-channel 2 --trigger-slope negative --time-seconds 1e-6 --count 2 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-delay --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-delay --dry-run --json --model keysight-dsox4024a --query
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-delay --simulate --json --query
+.\.venv\Scripts\scopes-tool.exe trigger-delay --resource "$env:SCOPES_TOOL_RESOURCE" --arm-channel 1 --arm-slope positive --trigger-channel 2 --trigger-slope negative --time-seconds 1e-6 --count 2 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-delay --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-delay --dry-run --json --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-delay --simulate --json --query
 ```
 
 `trigger-delay` v1 configures and queries the Keysight Edge Then Edge / Delay
@@ -1180,18 +1188,18 @@ wait-trigger, or capture integration.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-delay --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-delay --arguments-json "{\"arm_channel\":1,\"arm_slope\":\"positive\",\"trigger_channel\":2,\"trigger_slope\":\"negative\",\"time_seconds\":0.000001,\"count\":2}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-delay --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-delay --arguments-json "{\"arm_channel\":1,\"arm_slope\":\"positive\",\"trigger_channel\":2,\"trigger_slope\":\"negative\",\"time_seconds\":0.000001,\"count\":2}" --json
 ```
 
 Configure or query DSO analog-channel setup-hold trigger settings with the
 canonical `trigger-setup-hold` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-setup-hold --resource "$env:SCOPES_TOOL_RESOURCE" --clock-channel 1 --data-channel 2 --slope positive --setup-time 1e-9 --hold-time 1e-9 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-setup-hold --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-setup-hold --dry-run --json --model keysight-dsox4024a --query
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-setup-hold --simulate --json --query
+.\.venv\Scripts\scopes-tool.exe trigger-setup-hold --resource "$env:SCOPES_TOOL_RESOURCE" --clock-channel 1 --data-channel 2 --slope positive --setup-time 1e-9 --hold-time 1e-9 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-setup-hold --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-setup-hold --dry-run --json --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-setup-hold --simulate --json --query
 ```
 
 `trigger-setup-hold` v1 configures and queries the Keysight Setup and Hold
@@ -1226,8 +1234,8 @@ signal-trigger validation, or a generic trigger-tree framework.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-setup-hold --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-setup-hold --arguments-json "{\"clock_channel\":1,\"data_channel\":2,\"slope\":\"positive\",\"setup_time\":0.000000001,\"hold_time\":0.000000001}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-setup-hold --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-setup-hold --arguments-json "{\"clock_channel\":1,\"data_channel\":2,\"slope\":\"positive\",\"setup_time\":0.000000001,\"hold_time\":0.000000001}" --json
 ```
 
 Worker JSON uses canonical keys `setup_time` and `hold_time`, matching the CLI
@@ -1241,12 +1249,12 @@ Configure or query DSO analog-channel Nth Edge Burst trigger settings with the
 canonical `trigger-edge-burst` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-burst --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --slope positive --count 3 --idle-time 1e-6 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-burst --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --slope positive --count 3 --idle-time 1e-6 --level-volts 0.5 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-burst --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-burst --dry-run --model keysight-dsox4024a --query
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-burst --dry-run --json --model keysight-dsox4024a --query
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-edge-burst --simulate --json --query
+.\.venv\Scripts\scopes-tool.exe trigger-edge-burst --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --slope positive --count 3 --idle-time 1e-6 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-burst --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --slope positive --count 3 --idle-time 1e-6 --level-volts 0.5 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-burst --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-edge-burst --dry-run --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-edge-burst --dry-run --json --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-edge-burst --simulate --json --query
 ```
 
 `trigger-edge-burst` v1 configures and queries the Keysight Nth Edge Burst
@@ -1268,9 +1276,9 @@ this v1 configure surface.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-burst --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-burst --arguments-json "{\"source_channel\":1,\"slope\":\"positive\",\"count\":3,\"idle_time\":0.000001}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-edge-burst --arguments-json "{\"source_channel\":1,\"slope\":\"positive\",\"count\":3,\"idle_time\":0.000001,\"level_volts\":0.5}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-burst --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-burst --arguments-json "{\"source_channel\":1,\"slope\":\"positive\",\"count\":3,\"idle_time\":0.000001}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-burst --arguments-json "{\"source_channel\":1,\"slope\":\"positive\",\"count\":3,\"idle_time\":0.000001,\"level_volts\":0.5}" --json
 ```
 
 Worker support has hardware-free validation only. It accepts only `query`,
@@ -1287,12 +1295,12 @@ Configure or query DSO analog-channel basic TV / video trigger settings with
 the canonical `trigger-tv` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-tv --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-tv --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --standard ntsc --mode field1 --polarity negative --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-tv --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --standard ntsc --mode line-field1 --line 20 --polarity negative --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-tv --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 2 --standard pal --mode line-field2 --line 400 --polarity positive --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-tv --dry-run --json --model keysight-dsox4024a --query
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-tv --simulate --json --query
+.\.venv\Scripts\scopes-tool.exe trigger-tv --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-tv --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --standard ntsc --mode field1 --polarity negative --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-tv --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --standard ntsc --mode line-field1 --line 20 --polarity negative --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-tv --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 2 --standard pal --mode line-field2 --line 400 --polarity positive --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-tv --dry-run --json --model keysight-dsox4024a --query
+.\.venv\Scripts\scopes-tool.exe trigger-tv --simulate --json --query
 ```
 
 `trigger-tv` v1 configures and queries the common Keysight TV trigger subtree
@@ -1309,9 +1317,9 @@ are not part of this v1 surface.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-tv --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-tv --arguments-json "{\"source_channel\":1,\"standard\":\"ntsc\",\"mode\":\"field1\",\"polarity\":\"negative\"}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-tv --arguments-json "{\"source_channel\":1,\"standard\":\"ntsc\",\"mode\":\"line-field1\",\"line\":20,\"polarity\":\"negative\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-tv --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-tv --arguments-json "{\"source_channel\":1,\"standard\":\"ntsc\",\"mode\":\"field1\",\"polarity\":\"negative\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-tv --arguments-json "{\"source_channel\":1,\"standard\":\"ntsc\",\"mode\":\"line-field1\",\"line\":20,\"polarity\":\"negative\"}" --json
 ```
 
 Worker support has hardware-free validation only. It accepts only `query`,
@@ -1328,10 +1336,10 @@ Configure or query DSO analog ASCII pattern trigger settings with the canonical
 `trigger-pattern` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-pattern --resource "$env:SCOPES_TOOL_RESOURCE" --pattern XXX1 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-pattern --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-pattern --dry-run --json --pattern XXX1
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-pattern --simulate --json --query
+.\.venv\Scripts\scopes-tool.exe trigger-pattern --resource "$env:SCOPES_TOOL_RESOURCE" --pattern XXX1 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-pattern --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-pattern --dry-run --json --pattern XXX1
+.\.venv\Scripts\scopes-tool.exe trigger-pattern --simulate --json --query
 ```
 
 `trigger-pattern` v1 configures and queries the Keysight Pattern trigger using
@@ -1362,18 +1370,18 @@ MSO/digital validation, and broader trigger-tree validation.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-pattern --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-pattern --arguments-json "{\"pattern\":\"XXX1\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-pattern --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-pattern --arguments-json "{\"pattern\":\"XXX1\"}" --json
 ```
 
 Configure or query DSO analog-only OR trigger settings with the canonical
 `trigger-or` command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-or --resource "$env:SCOPES_TOOL_RESOURCE" --pattern XXXR --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-or --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-or --dry-run --json --pattern XXXR
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-or --simulate --json --query
+.\.venv\Scripts\scopes-tool.exe trigger-or --resource "$env:SCOPES_TOOL_RESOURCE" --pattern XXXR --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-or --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-or --dry-run --json --pattern XXXR
+.\.venv\Scripts\scopes-tool.exe trigger-or --simulate --json --query
 ```
 
 `trigger-or` v1 configures and queries the Keysight OR trigger using the DSO
@@ -1405,20 +1413,20 @@ live-tested.
 Worker usage:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-or --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli send-command --port 8765 --command trigger-or --arguments-json "{\"pattern\":\"XXXR\"}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-or --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-or --arguments-json "{\"pattern\":\"XXXR\"}" --json
 ```
 
 Control common measurement subsystem state:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-clear --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-show --on --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-show --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-source --source-channel 1 --source2-channel 2 --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-source --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-window --window gate --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-window --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-clear --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-show --on --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-show --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-source --source-channel 1 --source2-channel 2 --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-source --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-window --window gate --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-window --query --simulate --json
 ```
 
 `measure-clear` clears installed screen measurements. `measure-show` supports
@@ -1443,15 +1451,15 @@ when the current zoom state is unknown.
 Control or query DVM Common Pack v1:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-enable --enabled true --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-enable --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-source --channel 1 --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-source --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-mode --mode dc-rms --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-mode --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-auto-range --enabled false --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-current --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli dvm-query --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-enable --enabled true --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-enable --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-source --channel 1 --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-source --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-mode --mode dc-rms --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-mode --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-auto-range --enabled false --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-current --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe dvm-query --query --simulate --json
 ```
 
 The only public modes are `dc`, `dc-rms`, and `ac-rms`; no aliases or
@@ -1476,13 +1484,13 @@ before enqueue or artifact/session creation.
 Control Demo Output Pack v1:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli demo-query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli demo-output --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli demo-output --enabled true --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli demo-function --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli demo-function --function runt --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli demo-phase --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli demo-phase --degrees 90 --simulate --json
+.\.venv\Scripts\scopes-tool.exe demo-query --simulate --json
+.\.venv\Scripts\scopes-tool.exe demo-output --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe demo-output --enabled true --simulate --json
+.\.venv\Scripts\scopes-tool.exe demo-function --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe demo-function --function runt --simulate --json
+.\.venv\Scripts\scopes-tool.exe demo-phase --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe demo-phase --degrees 90 --simulate --json
 ```
 
 `demo-output`, `demo-function`, and `demo-phase` require exactly one query or
@@ -1510,11 +1518,11 @@ and adds no WebUI runtime behavior.
 Control reference waveform slots:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli reference-save --slot 1 --source-channel 1 --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli reference-display --slot 1 --state on --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli reference-label --slot 1 --text BASELINE --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli reference-query --slot 1 --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli reference-clear --slot 1 --simulate --json
+.\.venv\Scripts\scopes-tool.exe reference-save --slot 1 --source-channel 1 --simulate --json
+.\.venv\Scripts\scopes-tool.exe reference-display --slot 1 --state on --simulate --json
+.\.venv\Scripts\scopes-tool.exe reference-label --slot 1 --text BASELINE --simulate --json
+.\.venv\Scripts\scopes-tool.exe reference-query --slot 1 --simulate --json
+.\.venv\Scripts\scopes-tool.exe reference-clear --slot 1 --simulate --json
 ```
 
 Reference Waveform Pack v1 supports slots 1 and 2. `reference-save` accepts an
@@ -1534,13 +1542,13 @@ other-model, and broader reference-waveform validation have not been run.
 Control Search Basic Pack v1:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli search-state --enabled true --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli search-state --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli search-mode --mode serial1 --simulate --json --model keysight-dsox2004a
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli search-mode --mode edge --simulate --json --model keysight-dsox3024a
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli search-mode --mode peak --simulate --json --model keysight-dsox4034a
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli search-mode --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli search-count --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe search-state --enabled true --simulate --json
+.\.venv\Scripts\scopes-tool.exe search-state --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe search-mode --mode serial1 --simulate --json --model keysight-dsox2004a
+.\.venv\Scripts\scopes-tool.exe search-mode --mode edge --simulate --json --model keysight-dsox3024a
+.\.venv\Scripts\scopes-tool.exe search-mode --mode peak --simulate --json --model keysight-dsox4034a
+.\.venv\Scripts\scopes-tool.exe search-mode --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe search-count --query --simulate --json
 ```
 
 `search-state` accepts exactly one of `--query` or
@@ -1560,18 +1568,18 @@ was performed.
 Use Save/Export Pack v1 for instrument-side file saving:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-pwd --path "USB:\captures" --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-pwd --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-filename --name scope_01 --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-image-format --format png --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-image-palette --palette color --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-image-ink-saver --enabled false --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-image-factors --enabled true --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-image --filename "USB:\captures\screen.png" --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-waveform-format --format csv --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-waveform-length --points 1000 --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-waveform-length-max --query --simulate --json
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli save-waveform --filename "USB:\captures\wave.csv" --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-pwd --path "USB:\captures" --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-pwd --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-filename --name scope_01 --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-image-format --format png --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-image-palette --palette color --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-image-ink-saver --enabled false --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-image-factors --enabled true --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-image --filename "USB:\captures\screen.png" --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-waveform-format --format csv --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-waveform-length --points 1000 --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-waveform-length-max --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-waveform --filename "USB:\captures\wave.csv" --simulate --json
 ```
 
 Query-capable commands require exactly `--query` or their setting argument.
@@ -1602,37 +1610,37 @@ validation only; live hardware validation was not performed.
 Query read-only measurements:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item vpp --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item frequency --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item period --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item vavg --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item vrms --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item ac_rms --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item minimum --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item maximum --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item x_at_max --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item x_at_min --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item rise_time --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item fall_time --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item amplitude --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item top --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item base --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item overshoot --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item preshoot --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item positive_width --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item negative_width --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item duty_cycle --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item negative_duty_cycle --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item area --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item positive_edges --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item negative_edges --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item positive_pulses --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item negative_pulses --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item y_at_x --time 0 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item time_at_edge --slope positive --occurrence 1 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item time_at_value --level 0.5 --slope positive --occurrence 1 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --reference-channel 2 --item phase --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --reference-channel 2 --item delay --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item vpp --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item frequency --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item period --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item vavg --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item vrms --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item ac_rms --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item minimum --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item maximum --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item x_at_max --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item x_at_min --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item rise_time --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item fall_time --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item amplitude --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item top --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item base --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item overshoot --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item preshoot --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item positive_width --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item negative_width --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item duty_cycle --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item negative_duty_cycle --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item area --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item positive_edges --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item negative_edges --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item positive_pulses --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item negative_pulses --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item y_at_x --time 0 --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item time_at_edge --slope positive --occurrence 1 --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item time_at_value --level 0.5 --slope positive --occurrence 1 --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --reference-channel 2 --item phase --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --reference-channel 2 --item delay --log-scpi
 ```
 
 The current measurement slice supports `vpp`, `frequency` (`freq` alias),
@@ -1689,7 +1697,7 @@ value as usable data.
 Collect a read-only diagnostic snapshot:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli doctor --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe doctor --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
 ```
 
 `doctor` queries `*IDN?`, backend and timeout metadata, acquisition type and
@@ -1701,8 +1709,8 @@ does not drain the full error queue.
 Sweep common measurements across channels:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --items vpp,frequency,period,vrms --json --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --items vpp,frequency,period,vrms,rise_time,fall_time --pair 1:2 --pair-items phase,delay --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --items vpp,frequency,period,vrms --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure-sweep --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --items vpp,frequency,period,vrms,rise_time,fall_time --pair 1:2 --pair-items phase,delay --json --log-scpi
 ```
 
 `measure-sweep` defaults to `--channel all` and
@@ -1716,8 +1724,8 @@ any invalid or error records were observed.
 Log a finite batch of measurements:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-log --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --items vpp,frequency --count 10 --interval-seconds 1 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-log --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --items vpp,frequency --pair 1:2 --pair-items phase --count 5 --output-dir data\measure_logs\ch1_ch2 --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure-log --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --items vpp,frequency --count 10 --interval-seconds 1 --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure-log --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --items vpp,frequency --pair 1:2 --pair-items phase --count 5 --output-dir data\measure_logs\ch1_ch2 --log-scpi
 ```
 
 `measure-log` is a finite read-only measurement logger. It requires `--count`
@@ -1742,7 +1750,7 @@ return-to-local behavior.
 Run a capture-safe smoke check:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli smoke --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe smoke --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
 ```
 
 `smoke` writes `report.json`, `scpi.log`, `capture.csv`,
@@ -1758,15 +1766,15 @@ backend, output, or system-error failures make the command return non-zero.
 Capture waveform data:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 10000 --csv data\ch1.csv --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --csv data\ch1.csv --plot data\ch1.png --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --format word --csv data\ch1_word.csv --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --points 1000 --csv data\ch1_ch2.csv --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --points 1000 --csv data\ch1_ch2.csv --allow-time-axis-tolerance --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --points 1000 --csv data\all_channels.csv --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --wait-trigger --trigger-timeout-ms 5000 --trigger-poll-interval-ms 100 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --wait-trigger --trigger-timeout-ms 5000 --force-trigger-on-timeout --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 10000 --csv data\ch1.csv --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --csv data\ch1.csv --plot data\ch1.png --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --format word --csv data\ch1_word.csv --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --points 1000 --csv data\ch1_ch2.csv --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --points 1000 --csv data\ch1_ch2.csv --allow-time-axis-tolerance --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --points 1000 --csv data\all_channels.csv --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --wait-trigger --trigger-timeout-ms 5000 --trigger-poll-interval-ms 100 --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --wait-trigger --trigger-timeout-ms 5000 --force-trigger-on-timeout --log-scpi
 ```
 
 The current capture slice supports BYTE and WORD waveform formats with 1000,
@@ -1827,9 +1835,9 @@ values remain unclassified and do not allow capture.
 Capture a finite waveform batch:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture-batch --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --format byte --count 3 --interval-seconds 1 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture-batch --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --points 1000 --format word --count 2 --output-dir data\captures\ch1_ch2_batch --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli capture-batch --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --points 1000 --count 2
+.\.venv\Scripts\scopes-tool.exe capture-batch --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --format byte --count 3 --interval-seconds 1 --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture-batch --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --points 1000 --format word --count 2 --output-dir data\captures\ch1_ch2_batch --log-scpi
+.\.venv\Scripts\scopes-tool.exe capture-batch --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --points 1000 --count 2
 ```
 
 `capture-batch` is a conservative finite batch capture command. `--count` is
@@ -1862,17 +1870,17 @@ effort manifest with status `interrupted` and returns `130`.
 Additional DSO-X 4024A controls:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli cursor --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli cursor --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --x1 0 --x2 1e-3 --y1 0 --y2 0.5 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-holdoff --resource "$env:SCOPES_TOOL_RESOURCE" --query --json --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli trigger-holdoff --resource "$env:SCOPES_TOOL_RESOURCE" --seconds 1e-6 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli measure-stats --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --items vpp,frequency --mode all --reset --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli autoscale --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --source-channel 2 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli setup-save --resource "$env:SCOPES_TOOL_RESOURCE" --slot 1 --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli setup-recall --resource "$env:SCOPES_TOOL_RESOURCE" --file "\usb\setup.scp" --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --source-channel 1 --units decibel --window hanning --center-hz 1000 --span-hz 10000 --display on --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --source-channel 1 --display off --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe cursor --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe cursor --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --x1 0 --x2 1e-3 --y1 0 --y2 0.5 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-holdoff --resource "$env:SCOPES_TOOL_RESOURCE" --query --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-holdoff --resource "$env:SCOPES_TOOL_RESOURCE" --seconds 1e-6 --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure-stats --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --items vpp,frequency --mode all --reset --log-scpi
+.\.venv\Scripts\scopes-tool.exe autoscale --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --source-channel 2 --log-scpi
+.\.venv\Scripts\scopes-tool.exe setup-save --resource "$env:SCOPES_TOOL_RESOURCE" --slot 1 --log-scpi
+.\.venv\Scripts\scopes-tool.exe setup-recall --resource "$env:SCOPES_TOOL_RESOURCE" --file "\usb\setup.scp" --log-scpi
+.\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --source-channel 1 --units decibel --window hanning --center-hz 1000 --span-hz 10000 --display on --log-scpi
+.\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --source-channel 1 --display off --log-scpi
+.\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --log-scpi
 ```
 
 These commands are explicit user actions and are never called by `doctor`,
@@ -1887,13 +1895,13 @@ recorder loop.
 Capture the current oscilloscope screen as an image file:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --output data\screen.png --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --background white --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --format png --output data\screen.png --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --format bmp --output data\screen.bmp --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --format bmp8bit --ink-saver false --palette grayscale --layout landscape --output data\screen-8bit.bmp --log-scpi
-.\.venv\Scripts\python.exe -m scopes_tool_cli.cli screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --query-hardcopy --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
+.\.venv\Scripts\scopes-tool.exe screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --output data\screen.png --log-scpi
+.\.venv\Scripts\scopes-tool.exe screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --background white --log-scpi
+.\.venv\Scripts\scopes-tool.exe screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --format png --output data\screen.png --log-scpi
+.\.venv\Scripts\scopes-tool.exe screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --format bmp --output data\screen.bmp --log-scpi
+.\.venv\Scripts\scopes-tool.exe screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --format bmp8bit --ink-saver false --palette grayscale --layout landscape --output data\screen-8bit.bmp --log-scpi
+.\.venv\Scripts\scopes-tool.exe screenshot --resource "$env:SCOPES_TOOL_RESOURCE" --query-hardcopy --json --log-scpi
 ```
 
 The `screenshot` command first queries `*IDN?`, sets `:HARDcopy:INKSaver` for

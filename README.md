@@ -30,6 +30,22 @@ uv pip install -e ".[all,dev]"
 The repository uses one editable package install for local development. It is not
 configured as a committed `uv` workspace.
 
+After the editable install, the Windows virtual environment provides the
+`.\.venv\Scripts\scopes-tool.exe` console wrapper. Prefer this wrapper for
+normal CLI operations:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe identify --simulate --json
+```
+
+The wrapper is part of the virtual environment and is not a portable standalone
+executable. The module form remains supported as a development or fallback
+entry point:
+
+```powershell
+.\.venv\Scripts\python.exe -m scopes_tool_cli.cli ...
+```
+
 The PowerShell test script gives each pytest run an isolated temporary
 directory. This avoids Windows permission conflicts when tests are run by both
 the local user and a sandboxed tool. It removes the directory after a successful
