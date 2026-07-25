@@ -159,7 +159,8 @@ Worker `/command` supports the existing Scopes capability surface:
   `trigger-delay`, `trigger-setup-hold`, `trigger-edge-burst`, `trigger-tv`,
   `trigger-pattern`, `trigger-or`, `trigger-sweep`, `trigger-noise-reject`,
   `trigger-hf-reject`, `trigger-holdoff`, `cursor`, `autoscale`
-- `setup-save`, `setup-recall`, `fft`, `math-display`, `math-vertical`
+- `setup-save`, `setup-recall`, `fft`, `math-display`, `math-vertical`,
+  `math-operator`
 
 `list-resources` remains an explicit discovery command outside live worker
 flows. `hardware-report` remains a local report renderer. They are not accepted
@@ -1380,6 +1381,34 @@ other 4000X slots; instrument display behavior remains instrument-managed. P1
 does not configure Math operations or sources, probe licenses, or calculate
 host-side Math. It adds no artifacts and has hardware-free validation only; no
 live validation was performed.
+
+### MATH-P2 Dual-Source Operator Command
+
+MATH-P2 adds one instrument-side dual-source Math command:
+
+```json
+{"command": "math-operator", "arguments": {"function": 1, "operation": "subtract", "source1": "channel1", "source2": "channel2"}}
+```
+
+```json
+{"command": "math-operator", "arguments": {"function": 1, "query": true}}
+```
+
+Configure requires canonical `operation`, `source1`, and `source2` arguments.
+Supported operations are `add`, `subtract`, `multiply`, and `divide`. Sources
+are limited to canonical analog `channel1` through `channel4` values supported
+by the worker startup model. Query requires exactly `query: true` and cannot
+include configure arguments. Unknown arguments and incomplete configure
+requests are rejected before enqueue, artifacts, backend open, or SCPI.
+
+The command reuses the P0/P1 function capability and dialect:
+2000X/3000X accept only function 1 and use unindexed `:FUNCtion`; 4000X accepts
+functions 1 through 4 and uses indexed `:FUNCtion<n>`. Configure writes only
+operation, source1, and source2 in that order. It does not enable Math display,
+change vertical state, run autoscale, probe licenses, or calculate host-side
+waveforms. Reference, Math, bus, digital, external, and expression sources are
+not supported. P2 adds no artifacts and has hardware-free validation only; no
+live instrument or license validation was performed.
 
 ### Search Basic Pack v1 Commands
 

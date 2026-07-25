@@ -11,9 +11,13 @@ from scopes_tool_core.advanced import (
     fft_query_commands,
     math_display_command,
     math_display_query,
+    math_operator_commands,
+    math_operator_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
     parse_math_display,
+    parse_math_operation,
+    parse_math_source,
     setup_recall_command,
     setup_save_command,
     trigger_holdoff_command,
@@ -204,6 +208,109 @@ def test_math_p1_simulator_round_trip_in_one_session():
         ":FUNCtion:SCALe?",
         ":FUNCtion:RANGe?",
         ":FUNCtion:OFFSet?",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("operation", "token"),
+    [
+        ("add", "ADD"),
+        ("subtract", "SUBTract"),
+        ("multiply", "MULTiply"),
+        ("divide", "DIVide"),
+    ],
+)
+def test_math_p2_operation_mapping(operation, token):
+    capabilities = capabilities_for_model("DSOX4024A")
+
+    assert math_operator_commands(
+        1,
+        operation,
+        "channel1",
+        "channel2",
+        capabilities=capabilities,
+    )[0] == f":FUNCtion1:OPERation {token}"
+
+
+@pytest.mark.parametrize(
+    ("model", "function", "prefix"),
+    [
+        ("DSOX2004A", 1, ":FUNCtion"),
+        ("DSOX3024A", 1, ":FUNCtion"),
+        ("DSOX4024A", 2, ":FUNCtion2"),
+    ],
+)
+def test_math_p2_operator_commands_use_series_dialect(model, function, prefix):
+    capabilities = capabilities_for_model(model)
+
+    assert math_operator_commands(
+        function,
+        "subtract",
+        "channel1",
+        "channel2",
+        capabilities=capabilities,
+    ) == [
+        f"{prefix}:OPERation SUBTract",
+        f"{prefix}:SOURce1 CHANnel1",
+        f"{prefix}:SOURce2 CHANnel2",
+    ]
+    assert math_operator_query_commands(
+        function, capabilities=capabilities
+    ) == [
+        f"{prefix}:OPERation?",
+        f"{prefix}:SOURce1?",
+        f"{prefix}:SOURce2?",
+    ]
+
+
+def test_math_p2_operator_validation_and_readback_parsing():
+    single_function = capabilities_for_model("DSOX2004A")
+    four_functions = capabilities_for_model("DSOX4024A")
+
+    with pytest.raises(ParameterValidationError, match="between 1 and 1"):
+        math_operator_commands(
+            2,
+            "add",
+            "channel1",
+            "channel2",
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="channel1"):
+        math_operator_commands(
+            1,
+            "add",
+            "channel1",
+            "channel5",
+            capabilities=four_functions,
+        )
+    assert parse_math_operation(" sUbT ") == "subtract"
+    assert parse_math_source(" cHaN1 ", capabilities=four_functions) == "channel1"
+    with pytest.raises(ChannelResponseError, match="UNKNOWN"):
+        parse_math_operation(" UNKNOWN ")
+
+
+def test_math_p2_simulator_operator_round_trip():
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.configure_math_operator(2, "subtract", "channel1", "channel2")
+    state = scope.query_math_operator(2)
+
+    assert state.function == 2
+    assert state.operation == "subtract"
+    assert state.operation_raw == "SUBTRACT"
+    assert state.source1 == "channel1"
+    assert state.source1_raw == "CHANnel1"
+    assert state.source2 == "channel2"
+    assert state.source2_raw == "CHANnel2"
+    assert backend.history[1:] == [
+        ":FUNCtion2:OPERation SUBTract",
+        ":FUNCtion2:SOURce1 CHANnel1",
+        ":FUNCtion2:SOURce2 CHANnel2",
+        ":FUNCtion2:OPERation?",
+        ":FUNCtion2:SOURce1?",
+        ":FUNCtion2:SOURce2?",
     ]
 
 

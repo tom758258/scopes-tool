@@ -32,6 +32,23 @@ _FFT_WINDOWS = {
     "bharris": "BHARris",
     "bartlett": "BARTlett",
 }
+MATH_OPERATIONS = ("add", "subtract", "multiply", "divide")
+MATH_SOURCES = ("channel1", "channel2", "channel3", "channel4")
+_MATH_OPERATION_TOKENS = {
+    "add": "ADD",
+    "subtract": "SUBTract",
+    "multiply": "MULTiply",
+    "divide": "DIVide",
+}
+_MATH_OPERATION_READBACKS = {
+    "ADD": "add",
+    "SUBT": "subtract",
+    "SUBTRACT": "subtract",
+    "MULT": "multiply",
+    "MULTIPLY": "multiply",
+    "DIV": "divide",
+    "DIVIDE": "divide",
+}
 
 
 @dataclass(frozen=True)
@@ -97,6 +114,17 @@ class MathVerticalState:
     scale: float
     range: float
     offset: float
+
+
+@dataclass(frozen=True)
+class MathOperatorState:
+    function: int
+    operation: str
+    operation_raw: str
+    source1: str
+    source1_raw: str
+    source2: str
+    source2_raw: str
 
 
 class CursorController:
@@ -322,6 +350,39 @@ class MathController:
             scale=self.scpi.query_float(scale_command),
             range=self.scpi.query_float(range_command),
             offset=self.scpi.query_float(offset_command),
+        )
+
+    def configure_operator(
+        self,
+        function: int,
+        operation: str,
+        source1: str,
+        source2: str,
+    ) -> None:
+        for command in math_operator_commands(
+            function,
+            operation,
+            source1,
+            source2,
+            capabilities=self.capabilities,
+        ):
+            self.scpi.write(command)
+
+    def query_operator(self, function: int) -> MathOperatorState:
+        operation_command, source1_command, source2_command = (
+            math_operator_query_commands(function, capabilities=self.capabilities)
+        )
+        operation_raw = self.scpi.query(operation_command).strip()
+        source1_raw = self.scpi.query(source1_command).strip()
+        source2_raw = self.scpi.query(source2_command).strip()
+        return MathOperatorState(
+            function=function,
+            operation=parse_math_operation(operation_raw),
+            operation_raw=operation_raw,
+            source1=parse_math_source(source1_raw, capabilities=self.capabilities),
+            source1_raw=source1_raw,
+            source2=parse_math_source(source2_raw, capabilities=self.capabilities),
+            source2_raw=source2_raw,
         )
 
 
@@ -747,6 +808,105 @@ def math_vertical_query_commands(
         f"{prefix}:RANGe?",
         f"{prefix}:OFFSet?",
     ]
+
+
+def math_operator_commands(
+    function: int,
+    operation: str,
+    source1: str,
+    source2: str,
+    *,
+    capabilities: ScopeCapabilities | None = None,
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    operation = normalize_math_operation(operation)
+    source1 = normalize_math_source(source1, capabilities=capabilities)
+    source2 = normalize_math_source(source2, capabilities=capabilities)
+    return [
+        f"{prefix}:OPERation {_MATH_OPERATION_TOKENS[operation]}",
+        f"{prefix}:SOURce1 CHANnel{source1.removeprefix('channel')}",
+        f"{prefix}:SOURce2 CHANnel{source2.removeprefix('channel')}",
+    ]
+
+
+def math_operator_query_commands(
+    function: int, *, capabilities: ScopeCapabilities | None = None
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    return [
+        f"{prefix}:OPERation?",
+        f"{prefix}:SOURce1?",
+        f"{prefix}:SOURce2?",
+    ]
+
+
+def normalize_math_operation(value: str) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError(
+            "--operation must be add, subtract, multiply, or divide."
+        )
+    normalized = value.strip().lower()
+    if normalized not in _MATH_OPERATION_TOKENS:
+        raise ParameterValidationError(
+            "--operation must be add, subtract, multiply, or divide."
+        )
+    return normalized
+
+
+def normalize_math_source(
+    value: str, *, capabilities: ScopeCapabilities | None = None
+) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError(
+            "--source1 and --source2 must be channel1, channel2, channel3, or channel4."
+        )
+    normalized = value.strip().lower()
+    if normalized not in MATH_SOURCES:
+        raise ParameterValidationError(
+            "--source1 and --source2 must be channel1, channel2, channel3, or channel4."
+        )
+    channel = int(normalized.removeprefix("channel"))
+    if capabilities is not None:
+        validate_analog_channel(channel, capabilities)
+    return normalized
+
+
+def parse_math_operation(raw: str) -> str:
+    raw_value = raw.strip()
+    operation = _MATH_OPERATION_READBACKS.get(raw_value.upper())
+    if operation is None:
+        raise ChannelResponseError(
+            f"Could not parse Math operation response: {raw_value!r}"
+        )
+    return operation
+
+
+def parse_math_source(
+    raw: str, *, capabilities: ScopeCapabilities | None = None
+) -> str:
+    raw_value = raw.strip()
+    normalized = raw_value.upper()
+    if normalized.startswith("CHANNEL"):
+        suffix = normalized.removeprefix("CHANNEL")
+    elif normalized.startswith("CHAN"):
+        suffix = normalized.removeprefix("CHAN")
+    else:
+        suffix = ""
+    if not suffix.isdigit():
+        raise ChannelResponseError(
+            f"Could not parse Math source response: {raw_value!r}"
+        )
+    channel = int(suffix)
+    try:
+        if channel < 1 or channel > 4:
+            raise ParameterValidationError("Math source channel is out of range.")
+        if capabilities is not None:
+            validate_analog_channel(channel, capabilities)
+    except ParameterValidationError as exc:
+        raise ChannelResponseError(
+            f"Could not parse Math source response: {raw_value!r}"
+        ) from exc
+    return f"channel{channel}"
 
 
 def math_function_scpi_prefix(

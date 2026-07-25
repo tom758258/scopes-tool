@@ -12,6 +12,7 @@ from .advanced import (
     FFTState,
     MathController,
     MathDisplayState,
+    MathOperatorState,
     MathVerticalState,
     SetupController,
     TriggerHoldoffController,
@@ -1203,6 +1204,23 @@ class Oscilloscope:
 
     def query_math_vertical(self, function: int) -> MathVerticalState:
         return self._math_controller().query_vertical(function)
+
+    def configure_math_operator(
+        self,
+        function: int,
+        operation: str,
+        source1: str,
+        source2: str,
+    ) -> None:
+        self._math_controller().configure_operator(
+            function,
+            operation,
+            source1,
+            source2,
+        )
+
+    def query_math_operator(self, function: int) -> MathOperatorState:
+        return self._math_controller().query_operator(function)
 
     def capture_screenshot_png(self, *, background: str = "black") -> ScreenshotCapture:
         """Capture the current screen as a color PNG image."""

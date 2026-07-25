@@ -1845,6 +1845,7 @@ class SimulatorBackend:
             {
                 "operation": "FFT",
                 "source": 1,
+                "source2": 2,
                 "units": "DECibel",
                 "window": "HANNing",
                 "center": 0.0,
@@ -1860,6 +1861,8 @@ class SimulatorBackend:
             key["operation"] = value.upper()
         elif primary == "SOURCE1":
             key["source"] = self._validate_channel(int(value.rsplit("CHANnel", 1)[1]))
+        elif primary == "SOURCE2":
+            key["source2"] = self._validate_channel(int(value.rsplit("CHANnel", 1)[1]))
         elif primary == "DISPLAY":
             key["display"] = value.upper() == "ON"
         elif primary == "SCALE":
@@ -1894,6 +1897,7 @@ class SimulatorBackend:
             {
                 "operation": "FFT",
                 "source": 1,
+                "source2": 2,
                 "units": "DECibel",
                 "window": "HANNing",
                 "center": 0.0,
@@ -1909,6 +1913,8 @@ class SimulatorBackend:
             return str(state["operation"])
         if primary == "SOURCE1":
             return f"CHANnel{state['source']}"
+        if primary == "SOURCE2":
+            return f"CHANnel{state['source2']}"
         if primary == "DISPLAY":
             return "1" if state["display"] else "0"
         if primary == "SCALE":

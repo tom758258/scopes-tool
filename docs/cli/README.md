@@ -1888,12 +1888,14 @@ Additional DSO-X 4024A controls:
 .\.venv\Scripts\scopes-tool.exe math-vertical --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --scale 2 --offset 0.5 --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-vertical --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --range 8 --offset 0 --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-vertical --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-operator --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation subtract --source1 channel1 --source2 channel2 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-operator --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
 ```
 
-The existing `fft`, `math-display`, and `math-vertical` commands use the
-model's instrument-side Math function layout. 2000X and 3000X models have one
-unindexed `:FUNCtion` subsystem and require `--function 1`. 4000X models use
-indexed `:FUNCtion1` through `:FUNCtion4` slots and accept
+The existing `fft`, `math-display`, `math-vertical`, and `math-operator`
+commands use the model's instrument-side Math function layout. 2000X and 3000X
+models have one unindexed `:FUNCtion` subsystem and require `--function 1`.
+4000X models use indexed `:FUNCtion1` through `:FUNCtion4` slots and accept
 `--function 1..4`.
 
 `math-display` requires exactly one of `--on`, `--off`, or `--query`.
@@ -1909,6 +1911,17 @@ disable another slot; any single-visible-slot behavior is managed by the
 instrument. MATH-P1 does not configure Math operations or sources, probe
 licenses, or calculate host-side Math. These commands have hardware-free
 validation only; no live hardware validation was performed.
+
+`math-operator` configures or queries one instrument-side dual-source Math
+operator. Configure requires `--operation`, `--source1`, and `--source2`;
+query mode cannot include those options. P2 accepts `add`, `subtract`,
+`multiply`, and `divide`, and both sources must be canonical analog channels
+`channel1` through `channel4` supported by the selected model. It does not
+automatically enable Math display, alter Math vertical settings, perform
+autoscale, calculate host-side waveforms, or probe licenses. Other Math
+operations and reference, Math, bus, digital, external, or expression sources
+are not supported. P2 has hardware-free validation only; license availability
+and live instrument behavior have not been validated.
 
 These commands are explicit user actions and are never called by `doctor`,
 `smoke`, or `acquisition-check`. Some change front-panel state, such as cursor,

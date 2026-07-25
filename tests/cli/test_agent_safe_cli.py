@@ -1614,6 +1614,77 @@ def test_math_vertical_query_with_setter_fails_before_open(
     assert _json_stdout(capsys)["ok"] is False
 
 
+@pytest.mark.parametrize(
+    ("model", "function", "prefix"),
+    [
+        ("keysight-dsox2004a", "1", ":FUNCtion"),
+        ("keysight-dsox4024a", "2", ":FUNCtion2"),
+    ],
+)
+def test_math_operator_dry_run_uses_model_function_dialect(
+    model, function, prefix, capsys
+):
+    assert (
+        cli.main(
+            [
+                "math-operator",
+                "--dry-run",
+                "--json",
+                "--model",
+                model,
+                "--function",
+                function,
+                "--operation",
+                "subtract",
+                "--source1",
+                "channel1",
+                "--source2",
+                "channel2",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_stdout(capsys)
+    result = payload["result"]
+    assert result["operation"] == "set"
+    assert result["function"] == int(function)
+    assert result["math_operation"] == "subtract"
+    assert result["source1"] == "channel1"
+    assert result["source2"] == "channel2"
+    assert result["commands"] == [
+        f"{prefix}:OPERation SUBTract",
+        f"{prefix}:SOURce1 CHANnel1",
+        f"{prefix}:SOURce2 CHANnel2",
+    ]
+    assert payload["scpi"]["planned"] == [
+        *result["commands"],
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_math_operator_missing_source2_fails_before_open(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+
+    assert (
+        cli.main(
+            [
+                "math-operator",
+                "--simulate",
+                "--json",
+                "--function",
+                "1",
+                "--operation",
+                "add",
+                "--source1",
+                "channel1",
+            ]
+        )
+        == 1
+    )
+    assert _json_stdout(capsys)["ok"] is False
+
+
 def test_measure_simulate_json_reports_invalid_sentinel(monkeypatch, capsys):
     backend = SimulatorBackend(invalid_measurement_channels={1})
     monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)

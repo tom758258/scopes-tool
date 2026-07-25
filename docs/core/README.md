@@ -32,6 +32,15 @@ Core owns runtime behavior:
   selection, sources, host-side Math, license probing, and slot coordination
   are outside P1. Coverage is hardware-free only; no live validation was
   performed.
+- MATH-P2 instrument-side dual-source Math operators through
+  `Oscilloscope.configure_math_operator()` and `query_math_operator()`. P2
+  supports `add`, `subtract`, `multiply`, and `divide` with two analog-channel
+  sources. It reuses the single unindexed 2000X/3000X Math function and indexed
+  4000X slots, preserves normalized and raw query values, and does not enable
+  display or change vertical controls. Reference, Math, bus, digital, external,
+  and arbitrary-expression sources are not supported. Capability profiles
+  describe the available runtime path, not validated instrument licenses.
+  Coverage is hardware-free only; no live validation was performed.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,

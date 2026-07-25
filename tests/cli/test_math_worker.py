@@ -76,3 +76,53 @@ def test_worker_rejects_oversized_math_vertical_value_before_enqueue(tmp_path):
     assert runtime.queue.empty()
     assert runtime.jobs == {}
     assert not (tmp_path / runtime.run_id).exists()
+
+
+def test_worker_accepts_math_operator_configure_and_query(tmp_path):
+    assert "math-operator" in worker.DOMAIN_COMMANDS
+    runtime = _runtime(tmp_path)
+
+    configured = worker.parse_domain_command(
+        "math-operator",
+        {
+            "function": 2,
+            "operation": "multiply",
+            "source1": "channel1",
+            "source2": "channel2",
+        },
+        runtime,
+    )
+    queried = worker.parse_domain_command(
+        "math-operator",
+        {"function": 2, "query": True},
+        runtime,
+    )
+
+    assert configured.command == "math-operator"
+    assert configured.function == 2
+    assert configured.math_operation == "multiply"
+    assert configured.source1 == "channel1"
+    assert configured.source2 == "channel2"
+    assert queried.math_operator_query is True
+
+
+def test_worker_rejects_math_operator_query_conflict_before_enqueue(tmp_path):
+    runtime = _runtime(tmp_path)
+
+    with pytest.raises(OscilloscopeError, match="cannot be combined"):
+        worker.parse_domain_command(
+            "math-operator",
+            {
+                "function": 1,
+                "query": True,
+                "operation": "add",
+                "source1": "channel1",
+                "source2": "channel2",
+            },
+            runtime,
+        )
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()

@@ -22,6 +22,8 @@ from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.advanced import (
     math_display_command,
     math_display_query,
+    math_operator_commands,
+    math_operator_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
 )
@@ -152,6 +154,7 @@ DOMAIN_COMMANDS = {
     "setup-recall",
     "fft",
     "math-display",
+    "math-operator",
     "math-vertical",
 }
 
@@ -1523,14 +1526,15 @@ def _normalize_save_export_worker_arguments(
 def _normalize_math_worker_arguments(
     command: str, arguments: dict[str, Any], runtime: WorkerRuntime
 ) -> dict[str, Any]:
-    if command not in {"math-display", "math-vertical"}:
+    if command not in {"math-display", "math-vertical", "math-operator"}:
         return arguments
 
-    allowed = (
-        {"function", "on", "off", "query"}
-        if command == "math-display"
-        else {"function", "query", "scale", "range", "offset"}
-    )
+    if command == "math-display":
+        allowed = {"function", "on", "off", "query"}
+    elif command == "math-vertical":
+        allowed = {"function", "query", "scale", "range", "offset"}
+    else:
+        allowed = {"function", "query", "operation", "source1", "source2"}
     unknown = set(arguments) - allowed
     if unknown:
         raise OscilloscopeError(
@@ -1558,6 +1562,35 @@ def _normalize_math_worker_arguments(
             math_display_command(
                 function, actions[0] == "on", capabilities=capabilities
             )
+        return dict(arguments)
+
+    if command == "math-operator":
+        configure_keys = ("operation", "source1", "source2")
+        configure_arguments = {
+            key: arguments[key] for key in configure_keys if key in arguments
+        }
+        if "query" in arguments:
+            if arguments["query"] is not True:
+                raise OscilloscopeError(
+                    "math-operator argument query must be exactly true"
+                )
+            if configure_arguments:
+                raise OscilloscopeError(
+                    "math-operator query cannot be combined with configure arguments"
+                )
+            math_operator_query_commands(function, capabilities=capabilities)
+            return dict(arguments)
+        if len(configure_arguments) != len(configure_keys):
+            raise OscilloscopeError(
+                "math-operator configure requires operation, source1, and source2"
+            )
+        math_operator_commands(
+            function,
+            arguments["operation"],
+            arguments["source1"],
+            arguments["source2"],
+            capabilities=capabilities,
+        )
         return dict(arguments)
 
     setters = {

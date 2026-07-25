@@ -336,6 +336,11 @@ Control and setup:
   nullable `scale`, `range`, and `offset`, plus ordered executed `commands`.
   Query results include `operation: "query"`, `function`, and numeric `scale`,
   `range`, and `offset`.
+- `math-operator`: configure results include `operation: "set"`, `function`,
+  canonical `math_operation`, canonical analog `source1` and `source2`, and
+  ordered executed `commands`. Query results include `operation: "query"`,
+  `function`, canonical `math_operation`, `source1`, and `source2`, plus
+  stripped `operation_raw`, `source1_raw`, and `source2_raw` readbacks.
 
 Measurement and artifact-producing flows:
 

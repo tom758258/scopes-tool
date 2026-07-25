@@ -30,6 +30,8 @@ from scopes_tool_core.acquisition import (
     validate_acquisition_count,
 )
 from scopes_tool_core.advanced import (
+    MATH_OPERATIONS,
+    MATH_SOURCES,
     autoscale_commands,
     cursor_auto_vertical_dry_run_plan,
     cursor_auto_vertical_json,
@@ -42,6 +44,8 @@ from scopes_tool_core.advanced import (
     fft_query_commands,
     math_display_command,
     math_display_query,
+    math_operator_commands,
+    math_operator_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
     setup_recall_command,
@@ -2499,6 +2503,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "--offset", type=_measurement_finite_float, default=None
     )
 
+    math_operator_parser = subparsers.add_parser(
+        "math-operator",
+        allow_abbrev=False,
+        help="configure or query an instrument-side dual-source Math operator",
+    )
+    _add_scope_connection_args(math_operator_parser)
+    math_operator_parser.add_argument("--function", type=_positive_int, required=True)
+    math_operator_parser.add_argument(
+        "--query", dest="math_operator_query", action="store_true"
+    )
+    math_operator_parser.add_argument(
+        "--operation", dest="math_operation", choices=MATH_OPERATIONS, default=None
+    )
+    math_operator_parser.add_argument("--source1", choices=MATH_SOURCES, default=None)
+    math_operator_parser.add_argument("--source2", choices=MATH_SOURCES, default=None)
+
     acquisition_check_parser = subparsers.add_parser(
         "acquisition-check",
         help="run the acquisition configuration hardware validation workflow",
@@ -2829,6 +2849,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_math_display(args)
     if args.command == "math-vertical":
         return _cmd_math_vertical(args)
+    if args.command == "math-operator":
+        return _cmd_math_operator(args)
     if args.command == "acquisition-check":
         return _cmd_acquisition_check(args)
     raise OscilloscopeError("missing command")
@@ -3374,7 +3396,11 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         _validate_trigger_pattern_args(args)
     if getattr(args, "command", None) == "trigger-or":
         _validate_trigger_or_args(args)
-    if getattr(args, "command", None) in {"math-display", "math-vertical"}:
+    if getattr(args, "command", None) in {
+        "math-display",
+        "math-vertical",
+        "math-operator",
+    }:
         _validate_math_args(args)
 
 
@@ -3391,21 +3417,43 @@ def _validate_math_args(args: argparse.Namespace) -> None:
             )
         return
 
-    if args.math_vertical_query:
-        if any(
-            value is not None
-            for value in (args.scale, args.range_value, args.offset)
-        ):
-            raise ParameterValidationError(
-                "math-vertical --query cannot be combined with configure options."
-            )
-        math_vertical_query_commands(args.function, capabilities=capabilities)
+    if args.command == "math-vertical":
+        if args.math_vertical_query:
+            if any(
+                value is not None
+                for value in (args.scale, args.range_value, args.offset)
+            ):
+                raise ParameterValidationError(
+                    "math-vertical --query cannot be combined with configure options."
+                )
+            math_vertical_query_commands(args.function, capabilities=capabilities)
+            return
+        math_vertical_commands(
+            args.function,
+            scale=args.scale,
+            range_value=args.range_value,
+            offset=args.offset,
+            capabilities=capabilities,
+        )
         return
-    math_vertical_commands(
+
+    configure_values = (args.math_operation, args.source1, args.source2)
+    if args.math_operator_query:
+        if any(value is not None for value in configure_values):
+            raise ParameterValidationError(
+                "math-operator --query cannot be combined with configure options."
+            )
+        math_operator_query_commands(args.function, capabilities=capabilities)
+        return
+    if any(value is None for value in configure_values):
+        raise ParameterValidationError(
+            "math-operator configure requires --operation, --source1, and --source2."
+        )
+    math_operator_commands(
         args.function,
-        scale=args.scale,
-        range_value=args.range_value,
-        offset=args.offset,
+        args.math_operation,
+        args.source1,
+        args.source2,
         capabilities=capabilities,
     )
 
@@ -5235,6 +5283,36 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "scale": args.scale,
             "range": args.range_value,
             "offset": args.offset,
+            "commands": planned,
+        }
+    if command == "math-operator":
+        if args.math_operator_query:
+            planned = math_operator_query_commands(
+                args.function, capabilities=capabilities
+            )
+            return planned + [":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "function": args.function,
+                "math_operation": None,
+                "operation_raw": None,
+                "source1": None,
+                "source1_raw": None,
+                "source2": None,
+                "source2_raw": None,
+            }
+        planned = math_operator_commands(
+            args.function,
+            args.math_operation,
+            args.source1,
+            args.source2,
+            capabilities=capabilities,
+        )
+        return planned + [":SYSTem:ERRor?"], [], {
+            "operation": "set",
+            "function": args.function,
+            "math_operation": args.math_operation,
+            "source1": args.source1,
+            "source2": args.source2,
             "commands": planned,
         }
     return [], [], {}
@@ -9446,6 +9524,66 @@ def _cmd_math_vertical(args: argparse.Namespace) -> int:
                 scale=args.scale,
                 range=args.range_value,
                 offset=args.offset,
+                commands=commands,
+            )
+            for command in commands:
+                print(f"Command: {command}")
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_math_operator(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        if args.math_operator_query:
+            state = scope.query_math_operator(args.function)
+            _json_update_result(
+                operation="query",
+                function=state.function,
+                math_operation=state.operation,
+                operation_raw=state.operation_raw,
+                source1=state.source1,
+                source1_raw=state.source1_raw,
+                source2=state.source2,
+                source2_raw=state.source2_raw,
+            )
+            commands = math_operator_query_commands(
+                args.function, capabilities=scope.capabilities
+            )
+            for command in commands:
+                print(f"Command: {command}")
+            print(f"Math operation: {state.operation}")
+            print(f"Source 1: {state.source1}")
+            print(f"Source 2: {state.source2}")
+        else:
+            scope.configure_math_operator(
+                args.function,
+                args.math_operation,
+                args.source1,
+                args.source2,
+            )
+            commands = math_operator_commands(
+                args.function,
+                args.math_operation,
+                args.source1,
+                args.source2,
+                capabilities=scope.capabilities,
+            )
+            _json_update_result(
+                operation="set",
+                function=args.function,
+                math_operation=args.math_operation,
+                source1=args.source1,
+                source2=args.source2,
                 commands=commands,
             )
             for command in commands:
