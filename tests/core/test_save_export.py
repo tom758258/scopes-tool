@@ -1,7 +1,7 @@
 import pytest
 
 from scopes_tool_core.errors import ParameterValidationError
-from scopes_tool_core.fake_backend import FakeBackend
+from scopes_tool_core.fake_backend import FakeBackend, FakeBackendError
 from scopes_tool_core.save_export import (
     SaveExportController,
     parse_save_image_format,
@@ -123,6 +123,45 @@ def test_start_operations_wait_for_opc(operation, command):
     assert result.to_json()["operation"] == operation
     assert result.to_json()["command"] == command
     assert backend.history == [command, "*OPC?"]
+
+
+def test_save_image_temporarily_uses_bounded_opc_timeout_and_restores_original(
+    monkeypatch,
+):
+    backend = FakeBackend(responses={"*OPC?": "1"}, timeout=2000)
+    opc_query_timeouts = []
+    query = backend.query
+
+    def record_query_timeout(command):
+        opc_query_timeouts.append(backend.timeout)
+        return query(command)
+
+    monkeypatch.setattr(backend, "query", record_query_timeout)
+    result = SaveExportController(SCPIClient(backend)).save_image("USB:/screen.png")
+
+    assert result.raw_operation_complete == "1"
+    assert opc_query_timeouts == [15000]
+    assert backend.timeout_history == [15000, 2000]
+    assert backend.timeout == 2000
+
+
+def test_save_image_restores_original_timeout_when_opc_query_raises():
+    backend = FakeBackend(responses={}, timeout=2000)
+
+    with pytest.raises(FakeBackendError):
+        SaveExportController(SCPIClient(backend)).save_image("USB:/screen.png")
+
+    assert backend.timeout_history == [15000, 2000]
+    assert backend.timeout == 2000
+
+
+def test_save_waveform_keeps_existing_opc_timeout_behavior():
+    backend = FakeBackend(responses={"*OPC?": "1"}, timeout=2000)
+    SaveExportController(SCPIClient(backend)).save_waveform("USB:/wave.csv")
+
+    assert backend.timeout_history == []
+    assert backend.timeout == 2000
+    assert backend.history == [':SAVE:WAVeform "USB:/wave.csv"', "*OPC?"]
 
 
 @pytest.mark.parametrize("points", [True, 99, 1.5, "100"])

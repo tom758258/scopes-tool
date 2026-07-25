@@ -218,7 +218,10 @@ plus `save_image(filename)` and `save_waveform(filename)`. These methods send
 `:SAVE...` commands so the oscilloscope writes to its current instrument-side
 storage location. The start methods require an explicit printable-ASCII
 filename, reject unsafe quoted-SCPI characters, and wait with `*OPC?` before
-returning `SaveOperationResult`. They do not create or inspect host-side files.
+returning `SaveOperationResult`. Image saves temporarily use a bounded 15-second
+timeout for that completion query and then restore the prior timeout; waveform
+saves retain the current session timeout. They do not create or inspect
+host-side files.
 `capture_waveform_*()` and screenshot capture remain separate PC-side byte
 transfer APIs. The maximum accepted configured save length is model-, option-,
 and instrument-state-dependent; Core enforces the common minimum of 100 points

@@ -1597,7 +1597,9 @@ only and also rejects path and drive separators. Instrument paths and explicit
 image/waveform file specifications may contain `/`, `\`, and `:`. Values are
 not trimmed, sanitized, escaped, or given automatic extensions. `save-image`
 and `save-waveform` require an explicit filename in v1 for agent safety and
-wait for `*OPC?` after starting the save.
+wait for `*OPC?` after starting the save. `save-image` uses a bounded 15-second
+timeout for this completion query and then restores the prior session timeout;
+`save-waveform` retains the current session timeout.
 
 These commands send `:SAVE...` SCPI so the oscilloscope writes to its own
 current save directory, internal storage, or attached USB storage. They do not

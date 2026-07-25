@@ -1429,7 +1429,10 @@ double quotes, control characters, CR/LF, or semicolons. Paths and explicit
 start filenames may contain `/`, `\`, and `:`. `save-filename` is base-name
 only and additionally rejects path and drive separators. The worker never
 trims, sanitizes, escapes, or appends an extension. Start commands send
-`*OPC?` after the SAVE command before reporting success.
+`*OPC?` after the SAVE command before reporting success. `save-image`
+temporarily uses a bounded 15-second timeout for that completion query and then
+restores the prior session timeout. `save-waveform` retains the current session
+timeout.
 
 Unknown keys, aliases, empty arguments, `query: false`, query/configure mixes,
 string or numeric booleans, wrong string types, non-integer points, and values
