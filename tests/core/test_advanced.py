@@ -9,13 +9,18 @@ from scopes_tool_core.advanced import (
     cursor_configure_commands,
     fft_configure_commands,
     fft_query_commands,
+    math_display_command,
+    math_display_query,
+    math_vertical_commands,
+    math_vertical_query_commands,
+    parse_math_display,
     setup_recall_command,
     setup_save_command,
     trigger_holdoff_command,
     trigger_holdoff_commands,
 )
 from scopes_tool_core.capabilities import capabilities_for_model
-from scopes_tool_core.errors import ParameterValidationError
+from scopes_tool_core.errors import ChannelResponseError, ParameterValidationError
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend, SimulatorBackendError
 
@@ -100,7 +105,7 @@ def test_fft_function_validation_uses_profile_function_count():
 
     with pytest.raises(
         ParameterValidationError,
-        match="FFT operations are not supported by this capability profile",
+        match="Math functions are not supported by this capability profile",
     ):
         fft_configure_commands(1, 1, capabilities=unsupported)
 
@@ -110,6 +115,87 @@ def test_fft_function_validation_uses_profile_function_count():
     assert fft_configure_commands(4, 1, capabilities=four_functions)[:2] == [
         ":FUNCtion4:OPERation FFT",
         ":FUNCtion4:SOURce1 CHANnel1",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("model", "prefix"),
+    [
+        ("DSOX2004A", ":FUNCtion"),
+        ("DSOX3024A", ":FUNCtion"),
+        ("DSOX4024A", ":FUNCtion1"),
+    ],
+)
+def test_math_p1_commands_use_series_appropriate_function_prefix(model, prefix):
+    capabilities = capabilities_for_model(model)
+
+    assert math_display_command(1, True, capabilities=capabilities) == (
+        f"{prefix}:DISPlay ON"
+    )
+    assert math_display_query(1, capabilities=capabilities) == f"{prefix}:DISPlay?"
+    assert math_vertical_commands(
+        1, scale=2, offset=0.5, capabilities=capabilities
+    ) == [
+        f"{prefix}:SCALe 2",
+        f"{prefix}:OFFSet 0.5",
+    ]
+    assert math_vertical_commands(
+        1, range_value=8, capabilities=capabilities
+    ) == [f"{prefix}:RANGe 8"]
+    assert math_vertical_query_commands(1, capabilities=capabilities) == [
+        f"{prefix}:SCALe?",
+        f"{prefix}:RANGe?",
+        f"{prefix}:OFFSet?",
+    ]
+
+
+def test_math_p1_validation_rejects_invalid_functions_and_vertical_values():
+    single_function = capabilities_for_model("DSOX2004A")
+    unsupported = replace(single_function, math_function_count=0)
+
+    with pytest.raises(ParameterValidationError, match="between 1 and 1"):
+        math_display_query(2, capabilities=single_function)
+    with pytest.raises(ParameterValidationError, match="Math functions are not supported"):
+        math_display_query(1, capabilities=unsupported)
+    with pytest.raises(ParameterValidationError, match="greater than zero"):
+        math_vertical_commands(1, scale=0, capabilities=single_function)
+    with pytest.raises(ParameterValidationError, match="greater than zero"):
+        math_vertical_commands(1, range_value=-1, capabilities=single_function)
+    with pytest.raises(ParameterValidationError, match="finite number"):
+        math_vertical_commands(
+            1, offset=float("inf"), capabilities=single_function
+        )
+    with pytest.raises(ParameterValidationError, match="mutually exclusive"):
+        math_vertical_commands(
+            1, scale=2, range_value=8, capabilities=single_function
+        )
+    with pytest.raises(ChannelResponseError, match="Math display"):
+        parse_math_display("UNKNOWN")
+
+
+def test_math_p1_simulator_round_trip_in_one_session():
+    backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.configure_math_display(1, True)
+    display = scope.query_math_display(1)
+    scope.configure_math_vertical(1, scale=2, offset=0.5)
+    vertical = scope.query_math_vertical(1)
+
+    assert display.enabled is True
+    assert display.raw == "1"
+    assert vertical.scale == pytest.approx(2.0)
+    assert vertical.range == pytest.approx(8.0)
+    assert vertical.offset == pytest.approx(0.5)
+    assert backend.history[1:] == [
+        ":FUNCtion:DISPlay ON",
+        ":FUNCtion:DISPlay?",
+        ":FUNCtion:SCALe 2",
+        ":FUNCtion:OFFSet 0.5",
+        ":FUNCtion:SCALe?",
+        ":FUNCtion:RANGe?",
+        ":FUNCtion:OFFSet?",
     ]
 
 

@@ -1883,18 +1883,33 @@ Additional DSO-X 4024A controls:
 .\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --source-channel 1 --units decibel --window hanning --center-hz 1000 --span-hz 10000 --display on --log-scpi
 .\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --source-channel 1 --display off --log-scpi
 .\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-display --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --on --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-display --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-vertical --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --scale 2 --offset 0.5 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-vertical --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --range 8 --offset 0 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-vertical --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
 ```
 
-The existing `fft` command uses the model's instrument-side Math function
-layout. 2000X and 3000X models have one unindexed `:FUNCtion` subsystem and
-require `--function 1`. 4000X models use indexed `:FUNCtion1` through
-`:FUNCtion4` slots and accept `--function 1..4`. MATH-P0 corrects only this
-existing FFT configuration and query path; other MATH operations are not
-implemented.
+The existing `fft`, `math-display`, and `math-vertical` commands use the
+model's instrument-side Math function layout. 2000X and 3000X models have one
+unindexed `:FUNCtion` subsystem and require `--function 1`. 4000X models use
+indexed `:FUNCtion1` through `:FUNCtion4` slots and accept
+`--function 1..4`.
+
+`math-display` requires exactly one of `--on`, `--off`, or `--query`.
+`math-vertical` query mode cannot include setters. Configure mode requires
+`--scale`, `--range`, or `--offset`; scale and range are mutually exclusive,
+while either may be combined with offset. Vertical configuration does not
+automatically enable Math display. Enabling one 4000X Math slot does not
+actively disable another slot; any single-visible-slot behavior is managed by
+the instrument. MATH-P1 does not configure Math operations or sources, probe
+licenses, perform autoscale, or calculate host-side Math. These commands have
+hardware-free validation only; no live hardware validation was performed.
 
 These commands are explicit user actions and are never called by `doctor`,
 `smoke`, or `acquisition-check`. Some change front-panel state, such as cursor,
-holdoff, autoscale, setup, FFT, and front-panel measurement statistics.
+holdoff, autoscale, setup, FFT, Math display/vertical controls, and front-panel
+measurement statistics.
 
 Phase 6A `capture-batch` intentionally does not change acquisition mode, wait
 for a trigger, poll for acquisition completion, change VISA timeout defaults,

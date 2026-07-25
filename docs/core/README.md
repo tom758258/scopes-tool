@@ -20,6 +20,15 @@ Core owns runtime behavior:
 - Analog channel advanced setting helpers for impedance, invert, full-scale
   range, units, vernier, and probe skew.
 - Simulator and fake backend support for hardware-free tests.
+- MATH-P1 instrument-side Math waveform display and vertical controls through
+  `Oscilloscope.configure_math_display()`, `query_math_display()`,
+  `configure_math_vertical()`, and `query_math_vertical()`. The controls use
+  the single unindexed `:FUNCtion` subsystem on 2000X/3000X and indexed slots
+  1 through 4 on 4000X. Vertical configuration supports scale or range plus an
+  optional offset and does not automatically enable display. Math operation
+  selection, sources, host-side Math, license probing, autoscale, and slot
+  coordination are outside P1. Coverage is hardware-free only; no live
+  validation was performed.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,

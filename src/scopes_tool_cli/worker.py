@@ -19,6 +19,12 @@ from urllib import request as urlrequest
 from uuid import uuid4
 
 from scopes_tool_core.errors import OscilloscopeError
+from scopes_tool_core.advanced import (
+    math_display_command,
+    math_display_query,
+    math_vertical_commands,
+    math_vertical_query_commands,
+)
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.channel import validate_analog_channel
 from scopes_tool_core.demo import validate_demo_function, validate_demo_phase
@@ -145,6 +151,8 @@ DOMAIN_COMMANDS = {
     "setup-save",
     "setup-recall",
     "fft",
+    "math-display",
+    "math-vertical",
 }
 
 
@@ -395,6 +403,7 @@ def parse_domain_command(
     arguments = _normalize_demo_worker_arguments(command, arguments, runtime)
     arguments = _normalize_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_save_export_worker_arguments(command, arguments)
+    arguments = _normalize_math_worker_arguments(command, arguments, runtime)
     arguments = _normalize_trigger_edge_worker_arguments(command, arguments)
     arguments = _normalize_trigger_edge_source_worker_arguments(
         command, arguments, runtime
@@ -1508,6 +1517,89 @@ def _normalize_save_export_worker_arguments(
                 "save-waveform-length argument points must be an integer"
             )
         validate_save_waveform_length(value)
+    return dict(arguments)
+
+
+def _normalize_math_worker_arguments(
+    command: str, arguments: dict[str, Any], runtime: WorkerRuntime
+) -> dict[str, Any]:
+    if command not in {"math-display", "math-vertical"}:
+        return arguments
+
+    allowed = (
+        {"function", "on", "off", "query"}
+        if command == "math-display"
+        else {"function", "query", "scale", "range", "offset"}
+    )
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"unknown argument for {command}: {sorted(unknown)[0]}"
+        )
+    function = arguments.get("function")
+    if not isinstance(function, int) or isinstance(function, bool):
+        raise OscilloscopeError(f"{command} argument function must be an integer")
+    capabilities = capabilities_for_model_id(runtime.model)
+
+    if command == "math-display":
+        actions = [key for key in ("on", "off", "query") if key in arguments]
+        for key in actions:
+            if arguments[key] is not True:
+                raise OscilloscopeError(
+                    f"math-display argument {key} must be exactly true"
+                )
+        if len(actions) != 1:
+            raise OscilloscopeError(
+                "math-display requires exactly one of on, off, or query"
+            )
+        if actions[0] == "query":
+            math_display_query(function, capabilities=capabilities)
+        else:
+            math_display_command(
+                function, actions[0] == "on", capabilities=capabilities
+            )
+        return dict(arguments)
+
+    setters = {
+        key: arguments[key]
+        for key in ("scale", "range", "offset")
+        if key in arguments
+    }
+    if "query" in arguments:
+        if arguments["query"] is not True:
+            raise OscilloscopeError(
+                "math-vertical argument query must be exactly true"
+            )
+        if setters:
+            raise OscilloscopeError(
+                "math-vertical query cannot be combined with configure arguments"
+            )
+        math_vertical_query_commands(function, capabilities=capabilities)
+        return dict(arguments)
+    if not setters:
+        raise OscilloscopeError(
+            "math-vertical configure requires scale, range, or offset"
+        )
+    for key, value in setters.items():
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise OscilloscopeError(
+                f"math-vertical argument {key} must be a finite number"
+            )
+        if key in {"scale", "range"} and value <= 0:
+            raise OscilloscopeError(
+                f"math-vertical argument {key} must be greater than zero"
+            )
+    math_vertical_commands(
+        function,
+        scale=setters.get("scale"),
+        range_value=setters.get("range"),
+        offset=setters.get("offset"),
+        capabilities=capabilities,
+    )
     return dict(arguments)
 
 

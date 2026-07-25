@@ -40,6 +40,10 @@ from scopes_tool_core.advanced import (
     cursor_configure_commands,
     fft_configure_commands,
     fft_query_commands,
+    math_display_command,
+    math_display_query,
+    math_vertical_commands,
+    math_vertical_query_commands,
     setup_recall_command,
     setup_save_command,
     trigger_holdoff_commands,
@@ -2454,6 +2458,47 @@ def _build_parser() -> argparse.ArgumentParser:
     fft_parser.add_argument("--span-hz", type=_positive_plain_float, default=None)
     fft_parser.add_argument("--display", choices=("on", "off"), default=None)
 
+    math_display_parser = subparsers.add_parser(
+        "math-display",
+        allow_abbrev=False,
+        help="enable, disable, or query one instrument-side Math waveform display",
+    )
+    _add_scope_connection_args(math_display_parser)
+    math_display_parser.add_argument("--function", type=_positive_int, required=True)
+    math_display_action = math_display_parser.add_mutually_exclusive_group(
+        required=True
+    )
+    math_display_action.add_argument(
+        "--on", dest="math_display_action", action="store_const", const="on"
+    )
+    math_display_action.add_argument(
+        "--off", dest="math_display_action", action="store_const", const="off"
+    )
+    math_display_action.add_argument(
+        "--query", dest="math_display_action", action="store_const", const="query"
+    )
+
+    math_vertical_parser = subparsers.add_parser(
+        "math-vertical",
+        allow_abbrev=False,
+        help="configure or query instrument-side Math waveform vertical controls",
+    )
+    _add_scope_connection_args(math_vertical_parser)
+    math_vertical_parser.add_argument("--function", type=_positive_int, required=True)
+    math_vertical_parser.add_argument(
+        "--query", dest="math_vertical_query", action="store_true"
+    )
+    math_vertical_size = math_vertical_parser.add_mutually_exclusive_group()
+    math_vertical_size.add_argument(
+        "--scale", type=_positive_plain_float, default=None
+    )
+    math_vertical_size.add_argument(
+        "--range", dest="range_value", type=_positive_plain_float, default=None
+    )
+    math_vertical_parser.add_argument(
+        "--offset", type=_measurement_finite_float, default=None
+    )
+
     acquisition_check_parser = subparsers.add_parser(
         "acquisition-check",
         help="run the acquisition configuration hardware validation workflow",
@@ -2780,6 +2825,10 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_setup_recall(args)
     if args.command == "fft":
         return _cmd_fft(args)
+    if args.command == "math-display":
+        return _cmd_math_display(args)
+    if args.command == "math-vertical":
+        return _cmd_math_vertical(args)
     if args.command == "acquisition-check":
         return _cmd_acquisition_check(args)
     raise OscilloscopeError("missing command")
@@ -3325,6 +3374,40 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         _validate_trigger_pattern_args(args)
     if getattr(args, "command", None) == "trigger-or":
         _validate_trigger_or_args(args)
+    if getattr(args, "command", None) in {"math-display", "math-vertical"}:
+        _validate_math_args(args)
+
+
+def _validate_math_args(args: argparse.Namespace) -> None:
+    capabilities = _pre_open_capabilities(args)
+    if args.command == "math-display":
+        if args.math_display_action == "query":
+            math_display_query(args.function, capabilities=capabilities)
+        else:
+            math_display_command(
+                args.function,
+                args.math_display_action == "on",
+                capabilities=capabilities,
+            )
+        return
+
+    if args.math_vertical_query:
+        if any(
+            value is not None
+            for value in (args.scale, args.range_value, args.offset)
+        ):
+            raise ParameterValidationError(
+                "math-vertical --query cannot be combined with configure options."
+            )
+        math_vertical_query_commands(args.function, capabilities=capabilities)
+        return
+    math_vertical_commands(
+        args.function,
+        scale=args.scale,
+        range_value=args.range_value,
+        offset=args.offset,
+        capabilities=capabilities,
+    )
 
 
 def _pre_open_capabilities(
@@ -5108,6 +5191,52 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             capabilities=capabilities,
         )
         return commands + [":SYSTem:ERRor?"], [], {"operation": "set", "commands": commands, "function": args.function, "source_channel": args.source_channel, "units": args.units, "window": args.window, "center_hz": args.center_hz, "span_hz": args.span_hz, "display": args.display}
+    if command == "math-display":
+        if args.math_display_action == "query":
+            planned = math_display_query(args.function, capabilities=capabilities)
+            return [planned, ":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "function": args.function,
+                "enabled": None,
+                "raw": None,
+            }
+        enabled = args.math_display_action == "on"
+        planned = math_display_command(
+            args.function, enabled, capabilities=capabilities
+        )
+        return [planned, ":SYSTem:ERRor?"], [], {
+            "operation": "set",
+            "function": args.function,
+            "enabled": enabled,
+            "command": planned,
+        }
+    if command == "math-vertical":
+        if args.math_vertical_query:
+            planned = math_vertical_query_commands(
+                args.function, capabilities=capabilities
+            )
+            return planned + [":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "function": args.function,
+                "scale": None,
+                "range": None,
+                "offset": None,
+            }
+        planned = math_vertical_commands(
+            args.function,
+            scale=args.scale,
+            range_value=args.range_value,
+            offset=args.offset,
+            capabilities=capabilities,
+        )
+        return planned + [":SYSTem:ERRor?"], [], {
+            "operation": "set",
+            "function": args.function,
+            "scale": args.scale,
+            "range": args.range_value,
+            "offset": args.offset,
+            "commands": planned,
+        }
     return [], [], {}
 
 
@@ -9221,6 +9350,104 @@ def _cmd_fft(args: argparse.Namespace) -> int:
             scope.configure_fft(args.function, args.source_channel, units=args.units, window=args.window, center_hz=args.center_hz, span_hz=args.span_hz, display=display)
             commands = fft_configure_commands(args.function, args.source_channel, units=args.units, window=args.window, center_hz=args.center_hz, span_hz=args.span_hz, display=display, capabilities=scope.capabilities)
             _json_update_result(operation="set", commands=commands, function=args.function, source_channel=args.source_channel)
+            for command in commands:
+                print(f"Command: {command}")
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_math_display(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        if args.math_display_action == "query":
+            state = scope.query_math_display(args.function)
+            _json_update_result(
+                operation="query",
+                function=state.function,
+                enabled=state.enabled,
+                raw=state.raw,
+            )
+            print(
+                f"Command: {math_display_query(args.function, capabilities=scope.capabilities)}"
+            )
+            print(f"Math display: {'ON' if state.enabled else 'OFF'}")
+        else:
+            enabled = args.math_display_action == "on"
+            scope.configure_math_display(args.function, enabled)
+            command = math_display_command(
+                args.function, enabled, capabilities=scope.capabilities
+            )
+            _json_update_result(
+                operation="set",
+                function=args.function,
+                enabled=enabled,
+                command=command,
+            )
+            print(f"Command: {command}")
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_math_vertical(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        if args.math_vertical_query:
+            state = scope.query_math_vertical(args.function)
+            _json_update_result(
+                operation="query",
+                function=state.function,
+                scale=state.scale,
+                range=state.range,
+                offset=state.offset,
+            )
+            commands = math_vertical_query_commands(
+                args.function, capabilities=scope.capabilities
+            )
+            for command in commands:
+                print(f"Command: {command}")
+            print(f"Scale: {state.scale:.12g}")
+            print(f"Range: {state.range:.12g}")
+            print(f"Offset: {state.offset:.12g}")
+        else:
+            scope.configure_math_vertical(
+                args.function,
+                scale=args.scale,
+                range_value=args.range_value,
+                offset=args.offset,
+            )
+            commands = math_vertical_commands(
+                args.function,
+                scale=args.scale,
+                range_value=args.range_value,
+                offset=args.offset,
+                capabilities=scope.capabilities,
+            )
+            _json_update_result(
+                operation="set",
+                function=args.function,
+                scale=args.scale,
+                range=args.range_value,
+                offset=args.offset,
+                commands=commands,
+            )
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()

@@ -1850,6 +1850,9 @@ class SimulatorBackend:
                 "center": 0.0,
                 "span": 1.0e6,
                 "display": False,
+                "scale": 1.0,
+                "range": 8.0,
+                "offset": 0.0,
             },
         )
         primary, secondary, value = match.group(2).upper(), (match.group(3) or "").upper(), match.group(4)
@@ -1859,6 +1862,12 @@ class SimulatorBackend:
             key["source"] = self._validate_channel(int(value.rsplit("CHANnel", 1)[1]))
         elif primary == "DISPLAY":
             key["display"] = value.upper() == "ON"
+        elif primary == "SCALE":
+            key["scale"] = float(value)
+        elif primary == "RANGE":
+            key["range"] = float(value)
+        elif primary == "OFFSET":
+            key["offset"] = float(value)
         elif primary == "FFT" and secondary == "VTYPE":
             key["units"] = value
         elif primary == "FFT" and secondary == "WINDOW":
@@ -1890,6 +1899,9 @@ class SimulatorBackend:
                 "center": 0.0,
                 "span": 1.0e6,
                 "display": False,
+                "scale": 1.0,
+                "range": 8.0,
+                "offset": 0.0,
             },
         )
         primary, secondary = match.group(2).upper(), (match.group(3) or "").upper()
@@ -1899,6 +1911,12 @@ class SimulatorBackend:
             return f"CHANnel{state['source']}"
         if primary == "DISPLAY":
             return "1" if state["display"] else "0"
+        if primary == "SCALE":
+            return f"{float(state['scale']):.12g}"
+        if primary == "RANGE":
+            return f"{float(state['range']):.12g}"
+        if primary == "OFFSET":
+            return f"{float(state['offset']):.12g}"
         if primary == "FFT" and secondary == "VTYPE":
             return str(state["units"])
         if primary == "FFT" and secondary == "WINDOW":

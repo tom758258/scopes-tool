@@ -329,6 +329,13 @@ Control and setup:
   `source_channel`, `units`, `window`, `center_hz`, `span_hz`, `display`.
   `fft --query` reports the CLI action as `operation: "query"` and the
   instrument math operation as `fft_operation`.
+- `math-display`: configure results include `operation: "set"`, `function`,
+  boolean `enabled`, and executed `command`. Query results include
+  `operation: "query"`, `function`, boolean `enabled`, and stripped `raw`.
+- `math-vertical`: configure results include `operation: "set"`, `function`,
+  nullable `scale`, `range`, and `offset`, plus ordered executed `commands`.
+  Query results include `operation: "query"`, `function`, and numeric `scale`,
+  `range`, and `offset`.
 
 Measurement and artifact-producing flows:
 

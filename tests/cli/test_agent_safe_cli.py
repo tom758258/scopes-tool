@@ -1522,6 +1522,98 @@ def test_fft_simulate_2000x_uses_unindexed_commands_for_configure_and_query(caps
     assert payload["system_error"]["is_error"] is False
 
 
+def test_math_display_simulate_2000x_uses_unindexed_scpi(capsys):
+    assert (
+        cli.main(
+            [
+                "math-display",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+                "--function",
+                "1",
+                "--on",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_stdout(capsys)
+    result = payload["result"]
+    assert result["operation"] == "set"
+    assert result["function"] == 1
+    assert result["enabled"] is True
+    assert result["command"] == ":FUNCtion:DISPlay ON"
+    assert payload["scpi"]["sent"] == [
+        "*IDN?",
+        ":FUNCtion:DISPlay ON",
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_math_vertical_simulate_4000x_uses_indexed_scpi(capsys):
+    assert (
+        cli.main(
+            [
+                "math-vertical",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox4024a",
+                "--function",
+                "2",
+                "--scale",
+                "2",
+                "--offset",
+                "0.5",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_stdout(capsys)
+    result = payload["result"]
+    assert result["operation"] == "set"
+    assert result["function"] == 2
+    assert result["scale"] == 2.0
+    assert result["range"] is None
+    assert result["offset"] == 0.5
+    assert result["commands"] == [
+        ":FUNCtion2:SCALe 2",
+        ":FUNCtion2:OFFSet 0.5",
+    ]
+    assert payload["scpi"]["sent"] == [
+        "*IDN?",
+        ":FUNCtion2:SCALe 2",
+        ":FUNCtion2:OFFSet 0.5",
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_math_vertical_query_with_setter_fails_before_open(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+
+    assert (
+        cli.main(
+            [
+                "math-vertical",
+                "--simulate",
+                "--json",
+                "--function",
+                "1",
+                "--query",
+                "--offset",
+                "0",
+            ]
+        )
+        == 1
+    )
+    assert _json_stdout(capsys)["ok"] is False
+
+
 def test_measure_simulate_json_reports_invalid_sentinel(monkeypatch, capsys):
     backend = SimulatorBackend(invalid_measurement_channels={1})
     monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)

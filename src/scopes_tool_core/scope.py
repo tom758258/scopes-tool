@@ -10,6 +10,9 @@ from .advanced import (
     CursorState,
     FFTController,
     FFTState,
+    MathController,
+    MathDisplayState,
+    MathVerticalState,
     SetupController,
     TriggerHoldoffController,
 )
@@ -1177,6 +1180,30 @@ class Oscilloscope:
     def query_fft(self, function: int) -> FFTState:
         return self._fft_controller().query(function)
 
+    def configure_math_display(self, function: int, enabled: bool) -> None:
+        self._math_controller().set_display(function, enabled)
+
+    def query_math_display(self, function: int) -> MathDisplayState:
+        return self._math_controller().query_display(function)
+
+    def configure_math_vertical(
+        self,
+        function: int,
+        *,
+        scale: float | None = None,
+        range_value: float | None = None,
+        offset: float | None = None,
+    ) -> None:
+        self._math_controller().configure_vertical(
+            function,
+            scale=scale,
+            range_value=range_value,
+            offset=offset,
+        )
+
+    def query_math_vertical(self, function: int) -> MathVerticalState:
+        return self._math_controller().query_vertical(function)
+
     def capture_screenshot_png(self, *, background: str = "black") -> ScreenshotCapture:
         """Capture the current screen as a color PNG image."""
 
@@ -1463,6 +1490,13 @@ class Oscilloscope:
                 "FFT operations require known capabilities; call query_idn() first."
             )
         return FFTController(self.scpi, self.capabilities)
+
+    def _math_controller(self) -> MathController:
+        if self.capabilities is None:
+            raise ParameterValidationError(
+                "Math operations require known capabilities; call query_idn() first."
+            )
+        return MathController(self.scpi, self.capabilities)
 
     def _screenshot_controller(self) -> ScreenshotController:
         if self.capabilities is None:

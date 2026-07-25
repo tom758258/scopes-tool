@@ -15,7 +15,7 @@ from .channel import (
     channel_scale_query,
     validate_analog_channel,
 )
-from .errors import ParameterValidationError
+from .errors import ChannelResponseError, ParameterValidationError
 from .scpi import SCPIClient
 
 
@@ -82,6 +82,21 @@ class FFTState:
     center_hz: float
     span_hz: float
     display: bool
+
+
+@dataclass(frozen=True)
+class MathDisplayState:
+    function: int
+    enabled: bool
+    raw: str
+
+
+@dataclass(frozen=True)
+class MathVerticalState:
+    function: int
+    scale: float
+    range: float
+    offset: float
 
 
 class CursorController:
@@ -258,6 +273,55 @@ class FFTController:
             center_hz=self.scpi.query_float(center_command),
             span_hz=self.scpi.query_float(span_command),
             display=self.scpi.query(display_command).strip() in {"1", "ON"},
+        )
+
+
+class MathController:
+    def __init__(self, scpi: SCPIClient, capabilities: ScopeCapabilities) -> None:
+        self.scpi = scpi
+        self.capabilities = capabilities
+
+    def set_display(self, function: int, enabled: bool) -> None:
+        self.scpi.write(
+            math_display_command(function, enabled, capabilities=self.capabilities)
+        )
+
+    def query_display(self, function: int) -> MathDisplayState:
+        raw = self.scpi.query(
+            math_display_query(function, capabilities=self.capabilities)
+        ).strip()
+        return MathDisplayState(
+            function=function,
+            enabled=parse_math_display(raw),
+            raw=raw,
+        )
+
+    def configure_vertical(
+        self,
+        function: int,
+        *,
+        scale: float | None = None,
+        range_value: float | None = None,
+        offset: float | None = None,
+    ) -> None:
+        for command in math_vertical_commands(
+            function,
+            scale=scale,
+            range_value=range_value,
+            offset=offset,
+            capabilities=self.capabilities,
+        ):
+            self.scpi.write(command)
+
+    def query_vertical(self, function: int) -> MathVerticalState:
+        scale_command, range_command, offset_command = math_vertical_query_commands(
+            function, capabilities=self.capabilities
+        )
+        return MathVerticalState(
+            function=function,
+            scale=self.scpi.query_float(scale_command),
+            range=self.scpi.query_float(range_command),
+            offset=self.scpi.query_float(offset_command),
         )
 
 
@@ -615,13 +679,83 @@ def fft_query_commands(
     ]
 
 
+def math_display_command(
+    function: int,
+    enabled: bool,
+    *,
+    capabilities: ScopeCapabilities | None = None,
+) -> str:
+    if not isinstance(enabled, bool):
+        raise ParameterValidationError("Math display enabled value must be a boolean.")
+    prefix = math_function_scpi_prefix(function, capabilities)
+    return f"{prefix}:DISPlay {'ON' if enabled else 'OFF'}"
+
+
+def math_display_query(
+    function: int, *, capabilities: ScopeCapabilities | None = None
+) -> str:
+    return f"{math_function_scpi_prefix(function, capabilities)}:DISPlay?"
+
+
+def parse_math_display(raw: str) -> bool:
+    normalized = raw.strip().upper()
+    if normalized in {"1", "ON"}:
+        return True
+    if normalized in {"0", "OFF"}:
+        return False
+    raise ChannelResponseError(f"Could not parse Math display response: {raw!r}")
+
+
+def math_vertical_commands(
+    function: int,
+    *,
+    scale: float | None = None,
+    range_value: float | None = None,
+    offset: float | None = None,
+    capabilities: ScopeCapabilities | None = None,
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    if scale is not None and range_value is not None:
+        raise ParameterValidationError("--scale and --range are mutually exclusive.")
+    if scale is None and range_value is None and offset is None:
+        raise ParameterValidationError(
+            "Math vertical configure requires --scale, --range, or --offset."
+        )
+    commands: list[str] = []
+    if scale is not None:
+        commands.append(
+            f"{prefix}:SCALe {_format_number(validate_positive(scale, '--scale'))}"
+        )
+    if range_value is not None:
+        commands.append(
+            f"{prefix}:RANGe "
+            f"{_format_number(validate_positive(range_value, '--range'))}"
+        )
+    if offset is not None:
+        commands.append(
+            f"{prefix}:OFFSet {_format_number(validate_finite_number(offset, '--offset'))}"
+        )
+    return commands
+
+
+def math_vertical_query_commands(
+    function: int, *, capabilities: ScopeCapabilities | None = None
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    return [
+        f"{prefix}:SCALe?",
+        f"{prefix}:RANGe?",
+        f"{prefix}:OFFSet?",
+    ]
+
+
 def math_function_scpi_prefix(
     function: int, capabilities: ScopeCapabilities | None = None
 ) -> str:
     function = validate_function_number(function)
     if capabilities is not None and capabilities.math_function_count <= 0:
         raise ParameterValidationError(
-            "FFT operations are not supported by this capability profile."
+            "Math functions are not supported by this capability profile."
         )
     if capabilities is not None and function > capabilities.math_function_count:
         raise ParameterValidationError(

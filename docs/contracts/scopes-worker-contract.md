@@ -159,7 +159,7 @@ Worker `/command` supports the existing Scopes capability surface:
   `trigger-delay`, `trigger-setup-hold`, `trigger-edge-burst`, `trigger-tv`,
   `trigger-pattern`, `trigger-or`, `trigger-sweep`, `trigger-noise-reject`,
   `trigger-hf-reject`, `trigger-holdoff`, `cursor`, `autoscale`
-- `setup-save`, `setup-recall`, `fft`
+- `setup-save`, `setup-recall`, `fft`, `math-display`, `math-vertical`
 
 `list-resources` remains an explicit discovery command outside live worker
 flows. `hardware-report` remains a local report renderer. They are not accepted
@@ -1339,6 +1339,44 @@ errors use the existing instrument error path. This pack is hardware-free
 validated only. It does not implement WGEN, WebUI runtime behavior, or the
 additional 4000X-only DEMO functions, and it does not claim validation across
 physical models or firmware revisions.
+
+### MATH-P1 Display And Vertical Commands
+
+MATH-P1 controls instrument-side Math waveform display and vertical settings.
+It preserves the existing `fft` command and adds these worker request shapes:
+
+```json
+{"command": "math-display", "arguments": {"function": 1, "on": true}}
+```
+
+```json
+{"command": "math-display", "arguments": {"function": 1, "query": true}}
+```
+
+```json
+{"command": "math-vertical", "arguments": {"function": 1, "scale": 2.0, "offset": 0.5}}
+```
+
+```json
+{"command": "math-vertical", "arguments": {"function": 1, "query": true}}
+```
+
+`math-display` requires exactly one of `on: true`, `off: true`, or
+`query: true`. `math-vertical` query cannot include setters. Configure requires
+at least one finite numeric `scale`, `range`, or `offset`; scale and range must
+be positive and are mutually exclusive, while either may be combined with
+offset. Booleans are not numeric values. Unknown keys and noncanonical boolean
+forms are rejected.
+
+The worker startup model profile validates `function` before enqueue,
+artifacts, backend open, or SCPI. 2000X/3000X accept only function 1 and use
+unindexed `:FUNCtion`; 4000X accepts functions 1 through 4 and uses indexed
+`:FUNCtion<n>`. Vertical configuration does not automatically enable display.
+The worker does not disable other 4000X slots; instrument display behavior
+remains instrument-managed. P1 does not configure Math operations or sources,
+probe licenses, perform autoscale, or calculate host-side Math. It adds no
+artifacts and has hardware-free validation only; no live validation was
+performed.
 
 ### Search Basic Pack v1 Commands
 
