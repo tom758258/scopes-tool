@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from scopes_tool_core.advanced import (
@@ -94,6 +96,13 @@ def test_fft_commands_use_series_appropriate_function_prefix(model, prefix):
 def test_fft_function_validation_uses_profile_function_count():
     single_function = capabilities_for_model("DSOX2004A")
     four_functions = capabilities_for_model("DSOX4024A")
+    unsupported = replace(four_functions, math_function_count=0)
+
+    with pytest.raises(
+        ParameterValidationError,
+        match="FFT operations are not supported by this capability profile",
+    ):
+        fft_configure_commands(1, 1, capabilities=unsupported)
 
     with pytest.raises(ParameterValidationError, match="between 1 and 1"):
         fft_configure_commands(2, 1, capabilities=single_function)

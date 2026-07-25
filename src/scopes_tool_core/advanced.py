@@ -619,6 +619,10 @@ def math_function_scpi_prefix(
     function: int, capabilities: ScopeCapabilities | None = None
 ) -> str:
     function = validate_function_number(function)
+    if capabilities is not None and capabilities.math_function_count <= 0:
+        raise ParameterValidationError(
+            "FFT operations are not supported by this capability profile."
+        )
     if capabilities is not None and function > capabilities.math_function_count:
         raise ParameterValidationError(
             f"--function must be between 1 and {capabilities.math_function_count}."

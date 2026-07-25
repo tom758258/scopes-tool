@@ -4,11 +4,34 @@ import scopes_tool_core.identity as identity_module
 
 from scopes_tool_core import PHYSICAL_MODEL_REGISTRY
 from scopes_tool_core.capabilities import (
+    ScopeCapabilities,
     capabilities_for_model,
     capabilities_for_model_id,
 )
 from scopes_tool_core.errors import UnsupportedModelError
 from scopes_tool_core.identity import PhysicalModelInfo
+
+
+def test_scope_capabilities_preserves_existing_optional_positional_order():
+    capabilities = ScopeCapabilities(
+        "TEST",
+        4,
+        1000,
+        10000,
+        True,
+        False,
+        True,
+        False,
+        True,
+        False,
+        False,
+        True,
+        2,
+    )
+
+    assert capabilities.supports_screenshot_format_pack is True
+    assert capabilities.reference_waveforms == 2
+    assert capabilities.math_function_count == 0
 
 
 @pytest.mark.parametrize(

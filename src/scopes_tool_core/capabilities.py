@@ -23,7 +23,6 @@ class ScopeCapabilities:
     supports_screenshot: bool
     supports_segmented_memory: bool
     supports_serial_decode: bool
-    math_function_count: int = 0
     supports_screenshot_format_pack: bool = False
     reference_waveforms: int = 0
     supports_channel_label: bool = False
@@ -38,6 +37,7 @@ class ScopeCapabilities:
     search_modes: frozenset[str] = frozenset()
     supports_demo: bool = False
     demo_functions: frozenset[str] = frozenset()
+    math_function_count: int = 0
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
