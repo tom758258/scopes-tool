@@ -1832,10 +1832,14 @@ class SimulatorBackend:
         return ",".join(parts)
 
     def _apply_fft_write(self, command: str) -> bool:
-        match = re.fullmatch(r":FUNCtion(\d+):([A-Za-z0-9]+)(?::([A-Za-z]+))?\s+(.+)", command, flags=re.IGNORECASE)
+        match = re.fullmatch(
+            r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z]+))?\s+(.+)",
+            command,
+            flags=re.IGNORECASE,
+        )
         if not match:
             return False
-        function = int(match.group(1))
+        function = int(match.group(1) or "1")
         key = self.fft_functions.setdefault(
             function,
             {
@@ -1868,10 +1872,14 @@ class SimulatorBackend:
         return True
 
     def _query_fft(self, command: str) -> str | None:
-        match = re.fullmatch(r":FUNCtion(\d+):([A-Za-z0-9]+)(?::([A-Za-z]+))?\?", command, flags=re.IGNORECASE)
+        match = re.fullmatch(
+            r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z]+))?\?",
+            command,
+            flags=re.IGNORECASE,
+        )
         if not match:
             return None
-        function = int(match.group(1))
+        function = int(match.group(1) or "1")
         state = self.fft_functions.setdefault(
             function,
             {

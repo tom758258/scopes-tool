@@ -1885,6 +1885,13 @@ Additional DSO-X 4024A controls:
 .\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --log-scpi
 ```
 
+The existing `fft` command uses the model's instrument-side Math function
+layout. 2000X and 3000X models have one unindexed `:FUNCtion` subsystem and
+require `--function 1`. 4000X models use indexed `:FUNCtion1` through
+`:FUNCtion4` slots and accept `--function 1..4`. MATH-P0 corrects only this
+existing FFT configuration and query path; other MATH operations are not
+implemented.
+
 These commands are explicit user actions and are never called by `doctor`,
 `smoke`, or `acquisition-check`. Some change front-panel state, such as cursor,
 holdoff, autoscale, setup, FFT, and front-panel measurement statistics.

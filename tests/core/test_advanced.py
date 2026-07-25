@@ -6,6 +6,7 @@ from scopes_tool_core.advanced import (
     cursor_auto_timebase_plan,
     cursor_configure_commands,
     fft_configure_commands,
+    fft_query_commands,
     setup_recall_command,
     setup_save_command,
     trigger_holdoff_command,
@@ -48,6 +49,19 @@ def test_advanced_command_formatting():
     assert setup_recall_command(file_spec="\\usb\\setup.scp") == (
         ':RECall:SETup "\\usb\\setup.scp"'
     )
+
+
+@pytest.mark.parametrize(
+    ("model", "prefix"),
+    [
+        ("DSOX2004A", ":FUNCtion"),
+        ("DSOX3024A", ":FUNCtion"),
+        ("DSOX4024A", ":FUNCtion1"),
+    ],
+)
+def test_fft_commands_use_series_appropriate_function_prefix(model, prefix):
+    capabilities = capabilities_for_model(model)
+
     assert fft_configure_commands(
         1,
         1,
@@ -58,13 +72,35 @@ def test_advanced_command_formatting():
         display=True,
         capabilities=capabilities,
     ) == [
-        ":FUNCtion1:OPERation FFT",
-        ":FUNCtion1:SOURce1 CHANnel1",
-        ":FUNCtion1:FFT:VTYPe DECibel",
-        ":FUNCtion1:FFT:WINDow HANNing",
-        ":FUNCtion1:FFT:CENTer 1000",
-        ":FUNCtion1:FFT:SPAN 10000",
-        ":FUNCtion1:DISPlay ON",
+        f"{prefix}:OPERation FFT",
+        f"{prefix}:SOURce1 CHANnel1",
+        f"{prefix}:FFT:VTYPe DECibel",
+        f"{prefix}:FFT:WINDow HANNing",
+        f"{prefix}:FFT:CENTer 1000",
+        f"{prefix}:FFT:SPAN 10000",
+        f"{prefix}:DISPlay ON",
+    ]
+    assert fft_query_commands(1, capabilities=capabilities) == [
+        f"{prefix}:OPERation?",
+        f"{prefix}:SOURce1?",
+        f"{prefix}:FFT:VTYPe?",
+        f"{prefix}:FFT:WINDow?",
+        f"{prefix}:FFT:CENTer?",
+        f"{prefix}:FFT:SPAN?",
+        f"{prefix}:DISPlay?",
+    ]
+
+
+def test_fft_function_validation_uses_profile_function_count():
+    single_function = capabilities_for_model("DSOX2004A")
+    four_functions = capabilities_for_model("DSOX4024A")
+
+    with pytest.raises(ParameterValidationError, match="between 1 and 1"):
+        fft_configure_commands(2, 1, capabilities=single_function)
+
+    assert fft_configure_commands(4, 1, capabilities=four_functions)[:2] == [
+        ":FUNCtion4:OPERation FFT",
+        ":FUNCtion4:SOURce1 CHANnel1",
     ]
 
 

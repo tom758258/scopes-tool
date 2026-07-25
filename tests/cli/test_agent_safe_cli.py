@@ -1482,15 +1482,43 @@ def test_measure_pair_phase_simulate_json_supported_across_target_models(capsys)
         assert payload["result"]["value"] == 45.0
 
 
-def test_fft_query_simulate_json_uses_distinct_fft_operation_field(capsys):
-    assert cli.main(["fft", "--simulate", "--json", "--function", "1", "--query"]) == 0
+def test_fft_simulate_2000x_uses_unindexed_commands_for_configure_and_query(capsys):
+    common = [
+        "fft",
+        "--simulate",
+        "--json",
+        "--model",
+        "keysight-dsox2004a",
+        "--function",
+        "1",
+    ]
+    assert cli.main([*common, "--source-channel", "1"]) == 0
+    configured = _json_stdout(capsys)
+    assert configured["scpi"]["sent"] == [
+        "*IDN?",
+        ":FUNCtion:OPERation FFT",
+        ":FUNCtion:SOURce1 CHANnel1",
+        ":SYSTem:ERRor?",
+    ]
 
+    assert cli.main([*common, "--query"]) == 0
     payload = _json_stdout(capsys)
     result = payload["result"]
     assert result["operation"] == "query"
     assert result["fft_operation"] == "FFT"
     assert result["function"] == 1
     assert result["source_channel"] == 1
+    assert payload["scpi"]["sent"] == [
+        "*IDN?",
+        ":FUNCtion:OPERation?",
+        ":FUNCtion:SOURce1?",
+        ":FUNCtion:FFT:VTYPe?",
+        ":FUNCtion:FFT:WINDow?",
+        ":FUNCtion:FFT:CENTer?",
+        ":FUNCtion:FFT:SPAN?",
+        ":FUNCtion:DISPlay?",
+        ":SYSTem:ERRor?",
+    ]
     assert payload["system_error"]["is_error"] is False
 
 

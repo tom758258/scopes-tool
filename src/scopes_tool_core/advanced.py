@@ -237,17 +237,27 @@ class FFTController:
             self.scpi.write(command)
 
     def query(self, function: int) -> FFTState:
-        function = validate_function_number(function)
-        source = self.scpi.query(f":FUNCtion{function}:SOURce1?").strip()
+        commands = fft_query_commands(function, capabilities=self.capabilities)
+        (
+            operation_command,
+            source_command,
+            units_command,
+            window_command,
+            center_command,
+            span_command,
+            display_command,
+        ) = commands
+        operation = self.scpi.query(operation_command)
+        source = self.scpi.query(source_command).strip()
         return FFTState(
             function=function,
-            operation=self.scpi.query(f":FUNCtion{function}:OPERation?"),
+            operation=operation,
             source_channel=int("".join(ch for ch in source if ch.isdigit()) or "0"),
-            units=self.scpi.query(f":FUNCtion{function}:FFT:VTYPe?"),
-            window=self.scpi.query(f":FUNCtion{function}:FFT:WINDow?"),
-            center_hz=self.scpi.query_float(f":FUNCtion{function}:FFT:CENTer?"),
-            span_hz=self.scpi.query_float(f":FUNCtion{function}:FFT:SPAN?"),
-            display=self.scpi.query(f":FUNCtion{function}:DISPlay?").strip() in {"1", "ON"},
+            units=self.scpi.query(units_command),
+            window=self.scpi.query(window_command),
+            center_hz=self.scpi.query_float(center_command),
+            span_hz=self.scpi.query_float(span_command),
+            display=self.scpi.query(display_command).strip() in {"1", "ON"},
         )
 
 
@@ -571,36 +581,51 @@ def fft_configure_commands(
     display: bool | None = None,
     capabilities: ScopeCapabilities | None = None,
 ) -> list[str]:
-    function = validate_function_number(function)
+    prefix = math_function_scpi_prefix(function, capabilities)
     channel = validate_analog_channel(source_channel, capabilities) if capabilities is not None else source_channel
     commands = [
-        f":FUNCtion{function}:OPERation FFT",
-        f":FUNCtion{function}:SOURce1 CHANnel{channel}",
+        f"{prefix}:OPERation FFT",
+        f"{prefix}:SOURce1 CHANnel{channel}",
     ]
     if units is not None:
-        commands.append(f":FUNCtion{function}:FFT:VTYPe {normalize_fft_units(units)}")
+        commands.append(f"{prefix}:FFT:VTYPe {normalize_fft_units(units)}")
     if window is not None:
-        commands.append(f":FUNCtion{function}:FFT:WINDow {normalize_fft_window(window)}")
+        commands.append(f"{prefix}:FFT:WINDow {normalize_fft_window(window)}")
     if center_hz is not None:
-        commands.append(f":FUNCtion{function}:FFT:CENTer {_format_number(validate_nonnegative(center_hz, '--center-hz'))}")
+        commands.append(f"{prefix}:FFT:CENTer {_format_number(validate_nonnegative(center_hz, '--center-hz'))}")
     if span_hz is not None:
-        commands.append(f":FUNCtion{function}:FFT:SPAN {_format_number(validate_positive(span_hz, '--span-hz'))}")
+        commands.append(f"{prefix}:FFT:SPAN {_format_number(validate_positive(span_hz, '--span-hz'))}")
     if display is not None:
-        commands.append(f":FUNCtion{function}:DISPlay {'ON' if display else 'OFF'}")
+        commands.append(f"{prefix}:DISPlay {'ON' if display else 'OFF'}")
     return commands
 
 
-def fft_query_commands(function: int) -> list[str]:
-    function = validate_function_number(function)
+def fft_query_commands(
+    function: int, capabilities: ScopeCapabilities | None = None
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
     return [
-        f":FUNCtion{function}:OPERation?",
-        f":FUNCtion{function}:SOURce1?",
-        f":FUNCtion{function}:FFT:VTYPe?",
-        f":FUNCtion{function}:FFT:WINDow?",
-        f":FUNCtion{function}:FFT:CENTer?",
-        f":FUNCtion{function}:FFT:SPAN?",
-        f":FUNCtion{function}:DISPlay?",
+        f"{prefix}:OPERation?",
+        f"{prefix}:SOURce1?",
+        f"{prefix}:FFT:VTYPe?",
+        f"{prefix}:FFT:WINDow?",
+        f"{prefix}:FFT:CENTer?",
+        f"{prefix}:FFT:SPAN?",
+        f"{prefix}:DISPlay?",
     ]
+
+
+def math_function_scpi_prefix(
+    function: int, capabilities: ScopeCapabilities | None = None
+) -> str:
+    function = validate_function_number(function)
+    if capabilities is not None and function > capabilities.math_function_count:
+        raise ParameterValidationError(
+            f"--function must be between 1 and {capabilities.math_function_count}."
+        )
+    if capabilities is not None and capabilities.math_function_count == 1:
+        return ":FUNCtion"
+    return f":FUNCtion{function}"
 
 
 def validate_function_number(function: int) -> int:

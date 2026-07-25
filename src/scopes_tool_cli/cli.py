@@ -5093,7 +5093,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         if args.fft_query:
             if any(value is not None for value in (args.source_channel, args.units, args.window, args.center_hz, args.span_hz, args.display)):
                 raise OscilloscopeError("--query cannot be combined with FFT configuration options")
-            commands = fft_query_commands(args.function)
+            commands = fft_query_commands(args.function, capabilities=capabilities)
             return commands + [":SYSTem:ERRor?"], [], {"operation": "query", "commands": commands, "function": args.function}
         if args.source_channel is None:
             raise OscilloscopeError("fft configure requires --source-channel unless --query is used")
@@ -9208,7 +9208,9 @@ def _cmd_fft(args: argparse.Namespace) -> int:
                 span_hz=state.span_hz,
                 display=state.display,
             )
-            for command in fft_query_commands(args.function):
+            for command in fft_query_commands(
+                args.function, capabilities=scope.capabilities
+            ):
                 print(f"Command: {command}")
             print(f"Function: {state.function}")
             print(f"Source: CH{state.source_channel}")
