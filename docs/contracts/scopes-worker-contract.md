@@ -1371,12 +1371,15 @@ forms are rejected.
 The worker startup model profile validates `function` before enqueue,
 artifacts, backend open, or SCPI. 2000X/3000X accept only function 1 and use
 unindexed `:FUNCtion`; 4000X accepts functions 1 through 4 and uses indexed
-`:FUNCtion<n>`. Vertical configuration does not automatically enable display.
-The worker does not disable other 4000X slots; instrument display behavior
-remains instrument-managed. P1 does not configure Math operations or sources,
-probe licenses, perform autoscale, or calculate host-side Math. It adds no
-artifacts and has hardware-free validation only; no live validation was
-performed.
+`:FUNCtion<n>`. Vertical configuration does not automatically enable display,
+and the worker does not run autoscale. Instrument firmware may recalculate
+vertical scaling when Math display changes from OFF to ON. Clients that require
+explicit vertical settings should submit `math-display` with `on: true` before
+submitting the desired `math-vertical` setters. The worker does not disable
+other 4000X slots; instrument display behavior remains instrument-managed. P1
+does not configure Math operations or sources, probe licenses, or calculate
+host-side Math. It adds no artifacts and has hardware-free validation only; no
+live validation was performed.
 
 ### Search Basic Pack v1 Commands
 

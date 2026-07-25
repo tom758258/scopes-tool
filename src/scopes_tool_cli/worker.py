@@ -1581,11 +1581,15 @@ def _normalize_math_worker_arguments(
             "math-vertical configure requires scale, range, or offset"
         )
     for key, value in setters.items():
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not math.isfinite(value)
-        ):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise OscilloscopeError(
+                f"math-vertical argument {key} must be a finite number"
+            )
+        try:
+            finite = math.isfinite(float(value))
+        except (TypeError, ValueError, OverflowError):
+            finite = False
+        if not finite:
             raise OscilloscopeError(
                 f"math-vertical argument {key} must be a finite number"
             )

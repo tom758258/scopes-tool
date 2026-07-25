@@ -60,3 +60,19 @@ def test_worker_rejects_unsupported_math_function_before_enqueue(tmp_path):
     assert runtime.queue.empty()
     assert runtime.jobs == {}
     assert not (tmp_path / runtime.run_id).exists()
+
+
+def test_worker_rejects_oversized_math_vertical_value_before_enqueue(tmp_path):
+    runtime = _runtime(tmp_path)
+
+    with pytest.raises(OscilloscopeError, match="finite number"):
+        worker.parse_domain_command(
+            "math-vertical",
+            {"function": 1, "scale": 10**10000},
+            runtime,
+        )
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()

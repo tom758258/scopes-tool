@@ -767,6 +767,8 @@ def math_function_scpi_prefix(
 
 
 def validate_function_number(function: int) -> int:
+    if isinstance(function, bool) or not isinstance(function, int):
+        raise ParameterValidationError("--function must be an integer.")
     if function < 1 or function > 4:
         raise ParameterValidationError("--function must be between 1 and 4.")
     return function
@@ -789,7 +791,13 @@ def normalize_fft_window(value: str) -> str:
 
 
 def validate_finite_number(value: float, option: str) -> float:
-    if not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ParameterValidationError(f"{option} must be a finite number.")
+    try:
+        finite = math.isfinite(float(value))
+    except (TypeError, ValueError, OverflowError):
+        finite = False
+    if not finite:
         raise ParameterValidationError(f"{option} must be a finite number.")
     return value
 

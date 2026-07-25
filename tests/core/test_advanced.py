@@ -153,10 +153,18 @@ def test_math_p1_validation_rejects_invalid_functions_and_vertical_values():
     single_function = capabilities_for_model("DSOX2004A")
     unsupported = replace(single_function, math_function_count=0)
 
+    with pytest.raises(ParameterValidationError, match="must be an integer"):
+        math_display_query(True, capabilities=single_function)
+    with pytest.raises(ParameterValidationError, match="must be an integer"):
+        math_display_query(1.5, capabilities=single_function)
     with pytest.raises(ParameterValidationError, match="between 1 and 1"):
         math_display_query(2, capabilities=single_function)
     with pytest.raises(ParameterValidationError, match="Math functions are not supported"):
         math_display_query(1, capabilities=unsupported)
+    with pytest.raises(ParameterValidationError, match="finite number"):
+        math_vertical_commands(1, offset=True, capabilities=single_function)
+    with pytest.raises(ParameterValidationError, match="finite number"):
+        math_vertical_commands(1, scale=10**10000, capabilities=single_function)
     with pytest.raises(ParameterValidationError, match="greater than zero"):
         math_vertical_commands(1, scale=0, capabilities=single_function)
     with pytest.raises(ParameterValidationError, match="greater than zero"):

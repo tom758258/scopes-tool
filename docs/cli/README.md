@@ -1900,11 +1900,15 @@ indexed `:FUNCtion1` through `:FUNCtion4` slots and accept
 `math-vertical` query mode cannot include setters. Configure mode requires
 `--scale`, `--range`, or `--offset`; scale and range are mutually exclusive,
 while either may be combined with offset. Vertical configuration does not
-automatically enable Math display. Enabling one 4000X Math slot does not
-actively disable another slot; any single-visible-slot behavior is managed by
-the instrument. MATH-P1 does not configure Math operations or sources, probe
-licenses, perform autoscale, or calculate host-side Math. These commands have
-hardware-free validation only; no live hardware validation was performed.
+automatically enable Math display, and the tool does not run autoscale.
+Instrument firmware may recalculate vertical scaling when Math display changes
+from OFF to ON. To preserve explicit vertical settings, run
+`math-display --function N --on` before applying the desired `math-vertical`
+scale, range, or offset setters. Enabling one 4000X Math slot does not actively
+disable another slot; any single-visible-slot behavior is managed by the
+instrument. MATH-P1 does not configure Math operations or sources, probe
+licenses, or calculate host-side Math. These commands have hardware-free
+validation only; no live hardware validation was performed.
 
 These commands are explicit user actions and are never called by `doctor`,
 `smoke`, or `acquisition-check`. Some change front-panel state, such as cursor,

@@ -25,10 +25,13 @@ Core owns runtime behavior:
   `configure_math_vertical()`, and `query_math_vertical()`. The controls use
   the single unindexed `:FUNCtion` subsystem on 2000X/3000X and indexed slots
   1 through 4 on 4000X. Vertical configuration supports scale or range plus an
-  optional offset and does not automatically enable display. Math operation
-  selection, sources, host-side Math, license probing, autoscale, and slot
-  coordination are outside P1. Coverage is hardware-free only; no live
-  validation was performed.
+  optional offset and does not automatically enable display or run autoscale.
+  Instrument firmware may recalculate vertical scaling when Math display
+  changes from OFF to ON, so callers that need explicit vertical settings
+  should enable display before applying scale, range, or offset. Math operation
+  selection, sources, host-side Math, license probing, and slot coordination
+  are outside P1. Coverage is hardware-free only; no live validation was
+  performed.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,
