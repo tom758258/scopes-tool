@@ -63,6 +63,18 @@ Core owns runtime behavior:
   These controls do not calculate or export waveform data, enable display,
   change vertical settings, or probe licenses. Coverage is hardware-free only;
   no live validation was performed.
+- MATH-P5 instrument-side Math filters through
+  `Oscilloscope.configure_math_filter()`, `query_math_filter()`, and
+  `clear_math()`. All registered series support `low-pass` and `high-pass`;
+  4000X additionally supports `average`, `smooth`, and `envelope`. Filter
+  sources reuse the P4 single-source rules: analog channels on all series,
+  `composite` on 2000X/3000X, and a lower-numbered Math function on 4000X.
+  Cutoff, average-count, and smooth-point writes are optional and
+  operation-specific. Math clear is available only on profiles that support
+  average and uses indexed 4000X `:FUNCtion<n>:CLEar`. These controls do not
+  calculate waveforms, enable display, change vertical or acquisition state,
+  probe licenses, or wait for completion. Coverage is hardware-free only; no
+  live validation was performed.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,

@@ -1921,6 +1921,151 @@ def test_math_transform_unsupported_composite_fails_before_open(
     assert _json_stdout(capsys)["ok"] is False
 
 
+def test_math_filter_common_simulate_configure_query_round_trip(
+    monkeypatch, capsys
+):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
+
+    def simulator_backend(**unused):
+        backend.closed = False
+        return backend
+
+    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    common = [
+        "--simulate",
+        "--json",
+        "--model",
+        "keysight-dsox2004a",
+        "--function",
+        "1",
+    ]
+    assert (
+        cli.main(
+            [
+                "math-filter",
+                *common,
+                "--operation",
+                "high-pass",
+                "--source",
+                "composite",
+                "--cutoff-hz",
+                "1000",
+            ]
+        )
+        == 0
+    )
+    configured = _json_stdout(capsys)
+    assert configured["result"]["commands"] == [
+        ":FUNCtion:OPERation HIGHpass",
+        ":FUNCtion:SOURce1 GOFT",
+        ":FUNCtion:FREQuency:HIGHpass 1000",
+    ]
+
+    assert cli.main(["math-filter", *common, "--query"]) == 0
+    queried = _json_stdout(capsys)
+    assert queried["result"]["math_operation"] == "high-pass"
+    assert queried["result"]["source"] == "composite"
+    assert queried["result"]["cutoff_hz"] == 1000.0
+    assert queried["result"]["average_count"] is None
+    assert queried["result"]["smooth_points"] is None
+    assert queried["scpi"]["sent"][-4:] == [
+        ":FUNCtion:OPERation?",
+        ":FUNCtion:SOURce1?",
+        ":FUNCtion:FREQuency:HIGHpass?",
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_math_filter_advanced_and_clear_simulate(monkeypatch, capsys):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+
+    def simulator_backend(**unused):
+        backend.closed = False
+        return backend
+
+    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    common = [
+        "--simulate",
+        "--json",
+        "--model",
+        "keysight-dsox4024a",
+        "--function",
+        "2",
+    ]
+    assert (
+        cli.main(
+            [
+                "math-filter",
+                *common,
+                "--operation",
+                "average",
+                "--source",
+                "math1",
+                "--average-count",
+                "64",
+            ]
+        )
+        == 0
+    )
+    configured = _json_stdout(capsys)
+    assert configured["result"]["commands"] == [
+        ":FUNCtion2:OPERation AVERage",
+        ":FUNCtion2:SOURce1 FUNCtion1",
+        ":FUNCtion2:AVERage:COUNt 64",
+    ]
+
+    assert cli.main(["math-filter", *common, "--query"]) == 0
+    queried = _json_stdout(capsys)
+    assert queried["result"]["math_operation"] == "average"
+    assert queried["result"]["source"] == "math1"
+    assert queried["result"]["average_count"] == 64
+    assert queried["scpi"]["sent"][-4:] == [
+        ":FUNCtion2:OPERation?",
+        ":FUNCtion2:SOURce1?",
+        ":FUNCtion2:AVERage:COUNt?",
+        ":SYSTem:ERRor?",
+    ]
+
+    assert cli.main(["math-clear", *common]) == 0
+    cleared = _json_stdout(capsys)
+    assert cleared["result"]["operation"] == "clear"
+    assert cleared["result"]["function"] == 2
+    assert cleared["result"]["cleared"] is True
+    assert cleared["result"]["command"] == ":FUNCtion2:CLEar"
+    assert cleared["scpi"]["sent"][-2:] == [
+        ":FUNCtion2:CLEar",
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_math_filter_irrelevant_parameter_fails_before_open(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+
+    assert (
+        cli.main(
+            [
+                "math-filter",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox4024a",
+                "--function",
+                "1",
+                "--operation",
+                "envelope",
+                "--source",
+                "channel1",
+                "--cutoff-hz",
+                "1000",
+            ]
+        )
+        == 1
+    )
+    assert _json_stdout(capsys)["ok"] is False
+
+
 def test_measure_simulate_json_reports_invalid_sentinel(monkeypatch, capsys):
     backend = SimulatorBackend(invalid_measurement_channels={1})
     monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)

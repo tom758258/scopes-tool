@@ -160,7 +160,8 @@ Worker `/command` supports the existing Scopes capability surface:
   `trigger-pattern`, `trigger-or`, `trigger-sweep`, `trigger-noise-reject`,
   `trigger-hf-reject`, `trigger-holdoff`, `cursor`, `autoscale`
 - `setup-save`, `setup-recall`, `fft`, `math-display`, `math-vertical`,
-  `math-operator`, `math-composite-source`, `math-transform`
+  `math-operator`, `math-composite-source`, `math-transform`, `math-filter`,
+  `math-clear`
 
 `list-resources` remains an explicit discovery command outside live worker
 flows. `hardware-report` remains a local report renderer. They are not accepted
@@ -1486,6 +1487,51 @@ P4 configures instrument-side Math only. It does not calculate or export
 waveforms, enable display, change vertical state, run autoscale, or probe
 licenses. It adds no artifacts and has hardware-free validation only; no live
 instrument or license validation was performed.
+
+### MATH-P5 Filter And Clear Commands
+
+MATH-P5 adds instrument-side filter configuration and query:
+
+```json
+{"command": "math-filter", "arguments": {"function": 1, "operation": "low-pass", "source": "channel1", "cutoff_hz": 1000000}}
+```
+
+```json
+{"command": "math-filter", "arguments": {"function": 2, "operation": "average", "source": "math1", "average_count": 64}}
+```
+
+```json
+{"command": "math-filter", "arguments": {"function": 1, "query": true}}
+```
+
+All registered series support canonical `low-pass` and `high-pass`; 4000X
+also supports `average`, `smooth`, and `envelope`. Configure requires
+`operation` and `source`. Optional `cutoff_hz` is positive and finite and is
+valid only for low/high-pass. Optional `average_count` is a non-boolean
+power-of-two integer from 2 through 65536. Optional `smooth_points` is a
+non-boolean odd integer of at least 3. Query requires exactly `query: true`
+and cannot include configure arguments.
+
+Filter sources reuse the P4 single-source rules: supported analog channels on
+all series, `composite` only on 2000X/3000X, and only a lower-numbered Math
+function on 4000X. The `math-operator` source contract remains
+analog-channel-only. Unknown fields, irrelevant parameters, unsupported
+operations, functions, or sources, and invalid numeric types fail before
+enqueue, artifacts, backend open, or SCPI.
+
+MATH-P5 also adds 4000X-only accumulation clear:
+
+```json
+{"command": "math-clear", "arguments": {"function": 1}}
+```
+
+`math-clear` is accepted only for capability profiles that support Math
+average and sends indexed `:FUNCtion<n>:CLEar` without querying the current
+operation, waiting for completion, or clearing acquisition or display state.
+Neither P5 command enables Math display, changes vertical or acquisition
+state, runs autoscale, probes licenses, calculates waveform samples, or
+creates domain artifacts. Validation is hardware-free only; live instrument
+and license behavior have not been validated.
 
 ### Search Basic Pack v1 Commands
 

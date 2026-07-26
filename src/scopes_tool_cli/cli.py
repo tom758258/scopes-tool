@@ -31,6 +31,7 @@ from scopes_tool_core.acquisition import (
 )
 from scopes_tool_core.advanced import (
     MATH_COMPOSITE_OPERATIONS,
+    MATH_FILTER_OPERATIONS,
     MATH_OPERATIONS,
     MATH_SOURCES,
     MATH_TRANSFORM_SOURCES,
@@ -47,10 +48,13 @@ from scopes_tool_core.advanced import (
     fft_query_commands,
     math_display_command,
     math_display_query,
+    math_clear_command,
     math_composite_source_commands,
     math_composite_source_query_commands,
     math_operator_commands,
     math_operator_query_commands,
+    math_filter_commands,
+    math_filter_query_commands,
     math_transform_commands,
     math_transform_query_commands,
     math_vertical_commands,
@@ -2573,6 +2577,39 @@ def _build_parser() -> argparse.ArgumentParser:
         "--linear-offset", type=_measurement_finite_float, default=None
     )
 
+    math_filter_parser = subparsers.add_parser(
+        "math-filter",
+        allow_abbrev=False,
+        help="configure or query an instrument-side single-source Math filter",
+    )
+    _add_scope_connection_args(math_filter_parser)
+    math_filter_parser.add_argument("--function", type=_positive_int, required=True)
+    math_filter_parser.add_argument(
+        "--query", dest="math_filter_query", action="store_true"
+    )
+    math_filter_parser.add_argument(
+        "--operation",
+        dest="math_filter_operation",
+        choices=MATH_FILTER_OPERATIONS,
+        default=None,
+    )
+    math_filter_parser.add_argument(
+        "--source", choices=MATH_TRANSFORM_SOURCES, default=None
+    )
+    math_filter_parser.add_argument(
+        "--cutoff-hz", type=_positive_plain_float, default=None
+    )
+    math_filter_parser.add_argument("--average-count", type=_positive_int, default=None)
+    math_filter_parser.add_argument("--smooth-points", type=_positive_int, default=None)
+
+    math_clear_parser = subparsers.add_parser(
+        "math-clear",
+        allow_abbrev=False,
+        help="clear one supported instrument-side Math accumulation",
+    )
+    _add_scope_connection_args(math_clear_parser)
+    math_clear_parser.add_argument("--function", type=_positive_int, required=True)
+
     acquisition_check_parser = subparsers.add_parser(
         "acquisition-check",
         help="run the acquisition configuration hardware validation workflow",
@@ -2909,6 +2946,10 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_math_composite_source(args)
     if args.command == "math-transform":
         return _cmd_math_transform(args)
+    if args.command == "math-filter":
+        return _cmd_math_filter(args)
+    if args.command == "math-clear":
+        return _cmd_math_clear(args)
     if args.command == "acquisition-check":
         return _cmd_acquisition_check(args)
     raise OscilloscopeError("missing command")
@@ -3460,6 +3501,8 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         "math-operator",
         "math-composite-source",
         "math-transform",
+        "math-filter",
+        "math-clear",
     }:
         _validate_math_args(args)
 
@@ -3554,6 +3597,40 @@ def _validate_math_args(args: argparse.Namespace) -> None:
             linear_offset=args.linear_offset,
             capabilities=capabilities,
         )
+        return
+
+    if args.command == "math-filter":
+        configure_values = (
+            args.math_filter_operation,
+            args.source,
+            args.cutoff_hz,
+            args.average_count,
+            args.smooth_points,
+        )
+        if args.math_filter_query:
+            if any(value is not None for value in configure_values):
+                raise ParameterValidationError(
+                    "math-filter --query cannot be combined with configure options."
+                )
+            math_filter_query_commands(args.function, capabilities=capabilities)
+            return
+        if args.math_filter_operation is None or args.source is None:
+            raise ParameterValidationError(
+                "math-filter configure requires --operation and --source."
+            )
+        math_filter_commands(
+            args.function,
+            args.math_filter_operation,
+            args.source,
+            cutoff_hz=args.cutoff_hz,
+            average_count=args.average_count,
+            smooth_points=args.smooth_points,
+            capabilities=capabilities,
+        )
+        return
+
+    if args.command == "math-clear":
+        math_clear_command(args.function, capabilities=capabilities)
         return
 
     configure_values = (args.math_operation, args.source1, args.source2)
@@ -5495,6 +5572,49 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "gain": args.gain,
             "linear_offset": args.linear_offset,
             "commands": planned,
+        }
+    if command == "math-filter":
+        if args.math_filter_query:
+            planned = math_filter_query_commands(
+                args.function, capabilities=capabilities
+            )
+            return planned + [":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "function": args.function,
+                "math_operation": None,
+                "operation_raw": None,
+                "source": None,
+                "source_raw": None,
+                "cutoff_hz": None,
+                "average_count": None,
+                "smooth_points": None,
+            }
+        planned = math_filter_commands(
+            args.function,
+            args.math_filter_operation,
+            args.source,
+            cutoff_hz=args.cutoff_hz,
+            average_count=args.average_count,
+            smooth_points=args.smooth_points,
+            capabilities=capabilities,
+        )
+        return planned + [":SYSTem:ERRor?"], [], {
+            "operation": "set",
+            "function": args.function,
+            "math_operation": args.math_filter_operation,
+            "source": args.source,
+            "cutoff_hz": args.cutoff_hz,
+            "average_count": args.average_count,
+            "smooth_points": args.smooth_points,
+            "commands": planned,
+        }
+    if command == "math-clear":
+        planned = math_clear_command(args.function, capabilities=capabilities)
+        return [planned, ":SYSTem:ERRor?"], [], {
+            "operation": "clear",
+            "function": args.function,
+            "cleared": True,
+            "command": planned,
         }
     return [], [], {}
 
@@ -9897,6 +10017,105 @@ def _cmd_math_transform(args: argparse.Namespace) -> int:
             )
             for command in commands:
                 print(f"Command: {command}")
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_math_filter(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        if args.math_filter_query:
+            state = scope.query_math_filter(args.function)
+            _json_update_result(
+                operation="query",
+                function=state.function,
+                math_operation=state.operation,
+                operation_raw=state.operation_raw,
+                source=state.source,
+                source_raw=state.source_raw,
+                cutoff_hz=state.cutoff_hz,
+                average_count=state.average_count,
+                smooth_points=state.smooth_points,
+            )
+            commands = math_filter_query_commands(
+                args.function, capabilities=scope.capabilities
+            )
+            for command in commands:
+                print(f"Command: {command}")
+            print(f"Math filter: {state.operation}")
+            print(f"Source: {state.source}")
+            if state.cutoff_hz is not None:
+                print(f"Cutoff: {state.cutoff_hz:.12g} Hz")
+            if state.average_count is not None:
+                print(f"Average count: {state.average_count}")
+            if state.smooth_points is not None:
+                print(f"Smooth points: {state.smooth_points}")
+        else:
+            scope.configure_math_filter(
+                args.function,
+                args.math_filter_operation,
+                args.source,
+                cutoff_hz=args.cutoff_hz,
+                average_count=args.average_count,
+                smooth_points=args.smooth_points,
+            )
+            commands = math_filter_commands(
+                args.function,
+                args.math_filter_operation,
+                args.source,
+                cutoff_hz=args.cutoff_hz,
+                average_count=args.average_count,
+                smooth_points=args.smooth_points,
+                capabilities=scope.capabilities,
+            )
+            _json_update_result(
+                operation="set",
+                function=args.function,
+                math_operation=args.math_filter_operation,
+                source=args.source,
+                cutoff_hz=args.cutoff_hz,
+                average_count=args.average_count,
+                smooth_points=args.smooth_points,
+                commands=commands,
+            )
+            for command in commands:
+                print(f"Command: {command}")
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_math_clear(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        scope.clear_math(args.function)
+        command = math_clear_command(
+            args.function, capabilities=scope.capabilities
+        )
+        _json_update_result(
+            operation="clear",
+            function=args.function,
+            cleared=True,
+            command=command,
+        )
+        print(f"Command: {command}")
         entry = scope.query_system_error()
         _json_record_system_error(entry)
         print(f"System error: {entry.format()}")

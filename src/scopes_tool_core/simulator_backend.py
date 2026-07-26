@@ -1835,6 +1835,21 @@ class SimulatorBackend:
         return ",".join(parts)
 
     def _apply_fft_write(self, command: str) -> bool:
+        clear_match = re.fullmatch(
+            r":FUNCtion(\d+):CLEar",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if clear_match is not None:
+            function = int(clear_match.group(1))
+            if (
+                "average" not in self._capabilities.math_filter_operations
+                or function > self._capabilities.math_function_count
+            ):
+                raise SimulatorBackendError(
+                    "Math clear is not supported by this simulator profile."
+                )
+            return True
         match = re.fullmatch(
             r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z0-9]+))?\s+(.+)",
             command,
@@ -1860,6 +1875,10 @@ class SimulatorBackend:
                 "integrate_input_offset": 0.0,
                 "linear_gain": 1.0,
                 "linear_offset": 0.0,
+                "low_pass_cutoff": 1.0e6,
+                "high_pass_cutoff": 1.0e3,
+                "average_count": 64,
+                "smooth_points": 9,
             },
         )
         primary, secondary, value = match.group(2).upper(), (match.group(3) or "").upper(), match.group(4)
@@ -1902,6 +1921,14 @@ class SimulatorBackend:
             key["linear_gain"] = float(value)
         elif primary == "LINEAR" and secondary == "OFFSET":
             key["linear_offset"] = float(value)
+        elif primary == "FREQUENCY" and secondary == "LOWPASS":
+            key["low_pass_cutoff"] = float(value)
+        elif primary == "FREQUENCY" and secondary == "HIGHPASS":
+            key["high_pass_cutoff"] = float(value)
+        elif primary == "AVERAGE" and secondary == "COUNT":
+            key["average_count"] = int(value)
+        elif primary == "SMOOTH" and secondary == "POINTS":
+            key["smooth_points"] = int(value)
         elif primary == "FFT" and secondary == "VTYPE":
             key["units"] = value
         elif primary == "FFT" and secondary == "WINDOW":
@@ -1940,6 +1967,10 @@ class SimulatorBackend:
                 "integrate_input_offset": 0.0,
                 "linear_gain": 1.0,
                 "linear_offset": 0.0,
+                "low_pass_cutoff": 1.0e6,
+                "high_pass_cutoff": 1.0e3,
+                "average_count": 64,
+                "smooth_points": 9,
             },
         )
         primary, secondary = match.group(2).upper(), (match.group(3) or "").upper()
@@ -1969,6 +2000,14 @@ class SimulatorBackend:
             return f"{float(state['linear_gain']):.12g}"
         if primary == "LINEAR" and secondary == "OFFSET":
             return f"{float(state['linear_offset']):.12g}"
+        if primary == "FREQUENCY" and secondary == "LOWPASS":
+            return f"{float(state['low_pass_cutoff']):.12g}"
+        if primary == "FREQUENCY" and secondary == "HIGHPASS":
+            return f"{float(state['high_pass_cutoff']):.12g}"
+        if primary == "AVERAGE" and secondary == "COUNT":
+            return str(int(state["average_count"]))
+        if primary == "SMOOTH" and secondary == "POINTS":
+            return str(int(state["smooth_points"]))
         if primary == "FFT" and secondary == "VTYPE":
             return str(state["units"])
         if primary == "FFT" and secondary == "WINDOW":

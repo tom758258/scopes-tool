@@ -20,10 +20,13 @@ from uuid import uuid4
 
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.advanced import (
+    math_clear_command,
     math_composite_source_commands,
     math_composite_source_query_commands,
     math_display_command,
     math_display_query,
+    math_filter_commands,
+    math_filter_query_commands,
     math_operator_commands,
     math_operator_query_commands,
     math_transform_commands,
@@ -158,6 +161,8 @@ DOMAIN_COMMANDS = {
     "setup-recall",
     "fft",
     "math-display",
+    "math-filter",
+    "math-clear",
     "math-composite-source",
     "math-operator",
     "math-transform",
@@ -1538,6 +1543,8 @@ def _normalize_math_worker_arguments(
         "math-operator",
         "math-composite-source",
         "math-transform",
+        "math-filter",
+        "math-clear",
     }:
         return arguments
 
@@ -1557,6 +1564,18 @@ def _normalize_math_worker_arguments(
             "gain",
             "linear_offset",
         }
+    elif command == "math-filter":
+        allowed = {
+            "function",
+            "query",
+            "operation",
+            "source",
+            "cutoff_hz",
+            "average_count",
+            "smooth_points",
+        }
+    elif command == "math-clear":
+        allowed = {"function"}
     else:
         allowed = {"function", "query", "operation", "source1", "source2"}
     unknown = set(arguments) - allowed
@@ -1617,6 +1636,10 @@ def _normalize_math_worker_arguments(
             math_display_command(
                 function, actions[0] == "on", capabilities=capabilities
             )
+        return dict(arguments)
+
+    if command == "math-clear":
+        math_clear_command(function, capabilities=capabilities)
         return dict(arguments)
 
     if command == "math-operator":
@@ -1681,6 +1704,43 @@ def _normalize_math_worker_arguments(
             input_offset=arguments.get("input_offset"),
             gain=arguments.get("gain"),
             linear_offset=arguments.get("linear_offset"),
+            capabilities=capabilities,
+        )
+        return dict(arguments)
+
+    if command == "math-filter":
+        configure_keys = (
+            "operation",
+            "source",
+            "cutoff_hz",
+            "average_count",
+            "smooth_points",
+        )
+        configure_arguments = {
+            key: arguments[key] for key in configure_keys if key in arguments
+        }
+        if "query" in arguments:
+            if arguments["query"] is not True:
+                raise OscilloscopeError(
+                    "math-filter argument query must be exactly true"
+                )
+            if configure_arguments:
+                raise OscilloscopeError(
+                    "math-filter query cannot be combined with configure arguments"
+                )
+            math_filter_query_commands(function, capabilities=capabilities)
+            return dict(arguments)
+        if "operation" not in arguments or "source" not in arguments:
+            raise OscilloscopeError(
+                "math-filter configure requires operation and source"
+            )
+        math_filter_commands(
+            function,
+            arguments["operation"],
+            arguments["source"],
+            cutoff_hz=arguments.get("cutoff_hz"),
+            average_count=arguments.get("average_count"),
+            smooth_points=arguments.get("smooth_points"),
             capabilities=capabilities,
         )
         return dict(arguments)

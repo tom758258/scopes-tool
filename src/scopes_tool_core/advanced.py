@@ -53,6 +53,13 @@ MATH_TRANSFORMS = (
     "exp10",
     "linear",
 )
+MATH_FILTER_OPERATIONS = (
+    "low-pass",
+    "high-pass",
+    "average",
+    "smooth",
+    "envelope",
+)
 _MATH_OPERATION_TOKENS = {
     "add": "ADD",
     "subtract": "SUBTract",
@@ -107,6 +114,25 @@ _MATH_TRANSFORM_READBACKS = {
     "TEN": "exp10",
     "LIN": "linear",
     "LINEAR": "linear",
+}
+_MATH_FILTER_TOKENS = {
+    "low-pass": "LOWPass",
+    "high-pass": "HIGHpass",
+    "average": "AVERage",
+    "smooth": "SMOoth",
+    "envelope": "ENVelope",
+}
+_MATH_FILTER_READBACKS = {
+    "LOWP": "low-pass",
+    "LOWPASS": "low-pass",
+    "HIGH": "high-pass",
+    "HIGHPASS": "high-pass",
+    "AVER": "average",
+    "AVERAGE": "average",
+    "SMO": "smooth",
+    "SMOOTH": "smooth",
+    "ENV": "envelope",
+    "ENVELOPE": "envelope",
 }
 
 
@@ -206,6 +232,18 @@ class MathCompositeSourceState:
     source1_raw: str
     source2: str
     source2_raw: str
+
+
+@dataclass(frozen=True)
+class MathFilterState:
+    function: int
+    operation: str
+    operation_raw: str
+    source: str
+    source_raw: str
+    cutoff_hz: float | None
+    average_count: int | None
+    smooth_points: int | None
 
 
 class CursorController:
@@ -550,6 +588,66 @@ class MathController:
             gain=gain,
             linear_offset=linear_offset,
         )
+
+    def configure_filter(
+        self,
+        function: int,
+        operation: str,
+        source: str,
+        *,
+        cutoff_hz: float | None = None,
+        average_count: int | None = None,
+        smooth_points: int | None = None,
+    ) -> None:
+        for command in math_filter_commands(
+            function,
+            operation,
+            source,
+            cutoff_hz=cutoff_hz,
+            average_count=average_count,
+            smooth_points=smooth_points,
+            capabilities=self.capabilities,
+        ):
+            self.scpi.write(command)
+
+    def query_filter(self, function: int) -> MathFilterState:
+        operation_command, source_command = math_filter_query_commands(
+            function, capabilities=self.capabilities
+        )
+        operation_raw = self.scpi.query(operation_command).strip()
+        source_raw = self.scpi.query(source_command).strip()
+        operation = parse_math_filter_operation(operation_raw)
+        _validate_math_filter_capability(operation, self.capabilities)
+        prefix = math_function_scpi_prefix(function, self.capabilities)
+        cutoff_hz = None
+        average_count = None
+        smooth_points = None
+        if operation == "low-pass":
+            cutoff_hz = self.scpi.query_float(f"{prefix}:FREQuency:LOWPass?")
+        elif operation == "high-pass":
+            cutoff_hz = self.scpi.query_float(f"{prefix}:FREQuency:HIGHpass?")
+        elif operation == "average":
+            average_count = int(self.scpi.query_float(f"{prefix}:AVERage:COUNt?"))
+        elif operation == "smooth":
+            smooth_points = int(self.scpi.query_float(f"{prefix}:SMOoth:POINts?"))
+        return MathFilterState(
+            function=function,
+            operation=operation,
+            operation_raw=operation_raw,
+            source=parse_math_source1(
+                source_raw,
+                function,
+                capabilities=self.capabilities,
+                allow_composite=True,
+            ),
+            source_raw=source_raw,
+            cutoff_hz=cutoff_hz,
+            average_count=average_count,
+            smooth_points=smooth_points,
+        )
+
+    def clear(self, function: int) -> None:
+        self.scpi.write(math_clear_command(function, capabilities=self.capabilities))
 
 
 def trigger_holdoff_command(seconds: float) -> str:
@@ -1102,6 +1200,84 @@ def math_transform_query_commands(
     ]
 
 
+def math_filter_commands(
+    function: int,
+    operation: str,
+    source: str,
+    *,
+    cutoff_hz: float | None = None,
+    average_count: int | None = None,
+    smooth_points: int | None = None,
+    capabilities: ScopeCapabilities | None = None,
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    operation = normalize_math_filter_operation(operation)
+    _validate_math_filter_capability(operation, capabilities)
+    source = normalize_math_source1(
+        source,
+        function,
+        capabilities=capabilities,
+        allow_composite=True,
+        option_names="--source",
+    )
+    if operation not in {"low-pass", "high-pass"} and cutoff_hz is not None:
+        raise ParameterValidationError(
+            "--cutoff-hz is only valid with --operation low-pass or high-pass."
+        )
+    if operation != "average" and average_count is not None:
+        raise ParameterValidationError(
+            "--average-count is only valid with --operation average."
+        )
+    if operation != "smooth" and smooth_points is not None:
+        raise ParameterValidationError(
+            "--smooth-points is only valid with --operation smooth."
+        )
+    commands = [
+        f"{prefix}:OPERation {_MATH_FILTER_TOKENS[operation]}",
+        f"{prefix}:SOURce1 {_math_source_scpi_token(source)}",
+    ]
+    if cutoff_hz is not None:
+        cutoff_hz = validate_positive(cutoff_hz, "--cutoff-hz")
+        filter_path = "LOWPass" if operation == "low-pass" else "HIGHpass"
+        commands.append(
+            f"{prefix}:FREQuency:{filter_path} {_format_number(cutoff_hz)}"
+        )
+    if average_count is not None:
+        commands.append(
+            f"{prefix}:AVERage:COUNt {validate_math_average_count(average_count)}"
+        )
+    if smooth_points is not None:
+        commands.append(
+            f"{prefix}:SMOoth:POINts {validate_math_smooth_points(smooth_points)}"
+        )
+    return commands
+
+
+def math_filter_query_commands(
+    function: int, *, capabilities: ScopeCapabilities | None = None
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    if capabilities is not None and not capabilities.math_filter_operations:
+        raise ParameterValidationError(
+            "Math filters are not supported by this capability profile."
+        )
+    return [
+        f"{prefix}:OPERation?",
+        f"{prefix}:SOURce1?",
+    ]
+
+
+def math_clear_command(
+    function: int, *, capabilities: ScopeCapabilities | None = None
+) -> str:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    if capabilities is not None and "average" not in capabilities.math_filter_operations:
+        raise ParameterValidationError(
+            "Math clear is not supported by this capability profile."
+        )
+    return f"{prefix}:CLEar"
+
+
 def normalize_math_operation(value: str) -> str:
     if not isinstance(value, str):
         raise ParameterValidationError(
@@ -1241,6 +1417,64 @@ def parse_math_transform(raw: str) -> str:
             f"Could not parse Math transform response: {raw_value!r}"
         )
     return operation
+
+
+def normalize_math_filter_operation(value: str) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError(
+            "--operation must be a supported instrument-side Math filter."
+        )
+    normalized = value.strip().lower()
+    if normalized not in _MATH_FILTER_TOKENS:
+        raise ParameterValidationError(
+            "--operation must be a supported instrument-side Math filter."
+        )
+    return normalized
+
+
+def parse_math_filter_operation(raw: str) -> str:
+    raw_value = raw.strip()
+    operation = _MATH_FILTER_READBACKS.get(raw_value.upper())
+    if operation is None:
+        raise ChannelResponseError(
+            f"Could not parse Math filter response: {raw_value!r}"
+        )
+    return operation
+
+
+def validate_math_average_count(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ParameterValidationError("--average-count must be an integer.")
+    if value < 2 or value > 65536:
+        raise ParameterValidationError(
+            "--average-count must be between 2 and 65536."
+        )
+    if value & (value - 1):
+        raise ParameterValidationError("--average-count must be a power of two.")
+    return value
+
+
+def validate_math_smooth_points(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ParameterValidationError("--smooth-points must be an integer.")
+    if value < 3:
+        raise ParameterValidationError("--smooth-points must be at least 3.")
+    if value % 2 == 0:
+        raise ParameterValidationError("--smooth-points must be odd.")
+    return value
+
+
+def _validate_math_filter_capability(
+    operation: str, capabilities: ScopeCapabilities | None
+) -> None:
+    if (
+        capabilities is not None
+        and operation not in capabilities.math_filter_operations
+    ):
+        raise ParameterValidationError(
+            f"Math filter operation {operation!r} is not supported by this "
+            "capability profile."
+        )
 
 
 def parse_math_source(

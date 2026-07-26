@@ -246,3 +246,60 @@ def test_worker_rejects_invalid_math_composite_source_before_enqueue(tmp_path):
     assert runtime.queue.empty()
     assert runtime.jobs == {}
     assert not (tmp_path / runtime.run_id).exists()
+
+
+def test_worker_accepts_math_filter_and_clear_requests(tmp_path):
+    assert {"math-filter", "math-clear"} <= worker.DOMAIN_COMMANDS
+    runtime = _runtime(tmp_path)
+
+    configured = worker.parse_domain_command(
+        "math-filter",
+        {
+            "function": 2,
+            "operation": "average",
+            "source": "math1",
+            "average_count": 64,
+        },
+        runtime,
+    )
+    queried = worker.parse_domain_command(
+        "math-filter",
+        {"function": 2, "query": True},
+        runtime,
+    )
+    cleared = worker.parse_domain_command(
+        "math-clear",
+        {"function": 2},
+        runtime,
+    )
+
+    assert configured.command == "math-filter"
+    assert configured.math_filter_operation == "average"
+    assert configured.source == "math1"
+    assert configured.average_count == 64
+    assert queried.math_filter_query is True
+    assert cleared.command == "math-clear"
+    assert cleared.function == 2
+
+
+def test_worker_rejects_irrelevant_math_filter_parameter_before_enqueue(
+    tmp_path,
+):
+    runtime = _runtime(tmp_path)
+
+    with pytest.raises(OscilloscopeError, match="only valid.*average"):
+        worker.parse_domain_command(
+            "math-filter",
+            {
+                "function": 1,
+                "operation": "envelope",
+                "source": "channel1",
+                "average_count": 64,
+            },
+            runtime,
+        )
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()

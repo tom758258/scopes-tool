@@ -1895,10 +1895,15 @@ Additional DSO-X 4024A controls:
 .\.venv\Scripts\scopes-tool.exe math-transform --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation integrate --source channel1 --input-offset 0 --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-transform --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation linear --source channel1 --gain 2 --linear-offset -1 --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-transform --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-filter --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation low-pass --source channel1 --cutoff-hz 1000000 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-filter --resource "$env:SCOPES_TOOL_RESOURCE" --function 2 --operation average --source math1 --average-count 64 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-filter --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-clear --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --log-scpi
 ```
 
 The existing `fft`, `math-display`, `math-vertical`, `math-operator`, and
-`math-transform` commands use the model's instrument-side Math function
+`math-transform`, `math-filter`, and `math-clear` commands use the model's
+instrument-side Math function
 layout. 2000X and 3000X models have one unindexed `:FUNCtion` subsystem and
 require `--function 1`. 4000X models use indexed `:FUNCtion1` through
 `:FUNCtion4` slots and accept `--function 1..4`. The global
@@ -1953,12 +1958,25 @@ with configure options. The canonical `composite` value is accepted only by
 `math-transform`; it is not accepted by `math-operator` or as source2. GOFT is
 not exposed on the public 4000X path.
 
+`math-filter` configures or queries an instrument-side, single-source Math
+filter. `low-pass` and `high-pass` are available on 2000X, 3000X, and 4000X
+and optionally accept a positive finite `--cutoff-hz`. The 4000X path also
+supports `average` with an optional power-of-two `--average-count` from 2
+through 65536, `smooth` with optional odd `--smooth-points` of at least 3,
+and `envelope` without an additional parameter. Sources reuse the P4
+single-source contract: analog channels on every series, `composite` on
+2000X/3000X, and a lower-numbered Math function on 4000X. Query first reads
+operation and source, then reads only the parameter applicable to the current
+filter. `math-clear --function N` is available only on 4000X and clears the
+selected Math accumulation without querying its operation or waiting for
+completion.
+
 These Math commands do not automatically enable display, change vertical
 settings, run autoscale, probe licenses, calculate host-side waveforms, or
 export waveform data. Reference waveform, bus, and digital sources remain
 unsupported. License availability remains subject to the live instrument error
-queue. P4 has hardware-free validation only; live instrument behavior and
-license availability have not been validated.
+queue. These Math paths have hardware-free validation only; live instrument
+behavior and license availability have not been validated.
 
 These commands are explicit user actions and are never called by `doctor`,
 `smoke`, or `acquisition-check`. Some change front-panel state, such as cursor,

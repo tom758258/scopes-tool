@@ -11,16 +11,20 @@ from scopes_tool_core.advanced import (
     fft_query_commands,
     math_display_command,
     math_display_query,
+    math_clear_command,
     math_composite_source_commands,
     math_composite_source_query_commands,
     math_operator_commands,
     math_operator_query_commands,
+    math_filter_commands,
+    math_filter_query_commands,
     math_transform_commands,
     math_transform_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
     parse_math_display,
     parse_math_composite_operation,
+    parse_math_filter_operation,
     parse_math_operation,
     parse_math_source,
     parse_math_source1,
@@ -684,6 +688,191 @@ def test_math_p4_source_capabilities_fail_closed():
         )
     with pytest.raises(ParameterValidationError, match="not supported"):
         math_composite_source_query_commands(capabilities=four_functions)
+
+
+@pytest.mark.parametrize(
+    ("operation", "token", "readbacks"),
+    [
+        ("low-pass", "LOWPass", ("LOWP", "LOWPASS")),
+        ("high-pass", "HIGHpass", ("HIGH", "HIGHPASS")),
+        ("average", "AVERage", ("AVER", "AVERAGE")),
+        ("smooth", "SMOoth", ("SMO", "SMOOTH")),
+        ("envelope", "ENVelope", ("ENV", "ENVELOPE")),
+    ],
+)
+def test_math_p5_filter_mapping_and_readback(operation, token, readbacks):
+    capabilities = capabilities_for_model("DSOX4024A")
+
+    assert math_filter_commands(
+        1,
+        operation,
+        "channel1",
+        capabilities=capabilities,
+    )[0] == f":FUNCtion1:OPERation {token}"
+    for readback in readbacks:
+        assert parse_math_filter_operation(f" {readback.swapcase()} ") == operation
+
+
+@pytest.mark.parametrize(
+    ("model", "function", "prefix"),
+    [
+        ("DSOX2004A", 1, ":FUNCtion"),
+        ("DSOX3024A", 1, ":FUNCtion"),
+        ("DSOX4024A", 2, ":FUNCtion2"),
+    ],
+)
+def test_math_p5_filter_commands_use_series_dialect(model, function, prefix):
+    capabilities = capabilities_for_model(model)
+
+    assert math_filter_commands(
+        function,
+        "low-pass",
+        "channel1",
+        cutoff_hz=1e6,
+        capabilities=capabilities,
+    ) == [
+        f"{prefix}:OPERation LOWPass",
+        f"{prefix}:SOURce1 CHANnel1",
+        f"{prefix}:FREQuency:LOWPass 1000000",
+    ]
+    assert math_filter_query_commands(
+        function, capabilities=capabilities
+    ) == [
+        f"{prefix}:OPERation?",
+        f"{prefix}:SOURce1?",
+    ]
+
+
+def test_math_p5_filter_reuses_composite_and_cascade_sources():
+    single_function = capabilities_for_model("DSOX2004A")
+    four_functions = capabilities_for_model("DSOX4034A")
+
+    assert math_filter_commands(
+        1,
+        "high-pass",
+        "composite",
+        cutoff_hz=1000,
+        capabilities=single_function,
+    )[1] == ":FUNCtion:SOURce1 GOFT"
+    assert math_filter_commands(
+        2,
+        "average",
+        "math1",
+        average_count=64,
+        capabilities=four_functions,
+    )[1] == ":FUNCtion2:SOURce1 FUNCtion1"
+
+
+def test_math_p5_filter_validation():
+    single_function = capabilities_for_model("DSOX2004A")
+    four_functions = capabilities_for_model("DSOX4024A")
+
+    with pytest.raises(ParameterValidationError, match="not supported"):
+        math_filter_commands(
+            1, "average", "channel1", capabilities=single_function
+        )
+    with pytest.raises(ParameterValidationError, match="greater than zero"):
+        math_filter_commands(
+            1,
+            "low-pass",
+            "channel1",
+            cutoff_hz=0,
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="finite number"):
+        math_filter_commands(
+            1,
+            "high-pass",
+            "channel1",
+            cutoff_hz=float("inf"),
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="power of two"):
+        math_filter_commands(
+            1,
+            "average",
+            "channel1",
+            average_count=3,
+            capabilities=four_functions,
+        )
+    with pytest.raises(ParameterValidationError, match="integer"):
+        math_filter_commands(
+            1,
+            "average",
+            "channel1",
+            average_count=True,
+            capabilities=four_functions,
+        )
+    with pytest.raises(ParameterValidationError, match="odd"):
+        math_filter_commands(
+            1,
+            "smooth",
+            "channel1",
+            smooth_points=8,
+            capabilities=four_functions,
+        )
+    with pytest.raises(ParameterValidationError, match="only valid.*average"):
+        math_filter_commands(
+            1,
+            "envelope",
+            "channel1",
+            average_count=64,
+            capabilities=four_functions,
+        )
+    assert math_filter_commands(
+        1,
+        "smooth",
+        "channel1",
+        smooth_points=9,
+        capabilities=four_functions,
+    )[-1] == ":FUNCtion1:SMOoth:POINts 9"
+
+
+def test_math_p5_simulator_round_trips_filters_and_clear():
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.configure_math_filter(
+        2, "low-pass", "channel1", cutoff_hz=1e6
+    )
+    low_pass = scope.query_math_filter(2)
+    scope.configure_math_filter(
+        2, "high-pass", "channel2", cutoff_hz=1000
+    )
+    high_pass = scope.query_math_filter(2)
+    scope.configure_math_filter(
+        2, "average", "math1", average_count=64
+    )
+    average = scope.query_math_filter(2)
+    scope.clear_math(2)
+
+    assert low_pass.operation == "low-pass"
+    assert low_pass.source == "channel1"
+    assert low_pass.cutoff_hz == pytest.approx(1e6)
+    assert low_pass.average_count is None
+    assert low_pass.smooth_points is None
+    assert high_pass.operation == "high-pass"
+    assert high_pass.source == "channel2"
+    assert high_pass.cutoff_hz == pytest.approx(1000)
+    assert average.operation == "average"
+    assert average.source == "math1"
+    assert average.cutoff_hz is None
+    assert average.average_count == 64
+    assert average.smooth_points is None
+    assert backend.history[-4:] == [
+        ":FUNCtion2:OPERation?",
+        ":FUNCtion2:SOURce1?",
+        ":FUNCtion2:AVERage:COUNt?",
+        ":FUNCtion2:CLEar",
+    ]
+    assert math_clear_command(2, capabilities=scope.capabilities) == (
+        ":FUNCtion2:CLEar"
+    )
+    with pytest.raises(ParameterValidationError, match="not supported"):
+        math_clear_command(
+            1, capabilities=capabilities_for_model("DSOX2004A")
+        )
 
 
 def test_cursor_auto_timebase_plan_keeps_visible_positions():

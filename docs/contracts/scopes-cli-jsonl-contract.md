@@ -353,6 +353,14 @@ Control and setup:
   `commands`. Query results include `operation: "query"`, `function`,
   canonical `math_operation` and `source`, stripped `operation_raw` and
   `source_raw`, and the same nullable operation-specific numeric fields.
+- `math-filter`: configure results include `operation: "set"`, `function`,
+  canonical `math_operation` and `source`, nullable `cutoff_hz`,
+  `average_count`, and `smooth_points`, plus ordered executed `commands`.
+  Query results include `operation: "query"`, `function`, canonical
+  `math_operation` and `source`, stripped `operation_raw` and `source_raw`,
+  and the same nullable operation-specific numeric fields.
+- `math-clear`: results include `operation: "clear"`, `function`,
+  `cleared: true`, and executed `command`.
   Source may be `composite` on 2000X/3000X or a lower-numbered canonical
   `math1` through `math3` on 4000X.
 
