@@ -579,11 +579,14 @@ class FFTController:
         operation = self.scpi.query(operation_command)
         operation_canonical = parse_fft_operation(operation)
         source = self.scpi.query(source_command).strip()
+        source_canonical = parse_math_source(
+            source, capabilities=self.capabilities
+        )
         state = FFTState(
             function=function,
             operation=operation,
             operation_canonical=operation_canonical,
-            source_channel=int("".join(ch for ch in source if ch.isdigit()) or "0"),
+            source_channel=int(source_canonical.removeprefix("channel")),
             units=self.scpi.query(units_command),
             window=self.scpi.query(window_command),
             center_hz=_query_fft_finite_number(
@@ -592,7 +595,7 @@ class FFTController:
             span_hz=_query_fft_finite_number(
                 self.scpi, span_command, "frequency span"
             ),
-            display=self.scpi.query(display_command).strip() in {"1", "ON"},
+            display=parse_math_display(self.scpi.query(display_command)),
         )
         if not self.capabilities.supports_advanced_fft:
             return state
@@ -687,9 +690,15 @@ class MathController:
         )
         return MathVerticalState(
             function=function,
-            scale=self.scpi.query_float(scale_command),
-            range=self.scpi.query_float(range_command),
-            offset=self.scpi.query_float(offset_command),
+            scale=_query_math_finite_number(
+                self.scpi, scale_command, "vertical scale"
+            ),
+            range=_query_math_finite_number(
+                self.scpi, range_command, "vertical range"
+            ),
+            offset=_query_math_finite_number(
+                self.scpi, offset_command, "vertical offset"
+            ),
         )
 
     def configure_operator(
@@ -788,12 +797,18 @@ class MathController:
         gain = None
         linear_offset = None
         if operation == "integrate":
-            input_offset = self.scpi.query_float(
-                f"{prefix}:INTegrate:IOFFset?"
+            input_offset = _query_math_finite_number(
+                self.scpi,
+                f"{prefix}:INTegrate:IOFFset?",
+                "integrate input offset",
             )
         elif operation == "linear":
-            gain = self.scpi.query_float(f"{prefix}:LINear:GAIN?")
-            linear_offset = self.scpi.query_float(f"{prefix}:LINear:OFFSet?")
+            gain = _query_math_finite_number(
+                self.scpi, f"{prefix}:LINear:GAIN?", "linear gain"
+            )
+            linear_offset = _query_math_finite_number(
+                self.scpi, f"{prefix}:LINear:OFFSet?", "linear offset"
+            )
         return MathTransformState(
             function=function,
             operation=operation,
@@ -844,9 +859,17 @@ class MathController:
         average_count = None
         smooth_points = None
         if operation == "low-pass":
-            cutoff_hz = self.scpi.query_float(f"{prefix}:FREQuency:LOWPass?")
+            cutoff_hz = _query_math_finite_number(
+                self.scpi,
+                f"{prefix}:FREQuency:LOWPass?",
+                "low-pass cutoff frequency",
+            )
         elif operation == "high-pass":
-            cutoff_hz = self.scpi.query_float(f"{prefix}:FREQuency:HIGHpass?")
+            cutoff_hz = _query_math_finite_number(
+                self.scpi,
+                f"{prefix}:FREQuency:HIGHpass?",
+                "high-pass cutoff frequency",
+            )
         elif operation == "average":
             average_count = _parse_math_filter_integer_response(
                 self.scpi.query(f"{prefix}:AVERage:COUNt?"),
@@ -2047,7 +2070,7 @@ def parse_math_trend_measurement_slot(raw: str) -> int | None:
         if suffix.isdigit():
             try:
                 return validate_math_trend_measurement_slot(int(suffix))
-            except ParameterValidationError:
+            except (ValueError, OverflowError, ParameterValidationError):
                 pass
     raise ChannelResponseError(
         f"Could not parse Math Trend measurement slot response: {raw_value!r}"
@@ -2069,6 +2092,8 @@ def validate_math_average_count(value: int) -> int:
 def validate_math_smooth_points(value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ParameterValidationError("--smooth-points must be an integer.")
+    if value.bit_length() > 63:
+        raise ParameterValidationError("--smooth-points is too large.")
     if value < 3:
         raise ParameterValidationError("--smooth-points must be at least 3.")
     if value % 2 == 0:
@@ -2133,13 +2158,13 @@ def parse_math_source(
         raise ChannelResponseError(
             f"Could not parse Math source response: {raw_value!r}"
         )
-    channel = int(suffix)
     try:
+        channel = int(suffix)
         if channel < 1 or channel > 4:
             raise ParameterValidationError("Math source channel is out of range.")
         if capabilities is not None:
             validate_analog_channel(channel, capabilities)
-    except ParameterValidationError as exc:
+    except (ValueError, OverflowError, ParameterValidationError) as exc:
         raise ChannelResponseError(
             f"Could not parse Math source response: {raw_value!r}"
         ) from exc
@@ -2165,7 +2190,10 @@ def parse_math_source1(
             if normalized.startswith(prefix):
                 suffix = normalized.removeprefix(prefix)
                 if suffix.isdigit():
-                    match = f"math{int(suffix)}"
+                    try:
+                        match = f"math{int(suffix)}"
+                    except (ValueError, OverflowError):
+                        match = None
                 break
         candidate = match or ""
     try:
@@ -2344,6 +2372,21 @@ def _query_fft_finite_number(
     except (TypeError, ValueError, OverflowError) as exc:
         raise ChannelResponseError(
             f"Could not parse FFT {setting_name} response: {raw!r}"
+        ) from exc
+
+
+def _query_math_finite_number(
+    scpi: SCPIClient, command: str, setting_name: str
+) -> float:
+    raw = scpi.query(command)
+    try:
+        value = float(raw)
+        if not math.isfinite(value):
+            raise ValueError
+        return value
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ChannelResponseError(
+            f"Could not parse Math {setting_name} response: {raw!r}"
         ) from exc
 
 

@@ -64,6 +64,36 @@ when it does not match the detected identity.
 
 All supported series profiles currently expose:
 
+### Instrument-Side Math Matrix
+
+P0-P7 Math support is instrument-side only. Canonical operation and source
+names remain independent of raw SCPI readbacks.
+
+| Surface | 2000X | 3000X | 4000X |
+| --- | --- | --- | --- |
+| Math function slots and dialect | 1; unnumbered `:FUNCtion` | 1; unnumbered `:FUNCtion` | 4; indexed `:FUNCtion<n>` |
+| Operators | `add`, `subtract`, `multiply`, `divide` | Same | Same |
+| Transforms | `differentiate`, `integrate`, `sqrt`, `absolute`, `square`, `ln`, `log10`, `exp`, `exp10`, `linear` | Same | Same |
+| Filters | `low-pass`, `high-pass` | Same | `low-pass`, `high-pass`, `average`, `smooth`, `envelope` |
+| Visualizations | `magnify`, `trend` | Same | `magnify`, `trend`, `maximum`, `minimum`, `peak`, `max-hold`, `min-hold` |
+| FFT | Basic magnitude FFT | Basic magnitude FFT | Magnitude FFT and FFT Phase with advanced controls |
+| Composite / GOFT source | Global analog-channel composite | Same | Not supported |
+| Math cascade source | Not supported | Not supported | Lower-numbered Math functions only |
+| Accumulation clear | Not supported | Not supported | `average`, `max-hold`, `min-hold` |
+
+Display, vertical configuration, query, and the applicable clear behavior use
+the same function-slot dialect. The 2000X/3000X profiles reject Math-function
+cascade sources. The 4000X profile rejects composite/GOFT sources and rejects
+self-reference or forward-reference before backend access. The existing
+`fft` CLI and Worker command remains compatible across all profiles.
+
+MATH-P8 bus-timing and bus-state are blocked by the missing MSO/digital-channel
+foundation. They are absent from enabled capability operations, CLI choices,
+Worker commands, Core builders, and simulator behavior; no hardware-free shell
+is provided. This matrix has hardware-free validation only. Focused live
+validation is still required for each registered model, relevant firmware,
+and USB/LAN or Worker-live path.
+
 - BYTE and WORD waveform capture with a conservative 10,000-point safe maximum.
 - Read-only measurement helpers and screenshot capture.
 - Measurement Control Pack v1 helpers for clearing measurements, enabling or

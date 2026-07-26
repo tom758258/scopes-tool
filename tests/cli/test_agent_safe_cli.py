@@ -1730,6 +1730,7 @@ def test_math_vertical_query_with_setter_fails_before_open(
     ("model", "function", "prefix"),
     [
         ("keysight-dsox2004a", "1", ":FUNCtion"),
+        ("keysight-dsox3024a", "1", ":FUNCtion"),
         ("keysight-dsox4024a", "2", ":FUNCtion2"),
     ],
 )
@@ -1769,6 +1770,12 @@ def test_math_operator_dry_run_uses_model_function_dialect(
         f"{prefix}:SOURce1 CHANnel1",
         f"{prefix}:SOURce2 CHANnel2",
     ]
+    if model == "keysight-dsox4024a":
+        assert all(
+            command.startswith(":FUNCtion2") for command in result["commands"]
+        )
+    else:
+        assert all(":FUNCtion1" not in command for command in result["commands"])
     assert payload["scpi"]["planned"] == [
         *result["commands"],
         ":SYSTem:ERRor?",

@@ -99,6 +99,13 @@ Core owns runtime behavior:
   FFT Phase. These controls do not calculate FFT data on the host, enable Math
   display, configure Zoom or timebase, run autoscale, or change acquisition
   state. Coverage is hardware-free only; no live validation was performed.
+- MATH-P9 closes the P0-P7 instrument-side Math surface with cross-layer
+  consistency gates for capability operations, Core builders and parsers,
+  CLI choices, Worker schemas, simulator state, function-slot dialects, and
+  legacy FFT behavior. Math remains instrument-side only. MATH-P8 bus-timing
+  and bus-state are not enabled because the required MSO/digital-channel
+  foundation is not implemented. The closure is hardware-free; focused live
+  validation remains required by registered model, firmware, and transport.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,

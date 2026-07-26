@@ -1932,6 +1932,15 @@ come from the instrument and do not represent host-side FFT calculation.
 This path has hardware-free validation only; no live hardware validation was
 performed.
 
+The P0-P7 instrument-side Math commands are closed under a hardware-free
+consistency gate covering CLI choices, Worker keys, capability guards, Core
+SCPI builders and parsers, simulator round trips, and the 2000X/3000X
+unnumbered versus 4000X indexed function dialect. The supported per-series
+operation matrix is documented in `../core/supported-models.md`. MATH-P8
+bus-timing and bus-state remain unavailable because MSO/digital-channel
+support is not implemented. No Math command performs host-side waveform
+calculation.
+
 `math-display` requires exactly one of `--on`, `--off`, or `--query`.
 `math-vertical` query mode cannot include setters. Configure mode requires
 `--scale`, `--range`, or `--offset`; scale and range are mutually exclusive,
@@ -1990,9 +1999,10 @@ and `envelope` without an additional parameter. Sources reuse the P4
 single-source contract: analog channels on every series, `composite` on
 2000X/3000X, and a lower-numbered Math function on 4000X. Query first reads
 operation and source, then reads only the parameter applicable to the current
-filter. `math-clear --function N` is available only on 4000X and clears the
-selected Math accumulation without querying its operation or waiting for
-completion.
+filter. Oversized integers that cannot be safely serialized are rejected as
+parameter errors. `math-clear --function N` is available only on 4000X and
+clears the selected Math accumulation without querying its operation or
+waiting for completion.
 
 `math-visualization` configures or queries instrument-side visualization
 waveforms. All registered series support `magnify` and `trend`; 4000X also

@@ -380,6 +380,13 @@ Control and setup:
   Visualization source may be `composite` on 2000X/3000X or a lower-numbered
   canonical `math1` through `math3` on 4000X.
 
+These P0-P7 Math result shapes remain instrument-side contracts. A consistency
+gate aligns canonical CLI choices, capability guards, Core parsers/builders,
+Worker arguments, simulator behavior, and the 1/1/4 function-slot dialect.
+MATH-P8 bus-timing and bus-state are not enabled because MSO/digital-channel
+support is absent. No bus-operation result shape, host-side Math execution
+mode, waveform Math artifact, or generic expression result is defined.
+
 Measurement and artifact-producing flows:
 
 - `measure`: `item`, `channel`, optional `reference_channel`, `value`, `unit`,

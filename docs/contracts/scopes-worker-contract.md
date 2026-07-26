@@ -1510,7 +1510,8 @@ also supports `average`, `smooth`, and `envelope`. Configure requires
 valid only for low/high-pass. Optional `average_count` is a non-boolean
 power-of-two integer from 2 through 65536. Optional `smooth_points` is a
 non-boolean odd integer of at least 3. Query requires exactly `query: true`
-and cannot include configure arguments.
+and cannot include configure arguments. Oversized integers that cannot be
+safely serialized are rejected before enqueue.
 
 Filter sources reuse the P4 single-source rules: supported analog channels on
 all series, `composite` only on 2000X/3000X, and only a lower-numbered Math
@@ -1609,6 +1610,29 @@ Advanced controls do not enable Math display, configure Zoom or timebase, run
 autoscale, or change acquisition state. Query-only derived fields are
 instrument readbacks, not host-side FFT results. Validation is hardware-free
 only; no live instrument validation was performed.
+
+### MATH-P9 Integration Closure
+
+The P0-P7 Worker surface is closed under a consistency gate that compares the
+canonical CLI arguments with the strict Worker allowlists and verifies that
+enabled capability operations reach Core builders, parsers, and simulator
+state. The public commands remain `fft`, `math-display`, `math-vertical`,
+`math-operator`, `math-composite-source`, `math-transform`, `math-filter`,
+`math-visualization`, and `math-clear`.
+
+2000X/3000X use one unnumbered Math function, accept the global composite/GOFT
+source where documented, and reject Math cascade sources. 4000X uses four
+indexed functions, rejects composite/GOFT sources, and accepts only
+lower-numbered Math cascade sources. Self-reference, forward-reference,
+inapplicable operation parameters, invalid integers, non-finite numeric
+values, unsupported capabilities, and schema mismatches are rejected before
+enqueue or backend access.
+
+MATH remains instrument-side only. MATH-P8 bus-timing and bus-state are absent
+from `DOMAIN_COMMANDS` and all strict schemas because MSO/digital-channel
+support is not implemented. No empty Worker request shape is reserved for
+them. P9 validation is hardware-free; focused live validation remains required
+per registered model, firmware, transport, and Worker-live path.
 
 ### Search Basic Pack v1 Commands
 

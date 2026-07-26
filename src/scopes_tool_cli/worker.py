@@ -179,6 +179,72 @@ DOMAIN_COMMANDS = {
     "math-vertical",
 }
 
+_MATH_WORKER_ARGUMENTS = {
+    "fft": frozenset(
+        {
+            "function",
+            "query",
+            "source_channel",
+            "units",
+            "window",
+            "center_hz",
+            "span_hz",
+            "display",
+            "fft_operation",
+            "start_hz",
+            "stop_hz",
+            "gate",
+            "phase_reference",
+            "detection_type",
+            "detection_points",
+        }
+    ),
+    "math-display": frozenset({"function", "on", "off", "query"}),
+    "math-vertical": frozenset(
+        {"function", "query", "scale", "range", "offset"}
+    ),
+    "math-operator": frozenset(
+        {"function", "query", "operation", "source1", "source2"}
+    ),
+    "math-composite-source": frozenset(
+        {"query", "operation", "source1", "source2"}
+    ),
+    "math-transform": frozenset(
+        {
+            "function",
+            "query",
+            "operation",
+            "source",
+            "input_offset",
+            "gain",
+            "linear_offset",
+        }
+    ),
+    "math-filter": frozenset(
+        {
+            "function",
+            "query",
+            "operation",
+            "source",
+            "cutoff_hz",
+            "average_count",
+            "smooth_points",
+        }
+    ),
+    "math-visualization": frozenset(
+        {
+            "function",
+            "query",
+            "operation",
+            "source",
+            "source2",
+            "measurement",
+            "measurement_slot",
+        }
+    ),
+    "math-clear": frozenset({"function"}),
+}
+
 
 @dataclass
 class WorkerJob:
@@ -1547,77 +1613,10 @@ def _normalize_save_export_worker_arguments(
 def _normalize_math_worker_arguments(
     command: str, arguments: dict[str, Any], runtime: WorkerRuntime
 ) -> dict[str, Any]:
-    if command not in {
-        "fft",
-        "math-display",
-        "math-vertical",
-        "math-operator",
-        "math-composite-source",
-        "math-transform",
-        "math-filter",
-        "math-visualization",
-        "math-clear",
-    }:
+    if command not in _MATH_WORKER_ARGUMENTS:
         return arguments
 
-    if command == "fft":
-        allowed = {
-            "function",
-            "query",
-            "source_channel",
-            "units",
-            "window",
-            "center_hz",
-            "span_hz",
-            "display",
-            "fft_operation",
-            "start_hz",
-            "stop_hz",
-            "gate",
-            "phase_reference",
-            "detection_type",
-            "detection_points",
-        }
-    elif command == "math-display":
-        allowed = {"function", "on", "off", "query"}
-    elif command == "math-vertical":
-        allowed = {"function", "query", "scale", "range", "offset"}
-    elif command == "math-composite-source":
-        allowed = {"query", "operation", "source1", "source2"}
-    elif command == "math-transform":
-        allowed = {
-            "function",
-            "query",
-            "operation",
-            "source",
-            "input_offset",
-            "gain",
-            "linear_offset",
-        }
-    elif command == "math-filter":
-        allowed = {
-            "function",
-            "query",
-            "operation",
-            "source",
-            "cutoff_hz",
-            "average_count",
-            "smooth_points",
-        }
-    elif command == "math-visualization":
-        allowed = {
-            "function",
-            "query",
-            "operation",
-            "source",
-            "source2",
-            "measurement",
-            "measurement_slot",
-        }
-    elif command == "math-clear":
-        allowed = {"function"}
-    else:
-        allowed = {"function", "query", "operation", "source1", "source2"}
+    allowed = _MATH_WORKER_ARGUMENTS[command]
     unknown = set(arguments) - allowed
     if unknown:
         raise OscilloscopeError(
