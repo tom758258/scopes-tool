@@ -161,7 +161,7 @@ Worker `/command` supports the existing Scopes capability surface:
   `trigger-hf-reject`, `trigger-holdoff`, `cursor`, `autoscale`
 - `setup-save`, `setup-recall`, `fft`, `math-display`, `math-vertical`,
   `math-operator`, `math-composite-source`, `math-transform`, `math-filter`,
-  `math-clear`
+  `math-visualization`, `math-clear`
 
 `list-resources` remains an explicit discovery command outside live worker
 flows. `hardware-report` remains a local report renderer. They are not accepted
@@ -1474,14 +1474,14 @@ analog channels. Query requires exactly `query: true` and is exclusive with
 configure fields. The command takes no `function` argument and is rejected for
 4000X startup profiles.
 
-The existing `math-transform` worker schema accepts canonical `composite` only
-on 2000X/3000X. On 4000X, only `math-transform` accepts `math1` through
-`math3`, and only when the source function is lower-numbered than the
-destination function. `math-operator` remains analog-channel-only. Math
-function sources and `composite` are never accepted as source2. Unknown
-fields, partial configure requests, query/configure mixes, aliases, uppercase
-values, and unsupported model/source combinations fail before enqueue,
-artifacts, backend open, or SCPI.
+The existing single-source worker schemas accept canonical `composite` only on
+2000X/3000X. On 4000X, supported transform, filter, and visualization
+operations accept `math1` through `math3` only when the source function is
+lower-numbered than the destination function. `math-operator` remains
+analog-channel-only. Math function sources and `composite` are never accepted
+as source2. Unknown fields, partial configure requests, query/configure mixes,
+aliases, uppercase values, and unsupported model/source combinations fail
+before enqueue, artifacts, backend open, or SCPI.
 
 P4 configures instrument-side Math only. It does not calculate or export
 waveforms, enable display, change vertical state, run autoscale, or probe
@@ -1526,12 +1526,51 @@ MATH-P5 also adds 4000X-only accumulation clear:
 ```
 
 `math-clear` is accepted only for capability profiles that support Math
-average and sends indexed `:FUNCtion<n>:CLEar` without querying the current
-operation, waiting for completion, or clearing acquisition or display state.
+`average`, `max-hold`, or `min-hold` accumulation and sends indexed
+`:FUNCtion<n>:CLEar` without querying the current operation, waiting for
+completion, or clearing acquisition or display state.
 Neither P5 command enables Math display, changes vertical or acquisition
 state, runs autoscale, probes licenses, calculates waveform samples, or
 creates domain artifacts. Validation is hardware-free only; live instrument
 and license behavior have not been validated.
+
+### MATH-P6 Visualization And Trend Command
+
+MATH-P6 adds instrument-side visualization configuration and query:
+
+```json
+{"command": "math-visualization", "arguments": {"function": 1, "operation": "magnify", "source": "composite"}}
+```
+
+```json
+{"command": "math-visualization", "arguments": {"function": 1, "operation": "trend", "source": "channel1", "source2": "channel2", "measurement": "vratio"}}
+```
+
+```json
+{"command": "math-visualization", "arguments": {"function": 2, "operation": "trend", "measurement_slot": 3}}
+```
+
+```json
+{"command": "math-visualization", "arguments": {"function": 2, "query": true}}
+```
+
+All registered series support canonical `magnify` and `trend`; 4000X also
+supports `maximum`, `minimum`, `peak`, `max-hold`, and `min-hold`. Non-Trend
+operations require `source` and reuse the existing single-source rules.
+2000X/3000X Trend requires one analog `source` and canonical `measurement`;
+only `vratio` requires analog `source2`. 4000X Trend instead requires
+non-boolean integer `measurement_slot` from 1 through 10 and rejects `source`,
+`source2`, and `measurement`. The selected 4000X measurement slot must already
+contain a compatible installed measurement.
+
+Query requires exactly `query: true` with `function` and rejects configure
+arguments. Unknown fields, wrong JSON types, aliases, uppercase values,
+unsupported operations or sources, invalid slots, and operation-specific
+argument conflicts fail before enqueue, artifacts, backend open, or SCPI. P6
+does not enable Math display, change vertical or acquisition state, run
+autoscale, install measurements, probe licenses, calculate waveform samples,
+or export waveform data. Validation is hardware-free only; live instrument and
+license behavior have not been validated.
 
 ### Search Basic Pack v1 Commands
 

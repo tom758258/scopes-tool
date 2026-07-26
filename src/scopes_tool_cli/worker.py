@@ -31,6 +31,8 @@ from scopes_tool_core.advanced import (
     math_operator_query_commands,
     math_transform_commands,
     math_transform_query_commands,
+    math_visualization_commands,
+    math_visualization_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
 )
@@ -166,6 +168,7 @@ DOMAIN_COMMANDS = {
     "math-composite-source",
     "math-operator",
     "math-transform",
+    "math-visualization",
     "math-vertical",
 }
 
@@ -1544,6 +1547,7 @@ def _normalize_math_worker_arguments(
         "math-composite-source",
         "math-transform",
         "math-filter",
+        "math-visualization",
         "math-clear",
     }:
         return arguments
@@ -1573,6 +1577,16 @@ def _normalize_math_worker_arguments(
             "cutoff_hz",
             "average_count",
             "smooth_points",
+        }
+    elif command == "math-visualization":
+        allowed = {
+            "function",
+            "query",
+            "operation",
+            "source",
+            "source2",
+            "measurement",
+            "measurement_slot",
         }
     elif command == "math-clear":
         allowed = {"function"}
@@ -1741,6 +1755,46 @@ def _normalize_math_worker_arguments(
             cutoff_hz=arguments.get("cutoff_hz"),
             average_count=arguments.get("average_count"),
             smooth_points=arguments.get("smooth_points"),
+            capabilities=capabilities,
+        )
+        return dict(arguments)
+
+    if command == "math-visualization":
+        configure_keys = (
+            "operation",
+            "source",
+            "source2",
+            "measurement",
+            "measurement_slot",
+        )
+        configure_arguments = {
+            key: arguments[key] for key in configure_keys if key in arguments
+        }
+        if "query" in arguments:
+            if arguments["query"] is not True:
+                raise OscilloscopeError(
+                    "math-visualization argument query must be exactly true"
+                )
+            if configure_arguments:
+                raise OscilloscopeError(
+                    "math-visualization query cannot be combined with "
+                    "configure arguments"
+                )
+            math_visualization_query_commands(
+                function, capabilities=capabilities
+            )
+            return dict(arguments)
+        if "operation" not in arguments:
+            raise OscilloscopeError(
+                "math-visualization configure requires operation"
+            )
+        math_visualization_commands(
+            function,
+            arguments["operation"],
+            source=arguments.get("source"),
+            source2=arguments.get("source2"),
+            measurement=arguments.get("measurement"),
+            measurement_slot=arguments.get("measurement_slot"),
             capabilities=capabilities,
         )
         return dict(arguments)

@@ -34,8 +34,10 @@ from scopes_tool_core.advanced import (
     MATH_FILTER_OPERATIONS,
     MATH_OPERATIONS,
     MATH_SOURCES,
+    MATH_TREND_MEASUREMENTS,
     MATH_TRANSFORM_SOURCES,
     MATH_TRANSFORMS,
+    MATH_VISUALIZATION_OPERATIONS,
     autoscale_commands,
     cursor_auto_vertical_dry_run_plan,
     cursor_auto_vertical_json,
@@ -57,6 +59,8 @@ from scopes_tool_core.advanced import (
     math_filter_query_commands,
     math_transform_commands,
     math_transform_query_commands,
+    math_visualization_commands,
+    math_visualization_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
     setup_recall_command,
@@ -2602,6 +2606,37 @@ def _build_parser() -> argparse.ArgumentParser:
     math_filter_parser.add_argument("--average-count", type=_positive_int, default=None)
     math_filter_parser.add_argument("--smooth-points", type=_positive_int, default=None)
 
+    math_visualization_parser = subparsers.add_parser(
+        "math-visualization",
+        allow_abbrev=False,
+        help="configure or query an instrument-side Math visualization",
+    )
+    _add_scope_connection_args(math_visualization_parser)
+    math_visualization_parser.add_argument(
+        "--function", type=_positive_int, required=True
+    )
+    math_visualization_parser.add_argument(
+        "--query", dest="math_visualization_query", action="store_true"
+    )
+    math_visualization_parser.add_argument(
+        "--operation",
+        dest="math_visualization_operation",
+        choices=MATH_VISUALIZATION_OPERATIONS,
+        default=None,
+    )
+    math_visualization_parser.add_argument(
+        "--source", choices=MATH_TRANSFORM_SOURCES, default=None
+    )
+    math_visualization_parser.add_argument(
+        "--source2", choices=MATH_SOURCES, default=None
+    )
+    math_visualization_parser.add_argument(
+        "--measurement", choices=MATH_TREND_MEASUREMENTS, default=None
+    )
+    math_visualization_parser.add_argument(
+        "--measurement-slot", type=_positive_int, default=None
+    )
+
     math_clear_parser = subparsers.add_parser(
         "math-clear",
         allow_abbrev=False,
@@ -2948,6 +2983,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_math_transform(args)
     if args.command == "math-filter":
         return _cmd_math_filter(args)
+    if args.command == "math-visualization":
+        return _cmd_math_visualization(args)
     if args.command == "math-clear":
         return _cmd_math_clear(args)
     if args.command == "acquisition-check":
@@ -3502,6 +3539,7 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         "math-composite-source",
         "math-transform",
         "math-filter",
+        "math-visualization",
         "math-clear",
     }:
         _validate_math_args(args)
@@ -3625,6 +3663,39 @@ def _validate_math_args(args: argparse.Namespace) -> None:
             cutoff_hz=args.cutoff_hz,
             average_count=args.average_count,
             smooth_points=args.smooth_points,
+            capabilities=capabilities,
+        )
+        return
+
+    if args.command == "math-visualization":
+        configure_values = (
+            args.math_visualization_operation,
+            args.source,
+            args.source2,
+            args.measurement,
+            args.measurement_slot,
+        )
+        if args.math_visualization_query:
+            if any(value is not None for value in configure_values):
+                raise ParameterValidationError(
+                    "math-visualization --query cannot be combined with "
+                    "configure options."
+                )
+            math_visualization_query_commands(
+                args.function, capabilities=capabilities
+            )
+            return
+        if args.math_visualization_operation is None:
+            raise ParameterValidationError(
+                "math-visualization configure requires --operation."
+            )
+        math_visualization_commands(
+            args.function,
+            args.math_visualization_operation,
+            source=args.source,
+            source2=args.source2,
+            measurement=args.measurement,
+            measurement_slot=args.measurement_slot,
             capabilities=capabilities,
         )
         return
@@ -5606,6 +5677,43 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "cutoff_hz": args.cutoff_hz,
             "average_count": args.average_count,
             "smooth_points": args.smooth_points,
+            "commands": planned,
+        }
+    if command == "math-visualization":
+        if args.math_visualization_query:
+            planned = math_visualization_query_commands(
+                args.function, capabilities=capabilities
+            )
+            return planned + [":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "function": args.function,
+                "math_operation": None,
+                "operation_raw": None,
+                "source": None,
+                "source_raw": None,
+                "source2": None,
+                "source2_raw": None,
+                "measurement": None,
+                "measurement_raw": None,
+                "measurement_slot": None,
+            }
+        planned = math_visualization_commands(
+            args.function,
+            args.math_visualization_operation,
+            source=args.source,
+            source2=args.source2,
+            measurement=args.measurement,
+            measurement_slot=args.measurement_slot,
+            capabilities=capabilities,
+        )
+        return planned + [":SYSTem:ERRor?"], [], {
+            "operation": "set",
+            "function": args.function,
+            "math_operation": args.math_visualization_operation,
+            "source": args.source,
+            "source2": args.source2,
+            "measurement": args.measurement,
+            "measurement_slot": args.measurement_slot,
             "commands": planned,
         }
     if command == "math-clear":
@@ -10085,6 +10193,76 @@ def _cmd_math_filter(args: argparse.Namespace) -> int:
                 cutoff_hz=args.cutoff_hz,
                 average_count=args.average_count,
                 smooth_points=args.smooth_points,
+                commands=commands,
+            )
+            for command in commands:
+                print(f"Command: {command}")
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_math_visualization(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        if args.math_visualization_query:
+            state = scope.query_math_visualization(args.function)
+            _json_update_result(
+                operation="query",
+                function=state.function,
+                math_operation=state.operation,
+                operation_raw=state.operation_raw,
+                source=state.source,
+                source_raw=state.source_raw,
+                source2=state.source2,
+                source2_raw=state.source2_raw,
+                measurement=state.measurement,
+                measurement_raw=state.measurement_raw,
+                measurement_slot=state.measurement_slot,
+            )
+            print(f"Math visualization: {state.operation}")
+            if state.source is not None:
+                print(f"Source: {state.source}")
+            if state.source2 is not None:
+                print(f"Source 2: {state.source2}")
+            if state.measurement is not None:
+                print(f"Trend measurement: {state.measurement}")
+            if state.measurement_slot is not None:
+                print(f"Trend measurement slot: {state.measurement_slot}")
+        else:
+            scope.configure_math_visualization(
+                args.function,
+                args.math_visualization_operation,
+                source=args.source,
+                source2=args.source2,
+                measurement=args.measurement,
+                measurement_slot=args.measurement_slot,
+            )
+            commands = math_visualization_commands(
+                args.function,
+                args.math_visualization_operation,
+                source=args.source,
+                source2=args.source2,
+                measurement=args.measurement,
+                measurement_slot=args.measurement_slot,
+                capabilities=scope.capabilities,
+            )
+            _json_update_result(
+                operation="set",
+                function=args.function,
+                math_operation=args.math_visualization_operation,
+                source=args.source,
+                source2=args.source2,
+                measurement=args.measurement,
+                measurement_slot=args.measurement_slot,
                 commands=commands,
             )
             for command in commands:

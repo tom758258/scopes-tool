@@ -41,6 +41,7 @@ class ScopeCapabilities:
     supports_math_goft: bool = False
     supports_math_cascade: bool = False
     math_filter_operations: frozenset[str] = frozenset()
+    math_visualization_operations: frozenset[str] = frozenset()
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
@@ -72,6 +73,7 @@ _CAPABILITY_PROFILES = {
         math_function_count=1,
         supports_math_goft=True,
         math_filter_operations=frozenset({"low-pass", "high-pass"}),
+        math_visualization_operations=frozenset({"magnify", "trend"}),
         reference_waveforms=2,
         supports_channel_label=True,
         channel_label_max_length=10,
@@ -101,6 +103,7 @@ _CAPABILITY_PROFILES = {
         math_function_count=1,
         supports_math_goft=True,
         math_filter_operations=frozenset({"low-pass", "high-pass"}),
+        math_visualization_operations=frozenset({"magnify", "trend"}),
         reference_waveforms=2,
         supports_channel_label=True,
         channel_label_max_length=10,
@@ -133,6 +136,17 @@ _CAPABILITY_PROFILES = {
         supports_math_cascade=True,
         math_filter_operations=frozenset(
             {"low-pass", "high-pass", "average", "smooth", "envelope"}
+        ),
+        math_visualization_operations=frozenset(
+            {
+                "magnify",
+                "trend",
+                "maximum",
+                "minimum",
+                "peak",
+                "max-hold",
+                "min-hold",
+            }
         ),
         supports_screenshot_format_pack=True,
         reference_waveforms=2,

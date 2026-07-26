@@ -1898,13 +1898,18 @@ Additional DSO-X 4024A controls:
 .\.venv\Scripts\scopes-tool.exe math-filter --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation low-pass --source channel1 --cutoff-hz 1000000 --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-filter --resource "$env:SCOPES_TOOL_RESOURCE" --function 2 --operation average --source math1 --average-count 64 --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-filter --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-visualization --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation magnify --source composite --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-visualization --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation trend --source channel1 --source2 channel2 --measurement vratio --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-visualization --resource "$env:SCOPES_TOOL_RESOURCE" --function 2 --operation max-hold --source math1 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-visualization --resource "$env:SCOPES_TOOL_RESOURCE" --function 2 --operation trend --measurement-slot 3 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-visualization --resource "$env:SCOPES_TOOL_RESOURCE" --function 2 --query --json --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-clear --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --log-scpi
 ```
 
 The existing `fft`, `math-display`, `math-vertical`, `math-operator`, and
-`math-transform`, `math-filter`, and `math-clear` commands use the model's
-instrument-side Math function
-layout. 2000X and 3000X models have one unindexed `:FUNCtion` subsystem and
+`math-transform`, `math-filter`, `math-visualization`, and `math-clear`
+commands use the model's instrument-side Math function layout. 2000X and
+3000X models have one unindexed `:FUNCtion` subsystem and
 require `--function 1`. 4000X models use indexed `:FUNCtion1` through
 `:FUNCtion4` slots and accept `--function 1..4`. The global
 `math-composite-source` command is available only on 2000X/3000X and does not
@@ -1955,8 +1960,9 @@ source. Configure requires `--operation`, `--source1`, and `--source2`;
 supported operations are `add`, `subtract`, and `multiply`, and both sources
 must be supported analog channels. `divide` is not accepted. Query is exclusive
 with configure options. The canonical `composite` value is accepted by
-`math-transform` and `math-filter`; it is not accepted by `math-operator` or as
-source2. GOFT is not exposed on the public 4000X path.
+`math-transform`, `math-filter`, and supported `math-visualization`
+operations; it is not accepted by `math-operator` or as source2. GOFT is not
+exposed on the public 4000X path.
 
 `math-filter` configures or queries an instrument-side, single-source Math
 filter. `low-pass` and `high-pass` are available on 2000X, 3000X, and 4000X
@@ -1971,12 +1977,29 @@ filter. `math-clear --function N` is available only on 4000X and clears the
 selected Math accumulation without querying its operation or waiting for
 completion.
 
+`math-visualization` configures or queries instrument-side visualization
+waveforms. All registered series support `magnify` and `trend`; 4000X also
+supports `maximum`, `minimum`, `peak`, `max-hold`, and `min-hold`. Non-Trend
+operations require one source and reuse the single-source rules: analog
+channels on all series, `composite` on 2000X/3000X, and a lower-numbered Math
+function on 4000X. For 2000X/3000X, Trend requires an analog `--source` and
+one canonical `--measurement`; only `vratio` also requires analog
+`--source2`. For 4000X, Trend instead requires `--measurement-slot 1..10`,
+rejects source options, and assumes that the compatible measurement is already
+installed in that slot. Query preserves raw operation, source, and measurement
+readbacks and does not issue source queries for 4000X Trend.
+
+`math-clear` applies to 4000X `average`, `max-hold`, and `min-hold`
+accumulations. It does not inspect the current operation before issuing the
+indexed clear command.
+
 These Math commands do not automatically enable display, change vertical
-settings, run autoscale, probe licenses, calculate host-side waveforms, or
-export waveform data. Reference waveform, bus, and digital sources remain
-unsupported. License availability remains subject to the live instrument error
-queue. These Math paths have hardware-free validation only; live instrument
-behavior and license availability have not been validated.
+settings, run autoscale, install or modify measurements, change acquisition
+state, probe licenses, calculate host-side waveforms, or export waveform data.
+Reference waveform, bus, and digital sources remain unsupported. License
+availability remains subject to the live instrument error queue. These Math
+paths have hardware-free validation only; live instrument behavior and license
+availability have not been validated.
 
 These commands are explicit user actions and are never called by `doctor`,
 `smoke`, or `acquisition-check`. Some change front-panel state, such as cursor,

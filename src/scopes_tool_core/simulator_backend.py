@@ -1842,8 +1842,15 @@ class SimulatorBackend:
         )
         if clear_match is not None:
             function = int(clear_match.group(1))
+            accumulation_operations = (
+                self._capabilities.math_filter_operations
+                | self._capabilities.math_visualization_operations
+            )
             if (
-                "average" not in self._capabilities.math_filter_operations
+                not (
+                    {"average", "max-hold", "min-hold"}
+                    & accumulation_operations
+                )
                 or function > self._capabilities.math_function_count
             ):
                 raise SimulatorBackendError(
@@ -1879,6 +1886,8 @@ class SimulatorBackend:
                 "high_pass_cutoff": 1.0e3,
                 "average_count": 64,
                 "smooth_points": 9,
+                "trend_measurement": "VAVerage",
+                "trend_measurement_slot": "NONE",
             },
         )
         primary, secondary, value = match.group(2).upper(), (match.group(3) or "").upper(), match.group(4)
@@ -1904,8 +1913,22 @@ class SimulatorBackend:
                 raise SimulatorBackendError(
                     "Arithmetic Math operators require an analog source1."
                 )
+            if (
+                str(key["operation"]).upper() == "TREND"
+                and self._capabilities.series == "4000X"
+            ):
+                raise SimulatorBackendError(
+                    "4000X Trend does not accept a Math source write."
+                )
             key["source"] = source
         elif primary == "SOURCE2":
+            if (
+                str(key["operation"]).upper() == "TREND"
+                and self._capabilities.series == "4000X"
+            ):
+                raise SimulatorBackendError(
+                    "4000X Trend does not accept a Math source write."
+                )
             key["source2"] = self._normalize_math_source_token(value)
         elif primary == "DISPLAY":
             key["display"] = value.upper() == "ON"
@@ -1929,6 +1952,10 @@ class SimulatorBackend:
             key["average_count"] = int(value)
         elif primary == "SMOOTH" and secondary == "POINTS":
             key["smooth_points"] = int(value)
+        elif primary == "TREND" and secondary == "MEASUREMENT":
+            key["trend_measurement"] = value
+        elif primary == "TREND" and secondary == "NMEASUREMENT":
+            key["trend_measurement_slot"] = value.upper()
         elif primary == "FFT" and secondary == "VTYPE":
             key["units"] = value
         elif primary == "FFT" and secondary == "WINDOW":
@@ -1971,6 +1998,8 @@ class SimulatorBackend:
                 "high_pass_cutoff": 1.0e3,
                 "average_count": 64,
                 "smooth_points": 9,
+                "trend_measurement": "VAVerage",
+                "trend_measurement_slot": "NONE",
             },
         )
         primary, secondary = match.group(2).upper(), (match.group(3) or "").upper()
@@ -2008,6 +2037,10 @@ class SimulatorBackend:
             return str(int(state["average_count"]))
         if primary == "SMOOTH" and secondary == "POINTS":
             return str(int(state["smooth_points"]))
+        if primary == "TREND" and secondary == "MEASUREMENT":
+            return str(state["trend_measurement"])
+        if primary == "TREND" and secondary == "NMEASUREMENT":
+            return str(state["trend_measurement_slot"])
         if primary == "FFT" and secondary == "VTYPE":
             return str(state["units"])
         if primary == "FFT" and secondary == "WINDOW":

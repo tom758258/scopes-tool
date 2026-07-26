@@ -359,10 +359,19 @@ Control and setup:
   Query results include `operation: "query"`, `function`, canonical
   `math_operation` and `source`, stripped `operation_raw` and `source_raw`,
   and the same nullable operation-specific numeric fields.
+- `math-visualization`: configure results include `operation: "set"`,
+  `function`, canonical `math_operation`, nullable canonical `source`,
+  `source2`, `measurement`, and integer `measurement_slot`, plus ordered
+  executed `commands`. Query results include `operation: "query"`, `function`,
+  canonical `math_operation`, nullable canonical `source`, `source2`,
+  `measurement`, and `measurement_slot`, plus nullable stripped
+  `operation_raw`, `source_raw`, `source2_raw`, and `measurement_raw`
+  readbacks. Non-applicable fields are `null`.
 - `math-clear`: results include `operation: "clear"`, `function`,
   `cleared: true`, and executed `command`.
-  Source may be `composite` on 2000X/3000X or a lower-numbered canonical
-  `math1` through `math3` on 4000X.
+  It applies to 4000X `average`, `max-hold`, and `min-hold` accumulations.
+  Visualization source may be `composite` on 2000X/3000X or a lower-numbered
+  canonical `math1` through `math3` on 4000X.
 
 Measurement and artifact-producing flows:
 

@@ -60,6 +60,27 @@ MATH_FILTER_OPERATIONS = (
     "smooth",
     "envelope",
 )
+MATH_VISUALIZATION_OPERATIONS = (
+    "magnify",
+    "trend",
+    "maximum",
+    "minimum",
+    "peak",
+    "max-hold",
+    "min-hold",
+)
+MATH_TREND_MEASUREMENTS = (
+    "vavg",
+    "ac_rms",
+    "vratio",
+    "period",
+    "frequency",
+    "positive_width",
+    "negative_width",
+    "duty_cycle",
+    "rise_time",
+    "fall_time",
+)
 _MATH_OPERATION_TOKENS = {
     "add": "ADD",
     "subtract": "SUBTract",
@@ -133,6 +154,64 @@ _MATH_FILTER_READBACKS = {
     "SMOOTH": "smooth",
     "ENV": "envelope",
     "ENVELOPE": "envelope",
+}
+_MATH_VISUALIZATION_TOKENS = {
+    "magnify": "MAGNify",
+    "trend": "TRENd",
+    "maximum": "MAXimum",
+    "minimum": "MINimum",
+    "peak": "PEAK",
+    "max-hold": "MAXHold",
+    "min-hold": "MINHold",
+}
+_MATH_VISUALIZATION_READBACKS = {
+    "MAGN": "magnify",
+    "MAGNIFY": "magnify",
+    "TREN": "trend",
+    "TREND": "trend",
+    "MAX": "maximum",
+    "MAXIMUM": "maximum",
+    "MIN": "minimum",
+    "MINIMUM": "minimum",
+    "PEAK": "peak",
+    "MAXH": "max-hold",
+    "MAXHOLD": "max-hold",
+    "MINH": "min-hold",
+    "MINHOLD": "min-hold",
+}
+_MATH_TREND_MEASUREMENT_TOKENS = {
+    "vavg": "VAVerage",
+    "ac_rms": "ACRMs",
+    "vratio": "VRATio",
+    "period": "PERiod",
+    "frequency": "FREQuency",
+    "positive_width": "PWIDth",
+    "negative_width": "NWIDth",
+    "duty_cycle": "DUTYcycle",
+    "rise_time": "RISetime",
+    "fall_time": "FALLtime",
+}
+_MATH_TREND_MEASUREMENT_READBACKS = {
+    "VAV": "vavg",
+    "VAVERAGE": "vavg",
+    "ACRM": "ac_rms",
+    "ACRMS": "ac_rms",
+    "VRAT": "vratio",
+    "VRATIO": "vratio",
+    "PER": "period",
+    "PERIOD": "period",
+    "FREQ": "frequency",
+    "FREQUENCY": "frequency",
+    "PWID": "positive_width",
+    "PWIDTH": "positive_width",
+    "NWID": "negative_width",
+    "NWIDTH": "negative_width",
+    "DUTY": "duty_cycle",
+    "DUTYCYCLE": "duty_cycle",
+    "RIS": "rise_time",
+    "RISETIME": "rise_time",
+    "FALL": "fall_time",
+    "FALLTIME": "fall_time",
 }
 
 
@@ -244,6 +323,20 @@ class MathFilterState:
     cutoff_hz: float | None
     average_count: int | None
     smooth_points: int | None
+
+
+@dataclass(frozen=True)
+class MathVisualizationState:
+    function: int
+    operation: str
+    operation_raw: str
+    source: str | None
+    source_raw: str | None
+    source2: str | None
+    source2_raw: str | None
+    measurement: str | None
+    measurement_raw: str | None
+    measurement_slot: int | None
 
 
 class CursorController:
@@ -652,6 +745,90 @@ class MathController:
             cutoff_hz=cutoff_hz,
             average_count=average_count,
             smooth_points=smooth_points,
+        )
+
+    def configure_visualization(
+        self,
+        function: int,
+        operation: str,
+        *,
+        source: str | None = None,
+        source2: str | None = None,
+        measurement: str | None = None,
+        measurement_slot: int | None = None,
+    ) -> None:
+        for command in math_visualization_commands(
+            function,
+            operation,
+            source=source,
+            source2=source2,
+            measurement=measurement,
+            measurement_slot=measurement_slot,
+            capabilities=self.capabilities,
+        ):
+            self.scpi.write(command)
+
+    def query_visualization(self, function: int) -> MathVisualizationState:
+        operation_command = math_visualization_query_commands(
+            function, capabilities=self.capabilities
+        )[0]
+        operation_raw = self.scpi.query(operation_command).strip()
+        operation = parse_math_visualization_operation(operation_raw)
+        try:
+            _validate_math_visualization_capability(
+                operation, self.capabilities
+            )
+        except ParameterValidationError as exc:
+            raise ChannelResponseError(
+                "Could not parse Math visualization response: "
+                f"{operation_raw!r}"
+            ) from exc
+        prefix = math_function_scpi_prefix(function, self.capabilities)
+        source = None
+        source_raw = None
+        source2 = None
+        source2_raw = None
+        measurement = None
+        measurement_raw = None
+        measurement_slot = None
+        if operation == "trend" and self.capabilities.series == "4000X":
+            measurement_raw = self.scpi.query(
+                f"{prefix}:TRENd:NMEasurement?"
+            ).strip()
+            measurement_slot = parse_math_trend_measurement_slot(measurement_raw)
+        else:
+            source_raw = self.scpi.query(f"{prefix}:SOURce1?").strip()
+            if operation == "trend":
+                source = parse_math_source(
+                    source_raw, capabilities=self.capabilities
+                )
+                measurement_raw = self.scpi.query(
+                    f"{prefix}:TRENd:MEASurement?"
+                ).strip()
+                measurement = parse_math_trend_measurement(measurement_raw)
+                if measurement == "vratio":
+                    source2_raw = self.scpi.query(f"{prefix}:SOURce2?").strip()
+                    source2 = parse_math_source(
+                        source2_raw, capabilities=self.capabilities
+                    )
+            else:
+                source = parse_math_source1(
+                    source_raw,
+                    function,
+                    capabilities=self.capabilities,
+                    allow_composite=True,
+                )
+        return MathVisualizationState(
+            function=function,
+            operation=operation,
+            operation_raw=operation_raw,
+            source=source,
+            source_raw=source_raw,
+            source2=source2,
+            source2_raw=source2_raw,
+            measurement=measurement,
+            measurement_raw=measurement_raw,
+            measurement_slot=measurement_slot,
         )
 
     def clear(self, function: int) -> None:
@@ -1275,11 +1452,130 @@ def math_filter_query_commands(
     ]
 
 
+def math_visualization_commands(
+    function: int,
+    operation: str,
+    *,
+    source: str | None = None,
+    source2: str | None = None,
+    measurement: str | None = None,
+    measurement_slot: int | None = None,
+    capabilities: ScopeCapabilities | None = None,
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    operation = normalize_math_visualization_operation(operation)
+    _validate_math_visualization_capability(operation, capabilities)
+    commands = [
+        f"{prefix}:OPERation {_MATH_VISUALIZATION_TOKENS[operation]}"
+    ]
+    if operation != "trend":
+        if source is None:
+            raise ParameterValidationError(
+                "Math visualization configure requires --source."
+            )
+        if any(
+            value is not None
+            for value in (source2, measurement, measurement_slot)
+        ):
+            raise ParameterValidationError(
+                "--source2, --measurement, and --measurement-slot are only "
+                "valid with --operation trend."
+            )
+        normalized_source = normalize_math_source1(
+            source,
+            function,
+            capabilities=capabilities,
+            allow_composite=True,
+            option_names="--source",
+        )
+        commands.append(
+            f"{prefix}:SOURce1 {_math_source_scpi_token(normalized_source)}"
+        )
+        return commands
+
+    is_4000x = (
+        capabilities.series == "4000X"
+        if capabilities is not None
+        else measurement_slot is not None
+    )
+    if is_4000x:
+        if any(value is not None for value in (source, source2, measurement)):
+            raise ParameterValidationError(
+                "4000X Trend accepts --measurement-slot and does not accept "
+                "--source, --source2, or --measurement."
+            )
+        slot = validate_math_trend_measurement_slot(measurement_slot)
+        commands.append(f"{prefix}:TRENd:NMEasurement MEAS{slot}")
+        return commands
+
+    if measurement_slot is not None:
+        raise ParameterValidationError(
+            "--measurement-slot is only valid for 4000X Trend."
+        )
+    if source is None or measurement is None:
+        raise ParameterValidationError(
+            "2000X/3000X Trend requires --source and --measurement."
+        )
+    normalized_source = normalize_math_source(
+        source,
+        capabilities=capabilities,
+        option_names="--source",
+    )
+    normalized_measurement = normalize_math_trend_measurement(measurement)
+    commands.append(
+        f"{prefix}:SOURce1 {_math_source_scpi_token(normalized_source)}"
+    )
+    if normalized_measurement == "vratio":
+        if source2 is None:
+            raise ParameterValidationError(
+                "--source2 is required with Trend measurement vratio."
+            )
+        normalized_source2 = normalize_math_source(
+            source2,
+            capabilities=capabilities,
+            option_names="--source2",
+        )
+        commands.append(
+            f"{prefix}:SOURce2 {_math_source_scpi_token(normalized_source2)}"
+        )
+    elif source2 is not None:
+        raise ParameterValidationError(
+            "--source2 is only valid with Trend measurement vratio."
+        )
+    commands.append(
+        f"{prefix}:TRENd:MEASurement "
+        f"{_MATH_TREND_MEASUREMENT_TOKENS[normalized_measurement]}"
+    )
+    return commands
+
+
+def math_visualization_query_commands(
+    function: int, *, capabilities: ScopeCapabilities | None = None
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    if (
+        capabilities is not None
+        and not capabilities.math_visualization_operations
+    ):
+        raise ParameterValidationError(
+            "Math visualizations are not supported by this capability profile."
+        )
+    return [f"{prefix}:OPERation?"]
+
+
 def math_clear_command(
     function: int, *, capabilities: ScopeCapabilities | None = None
 ) -> str:
     prefix = math_function_scpi_prefix(function, capabilities)
-    if capabilities is not None and "average" not in capabilities.math_filter_operations:
+    accumulation_operations = (
+        capabilities.math_filter_operations
+        | capabilities.math_visualization_operations
+        if capabilities is not None
+        else frozenset()
+    )
+    if capabilities is not None and not (
+        {"average", "max-hold", "min-hold"} & accumulation_operations
+    ):
         raise ParameterValidationError(
             "Math clear is not supported by this capability profile."
         )
@@ -1450,6 +1746,81 @@ def parse_math_filter_operation(raw: str) -> str:
     return operation
 
 
+def normalize_math_visualization_operation(value: str) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError(
+            "--operation must be a supported instrument-side Math visualization."
+        )
+    normalized = value.strip().lower()
+    if normalized not in _MATH_VISUALIZATION_TOKENS:
+        raise ParameterValidationError(
+            "--operation must be a supported instrument-side Math visualization."
+        )
+    return normalized
+
+
+def parse_math_visualization_operation(raw: str) -> str:
+    raw_value = raw.strip()
+    operation = _MATH_VISUALIZATION_READBACKS.get(raw_value.upper())
+    if operation is None:
+        raise ChannelResponseError(
+            f"Could not parse Math visualization response: {raw_value!r}"
+        )
+    return operation
+
+
+def normalize_math_trend_measurement(value: str) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError(
+            "--measurement must be a supported Trend measurement."
+        )
+    normalized = value.strip().lower()
+    if normalized not in _MATH_TREND_MEASUREMENT_TOKENS:
+        raise ParameterValidationError(
+            "--measurement must be a supported Trend measurement."
+        )
+    return normalized
+
+
+def parse_math_trend_measurement(raw: str) -> str:
+    raw_value = raw.strip()
+    measurement = _MATH_TREND_MEASUREMENT_READBACKS.get(raw_value.upper())
+    if measurement is None:
+        raise ChannelResponseError(
+            f"Could not parse Math Trend measurement response: {raw_value!r}"
+        )
+    return measurement
+
+
+def validate_math_trend_measurement_slot(value: int | None) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ParameterValidationError(
+            "--measurement-slot must be an integer."
+        )
+    if value < 1 or value > 10:
+        raise ParameterValidationError(
+            "--measurement-slot must be between 1 and 10."
+        )
+    return value
+
+
+def parse_math_trend_measurement_slot(raw: str) -> int | None:
+    raw_value = raw.strip()
+    normalized = raw_value.upper()
+    if normalized == "NONE":
+        return None
+    if normalized.startswith("MEAS"):
+        suffix = normalized.removeprefix("MEAS")
+        if suffix.isdigit():
+            try:
+                return validate_math_trend_measurement_slot(int(suffix))
+            except ParameterValidationError:
+                pass
+    raise ChannelResponseError(
+        f"Could not parse Math Trend measurement slot response: {raw_value!r}"
+    )
+
+
 def validate_math_average_count(value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ParameterValidationError("--average-count must be an integer.")
@@ -1498,6 +1869,19 @@ def _validate_math_filter_capability(
         raise ParameterValidationError(
             f"Math filter operation {operation!r} is not supported by this "
             "capability profile."
+        )
+
+
+def _validate_math_visualization_capability(
+    operation: str, capabilities: ScopeCapabilities | None
+) -> None:
+    if (
+        capabilities is not None
+        and operation not in capabilities.math_visualization_operations
+    ):
+        raise ParameterValidationError(
+            f"Math visualization operation {operation!r} is not supported by "
+            "this capability profile."
         )
 
 

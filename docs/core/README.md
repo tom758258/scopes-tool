@@ -75,6 +75,19 @@ Core owns runtime behavior:
   calculate waveforms, enable display, change vertical or acquisition state,
   probe licenses, or wait for completion. Coverage is hardware-free only; no
   live validation was performed.
+- MATH-P6 instrument-side visualizations through
+  `Oscilloscope.configure_math_visualization()` and
+  `query_math_visualization()`. All registered series support `magnify` and
+  `trend`; 4000X additionally supports `maximum`, `minimum`, `peak`,
+  `max-hold`, and `min-hold`. Non-Trend sources reuse the existing
+  single-source rules. Trend uses an analog source and canonical measurement
+  on 2000X/3000X, with source2 only for `vratio`; 4000X Trend selects an
+  already-installed measurement slot and does not read or write Math sources.
+  Math clear applies to 4000X `average`, `max-hold`, and `min-hold`
+  accumulations. These controls do not install measurements, calculate or
+  export waveform data, enable display, run autoscale, change acquisition
+  state, or probe licenses. Coverage is hardware-free only; no live validation
+  was performed.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,

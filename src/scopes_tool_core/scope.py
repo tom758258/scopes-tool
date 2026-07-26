@@ -16,6 +16,7 @@ from .advanced import (
     MathFilterState,
     MathOperatorState,
     MathTransformState,
+    MathVisualizationState,
     MathVerticalState,
     SetupController,
     TriggerHoldoffController,
@@ -1283,6 +1284,30 @@ class Oscilloscope:
 
     def query_math_filter(self, function: int) -> MathFilterState:
         return self._math_controller().query_filter(function)
+
+    def configure_math_visualization(
+        self,
+        function: int,
+        operation: str,
+        *,
+        source: str | None = None,
+        source2: str | None = None,
+        measurement: str | None = None,
+        measurement_slot: int | None = None,
+    ) -> None:
+        self._math_controller().configure_visualization(
+            function,
+            operation,
+            source=source,
+            source2=source2,
+            measurement=measurement,
+            measurement_slot=measurement_slot,
+        )
+
+    def query_math_visualization(
+        self, function: int
+    ) -> MathVisualizationState:
+        return self._math_controller().query_visualization(function)
 
     def clear_math(self, function: int) -> None:
         self._math_controller().clear(function)

@@ -20,6 +20,8 @@ from scopes_tool_core.advanced import (
     math_filter_query_commands,
     math_transform_commands,
     math_transform_query_commands,
+    math_visualization_commands,
+    math_visualization_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
     parse_math_display,
@@ -29,6 +31,8 @@ from scopes_tool_core.advanced import (
     parse_math_source,
     parse_math_source1,
     parse_math_transform,
+    parse_math_trend_measurement,
+    parse_math_visualization_operation,
     setup_recall_command,
     setup_save_command,
     trigger_holdoff_command,
@@ -908,6 +912,210 @@ def test_math_p5_filter_rejects_invalid_integer_readbacks(
 
     with pytest.raises(ChannelResponseError, match=message):
         scope.query_math_filter(1)
+
+
+@pytest.mark.parametrize(
+    ("operation", "token", "readback"),
+    [
+        ("magnify", "MAGNify", "MAGN"),
+        ("trend", "TRENd", "TREN"),
+        ("maximum", "MAXimum", "MAX"),
+        ("minimum", "MINimum", "MIN"),
+        ("peak", "PEAK", "PEAK"),
+        ("max-hold", "MAXHold", "MAXH"),
+        ("min-hold", "MINHold", "MINH"),
+    ],
+)
+def test_math_p6_visualization_mapping(operation, token, readback):
+    capabilities = capabilities_for_model("DSOX4024A")
+    options = (
+        {"measurement_slot": 1}
+        if operation == "trend"
+        else {"source": "channel1"}
+    )
+
+    assert math_visualization_commands(
+        1,
+        operation,
+        capabilities=capabilities,
+        **options,
+    )[0] == f":FUNCtion1:OPERation {token}"
+    assert parse_math_visualization_operation(
+        f" {readback.swapcase()} "
+    ) == operation
+
+
+@pytest.mark.parametrize(
+    ("model", "prefix"),
+    [
+        ("DSOX2004A", ":FUNCtion"),
+        ("DSOX3024A", ":FUNCtion"),
+    ],
+)
+def test_math_p6_common_magnify_uses_unindexed_composite_source(model, prefix):
+    capabilities = capabilities_for_model(model)
+
+    assert math_visualization_commands(
+        1,
+        "magnify",
+        source="composite",
+        capabilities=capabilities,
+    ) == [
+        f"{prefix}:OPERation MAGNify",
+        f"{prefix}:SOURce1 GOFT",
+    ]
+
+
+def test_math_p6_4000x_visualization_cascade_and_capability_rejection():
+    four_functions = capabilities_for_model("DSOX4034A")
+    single_function = capabilities_for_model("DSOX2004A")
+    hold_only = replace(
+        four_functions,
+        math_filter_operations=frozenset(),
+        math_visualization_operations=frozenset({"max-hold"}),
+    )
+
+    assert math_visualization_commands(
+        2,
+        "max-hold",
+        source="math1",
+        capabilities=four_functions,
+    ) == [
+        ":FUNCtion2:OPERation MAXHold",
+        ":FUNCtion2:SOURce1 FUNCtion1",
+    ]
+    with pytest.raises(ParameterValidationError, match="not supported"):
+        math_visualization_commands(
+            1,
+            "max-hold",
+            source="channel1",
+            capabilities=single_function,
+        )
+    assert math_clear_command(2, capabilities=hold_only) == ":FUNCtion2:CLEar"
+
+
+def test_math_p6_trend_commands_keep_series_paths_explicit():
+    single_function = capabilities_for_model("DSOX3024A")
+    four_functions = capabilities_for_model("DSOX4024A")
+
+    assert math_visualization_commands(
+        1,
+        "trend",
+        source="channel1",
+        source2="channel2",
+        measurement="vratio",
+        capabilities=single_function,
+    ) == [
+        ":FUNCtion:OPERation TRENd",
+        ":FUNCtion:SOURce1 CHANnel1",
+        ":FUNCtion:SOURce2 CHANnel2",
+        ":FUNCtion:TRENd:MEASurement VRATio",
+    ]
+    assert math_visualization_commands(
+        2,
+        "trend",
+        measurement_slot=3,
+        capabilities=four_functions,
+    ) == [
+        ":FUNCtion2:OPERation TRENd",
+        ":FUNCtion2:TRENd:NMEasurement MEAS3",
+    ]
+    assert parse_math_trend_measurement(" vRaT ") == "vratio"
+
+
+def test_math_p6_visualization_query_parses_trend_variants():
+    single_backend = SimulatorBackend(
+        physical_model_id="keysight-dsox2004a",
+        query_overrides={
+            ":FUNCtion:OPERation?": "TREN",
+            ":FUNCtion:SOURce1?": "CHAN1",
+            ":FUNCtion:TRENd:MEASurement?": "VRAT",
+            ":FUNCtion:SOURce2?": "CHAN2",
+        },
+    )
+    single_scope = Oscilloscope(single_backend)
+    single_scope.query_idn()
+
+    single_state = single_scope.query_math_visualization(1)
+
+    assert single_state.operation == "trend"
+    assert single_state.source == "channel1"
+    assert single_state.source2 == "channel2"
+    assert single_state.measurement == "vratio"
+    assert single_backend.history[1:] == [
+        ":FUNCtion:OPERation?",
+        ":FUNCtion:SOURce1?",
+        ":FUNCtion:TRENd:MEASurement?",
+        ":FUNCtion:SOURce2?",
+    ]
+
+    four_backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        query_overrides={
+            ":FUNCtion2:OPERation?": "TREN",
+            ":FUNCtion2:TRENd:NMEasurement?": "NONE",
+        },
+    )
+    four_scope = Oscilloscope(four_backend)
+    four_scope.query_idn()
+
+    four_state = four_scope.query_math_visualization(2)
+
+    assert four_state.operation == "trend"
+    assert four_state.source is None
+    assert four_state.measurement is None
+    assert four_state.measurement_raw == "NONE"
+    assert four_state.measurement_slot is None
+    assert four_backend.history[1:] == [
+        ":FUNCtion2:OPERation?",
+        ":FUNCtion2:TRENd:NMEasurement?",
+    ]
+
+    inappropriate_backend = SimulatorBackend(
+        physical_model_id="keysight-dsox2004a",
+        query_overrides={":FUNCtion:OPERation?": "MAX"},
+    )
+    inappropriate_scope = Oscilloscope(inappropriate_backend)
+    inappropriate_scope.query_idn()
+
+    with pytest.raises(ChannelResponseError, match="'MAX'"):
+        inappropriate_scope.query_math_visualization(1)
+
+
+def test_math_p6_visualization_rejects_inapplicable_arguments():
+    single_function = capabilities_for_model("DSOX2004A")
+    four_functions = capabilities_for_model("DSOX4024A")
+
+    with pytest.raises(ParameterValidationError, match="source2.*vratio"):
+        math_visualization_commands(
+            1,
+            "trend",
+            source="channel1",
+            source2="channel2",
+            measurement="vavg",
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="does not accept"):
+        math_visualization_commands(
+            2,
+            "trend",
+            source="channel1",
+            measurement_slot=1,
+            capabilities=four_functions,
+        )
+    with pytest.raises(ParameterValidationError, match="only valid.*trend"):
+        math_visualization_commands(
+            1,
+            "magnify",
+            source="channel1",
+            measurement="vavg",
+            capabilities=single_function,
+        )
+    with pytest.raises(ChannelResponseError, match="UNKNOWN"):
+        parse_math_visualization_operation("UNKNOWN")
+    assert math_visualization_query_commands(
+        2, capabilities=four_functions
+    ) == [":FUNCtion2:OPERation?"]
 
 
 def test_cursor_auto_timebase_plan_keeps_visible_positions():

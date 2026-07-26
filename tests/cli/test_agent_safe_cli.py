@@ -2066,6 +2066,172 @@ def test_math_filter_irrelevant_parameter_fails_before_open(
     assert _json_stdout(capsys)["ok"] is False
 
 
+def test_math_visualization_common_and_trend_simulate_round_trips(
+    monkeypatch, capsys
+):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
+
+    def simulator_backend(**unused):
+        backend.closed = False
+        return backend
+
+    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    common = [
+        "--simulate",
+        "--json",
+        "--model",
+        "keysight-dsox2004a",
+        "--function",
+        "1",
+    ]
+    assert (
+        cli.main(
+            [
+                "math-visualization",
+                *common,
+                "--operation",
+                "magnify",
+                "--source",
+                "composite",
+            ]
+        )
+        == 0
+    )
+    configured = _json_stdout(capsys)
+    assert configured["result"]["commands"] == [
+        ":FUNCtion:OPERation MAGNify",
+        ":FUNCtion:SOURce1 GOFT",
+    ]
+
+    assert cli.main(["math-visualization", *common, "--query"]) == 0
+    queried = _json_stdout(capsys)
+    assert queried["result"]["math_operation"] == "magnify"
+    assert queried["result"]["source"] == "composite"
+
+    assert (
+        cli.main(
+            [
+                "math-visualization",
+                *common,
+                "--operation",
+                "trend",
+                "--source",
+                "channel1",
+                "--source2",
+                "channel2",
+                "--measurement",
+                "vratio",
+            ]
+        )
+        == 0
+    )
+    _json_stdout(capsys)
+
+    assert cli.main(["math-visualization", *common, "--query"]) == 0
+    trend = _json_stdout(capsys)
+    assert trend["result"]["math_operation"] == "trend"
+    assert trend["result"]["source"] == "channel1"
+    assert trend["result"]["source2"] == "channel2"
+    assert trend["result"]["measurement"] == "vratio"
+    assert trend["result"]["measurement_slot"] is None
+
+
+def test_math_visualization_4000x_advanced_and_trend_slot_simulate(
+    monkeypatch, capsys
+):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+
+    def simulator_backend(**unused):
+        backend.closed = False
+        return backend
+
+    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    common = [
+        "--simulate",
+        "--json",
+        "--model",
+        "keysight-dsox4024a",
+        "--function",
+        "2",
+    ]
+    assert (
+        cli.main(
+            [
+                "math-visualization",
+                *common,
+                "--operation",
+                "max-hold",
+                "--source",
+                "math1",
+            ]
+        )
+        == 0
+    )
+    configured = _json_stdout(capsys)
+    assert configured["result"]["commands"] == [
+        ":FUNCtion2:OPERation MAXHold",
+        ":FUNCtion2:SOURce1 FUNCtion1",
+    ]
+
+    assert cli.main(["math-visualization", *common, "--query"]) == 0
+    queried = _json_stdout(capsys)
+    assert queried["result"]["math_operation"] == "max-hold"
+    assert queried["result"]["source"] == "math1"
+
+    assert (
+        cli.main(
+            [
+                "math-visualization",
+                *common,
+                "--operation",
+                "trend",
+                "--measurement-slot",
+                "3",
+            ]
+        )
+        == 0
+    )
+    trend_configured = _json_stdout(capsys)
+    assert trend_configured["result"]["commands"] == [
+        ":FUNCtion2:OPERation TRENd",
+        ":FUNCtion2:TRENd:NMEasurement MEAS3",
+    ]
+
+    assert cli.main(["math-visualization", *common, "--query"]) == 0
+    trend = _json_stdout(capsys)
+    assert trend["result"]["math_operation"] == "trend"
+    assert trend["result"]["source"] is None
+    assert trend["result"]["measurement"] is None
+    assert trend["result"]["measurement_raw"] == "MEAS3"
+    assert trend["result"]["measurement_slot"] == 3
+
+
+def test_math_visualization_capability_rejection_fails_before_open(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+
+    assert (
+        cli.main(
+            [
+                "math-visualization",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+                "--function",
+                "1",
+                "--operation",
+                "maximum",
+                "--source",
+                "channel1",
+            ]
+        )
+        == 1
+    )
+    assert _json_stdout(capsys)["ok"] is False
+
+
 def test_measure_simulate_json_reports_invalid_sentinel(monkeypatch, capsys):
     backend = SimulatorBackend(invalid_measurement_channels={1})
     monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)

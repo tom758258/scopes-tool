@@ -303,3 +303,49 @@ def test_worker_rejects_irrelevant_math_filter_parameter_before_enqueue(
     assert runtime.queue.empty()
     assert runtime.jobs == {}
     assert not (tmp_path / runtime.run_id).exists()
+
+
+def test_worker_accepts_math_visualization_configure_and_query(tmp_path):
+    assert "math-visualization" in worker.DOMAIN_COMMANDS
+    runtime = _runtime(tmp_path)
+
+    configured = worker.parse_domain_command(
+        "math-visualization",
+        {
+            "function": 2,
+            "operation": "trend",
+            "measurement_slot": 3,
+        },
+        runtime,
+    )
+    queried = worker.parse_domain_command(
+        "math-visualization",
+        {"function": 2, "query": True},
+        runtime,
+    )
+
+    assert configured.command == "math-visualization"
+    assert configured.math_visualization_operation == "trend"
+    assert configured.measurement_slot == 3
+    assert queried.math_visualization_query is True
+
+
+def test_worker_rejects_invalid_math_visualization_before_enqueue(tmp_path):
+    runtime = _runtime(tmp_path)
+
+    with pytest.raises(OscilloscopeError, match="does not accept"):
+        worker.parse_domain_command(
+            "math-visualization",
+            {
+                "function": 2,
+                "operation": "trend",
+                "source": "channel1",
+                "measurement_slot": 3,
+            },
+            runtime,
+        )
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()
