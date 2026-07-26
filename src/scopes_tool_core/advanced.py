@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from pathlib import PureWindowsPath
-from typing import Sequence
+from typing import Callable, Sequence
 
 from .capabilities import ScopeCapabilities
 from .channel import (
@@ -627,9 +627,17 @@ class MathController:
         elif operation == "high-pass":
             cutoff_hz = self.scpi.query_float(f"{prefix}:FREQuency:HIGHpass?")
         elif operation == "average":
-            average_count = int(self.scpi.query_float(f"{prefix}:AVERage:COUNt?"))
+            average_count = _parse_math_filter_integer_response(
+                self.scpi.query(f"{prefix}:AVERage:COUNt?"),
+                "average count",
+                validate_math_average_count,
+            )
         elif operation == "smooth":
-            smooth_points = int(self.scpi.query_float(f"{prefix}:SMOoth:POINts?"))
+            smooth_points = _parse_math_filter_integer_response(
+                self.scpi.query(f"{prefix}:SMOoth:POINts?"),
+                "smooth points",
+                validate_math_smooth_points,
+            )
         return MathFilterState(
             function=function,
             operation=operation,
@@ -1462,6 +1470,22 @@ def validate_math_smooth_points(value: int) -> int:
     if value % 2 == 0:
         raise ParameterValidationError("--smooth-points must be odd.")
     return value
+
+
+def _parse_math_filter_integer_response(
+    raw: str,
+    setting_name: str,
+    validator: Callable[[int], int],
+) -> int:
+    try:
+        numeric_value = float(raw)
+        if not math.isfinite(numeric_value) or not numeric_value.is_integer():
+            raise ValueError
+        return validator(int(numeric_value))
+    except (TypeError, ValueError, OverflowError, ParameterValidationError) as exc:
+        raise ChannelResponseError(
+            f"Could not parse Math {setting_name} response: {raw!r}"
+        ) from exc
 
 
 def _validate_math_filter_capability(

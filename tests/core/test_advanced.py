@@ -875,6 +875,41 @@ def test_math_p5_simulator_round_trips_filters_and_clear():
         )
 
 
+@pytest.mark.parametrize(
+    ("operation", "query_command", "response", "message"),
+    [
+        (
+            "AVERage",
+            ":FUNCtion1:AVERage:COUNt?",
+            "63.5",
+            "Math average count response",
+        ),
+        (
+            "SMOoth",
+            ":FUNCtion1:SMOoth:POINts?",
+            "8",
+            "Math smooth points response",
+        ),
+    ],
+)
+def test_math_p5_filter_rejects_invalid_integer_readbacks(
+    operation, query_command, response, message
+):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        query_overrides={
+            ":FUNCtion1:OPERation?": operation,
+            ":FUNCtion1:SOURce1?": "CHAN1",
+            query_command: response,
+        },
+    )
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    with pytest.raises(ChannelResponseError, match=message):
+        scope.query_math_filter(1)
+
+
 def test_cursor_auto_timebase_plan_keeps_visible_positions():
     result = cursor_auto_timebase_plan(1e-3, 0.0, 0.0, 1e-3)
 

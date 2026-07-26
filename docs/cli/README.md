@@ -1954,9 +1954,9 @@ current operation is not a P3 transform.
 source. Configure requires `--operation`, `--source1`, and `--source2`;
 supported operations are `add`, `subtract`, and `multiply`, and both sources
 must be supported analog channels. `divide` is not accepted. Query is exclusive
-with configure options. The canonical `composite` value is accepted only by
-`math-transform`; it is not accepted by `math-operator` or as source2. GOFT is
-not exposed on the public 4000X path.
+with configure options. The canonical `composite` value is accepted by
+`math-transform` and `math-filter`; it is not accepted by `math-operator` or as
+source2. GOFT is not exposed on the public 4000X path.
 
 `math-filter` configures or queries an instrument-side, single-source Math
 filter. `low-pass` and `high-pass` are available on 2000X, 3000X, and 4000X
