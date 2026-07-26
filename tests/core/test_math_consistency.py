@@ -24,13 +24,17 @@ from scopes_tool_core.advanced import (
 )
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.errors import ChannelResponseError, ParameterValidationError
+from scopes_tool_core.identity import (
+    PHYSICAL_MODEL_REGISTRY,
+    physical_model_for_id,
+)
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
 
 _PROFILE_MATRIX = {
-    "keysight-dsox2004a": {
-        "series": "2000X",
+    "2000X": {
+        "profile": "keysight-infiniivision-2000x",
         "count": 1,
         "goft": True,
         "cascade": False,
@@ -38,8 +42,8 @@ _PROFILE_MATRIX = {
         "filters": {"low-pass", "high-pass"},
         "visualizations": {"magnify", "trend"},
     },
-    "keysight-dsox3024a": {
-        "series": "3000X",
+    "3000X": {
+        "profile": "keysight-infiniivision-3000x",
         "count": 1,
         "goft": True,
         "cascade": False,
@@ -47,8 +51,8 @@ _PROFILE_MATRIX = {
         "filters": {"low-pass", "high-pass"},
         "visualizations": {"magnify", "trend"},
     },
-    "keysight-dsox4024a": {
-        "series": "4000X",
+    "4000X": {
+        "profile": "keysight-infiniivision-4000x",
         "count": 4,
         "goft": False,
         "cascade": True,
@@ -57,6 +61,22 @@ _PROFILE_MATRIX = {
         "visualizations": set(MATH_VISUALIZATION_OPERATIONS),
     },
 }
+_REGISTERED_PHYSICAL_MODEL_IDS = tuple(
+    model.model_id for model in PHYSICAL_MODEL_REGISTRY
+)
+_EXPECTED_MATH_WORKER_COMMANDS = frozenset(
+    {
+        "fft",
+        "math-display",
+        "math-vertical",
+        "math-operator",
+        "math-composite-source",
+        "math-transform",
+        "math-filter",
+        "math-visualization",
+        "math-clear",
+    }
+)
 
 
 def _subcommand_parsers() -> dict[str, argparse.ArgumentParser]:
@@ -88,9 +108,20 @@ def _option_choices(
 
 
 def test_math_profile_operation_and_dialect_consistency_gate():
-    for model, expected in _PROFILE_MATRIX.items():
-        capabilities = capabilities_for_model_id(model)
-        assert capabilities.series == expected["series"]
+    assert {
+        "keysight-dsox2004a",
+        "keysight-dsox3024a",
+        "keysight-dsox4024a",
+        "keysight-dsox4034a",
+    } <= set(_REGISTERED_PHYSICAL_MODEL_IDS)
+
+    for model_id in _REGISTERED_PHYSICAL_MODEL_IDS:
+        physical_model = physical_model_for_id(model_id)
+        expected = _PROFILE_MATRIX[physical_model.series]
+        capabilities = capabilities_for_model_id(model_id)
+        assert physical_model.model_id == model_id
+        assert physical_model.capability_profile_id == expected["profile"]
+        assert capabilities.series == physical_model.series
         assert capabilities.math_function_count == expected["count"]
         assert capabilities.supports_math_goft is expected["goft"]
         assert capabilities.supports_math_cascade is expected["cascade"]
@@ -168,7 +199,19 @@ def test_math_cli_worker_schema_and_p8_absence_consistency_gate():
     cli._add_scope_connection_args(connection_parser)
     connection_arguments = _long_option_names(connection_parser)
 
-    assert set(worker._MATH_WORKER_ARGUMENTS) <= worker.DOMAIN_COMMANDS
+    assert worker._MATH_DOMAIN_COMMANDS == _EXPECTED_MATH_WORKER_COMMANDS
+    assert (
+        worker._MATH_DOMAIN_COMMANDS
+        == frozenset(worker._MATH_WORKER_ARGUMENTS)
+    )
+    assert not {
+        command
+        for command in worker._NON_MATH_DOMAIN_COMMANDS
+        if command == "fft" or command.startswith("math-")
+    }
+    assert worker.DOMAIN_COMMANDS == (
+        worker._NON_MATH_DOMAIN_COMMANDS | worker._MATH_DOMAIN_COMMANDS
+    )
     for command, worker_arguments in worker._MATH_WORKER_ARGUMENTS.items():
         cli_arguments = (
             _long_option_names(command_parsers[command]) - connection_arguments
@@ -207,7 +250,7 @@ def test_math_cli_worker_schema_and_p8_absence_consistency_gate():
     assert "bus-state" not in enabled_names
 
 
-@pytest.mark.parametrize("model", _PROFILE_MATRIX)
+@pytest.mark.parametrize("model", _REGISTERED_PHYSICAL_MODEL_IDS)
 def test_math_enabled_operations_have_simulator_round_trip(model):
     backend = SimulatorBackend(physical_model_id=model)
     scope = Oscilloscope(backend)

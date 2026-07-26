@@ -59,7 +59,7 @@ from scopes_tool_core.save_export import (
 from . import cli as scope_cli
 
 
-DOMAIN_COMMANDS = {
+_NON_MATH_DOMAIN_COMMANDS = {
     "identify",
     "check-error",
     "system-clear-status",
@@ -168,15 +168,6 @@ DOMAIN_COMMANDS = {
     "autoscale",
     "setup-save",
     "setup-recall",
-    "fft",
-    "math-display",
-    "math-filter",
-    "math-clear",
-    "math-composite-source",
-    "math-operator",
-    "math-transform",
-    "math-visualization",
-    "math-vertical",
 }
 
 _MATH_WORKER_ARGUMENTS = {
@@ -244,6 +235,9 @@ _MATH_WORKER_ARGUMENTS = {
     ),
     "math-clear": frozenset({"function"}),
 }
+
+_MATH_DOMAIN_COMMANDS = frozenset(_MATH_WORKER_ARGUMENTS)
+DOMAIN_COMMANDS = _NON_MATH_DOMAIN_COMMANDS | _MATH_DOMAIN_COMMANDS
 
 
 @dataclass
