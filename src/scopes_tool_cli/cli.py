@@ -30,6 +30,10 @@ from scopes_tool_core.acquisition import (
     validate_acquisition_count,
 )
 from scopes_tool_core.advanced import (
+    FFT_DETECTION_TYPES,
+    FFT_GATES,
+    FFT_OPERATIONS,
+    FFT_PHASE_REFERENCES,
     MATH_COMPOSITE_OPERATIONS,
     MATH_FILTER_OPERATIONS,
     MATH_OPERATIONS,
@@ -47,6 +51,7 @@ from scopes_tool_core.advanced import (
     cursor_auto_timebase_plan,
     cursor_configure_commands,
     fft_configure_commands,
+    fft_advanced_query_commands,
     fft_query_commands,
     math_display_command,
     math_display_query,
@@ -2475,6 +2480,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     fft_parser.add_argument("--center-hz", type=_nonnegative_finite_float, default=None)
     fft_parser.add_argument("--span-hz", type=_positive_plain_float, default=None)
+    fft_parser.add_argument("--fft-operation", choices=FFT_OPERATIONS, default=None)
+    fft_parser.add_argument("--start-hz", type=_measurement_finite_float, default=None)
+    fft_parser.add_argument("--stop-hz", type=_measurement_finite_float, default=None)
+    fft_parser.add_argument("--gate", choices=FFT_GATES, default=None)
+    fft_parser.add_argument(
+        "--phase-reference", choices=FFT_PHASE_REFERENCES, default=None
+    )
+    fft_parser.add_argument(
+        "--detection-type", choices=FFT_DETECTION_TYPES, default=None
+    )
+    fft_parser.add_argument("--detection-points", type=_positive_int, default=None)
     fft_parser.add_argument("--display", choices=("on", "off"), default=None)
 
     math_display_parser = subparsers.add_parser(
@@ -3393,7 +3409,60 @@ def _validate_screenshot_args(args: argparse.Namespace) -> None:
             )
 
 
+def _validate_fft_args(args: argparse.Namespace) -> None:
+    capabilities = _pre_open_capabilities(args)
+    configure_values = (
+        args.source_channel,
+        args.units,
+        args.window,
+        args.center_hz,
+        args.span_hz,
+        args.fft_operation,
+        args.start_hz,
+        args.stop_hz,
+        args.gate,
+        args.phase_reference,
+        args.detection_type,
+        args.detection_points,
+        args.display,
+    )
+    if args.fft_query:
+        if any(value is not None for value in configure_values):
+            raise ParameterValidationError(
+                "--query cannot be combined with FFT configuration options."
+            )
+        fft_query_commands(args.function, capabilities=capabilities)
+        if capabilities is not None and capabilities.supports_advanced_fft:
+            fft_advanced_query_commands(
+                args.function, capabilities=capabilities
+            )
+        return
+    if args.source_channel is None:
+        raise ParameterValidationError(
+            "fft configure requires --source-channel unless --query is used."
+        )
+    fft_configure_commands(
+        args.function,
+        args.source_channel,
+        units=args.units,
+        window=args.window,
+        center_hz=args.center_hz,
+        span_hz=args.span_hz,
+        display=None if args.display is None else args.display == "on",
+        fft_operation=args.fft_operation or "fft",
+        start_hz=args.start_hz,
+        stop_hz=args.stop_hz,
+        gate=args.gate,
+        phase_reference=args.phase_reference,
+        detection_type=args.detection_type,
+        detection_points=args.detection_points,
+        capabilities=capabilities,
+    )
+
+
 def _validate_pre_open_args(args: argparse.Namespace) -> None:
+    if getattr(args, "command", None) == "fft":
+        _validate_fft_args(args)
     if getattr(args, "command", None) == "screenshot":
         _validate_screenshot_args(args)
     if getattr(args, "command", None) == "channel-impedance":
@@ -5489,12 +5558,28 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         return planned + [":SYSTem:ERRor?"], [], {"operation": "recall", "command": planned[0], "slot": args.slot, "file": args.setup_file}
     if command == "fft":
         if args.fft_query:
-            if any(value is not None for value in (args.source_channel, args.units, args.window, args.center_hz, args.span_hz, args.display)):
-                raise OscilloscopeError("--query cannot be combined with FFT configuration options")
             commands = fft_query_commands(args.function, capabilities=capabilities)
-            return commands + [":SYSTem:ERRor?"], [], {"operation": "query", "commands": commands, "function": args.function}
-        if args.source_channel is None:
-            raise OscilloscopeError("fft configure requires --source-channel unless --query is used")
+            if capabilities.supports_advanced_fft:
+                commands += fft_advanced_query_commands(
+                    args.function, capabilities=capabilities
+                )
+            return commands + [":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "commands": commands,
+                "function": args.function,
+                "fft_operation": None,
+                "fft_operation_canonical": None,
+                "start_hz": None,
+                "stop_hz": None,
+                "gate": None,
+                "phase_reference": None,
+                "detection_type": None,
+                "detection_points": None,
+                "bin_size_hz": None,
+                "sample_rate_hz": None,
+                "resolution_bandwidth_hz": None,
+            }
+        assert args.source_channel is not None
         commands = fft_configure_commands(
             args.function,
             args.source_channel,
@@ -5503,9 +5588,33 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             center_hz=args.center_hz,
             span_hz=args.span_hz,
             display=None if args.display is None else args.display == "on",
+            fft_operation=args.fft_operation or "fft",
+            start_hz=args.start_hz,
+            stop_hz=args.stop_hz,
+            gate=args.gate,
+            phase_reference=args.phase_reference,
+            detection_type=args.detection_type,
+            detection_points=args.detection_points,
             capabilities=capabilities,
         )
-        return commands + [":SYSTem:ERRor?"], [], {"operation": "set", "commands": commands, "function": args.function, "source_channel": args.source_channel, "units": args.units, "window": args.window, "center_hz": args.center_hz, "span_hz": args.span_hz, "display": args.display}
+        return commands + [":SYSTem:ERRor?"], [], {
+            "operation": "set",
+            "commands": commands,
+            "function": args.function,
+            "source_channel": args.source_channel,
+            "fft_operation_canonical": args.fft_operation or "fft",
+            "units": args.units,
+            "window": args.window,
+            "center_hz": args.center_hz,
+            "span_hz": args.span_hz,
+            "start_hz": args.start_hz,
+            "stop_hz": args.stop_hz,
+            "gate": args.gate,
+            "phase_reference": args.phase_reference,
+            "detection_type": args.detection_type,
+            "detection_points": args.detection_points,
+            "display": args.display,
+        }
     if command == "math-display":
         if args.math_display_action == "query":
             planned = math_display_query(args.function, capabilities=capabilities)
@@ -9810,33 +9919,98 @@ def _cmd_fft(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
         if args.fft_query:
-            if any(value is not None for value in (args.source_channel, args.units, args.window, args.center_hz, args.span_hz, args.display)):
-                raise OscilloscopeError("--query cannot be combined with FFT configuration options")
             state = scope.query_fft(args.function)
             _json_update_result(
                 operation="query",
                 function=state.function,
                 fft_operation=state.operation,
+                fft_operation_canonical=state.operation_canonical,
                 source_channel=state.source_channel,
                 units=state.units,
                 window=state.window,
                 center_hz=state.center_hz,
                 span_hz=state.span_hz,
                 display=state.display,
+                start_hz=state.start_hz,
+                stop_hz=state.stop_hz,
+                gate=state.gate,
+                phase_reference=state.phase_reference,
+                detection_type=state.detection_type,
+                detection_points=state.detection_points,
+                bin_size_hz=state.bin_size_hz,
+                sample_rate_hz=state.sample_rate_hz,
+                resolution_bandwidth_hz=state.resolution_bandwidth_hz,
             )
-            for command in fft_query_commands(
+            commands = fft_query_commands(
                 args.function, capabilities=scope.capabilities
-            ):
+            )
+            if scope.capabilities.supports_advanced_fft:
+                commands += fft_advanced_query_commands(
+                    args.function,
+                    include_phase_reference=(
+                        state.operation_canonical == "fft-phase"
+                    ),
+                    capabilities=scope.capabilities,
+                )
+            for command in commands:
                 print(f"Command: {command}")
             print(f"Function: {state.function}")
             print(f"Source: CH{state.source_channel}")
         else:
-            if args.source_channel is None:
-                raise OscilloscopeError("fft configure requires --source-channel unless --query is used")
+            assert args.source_channel is not None
             display = None if args.display is None else args.display == "on"
-            scope.configure_fft(args.function, args.source_channel, units=args.units, window=args.window, center_hz=args.center_hz, span_hz=args.span_hz, display=display)
-            commands = fft_configure_commands(args.function, args.source_channel, units=args.units, window=args.window, center_hz=args.center_hz, span_hz=args.span_hz, display=display, capabilities=scope.capabilities)
-            _json_update_result(operation="set", commands=commands, function=args.function, source_channel=args.source_channel)
+            fft_operation = args.fft_operation or "fft"
+            scope.configure_fft(
+                args.function,
+                args.source_channel,
+                units=args.units,
+                window=args.window,
+                center_hz=args.center_hz,
+                span_hz=args.span_hz,
+                display=display,
+                fft_operation=fft_operation,
+                start_hz=args.start_hz,
+                stop_hz=args.stop_hz,
+                gate=args.gate,
+                phase_reference=args.phase_reference,
+                detection_type=args.detection_type,
+                detection_points=args.detection_points,
+            )
+            commands = fft_configure_commands(
+                args.function,
+                args.source_channel,
+                units=args.units,
+                window=args.window,
+                center_hz=args.center_hz,
+                span_hz=args.span_hz,
+                display=display,
+                fft_operation=fft_operation,
+                start_hz=args.start_hz,
+                stop_hz=args.stop_hz,
+                gate=args.gate,
+                phase_reference=args.phase_reference,
+                detection_type=args.detection_type,
+                detection_points=args.detection_points,
+                capabilities=scope.capabilities,
+            )
+            _json_update_result(
+                operation="set",
+                commands=commands,
+                function=args.function,
+                source_channel=args.source_channel,
+                fft_operation_canonical=fft_operation,
+                units=args.units,
+                window=args.window,
+                center_hz=args.center_hz,
+                span_hz=args.span_hz,
+                start_hz=args.start_hz,
+                stop_hz=args.stop_hz,
+                gate=args.gate,
+                phase_reference=args.phase_reference,
+                detection_type=args.detection_type,
+                detection_points=args.detection_points,
+                display=args.display,
+            )
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()

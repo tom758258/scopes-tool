@@ -1572,6 +1572,44 @@ autoscale, install measurements, probe licenses, calculate waveform samples,
 or export waveform data. Validation is hardware-free only; live instrument and
 license behavior have not been validated.
 
+### MATH-P7 FFT Completion
+
+MATH-P7 preserves the existing `fft` worker command and basic request:
+
+```json
+{"command": "fft", "arguments": {"function": 1, "source_channel": 1}}
+```
+
+4000X additionally accepts canonical advanced requests such as:
+
+```json
+{"command": "fft", "arguments": {"function": 2, "source_channel": 1, "fft_operation": "fft-phase", "start_hz": 100, "stop_hz": 1000000, "gate": "zoom", "phase_reference": "display", "detection_type": "average", "detection_points": 4096}}
+```
+
+Query remains:
+
+```json
+{"command": "fft", "arguments": {"function": 1, "query": true}}
+```
+
+`fft_operation` is `fft` by default and also accepts `fft-phase` on 4000X.
+The 4000X-only fields are `start_hz`, `stop_hz`, `gate`, `phase_reference`,
+`detection_type`, and `detection_points`. Center/span cannot be mixed with
+start/stop, start must not exceed stop when both are present, and phase
+reference is valid only with FFT Phase. Detection points must be a
+non-boolean integer from 640 through 65536. Worker arguments use only the
+shown canonical snake_case keys and lowercase canonical enum values.
+
+2000X/3000X retain basic magnitude FFT and reject FFT Phase or advanced fields.
+All capability, type, enum, range, and conflicting-option failures occur before
+enqueue, counters, artifacts, backend open, or SCPI. A 4000X query adds
+start/stop, gate, detector settings, bin size, FFT sample rate, resolution
+bandwidth, and phase reference when the current operation is FFT Phase.
+Advanced controls do not enable Math display, configure Zoom or timebase, run
+autoscale, or change acquisition state. Query-only derived fields are
+instrument readbacks, not host-side FFT results. Validation is hardware-free
+only; no live instrument validation was performed.
+
 ### Search Basic Pack v1 Commands
 
 The worker accepts only these canonical argument shapes:

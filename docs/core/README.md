@@ -88,6 +88,17 @@ Core owns runtime behavior:
   export waveform data, enable display, run autoscale, change acquisition
   state, or probe licenses. Coverage is hardware-free only; no live validation
   was performed.
+- MATH-P7 completes the existing instrument-side FFT path through
+  `Oscilloscope.configure_fft()` and `query_fft()`. The 2000X/3000X profiles
+  retain basic magnitude FFT with the unindexed Math function. The 4000X
+  profile adds indexed FFT Phase, start/stop frequency, Main/Zoom gating,
+  phase reference, detector type and point controls, plus read-only bin size,
+  FFT sample rate, and resolution bandwidth. Center/span and start/stop are
+  alternate displayed-range controls and cannot be mixed. Phase reference is
+  valid only for FFT Phase and is queried only when the current operation is
+  FFT Phase. These controls do not calculate FFT data on the host, enable Math
+  display, configure Zoom or timebase, run autoscale, or change acquisition
+  state. Coverage is hardware-free only; no live validation was performed.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,

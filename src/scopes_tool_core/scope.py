@@ -1171,6 +1171,13 @@ class Oscilloscope:
         center_hz: float | None = None,
         span_hz: float | None = None,
         display: bool | None = None,
+        fft_operation: str = "fft",
+        start_hz: float | None = None,
+        stop_hz: float | None = None,
+        gate: str | None = None,
+        phase_reference: str | None = None,
+        detection_type: str | None = None,
+        detection_points: int | None = None,
     ) -> None:
         self._fft_controller().configure(
             function,
@@ -1180,6 +1187,13 @@ class Oscilloscope:
             center_hz=center_hz,
             span_hz=span_hz,
             display=display,
+            fft_operation=fft_operation,
+            start_hz=start_hz,
+            stop_hz=stop_hz,
+            gate=gate,
+            phase_reference=phase_reference,
+            detection_type=detection_type,
+            detection_points=detection_points,
         )
 
     def query_fft(self, function: int) -> FFTState:

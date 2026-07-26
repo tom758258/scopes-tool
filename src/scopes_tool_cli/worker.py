@@ -20,6 +20,13 @@ from uuid import uuid4
 
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.advanced import (
+    FFT_DETECTION_TYPES,
+    FFT_GATES,
+    FFT_OPERATIONS,
+    FFT_PHASE_REFERENCES,
+    fft_advanced_query_commands,
+    fft_configure_commands,
+    fft_query_commands,
     math_clear_command,
     math_composite_source_commands,
     math_composite_source_query_commands,
@@ -1541,6 +1548,7 @@ def _normalize_math_worker_arguments(
     command: str, arguments: dict[str, Any], runtime: WorkerRuntime
 ) -> dict[str, Any]:
     if command not in {
+        "fft",
         "math-display",
         "math-vertical",
         "math-operator",
@@ -1552,7 +1560,25 @@ def _normalize_math_worker_arguments(
     }:
         return arguments
 
-    if command == "math-display":
+    if command == "fft":
+        allowed = {
+            "function",
+            "query",
+            "source_channel",
+            "units",
+            "window",
+            "center_hz",
+            "span_hz",
+            "display",
+            "fft_operation",
+            "start_hz",
+            "stop_hz",
+            "gate",
+            "phase_reference",
+            "detection_type",
+            "detection_points",
+        }
+    elif command == "math-display":
         allowed = {"function", "on", "off", "query"}
     elif command == "math-vertical":
         allowed = {"function", "query", "scale", "range", "offset"}
@@ -1598,6 +1624,71 @@ def _normalize_math_worker_arguments(
             f"unknown argument for {command}: {sorted(unknown)[0]}"
         )
     capabilities = capabilities_for_model_id(runtime.model)
+
+    if command == "fft":
+        configure_keys = allowed - {"function", "query"}
+        configure_arguments = configure_keys & set(arguments)
+        if "query" in arguments:
+            if arguments["query"] is not True:
+                raise OscilloscopeError("fft argument query must be exactly true")
+            if configure_arguments:
+                raise OscilloscopeError(
+                    "fft query cannot be combined with configure arguments"
+                )
+            fft_query_commands(
+                arguments.get("function"), capabilities=capabilities
+            )
+            if capabilities.supports_advanced_fft:
+                fft_advanced_query_commands(
+                    arguments.get("function"), capabilities=capabilities
+                )
+            return dict(arguments)
+        if "source_channel" not in arguments:
+            raise OscilloscopeError(
+                "fft configure requires source_channel unless query is used"
+            )
+        canonical_values = {
+            "fft_operation": FFT_OPERATIONS,
+            "gate": FFT_GATES,
+            "phase_reference": FFT_PHASE_REFERENCES,
+            "detection_type": FFT_DETECTION_TYPES,
+            "units": ("decibel", "vrms"),
+            "window": (
+                "rectangular",
+                "hanning",
+                "flattop",
+                "bharris",
+                "bartlett",
+            ),
+            "display": ("on", "off"),
+        }
+        for key, choices in canonical_values.items():
+            if key in arguments and arguments[key] not in choices:
+                raise OscilloscopeError(
+                    f"fft argument {key} must be one of: {', '.join(choices)}"
+                )
+        fft_configure_commands(
+            arguments.get("function"),
+            arguments["source_channel"],
+            units=arguments.get("units"),
+            window=arguments.get("window"),
+            center_hz=arguments.get("center_hz"),
+            span_hz=arguments.get("span_hz"),
+            display=(
+                None
+                if "display" not in arguments
+                else arguments["display"] == "on"
+            ),
+            fft_operation=arguments.get("fft_operation", "fft"),
+            start_hz=arguments.get("start_hz"),
+            stop_hz=arguments.get("stop_hz"),
+            gate=arguments.get("gate"),
+            phase_reference=arguments.get("phase_reference"),
+            detection_type=arguments.get("detection_type"),
+            detection_points=arguments.get("detection_points"),
+            capabilities=capabilities,
+        )
+        return dict(arguments)
 
     if command == "math-composite-source":
         configure_keys = ("operation", "source1", "source2")

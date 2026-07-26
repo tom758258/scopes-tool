@@ -328,7 +328,14 @@ Control and setup:
 - `fft`: `operation`, `commands` or query fields, `function`,
   `source_channel`, `units`, `window`, `center_hz`, `span_hz`, `display`.
   `fft --query` reports the CLI action as `operation: "query"` and the
-  instrument math operation as `fft_operation`.
+  raw instrument math operation as `fft_operation`. It additionally reports
+  canonical `fft_operation_canonical`. Configure results add canonical
+  `fft_operation_canonical`; on 4000X they can also include `start_hz`,
+  `stop_hz`, `gate`, `phase_reference`, `detection_type`, and
+  `detection_points`. Query results
+  add `start_hz`, `stop_hz`, `gate`, `detection_type`, `detection_points`,
+  `bin_size_hz`, `sample_rate_hz`, `resolution_bandwidth_hz`, and nullable
+  `phase_reference`. The 4000X-only fields are null for basic-series queries.
 - `math-display`: configure results include `operation: "set"`, `function`,
   boolean `enabled`, and executed `command`. Query results include
   `operation: "query"`, `function`, boolean `enabled`, and stripped `raw`.

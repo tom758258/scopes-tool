@@ -17,6 +17,59 @@ def _runtime(tmp_path, model="keysight-dsox4024a"):
     )
 
 
+def test_worker_accepts_advanced_fft_and_preserves_basic_fft(tmp_path):
+    runtime = _runtime(tmp_path)
+    advanced = worker.parse_domain_command(
+        "fft",
+        {
+            "function": 2,
+            "source_channel": 1,
+            "fft_operation": "fft-phase",
+            "start_hz": 100,
+            "stop_hz": 1000,
+            "gate": "zoom",
+            "phase_reference": "display",
+            "detection_type": "average",
+            "detection_points": 2048,
+        },
+        runtime,
+    )
+    basic = worker.parse_domain_command(
+        "fft",
+        {"function": 1, "source_channel": 1},
+        _runtime(tmp_path, "keysight-dsox2004a"),
+    )
+
+    assert advanced.command == "fft"
+    assert advanced.function == 2
+    assert advanced.fft_operation == "fft-phase"
+    assert advanced.start_hz == 100
+    assert advanced.stop_hz == 1000
+    assert advanced.detection_points == 2048
+    assert basic.command == "fft"
+    assert basic.fft_operation is None
+
+
+def test_worker_rejects_unsupported_fft_before_enqueue(tmp_path):
+    runtime = _runtime(tmp_path, "keysight-dsox3024a")
+
+    with pytest.raises(OscilloscopeError, match="4000X"):
+        worker.parse_domain_command(
+            "fft",
+            {
+                "function": 1,
+                "source_channel": 1,
+                "gate": "zoom",
+            },
+            runtime,
+        )
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()
+
+
 def test_worker_accepts_math_display_request(tmp_path):
     assert "math-display" in worker.DOMAIN_COMMANDS
 

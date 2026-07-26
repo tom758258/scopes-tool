@@ -1522,6 +1522,114 @@ def test_fft_simulate_2000x_uses_unindexed_commands_for_configure_and_query(caps
     assert payload["system_error"]["is_error"] is False
 
 
+def test_fft_4000x_advanced_dry_run_and_query_shape(capsys):
+    assert (
+        cli.main(
+            [
+                "fft",
+                "--dry-run",
+                "--json",
+                "--model",
+                "keysight-dsox4024a",
+                "--function",
+                "2",
+                "--source-channel",
+                "1",
+                "--fft-operation",
+                "fft-phase",
+                "--start-hz",
+                "100",
+                "--stop-hz",
+                "1000",
+                "--gate",
+                "zoom",
+                "--phase-reference",
+                "display",
+                "--detection-type",
+                "positive-peak",
+                "--detection-points",
+                "2048",
+            ]
+        )
+        == 0
+    )
+    configured = _json_stdout(capsys)
+    commands = configured["result"]["commands"]
+    assert configured["result"]["fft_operation_canonical"] == "fft-phase"
+    assert "fft_operation" not in configured["result"]
+    assert commands == [
+        ":FUNCtion2:OPERation FFTPhase",
+        ":FUNCtion2:SOURce1 CHANnel1",
+        ":FUNCtion2:FREQuency:STARt 100",
+        ":FUNCtion2:FREQuency:STOP 1000",
+        ":FUNCtion2:GATE ZOOM",
+        ":FUNCtion2:PHASe:REFerence DISPlay",
+        ":FUNCtion2:DETection:TYPE PPOSitive",
+        ":FUNCtion2:DETection:POINts 2048",
+    ]
+    assert all("<" not in command and ">" not in command for command in commands)
+
+    assert (
+        cli.main(
+            [
+                "fft",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox4024a",
+                "--function",
+                "1",
+                "--query",
+            ]
+        )
+        == 0
+    )
+    queried = _json_stdout(capsys)["result"]
+    assert queried["fft_operation"] == "FFT"
+    assert queried["fft_operation_canonical"] == "fft"
+    assert queried["phase_reference"] is None
+    assert queried["detection_type"] == "off"
+    assert queried["detection_points"] == 640
+    assert queried["bin_size_hz"] == pytest.approx(1000)
+    assert queried["sample_rate_hz"] == pytest.approx(1e9)
+    assert queried["resolution_bandwidth_hz"] == pytest.approx(1500)
+
+
+@pytest.mark.parametrize(
+    ("model", "extra"),
+    [
+        ("keysight-dsox2004a", ["--fft-operation", "fft-phase"]),
+        (
+            "keysight-dsox4024a",
+            ["--center-hz", "1000", "--start-hz", "100"],
+        ),
+    ],
+)
+def test_fft_invalid_or_unsupported_configuration_fails_before_open(
+    monkeypatch, capsys, model, extra
+):
+    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+
+    assert (
+        cli.main(
+            [
+                "fft",
+                "--simulate",
+                "--json",
+                "--model",
+                model,
+                "--function",
+                "1",
+                "--source-channel",
+                "1",
+                *extra,
+            ]
+        )
+        == 1
+    )
+    assert _json_stdout(capsys)["ok"] is False
+
+
 def test_math_display_simulate_2000x_uses_unindexed_scpi(capsys):
     assert (
         cli.main(

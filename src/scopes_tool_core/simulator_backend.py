@@ -1875,6 +1875,15 @@ class SimulatorBackend:
                 "window": "HANNing",
                 "center": 0.0,
                 "span": 1.0e6,
+                "start": 0.0,
+                "stop": 1.0e6,
+                "gate": "NONE",
+                "phase_reference": "TRIGger",
+                "detection_type": "OFF",
+                "detection_points": 640,
+                "bin_size": 1000.0,
+                "fft_sample_rate": 1.0e9,
+                "resolution_bandwidth": 1500.0,
                 "display": False,
                 "scale": 1.0,
                 "range": 8.0,
@@ -1891,6 +1900,16 @@ class SimulatorBackend:
             },
         )
         primary, secondary, value = match.group(2).upper(), (match.group(3) or "").upper(), match.group(4)
+        advanced_fft_setting = (
+            (primary == "FREQUENCY" and secondary in {"START", "STOP"})
+            or primary == "GATE"
+            or (primary == "PHASE" and secondary == "REFERENCE")
+            or (primary == "DETECTION" and secondary in {"TYPE", "POINTS"})
+        )
+        if advanced_fft_setting and not self._capabilities.supports_advanced_fft:
+            raise SimulatorBackendError(
+                "Advanced FFT controls are not supported by this simulator profile."
+            )
         if primary == "GOFT" and secondary == "OPERATION":
             self.math_goft_operation = value.upper()
         elif primary == "GOFT" and secondary == "SOURCE1":
@@ -1902,7 +1921,17 @@ class SimulatorBackend:
                 int(value.upper().rsplit("CHANNEL", 1)[1])
             )
         elif primary == "OPERATION":
-            key["operation"] = value.upper()
+            operation = value.upper()
+            if (
+                operation == "FFTPHASE"
+                and not self._capabilities.supports_advanced_fft
+            ):
+                raise SimulatorBackendError(
+                    "FFT Phase is not supported by this simulator profile."
+                )
+            key["operation"] = (
+                "FFTPhase" if operation == "FFTPHASE" else operation
+            )
         elif primary == "SOURCE1":
             source = self._normalize_math_source_token(value)
             if (
@@ -1964,6 +1993,23 @@ class SimulatorBackend:
             key["center"] = float(value)
         elif primary == "FFT" and secondary == "SPAN":
             key["span"] = float(value)
+        elif primary == "FREQUENCY" and secondary == "START":
+            key["start"] = float(value)
+        elif primary == "FREQUENCY" and secondary == "STOP":
+            key["stop"] = float(value)
+        elif primary == "GATE":
+            key["gate"] = value
+        elif primary == "PHASE" and secondary == "REFERENCE":
+            key["phase_reference"] = value
+        elif primary == "DETECTION" and secondary == "TYPE":
+            key["detection_type"] = value
+        elif primary == "DETECTION" and secondary == "POINTS":
+            points = int(value)
+            if points < 640 or points > 65536:
+                raise SimulatorBackendError(
+                    "FFT detection points must be between 640 and 65536."
+                )
+            key["detection_points"] = points
         else:
             return False
         return True
@@ -1987,6 +2033,15 @@ class SimulatorBackend:
                 "window": "HANNing",
                 "center": 0.0,
                 "span": 1.0e6,
+                "start": 0.0,
+                "stop": 1.0e6,
+                "gate": "NONE",
+                "phase_reference": "TRIGger",
+                "detection_type": "OFF",
+                "detection_points": 640,
+                "bin_size": 1000.0,
+                "fft_sample_rate": 1.0e9,
+                "resolution_bandwidth": 1500.0,
                 "display": False,
                 "scale": 1.0,
                 "range": 8.0,
@@ -2003,6 +2058,16 @@ class SimulatorBackend:
             },
         )
         primary, secondary = match.group(2).upper(), (match.group(3) or "").upper()
+        advanced_fft_query = (
+            (primary == "FREQUENCY" and secondary in {"START", "STOP"})
+            or primary in {"GATE", "BSIZE", "SRATE", "RBWIDTH"}
+            or (primary == "PHASE" and secondary == "REFERENCE")
+            or (primary == "DETECTION" and secondary in {"TYPE", "POINTS"})
+        )
+        if advanced_fft_query and not self._capabilities.supports_advanced_fft:
+            raise SimulatorBackendError(
+                "Advanced FFT queries are not supported by this simulator profile."
+            )
         if primary == "GOFT" and secondary == "OPERATION":
             return self.math_goft_operation
         if primary == "GOFT" and secondary == "SOURCE1":
@@ -2049,6 +2114,24 @@ class SimulatorBackend:
             return f"{float(state['center']):.12g}"
         if primary == "FFT" and secondary == "SPAN":
             return f"{float(state['span']):.12g}"
+        if primary == "FREQUENCY" and secondary == "START":
+            return f"{float(state['start']):.12g}"
+        if primary == "FREQUENCY" and secondary == "STOP":
+            return f"{float(state['stop']):.12g}"
+        if primary == "GATE":
+            return str(state["gate"])
+        if primary == "PHASE" and secondary == "REFERENCE":
+            return str(state["phase_reference"])
+        if primary == "DETECTION" and secondary == "TYPE":
+            return str(state["detection_type"])
+        if primary == "DETECTION" and secondary == "POINTS":
+            return str(int(state["detection_points"]))
+        if primary == "BSIZE":
+            return f"{float(state['bin_size']):.12g}"
+        if primary == "SRATE":
+            return f"{float(state['fft_sample_rate']):.12g}"
+        if primary == "RBWIDTH":
+            return f"{float(state['resolution_bandwidth']):.12g}"
         return None
 
     def _normalize_math_source_token(self, value: str) -> str:

@@ -42,6 +42,7 @@ class ScopeCapabilities:
     supports_math_cascade: bool = False
     math_filter_operations: frozenset[str] = frozenset()
     math_visualization_operations: frozenset[str] = frozenset()
+    supports_advanced_fft: bool = False
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
@@ -134,6 +135,7 @@ _CAPABILITY_PROFILES = {
         supports_serial_decode=False,
         math_function_count=4,
         supports_math_cascade=True,
+        supports_advanced_fft=True,
         math_filter_operations=frozenset(
             {"low-pass", "high-pass", "average", "smooth", "envelope"}
         ),

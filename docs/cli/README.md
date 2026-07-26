@@ -1883,6 +1883,7 @@ Additional DSO-X 4024A controls:
 .\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --source-channel 1 --units decibel --window hanning --center-hz 1000 --span-hz 10000 --display on --log-scpi
 .\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --source-channel 1 --display off --log-scpi
 .\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe fft --resource "$env:SCOPES_TOOL_RESOURCE" --function 2 --source-channel 1 --fft-operation fft-phase --start-hz 100 --stop-hz 1000000 --gate zoom --phase-reference display --detection-type average --detection-points 4096 --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-display --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --on --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-display --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-vertical --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --scale 2 --offset 0.5 --log-scpi
@@ -1914,6 +1915,21 @@ require `--function 1`. 4000X models use indexed `:FUNCtion1` through
 `:FUNCtion4` slots and accept `--function 1..4`. The global
 `math-composite-source` command is available only on 2000X/3000X and does not
 take `--function`.
+
+The existing `fft` command retains its basic 2000X/3000X magnitude behavior
+and defaults to `--fft-operation fft`. On 4000X, `--fft-operation fft-phase`
+selects FFT Phase. The 4000X-only optional controls are `--start-hz`,
+`--stop-hz`, `--gate`, `--phase-reference`, `--detection-type`, and
+`--detection-points`. Center/span and start/stop cannot be mixed in one
+configure request. Phase reference is accepted only with FFT Phase.
+`fft --query` additionally reports `start_hz`, `stop_hz`, `gate`,
+`detection_type`, `detection_points`, `bin_size_hz`, `sample_rate_hz`,
+`resolution_bandwidth_hz`, and a nullable `phase_reference` on 4000X.
+The command does not automatically enable Math display, configure Zoom or
+timebase, run autoscale, or change acquisition state. The derived query fields
+come from the instrument and do not represent host-side FFT calculation.
+This path has hardware-free validation only; no live hardware validation was
+performed.
 
 `math-display` requires exactly one of `--on`, `--off`, or `--query`.
 `math-vertical` query mode cannot include setters. Configure mode requires
