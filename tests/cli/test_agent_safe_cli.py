@@ -1867,11 +1867,11 @@ def test_math_composite_source_simulate_configure_query_round_trip(
     assert result["source2_raw"] == "CHANnel2"
 
 
-def test_math_operator_4000x_cascade_dry_run(capsys):
+def test_math_transform_4000x_cascade_dry_run(capsys):
     assert (
         cli.main(
             [
-                "math-operator",
+                "math-transform",
                 "--dry-run",
                 "--json",
                 "--model",
@@ -1879,22 +1879,19 @@ def test_math_operator_4000x_cascade_dry_run(capsys):
                 "--function",
                 "2",
                 "--operation",
-                "add",
-                "--source1",
+                "absolute",
+                "--source",
                 "math1",
-                "--source2",
-                "channel2",
             ]
         )
         == 0
     )
 
     payload = _json_stdout(capsys)
-    assert payload["result"]["source1"] == "math1"
+    assert payload["result"]["source"] == "math1"
     assert payload["result"]["commands"] == [
-        ":FUNCtion2:OPERation ADD",
+        ":FUNCtion2:OPERation ABSolute",
         ":FUNCtion2:SOURce1 FUNCtion1",
-        ":FUNCtion2:SOURce2 CHANnel2",
     ]
 
 

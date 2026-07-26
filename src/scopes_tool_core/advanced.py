@@ -34,7 +34,6 @@ _FFT_WINDOWS = {
 }
 MATH_OPERATIONS = ("add", "subtract", "multiply", "divide")
 MATH_SOURCES = ("channel1", "channel2", "channel3", "channel4")
-MATH_OPERATOR_SOURCE1S = MATH_SOURCES + ("math1", "math2", "math3")
 MATH_TRANSFORM_SOURCES = MATH_SOURCES + (
     "composite",
     "math1",
@@ -461,11 +460,7 @@ class MathController:
             function=function,
             operation=parse_math_operation(operation_raw),
             operation_raw=operation_raw,
-            source1=parse_math_source1(
-                source1_raw,
-                function,
-                capabilities=self.capabilities,
-            ),
+            source1=parse_math_source(source1_raw, capabilities=self.capabilities),
             source1_raw=source1_raw,
             source2=parse_math_source(source2_raw, capabilities=self.capabilities),
             source2_raw=source2_raw,
@@ -991,15 +986,11 @@ def math_operator_commands(
 ) -> list[str]:
     prefix = math_function_scpi_prefix(function, capabilities)
     operation = normalize_math_operation(operation)
-    source1 = normalize_math_source1(
-        source1,
-        function,
-        capabilities=capabilities,
-    )
+    source1 = normalize_math_source(source1, capabilities=capabilities)
     source2 = normalize_math_source(source2, capabilities=capabilities)
     return [
         f"{prefix}:OPERation {_MATH_OPERATION_TOKENS[operation]}",
-        f"{prefix}:SOURce1 {_math_source_scpi_token(source1)}",
+        f"{prefix}:SOURce1 CHANnel{source1.removeprefix('channel')}",
         f"{prefix}:SOURce2 CHANnel{source2.removeprefix('channel')}",
     ]
 

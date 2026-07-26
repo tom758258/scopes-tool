@@ -32,7 +32,6 @@ from scopes_tool_core.acquisition import (
 from scopes_tool_core.advanced import (
     MATH_COMPOSITE_OPERATIONS,
     MATH_OPERATIONS,
-    MATH_OPERATOR_SOURCE1S,
     MATH_SOURCES,
     MATH_TRANSFORM_SOURCES,
     MATH_TRANSFORMS,
@@ -2524,9 +2523,7 @@ def _build_parser() -> argparse.ArgumentParser:
     math_operator_parser.add_argument(
         "--operation", dest="math_operation", choices=MATH_OPERATIONS, default=None
     )
-    math_operator_parser.add_argument(
-        "--source1", choices=MATH_OPERATOR_SOURCE1S, default=None
-    )
+    math_operator_parser.add_argument("--source1", choices=MATH_SOURCES, default=None)
     math_operator_parser.add_argument("--source2", choices=MATH_SOURCES, default=None)
 
     math_composite_parser = subparsers.add_parser(

@@ -35,11 +35,10 @@ Core owns runtime behavior:
 - MATH-P2 instrument-side dual-source Math operators through
   `Oscilloscope.configure_math_operator()` and `query_math_operator()`. P2
   supports `add`, `subtract`, `multiply`, and `divide` with two analog-channel
-  sources. MATH-P4 additionally permits a lower-numbered 4000X Math function
-  as source1; source2 remains analog-channel-only. It reuses the single
-  unindexed 2000X/3000X Math function and indexed 4000X slots, preserves
-  normalized and raw query values, and does not enable display or change
-  vertical controls. Reference, bus, digital, external, and
+  sources. Both source1 and source2 remain analog-channel-only on every series.
+  It reuses the single unindexed 2000X/3000X Math function and indexed 4000X
+  slots, preserves normalized and raw query values, and does not enable display
+  or change vertical controls. Reference, Math, bus, digital, external, and
   arbitrary-expression sources are not supported. Capability profiles describe
   the available runtime path, not validated instrument licenses. Coverage is
   hardware-free only; no live validation was performed.
@@ -59,8 +58,8 @@ Core owns runtime behavior:
   `query_math_composite_source()`. The 2000X/3000X path supports `add`,
   `subtract`, or `multiply` over two analog channels and can feed that result
   to `math-transform` as `composite`. The 4000X path instead supports Math
-  cascade by allowing only a lower-numbered Math function as source1 for
-  `math-operator` and `math-transform`; source2 remains analog-channel-only.
+  cascade by allowing only a lower-numbered Math function as the
+  `math-transform` source. `math-operator` remains analog-channel-only.
   These controls do not calculate or export waveform data, enable display,
   change vertical settings, or probe licenses. Coverage is hardware-free only;
   no live validation was performed.

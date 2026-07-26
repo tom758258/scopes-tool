@@ -1876,7 +1876,16 @@ class SimulatorBackend:
         elif primary == "OPERATION":
             key["operation"] = value.upper()
         elif primary == "SOURCE1":
-            key["source"] = self._normalize_math_source_token(value)
+            source = self._normalize_math_source_token(value)
+            if (
+                source.upper().startswith("FUNCTION")
+                and str(key["operation"]).upper()
+                in {"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE"}
+            ):
+                raise SimulatorBackendError(
+                    "Arithmetic Math operators require an analog source1."
+                )
+            key["source"] = source
         elif primary == "SOURCE2":
             key["source2"] = self._normalize_math_source_token(value)
         elif primary == "DISPLAY":

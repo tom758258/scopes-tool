@@ -1395,23 +1395,22 @@ MATH-P2 adds one instrument-side dual-source Math command:
 ```
 
 Configure requires canonical `operation`, `source1`, and `source2` arguments.
-Supported operations are `add`, `subtract`, `multiply`, and `divide`. Source2
-is limited to canonical analog `channel1` through `channel4` values supported
-by the worker startup model. Source1 accepts the same channels and, on 4000X,
-a canonical lower-numbered `math1` through `math3` function. Query requires
-exactly `query: true` and cannot include configure arguments. Unknown arguments
-and incomplete configure requests are rejected before enqueue, artifacts,
-backend open, or SCPI.
+Supported operations are `add`, `subtract`, `multiply`, and `divide`. Both
+source1 and source2 are limited to canonical analog `channel1` through
+`channel4` values supported by the worker startup model. Query requires
+exactly `query: true` and cannot include configure arguments. Unknown
+arguments and incomplete configure requests are rejected before enqueue,
+artifacts, backend open, or SCPI.
 
 The command reuses the P0/P1 function capability and dialect:
 2000X/3000X accept only function 1 and use unindexed `:FUNCtion`; 4000X accepts
 functions 1 through 4 and uses indexed `:FUNCtion<n>`. Configure writes only
 operation, source1, and source2 in that order. It does not enable Math display,
 change vertical state, run autoscale, probe licenses, or calculate host-side
-waveforms. Math function sources are not accepted on 2000X/3000X or as source2.
-Reference, bus, digital, external, and expression sources are not supported.
-This command adds no artifacts and has hardware-free validation only; no live
-instrument or license validation was performed.
+waveforms. Math function sources are not accepted by `math-operator` on any
+series. Reference, bus, digital, external, and expression sources are not
+supported. This command adds no artifacts and has hardware-free validation
+only; no live instrument or license validation was performed.
 
 ### MATH-P3 Single-Source Transform Command
 
@@ -1475,13 +1474,13 @@ configure fields. The command takes no `function` argument and is rejected for
 4000X startup profiles.
 
 The existing `math-transform` worker schema accepts canonical `composite` only
-on 2000X/3000X. The existing `math-transform` and `math-operator` schemas accept
-`math1` through `math3` as source1 only on 4000X and only when the source
-function is lower-numbered than the destination function. Math function
-sources and `composite` are never accepted as source2. Unknown fields, partial
-configure requests, query/configure mixes, aliases, uppercase values, and
-unsupported model/source combinations fail before enqueue, artifacts, backend
-open, or SCPI.
+on 2000X/3000X. On 4000X, only `math-transform` accepts `math1` through
+`math3`, and only when the source function is lower-numbered than the
+destination function. `math-operator` remains analog-channel-only. Math
+function sources and `composite` are never accepted as source2. Unknown
+fields, partial configure requests, query/configure mixes, aliases, uppercase
+values, and unsupported model/source combinations fail before enqueue,
+artifacts, backend open, or SCPI.
 
 P4 configures instrument-side Math only. It does not calculate or export
 waveforms, enable display, change vertical state, run autoscale, or probe

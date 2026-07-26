@@ -592,16 +592,14 @@ def test_math_p4_transform_composite_source_commands_and_query_parse():
 def test_math_p4_4000x_lower_function_cascade_source():
     capabilities = capabilities_for_model("DSOX4034A")
 
-    assert math_operator_commands(
+    assert math_transform_commands(
         2,
-        "add",
+        "absolute",
         "math1",
-        "channel2",
         capabilities=capabilities,
     ) == [
-        ":FUNCtion2:OPERation ADD",
+        ":FUNCtion2:OPERation ABSolute",
         ":FUNCtion2:SOURce1 FUNCtion1",
-        ":FUNCtion2:SOURce2 CHANnel2",
     ]
     assert parse_math_source1(
         "FUNC1", 2, capabilities=capabilities
@@ -615,12 +613,33 @@ def test_math_p4_4000x_lower_function_cascade_source():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
     scope = Oscilloscope(backend)
     scope.query_idn()
-    scope.configure_math_operator(2, "add", "math1", "channel2")
+    scope.configure_math_transform(2, "absolute", "math1")
 
-    state = scope.query_math_operator(2)
+    state = scope.query_math_transform(2)
 
-    assert state.source1 == "math1"
-    assert state.source1_raw == "FUNCtion1"
+    assert state.source == "math1"
+    assert state.source_raw == "FUNCtion1"
+
+
+def test_math_p4_operator_rejects_math_function_source():
+    capabilities = capabilities_for_model("DSOX4034A")
+
+    with pytest.raises(ParameterValidationError, match="channel1"):
+        math_operator_commands(
+            2,
+            "add",
+            "math1",
+            "channel2",
+            capabilities=capabilities,
+        )
+
+
+def test_math_p4_simulator_rejects_arithmetic_cascade_source():
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
+
+    backend.write(":FUNCtion2:OPERation ADD")
+    with pytest.raises(SimulatorBackendError, match="analog source1"):
+        backend.write(":FUNCtion2:SOURce1 FUNCtion1")
 
 
 @pytest.mark.parametrize("source", ["math2", "math3"])

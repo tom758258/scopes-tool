@@ -1922,16 +1922,13 @@ validation only; no live hardware validation was performed.
 `math-operator` configures or queries one instrument-side dual-source Math
 operator. Configure requires `--operation`, `--source1`, and `--source2`;
 query mode cannot include those options. P2 accepts `add`, `subtract`,
-`multiply`, and `divide`. Source2 must be a canonical analog channel
-`channel1` through `channel4` supported by the selected model. Source1 may use
-the same channels; on 4000X it may instead use `math1` through `math3` when the
-source function is lower-numbered than the destination function. It does not
-automatically enable Math display, alter Math vertical settings, perform
-autoscale, calculate host-side waveforms, or probe licenses. Other Math
-operations and reference, bus, digital, external, or expression sources are
-not supported. Math function sources are never accepted as source2. This path
-has hardware-free validation only; license availability and live instrument
-behavior have not been validated.
+`multiply`, and `divide`. Source1 and source2 must both be canonical analog
+channels `channel1` through `channel4` supported by the selected model.
+It does not automatically enable Math display, alter Math vertical settings,
+perform autoscale, calculate host-side waveforms, or probe licenses. Other
+Math operations and reference, Math, bus, digital, external, or expression
+sources are not supported. This path has hardware-free validation only;
+license availability and live instrument behavior have not been validated.
 
 `math-transform` configures or queries one instrument-side, single-source Math
 transform. Supported operations are `differentiate`, `integrate`, `sqrt`,
