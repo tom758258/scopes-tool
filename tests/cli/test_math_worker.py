@@ -126,3 +126,56 @@ def test_worker_rejects_math_operator_query_conflict_before_enqueue(tmp_path):
     assert runtime.queue.empty()
     assert runtime.jobs == {}
     assert not (tmp_path / runtime.run_id).exists()
+
+
+def test_worker_accepts_math_transform_configure_and_query(tmp_path):
+    assert "math-transform" in worker.DOMAIN_COMMANDS
+    runtime = _runtime(tmp_path)
+
+    configured = worker.parse_domain_command(
+        "math-transform",
+        {
+            "function": 2,
+            "operation": "linear",
+            "source": "channel1",
+            "gain": 2,
+            "linear_offset": -1,
+        },
+        runtime,
+    )
+    queried = worker.parse_domain_command(
+        "math-transform",
+        {"function": 2, "query": True},
+        runtime,
+    )
+
+    assert configured.command == "math-transform"
+    assert configured.function == 2
+    assert configured.math_transform_operation == "linear"
+    assert configured.source == "channel1"
+    assert configured.gain == 2.0
+    assert configured.linear_offset == -1.0
+    assert queried.math_transform_query is True
+
+
+def test_worker_rejects_math_transform_irrelevant_parameter_before_enqueue(
+    tmp_path,
+):
+    runtime = _runtime(tmp_path)
+
+    with pytest.raises(OscilloscopeError, match="only valid.*integrate"):
+        worker.parse_domain_command(
+            "math-transform",
+            {
+                "function": 1,
+                "operation": "absolute",
+                "source": "channel1",
+                "input_offset": 0,
+            },
+            runtime,
+        )
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()

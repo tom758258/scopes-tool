@@ -24,6 +24,8 @@ from scopes_tool_core.advanced import (
     math_display_query,
     math_operator_commands,
     math_operator_query_commands,
+    math_transform_commands,
+    math_transform_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
 )
@@ -155,6 +157,7 @@ DOMAIN_COMMANDS = {
     "fft",
     "math-display",
     "math-operator",
+    "math-transform",
     "math-vertical",
 }
 
@@ -1526,13 +1529,28 @@ def _normalize_save_export_worker_arguments(
 def _normalize_math_worker_arguments(
     command: str, arguments: dict[str, Any], runtime: WorkerRuntime
 ) -> dict[str, Any]:
-    if command not in {"math-display", "math-vertical", "math-operator"}:
+    if command not in {
+        "math-display",
+        "math-vertical",
+        "math-operator",
+        "math-transform",
+    }:
         return arguments
 
     if command == "math-display":
         allowed = {"function", "on", "off", "query"}
     elif command == "math-vertical":
         allowed = {"function", "query", "scale", "range", "offset"}
+    elif command == "math-transform":
+        allowed = {
+            "function",
+            "query",
+            "operation",
+            "source",
+            "input_offset",
+            "gain",
+            "linear_offset",
+        }
     else:
         allowed = {"function", "query", "operation", "source1", "source2"}
     unknown = set(arguments) - allowed
@@ -1589,6 +1607,43 @@ def _normalize_math_worker_arguments(
             arguments["operation"],
             arguments["source1"],
             arguments["source2"],
+            capabilities=capabilities,
+        )
+        return dict(arguments)
+
+    if command == "math-transform":
+        configure_keys = (
+            "operation",
+            "source",
+            "input_offset",
+            "gain",
+            "linear_offset",
+        )
+        configure_arguments = {
+            key: arguments[key] for key in configure_keys if key in arguments
+        }
+        if "query" in arguments:
+            if arguments["query"] is not True:
+                raise OscilloscopeError(
+                    "math-transform argument query must be exactly true"
+                )
+            if configure_arguments:
+                raise OscilloscopeError(
+                    "math-transform query cannot be combined with configure arguments"
+                )
+            math_transform_query_commands(function, capabilities=capabilities)
+            return dict(arguments)
+        if "operation" not in arguments or "source" not in arguments:
+            raise OscilloscopeError(
+                "math-transform configure requires operation and source"
+            )
+        math_transform_commands(
+            function,
+            arguments["operation"],
+            arguments["source"],
+            input_offset=arguments.get("input_offset"),
+            gain=arguments.get("gain"),
+            linear_offset=arguments.get("linear_offset"),
             capabilities=capabilities,
         )
         return dict(arguments)

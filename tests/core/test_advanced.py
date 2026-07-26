@@ -13,11 +13,14 @@ from scopes_tool_core.advanced import (
     math_display_query,
     math_operator_commands,
     math_operator_query_commands,
+    math_transform_commands,
+    math_transform_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
     parse_math_display,
     parse_math_operation,
     parse_math_source,
+    parse_math_transform,
     setup_recall_command,
     setup_save_command,
     trigger_holdoff_command,
@@ -311,6 +314,201 @@ def test_math_p2_simulator_operator_round_trip():
         ":FUNCtion2:OPERation?",
         ":FUNCtion2:SOURce1?",
         ":FUNCtion2:SOURce2?",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("operation", "token", "readbacks"),
+    [
+        ("differentiate", "DIFF", ("DIFF",)),
+        ("integrate", "INTegrate", ("INT", "INTEGRATE")),
+        ("sqrt", "SQRT", ("SQRT",)),
+        ("absolute", "ABSolute", ("ABS", "ABSOLUTE")),
+        ("square", "SQUare", ("SQU", "SQUARE")),
+        ("ln", "LN", ("LN",)),
+        ("log10", "LOG", ("LOG",)),
+        ("exp", "EXP", ("EXP",)),
+        ("exp10", "TEN", ("TEN",)),
+        ("linear", "LINear", ("LIN", "LINEAR")),
+    ],
+)
+def test_math_p3_transform_mapping_and_readback(operation, token, readbacks):
+    capabilities = capabilities_for_model("DSOX4024A")
+
+    assert math_transform_commands(
+        1,
+        operation,
+        "channel1",
+        capabilities=capabilities,
+    )[0] == f":FUNCtion1:OPERation {token}"
+    for readback in readbacks:
+        assert parse_math_transform(f" {readback.swapcase()} ") == operation
+
+
+@pytest.mark.parametrize(
+    ("model", "function", "prefix"),
+    [
+        ("DSOX2004A", 1, ":FUNCtion"),
+        ("DSOX3024A", 1, ":FUNCtion"),
+        ("DSOX4024A", 2, ":FUNCtion2"),
+    ],
+)
+def test_math_p3_transform_commands_use_series_dialect(model, function, prefix):
+    capabilities = capabilities_for_model(model)
+
+    assert math_transform_commands(
+        function,
+        "absolute",
+        "channel1",
+        capabilities=capabilities,
+    ) == [
+        f"{prefix}:OPERation ABSolute",
+        f"{prefix}:SOURce1 CHANnel1",
+    ]
+    assert math_transform_query_commands(
+        function, capabilities=capabilities
+    ) == [
+        f"{prefix}:OPERation?",
+        f"{prefix}:SOURce1?",
+    ]
+
+
+def test_math_p3_integrate_command_order_and_input_offset():
+    capabilities = capabilities_for_model("DSOX2004A")
+
+    assert math_transform_commands(
+        1,
+        "integrate",
+        "channel1",
+        input_offset=0,
+        capabilities=capabilities,
+    ) == [
+        ":FUNCtion:OPERation INTegrate",
+        ":FUNCtion:SOURce1 CHANnel1",
+        ":FUNCtion:INTegrate:IOFFset 0",
+    ]
+
+
+def test_math_p3_linear_command_order_gain_and_offset():
+    capabilities = capabilities_for_model("DSOX4024A")
+
+    assert math_transform_commands(
+        2,
+        "linear",
+        "channel1",
+        gain=2,
+        linear_offset=-1,
+        capabilities=capabilities,
+    ) == [
+        ":FUNCtion2:OPERation LINear",
+        ":FUNCtion2:SOURce1 CHANnel1",
+        ":FUNCtion2:LINear:GAIN 2",
+        ":FUNCtion2:LINear:OFFSet -1",
+    ]
+
+
+def test_math_p3_transform_validation():
+    single_function = capabilities_for_model("DSOX2004A")
+    four_functions = capabilities_for_model("DSOX4024A")
+
+    with pytest.raises(ParameterValidationError, match="only valid.*integrate"):
+        math_transform_commands(
+            1,
+            "absolute",
+            "channel1",
+            input_offset=0,
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="only valid.*linear"):
+        math_transform_commands(
+            1,
+            "integrate",
+            "channel1",
+            gain=2,
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="finite number"):
+        math_transform_commands(
+            1,
+            "linear",
+            "channel1",
+            gain=float("inf"),
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="finite number"):
+        math_transform_commands(
+            1,
+            "integrate",
+            "channel1",
+            input_offset=10**10000,
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="between 1 and 1"):
+        math_transform_commands(
+            2,
+            "absolute",
+            "channel1",
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="channel1"):
+        math_transform_commands(
+            1,
+            "absolute",
+            "channel5",
+            capabilities=four_functions,
+        )
+    with pytest.raises(ChannelResponseError, match="ADD"):
+        parse_math_transform(" ADD ")
+
+
+def test_math_p3_simulator_integrate_and_linear_round_trip():
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.configure_math_transform(
+        2,
+        "integrate",
+        "channel1",
+        input_offset=0.25,
+    )
+    integrate_state = scope.query_math_transform(2)
+    scope.configure_math_transform(
+        2,
+        "linear",
+        "channel2",
+        gain=2,
+        linear_offset=-1,
+    )
+    linear_state = scope.query_math_transform(2)
+
+    assert integrate_state.operation == "integrate"
+    assert integrate_state.operation_raw == "INTEGRATE"
+    assert integrate_state.source == "channel1"
+    assert integrate_state.source_raw == "CHANnel1"
+    assert integrate_state.input_offset == pytest.approx(0.25)
+    assert integrate_state.gain is None
+    assert integrate_state.linear_offset is None
+    assert linear_state.operation == "linear"
+    assert linear_state.source == "channel2"
+    assert linear_state.input_offset is None
+    assert linear_state.gain == pytest.approx(2.0)
+    assert linear_state.linear_offset == pytest.approx(-1.0)
+    assert backend.history[1:] == [
+        ":FUNCtion2:OPERation INTegrate",
+        ":FUNCtion2:SOURce1 CHANnel1",
+        ":FUNCtion2:INTegrate:IOFFset 0.25",
+        ":FUNCtion2:OPERation?",
+        ":FUNCtion2:SOURce1?",
+        ":FUNCtion2:INTegrate:IOFFset?",
+        ":FUNCtion2:OPERation LINear",
+        ":FUNCtion2:SOURce1 CHANnel2",
+        ":FUNCtion2:LINear:GAIN 2",
+        ":FUNCtion2:LINear:OFFSet -1",
+        ":FUNCtion2:OPERation?",
+        ":FUNCtion2:SOURce1?",
+        ":FUNCtion2:LINear:GAIN?",
+        ":FUNCtion2:LINear:OFFSet?",
     ]
 
 

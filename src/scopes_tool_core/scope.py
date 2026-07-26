@@ -13,6 +13,7 @@ from .advanced import (
     MathController,
     MathDisplayState,
     MathOperatorState,
+    MathTransformState,
     MathVerticalState,
     SetupController,
     TriggerHoldoffController,
@@ -1221,6 +1222,28 @@ class Oscilloscope:
 
     def query_math_operator(self, function: int) -> MathOperatorState:
         return self._math_controller().query_operator(function)
+
+    def configure_math_transform(
+        self,
+        function: int,
+        operation: str,
+        source: str,
+        *,
+        input_offset: float | None = None,
+        gain: float | None = None,
+        linear_offset: float | None = None,
+    ) -> None:
+        self._math_controller().configure_transform(
+            function,
+            operation,
+            source,
+            input_offset=input_offset,
+            gain=gain,
+            linear_offset=linear_offset,
+        )
+
+    def query_math_transform(self, function: int) -> MathTransformState:
+        return self._math_controller().query_transform(function)
 
     def capture_screenshot_png(self, *, background: str = "black") -> ScreenshotCapture:
         """Capture the current screen as a color PNG image."""

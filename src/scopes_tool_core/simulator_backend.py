@@ -1854,6 +1854,9 @@ class SimulatorBackend:
                 "scale": 1.0,
                 "range": 8.0,
                 "offset": 0.0,
+                "integrate_input_offset": 0.0,
+                "linear_gain": 1.0,
+                "linear_offset": 0.0,
             },
         )
         primary, secondary, value = match.group(2).upper(), (match.group(3) or "").upper(), match.group(4)
@@ -1871,6 +1874,12 @@ class SimulatorBackend:
             key["range"] = float(value)
         elif primary == "OFFSET":
             key["offset"] = float(value)
+        elif primary == "INTEGRATE" and secondary == "IOFFSET":
+            key["integrate_input_offset"] = float(value)
+        elif primary == "LINEAR" and secondary == "GAIN":
+            key["linear_gain"] = float(value)
+        elif primary == "LINEAR" and secondary == "OFFSET":
+            key["linear_offset"] = float(value)
         elif primary == "FFT" and secondary == "VTYPE":
             key["units"] = value
         elif primary == "FFT" and secondary == "WINDOW":
@@ -1906,6 +1915,9 @@ class SimulatorBackend:
                 "scale": 1.0,
                 "range": 8.0,
                 "offset": 0.0,
+                "integrate_input_offset": 0.0,
+                "linear_gain": 1.0,
+                "linear_offset": 0.0,
             },
         )
         primary, secondary = match.group(2).upper(), (match.group(3) or "").upper()
@@ -1923,6 +1935,12 @@ class SimulatorBackend:
             return f"{float(state['range']):.12g}"
         if primary == "OFFSET":
             return f"{float(state['offset']):.12g}"
+        if primary == "INTEGRATE" and secondary == "IOFFSET":
+            return f"{float(state['integrate_input_offset']):.12g}"
+        if primary == "LINEAR" and secondary == "GAIN":
+            return f"{float(state['linear_gain']):.12g}"
+        if primary == "LINEAR" and secondary == "OFFSET":
+            return f"{float(state['linear_offset']):.12g}"
         if primary == "FFT" and secondary == "VTYPE":
             return str(state["units"])
         if primary == "FFT" and secondary == "WINDOW":

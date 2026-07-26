@@ -1685,6 +1685,138 @@ def test_math_operator_missing_source2_fails_before_open(monkeypatch, capsys):
     assert _json_stdout(capsys)["ok"] is False
 
 
+def test_math_transform_dry_run_configures_integrate(capsys):
+    assert (
+        cli.main(
+            [
+                "math-transform",
+                "--dry-run",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+                "--function",
+                "1",
+                "--operation",
+                "integrate",
+                "--source",
+                "channel1",
+                "--input-offset",
+                "0",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_stdout(capsys)
+    result = payload["result"]
+    assert result == {
+        "operation": "set",
+        "function": 1,
+        "math_operation": "integrate",
+        "source": "channel1",
+        "input_offset": 0.0,
+        "gain": None,
+        "linear_offset": None,
+        "commands": [
+            ":FUNCtion:OPERation INTegrate",
+            ":FUNCtion:SOURce1 CHANnel1",
+            ":FUNCtion:INTegrate:IOFFset 0",
+        ],
+    }
+    assert payload["scpi"]["planned"] == [
+        *result["commands"],
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_math_transform_simulate_configure_query_round_trip(
+    monkeypatch, capsys
+):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+
+    def simulator_backend(**unused):
+        backend.closed = False
+        return backend
+
+    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    common = [
+        "--simulate",
+        "--json",
+        "--model",
+        "keysight-dsox4024a",
+        "--function",
+        "2",
+    ]
+    assert (
+        cli.main(
+            [
+                "math-transform",
+                *common,
+                "--operation",
+                "linear",
+                "--source",
+                "channel1",
+                "--gain",
+                "2",
+                "--linear-offset",
+                "-1",
+            ]
+        )
+        == 0
+    )
+    configured = _json_stdout(capsys)
+    assert configured["result"]["commands"] == [
+        ":FUNCtion2:OPERation LINear",
+        ":FUNCtion2:SOURce1 CHANnel1",
+        ":FUNCtion2:LINear:GAIN 2",
+        ":FUNCtion2:LINear:OFFSet -1",
+    ]
+
+    assert cli.main(["math-transform", *common, "--query"]) == 0
+    queried = _json_stdout(capsys)
+    result = queried["result"]
+    assert result["operation"] == "query"
+    assert result["function"] == 2
+    assert result["math_operation"] == "linear"
+    assert result["operation_raw"] == "LINEAR"
+    assert result["source"] == "channel1"
+    assert result["source_raw"] == "CHANnel1"
+    assert result["input_offset"] is None
+    assert result["gain"] == 2.0
+    assert result["linear_offset"] == -1.0
+    assert queried["scpi"]["sent"][-5:] == [
+        ":FUNCtion2:OPERation?",
+        ":FUNCtion2:SOURce1?",
+        ":FUNCtion2:LINear:GAIN?",
+        ":FUNCtion2:LINear:OFFSet?",
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_math_transform_invalid_option_fails_before_open(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+
+    assert (
+        cli.main(
+            [
+                "math-transform",
+                "--simulate",
+                "--json",
+                "--function",
+                "1",
+                "--operation",
+                "absolute",
+                "--source",
+                "channel1",
+                "--gain",
+                "2",
+            ]
+        )
+        == 1
+    )
+    assert _json_stdout(capsys)["ok"] is False
+
+
 def test_measure_simulate_json_reports_invalid_sentinel(monkeypatch, capsys):
     backend = SimulatorBackend(invalid_measurement_channels={1})
     monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)

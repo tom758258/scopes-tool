@@ -34,6 +34,18 @@ _FFT_WINDOWS = {
 }
 MATH_OPERATIONS = ("add", "subtract", "multiply", "divide")
 MATH_SOURCES = ("channel1", "channel2", "channel3", "channel4")
+MATH_TRANSFORMS = (
+    "differentiate",
+    "integrate",
+    "sqrt",
+    "absolute",
+    "square",
+    "ln",
+    "log10",
+    "exp",
+    "exp10",
+    "linear",
+)
 _MATH_OPERATION_TOKENS = {
     "add": "ADD",
     "subtract": "SUBTract",
@@ -48,6 +60,34 @@ _MATH_OPERATION_READBACKS = {
     "MULTIPLY": "multiply",
     "DIV": "divide",
     "DIVIDE": "divide",
+}
+_MATH_TRANSFORM_TOKENS = {
+    "differentiate": "DIFF",
+    "integrate": "INTegrate",
+    "sqrt": "SQRT",
+    "absolute": "ABSolute",
+    "square": "SQUare",
+    "ln": "LN",
+    "log10": "LOG",
+    "exp": "EXP",
+    "exp10": "TEN",
+    "linear": "LINear",
+}
+_MATH_TRANSFORM_READBACKS = {
+    "DIFF": "differentiate",
+    "INT": "integrate",
+    "INTEGRATE": "integrate",
+    "SQRT": "sqrt",
+    "ABS": "absolute",
+    "ABSOLUTE": "absolute",
+    "SQU": "square",
+    "SQUARE": "square",
+    "LN": "ln",
+    "LOG": "log10",
+    "EXP": "exp",
+    "TEN": "exp10",
+    "LIN": "linear",
+    "LINEAR": "linear",
 }
 
 
@@ -125,6 +165,18 @@ class MathOperatorState:
     source1_raw: str
     source2: str
     source2_raw: str
+
+
+@dataclass(frozen=True)
+class MathTransformState:
+    function: int
+    operation: str
+    operation_raw: str
+    source: str
+    source_raw: str
+    input_offset: float | None
+    gain: float | None
+    linear_offset: float | None
 
 
 class CursorController:
@@ -383,6 +435,56 @@ class MathController:
             source1_raw=source1_raw,
             source2=parse_math_source(source2_raw, capabilities=self.capabilities),
             source2_raw=source2_raw,
+        )
+
+    def configure_transform(
+        self,
+        function: int,
+        operation: str,
+        source: str,
+        *,
+        input_offset: float | None = None,
+        gain: float | None = None,
+        linear_offset: float | None = None,
+    ) -> None:
+        for command in math_transform_commands(
+            function,
+            operation,
+            source,
+            input_offset=input_offset,
+            gain=gain,
+            linear_offset=linear_offset,
+            capabilities=self.capabilities,
+        ):
+            self.scpi.write(command)
+
+    def query_transform(self, function: int) -> MathTransformState:
+        operation_command, source_command = math_transform_query_commands(
+            function, capabilities=self.capabilities
+        )
+        operation_raw = self.scpi.query(operation_command).strip()
+        source_raw = self.scpi.query(source_command).strip()
+        operation = parse_math_transform(operation_raw)
+        prefix = math_function_scpi_prefix(function, self.capabilities)
+        input_offset = None
+        gain = None
+        linear_offset = None
+        if operation == "integrate":
+            input_offset = self.scpi.query_float(
+                f"{prefix}:INTegrate:IOFFset?"
+            )
+        elif operation == "linear":
+            gain = self.scpi.query_float(f"{prefix}:LINear:GAIN?")
+            linear_offset = self.scpi.query_float(f"{prefix}:LINear:OFFSet?")
+        return MathTransformState(
+            function=function,
+            operation=operation,
+            operation_raw=operation_raw,
+            source=parse_math_source(source_raw, capabilities=self.capabilities),
+            source_raw=source_raw,
+            input_offset=input_offset,
+            gain=gain,
+            linear_offset=linear_offset,
         )
 
 
@@ -840,6 +942,63 @@ def math_operator_query_commands(
     ]
 
 
+def math_transform_commands(
+    function: int,
+    operation: str,
+    source: str,
+    *,
+    input_offset: float | None = None,
+    gain: float | None = None,
+    linear_offset: float | None = None,
+    capabilities: ScopeCapabilities | None = None,
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    operation = normalize_math_transform(operation)
+    source = normalize_math_source(
+        source,
+        capabilities=capabilities,
+        option_names="--source",
+    )
+    if operation != "integrate" and input_offset is not None:
+        raise ParameterValidationError(
+            "--input-offset is only valid with --operation integrate."
+        )
+    if operation != "linear" and (gain is not None or linear_offset is not None):
+        raise ParameterValidationError(
+            "--gain and --linear-offset are only valid with --operation linear."
+        )
+    commands = [
+        f"{prefix}:OPERation {_MATH_TRANSFORM_TOKENS[operation]}",
+        f"{prefix}:SOURce1 CHANnel{source.removeprefix('channel')}",
+    ]
+    if input_offset is not None:
+        commands.append(
+            f"{prefix}:INTegrate:IOFFset "
+            f"{_format_number(validate_finite_number(input_offset, '--input-offset'))}"
+        )
+    if gain is not None:
+        commands.append(
+            f"{prefix}:LINear:GAIN "
+            f"{_format_number(validate_finite_number(gain, '--gain'))}"
+        )
+    if linear_offset is not None:
+        commands.append(
+            f"{prefix}:LINear:OFFSet "
+            f"{_format_number(validate_finite_number(linear_offset, '--linear-offset'))}"
+        )
+    return commands
+
+
+def math_transform_query_commands(
+    function: int, *, capabilities: ScopeCapabilities | None = None
+) -> list[str]:
+    prefix = math_function_scpi_prefix(function, capabilities)
+    return [
+        f"{prefix}:OPERation?",
+        f"{prefix}:SOURce1?",
+    ]
+
+
 def normalize_math_operation(value: str) -> str:
     if not isinstance(value, str):
         raise ParameterValidationError(
@@ -854,16 +1013,19 @@ def normalize_math_operation(value: str) -> str:
 
 
 def normalize_math_source(
-    value: str, *, capabilities: ScopeCapabilities | None = None
+    value: str,
+    *,
+    capabilities: ScopeCapabilities | None = None,
+    option_names: str = "--source1 and --source2",
 ) -> str:
     if not isinstance(value, str):
         raise ParameterValidationError(
-            "--source1 and --source2 must be channel1, channel2, channel3, or channel4."
+            f"{option_names} must be channel1, channel2, channel3, or channel4."
         )
     normalized = value.strip().lower()
     if normalized not in MATH_SOURCES:
         raise ParameterValidationError(
-            "--source1 and --source2 must be channel1, channel2, channel3, or channel4."
+            f"{option_names} must be channel1, channel2, channel3, or channel4."
         )
     channel = int(normalized.removeprefix("channel"))
     if capabilities is not None:
@@ -877,6 +1039,29 @@ def parse_math_operation(raw: str) -> str:
     if operation is None:
         raise ChannelResponseError(
             f"Could not parse Math operation response: {raw_value!r}"
+        )
+    return operation
+
+
+def normalize_math_transform(value: str) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError(
+            "--operation must be a supported single-source Math transform."
+        )
+    normalized = value.strip().lower()
+    if normalized not in _MATH_TRANSFORM_TOKENS:
+        raise ParameterValidationError(
+            "--operation must be a supported single-source Math transform."
+        )
+    return normalized
+
+
+def parse_math_transform(raw: str) -> str:
+    raw_value = raw.strip()
+    operation = _MATH_TRANSFORM_READBACKS.get(raw_value.upper())
+    if operation is None:
+        raise ChannelResponseError(
+            f"Could not parse Math transform response: {raw_value!r}"
         )
     return operation
 

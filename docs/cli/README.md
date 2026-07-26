@@ -1890,13 +1890,16 @@ Additional DSO-X 4024A controls:
 .\.venv\Scripts\scopes-tool.exe math-vertical --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-operator --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation subtract --source1 channel1 --source2 channel2 --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-operator --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-transform --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation integrate --source channel1 --input-offset 0 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-transform --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --operation linear --source channel1 --gain 2 --linear-offset -1 --log-scpi
+.\.venv\Scripts\scopes-tool.exe math-transform --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --query --json --log-scpi
 ```
 
-The existing `fft`, `math-display`, `math-vertical`, and `math-operator`
-commands use the model's instrument-side Math function layout. 2000X and 3000X
-models have one unindexed `:FUNCtion` subsystem and require `--function 1`.
-4000X models use indexed `:FUNCtion1` through `:FUNCtion4` slots and accept
-`--function 1..4`.
+The existing `fft`, `math-display`, `math-vertical`, `math-operator`, and
+`math-transform` commands use the model's instrument-side Math function
+layout. 2000X and 3000X models have one unindexed `:FUNCtion` subsystem and
+require `--function 1`. 4000X models use indexed `:FUNCtion1` through
+`:FUNCtion4` slots and accept `--function 1..4`.
 
 `math-display` requires exactly one of `--on`, `--off`, or `--query`.
 `math-vertical` query mode cannot include setters. Configure mode requires
@@ -1922,6 +1925,25 @@ autoscale, calculate host-side waveforms, or probe licenses. Other Math
 operations and reference, Math, bus, digital, external, or expression sources
 are not supported. P2 has hardware-free validation only; license availability
 and live instrument behavior have not been validated.
+
+`math-transform` configures or queries one instrument-side, single-source Math
+transform. Supported operations are `differentiate`, `integrate`, `sqrt`,
+`absolute`, `square`, `ln`, `log10`, `exp`, `exp10`, and `linear`. Configure
+requires `--operation` and `--source`; sources are canonical analog channels
+`channel1` through `channel4` within the selected model's channel count.
+`--input-offset` is optional only for `integrate`. `--gain` and
+`--linear-offset` are optional only for `linear`; omitting them preserves the
+instrument's current values. Query mode cannot include configure options and
+conditionally reads integrate or linear parameters after identifying the
+current operation. It reports an error, without changing state, when the
+current operation is not a P3 transform.
+
+P3 does not automatically enable Math display, change vertical settings, run
+autoscale, probe licenses, or calculate host-side waveforms. GOFT, Math
+cascade, reference waveform sources, bus sources, and waveform export are not
+implemented. License availability remains subject to the live instrument error
+queue. P3 has hardware-free validation only; live instrument behavior and
+license availability have not been validated.
 
 These commands are explicit user actions and are never called by `doctor`,
 `smoke`, or `acquisition-check`. Some change front-panel state, such as cursor,

@@ -160,7 +160,7 @@ Worker `/command` supports the existing Scopes capability surface:
   `trigger-pattern`, `trigger-or`, `trigger-sweep`, `trigger-noise-reject`,
   `trigger-hf-reject`, `trigger-holdoff`, `cursor`, `autoscale`
 - `setup-save`, `setup-recall`, `fft`, `math-display`, `math-vertical`,
-  `math-operator`
+  `math-operator`, `math-transform`
 
 `list-resources` remains an explicit discovery command outside live worker
 flows. `hardware-report` remains a local report renderer. They are not accepted
@@ -1409,6 +1409,47 @@ change vertical state, run autoscale, probe licenses, or calculate host-side
 waveforms. Reference, Math, bus, digital, external, and expression sources are
 not supported. P2 adds no artifacts and has hardware-free validation only; no
 live instrument or license validation was performed.
+
+### MATH-P3 Single-Source Transform Command
+
+MATH-P3 adds one instrument-side single-source Math command:
+
+```json
+{"command": "math-transform", "arguments": {"function": 1, "operation": "integrate", "source": "channel1", "input_offset": 0}}
+```
+
+```json
+{"command": "math-transform", "arguments": {"function": 2, "operation": "linear", "source": "channel1", "gain": 2, "linear_offset": -1}}
+```
+
+```json
+{"command": "math-transform", "arguments": {"function": 1, "query": true}}
+```
+
+Configure requires canonical `operation` and `source` arguments. Supported
+operations are `differentiate`, `integrate`, `sqrt`, `absolute`, `square`,
+`ln`, `log10`, `exp`, `exp10`, and `linear`. Sources are limited to canonical
+analog `channel1` through `channel4` values supported by the worker startup
+model. `input_offset` is a finite JSON number accepted only for `integrate`.
+Finite JSON numbers `gain` and `linear_offset` are accepted only for `linear`;
+either or both may be omitted to preserve the current instrument values.
+
+Query requires exactly `query: true` and cannot include configure arguments.
+Empty arguments, `query: false`, incomplete configure requests, aliases,
+unknown keys or values, boolean or non-finite numeric parameters, and
+operation-specific options used with another operation are rejected before
+enqueue, artifacts, backend open, or SCPI.
+
+The command reuses the P0/P1 function capability and dialect:
+2000X/3000X accept only function 1 and use unindexed `:FUNCtion`; 4000X accepts
+functions 1 through 4 and uses indexed `:FUNCtion<n>`. Configure writes
+operation, source1, and then any applicable integrate or linear parameters. It
+does not enable Math display, change vertical state, run autoscale, probe
+licenses, or calculate host-side waveforms. GOFT, Math cascade, reference
+waveform sources, bus sources, and waveform export are not supported. License
+availability remains subject to the live instrument error queue. P3 adds no
+artifacts and has hardware-free validation only; no live instrument or license
+validation was performed.
 
 ### Search Basic Pack v1 Commands
 

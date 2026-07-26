@@ -32,6 +32,7 @@ from scopes_tool_core.acquisition import (
 from scopes_tool_core.advanced import (
     MATH_OPERATIONS,
     MATH_SOURCES,
+    MATH_TRANSFORMS,
     autoscale_commands,
     cursor_auto_vertical_dry_run_plan,
     cursor_auto_vertical_json,
@@ -46,6 +47,8 @@ from scopes_tool_core.advanced import (
     math_display_query,
     math_operator_commands,
     math_operator_query_commands,
+    math_transform_commands,
+    math_transform_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
     setup_recall_command,
@@ -2519,6 +2522,33 @@ def _build_parser() -> argparse.ArgumentParser:
     math_operator_parser.add_argument("--source1", choices=MATH_SOURCES, default=None)
     math_operator_parser.add_argument("--source2", choices=MATH_SOURCES, default=None)
 
+    math_transform_parser = subparsers.add_parser(
+        "math-transform",
+        allow_abbrev=False,
+        help="configure or query an instrument-side single-source Math transform",
+    )
+    _add_scope_connection_args(math_transform_parser)
+    math_transform_parser.add_argument("--function", type=_positive_int, required=True)
+    math_transform_parser.add_argument(
+        "--query", dest="math_transform_query", action="store_true"
+    )
+    math_transform_parser.add_argument(
+        "--operation",
+        dest="math_transform_operation",
+        choices=MATH_TRANSFORMS,
+        default=None,
+    )
+    math_transform_parser.add_argument("--source", choices=MATH_SOURCES, default=None)
+    math_transform_parser.add_argument(
+        "--input-offset", type=_measurement_finite_float, default=None
+    )
+    math_transform_parser.add_argument(
+        "--gain", type=_measurement_finite_float, default=None
+    )
+    math_transform_parser.add_argument(
+        "--linear-offset", type=_measurement_finite_float, default=None
+    )
+
     acquisition_check_parser = subparsers.add_parser(
         "acquisition-check",
         help="run the acquisition configuration hardware validation workflow",
@@ -2851,6 +2881,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_math_vertical(args)
     if args.command == "math-operator":
         return _cmd_math_operator(args)
+    if args.command == "math-transform":
+        return _cmd_math_transform(args)
     if args.command == "acquisition-check":
         return _cmd_acquisition_check(args)
     raise OscilloscopeError("missing command")
@@ -3400,6 +3432,7 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         "math-display",
         "math-vertical",
         "math-operator",
+        "math-transform",
     }:
         _validate_math_args(args)
 
@@ -3433,6 +3466,38 @@ def _validate_math_args(args: argparse.Namespace) -> None:
             scale=args.scale,
             range_value=args.range_value,
             offset=args.offset,
+            capabilities=capabilities,
+        )
+        return
+
+    if args.command == "math-transform":
+        configure_values = (
+            args.math_transform_operation,
+            args.source,
+            args.input_offset,
+            args.gain,
+            args.linear_offset,
+        )
+        if args.math_transform_query:
+            if any(value is not None for value in configure_values):
+                raise ParameterValidationError(
+                    "math-transform --query cannot be combined with configure options."
+                )
+            math_transform_query_commands(
+                args.function, capabilities=capabilities
+            )
+            return
+        if args.math_transform_operation is None or args.source is None:
+            raise ParameterValidationError(
+                "math-transform configure requires --operation and --source."
+            )
+        math_transform_commands(
+            args.function,
+            args.math_transform_operation,
+            args.source,
+            input_offset=args.input_offset,
+            gain=args.gain,
+            linear_offset=args.linear_offset,
             capabilities=capabilities,
         )
         return
@@ -5313,6 +5378,41 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "math_operation": args.math_operation,
             "source1": args.source1,
             "source2": args.source2,
+            "commands": planned,
+        }
+    if command == "math-transform":
+        if args.math_transform_query:
+            planned = math_transform_query_commands(
+                args.function, capabilities=capabilities
+            )
+            return planned + [":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "function": args.function,
+                "math_operation": None,
+                "operation_raw": None,
+                "source": None,
+                "source_raw": None,
+                "input_offset": None,
+                "gain": None,
+                "linear_offset": None,
+            }
+        planned = math_transform_commands(
+            args.function,
+            args.math_transform_operation,
+            args.source,
+            input_offset=args.input_offset,
+            gain=args.gain,
+            linear_offset=args.linear_offset,
+            capabilities=capabilities,
+        )
+        return planned + [":SYSTem:ERRor?"], [], {
+            "operation": "set",
+            "function": args.function,
+            "math_operation": args.math_transform_operation,
+            "source": args.source,
+            "input_offset": args.input_offset,
+            "gain": args.gain,
+            "linear_offset": args.linear_offset,
             "commands": planned,
         }
     return [], [], {}
@@ -9584,6 +9684,78 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
                 math_operation=args.math_operation,
                 source1=args.source1,
                 source2=args.source2,
+                commands=commands,
+            )
+            for command in commands:
+                print(f"Command: {command}")
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_math_transform(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        if args.math_transform_query:
+            state = scope.query_math_transform(args.function)
+            _json_update_result(
+                operation="query",
+                function=state.function,
+                math_operation=state.operation,
+                operation_raw=state.operation_raw,
+                source=state.source,
+                source_raw=state.source_raw,
+                input_offset=state.input_offset,
+                gain=state.gain,
+                linear_offset=state.linear_offset,
+            )
+            commands = math_transform_query_commands(
+                args.function, capabilities=scope.capabilities
+            )
+            for command in commands:
+                print(f"Command: {command}")
+            print(f"Math transform: {state.operation}")
+            print(f"Source: {state.source}")
+            if state.input_offset is not None:
+                print(f"Input offset: {state.input_offset:.12g}")
+            if state.gain is not None:
+                print(f"Gain: {state.gain:.12g}")
+            if state.linear_offset is not None:
+                print(f"Linear offset: {state.linear_offset:.12g}")
+        else:
+            scope.configure_math_transform(
+                args.function,
+                args.math_transform_operation,
+                args.source,
+                input_offset=args.input_offset,
+                gain=args.gain,
+                linear_offset=args.linear_offset,
+            )
+            commands = math_transform_commands(
+                args.function,
+                args.math_transform_operation,
+                args.source,
+                input_offset=args.input_offset,
+                gain=args.gain,
+                linear_offset=args.linear_offset,
+                capabilities=scope.capabilities,
+            )
+            _json_update_result(
+                operation="set",
+                function=args.function,
+                math_operation=args.math_transform_operation,
+                source=args.source,
+                input_offset=args.input_offset,
+                gain=args.gain,
+                linear_offset=args.linear_offset,
                 commands=commands,
             )
             for command in commands:

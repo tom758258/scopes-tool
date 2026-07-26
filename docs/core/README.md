@@ -41,6 +41,16 @@ Core owns runtime behavior:
   and arbitrary-expression sources are not supported. Capability profiles
   describe the available runtime path, not validated instrument licenses.
   Coverage is hardware-free only; no live validation was performed.
+- MATH-P3 instrument-side single-source Math transforms through
+  `Oscilloscope.configure_math_transform()` and `query_math_transform()`. P3
+  supports `differentiate`, `integrate`, `sqrt`, `absolute`, `square`, `ln`,
+  `log10`, `exp`, `exp10`, and `linear` with one analog-channel source.
+  Integrate optionally sets input offset; linear optionally sets gain and
+  linear offset. It reuses the unindexed 2000X/3000X function and indexed
+  4000X slots, does not enable display, and leaves license availability to the
+  instrument error queue. GOFT, Math cascade, reference and bus sources,
+  host-side calculation, and waveform export are not implemented. Coverage is
+  hardware-free only; no live validation was performed.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,

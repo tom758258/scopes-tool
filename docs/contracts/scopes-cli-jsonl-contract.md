@@ -341,6 +341,12 @@ Control and setup:
   ordered executed `commands`. Query results include `operation: "query"`,
   `function`, canonical `math_operation`, `source1`, and `source2`, plus
   stripped `operation_raw`, `source1_raw`, and `source2_raw` readbacks.
+- `math-transform`: configure results include `operation: "set"`, `function`,
+  canonical `math_operation`, canonical analog `source`, nullable
+  `input_offset`, `gain`, and `linear_offset`, plus ordered executed
+  `commands`. Query results include `operation: "query"`, `function`,
+  canonical `math_operation` and `source`, stripped `operation_raw` and
+  `source_raw`, and the same nullable operation-specific numeric fields.
 
 Measurement and artifact-producing flows:
 
