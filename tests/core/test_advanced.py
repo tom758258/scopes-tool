@@ -11,6 +11,8 @@ from scopes_tool_core.advanced import (
     fft_query_commands,
     math_display_command,
     math_display_query,
+    math_composite_source_commands,
+    math_composite_source_query_commands,
     math_operator_commands,
     math_operator_query_commands,
     math_transform_commands,
@@ -18,8 +20,10 @@ from scopes_tool_core.advanced import (
     math_vertical_commands,
     math_vertical_query_commands,
     parse_math_display,
+    parse_math_composite_operation,
     parse_math_operation,
     parse_math_source,
+    parse_math_source1,
     parse_math_transform,
     setup_recall_command,
     setup_save_command,
@@ -510,6 +514,157 @@ def test_math_p3_simulator_integrate_and_linear_round_trip():
         ":FUNCtion2:LINear:GAIN?",
         ":FUNCtion2:LINear:OFFSet?",
     ]
+
+
+@pytest.mark.parametrize(
+    ("operation", "token"),
+    [
+        ("add", "ADD"),
+        ("subtract", "SUBTract"),
+        ("multiply", "MULTiply"),
+    ],
+)
+def test_math_p4_goft_operation_mapping(operation, token):
+    capabilities = capabilities_for_model("DSOX2004A")
+
+    assert math_composite_source_commands(
+        operation,
+        "channel1",
+        "channel2",
+        capabilities=capabilities,
+    )[0] == f":FUNCtion:GOFT:OPERation {token}"
+
+
+def test_math_p4_goft_simulator_configure_query_state():
+    backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.configure_math_composite_source("subtract", "channel1", "channel2")
+    state = scope.query_math_composite_source()
+
+    assert state.operation == "subtract"
+    assert state.operation_raw == "SUBTRACT"
+    assert state.source1 == "channel1"
+    assert state.source1_raw == "CHANnel1"
+    assert state.source2 == "channel2"
+    assert state.source2_raw == "CHANnel2"
+    assert backend.history[1:] == [
+        ":FUNCtion:GOFT:OPERation SUBTract",
+        ":FUNCtion:GOFT:SOURce1 CHANnel1",
+        ":FUNCtion:GOFT:SOURce2 CHANnel2",
+        ":FUNCtion:GOFT:OPERation?",
+        ":FUNCtion:GOFT:SOURce1?",
+        ":FUNCtion:GOFT:SOURce2?",
+    ]
+    assert parse_math_composite_operation(" mUlT ") == "multiply"
+
+
+def test_math_p4_transform_composite_source_commands_and_query_parse():
+    capabilities = capabilities_for_model("DSOX3024A")
+
+    assert math_transform_commands(
+        1,
+        "absolute",
+        "composite",
+        capabilities=capabilities,
+    ) == [
+        ":FUNCtion:OPERation ABSolute",
+        ":FUNCtion:SOURce1 GOFT",
+    ]
+    assert parse_math_source1(
+        " GOFT ",
+        1,
+        capabilities=capabilities,
+        allow_composite=True,
+    ) == "composite"
+    backend = SimulatorBackend(physical_model_id="keysight-dsox3024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    scope.configure_math_transform(1, "absolute", "composite")
+
+    state = scope.query_math_transform(1)
+
+    assert state.source == "composite"
+    assert state.source_raw == "GOFT"
+
+
+def test_math_p4_4000x_lower_function_cascade_source():
+    capabilities = capabilities_for_model("DSOX4034A")
+
+    assert math_operator_commands(
+        2,
+        "add",
+        "math1",
+        "channel2",
+        capabilities=capabilities,
+    ) == [
+        ":FUNCtion2:OPERation ADD",
+        ":FUNCtion2:SOURce1 FUNCtion1",
+        ":FUNCtion2:SOURce2 CHANnel2",
+    ]
+    assert parse_math_source1(
+        "FUNC1", 2, capabilities=capabilities
+    ) == "math1"
+    assert parse_math_source1(
+        "FUNCtion1", 2, capabilities=capabilities
+    ) == "math1"
+    assert parse_math_source1(
+        "MATH1", 2, capabilities=capabilities
+    ) == "math1"
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    scope.configure_math_operator(2, "add", "math1", "channel2")
+
+    state = scope.query_math_operator(2)
+
+    assert state.source1 == "math1"
+    assert state.source1_raw == "FUNCtion1"
+
+
+@pytest.mark.parametrize("source", ["math2", "math3"])
+def test_math_p4_rejects_self_and_forward_cascade_sources(source):
+    capabilities = capabilities_for_model("DSOX4034A")
+
+    with pytest.raises(ParameterValidationError, match="lower than"):
+        math_transform_commands(
+            2,
+            "absolute",
+            source,
+            capabilities=capabilities,
+        )
+
+
+def test_math_p4_source_capabilities_fail_closed():
+    single_function = capabilities_for_model("DSOX2004A")
+    four_functions = capabilities_for_model("DSOX4034A")
+
+    assert capabilities_for_model("DSOX3024A").supports_math_goft is True
+    assert four_functions.supports_math_cascade is True
+    with pytest.raises(ParameterValidationError, match="composite.*not supported"):
+        math_transform_commands(
+            1,
+            "absolute",
+            "composite",
+            capabilities=four_functions,
+        )
+    with pytest.raises(ParameterValidationError, match="function sources.*not supported"):
+        math_transform_commands(
+            1,
+            "absolute",
+            "math1",
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="add, subtract, or multiply"):
+        math_composite_source_commands(
+            "divide",
+            "channel1",
+            "channel2",
+            capabilities=single_function,
+        )
+    with pytest.raises(ParameterValidationError, match="not supported"):
+        math_composite_source_query_commands(capabilities=four_functions)
 
 
 def test_cursor_auto_timebase_plan_keeps_visible_positions():

@@ -1817,6 +1817,113 @@ def test_math_transform_invalid_option_fails_before_open(monkeypatch, capsys):
     assert _json_stdout(capsys)["ok"] is False
 
 
+def test_math_composite_source_simulate_configure_query_round_trip(
+    monkeypatch, capsys
+):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
+
+    def simulator_backend(**unused):
+        backend.closed = False
+        return backend
+
+    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    common = [
+        "--simulate",
+        "--json",
+        "--model",
+        "keysight-dsox2004a",
+    ]
+    assert (
+        cli.main(
+            [
+                "math-composite-source",
+                *common,
+                "--operation",
+                "subtract",
+                "--source1",
+                "channel1",
+                "--source2",
+                "channel2",
+            ]
+        )
+        == 0
+    )
+    configured = _json_stdout(capsys)
+    assert configured["result"]["commands"] == [
+        ":FUNCtion:GOFT:OPERation SUBTract",
+        ":FUNCtion:GOFT:SOURce1 CHANnel1",
+        ":FUNCtion:GOFT:SOURce2 CHANnel2",
+    ]
+
+    assert cli.main(["math-composite-source", *common, "--query"]) == 0
+    queried = _json_stdout(capsys)
+    result = queried["result"]
+    assert result["operation"] == "query"
+    assert result["math_operation"] == "subtract"
+    assert result["operation_raw"] == "SUBTRACT"
+    assert result["source1"] == "channel1"
+    assert result["source1_raw"] == "CHANnel1"
+    assert result["source2"] == "channel2"
+    assert result["source2_raw"] == "CHANnel2"
+
+
+def test_math_operator_4000x_cascade_dry_run(capsys):
+    assert (
+        cli.main(
+            [
+                "math-operator",
+                "--dry-run",
+                "--json",
+                "--model",
+                "keysight-dsox4034a",
+                "--function",
+                "2",
+                "--operation",
+                "add",
+                "--source1",
+                "math1",
+                "--source2",
+                "channel2",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_stdout(capsys)
+    assert payload["result"]["source1"] == "math1"
+    assert payload["result"]["commands"] == [
+        ":FUNCtion2:OPERation ADD",
+        ":FUNCtion2:SOURce1 FUNCtion1",
+        ":FUNCtion2:SOURce2 CHANnel2",
+    ]
+
+
+def test_math_transform_unsupported_composite_fails_before_open(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+
+    assert (
+        cli.main(
+            [
+                "math-transform",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox4034a",
+                "--function",
+                "1",
+                "--operation",
+                "absolute",
+                "--source",
+                "composite",
+            ]
+        )
+        == 1
+    )
+    assert _json_stdout(capsys)["ok"] is False
+
+
 def test_measure_simulate_json_reports_invalid_sentinel(monkeypatch, capsys):
     backend = SimulatorBackend(invalid_measurement_channels={1})
     monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)

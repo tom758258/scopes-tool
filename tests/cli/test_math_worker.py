@@ -87,7 +87,7 @@ def test_worker_accepts_math_operator_configure_and_query(tmp_path):
         {
             "function": 2,
             "operation": "multiply",
-            "source1": "channel1",
+            "source1": "math1",
             "source2": "channel2",
         },
         runtime,
@@ -101,7 +101,7 @@ def test_worker_accepts_math_operator_configure_and_query(tmp_path):
     assert configured.command == "math-operator"
     assert configured.function == 2
     assert configured.math_operation == "multiply"
-    assert configured.source1 == "channel1"
+    assert configured.source1 == "math1"
     assert configured.source2 == "channel2"
     assert queried.math_operator_query is True
 
@@ -171,6 +171,52 @@ def test_worker_rejects_math_transform_irrelevant_parameter_before_enqueue(
                 "operation": "absolute",
                 "source": "channel1",
                 "input_offset": 0,
+            },
+            runtime,
+        )
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()
+
+
+def test_worker_accepts_math_composite_source_configure_and_query(tmp_path):
+    assert "math-composite-source" in worker.DOMAIN_COMMANDS
+    runtime = _runtime(tmp_path, "keysight-dsox2004a")
+
+    configured = worker.parse_domain_command(
+        "math-composite-source",
+        {
+            "operation": "subtract",
+            "source1": "channel1",
+            "source2": "channel2",
+        },
+        runtime,
+    )
+    queried = worker.parse_domain_command(
+        "math-composite-source",
+        {"query": True},
+        runtime,
+    )
+
+    assert configured.command == "math-composite-source"
+    assert configured.math_composite_operation == "subtract"
+    assert configured.source1 == "channel1"
+    assert configured.source2 == "channel2"
+    assert queried.math_composite_query is True
+
+
+def test_worker_rejects_invalid_math_composite_source_before_enqueue(tmp_path):
+    runtime = _runtime(tmp_path, "keysight-dsox2004a")
+
+    with pytest.raises(OscilloscopeError, match="add, subtract, or multiply"):
+        worker.parse_domain_command(
+            "math-composite-source",
+            {
+                "operation": "divide",
+                "source1": "channel1",
+                "source2": "channel2",
             },
             runtime,
         )

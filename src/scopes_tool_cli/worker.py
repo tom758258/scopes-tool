@@ -20,6 +20,8 @@ from uuid import uuid4
 
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.advanced import (
+    math_composite_source_commands,
+    math_composite_source_query_commands,
     math_display_command,
     math_display_query,
     math_operator_commands,
@@ -156,6 +158,7 @@ DOMAIN_COMMANDS = {
     "setup-recall",
     "fft",
     "math-display",
+    "math-composite-source",
     "math-operator",
     "math-transform",
     "math-vertical",
@@ -1533,6 +1536,7 @@ def _normalize_math_worker_arguments(
         "math-display",
         "math-vertical",
         "math-operator",
+        "math-composite-source",
         "math-transform",
     }:
         return arguments
@@ -1541,6 +1545,8 @@ def _normalize_math_worker_arguments(
         allowed = {"function", "on", "off", "query"}
     elif command == "math-vertical":
         allowed = {"function", "query", "scale", "range", "offset"}
+    elif command == "math-composite-source":
+        allowed = {"query", "operation", "source1", "source2"}
     elif command == "math-transform":
         allowed = {
             "function",
@@ -1558,10 +1564,41 @@ def _normalize_math_worker_arguments(
         raise OscilloscopeError(
             f"unknown argument for {command}: {sorted(unknown)[0]}"
         )
+    capabilities = capabilities_for_model_id(runtime.model)
+
+    if command == "math-composite-source":
+        configure_keys = ("operation", "source1", "source2")
+        configure_arguments = {
+            key: arguments[key] for key in configure_keys if key in arguments
+        }
+        if "query" in arguments:
+            if arguments["query"] is not True:
+                raise OscilloscopeError(
+                    "math-composite-source argument query must be exactly true"
+                )
+            if configure_arguments:
+                raise OscilloscopeError(
+                    "math-composite-source query cannot be combined with "
+                    "configure arguments"
+                )
+            math_composite_source_query_commands(capabilities=capabilities)
+            return dict(arguments)
+        if len(configure_arguments) != len(configure_keys):
+            raise OscilloscopeError(
+                "math-composite-source configure requires operation, "
+                "source1, and source2"
+            )
+        math_composite_source_commands(
+            arguments["operation"],
+            arguments["source1"],
+            arguments["source2"],
+            capabilities=capabilities,
+        )
+        return dict(arguments)
+
     function = arguments.get("function")
     if not isinstance(function, int) or isinstance(function, bool):
         raise OscilloscopeError(f"{command} argument function must be an integer")
-    capabilities = capabilities_for_model_id(runtime.model)
 
     if command == "math-display":
         actions = [key for key in ("on", "off", "query") if key in arguments]

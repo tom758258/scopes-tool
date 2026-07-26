@@ -278,6 +278,9 @@ class SimulatorBackend:
     )
     setup_targets: dict[str, str] = field(default_factory=dict)
     fft_functions: dict[int, dict[str, Any]] = field(default_factory=dict)
+    math_goft_operation: str = "ADD"
+    math_goft_source1: int = 1
+    math_goft_source2: int = 2
     invalid_measurement_channels: set[int] = field(default_factory=set)
     signals: dict[int, SimulatedSignal] = field(default_factory=dict)
     trigger_alternate_count: int = 0
@@ -1833,7 +1836,7 @@ class SimulatorBackend:
 
     def _apply_fft_write(self, command: str) -> bool:
         match = re.fullmatch(
-            r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z]+))?\s+(.+)",
+            r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z0-9]+))?\s+(.+)",
             command,
             flags=re.IGNORECASE,
         )
@@ -1844,8 +1847,8 @@ class SimulatorBackend:
             function,
             {
                 "operation": "FFT",
-                "source": 1,
-                "source2": 2,
+                "source": "CHANnel1",
+                "source2": "CHANnel2",
                 "units": "DECibel",
                 "window": "HANNing",
                 "center": 0.0,
@@ -1860,12 +1863,22 @@ class SimulatorBackend:
             },
         )
         primary, secondary, value = match.group(2).upper(), (match.group(3) or "").upper(), match.group(4)
-        if primary == "OPERATION":
+        if primary == "GOFT" and secondary == "OPERATION":
+            self.math_goft_operation = value.upper()
+        elif primary == "GOFT" and secondary == "SOURCE1":
+            self.math_goft_source1 = self._validate_channel(
+                int(value.upper().rsplit("CHANNEL", 1)[1])
+            )
+        elif primary == "GOFT" and secondary == "SOURCE2":
+            self.math_goft_source2 = self._validate_channel(
+                int(value.upper().rsplit("CHANNEL", 1)[1])
+            )
+        elif primary == "OPERATION":
             key["operation"] = value.upper()
         elif primary == "SOURCE1":
-            key["source"] = self._validate_channel(int(value.rsplit("CHANnel", 1)[1]))
+            key["source"] = self._normalize_math_source_token(value)
         elif primary == "SOURCE2":
-            key["source2"] = self._validate_channel(int(value.rsplit("CHANnel", 1)[1]))
+            key["source2"] = self._normalize_math_source_token(value)
         elif primary == "DISPLAY":
             key["display"] = value.upper() == "ON"
         elif primary == "SCALE":
@@ -1894,7 +1907,7 @@ class SimulatorBackend:
 
     def _query_fft(self, command: str) -> str | None:
         match = re.fullmatch(
-            r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z]+))?\?",
+            r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z0-9]+))?\?",
             command,
             flags=re.IGNORECASE,
         )
@@ -1905,8 +1918,8 @@ class SimulatorBackend:
             function,
             {
                 "operation": "FFT",
-                "source": 1,
-                "source2": 2,
+                "source": "CHANnel1",
+                "source2": "CHANnel2",
                 "units": "DECibel",
                 "window": "HANNing",
                 "center": 0.0,
@@ -1921,12 +1934,18 @@ class SimulatorBackend:
             },
         )
         primary, secondary = match.group(2).upper(), (match.group(3) or "").upper()
+        if primary == "GOFT" and secondary == "OPERATION":
+            return self.math_goft_operation
+        if primary == "GOFT" and secondary == "SOURCE1":
+            return f"CHANnel{self.math_goft_source1}"
+        if primary == "GOFT" and secondary == "SOURCE2":
+            return f"CHANnel{self.math_goft_source2}"
         if primary == "OPERATION":
             return str(state["operation"])
         if primary == "SOURCE1":
-            return f"CHANnel{state['source']}"
+            return str(state["source"])
         if primary == "SOURCE2":
-            return f"CHANnel{state['source2']}"
+            return str(state["source2"])
         if primary == "DISPLAY":
             return "1" if state["display"] else "0"
         if primary == "SCALE":
@@ -1950,6 +1969,20 @@ class SimulatorBackend:
         if primary == "FFT" and secondary == "SPAN":
             return f"{float(state['span']):.12g}"
         return None
+
+    def _normalize_math_source_token(self, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized.startswith("CHANNEL"):
+            channel = self._validate_channel(
+                int(normalized.removeprefix("CHANNEL"))
+            )
+            return f"CHANnel{channel}"
+        if normalized == "GOFT":
+            return "GOFT"
+        if normalized.startswith("FUNCTION"):
+            function = int(normalized.removeprefix("FUNCTION"))
+            return f"FUNCtion{function}"
+        raise SimulatorBackendError(f"Unsupported Math source: {value}")
 
     def _apply_channel_write(self, command: str) -> bool:
         channel = _extract_channel(command)

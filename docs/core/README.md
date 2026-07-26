@@ -35,22 +35,35 @@ Core owns runtime behavior:
 - MATH-P2 instrument-side dual-source Math operators through
   `Oscilloscope.configure_math_operator()` and `query_math_operator()`. P2
   supports `add`, `subtract`, `multiply`, and `divide` with two analog-channel
-  sources. It reuses the single unindexed 2000X/3000X Math function and indexed
-  4000X slots, preserves normalized and raw query values, and does not enable
-  display or change vertical controls. Reference, Math, bus, digital, external,
-  and arbitrary-expression sources are not supported. Capability profiles
-  describe the available runtime path, not validated instrument licenses.
-  Coverage is hardware-free only; no live validation was performed.
+  sources. MATH-P4 additionally permits a lower-numbered 4000X Math function
+  as source1; source2 remains analog-channel-only. It reuses the single
+  unindexed 2000X/3000X Math function and indexed 4000X slots, preserves
+  normalized and raw query values, and does not enable display or change
+  vertical controls. Reference, bus, digital, external, and
+  arbitrary-expression sources are not supported. Capability profiles describe
+  the available runtime path, not validated instrument licenses. Coverage is
+  hardware-free only; no live validation was performed.
 - MATH-P3 instrument-side single-source Math transforms through
   `Oscilloscope.configure_math_transform()` and `query_math_transform()`. P3
   supports `differentiate`, `integrate`, `sqrt`, `absolute`, `square`, `ln`,
-  `log10`, `exp`, `exp10`, and `linear` with one analog-channel source.
+  `log10`, `exp`, `exp10`, and `linear` with one source.
   Integrate optionally sets input offset; linear optionally sets gain and
   linear offset. It reuses the unindexed 2000X/3000X function and indexed
   4000X slots, does not enable display, and leaves license availability to the
-  instrument error queue. GOFT, Math cascade, reference and bus sources,
+  instrument error queue. P4 permits the 2000X/3000X `composite` GOFT source
+  and a lower-numbered Math function source on 4000X. Reference and bus sources,
   host-side calculation, and waveform export are not implemented. Coverage is
   hardware-free only; no live validation was performed.
+- MATH-P4 global GOFT configuration through
+  `Oscilloscope.configure_math_composite_source()` and
+  `query_math_composite_source()`. The 2000X/3000X path supports `add`,
+  `subtract`, or `multiply` over two analog channels and can feed that result
+  to `math-transform` as `composite`. The 4000X path instead supports Math
+  cascade by allowing only a lower-numbered Math function as source1 for
+  `math-operator` and `math-transform`; source2 remains analog-channel-only.
+  These controls do not calculate or export waveform data, enable display,
+  change vertical settings, or probe licenses. Coverage is hardware-free only;
+  no live validation was performed.
 - System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,

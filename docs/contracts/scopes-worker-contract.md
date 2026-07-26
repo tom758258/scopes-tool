@@ -160,7 +160,7 @@ Worker `/command` supports the existing Scopes capability surface:
   `trigger-pattern`, `trigger-or`, `trigger-sweep`, `trigger-noise-reject`,
   `trigger-hf-reject`, `trigger-holdoff`, `cursor`, `autoscale`
 - `setup-save`, `setup-recall`, `fft`, `math-display`, `math-vertical`,
-  `math-operator`, `math-transform`
+  `math-operator`, `math-composite-source`, `math-transform`
 
 `list-resources` remains an explicit discovery command outside live worker
 flows. `hardware-report` remains a local report renderer. They are not accepted
@@ -1395,20 +1395,23 @@ MATH-P2 adds one instrument-side dual-source Math command:
 ```
 
 Configure requires canonical `operation`, `source1`, and `source2` arguments.
-Supported operations are `add`, `subtract`, `multiply`, and `divide`. Sources
-are limited to canonical analog `channel1` through `channel4` values supported
-by the worker startup model. Query requires exactly `query: true` and cannot
-include configure arguments. Unknown arguments and incomplete configure
-requests are rejected before enqueue, artifacts, backend open, or SCPI.
+Supported operations are `add`, `subtract`, `multiply`, and `divide`. Source2
+is limited to canonical analog `channel1` through `channel4` values supported
+by the worker startup model. Source1 accepts the same channels and, on 4000X,
+a canonical lower-numbered `math1` through `math3` function. Query requires
+exactly `query: true` and cannot include configure arguments. Unknown arguments
+and incomplete configure requests are rejected before enqueue, artifacts,
+backend open, or SCPI.
 
 The command reuses the P0/P1 function capability and dialect:
 2000X/3000X accept only function 1 and use unindexed `:FUNCtion`; 4000X accepts
 functions 1 through 4 and uses indexed `:FUNCtion<n>`. Configure writes only
 operation, source1, and source2 in that order. It does not enable Math display,
 change vertical state, run autoscale, probe licenses, or calculate host-side
-waveforms. Reference, Math, bus, digital, external, and expression sources are
-not supported. P2 adds no artifacts and has hardware-free validation only; no
-live instrument or license validation was performed.
+waveforms. Math function sources are not accepted on 2000X/3000X or as source2.
+Reference, bus, digital, external, and expression sources are not supported.
+This command adds no artifacts and has hardware-free validation only; no live
+instrument or license validation was performed.
 
 ### MATH-P3 Single-Source Transform Command
 
@@ -1428,9 +1431,11 @@ MATH-P3 adds one instrument-side single-source Math command:
 
 Configure requires canonical `operation` and `source` arguments. Supported
 operations are `differentiate`, `integrate`, `sqrt`, `absolute`, `square`,
-`ln`, `log10`, `exp`, `exp10`, and `linear`. Sources are limited to canonical
-analog `channel1` through `channel4` values supported by the worker startup
-model. `input_offset` is a finite JSON number accepted only for `integrate`.
+`ln`, `log10`, `exp`, `exp10`, and `linear`. Sources include canonical analog
+`channel1` through `channel4` values supported by the worker startup model.
+2000X/3000X additionally accept `composite`; 4000X accepts a canonical
+lower-numbered `math1` through `math3` source. `input_offset` is a finite JSON
+number accepted only for `integrate`.
 Finite JSON numbers `gain` and `linear_offset` are accepted only for `linear`;
 either or both may be omitted to preserve the current instrument values.
 
@@ -1445,11 +1450,43 @@ The command reuses the P0/P1 function capability and dialect:
 functions 1 through 4 and uses indexed `:FUNCtion<n>`. Configure writes
 operation, source1, and then any applicable integrate or linear parameters. It
 does not enable Math display, change vertical state, run autoscale, probe
-licenses, or calculate host-side waveforms. GOFT, Math cascade, reference
-waveform sources, bus sources, and waveform export are not supported. License
-availability remains subject to the live instrument error queue. P3 adds no
-artifacts and has hardware-free validation only; no live instrument or license
-validation was performed.
+licenses, or calculate host-side waveforms. Reference waveform sources, bus
+sources, and waveform export are not supported. License availability remains
+subject to the live instrument error queue. The command adds no artifacts and
+has hardware-free validation only; no live instrument or license validation
+was performed.
+
+### MATH-P4 Composite And Cascade Sources
+
+MATH-P4 adds the global 2000X/3000X GOFT command:
+
+```json
+{"command": "math-composite-source", "arguments": {"operation": "subtract", "source1": "channel1", "source2": "channel2"}}
+```
+
+```json
+{"command": "math-composite-source", "arguments": {"query": true}}
+```
+
+Configure requires canonical `operation`, `source1`, and `source2`. Operations
+are limited to `add`, `subtract`, and `multiply`; both sources are supported
+analog channels. Query requires exactly `query: true` and is exclusive with
+configure fields. The command takes no `function` argument and is rejected for
+4000X startup profiles.
+
+The existing `math-transform` worker schema accepts canonical `composite` only
+on 2000X/3000X. The existing `math-transform` and `math-operator` schemas accept
+`math1` through `math3` as source1 only on 4000X and only when the source
+function is lower-numbered than the destination function. Math function
+sources and `composite` are never accepted as source2. Unknown fields, partial
+configure requests, query/configure mixes, aliases, uppercase values, and
+unsupported model/source combinations fail before enqueue, artifacts, backend
+open, or SCPI.
+
+P4 configures instrument-side Math only. It does not calculate or export
+waveforms, enable display, change vertical state, run autoscale, or probe
+licenses. It adds no artifacts and has hardware-free validation only; no live
+instrument or license validation was performed.
 
 ### Search Basic Pack v1 Commands
 

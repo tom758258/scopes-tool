@@ -337,16 +337,26 @@ Control and setup:
   Query results include `operation: "query"`, `function`, and numeric `scale`,
   `range`, and `offset`.
 - `math-operator`: configure results include `operation: "set"`, `function`,
-  canonical `math_operation`, canonical analog `source1` and `source2`, and
-  ordered executed `commands`. Query results include `operation: "query"`,
+  canonical `math_operation`, canonical `source1` and analog-channel `source2`,
+  and ordered executed `commands`. Query results include `operation: "query"`,
   `function`, canonical `math_operation`, `source1`, and `source2`, plus
   stripped `operation_raw`, `source1_raw`, and `source2_raw` readbacks.
+  On 4000X, source1 may be a lower-numbered canonical `math1` through `math3`;
+  source2 remains analog-channel-only.
+- `math-composite-source`: configure results include `operation: "set"`,
+  canonical `math_operation`, canonical analog `source1` and `source2`, and
+  ordered executed `commands`. Query results include `operation: "query"`,
+  canonical `math_operation`, `source1`, and `source2`, plus stripped
+  `operation_raw`, `source1_raw`, and `source2_raw` readbacks. This global
+  2000X/3000X command has no `function` field.
 - `math-transform`: configure results include `operation: "set"`, `function`,
-  canonical `math_operation`, canonical analog `source`, nullable
+  canonical `math_operation`, canonical `source`, nullable
   `input_offset`, `gain`, and `linear_offset`, plus ordered executed
   `commands`. Query results include `operation: "query"`, `function`,
   canonical `math_operation` and `source`, stripped `operation_raw` and
   `source_raw`, and the same nullable operation-specific numeric fields.
+  Source may be `composite` on 2000X/3000X or a lower-numbered canonical
+  `math1` through `math3` on 4000X.
 
 Measurement and artifact-producing flows:
 

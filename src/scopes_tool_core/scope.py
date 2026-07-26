@@ -11,6 +11,7 @@ from .advanced import (
     FFTController,
     FFTState,
     MathController,
+    MathCompositeSourceState,
     MathDisplayState,
     MathOperatorState,
     MathTransformState,
@@ -1222,6 +1223,21 @@ class Oscilloscope:
 
     def query_math_operator(self, function: int) -> MathOperatorState:
         return self._math_controller().query_operator(function)
+
+    def configure_math_composite_source(
+        self,
+        operation: str,
+        source1: str,
+        source2: str,
+    ) -> None:
+        self._math_controller().configure_composite_source(
+            operation,
+            source1,
+            source2,
+        )
+
+    def query_math_composite_source(self) -> MathCompositeSourceState:
+        return self._math_controller().query_composite_source()
 
     def configure_math_transform(
         self,

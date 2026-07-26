@@ -34,6 +34,14 @@ _FFT_WINDOWS = {
 }
 MATH_OPERATIONS = ("add", "subtract", "multiply", "divide")
 MATH_SOURCES = ("channel1", "channel2", "channel3", "channel4")
+MATH_OPERATOR_SOURCE1S = MATH_SOURCES + ("math1", "math2", "math3")
+MATH_TRANSFORM_SOURCES = MATH_SOURCES + (
+    "composite",
+    "math1",
+    "math2",
+    "math3",
+)
+MATH_COMPOSITE_OPERATIONS = ("add", "subtract", "multiply")
 MATH_TRANSFORMS = (
     "differentiate",
     "integrate",
@@ -60,6 +68,18 @@ _MATH_OPERATION_READBACKS = {
     "MULTIPLY": "multiply",
     "DIV": "divide",
     "DIVIDE": "divide",
+}
+_MATH_COMPOSITE_OPERATION_TOKENS = {
+    "add": "ADD",
+    "subtract": "SUBTract",
+    "multiply": "MULTiply",
+}
+_MATH_COMPOSITE_OPERATION_READBACKS = {
+    "ADD": "add",
+    "SUBT": "subtract",
+    "SUBTRACT": "subtract",
+    "MULT": "multiply",
+    "MULTIPLY": "multiply",
 }
 _MATH_TRANSFORM_TOKENS = {
     "differentiate": "DIFF",
@@ -177,6 +197,16 @@ class MathTransformState:
     input_offset: float | None
     gain: float | None
     linear_offset: float | None
+
+
+@dataclass(frozen=True)
+class MathCompositeSourceState:
+    operation: str
+    operation_raw: str
+    source1: str
+    source1_raw: str
+    source2: str
+    source2_raw: str
 
 
 class CursorController:
@@ -431,6 +461,40 @@ class MathController:
             function=function,
             operation=parse_math_operation(operation_raw),
             operation_raw=operation_raw,
+            source1=parse_math_source1(
+                source1_raw,
+                function,
+                capabilities=self.capabilities,
+            ),
+            source1_raw=source1_raw,
+            source2=parse_math_source(source2_raw, capabilities=self.capabilities),
+            source2_raw=source2_raw,
+        )
+
+    def configure_composite_source(
+        self,
+        operation: str,
+        source1: str,
+        source2: str,
+    ) -> None:
+        for command in math_composite_source_commands(
+            operation,
+            source1,
+            source2,
+            capabilities=self.capabilities,
+        ):
+            self.scpi.write(command)
+
+    def query_composite_source(self) -> MathCompositeSourceState:
+        operation_command, source1_command, source2_command = (
+            math_composite_source_query_commands(capabilities=self.capabilities)
+        )
+        operation_raw = self.scpi.query(operation_command).strip()
+        source1_raw = self.scpi.query(source1_command).strip()
+        source2_raw = self.scpi.query(source2_command).strip()
+        return MathCompositeSourceState(
+            operation=parse_math_composite_operation(operation_raw),
+            operation_raw=operation_raw,
             source1=parse_math_source(source1_raw, capabilities=self.capabilities),
             source1_raw=source1_raw,
             source2=parse_math_source(source2_raw, capabilities=self.capabilities),
@@ -480,7 +544,12 @@ class MathController:
             function=function,
             operation=operation,
             operation_raw=operation_raw,
-            source=parse_math_source(source_raw, capabilities=self.capabilities),
+            source=parse_math_source1(
+                source_raw,
+                function,
+                capabilities=self.capabilities,
+                allow_composite=True,
+            ),
             source_raw=source_raw,
             input_offset=input_offset,
             gain=gain,
@@ -922,11 +991,15 @@ def math_operator_commands(
 ) -> list[str]:
     prefix = math_function_scpi_prefix(function, capabilities)
     operation = normalize_math_operation(operation)
-    source1 = normalize_math_source(source1, capabilities=capabilities)
+    source1 = normalize_math_source1(
+        source1,
+        function,
+        capabilities=capabilities,
+    )
     source2 = normalize_math_source(source2, capabilities=capabilities)
     return [
         f"{prefix}:OPERation {_MATH_OPERATION_TOKENS[operation]}",
-        f"{prefix}:SOURce1 CHANnel{source1.removeprefix('channel')}",
+        f"{prefix}:SOURce1 {_math_source_scpi_token(source1)}",
         f"{prefix}:SOURce2 CHANnel{source2.removeprefix('channel')}",
     ]
 
@@ -942,6 +1015,43 @@ def math_operator_query_commands(
     ]
 
 
+def math_composite_source_commands(
+    operation: str,
+    source1: str,
+    source2: str,
+    *,
+    capabilities: ScopeCapabilities | None = None,
+) -> list[str]:
+    _validate_math_goft_capability(capabilities)
+    operation = normalize_math_composite_operation(operation)
+    source1 = normalize_math_source(
+        source1,
+        capabilities=capabilities,
+        option_names="--source1 and --source2",
+    )
+    source2 = normalize_math_source(
+        source2,
+        capabilities=capabilities,
+        option_names="--source1 and --source2",
+    )
+    return [
+        f":FUNCtion:GOFT:OPERation {_MATH_COMPOSITE_OPERATION_TOKENS[operation]}",
+        f":FUNCtion:GOFT:SOURce1 CHANnel{source1.removeprefix('channel')}",
+        f":FUNCtion:GOFT:SOURce2 CHANnel{source2.removeprefix('channel')}",
+    ]
+
+
+def math_composite_source_query_commands(
+    *, capabilities: ScopeCapabilities | None = None
+) -> list[str]:
+    _validate_math_goft_capability(capabilities)
+    return [
+        ":FUNCtion:GOFT:OPERation?",
+        ":FUNCtion:GOFT:SOURce1?",
+        ":FUNCtion:GOFT:SOURce2?",
+    ]
+
+
 def math_transform_commands(
     function: int,
     operation: str,
@@ -954,9 +1064,11 @@ def math_transform_commands(
 ) -> list[str]:
     prefix = math_function_scpi_prefix(function, capabilities)
     operation = normalize_math_transform(operation)
-    source = normalize_math_source(
+    source = normalize_math_source1(
         source,
+        function,
         capabilities=capabilities,
+        allow_composite=True,
         option_names="--source",
     )
     if operation != "integrate" and input_offset is not None:
@@ -969,7 +1081,7 @@ def math_transform_commands(
         )
     commands = [
         f"{prefix}:OPERation {_MATH_TRANSFORM_TOKENS[operation]}",
-        f"{prefix}:SOURce1 CHANnel{source.removeprefix('channel')}",
+        f"{prefix}:SOURce1 {_math_source_scpi_token(source)}",
     ]
     if input_offset is not None:
         commands.append(
@@ -1033,12 +1145,86 @@ def normalize_math_source(
     return normalized
 
 
+def normalize_math_source1(
+    value: str,
+    function: int,
+    *,
+    capabilities: ScopeCapabilities | None = None,
+    allow_composite: bool = False,
+    option_names: str = "--source1",
+) -> str:
+    function = validate_function_number(function)
+    if not isinstance(value, str):
+        raise ParameterValidationError(
+            f"{option_names} must be a supported Math source."
+        )
+    normalized = value.strip().lower()
+    if normalized.startswith("channel"):
+        return normalize_math_source(
+            normalized,
+            capabilities=capabilities,
+            option_names=option_names,
+        )
+    if normalized == "composite":
+        if not allow_composite:
+            raise ParameterValidationError(
+                f"{option_names} does not support the composite source."
+            )
+        if capabilities is not None and not capabilities.supports_math_goft:
+            raise ParameterValidationError(
+                "The composite Math source is not supported by this capability profile."
+            )
+        return normalized
+    if normalized not in {"math1", "math2", "math3"}:
+        raise ParameterValidationError(
+            f"{option_names} must be a supported Math source."
+        )
+    source_function = int(normalized.removeprefix("math"))
+    if capabilities is not None:
+        if not capabilities.supports_math_cascade:
+            raise ParameterValidationError(
+                "Math function sources are not supported by this capability profile."
+            )
+        if source_function > capabilities.math_function_count:
+            raise ParameterValidationError(
+                "Math source function exceeds this capability profile."
+            )
+    if source_function >= function:
+        raise ParameterValidationError(
+            "Math source function must be lower than the destination function."
+        )
+    return normalized
+
+
 def parse_math_operation(raw: str) -> str:
     raw_value = raw.strip()
     operation = _MATH_OPERATION_READBACKS.get(raw_value.upper())
     if operation is None:
         raise ChannelResponseError(
             f"Could not parse Math operation response: {raw_value!r}"
+        )
+    return operation
+
+
+def normalize_math_composite_operation(value: str) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError(
+            "--operation must be add, subtract, or multiply."
+        )
+    normalized = value.strip().lower()
+    if normalized not in _MATH_COMPOSITE_OPERATION_TOKENS:
+        raise ParameterValidationError(
+            "--operation must be add, subtract, or multiply."
+        )
+    return normalized
+
+
+def parse_math_composite_operation(raw: str) -> str:
+    raw_value = raw.strip()
+    operation = _MATH_COMPOSITE_OPERATION_READBACKS.get(raw_value.upper())
+    if operation is None:
+        raise ChannelResponseError(
+            f"Could not parse Math composite operation response: {raw_value!r}"
         )
     return operation
 
@@ -1092,6 +1278,58 @@ def parse_math_source(
             f"Could not parse Math source response: {raw_value!r}"
         ) from exc
     return f"channel{channel}"
+
+
+def parse_math_source1(
+    raw: str,
+    function: int,
+    *,
+    capabilities: ScopeCapabilities | None = None,
+    allow_composite: bool = False,
+) -> str:
+    raw_value = raw.strip()
+    normalized = raw_value.upper()
+    if normalized.startswith("CHAN"):
+        return parse_math_source(raw_value, capabilities=capabilities)
+    if normalized == "GOFT":
+        candidate = "composite"
+    else:
+        match = None
+        for prefix in ("FUNCTION", "FUNC", "MATH"):
+            if normalized.startswith(prefix):
+                suffix = normalized.removeprefix(prefix)
+                if suffix.isdigit():
+                    match = f"math{int(suffix)}"
+                break
+        candidate = match or ""
+    try:
+        return normalize_math_source1(
+            candidate,
+            function,
+            capabilities=capabilities,
+            allow_composite=allow_composite,
+        )
+    except ParameterValidationError as exc:
+        raise ChannelResponseError(
+            f"Could not parse Math source response: {raw_value!r}"
+        ) from exc
+
+
+def _math_source_scpi_token(source: str) -> str:
+    if source.startswith("channel"):
+        return f"CHANnel{source.removeprefix('channel')}"
+    if source == "composite":
+        return "GOFT"
+    return f"FUNCtion{source.removeprefix('math')}"
+
+
+def _validate_math_goft_capability(
+    capabilities: ScopeCapabilities | None,
+) -> None:
+    if capabilities is not None and not capabilities.supports_math_goft:
+        raise ParameterValidationError(
+            "Math composite source is not supported by this capability profile."
+        )
 
 
 def math_function_scpi_prefix(

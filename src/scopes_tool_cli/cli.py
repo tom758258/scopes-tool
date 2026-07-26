@@ -30,8 +30,11 @@ from scopes_tool_core.acquisition import (
     validate_acquisition_count,
 )
 from scopes_tool_core.advanced import (
+    MATH_COMPOSITE_OPERATIONS,
     MATH_OPERATIONS,
+    MATH_OPERATOR_SOURCE1S,
     MATH_SOURCES,
+    MATH_TRANSFORM_SOURCES,
     MATH_TRANSFORMS,
     autoscale_commands,
     cursor_auto_vertical_dry_run_plan,
@@ -45,6 +48,8 @@ from scopes_tool_core.advanced import (
     fft_query_commands,
     math_display_command,
     math_display_query,
+    math_composite_source_commands,
+    math_composite_source_query_commands,
     math_operator_commands,
     math_operator_query_commands,
     math_transform_commands,
@@ -2519,8 +2524,28 @@ def _build_parser() -> argparse.ArgumentParser:
     math_operator_parser.add_argument(
         "--operation", dest="math_operation", choices=MATH_OPERATIONS, default=None
     )
-    math_operator_parser.add_argument("--source1", choices=MATH_SOURCES, default=None)
+    math_operator_parser.add_argument(
+        "--source1", choices=MATH_OPERATOR_SOURCE1S, default=None
+    )
     math_operator_parser.add_argument("--source2", choices=MATH_SOURCES, default=None)
+
+    math_composite_parser = subparsers.add_parser(
+        "math-composite-source",
+        allow_abbrev=False,
+        help="configure or query the 2000X/3000X global Math composite source",
+    )
+    _add_scope_connection_args(math_composite_parser)
+    math_composite_parser.add_argument(
+        "--query", dest="math_composite_query", action="store_true"
+    )
+    math_composite_parser.add_argument(
+        "--operation",
+        dest="math_composite_operation",
+        choices=MATH_COMPOSITE_OPERATIONS,
+        default=None,
+    )
+    math_composite_parser.add_argument("--source1", choices=MATH_SOURCES, default=None)
+    math_composite_parser.add_argument("--source2", choices=MATH_SOURCES, default=None)
 
     math_transform_parser = subparsers.add_parser(
         "math-transform",
@@ -2538,7 +2563,9 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=MATH_TRANSFORMS,
         default=None,
     )
-    math_transform_parser.add_argument("--source", choices=MATH_SOURCES, default=None)
+    math_transform_parser.add_argument(
+        "--source", choices=MATH_TRANSFORM_SOURCES, default=None
+    )
     math_transform_parser.add_argument(
         "--input-offset", type=_measurement_finite_float, default=None
     )
@@ -2881,6 +2908,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_math_vertical(args)
     if args.command == "math-operator":
         return _cmd_math_operator(args)
+    if args.command == "math-composite-source":
+        return _cmd_math_composite_source(args)
     if args.command == "math-transform":
         return _cmd_math_transform(args)
     if args.command == "acquisition-check":
@@ -3432,6 +3461,7 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         "math-display",
         "math-vertical",
         "math-operator",
+        "math-composite-source",
         "math-transform",
     }:
         _validate_math_args(args)
@@ -3439,6 +3469,33 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
 
 def _validate_math_args(args: argparse.Namespace) -> None:
     capabilities = _pre_open_capabilities(args)
+    if args.command == "math-composite-source":
+        configure_values = (
+            args.math_composite_operation,
+            args.source1,
+            args.source2,
+        )
+        if args.math_composite_query:
+            if any(value is not None for value in configure_values):
+                raise ParameterValidationError(
+                    "math-composite-source --query cannot be combined with "
+                    "configure options."
+                )
+            math_composite_source_query_commands(capabilities=capabilities)
+            return
+        if any(value is None for value in configure_values):
+            raise ParameterValidationError(
+                "math-composite-source configure requires --operation, "
+                "--source1, and --source2."
+            )
+        math_composite_source_commands(
+            args.math_composite_operation,
+            args.source1,
+            args.source2,
+            capabilities=capabilities,
+        )
+        return
+
     if args.command == "math-display":
         if args.math_display_action == "query":
             math_display_query(args.function, capabilities=capabilities)
@@ -5348,6 +5405,33 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "scale": args.scale,
             "range": args.range_value,
             "offset": args.offset,
+            "commands": planned,
+        }
+    if command == "math-composite-source":
+        if args.math_composite_query:
+            planned = math_composite_source_query_commands(
+                capabilities=capabilities
+            )
+            return planned + [":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "math_operation": None,
+                "operation_raw": None,
+                "source1": None,
+                "source1_raw": None,
+                "source2": None,
+                "source2_raw": None,
+            }
+        planned = math_composite_source_commands(
+            args.math_composite_operation,
+            args.source1,
+            args.source2,
+            capabilities=capabilities,
+        )
+        return planned + [":SYSTem:ERRor?"], [], {
+            "operation": "set",
+            "math_operation": args.math_composite_operation,
+            "source1": args.source1,
+            "source2": args.source2,
             "commands": planned,
         }
     if command == "math-operator":
@@ -9682,6 +9766,62 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
                 operation="set",
                 function=args.function,
                 math_operation=args.math_operation,
+                source1=args.source1,
+                source2=args.source2,
+                commands=commands,
+            )
+            for command in commands:
+                print(f"Command: {command}")
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_math_composite_source(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        if args.math_composite_query:
+            state = scope.query_math_composite_source()
+            _json_update_result(
+                operation="query",
+                math_operation=state.operation,
+                operation_raw=state.operation_raw,
+                source1=state.source1,
+                source1_raw=state.source1_raw,
+                source2=state.source2,
+                source2_raw=state.source2_raw,
+            )
+            commands = math_composite_source_query_commands(
+                capabilities=scope.capabilities
+            )
+            for command in commands:
+                print(f"Command: {command}")
+            print(f"Composite operation: {state.operation}")
+            print(f"Source 1: {state.source1}")
+            print(f"Source 2: {state.source2}")
+        else:
+            scope.configure_math_composite_source(
+                args.math_composite_operation,
+                args.source1,
+                args.source2,
+            )
+            commands = math_composite_source_commands(
+                args.math_composite_operation,
+                args.source1,
+                args.source2,
+                capabilities=scope.capabilities,
+            )
+            _json_update_result(
+                operation="set",
+                math_operation=args.math_composite_operation,
                 source1=args.source1,
                 source2=args.source2,
                 commands=commands,
