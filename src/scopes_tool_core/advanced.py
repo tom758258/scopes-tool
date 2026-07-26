@@ -1297,6 +1297,10 @@ def fft_configure_commands(
         else source_channel
     )
     operation_token = normalize_fft_operation(fft_operation)
+    if fft_operation == "fft-phase" and units is not None:
+        raise ParameterValidationError(
+            "--units is not supported with --fft-operation fft-phase; omit --units."
+        )
     advanced_values = (
         start_hz,
         stop_hz,

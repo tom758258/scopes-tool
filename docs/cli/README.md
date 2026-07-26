@@ -1922,6 +1922,7 @@ selects FFT Phase. The 4000X-only optional controls are `--start-hz`,
 `--stop-hz`, `--gate`, `--phase-reference`, `--detection-type`, and
 `--detection-points`. Center/span and start/stop cannot be mixed in one
 configure request. Phase reference is accepted only with FFT Phase.
+`--units` applies only to magnitude FFT and must be omitted for FFT Phase.
 `fft --query` additionally reports `start_hz`, `stop_hz`, `gate`,
 `detection_type`, `detection_points`, `bin_size_hz`, `sample_rate_hz`,
 `resolution_bandwidth_hz`, and a nullable `phase_reference` on 4000X.

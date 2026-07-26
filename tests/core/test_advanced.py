@@ -171,6 +171,20 @@ def test_fft_phase_and_advanced_4000x_commands():
     ]
 
 
+def test_fft_phase_rejects_magnitude_units():
+    with pytest.raises(
+        ParameterValidationError,
+        match="units.*fft-phase",
+    ):
+        fft_configure_commands(
+            1,
+            1,
+            fft_operation="fft-phase",
+            units="decibel",
+            capabilities=capabilities_for_model("DSOX4024A"),
+        )
+
+
 def test_fft_advanced_validation_uses_profile_and_range_mode():
     basic = capabilities_for_model("DSOX3024A")
     advanced = capabilities_for_model("DSOX4024A")

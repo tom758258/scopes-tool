@@ -1603,6 +1603,10 @@ def test_fft_4000x_advanced_dry_run_and_query_shape(capsys):
             "keysight-dsox4024a",
             ["--center-hz", "1000", "--start-hz", "100"],
         ),
+        (
+            "keysight-dsox4024a",
+            ["--fft-operation", "fft-phase", "--units", "decibel"],
+        ),
     ],
 )
 def test_fft_invalid_or_unsupported_configuration_fails_before_open(
