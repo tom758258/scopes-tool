@@ -37,6 +37,8 @@ class ScopeCapabilities:
     search_modes: frozenset[str] = frozenset()
     supports_demo: bool = False
     demo_functions: frozenset[str] = frozenset()
+    supports_wgen: bool = False
+    wgen_scpi_root: str = ""
     math_function_count: int = 0
     supports_math_goft: bool = False
     supports_math_cascade: bool = False
@@ -88,6 +90,8 @@ _CAPABILITY_PROFILES = {
         search_modes=frozenset({"serial1"}),
         supports_demo=True,
         demo_functions=_DEMO_COMMON_FUNCTIONS,
+        supports_wgen=True,
+        wgen_scpi_root=":WGEN",
     ),
     "keysight-infiniivision-3000x": ScopeCapabilities(
         series="3000X",
@@ -120,6 +124,8 @@ _CAPABILITY_PROFILES = {
         ),
         supports_demo=True,
         demo_functions=_DEMO_COMMON_FUNCTIONS | _DEMO_3000X_EXTENSIONS,
+        supports_wgen=True,
+        wgen_scpi_root=":WGEN",
     ),
     "keysight-infiniivision-4000x": ScopeCapabilities(
         series="4000X",
@@ -174,6 +180,8 @@ _CAPABILITY_PROFILES = {
         ),
         supports_demo=True,
         demo_functions=_DEMO_COMMON_FUNCTIONS | _DEMO_3000X_EXTENSIONS,
+        supports_wgen=True,
+        wgen_scpi_root=":WGEN1",
     ),
 }
 

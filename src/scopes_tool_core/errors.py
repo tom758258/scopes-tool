@@ -57,6 +57,10 @@ class DemoResponseError(OscilloscopeError, ValueError):
     """Raised when a DEMO query response cannot be parsed."""
 
 
+class WgenResponseError(OscilloscopeError, ValueError):
+    """Raised when a WGEN query response cannot be parsed."""
+
+
 class SearchResponseError(OscilloscopeError, ValueError):
     """Raised when a waveform search query response cannot be parsed."""
 

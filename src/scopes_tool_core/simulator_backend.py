@@ -15,6 +15,7 @@ from .demo import DEMO_FUNCTION_TOKENS
 from .errors import BackendClosedError, OscilloscopeError
 from .identity import VENDOR_REGISTRY, physical_model_for_id
 from .trigger import OPERATION_CONDITION_RUN_MASK
+from .wgen import WGEN_FUNCTION_TOKENS, WGEN_LOAD_TOKENS
 
 
 class SimulatorBackendError(OscilloscopeError):
@@ -170,6 +171,12 @@ class SimulatorBackend:
     demo_function: str = "SIN"
     demo_output_enabled: bool = False
     demo_phase_degrees: float = 0.0
+    wgen_output_enabled: bool = False
+    wgen_function: str = "SINusoid"
+    wgen_frequency_hz: float = 1000.0
+    wgen_amplitude_volts: float = 0.5
+    wgen_offset_volts: float = 0.0
+    wgen_load: str = "ONEMeg"
     search_enabled: bool = False
     search_mode: str = "SERial1"
     search_count: int = 0
@@ -304,6 +311,7 @@ class SimulatorBackend:
         self.history.append(command)
         self._raise_configured_failure(self.write_failures, command)
         upper = command.upper()
+        wgen_root = self._capabilities.wgen_scpi_root.upper()
         if upper == "*CLS":
             self.system_errors.clear()
             self.status_byte = 0
@@ -420,6 +428,54 @@ class SimulatorBackend:
             self.demo_function = DEMO_FUNCTION_TOKENS[function]
         elif upper.startswith(":DEMO:OUTPUT "):
             self.demo_output_enabled = _parse_scpi_bool_write(command)
+        elif upper.startswith(f"{wgen_root}:OUTPUT "):
+            self.wgen_output_enabled = _parse_scpi_bool_write(command)
+        elif upper.startswith(f"{wgen_root}:FUNCTION "):
+            token = command.rsplit(" ", 1)[1].upper()
+            function_by_token = {
+                scpi_token.upper(): name
+                for name, scpi_token in WGEN_FUNCTION_TOKENS.items()
+            }
+            function = function_by_token.get(token)
+            if function is None:
+                raise SimulatorBackendError(
+                    f"Unsupported simulator WGEN function: {token}"
+                )
+            self.wgen_function = WGEN_FUNCTION_TOKENS[function]
+        elif upper.startswith(f"{wgen_root}:FREQUENCY "):
+            value = _parse_simulator_wgen_number(command, "frequency")
+            if value <= 0.0:
+                raise SimulatorBackendError(
+                    "Simulator WGEN frequency must be greater than zero."
+                )
+            self.wgen_frequency_hz = value
+        elif upper.startswith(f"{wgen_root}:VOLTAGE:OFFSET "):
+            value = _parse_simulator_wgen_number(command, "offset")
+            if not -2.5 <= value <= 2.5:
+                raise SimulatorBackendError(
+                    "Simulator WGEN offset must be in range -2.5 to 2.5 volts."
+                )
+            self.wgen_offset_volts = value
+        elif upper.startswith(f"{wgen_root}:VOLTAGE "):
+            value = _parse_simulator_wgen_number(command, "amplitude")
+            if not 0.0 < value <= 5.0:
+                raise SimulatorBackendError(
+                    "Simulator WGEN amplitude must be greater than zero "
+                    "and at most 5.0 volts."
+                )
+            self.wgen_amplitude_volts = value
+        elif upper.startswith(f"{wgen_root}:OUTPUT:LOAD "):
+            token = command.rsplit(" ", 1)[1].upper()
+            load_by_token = {
+                scpi_token.upper(): name
+                for name, scpi_token in WGEN_LOAD_TOKENS.items()
+            }
+            load = load_by_token.get(token)
+            if load is None:
+                raise SimulatorBackendError(
+                    f"Unsupported simulator WGEN load: {token}"
+                )
+            self.wgen_load = WGEN_LOAD_TOKENS[load]
         elif upper.startswith(":SEARCH:STATE "):
             self.search_enabled = _parse_scpi_bool_write(command)
         elif upper.startswith(":SEARCH:MODE "):
@@ -934,6 +990,19 @@ class SimulatorBackend:
             return "1" if self.demo_output_enabled else "0"
         if upper == ":DEMO:FUNCTION:PHASE:PHASE?":
             return f"{self.demo_phase_degrees:g}"
+        wgen_root = self._capabilities.wgen_scpi_root.upper()
+        if upper == f"{wgen_root}:OUTPUT?":
+            return "1" if self.wgen_output_enabled else "0"
+        if upper == f"{wgen_root}:FUNCTION?":
+            return self.wgen_function
+        if upper == f"{wgen_root}:FREQUENCY?":
+            return f"{self.wgen_frequency_hz:g}"
+        if upper == f"{wgen_root}:VOLTAGE?":
+            return f"{self.wgen_amplitude_volts:g}"
+        if upper == f"{wgen_root}:VOLTAGE:OFFSET?":
+            return f"{self.wgen_offset_volts:g}"
+        if upper == f"{wgen_root}:OUTPUT:LOAD?":
+            return self.wgen_load
         if upper == ":SEARCH:STATE?":
             return "1" if self.search_enabled else "0"
         if upper == ":SEARCH:MODE?":
@@ -2362,6 +2431,18 @@ def _parse_scpi_bool_write(command: str) -> bool:
     if value in {"0", "OFF"}:
         return False
     raise SimulatorBackendError(f"Unsupported simulator write: {command}")
+
+
+def _parse_simulator_wgen_number(command: str, field: str) -> float:
+    try:
+        value = float(command.rsplit(" ", 1)[1])
+    except ValueError as exc:
+        raise SimulatorBackendError(
+            f"Simulator WGEN {field} must be numeric."
+        ) from exc
+    if not math.isfinite(value):
+        raise SimulatorBackendError(f"Simulator WGEN {field} must be finite.")
+    return value
 
 
 def _parse_quoted_scpi_argument(command: str, prefix: str) -> str:

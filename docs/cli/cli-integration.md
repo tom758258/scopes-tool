@@ -18,6 +18,11 @@ configuration uses canonical `--enabled true|false`; `dvm-current` and
 `dvm-query` require `--query`. The adapter does not expose DVM frequency,
 independent Counter, or `:MEASure:COUNter` commands.
 
+WGEN Basic P1 adapter commands are `wgen-query`, `wgen-output`,
+`wgen-function`, `wgen-frequency`, `wgen-voltage`, `wgen-offset`, and
+`wgen-load`. The selected model profile determines the concrete `:WGEN` or
+`:WGEN1` SCPI root. The adapter exposes no generator selector in P1.
+
 Search Basic Pack v1 adapter commands are `search-state`, `search-mode`, and
 query-only `search-count`. Boolean configuration uses canonical
 `--enabled true|false`; search modes use lowercase canonical values and are

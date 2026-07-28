@@ -74,6 +74,16 @@ from .status import (
     parse_system_error,
 )
 from .timebase import TimebaseController
+from .wgen import (
+    WgenController,
+    WgenFrequencyState,
+    WgenFunctionState,
+    WgenLoadState,
+    WgenOffsetState,
+    WgenOutputState,
+    WgenState,
+    WgenVoltageState,
+)
 from .trigger import (
     DelayTriggerController,
     DelayTriggerState,
@@ -646,6 +656,71 @@ class Oscilloscope:
         """Query aggregate Demo Output Pack v1 state."""
 
         return self._demo_controller().query()
+
+    def configure_wgen_output(self, enabled: bool) -> None:
+        """Configure WGEN output state."""
+
+        self._wgen_controller().configure_output(enabled)
+
+    def query_wgen_output(self) -> WgenOutputState:
+        """Query WGEN output state."""
+
+        return self._wgen_controller().query_output()
+
+    def configure_wgen_function(self, function: str) -> None:
+        """Configure a WGEN Basic P1 function."""
+
+        self._wgen_controller().configure_function(function)
+
+    def query_wgen_function(self) -> WgenFunctionState:
+        """Query the WGEN function."""
+
+        return self._wgen_controller().query_function()
+
+    def configure_wgen_frequency(self, frequency_hz: float) -> None:
+        """Configure WGEN frequency in hertz."""
+
+        self._wgen_controller().configure_frequency(frequency_hz)
+
+    def query_wgen_frequency(self) -> WgenFrequencyState:
+        """Query WGEN frequency."""
+
+        return self._wgen_controller().query_frequency()
+
+    def configure_wgen_voltage(self, amplitude_volts: float) -> None:
+        """Configure WGEN peak-to-peak amplitude in volts."""
+
+        self._wgen_controller().configure_voltage(amplitude_volts)
+
+    def query_wgen_voltage(self) -> WgenVoltageState:
+        """Query WGEN peak-to-peak amplitude."""
+
+        return self._wgen_controller().query_voltage()
+
+    def configure_wgen_offset(self, offset_volts: float) -> None:
+        """Configure WGEN offset in volts."""
+
+        self._wgen_controller().configure_offset(offset_volts)
+
+    def query_wgen_offset(self) -> WgenOffsetState:
+        """Query WGEN offset."""
+
+        return self._wgen_controller().query_offset()
+
+    def configure_wgen_load(self, load: str) -> None:
+        """Configure the WGEN output load."""
+
+        self._wgen_controller().configure_load(load)
+
+    def query_wgen_load(self) -> WgenLoadState:
+        """Query the WGEN output load."""
+
+        return self._wgen_controller().query_load()
+
+    def query_wgen(self) -> WgenState:
+        """Query aggregate WGEN Basic P1 state."""
+
+        return self._wgen_controller().query()
 
     def configure_search_state(self, enabled: bool) -> SearchState:
         """Configure waveform search enable state."""
@@ -1570,6 +1645,13 @@ class Oscilloscope:
                 "DEMO operations require known capabilities; call query_idn() first."
             )
         return DemoController(self.scpi, self.capabilities)
+
+    def _wgen_controller(self) -> WgenController:
+        if self.capabilities is None:
+            raise ParameterValidationError(
+                "WGEN operations require known capabilities; call query_idn() first."
+            )
+        return WgenController(self.scpi, self.capabilities)
 
     def _search_controller(self) -> SearchController:
         if self.capabilities is None:

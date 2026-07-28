@@ -1,0 +1,772 @@
+﻿**********************
+Windows PowerShell 轉譯開始
+開始時間: 20260727193619
+使用者名稱: NYQST\tomliang
+RunAs 使用者: NYQST\tomliang
+設定名稱: 
+電腦: T113018 (Microsoft Windows NT 10.0.22631.0)
+主應用程式: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+處理序識別碼: 20520
+PSVersion: 5.1.22621.4391
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.22621.4391
+BuildVersion: 10.0.22621.4391
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+已啟動轉譯，輸出檔為 .\math-p9-live-4000x.txt
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> $cli = ".\.venv\Scripts\scopes-tool.exe"
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> $model = "keysight-dsox4034a"
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> $f = 4
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli identify --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli check-error --all --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> function Invoke-ScopeLive {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$CliArgs
+    )
+
+    Write-Host ""
+    Write-Host ">>> scopes-tool $($CliArgs -join ' ')" -ForegroundColor Cyan
+
+    & $script:cli @CliArgs --json
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed: scopes-tool $($CliArgs -join ' ')"
+    }
+
+    & $script:cli check-error --all --json
+    if ($LASTEXITCODE -ne 0) {
+        throw "Instrument error check failed after: $($CliArgs -join ' ')"
+    }
+}
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli math-operator `
+  --function 4 `
+  --operation subtract `
+  --source1 channel1 `
+  --source2 channel2 `
+  --dry-run `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli math-transform `
+  --function 4 `
+  --operation linear `
+  --source channel1 `
+  --gain 2 `
+  --linear-offset 0 `
+  --dry-run `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli math-filter `
+  --function 4 `
+  --operation average `
+  --source channel1 `
+  --average-count 64 `
+  --dry-run `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli fft `
+  --function 4 `
+  --source-channel 1 `
+  --fft-operation fft-phase `
+  --dry-run `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli math-operator `
+  --function 4 `
+  --operation subtract `
+  --source1 channel1 `
+  --source2 channel2 `
+  --simulate `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli math-transform `
+  --function 4 `
+  --operation linear `
+  --source channel1 `
+  --gain 2 `
+  --linear-offset 0 `
+  --simulate `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli math-filter `
+  --function 4 `
+  --operation smooth `
+  --source channel1 `
+  --smooth-points 9 `
+  --simulate `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli math-visualization `
+  --function 4 `
+  --operation max-hold `
+  --source channel1 `
+  --simulate `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli fft `
+  --function 4 `
+  --source-channel 1 `
+  --fft-operation fft-phase `
+  --simulate `
+  --model $model `
+  --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-display",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-display --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-vertical",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-vertical --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-display",
+    "--function", "$f",
+    "--on"
+)
+
+>>> scopes-tool math-display --function 4 --on
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-display",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-display --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-vertical",
+    "--function", "$f",
+    "--scale", "1",
+    "--offset", "0"
+)
+
+>>> scopes-tool math-vertical --function 4 --scale 1 --offset 0
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-vertical",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-vertical --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> foreach ($op in @("add", "subtract", "multiply", "divide")) {
+    Invoke-ScopeLive -CliArgs @(
+        "math-operator",
+        "--function", "$f",
+        "--operation", $op,
+        "--source1", "channel1",
+        "--source2", "channel2"
+    )
+
+    Invoke-ScopeLive -CliArgs @(
+        "math-operator",
+        "--function", "$f",
+        "--query"
+    )
+}
+
+>>> scopes-tool math-operator --function 4 --operation add --source1 channel1 --source2 channel2
+
+
+
+>>> scopes-tool math-operator --function 4 --query
+
+
+
+>>> scopes-tool math-operator --function 4 --operation subtract --source1 channel1 --source2 channel2
+
+
+
+>>> scopes-tool math-operator --function 4 --query
+
+
+
+>>> scopes-tool math-operator --function 4 --operation multiply --source1 channel1 --source2 channel2
+
+
+
+>>> scopes-tool math-operator --function 4 --query
+
+
+
+>>> scopes-tool math-operator --function 4 --operation divide --source1 channel1 --source2 channel2
+
+
+
+>>> scopes-tool math-operator --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> foreach ($op in @(
+    "differentiate",
+    "sqrt",
+    "absolute",
+    "square",
+    "ln",
+    "log10",
+    "exp",
+    "exp10"
+)) {
+    Invoke-ScopeLive -CliArgs @(
+        "math-transform",
+        "--function", "$f",
+        "--operation", $op,
+        "--source", "channel1"
+    )
+
+    Invoke-ScopeLive -CliArgs @(
+        "math-transform",
+        "--function", "$f",
+        "--query"
+    )
+}
+
+>>> scopes-tool math-transform --function 4 --operation differentiate --source channel1
+
+
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+
+>>> scopes-tool math-transform --function 4 --operation sqrt --source channel1
+
+
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+
+>>> scopes-tool math-transform --function 4 --operation absolute --source channel1
+
+
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+
+>>> scopes-tool math-transform --function 4 --operation square --source channel1
+
+
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+
+>>> scopes-tool math-transform --function 4 --operation ln --source channel1
+
+
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+
+>>> scopes-tool math-transform --function 4 --operation log10 --source channel1
+
+
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+
+>>> scopes-tool math-transform --function 4 --operation exp --source channel1
+
+
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+
+>>> scopes-tool math-transform --function 4 --operation exp10 --source channel1
+
+
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> clear
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-transform",
+    "--function", "$f",
+    "--operation", "integrate",
+    "--source", "channel1",
+    "--input-offset", "0"
+)
+
+>>> scopes-tool math-transform --function 4 --operation integrate --source channel1 --input-offset 0
+{"backend":"Visa Library at C:\\Windows\\system32\\visa32.dll","capabilities":{"analog_channels":4,"annotation_slots":10
+,"channel_label_max_length":32,"default_waveform_points":1000,"reference_waveforms":2,"safe_max_waveform_points":10000,"
+search_modes":["serial1","serial2","edge","glitch","runt","transition","peak"],"series":"4000X","supports_50_ohm_impedan
+ce":true,"supports_annotation":true,"supports_annotation_position":true,"supports_channel_label":true,"supports_delay_me
+asurement":true,"supports_display_label":true,"supports_indexed_annotation":true,"supports_measurements":true,"supports_
+raw_points_mode":false,"supports_screenshot":true,"supports_screenshot_format_pack":true,"supports_search_basic":true,"s
+upports_segmented_memory":false,"supports_serial_decode":false,"supports_word_format":true},"command":"math-transform","
+error":null,"files":[],"idn":{"firmware":"07.20.2017102615","model":"DSO-X 4034A","raw":"AGILENT TECHNOLOGIES,DSO-X 4034
+A,MY55440270,07.20.2017102615","serial":"MY55440270","series":"4000X","vendor":"AGILENT TECHNOLOGIES"},"mode":"live","ok
+":true,"resource":"USB0::0x0957::0x17A4::MY55440270::0::INSTR","result":{"commands":[":FUNCtion4:OPERation INTegrate",":
+FUNCtion4:SOURce1 CHANnel1",":FUNCtion4:INTegrate:IOFFset 0"],"function":4,"gain":null,"human_output":["Resource: USB0::
+0x0957::0x17A4::MY55440270::0::INSTR","PyVISA backend: Visa Library at C:\\Windows\\system32\\visa32.dll","Timeout ms: 2
+000","Model: DSO-X 4034A","Command: :FUNCtion4:OPERation INTegrate","Command: :FUNCtion4:SOURce1 CHANnel1","Command: :FU
+NCtion4:INTegrate:IOFFset 0","System error: +0, \"No error\""],"input_offset":0.0,"linear_offset":null,"math_operation":
+"integrate","operation":"set","source":"channel1"},"schema_version":1,"scpi":{"planned":[],"sent":[]},"system_error":{"c
+ode":0,"is_error":false,"message":"No error","raw":"+0,\"No error\""},"timestamp_utc":"2026-07-27T11:37:52.113813+00:00"
+}
+: 2000","System error 1: +0, \"No error\""],"max_reads":30},"schema_version":1,"scpi":{"planned":[],"sent":[]},"system_e
+rror":{"code":0,"is_error":false,"message":"No error","raw":"+0,\"No error\""},"timestamp_utc":"2026-07-27T11:37:52.4014
+13+00:00"}
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-transform",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-transform",
+    "--function", "$f",
+    "--operation", "linear",
+    "--source", "channel1",
+    "--gain", "2",
+    "--linear-offset", "0"
+)
+
+>>> scopes-tool math-transform --function 4 --operation linear --source channel1 --gain 2 --linear-offset 0
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-transform",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--operation", "low-pass",
+    "--source", "channel1",
+    "--cutoff-hz", "1000000"
+)
+
+>>> scopes-tool math-filter --function 4 --operation low-pass --source channel1 --cutoff-hz 1000000
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-filter --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--operation", "high-pass",
+    "--source", "channel1",
+    "--cutoff-hz", "1000"
+)
+
+>>> scopes-tool math-filter --function 4 --operation high-pass --source channel1 --cutoff-hz 1000
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-filter --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--operation", "average",
+    "--source", "channel1",
+    "--average-count", "64"
+)
+
+>>> scopes-tool math-filter --function 4 --operation average --source channel1 --average-count 64
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-filter --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-clear",
+    "--function", "$f"
+)
+
+>>> scopes-tool math-clear --function 4
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--operation", "smooth",
+    "--source", "channel1",
+    "--smooth-points", "9"
+)
+
+>>> scopes-tool math-filter --function 4 --operation smooth --source channel1 --smooth-points 9
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-filter --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--operation", "envelope",
+    "--source", "channel1"
+)
+
+>>> scopes-tool math-filter --function 4 --operation envelope --source channel1
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-filter",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-filter --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> clear
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-visualization",
+    "--function", "$f",
+    "--operation", "magnify",
+    "--source", "channel1"
+)
+
+>>> scopes-tool math-visualization --function 4 --operation magnify --source channel1
+{"backend":"Visa Library at C:\\Windows\\system32\\visa32.dll","capabilities":{"analog_channels":4,"annotation_slots":10
+,"channel_label_max_length":32,"default_waveform_points":1000,"reference_waveforms":2,"safe_max_waveform_points":10000,"
+search_modes":["serial1","serial2","edge","glitch","runt","transition","peak"],"series":"4000X","supports_50_ohm_impedan
+ce":true,"supports_annotation":true,"supports_annotation_position":true,"supports_channel_label":true,"supports_delay_me
+asurement":true,"supports_display_label":true,"supports_indexed_annotation":true,"supports_measurements":true,"supports_
+raw_points_mode":false,"supports_screenshot":true,"supports_screenshot_format_pack":true,"supports_search_basic":true,"s
+upports_segmented_memory":false,"supports_serial_decode":false,"supports_word_format":true},"command":"math-visualizatio
+n","error":null,"files":[],"idn":{"firmware":"07.20.2017102615","model":"DSO-X 4034A","raw":"AGILENT TECHNOLOGIES,DSO-X
+4034A,MY55440270,07.20.2017102615","serial":"MY55440270","series":"4000X","vendor":"AGILENT TECHNOLOGIES"},"mode":"live"
+,"ok":true,"resource":"USB0::0x0957::0x17A4::MY55440270::0::INSTR","result":{"commands":[":FUNCtion4:OPERation MAGNify",
+":FUNCtion4:SOURce1 CHANnel1"],"function":4,"human_output":["Resource: USB0::0x0957::0x17A4::MY55440270::0::INSTR","PyVI
+SA backend: Visa Library at C:\\Windows\\system32\\visa32.dll","Timeout ms: 2000","Model: DSO-X 4034A","Command: :FUNCti
+on4:OPERation MAGNify","Command: :FUNCtion4:SOURce1 CHANnel1","System error: +0, \"No error\""],"math_operation":"magnif
+y","measurement":null,"measurement_slot":null,"operation":"set","source":"channel1","source2":null},"schema_version":1,"
+scpi":{"planned":[],"sent":[]},"system_error":{"code":0,"is_error":false,"message":"No error","raw":"+0,\"No error\""},"
+timestamp_utc":"2026-07-27T11:38:53.706491+00:00"}
+true,"entries":[{"code":0,"is_error":false,"message":"No error","raw":"+0,\"No error\""}],"human_output":["Resource: USB
+0::0x0957::0x17A4::MY55440270::0::INSTR","PyVISA backend: Visa Library at C:\\Windows\\system32\\visa32.dll","Timeout ms
+: 2000","System error 1: +0, \"No error\""],"max_reads":30},"schema_version":1,"scpi":{"planned":[],"sent":[]},"system_e
+rror":{"code":0,"is_error":false,"message":"No error","raw":"+0,\"No error\""},"timestamp_utc":"2026-07-27T11:38:53.9935
+94+00:00"}
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-visualization",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-visualization --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> foreach ($op in @("maximum", "minimum", "peak")) {
+    Invoke-ScopeLive -CliArgs @(
+        "math-visualization",
+        "--function", "$f",
+        "--operation", $op,
+        "--source", "channel1"
+    )
+
+    Invoke-ScopeLive -CliArgs @(
+        "math-visualization",
+        "--function", "$f",
+        "--query"
+    )
+}
+
+>>> scopes-tool math-visualization --function 4 --operation maximum --source channel1
+
+
+
+>>> scopes-tool math-visualization --function 4 --query
+
+
+
+>>> scopes-tool math-visualization --function 4 --operation minimum --source channel1
+
+
+
+>>> scopes-tool math-visualization --function 4 --query
+
+
+
+>>> scopes-tool math-visualization --function 4 --operation peak --source channel1
+
+
+
+>>> scopes-tool math-visualization --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> foreach ($op in @("max-hold", "min-hold")) {
+    Invoke-ScopeLive -CliArgs @(
+        "math-visualization",
+        "--function", "$f",
+        "--operation", $op,
+        "--source", "channel1"
+    )
+
+    Invoke-ScopeLive -CliArgs @(
+        "math-visualization",
+        "--function", "$f",
+        "--query"
+    )
+
+    Invoke-ScopeLive -CliArgs @(
+        "math-clear",
+        "--function", "$f"
+    )
+}
+
+>>> scopes-tool math-visualization --function 4 --operation max-hold --source channel1
+
+
+
+>>> scopes-tool math-visualization --function 4 --query
+
+
+
+>>> scopes-tool math-clear --function 4
+
+
+
+>>> scopes-tool math-visualization --function 4 --operation min-hold --source channel1
+
+
+
+>>> scopes-tool math-visualization --function 4 --query
+
+
+
+>>> scopes-tool math-clear --function 4
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-transform",
+    "--function", "3",
+    "--operation", "absolute",
+    "--source", "channel1"
+)
+
+>>> scopes-tool math-transform --function 3 --operation absolute --source channel1
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-transform",
+    "--function", "4",
+    "--operation", "square",
+    "--source", "math3"
+)
+
+>>> scopes-tool math-transform --function 4 --operation square --source math3
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-transform",
+    "--function", "4",
+    "--query"
+)
+
+>>> scopes-tool math-transform --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "fft",
+    "--function", "$f",
+    "--source-channel", "1",
+    "--fft-operation", "fft",
+    "--units", "decibel",
+    "--window", "hanning",
+    "--center-hz", "1000000",
+    "--span-hz", "2000000"
+)
+
+>>> scopes-tool fft --function 4 --source-channel 1 --fft-operation fft --units decibel --window hanning --center-hz 1000000 --span-hz 2000000
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "fft",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool fft --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "fft",
+    "--function", "$f",
+    "--source-channel", "1",
+    "--fft-operation", "fft-phase",
+    "--window", "hanning"
+)
+
+>>> scopes-tool fft --function 4 --source-channel 1 --fft-operation fft-phase --window hanning
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "fft",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool fft --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "fft",
+    "--function", "$f",
+    "--source-channel", "1",
+    "--fft-operation", "fft-phase",
+    "--start-hz", "0",
+    "--stop-hz", "1000000",
+    "--gate", "none",
+    "--phase-reference", "trigger",
+    "--detection-type", "sample",
+    "--detection-points", "640"
+)
+
+>>> scopes-tool fft --function 4 --source-channel 1 --fft-operation fft-phase --start-hz 0 --stop-hz 1000000 --gate none --phase-reference trigger --detection-type sample --detection-points 640
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "fft",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool fft --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-visualization",
+    "--function", "$f",
+    "--operation", "trend",
+    "--measurement-slot", "1"
+)
+
+>>> scopes-tool math-visualization --function 4 --operation trend --measurement-slot 1
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> 終止錯誤(): "Command failed: scopes-tool math-visualization --function 4 --operation trend --measurement-slot 1"
+>> 終止錯誤(): "Command failed: scopes-tool math-visualization --function 4 --operation trend --measurement-slot 1"
+Command failed: scopes-tool math-visualization --function 4 --operation trend --measurement-slot 1
+Command failed: scopes-tool math-visualization --function 4 --operation trend --measurement-slot 1
+位於 線路:12 字元:9
++         throw "Command failed: scopes-tool $($CliArgs -join ' ')"
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Command failed:...surement-slot 1:String) [], RuntimeException
+    + FullyQualifiedErrorId : Command failed: scopes-tool math-visualization --function 4 --operation trend --measurem
+   ent-slot 1
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-visualization",
+    "--function", "$f",
+    "--query"
+)
+
+>>> scopes-tool math-visualization --function 4 --query
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> clear
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-display",
+    "--function", "4",
+    "--off"
+)
+
+>>> scopes-tool math-display --function 4 --off
+{"backend":"Visa Library at C:\\Windows\\system32\\visa32.dll","capabilities":{"analog_channels":4,"annotation_slots":10
+,"channel_label_max_length":32,"default_waveform_points":1000,"reference_waveforms":2,"safe_max_waveform_points":10000,"
+search_modes":["serial1","serial2","edge","glitch","runt","transition","peak"],"series":"4000X","supports_50_ohm_impedan
+ce":true,"supports_annotation":true,"supports_annotation_position":true,"supports_channel_label":true,"supports_delay_me
+asurement":true,"supports_display_label":true,"supports_indexed_annotation":true,"supports_measurements":true,"supports_
+raw_points_mode":false,"supports_screenshot":true,"supports_screenshot_format_pack":true,"supports_search_basic":true,"s
+upports_segmented_memory":false,"supports_serial_decode":false,"supports_word_format":true},"command":"math-display","er
+ror":null,"files":[],"idn":{"firmware":"07.20.2017102615","model":"DSO-X 4034A","raw":"AGILENT TECHNOLOGIES,DSO-X 4034A,
+MY55440270,07.20.2017102615","serial":"MY55440270","series":"4000X","vendor":"AGILENT TECHNOLOGIES"},"mode":"live","ok":
+true,"resource":"USB0::0x0957::0x17A4::MY55440270::0::INSTR","result":{"command":":FUNCtion4:DISPlay OFF","enabled":fals
+e,"function":4,"human_output":["Resource: USB0::0x0957::0x17A4::MY55440270::0::INSTR","PyVISA backend: Visa Library at C
+:\\Windows\\system32\\visa32.dll","Timeout ms: 2000","Model: DSO-X 4034A","Command: :FUNCtion4:DISPlay OFF","System erro
+r: +0, \"No error\""],"operation":"set"},"schema_version":1,"scpi":{"planned":[],"sent":[]},"system_error":{"code":0,"is
+_error":false,"message":"No error","raw":"+0,\"No error\""},"timestamp_utc":"2026-07-27T11:40:10.224723+00:00"}
+{"backend":"Visa Library at C:\\Windows\\system32\\visa32.dll","capabilities":null,"command":"check-error","error":null,
+"files":[],"idn":null,"mode":"live","ok":true,"resource":"USB0::0x0957::0x17A4::MY55440270::0::INSTR","result":{"drain":
+true,"entries":[{"code":0,"is_error":false,"message":"No error","raw":"+0,\"No error\""}],"human_output":["Resource: USB
+0::0x0957::0x17A4::MY55440270::0::INSTR","PyVISA backend: Visa Library at C:\\Windows\\system32\\visa32.dll","Timeout ms
+: 2000","System error 1: +0, \"No error\""],"max_reads":30},"schema_version":1,"scpi":{"planned":[],"sent":[]},"system_e
+rror":{"code":0,"is_error":false,"message":"No error","raw":"+0,\"No error\""},"timestamp_utc":"2026-07-27T11:40:10.5408
+87+00:00"}
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Invoke-ScopeLive -CliArgs @(
+    "math-display",
+    "--function", "3",
+    "--off"
+)
+
+>>> scopes-tool math-display --function 3 --off
+
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> & $cli check-error --all --json
+
+PS C:\Users\tomliang\Documents\Project\Keysight_Scopes_Tool> Stop-Transcript
+**********************
+Windows PowerShell 轉譯結束
+結束時間: 20260727194013
+**********************

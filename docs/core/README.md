@@ -147,8 +147,15 @@ Core owns runtime behavior:
   capability-profile guarded; unknown function readbacks remain available as
   raw values. DEMO is option-/hardware-dependent, so unsupported live
   instruments may report normal instrument errors. This pack is hardware-free
-  validated only, does not implement `:WGEN`, excludes additional 4000X-only
+  validated only, remains separate from WGEN, excludes additional 4000X-only
   DEMO functions, and adds no WebUI runtime behavior.
+- WGEN Basic P1 helpers for output, function, frequency, peak-to-peak
+  amplitude, offset, load, and aggregate queries. The 2000X and 3000X use the
+  unindexed `:WGEN` subsystem; the 4000X uses generator 1 through `:WGEN1`.
+  Settable functions are limited to `sine`, `square`, `ramp`, `pulse`, `noise`,
+  and `dc`. Software safety guards require positive finite frequency,
+  `0 < amplitude <= 5.0` volts, and `-2.5 <= offset <= 2.5` volts. Coverage is
+  hardware-free only; no live hardware validation was performed.
 - Search Basic Pack v1 helpers for enabling or disabling waveform search,
   selecting a model-profile-supported basic search mode, and querying the
   search event count. Mode configuration enables search before setting the

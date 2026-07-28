@@ -114,6 +114,10 @@ and USB/LAN or Worker-live path.
   DEMO is option-/hardware-dependent; capability profiles guard the documented
   function names before session open, while live instrument errors remain
   authoritative for missing options or hardware.
+- WGEN Basic P1 output, function, frequency, amplitude, offset, load, and
+  aggregate query helpers. The 2000X/3000X profiles use `:WGEN`; the 4000X
+  profile uses only generator 1 through `:WGEN1`. P1 settable functions are
+  `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`.
 - Search Basic Pack v1 state and count queries plus profile-guarded mode
   configuration. Unsupported modes are rejected before search SCPI is sent.
 - Save/Export Pack v1 common instrument-side SAVE commands for current save
@@ -142,7 +146,7 @@ The common/core DEMO set is `sine`, `noisy`, `phase`, `lf-sine`, `am`,
 `edge-then-edge`, `i2c`, `uart`, `spi`, `can`, and `lin`. Demo Output Pack v1
 intentionally excludes the additional 4000X-only DEMO functions until their
 short command and readback tokens are added with unambiguous coverage. It does
-not implement WGEN and adds no WebUI runtime behavior. Validation is
+not include WGEN behavior and adds no WebUI runtime behavior. Validation is
 hardware-free only; no physical model, firmware revision, USB/LAN path, or
 worker live path was validated for this pack.
 

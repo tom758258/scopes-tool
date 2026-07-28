@@ -220,6 +220,13 @@ Control and setup:
 - `trigger-hf-reject`: `operation` and `command`. Configure results include
   boolean `enabled` and `state_changing: true`. Query results include
   normalized boolean `enabled` and preserved `raw_value`.
+- WGEN Basic P1 focused commands return `operation` and concrete `command`.
+  Configure results include the canonical configured field and
+  `state_changing: true`; query results include normalized values and raw
+  readbacks. `wgen-query` returns ordered `commands`, `enabled`/`output_raw`,
+  nullable `function` plus `function_raw`, `frequency_hz`/`frequency_raw`,
+  `amplitude_volts`/`voltage_raw`, `offset_volts`/`offset_raw`, and
+  `load`/`load_raw`. Unknown function readbacks use `function: null`.
 - `search-state`: `operation` and `command`. Configure results include boolean
   `enabled`, `raw_state: null`, and `state_changing: true`. Query results
   include normalized boolean `enabled` and preserve `raw_state`.

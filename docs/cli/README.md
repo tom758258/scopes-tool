@@ -153,6 +153,8 @@ Current implemented scope:
   do not create host-side files.
 - Query or configure the option-dependent built-in DEMO subsystem with
   `demo-query`, `demo-output`, `demo-function`, and `demo-phase`.
+- Query or configure WGEN Basic P1 output, function, frequency, amplitude,
+  offset, and load with the `wgen-*` commands.
 - Collect read-only diagnostic snapshots with `doctor`.
 - Query multi-channel and optional pair measurement sweeps with
   continue-and-summarize failure handling.
@@ -1512,8 +1514,38 @@ v1.
 DEMO is option-/hardware-dependent. Unsupported live instruments may surface
 errors through the normal post-command instrument error check. This pack has
 hardware-free Core, CLI, simulator, and worker validation only; live hardware,
-USB/LAN, and worker live validation were not run. It does not implement WGEN
-and adds no WebUI runtime behavior.
+USB/LAN, and worker live validation were not run. DEMO commands remain separate
+from WGEN and add no WebUI runtime behavior.
+
+Control WGEN Basic P1:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe wgen-query --simulate --json
+.\.venv\Scripts\scopes-tool.exe wgen-output --enabled true --simulate --json
+.\.venv\Scripts\scopes-tool.exe wgen-output --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe wgen-function --function sine --simulate --json
+.\.venv\Scripts\scopes-tool.exe wgen-frequency --hz 1000 --simulate --json
+.\.venv\Scripts\scopes-tool.exe wgen-voltage --amplitude 0.5 --simulate --json
+.\.venv\Scripts\scopes-tool.exe wgen-offset --volts 0 --simulate --json
+.\.venv\Scripts\scopes-tool.exe wgen-load --load one-meg --simulate --json
+```
+
+Each focused command requires exactly one query or configure action. The
+settable functions are `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`;
+loads are `one-meg` and `fifty`. Frequency must be finite and greater than
+zero. The conservative P1 software guards are `0 < amplitude <= 5.0` volts and
+`-2.5 <= offset <= 2.5` volts. Aggregate `wgen-query` queries each field
+individually and preserves raw readbacks. Unknown or extended function
+readbacks produce `function: null` while preserving `function_raw`.
+
+The 2000X and 3000X use `:WGEN`; the 4000X uses generator 1 through `:WGEN1`.
+P1 does not expose generator selection, extended functions, waveform-specific
+range tables, modulation, arbitrary waveforms, or output synchronization.
+Worker queries require exactly `{"query": true}`; `{}` is rejected for both
+aggregate and focused commands. Configure requests require exactly their
+canonical value field, and WGEN output is enabled only by an explicit
+`{"enabled": true}` request. Validation is hardware-free; no live hardware
+access or validation was performed.
 
 Control reference waveform slots:
 

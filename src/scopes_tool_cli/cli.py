@@ -282,6 +282,27 @@ from scopes_tool_core.demo import (
     validate_demo_function,
     validate_demo_phase,
 )
+from scopes_tool_core.wgen import (
+    WGEN_FUNCTIONS,
+    WGEN_LOADS,
+    validate_wgen_amplitude,
+    validate_wgen_frequency,
+    validate_wgen_function,
+    validate_wgen_offset,
+    wgen_frequency_command,
+    wgen_frequency_query,
+    wgen_function_command,
+    wgen_function_query,
+    wgen_load_command,
+    wgen_load_query,
+    wgen_offset_command,
+    wgen_offset_query,
+    wgen_output_command,
+    wgen_output_query,
+    wgen_query_commands,
+    wgen_voltage_command,
+    wgen_voltage_query,
+)
 from scopes_tool_core.search import (
     SEARCH_MODES,
     search_count_query,
@@ -1125,6 +1146,59 @@ def _build_parser() -> argparse.ArgumentParser:
     demo_phase_action = demo_phase_parser.add_mutually_exclusive_group(required=True)
     demo_phase_action.add_argument("--query", action="store_true")
     demo_phase_action.add_argument("--degrees", type=float)
+
+    wgen_query_parser = subparsers.add_parser(
+        "wgen-query", allow_abbrev=False, help="query aggregate WGEN Basic P1 state"
+    )
+    _add_scope_connection_args(wgen_query_parser)
+
+    wgen_output_parser = subparsers.add_parser(
+        "wgen-output", allow_abbrev=False, help="configure or query WGEN output"
+    )
+    _add_scope_connection_args(wgen_output_parser)
+    wgen_output_action = wgen_output_parser.add_mutually_exclusive_group(required=True)
+    wgen_output_action.add_argument("--query", action="store_true")
+    wgen_output_action.add_argument("--enabled", type=_strict_bool_arg)
+
+    wgen_function_parser = subparsers.add_parser(
+        "wgen-function", allow_abbrev=False, help="configure or query WGEN function"
+    )
+    _add_scope_connection_args(wgen_function_parser)
+    wgen_function_action = wgen_function_parser.add_mutually_exclusive_group(required=True)
+    wgen_function_action.add_argument("--query", action="store_true")
+    wgen_function_action.add_argument("--function", choices=WGEN_FUNCTIONS)
+
+    wgen_frequency_parser = subparsers.add_parser(
+        "wgen-frequency", allow_abbrev=False, help="configure or query WGEN frequency"
+    )
+    _add_scope_connection_args(wgen_frequency_parser)
+    wgen_frequency_action = wgen_frequency_parser.add_mutually_exclusive_group(required=True)
+    wgen_frequency_action.add_argument("--query", action="store_true")
+    wgen_frequency_action.add_argument("--hz", type=float)
+
+    wgen_voltage_parser = subparsers.add_parser(
+        "wgen-voltage", allow_abbrev=False, help="configure or query WGEN amplitude"
+    )
+    _add_scope_connection_args(wgen_voltage_parser)
+    wgen_voltage_action = wgen_voltage_parser.add_mutually_exclusive_group(required=True)
+    wgen_voltage_action.add_argument("--query", action="store_true")
+    wgen_voltage_action.add_argument("--amplitude", type=float)
+
+    wgen_offset_parser = subparsers.add_parser(
+        "wgen-offset", allow_abbrev=False, help="configure or query WGEN offset"
+    )
+    _add_scope_connection_args(wgen_offset_parser)
+    wgen_offset_action = wgen_offset_parser.add_mutually_exclusive_group(required=True)
+    wgen_offset_action.add_argument("--query", action="store_true")
+    wgen_offset_action.add_argument("--volts", type=float)
+
+    wgen_load_parser = subparsers.add_parser(
+        "wgen-load", allow_abbrev=False, help="configure or query WGEN output load"
+    )
+    _add_scope_connection_args(wgen_load_parser)
+    wgen_load_action = wgen_load_parser.add_mutually_exclusive_group(required=True)
+    wgen_load_action.add_argument("--query", action="store_true")
+    wgen_load_action.add_argument("--load", choices=WGEN_LOADS)
 
     search_state_parser = subparsers.add_parser(
         "search-state", allow_abbrev=False, help="configure or query waveform search state"
@@ -2872,6 +2946,16 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_dvm(args)
     if args.command in {"demo-query", "demo-output", "demo-function", "demo-phase"}:
         return _cmd_demo(args)
+    if args.command in {
+        "wgen-query",
+        "wgen-output",
+        "wgen-function",
+        "wgen-frequency",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-load",
+    }:
+        return _cmd_wgen(args)
     if args.command in {"search-state", "search-mode", "search-count"}:
         return _cmd_search(args)
     if args.command in {
@@ -3536,6 +3620,16 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
     }:
         _validate_demo_args(args)
     if getattr(args, "command", None) in {
+        "wgen-query",
+        "wgen-output",
+        "wgen-function",
+        "wgen-frequency",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-load",
+    }:
+        _validate_wgen_args(args)
+    if getattr(args, "command", None) in {
         "search-state",
         "search-mode",
         "search-count",
@@ -3846,6 +3940,24 @@ def _validate_demo_args(args: argparse.Namespace) -> None:
         validate_demo_function(args.function, capabilities)
     if args.command == "demo-phase" and not args.query:
         validate_demo_phase(args.degrees)
+
+
+def _validate_wgen_args(args: argparse.Namespace) -> None:
+    capabilities = _pre_open_capabilities(args)
+    if capabilities is not None and not capabilities.supports_wgen:
+        raise ParameterValidationError(
+            "WGEN Basic P1 is not supported by the selected model profile."
+        )
+    if args.command == "wgen-query" or args.query:
+        return
+    if args.command == "wgen-function":
+        validate_wgen_function(args.function)
+    elif args.command == "wgen-frequency":
+        validate_wgen_frequency(args.hz)
+    elif args.command == "wgen-voltage":
+        validate_wgen_amplitude(args.amplitude)
+    elif args.command == "wgen-offset":
+        validate_wgen_offset(args.volts)
 
 
 def _validate_search_args(args: argparse.Namespace) -> None:
@@ -4748,6 +4860,72 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         result = {"operation": "query" if args.query else "configure", "command": target}
         if not args.query:
             result.update(degrees=validate_demo_phase(args.degrees), state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "wgen-query":
+        commands = wgen_query_commands(capabilities)
+        return [*commands, ":SYSTem:ERRor?"], [], {
+            "operation": "query",
+            "commands": commands,
+        }
+    if command == "wgen-output":
+        target = (
+            wgen_output_query(capabilities)
+            if args.query
+            else wgen_output_command(args.enabled, capabilities)
+        )
+        result = {"operation": "query" if args.query else "configure", "command": target}
+        if not args.query:
+            result.update(enabled=args.enabled, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "wgen-function":
+        target = (
+            wgen_function_query(capabilities)
+            if args.query
+            else wgen_function_command(args.function, capabilities)
+        )
+        result = {"operation": "query" if args.query else "configure", "command": target}
+        if not args.query:
+            result.update(function=args.function, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "wgen-frequency":
+        target = (
+            wgen_frequency_query(capabilities)
+            if args.query
+            else wgen_frequency_command(args.hz, capabilities)
+        )
+        result = {"operation": "query" if args.query else "configure", "command": target}
+        if not args.query:
+            result.update(frequency_hz=args.hz, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "wgen-voltage":
+        target = (
+            wgen_voltage_query(capabilities)
+            if args.query
+            else wgen_voltage_command(args.amplitude, capabilities)
+        )
+        result = {"operation": "query" if args.query else "configure", "command": target}
+        if not args.query:
+            result.update(amplitude_volts=args.amplitude, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "wgen-offset":
+        target = (
+            wgen_offset_query(capabilities)
+            if args.query
+            else wgen_offset_command(args.volts, capabilities)
+        )
+        result = {"operation": "query" if args.query else "configure", "command": target}
+        if not args.query:
+            result.update(offset_volts=args.volts, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "wgen-load":
+        target = (
+            wgen_load_query(capabilities)
+            if args.query
+            else wgen_load_command(args.load, capabilities)
+        )
+        result = {"operation": "query" if args.query else "configure", "command": target}
+        if not args.query:
+            result.update(load=args.load, state_changing=True)
         return [target, ":SYSTem:ERRor?"], [], result
     if command == "search-state":
         target = search_state_query() if args.query else search_state_command(args.enabled)
@@ -8090,6 +8268,147 @@ def _cmd_demo(args: argparse.Namespace) -> int:
                     state_changing=True,
                 )
                 print(f"DEMO phase degrees: {degrees}")
+            print(f"Command: {command}")
+
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_wgen(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        if scope.capabilities is None:
+            print("Capabilities: unavailable for this model")
+            return 1
+        capabilities = scope.capabilities
+
+        if args.command == "wgen-query":
+            commands = wgen_query_commands(capabilities)
+            state = scope.query_wgen()
+            _json_update_result(operation="query", commands=commands, **state.to_json())
+            for command in commands:
+                print(f"Command: {command}")
+            print(f"WGEN output enabled: {state.enabled}")
+            print(f"WGEN function: {state.function or 'unknown'}")
+            print(f"WGEN frequency Hz: {state.frequency_hz}")
+            print(f"WGEN amplitude volts: {state.amplitude_volts}")
+            print(f"WGEN offset volts: {state.offset_volts}")
+            print(f"WGEN load: {state.load}")
+        elif args.command == "wgen-output":
+            if args.query:
+                command = wgen_output_query(capabilities)
+                state = scope.query_wgen_output()
+                _json_update_result(operation="query", command=command, **state.to_json())
+                print(f"WGEN output enabled: {state.enabled}")
+            else:
+                command = wgen_output_command(args.enabled, capabilities)
+                scope.configure_wgen_output(args.enabled)
+                _json_update_result(
+                    operation="configure",
+                    command=command,
+                    enabled=args.enabled,
+                    state_changing=True,
+                )
+                print(f"WGEN output enabled: {args.enabled}")
+            print(f"Command: {command}")
+        elif args.command == "wgen-function":
+            if args.query:
+                command = wgen_function_query(capabilities)
+                state = scope.query_wgen_function()
+                _json_update_result(operation="query", command=command, **state.to_json())
+                print(f"WGEN function: {state.function or 'unknown'}")
+            else:
+                function = validate_wgen_function(args.function)
+                command = wgen_function_command(function, capabilities)
+                scope.configure_wgen_function(function)
+                _json_update_result(
+                    operation="configure",
+                    command=command,
+                    function=function,
+                    state_changing=True,
+                )
+                print(f"WGEN function: {function}")
+            print(f"Command: {command}")
+        elif args.command == "wgen-frequency":
+            if args.query:
+                command = wgen_frequency_query(capabilities)
+                state = scope.query_wgen_frequency()
+                _json_update_result(operation="query", command=command, **state.to_json())
+                print(f"WGEN frequency Hz: {state.frequency_hz}")
+            else:
+                value = validate_wgen_frequency(args.hz)
+                command = wgen_frequency_command(value, capabilities)
+                scope.configure_wgen_frequency(value)
+                _json_update_result(
+                    operation="configure",
+                    command=command,
+                    frequency_hz=value,
+                    state_changing=True,
+                )
+                print(f"WGEN frequency Hz: {value}")
+            print(f"Command: {command}")
+        elif args.command == "wgen-voltage":
+            if args.query:
+                command = wgen_voltage_query(capabilities)
+                state = scope.query_wgen_voltage()
+                _json_update_result(operation="query", command=command, **state.to_json())
+                print(f"WGEN amplitude volts: {state.amplitude_volts}")
+            else:
+                value = validate_wgen_amplitude(args.amplitude)
+                command = wgen_voltage_command(value, capabilities)
+                scope.configure_wgen_voltage(value)
+                _json_update_result(
+                    operation="configure",
+                    command=command,
+                    amplitude_volts=value,
+                    state_changing=True,
+                )
+                print(f"WGEN amplitude volts: {value}")
+            print(f"Command: {command}")
+        elif args.command == "wgen-offset":
+            if args.query:
+                command = wgen_offset_query(capabilities)
+                state = scope.query_wgen_offset()
+                _json_update_result(operation="query", command=command, **state.to_json())
+                print(f"WGEN offset volts: {state.offset_volts}")
+            else:
+                value = validate_wgen_offset(args.volts)
+                command = wgen_offset_command(value, capabilities)
+                scope.configure_wgen_offset(value)
+                _json_update_result(
+                    operation="configure",
+                    command=command,
+                    offset_volts=value,
+                    state_changing=True,
+                )
+                print(f"WGEN offset volts: {value}")
+            print(f"Command: {command}")
+        else:
+            if args.query:
+                command = wgen_load_query(capabilities)
+                state = scope.query_wgen_load()
+                _json_update_result(operation="query", command=command, **state.to_json())
+                print(f"WGEN load: {state.load}")
+            else:
+                command = wgen_load_command(args.load, capabilities)
+                scope.configure_wgen_load(args.load)
+                _json_update_result(
+                    operation="configure",
+                    command=command,
+                    load=args.load,
+                    state_changing=True,
+                )
+                print(f"WGEN load: {args.load}")
             print(f"Command: {command}")
 
         entry = scope.query_system_error()

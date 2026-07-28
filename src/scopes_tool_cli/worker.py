@@ -55,6 +55,13 @@ from scopes_tool_core.save_export import (
     validate_save_quoted_string,
     validate_save_waveform_length,
 )
+from scopes_tool_core.wgen import (
+    WGEN_LOADS,
+    validate_wgen_amplitude,
+    validate_wgen_frequency,
+    validate_wgen_function,
+    validate_wgen_offset,
+)
 
 from . import cli as scope_cli
 
@@ -100,6 +107,13 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "demo-output",
     "demo-function",
     "demo-phase",
+    "wgen-query",
+    "wgen-output",
+    "wgen-function",
+    "wgen-frequency",
+    "wgen-voltage",
+    "wgen-offset",
+    "wgen-load",
     "search-state",
     "search-mode",
     "search-count",
@@ -485,6 +499,7 @@ def parse_domain_command(
     )
     arguments = _normalize_dvm_worker_arguments(command, arguments, runtime)
     arguments = _normalize_demo_worker_arguments(command, arguments, runtime)
+    arguments = _normalize_wgen_worker_arguments(command, arguments)
     arguments = _normalize_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_save_export_worker_arguments(command, arguments)
     arguments = _normalize_math_worker_arguments(command, arguments, runtime)
@@ -1442,6 +1457,72 @@ def _normalize_demo_worker_arguments(
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise OscilloscopeError("demo-phase argument degrees must be a finite number")
     validate_demo_phase(value)
+    return dict(arguments)
+
+
+def _normalize_wgen_worker_arguments(
+    command: str, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    if command not in {
+        "wgen-query",
+        "wgen-output",
+        "wgen-function",
+        "wgen-frequency",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-load",
+    }:
+        return arguments
+
+    if command == "wgen-query":
+        if set(arguments) != {"query"} or arguments.get("query") is not True:
+            raise OscilloscopeError("wgen-query requires exactly query=true")
+        return {}
+
+    configure_key = {
+        "wgen-output": "enabled",
+        "wgen-function": "function",
+        "wgen-frequency": "hz",
+        "wgen-voltage": "amplitude",
+        "wgen-offset": "volts",
+        "wgen-load": "load",
+    }[command]
+    allowed = {"query", configure_key}
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"unknown argument for {command}: {sorted(unknown)[0]}"
+        )
+    if arguments.get("query") is True:
+        if set(arguments) != {"query"}:
+            raise OscilloscopeError(
+                f"{command} query cannot be combined with configure arguments"
+            )
+        return {"query": True}
+    if "query" in arguments:
+        raise OscilloscopeError(f"{command} argument query must be exactly true")
+    if set(arguments) != {configure_key}:
+        raise OscilloscopeError(
+            f"{command} configure requires exactly {configure_key}"
+        )
+
+    value = arguments[configure_key]
+    if command == "wgen-output":
+        if not isinstance(value, bool):
+            raise OscilloscopeError("wgen-output argument enabled must be a boolean")
+        return {"enabled": "true" if value else "false"}
+    if command == "wgen-function":
+        validate_wgen_function(value)
+    elif command == "wgen-frequency":
+        validate_wgen_frequency(value)
+    elif command == "wgen-voltage":
+        validate_wgen_amplitude(value)
+    elif command == "wgen-offset":
+        validate_wgen_offset(value)
+    elif not isinstance(value, str) or value not in WGEN_LOADS:
+        raise OscilloscopeError(
+            "wgen-load argument load must be one of: one-meg, fifty"
+        )
     return dict(arguments)
 
 

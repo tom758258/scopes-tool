@@ -51,6 +51,13 @@ scopes-tool send-command --port 8765 --command demo-query --arguments-json "{}" 
 scopes-tool send-command --port 8765 --command demo-output --arguments-json "{\"enabled\":true}" --json
 scopes-tool send-command --port 8765 --command demo-function --arguments-json "{\"function\":\"runt\"}" --json
 scopes-tool send-command --port 8765 --command demo-phase --arguments-json "{\"degrees\":90}" --json
+scopes-tool send-command --port 8765 --command wgen-query --arguments-json "{\"query\":true}" --json
+scopes-tool send-command --port 8765 --command wgen-output --arguments-json "{\"enabled\":true}" --json
+scopes-tool send-command --port 8765 --command wgen-function --arguments-json "{\"function\":\"sine\"}" --json
+scopes-tool send-command --port 8765 --command wgen-frequency --arguments-json "{\"hz\":1000}" --json
+scopes-tool send-command --port 8765 --command wgen-voltage --arguments-json "{\"amplitude\":0.5}" --json
+scopes-tool send-command --port 8765 --command wgen-offset --arguments-json "{\"volts\":0}" --json
+scopes-tool send-command --port 8765 --command wgen-load --arguments-json "{\"load\":\"one-meg\"}" --json
 scopes-tool send-command --port 8765 --command search-state --arguments-json "{\"enabled\":true}" --json
 scopes-tool send-command --port 8765 --command search-mode --arguments-json "{\"mode\":\"edge\"}" --json
 scopes-tool send-command --port 8765 --command search-count --arguments-json "{\"query\":true}" --json

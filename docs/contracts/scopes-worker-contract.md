@@ -137,6 +137,8 @@ Worker `/command` supports the existing Scopes capability surface:
 - `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`, `dvm-current`,
   `dvm-query`
 - `demo-query`, `demo-output`, `demo-function`, `demo-phase`
+- `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
+  `wgen-voltage`, `wgen-offset`, `wgen-load`
 - `search-state`, `search-mode`, `search-count`
 - `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
   `save-image-ink-saver`, `save-image-factors`, `save-image`,
@@ -1338,9 +1340,39 @@ artifact creation, simulator/VISA open, or SCPI.
 
 DEMO is option-/hardware-dependent, and live missing-option or missing-hardware
 errors use the existing instrument error path. This pack is hardware-free
-validated only. It does not implement WGEN, WebUI runtime behavior, or the
-additional 4000X-only DEMO functions, and it does not claim validation across
-physical models or firmware revisions.
+validated only. It remains separate from WGEN and does not implement WebUI
+runtime behavior or the additional 4000X-only DEMO functions. It does not claim
+validation across physical models or firmware revisions.
+
+### WGEN Basic P1 Commands
+
+The worker accepts only explicit canonical query or configure shapes:
+
+```jsonl
+{"command": "wgen-query", "arguments": {"query": true}}
+{"command": "wgen-output", "arguments": {"query": true}}
+{"command": "wgen-output", "arguments": {"enabled": true}}
+{"command": "wgen-function", "arguments": {"function": "sine"}}
+{"command": "wgen-frequency", "arguments": {"hz": 1000}}
+{"command": "wgen-voltage", "arguments": {"amplitude": 0.5}}
+{"command": "wgen-offset", "arguments": {"volts": 0}}
+{"command": "wgen-load", "arguments": {"load": "one-meg"}}
+```
+
+All query forms require exactly `{"query": true}`; `{}`, `query: false`, and
+query/configure mixtures are rejected. Configure forms require exactly their
+shown value field. Output can be enabled only by the explicit JSON boolean
+`{"enabled": true}` form; no aggregate or batch request enables it. Functions
+are limited to `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`; loads are
+`one-meg` and `fifty`. Frequency must be finite and positive, amplitude must
+satisfy `0 < amplitude <= 5.0`, and offset must satisfy
+`-2.5 <= offset <= 2.5`. Invalid requests are rejected before enqueue,
+artifact creation, backend open, or SCPI.
+
+The 2000X and 3000X route to `:WGEN`; the 4000X routes only to generator 1
+through `:WGEN1`. Multi-generator selection, modulation, arbitrary waveforms,
+and automatic configure-and-enable batches are outside P1. Worker support is
+hardware-free only; no live hardware validation was performed.
 
 ### MATH-P1 Display And Vertical Commands
 
@@ -1878,7 +1910,9 @@ The `measure-clear`, `measure-show`, `measure-source`, `measure-window`,
 `reference-save`, `reference-display`, `reference-label`, `reference-clear`,
 `reference-query`, `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`,
 `dvm-current`, `dvm-query`, `demo-query`, `demo-output`, `demo-function`,
-`demo-phase`, `search-state`, `search-mode`, and `search-count`
+`demo-phase`, `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
+`wgen-voltage`, `wgen-offset`, `wgen-load`, `search-state`, `search-mode`, and
+`search-count`
 commands also do not create command artifacts.
 The `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
 `save-image-ink-saver`, `save-image-factors`, `save-image`,
