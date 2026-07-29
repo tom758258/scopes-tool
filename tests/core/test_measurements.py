@@ -12,6 +12,7 @@ from scopes_tool_core.measurements import (
     measurement_unit,
     normalize_measurement_item,
     pair_measurement_query,
+    parse_measurement_results_dump,
     parse_measurement_result,
     parse_statistics_results,
     statistics_install_command,
@@ -343,6 +344,48 @@ def test_measurement_controller_queries_vpp_for_channel():
     assert result.valid is True
     assert result.value == 1.25
     assert backend.history == [":MEASure:VPP? CHANnel1"]
+
+
+@pytest.mark.parametrize("model", ["DSOX3024A", "DSOX4024A"])
+def test_measurement_controller_queries_displayed_results_on_supported_series(model):
+    command = ":MEASure:RESults?"
+    backend = FakeBackend(responses={command: "Frequency,1.000000E+06"})
+    controller = MeasurementController(SCPIClient(backend), capabilities_for_model(model))
+
+    controller.query_results()
+
+    assert backend.history == [command]
+
+
+def test_measurement_controller_rejects_displayed_results_on_2000x():
+    backend = FakeBackend()
+    controller = MeasurementController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    with pytest.raises(ParameterValidationError, match="2000X"):
+        controller.query_results()
+
+    assert backend.history == []
+
+
+def test_parse_measurement_results_dump_accepts_empty_response():
+    result = parse_measurement_results_dump("")
+
+    assert result.raw == ""
+    assert result.items == ()
+
+
+def test_parse_measurement_results_dump_accepts_simple_label_value_pairs():
+    raw = "Frequency,1.000000E+06,Vpp,3.280000E+00"
+
+    result = parse_measurement_results_dump(raw)
+
+    assert result.raw == raw
+    assert [(item.label, item.value) for item in result.items] == [
+        ("Frequency", 1000000.0),
+        ("Vpp", 3.28),
+    ]
 
 
 def test_measurement_controller_rejects_unsupported_single_query_before_scpi():

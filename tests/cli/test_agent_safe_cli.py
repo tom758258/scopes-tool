@@ -91,6 +91,7 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         "supports_raw_points_mode": False,
         "supports_measurements": True,
         "supports_delay_measurement": True,
+        "supports_measure_results_dump": True,
         "supports_screenshot": True,
         "supports_screenshot_format_pack": True,
         "supports_segmented_memory": False,

@@ -168,6 +168,22 @@ class MeasurementResult:
 
 
 @dataclass(frozen=True)
+class MeasurementResultsItem:
+    """One conservatively parsed front-panel measurement result."""
+
+    label: str
+    value: float | str
+
+
+@dataclass(frozen=True)
+class MeasurementResultsDump:
+    """Raw and best-effort parsed front-panel measurement results."""
+
+    raw: str
+    items: tuple[MeasurementResultsItem, ...]
+
+
+@dataclass(frozen=True)
 class MeasurementStatisticsRecord:
     """One front-panel statistics row returned by :MEASure:RESults?."""
 
@@ -309,6 +325,14 @@ class MeasurementController:
             reference_channel=reference_channel,
         )
 
+    def query_results(self) -> MeasurementResultsDump:
+        """Query displayed front-panel results without changing measurement state."""
+
+        validate_measure_results_dump_supported(self.capabilities)
+        return parse_measurement_results_dump(
+            self.scpi.query(measurement_results_query())
+        )
+
     def statistics(
         self,
         channel: int,
@@ -350,6 +374,10 @@ class MeasurementController:
 
 def measurement_clear_command() -> str:
     return ":MEASure:CLEar"
+
+
+def measurement_results_query() -> str:
+    return ":MEASure:RESults?"
 
 
 def measurement_show_command(enabled: bool = True) -> str:
@@ -733,6 +761,41 @@ def validate_measurements_supported(capabilities: ScopeCapabilities) -> None:
         raise ParameterValidationError(
             "measurements are not supported by this scope capability profile."
         )
+
+
+def validate_measure_results_dump_supported(capabilities: ScopeCapabilities) -> None:
+    if not capabilities.supports_measure_results_dump:
+        raise ParameterValidationError(
+            "measure-results is not supported by this scope capability profile; "
+            "2000X users should use individual measurement queries."
+        )
+
+
+def parse_measurement_results_dump(raw: str) -> MeasurementResultsDump:
+    """Parse simple label/value pairs while preserving ambiguous responses."""
+
+    raw_response = raw.strip()
+    if not raw_response:
+        return MeasurementResultsDump(raw="", items=())
+
+    tokens = [token.strip() for token in raw_response.split(",")]
+    if len(tokens) % 2 or any(
+        not tokens[index] or _looks_numeric(tokens[index])
+        for index in range(0, len(tokens), 2)
+    ):
+        return MeasurementResultsDump(raw=raw_response, items=())
+
+    items = []
+    for index in range(0, len(tokens), 2):
+        raw_value = tokens[index + 1]
+        try:
+            value: float | str = float(raw_value)
+            if not math.isfinite(value):
+                value = raw_value
+        except ValueError:
+            value = raw_value
+        items.append(MeasurementResultsItem(label=tokens[index], value=value))
+    return MeasurementResultsDump(raw=raw_response, items=tuple(items))
 
 
 def parse_measurement_result(

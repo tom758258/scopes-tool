@@ -3373,6 +3373,30 @@ def test_measure_cli_queries_new_items_then_checks_error(
     assert 'System error: +0, "No error"' in out
 
 
+def test_measure_results_cli_dry_run_plans_only_read_only_query(capsys):
+    assert (
+        cli.main(
+            [
+                "measure-results",
+                "--dry-run",
+                "--json",
+                "--model",
+                "keysight-dsox3024a",
+            ]
+        )
+        == 0
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["scpi"]["planned"] == [":MEASure:RESults?"]
+    assert payload["result"] == {
+        "operation": "query",
+        "command": ":MEASure:RESults?",
+        "raw": "",
+        "items": [],
+    }
+
+
 @pytest.mark.parametrize(
     (
         "argv",

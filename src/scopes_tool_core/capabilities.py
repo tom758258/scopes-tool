@@ -45,6 +45,7 @@ class ScopeCapabilities:
     math_filter_operations: frozenset[str] = frozenset()
     math_visualization_operations: frozenset[str] = frozenset()
     supports_advanced_fft: bool = False
+    supports_measure_results_dump: bool = False
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
@@ -102,6 +103,7 @@ _CAPABILITY_PROFILES = {
         supports_raw_points_mode=False,
         supports_measurements=True,
         supports_delay_measurement=False,
+        supports_measure_results_dump=True,
         supports_screenshot=True,
         supports_segmented_memory=False,
         supports_serial_decode=False,
@@ -136,6 +138,7 @@ _CAPABILITY_PROFILES = {
         supports_raw_points_mode=False,
         supports_measurements=True,
         supports_delay_measurement=True,
+        supports_measure_results_dump=True,
         supports_screenshot=True,
         supports_segmented_memory=False,
         supports_serial_decode=False,

@@ -137,6 +137,9 @@ Current implemented scope:
   overshoot, preshoot, positive width, negative width, duty cycle, negative
   duty cycle, area, edge count, pulse count, parameterized time, phase, and
   safe 4000X delay measurements with explicit invalid-sentinel handling.
+- Dump the currently displayed front-panel measurement results without
+  clearing, installing, or reconfiguring measurements with `measure-results`
+  on 3000X and 4000X.
 - Rebuild front-panel quick measurements and query measurement statistics with
   `measure-stats`.
 - Control common measurement subsystem state with `measure-clear`,
@@ -1676,6 +1679,19 @@ Query read-only measurements:
 .\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --reference-channel 2 --item phase --log-scpi
 .\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --reference-channel 2 --item delay --log-scpi
 ```
+
+Query the measurement results already displayed on the front panel:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe measure-results --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
+```
+
+`measure-results` is read-only and sends only `:MEASure:RESults?` after
+identity detection. It preserves the raw response and best-effort parses simple
+alternating label/value fields. It does not clear or install measurements,
+change measurement sources, or change statistics mode. The command is
+supported on 3000X and 4000X only; 2000X users should use individual
+`measure` queries.
 
 The current measurement slice supports `vpp`, `frequency` (`freq` alias),
 `period`, `vavg`, `vrms`, `ac_rms` (`acrms` and `vrms_ac` aliases),

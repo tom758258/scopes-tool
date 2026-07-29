@@ -244,6 +244,7 @@ from scopes_tool_core.measurements import (
     is_pair_measurement_item,
     measurement_clear_command,
     measurement_query,
+    measurement_results_query,
     measurement_show_command,
     measurement_show_query,
     measurement_source_command,
@@ -258,6 +259,7 @@ from scopes_tool_core.measurements import (
     validate_statistics_items,
     validate_statistics_max_count,
     validate_statistics_settle_seconds,
+    validate_measure_results_dump_supported,
 )
 from scopes_tool_core.reference import (
     reference_clear_command,
@@ -2150,6 +2152,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="positive edge or crossing occurrence for time_at_edge and time_at_value",
     )
 
+    measure_results_parser = subparsers.add_parser(
+        "measure-results",
+        help="query currently displayed front-panel measurement results",
+    )
+    _add_scope_connection_args(measure_results_parser)
+
     measure_stats_parser = subparsers.add_parser(
         "measure-stats",
         help="rebuild front-panel measurements and query statistics",
@@ -3036,6 +3044,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_trigger_holdoff(args)
     if args.command == "measure":
         return _cmd_measure(args)
+    if args.command == "measure-results":
+        return _cmd_measure_results(args)
     if args.command == "measure-stats":
         return _cmd_measure_stats(args)
     if args.command == "doctor":
@@ -4640,6 +4650,15 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
     if command == "measure":
         plan = plan_measure(_measure_plan_request(args), capabilities)
         return list(plan.planned_scpi), list(plan.files), plan.result
+    if command == "measure-results":
+        validate_measure_results_dump_supported(capabilities)
+        target = measurement_results_query()
+        return [target], [], {
+            "operation": "query",
+            "command": target,
+            "raw": "",
+            "items": [],
+        }
     if command == "measure-sweep":
         plan = plan_measure_sweep(
             MeasureSweepPlanRequest(
@@ -6432,6 +6451,7 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "supports_raw_points_mode": capabilities.supports_raw_points_mode,
         "supports_measurements": capabilities.supports_measurements,
         "supports_delay_measurement": capabilities.supports_delay_measurement,
+        "supports_measure_results_dump": capabilities.supports_measure_results_dump,
         "supports_screenshot": capabilities.supports_screenshot,
         "supports_screenshot_format_pack": capabilities.supports_screenshot_format_pack,
         "supports_segmented_memory": capabilities.supports_segmented_memory,
@@ -9398,6 +9418,38 @@ def _cmd_measure(args: argparse.Namespace) -> int:
         for line in operation_result.human_lines:
             print(line)
         return operation_result.exit_code
+
+
+def _cmd_measure_results(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
+
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        result = scope.query_measurement_results()
+        items = [
+            {"label": item.label, "value": item.value}
+            for item in result.items
+        ]
+        _json_update_result(
+            operation="query",
+            command=measurement_results_query(),
+            raw=result.raw,
+            items=items,
+        )
+        print(f"Raw response: {result.raw}")
+        if not items:
+            print("Parsed items: none")
+        else:
+            for item in items:
+                print(f"{item['label']}: {item['value']}")
+        return 0
 
 
 def _cmd_measure_stats(args: argparse.Namespace) -> int:

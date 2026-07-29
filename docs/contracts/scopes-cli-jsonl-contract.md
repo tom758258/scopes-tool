@@ -398,6 +398,9 @@ Measurement and artifact-producing flows:
 
 - `measure`: `item`, `channel`, optional `reference_channel`, `value`, `unit`,
   `valid`, `raw_value`, `reason`, `parameters`, and `command`.
+- `measure-results`: `operation: "query"`, `command` set to
+  `":MEASure:RESults?"`, preserved `raw`, and best-effort `items` containing
+  `label` and numeric-or-string `value`.
 - `measure-stats`: `channel`, `items`, `mode`, `reset`, `max_count`,
   `settle_seconds`, and `records`.
 - `measure-sweep`: `channels`, `items`, `pairs`, `pair_items`,
@@ -445,7 +448,8 @@ artifact files for raw data.
 Capability JSON currently includes `series`, `analog_channels`,
 `default_waveform_points`, `safe_max_waveform_points`,
 `supports_word_format`, `supports_raw_points_mode`, `supports_measurements`,
-`supports_delay_measurement`, `supports_screenshot`,
+`supports_delay_measurement`, `supports_measure_results_dump`,
+`supports_screenshot`,
 `supports_screenshot_format_pack`,
 `supports_segmented_memory`, `supports_serial_decode`,
 `supports_channel_label`, `channel_label_max_length`,

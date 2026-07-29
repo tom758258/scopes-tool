@@ -45,6 +45,7 @@ from .idn import IDN, parse_idn
 from .measurements import (
     MeasurementController,
     MeasurementResult,
+    MeasurementResultsDump,
     MeasurementShowState,
     MeasurementSourceState,
     MeasurementStatisticsResult,
@@ -1119,6 +1120,11 @@ class Oscilloscope:
             reference_channel,
             item,
         )
+
+    def query_measurement_results(self) -> MeasurementResultsDump:
+        """Query currently displayed front-panel measurement results."""
+
+        return self._measurement_controller().query_results()
 
     def clear_measurements(self) -> None:
         self._measurement_controller().clear()
