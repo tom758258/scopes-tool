@@ -1547,6 +1547,18 @@ def _execute_worker_job(runtime, command, arguments, artifact_path):
     return job, json.loads((artifact_path / "result.json").read_text(encoding="utf-8"))
 
 
+def test_worker_measure_results_preserves_statistics_items(tmp_path):
+    job, result = _execute_worker_job(
+        _runtime(tmp_path), "measure-results", {}, tmp_path / "measure_results"
+    )
+
+    assert result["state"] == "succeeded"
+    assert result["result"]["raw"]
+    assert result["result"]["items"] == []
+    assert result["result"]["statistics_items"]
+    assert job.result["scpi"]["sent"] == ["*IDN?", ":MEASure:RESults?"]
+
+
 def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
     runtime = _runtime(tmp_path)
     artifact_path = tmp_path / "capture_wait"

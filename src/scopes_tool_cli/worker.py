@@ -90,6 +90,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "screenshot",
     "smoke",
     "measure",
+    "measure-results",
     "measure-stats",
     "measure-sweep",
     "measure-log",
