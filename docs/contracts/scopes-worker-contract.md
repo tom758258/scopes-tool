@@ -132,6 +132,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `acquisition`, `acquisition-check`, `sample-rate`, `acquisition-points`,
   `record-length`
 - `capture`, `capture-batch`, `screenshot`, `smoke`
+- `channel-summary`
 - `measure`, `measure-results`, `measure-stats`, `measure-sweep`, `measure-log`,
   `measure-clear`, `measure-show`, `measure-source`, `measure-window`
 - `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`, `dvm-current`,
@@ -168,6 +169,9 @@ Worker `/command` supports the existing Scopes capability surface:
 `measure-results` reuses the CLI/Core read-only `:MEASure:RESults?` path and
 may return `statistics_items`. It is unrelated to Counter or
 `measure-counter`.
+
+`channel-summary` reuses the CLI/Core read-only analog-channel query path with
+empty arguments and returns the existing `result.channels` shape.
 
 `list-resources` remains an explicit discovery command outside live worker
 flows. `hardware-report` remains a local report renderer. They are not accepted

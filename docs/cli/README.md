@@ -573,6 +573,9 @@ Query a compact read-only summary of all analog channels:
 model profile. It sends queries only, does not change channel state, and does
 not include digital/MSO channels or extended probe inventory.
 
+Worker `/command` accepts `channel-summary` with empty arguments and preserves
+the same read-only `result.channels` shape.
+
 The `channel-display` command first queries `*IDN?` so the channel number can be
 validated against the detected model before any channel display command is sent.
 It prints the planned change or query, then performs one `:SYSTem:ERRor?`

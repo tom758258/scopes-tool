@@ -85,6 +85,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "sample-rate",
     "acquisition-points",
     "record-length",
+    "channel-summary",
     "capture",
     "capture-batch",
     "screenshot",
