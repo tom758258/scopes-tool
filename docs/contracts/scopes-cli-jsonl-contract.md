@@ -400,7 +400,9 @@ Measurement and artifact-producing flows:
   `valid`, `raw_value`, `reason`, `parameters`, and `command`.
 - `measure-results`: `operation: "query"`, `command` set to
   `":MEASure:RESults?"`, preserved `raw`, and best-effort `items` containing
-  `label` and numeric-or-string `value`.
+  `label` and numeric-or-string `value`. Recognized
+  `label,current,min,max,mean,stddev,count` responses additionally populate
+  `statistics_items` with numeric statistics and an integer `count`.
 - `measure-stats`: `channel`, `items`, `mode`, `reset`, `max_count`,
   `settle_seconds`, and `records`.
 - `measure-sweep`: `channels`, `items`, `pairs`, `pair_items`,

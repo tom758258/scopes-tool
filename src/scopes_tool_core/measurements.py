@@ -176,11 +176,25 @@ class MeasurementResultsItem:
 
 
 @dataclass(frozen=True)
+class MeasurementResultsStatisticsItem:
+    """One parsed front-panel measurement statistics result."""
+
+    label: str
+    current: float
+    minimum: float
+    maximum: float
+    mean: float
+    stddev: float
+    count: int
+
+
+@dataclass(frozen=True)
 class MeasurementResultsDump:
     """Raw and best-effort parsed front-panel measurement results."""
 
     raw: str
     items: tuple[MeasurementResultsItem, ...]
+    statistics_items: tuple[MeasurementResultsStatisticsItem, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -772,13 +786,21 @@ def validate_measure_results_dump_supported(capabilities: ScopeCapabilities) -> 
 
 
 def parse_measurement_results_dump(raw: str) -> MeasurementResultsDump:
-    """Parse simple label/value pairs while preserving ambiguous responses."""
+    """Parse known result layouts while preserving ambiguous responses."""
 
     raw_response = raw.strip()
     if not raw_response:
         return MeasurementResultsDump(raw="", items=())
 
     tokens = [token.strip() for token in raw_response.split(",")]
+    statistics_items = _parse_measurement_results_statistics(tokens)
+    if statistics_items is not None:
+        return MeasurementResultsDump(
+            raw=raw_response,
+            items=(),
+            statistics_items=statistics_items,
+        )
+
     if len(tokens) % 2 or any(
         not tokens[index] or _looks_numeric(tokens[index])
         for index in range(0, len(tokens), 2)
@@ -796,6 +818,40 @@ def parse_measurement_results_dump(raw: str) -> MeasurementResultsDump:
             value = raw_value
         items.append(MeasurementResultsItem(label=tokens[index], value=value))
     return MeasurementResultsDump(raw=raw_response, items=tuple(items))
+
+
+def _parse_measurement_results_statistics(
+    tokens: Sequence[str],
+) -> tuple[MeasurementResultsStatisticsItem, ...] | None:
+    if not tokens or len(tokens) % 7:
+        return None
+
+    items = []
+    for index in range(0, len(tokens), 7):
+        label = tokens[index]
+        if not label:
+            return None
+        try:
+            values = tuple(float(token) for token in tokens[index + 1 : index + 6])
+            count_value = float(tokens[index + 6])
+        except ValueError:
+            return None
+        if not all(math.isfinite(value) for value in values):
+            return None
+        if not math.isfinite(count_value) or not count_value.is_integer():
+            return None
+        items.append(
+            MeasurementResultsStatisticsItem(
+                label=label,
+                current=values[0],
+                minimum=values[1],
+                maximum=values[2],
+                mean=values[3],
+                stddev=values[4],
+                count=int(count_value),
+            )
+        )
+    return tuple(items)
 
 
 def parse_measurement_result(

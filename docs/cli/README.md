@@ -1687,11 +1687,13 @@ Query the measurement results already displayed on the front panel:
 ```
 
 `measure-results` is read-only and sends only `:MEASure:RESults?` after
-identity detection. It preserves the raw response and best-effort parses simple
-alternating label/value fields. It does not clear or install measurements,
-change measurement sources, or change statistics mode. The command is
-supported on 3000X and 4000X only; 2000X users should use individual
-`measure` queries.
+identity detection. It preserves the raw response; simple alternating
+label/value responses populate `items`, while statistics-style
+`label,current,min,max,mean,stddev,count` responses may populate
+`statistics_items`. It does not clear or install measurements, change
+measurement sources, or change statistics mode. The command is supported on
+3000X and 4000X only; 2000X users should use individual `measure` queries.
+This parser is unrelated to Counter or `measure-counter`.
 
 The current measurement slice supports `vpp`, `frequency` (`freq` alias),
 `period`, `vavg`, `vrms`, `ac_rms` (`acrms` and `vrms_ac` aliases),

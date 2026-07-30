@@ -4658,6 +4658,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "command": target,
             "raw": "",
             "items": [],
+            "statistics_items": [],
         }
     if command == "measure-sweep":
         plan = plan_measure_sweep(
@@ -9437,11 +9438,24 @@ def _cmd_measure_results(args: argparse.Namespace) -> int:
             {"label": item.label, "value": item.value}
             for item in result.items
         ]
+        statistics_items = [
+            {
+                "label": item.label,
+                "current": item.current,
+                "minimum": item.minimum,
+                "maximum": item.maximum,
+                "mean": item.mean,
+                "stddev": item.stddev,
+                "count": item.count,
+            }
+            for item in result.statistics_items
+        ]
         _json_update_result(
             operation="query",
             command=measurement_results_query(),
             raw=result.raw,
             items=items,
+            statistics_items=statistics_items,
         )
         print(f"Raw response: {result.raw}")
         if not items:
@@ -9449,6 +9463,8 @@ def _cmd_measure_results(args: argparse.Namespace) -> int:
         else:
             for item in items:
                 print(f"{item['label']}: {item['value']}")
+        if statistics_items:
+            print(f"Parsed statistics items: {len(statistics_items)}")
         return 0
 
 

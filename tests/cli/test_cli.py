@@ -10,7 +10,10 @@ import scopes_tool_core.output_files as core_output_files
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.errors import OscilloscopeError, VisaBackendError
 from scopes_tool_core.idn import parse_idn
-from scopes_tool_core.measurements import MeasurementResult
+from scopes_tool_core.measurements import (
+    MeasurementResult,
+    parse_measurement_results_dump,
+)
 from scopes_tool_core.screenshot import ScreenshotCapture
 from scopes_tool_core.status import SystemErrorEntry
 from scopes_tool_core.visa_backend import VisaLiveVerification, VisaResourceListing
@@ -3394,7 +3397,68 @@ def test_measure_results_cli_dry_run_plans_only_read_only_query(capsys):
         "command": ":MEASure:RESults?",
         "raw": "",
         "items": [],
+        "statistics_items": [],
     }
+
+
+def test_measure_results_cli_json_includes_statistics_items(monkeypatch, capsys):
+    raw = (
+        "Amplitude(2),+2.48E+00,+2.48E+00,+2.48E+00,"
+        "+2.48000000000000E+00,+0.0E+00,386"
+    )
+
+    class DummyScope:
+        backend = _MeasurementDummyBackend()
+
+        def __init__(self):
+            self.capabilities = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            del exc_type, exc, traceback
+
+        def query_idn(self):
+            self.capabilities = capabilities_for_model("DSOX4034A")
+            return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4034A,MY123,07.20")
+
+        def query_measurement_results(self):
+            return parse_measurement_results_dump(raw)
+
+    scope = DummyScope()
+    monkeypatch.setattr(
+        cli.Oscilloscope,
+        "open",
+        staticmethod(lambda resource, visa_library=None: scope),
+    )
+
+    assert (
+        cli.main(
+            [
+                "measure-results",
+                "--resource",
+                "USB0::FAKE::INSTR",
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["result"]["raw"] == raw
+    assert payload["result"]["items"] == []
+    assert payload["result"]["statistics_items"] == [
+        {
+            "label": "Amplitude(2)",
+            "current": 2.48,
+            "minimum": 2.48,
+            "maximum": 2.48,
+            "mean": 2.48,
+            "stddev": 0.0,
+            "count": 386,
+        }
+    ]
 
 
 @pytest.mark.parametrize(

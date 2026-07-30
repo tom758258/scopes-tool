@@ -374,6 +374,7 @@ def test_parse_measurement_results_dump_accepts_empty_response():
 
     assert result.raw == ""
     assert result.items == ()
+    assert result.statistics_items == ()
 
 
 def test_parse_measurement_results_dump_accepts_simple_label_value_pairs():
@@ -386,6 +387,60 @@ def test_parse_measurement_results_dump_accepts_simple_label_value_pairs():
         ("Frequency", 1000000.0),
         ("Vpp", 3.28),
     ]
+    assert result.statistics_items == ()
+
+
+def test_parse_measurement_results_dump_accepts_statistics_layout():
+    raw = (
+        "Period(1),1.0E-06,9.0E-07,1.1E-06,1.0E-06,5.0E-08,42,"
+        "Amplitude(2),+2.48E+00,+2.40E+00,+2.50E+00,"
+        "+2.48000000000000E+00,+0.0E+00,386"
+    )
+
+    result = parse_measurement_results_dump(raw)
+
+    assert result.raw == raw
+    assert result.items == ()
+    assert [
+        (
+            item.label,
+            item.current,
+            item.minimum,
+            item.maximum,
+            item.mean,
+            item.stddev,
+            item.count,
+        )
+        for item in result.statistics_items
+    ] == [
+        ("Period(1)", 1e-06, 9e-07, 1.1e-06, 1e-06, 5e-08, 42),
+        ("Amplitude(2)", 2.48, 2.4, 2.5, 2.48, 0.0, 386),
+    ]
+
+
+def test_parse_measurement_results_dump_accepts_live_invalid_sentinel():
+    raw = (
+        "Period(1),9.9E+37,9.9E+37,9.9E+37,9.9E+37,9.9E+37,0,"
+        "Frequency(1),9.9E+37,9.9E+37,9.9E+37,9.9E+37,9.9E+37,0"
+    )
+
+    result = parse_measurement_results_dump(raw)
+
+    assert result.raw == raw
+    assert result.items == ()
+    assert len(result.statistics_items) == 2
+    assert result.statistics_items[0].current == 9.9e37
+    assert result.statistics_items[1].count == 0
+
+
+def test_parse_measurement_results_dump_preserves_malformed_statistics_layout():
+    raw = "Period(1),1.0E-06,9.0E-07,not-a-number,1.0E-06,5.0E-08,42"
+
+    result = parse_measurement_results_dump(raw)
+
+    assert result.raw == raw
+    assert result.items == ()
+    assert result.statistics_items == ()
 
 
 def test_measurement_controller_rejects_unsupported_single_query_before_scpi():
