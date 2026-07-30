@@ -134,6 +134,7 @@ def test_visa_backend_opens_resource_delegates_io_and_closes(monkeypatch):
         ("read_raw",),
         ("query_binary_values", ":WAVeform:DATA?"),
     ]
+    assert backend.history == [":RUN", "*IDN?", ":WAVeform:DATA?"]
 
     backend.close()
     backend.close()

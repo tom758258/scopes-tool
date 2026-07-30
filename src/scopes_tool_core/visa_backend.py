@@ -122,6 +122,7 @@ class VisaBackend:
         self.resource_name = resource_name
         self._resource_manager = _create_resource_manager(visa_library)
         self.backend = _describe_backend(self._resource_manager)
+        self.history: list[str] = []
         self._closed = False
         try:
             self._resource = self._resource_manager.open_resource(resource_name)
@@ -148,6 +149,7 @@ class VisaBackend:
         """Write one raw command to the VISA resource."""
 
         self._ensure_open()
+        self.history.append(command)
         try:
             self._resource.write(command)
         except Exception as exc:  # pragma: no cover - depends on installed VISA stack
@@ -157,6 +159,7 @@ class VisaBackend:
         """Write one raw query and return its response."""
 
         self._ensure_open()
+        self.history.append(command)
         try:
             return str(self._resource.query(command))
         except Exception as exc:  # pragma: no cover - depends on installed VISA stack
@@ -175,6 +178,7 @@ class VisaBackend:
         """Query binary values through PyVISA."""
 
         self._ensure_open()
+        self.history.append(command)
         try:
             return self._resource.query_binary_values(command, **kwargs)
         except Exception as exc:  # pragma: no cover - depends on installed VISA stack

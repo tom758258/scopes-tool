@@ -447,9 +447,10 @@ Dry-run payloads include concrete planned SCPI commands and queries in
 resolved without instrument state is represented in structured result fields;
 for example, screenshot temporary ink saver restoration is described by
 `result.ink_saver_plan` rather than a non-SCPI placeholder in `scpi.planned`.
-Simulate and live payloads include sent SCPI history when available. Raw
-waveform sample arrays are intentionally omitted from top-level JSON; use
-artifact files for raw data.
+Simulate and live payloads include sent SCPI history when available. Live JSON
+output with `--log-scpi` includes the recorded sent SCPI history. Raw waveform
+sample arrays are intentionally omitted from top-level JSON; use artifact files
+for raw data.
 
 Capability JSON currently includes `series`, `analog_channels`,
 `default_waveform_points`, `safe_max_waveform_points`,
