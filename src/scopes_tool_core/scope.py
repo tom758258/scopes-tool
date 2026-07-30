@@ -23,6 +23,7 @@ from .advanced import (
 )
 from .capabilities import ScopeCapabilities, capabilities_for_model_id
 from .channel import ChannelController, ChannelSummaryEntry
+from .cleanup import CleanupResult, execute_cleanup
 from .display import AnnotationState, DisplayController, DisplayPersistence
 from .dvm import (
     DvmAutoRangeState,
@@ -200,6 +201,11 @@ class Oscilloscope:
         """Query successful completion with `*OPC?`."""
 
         return self._status_controller().query_operation_complete()
+
+    def cleanup(self, profile: str = "minimal") -> CleanupResult:
+        """Run one conservative cleanup profile."""
+
+        return execute_cleanup(self, profile)
 
     def query_status_byte(self) -> StatusRegisterState:
         """Query the status byte with `*STB?`."""

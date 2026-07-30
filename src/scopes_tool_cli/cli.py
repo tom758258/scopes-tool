@@ -199,6 +199,7 @@ from scopes_tool_core.channel import (
     validate_probe_skew,
     validate_probe_ratio,
 )
+from scopes_tool_core.cleanup import CLEANUP_PROFILES, plan_cleanup
 from scopes_tool_core.display import (
     annotation_commands,
     annotation_query_commands,
@@ -661,6 +662,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="clear status and event data with *CLS",
     )
     _add_scope_connection_args(system_clear_status_parser)
+
+    cleanup_parser = subparsers.add_parser(
+        "cleanup",
+        allow_abbrev=False,
+        help="clear common automation leftovers without resetting the instrument",
+    )
+    _add_scope_connection_args(cleanup_parser)
+    cleanup_parser.add_argument(
+        "--profile",
+        choices=CLEANUP_PROFILES,
+        default="minimal",
+        help="cleanup profile; defaults to minimal",
+    )
 
     for command, help_text in (
         ("system-opc", "query operation completion with *OPC?"),
@@ -2904,6 +2918,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "system-options",
     }:
         return _cmd_system_status(args)
+    if args.command == "cleanup":
+        return _cmd_cleanup(args)
     if args.command in _CONTROL_COMMANDS:
         return _cmd_control(args)
     if args.command == "force-trigger":
@@ -4660,6 +4676,9 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         return ["*IDN?", *channel_summary_queries(capabilities)], [], {
             "channels": [],
         }
+    if command == "cleanup":
+        plan = plan_cleanup(args.profile, capabilities)
+        return ["*IDN?", *plan.commands], [], plan.to_json()
     if command == "measure":
         plan = plan_measure(_measure_plan_request(args), capabilities)
         return list(plan.planned_scpi), list(plan.files), plan.result
@@ -6879,6 +6898,31 @@ def _cmd_channel_summary(args: argparse.Namespace) -> int:
                 f"probe_skew={_format_summary_value(channel['probe_skew'])}"
             )
         return 0
+
+
+def _cmd_cleanup(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        if scope.capabilities is None:
+            print("Capabilities: unavailable for this model")
+            return 1
+
+        result = scope.cleanup(args.profile)
+        _json_update_result(**result.to_json())
+        _json_record_system_error(result.final_error)
+        print(
+            f"Cleanup {result.profile}: {len(result.actions)} actions, "
+            f"{len(result.skipped)} skipped; "
+            f"final error queue clean: {result.final_error_queue_clean}"
+        )
+        return 0 if result.final_error_queue_clean else 1
 
 
 def _format_summary_bool(value: object) -> str:

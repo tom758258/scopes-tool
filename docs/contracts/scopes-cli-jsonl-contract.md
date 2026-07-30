@@ -140,6 +140,10 @@ Discovery and identification:
 - `system-options`: `operation: "query"`, `command: "*OPT?"`, preserved
   `raw`, and trimmed comma-separated `options`. A raw `0` remains visible and
   produces `options: ["0"]`.
+- `cleanup`: `profile`, ordered `actions`, reported `skipped` actions with
+  reasons, and `final_error_queue_clean`. Dry-run reports planned actions and
+  uses `null` for the final error state. `errors` is present only when the final
+  error check reports an instrument error.
 - `doctor`: `backend`, `timeout_ms`, `acquisition`, `channels`, `timebase`,
   and `edge_trigger`.
 

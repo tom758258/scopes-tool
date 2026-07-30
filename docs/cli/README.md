@@ -397,6 +397,25 @@ This pack has hardware-free Core, CLI, simulator, and worker coverage only.
 No live hardware validation was performed, and no WebUI runtime behavior was
 added.
 
+### Safe Cleanup Profiles
+
+`cleanup` removes common automation leftovers without performing a full
+instrument reset. The default `minimal` profile clears status and transient
+display data, waits with `*OPC?`, and performs one final error check. The
+`safe` profile also turns off DVM, search, and Demo output and clears the
+supported primary annotation. Unsupported steps are skipped and reported;
+WGEN cleanup is intentionally reported as `wgen_not_implemented`.
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe cleanup --profile minimal --dry-run --json
+.\.venv\Scripts\scopes-tool.exe cleanup --profile safe --simulate --json
+```
+
+Cleanup never sends `*RST`, `:SYSTem:PRESet`, or autoscale, and it does not
+reset channels, timebase, or trigger configuration. Worker `/command` accepts
+the same command and optional `profile` argument through the existing CLI
+routing.
+
 Send basic acquisition control commands:
 
 ```powershell

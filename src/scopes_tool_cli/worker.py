@@ -75,6 +75,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "system-standard-event",
     "system-operation-status",
     "system-options",
+    "cleanup",
     "doctor",
     "run",
     "single",

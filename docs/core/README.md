@@ -116,6 +116,10 @@ Core owns runtime behavior:
   local, date/time, and a replacement for the existing
   system-error helpers are not implemented. Coverage is hardware-free; no live
   hardware validation was performed, and no WebUI runtime behavior was added.
+- Conservative `minimal` and `safe` cleanup profiles compose existing status,
+  display, DVM, search, annotation, and Demo helpers. Unsupported steps are
+  reported instead of adding new subsystems; cleanup never performs reset,
+  preset, autoscale, or broad state restoration.
 - Save/Export Pack v1 helpers for common 2000X/3000X/4000X instrument-side
   image and waveform file saving. The pack configures the current save
   directory, base filename, image format/palette/ink-saver/factors, and

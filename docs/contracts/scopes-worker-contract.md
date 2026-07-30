@@ -128,6 +128,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `identify`, `check-error`, `doctor`
 - `system-clear-status`, `system-opc`, `system-status-byte`,
   `system-standard-event`, `system-operation-status`, `system-options`
+- `cleanup`
 - `run`, `single`, `stop-acquisition`, `force-trigger`
 - `acquisition`, `acquisition-check`, `sample-rate`, `acquisition-points`,
   `record-length`
@@ -172,6 +173,9 @@ may return `statistics_items`. It is unrelated to Counter or
 
 `channel-summary` reuses the CLI/Core read-only analog-channel query path with
 empty arguments and returns the existing `result.channels` shape.
+
+`cleanup` reuses the CLI/Core cleanup path. Worker arguments use the normal
+`profile` CLI option and do not define a worker-specific cleanup schema.
 
 `list-resources` remains an explicit discovery command outside live worker
 flows. `hardware-report` remains a local report renderer. They are not accepted
