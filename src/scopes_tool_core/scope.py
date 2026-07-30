@@ -22,7 +22,7 @@ from .advanced import (
     TriggerHoldoffController,
 )
 from .capabilities import ScopeCapabilities, capabilities_for_model_id
-from .channel import ChannelController
+from .channel import ChannelController, ChannelSummaryEntry
 from .display import AnnotationState, DisplayController, DisplayPersistence
 from .dvm import (
     DvmAutoRangeState,
@@ -365,6 +365,11 @@ class Oscilloscope:
         """Query one analog channel label."""
 
         return self._channel_controller().query_label(channel)
+
+    def query_channel_summary(self) -> tuple[ChannelSummaryEntry, ...]:
+        """Query common setup fields for every analog channel."""
+
+        return self._channel_controller().query_summary()
 
     def set_display_label(self, enabled: bool) -> None:
         """Turn display labels on or off."""

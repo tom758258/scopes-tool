@@ -19,6 +19,8 @@ Core owns runtime behavior:
   operation helpers.
 - Analog channel advanced setting helpers for impedance, invert, full-scale
   range, units, vernier, and probe skew.
+- Read-only analog channel summaries that aggregate common channel and probe
+  setup for every analog channel in the active capability profile.
 - Simulator and fake backend support for hardware-free tests.
 - MATH-P1 instrument-side Math waveform display and vertical controls through
   `Oscilloscope.configure_math_display()`, `query_math_display()`,

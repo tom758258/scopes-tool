@@ -151,6 +151,10 @@ Control and setup:
 - `channel-*`: `channel`, `operation`, `command`, and the setting value such as
   `display`, `text`, `volts_per_division`, `volts`, `coupling`,
   `probe_ratio`, or `bandwidth_limit`.
+- `channel-summary`: `channels`, with one read-only analog-channel entry
+  containing `channel`, `display`, `label`, `scale`, `range`, `offset`,
+  `coupling`, `impedance`, `invert`, `bandwidth_limit`, `units`, `vernier`,
+  `probe_ratio`, and `probe_skew`. An unparseable optional field is `null`.
 - `display-label`: `operation`, `command`, and `display_label`.
 - `display-clear`: `operation: "display-clear"` and target-only `command`
   `:DISPlay:CLEar`.

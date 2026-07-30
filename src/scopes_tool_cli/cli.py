@@ -182,6 +182,7 @@ from scopes_tool_core.channel import (
     channel_range_query,
     channel_scale_command,
     channel_scale_query,
+    channel_summary_queries,
     channel_units_command,
     channel_units_query,
     channel_vernier_command,
@@ -693,6 +694,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="force one trigger event without waiting for acquisition completion",
     )
     _add_scope_connection_args(force_trigger_parser)
+
+    channel_summary_parser = subparsers.add_parser(
+        "channel-summary",
+        help="query common setup fields for all analog channels",
+    )
+    _add_scope_connection_args(channel_summary_parser)
 
     channel_display_parser = subparsers.add_parser(
         "channel-display",
@@ -2901,6 +2908,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_control(args)
     if args.command == "force-trigger":
         return _cmd_force_trigger(args)
+    if args.command == "channel-summary":
+        return _cmd_channel_summary(args)
     if args.command == "channel-display":
         return _cmd_channel_display(args)
     if args.command == "channel-label":
@@ -4647,6 +4656,10 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
     if command == "doctor":
         plan = plan_doctor(capabilities)
         return list(plan.planned_scpi), list(plan.files), plan.result
+    if command == "channel-summary":
+        return ["*IDN?", *channel_summary_queries(capabilities)], [], {
+            "channels": [],
+        }
     if command == "measure":
         plan = plan_measure(_measure_plan_request(args), capabilities)
         return list(plan.planned_scpi), list(plan.files), plan.result
@@ -6831,6 +6844,55 @@ def _cmd_channel_display(args: argparse.Namespace) -> int:
         _json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
+
+
+def _cmd_channel_summary(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
+
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        print(f"Series: {idn.series or 'unknown'}")
+        if scope.capabilities is None:
+            print("Capabilities: unavailable for this model")
+            return 1
+
+        channels = [entry.to_json() for entry in scope.query_channel_summary()]
+        _json_update_result(channels=channels)
+        for channel in channels:
+            print(
+                f"CH{channel['channel']}: "
+                f"display={_format_summary_bool(channel['display'])}, "
+                f"label={channel['label'] or '-'}, "
+                f"scale={_format_summary_value(channel['scale'])}, "
+                f"offset={_format_summary_value(channel['offset'])}, "
+                f"coupling={channel['coupling'] or '-'}, "
+                f"impedance={channel['impedance'] or '-'}, "
+                f"bandwidth_limit={_format_summary_bool(channel['bandwidth_limit'])}, "
+                f"probe_ratio={_format_summary_value(channel['probe_ratio'])}, "
+                f"probe_skew={_format_summary_value(channel['probe_skew'])}"
+            )
+        return 0
+
+
+def _format_summary_bool(value: object) -> str:
+    if value is None:
+        return "-"
+    return "on" if value is True else "off"
+
+
+def _format_summary_value(value: object) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, float):
+        return f"{value:.12g}"
+    return str(value)
 
 
 def _cmd_channel_label(args: argparse.Namespace) -> int:

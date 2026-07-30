@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
-from typing import Literal
+from typing import Callable, Literal
 
 from .capabilities import ScopeCapabilities
 from .errors import ChannelResponseError, ParameterValidationError
@@ -15,6 +16,44 @@ _IMPEDANCE_NOT_SUPPORTED_2000X = (
     "DSO-X 2000X only supports one-meg input impedance; 50 ohm is not supported "
     "by the 2000X channel impedance spec."
 )
+
+
+@dataclass(frozen=True)
+class ChannelSummaryEntry:
+    """Read-only setup summary for one analog channel."""
+
+    channel: int
+    display: bool | None
+    label: str | None
+    scale: float | None
+    range: float | None
+    offset: float | None
+    coupling: str | None
+    impedance: ChannelImpedance | None
+    invert: bool | None
+    bandwidth_limit: bool | None
+    units: ChannelUnits | None
+    vernier: bool | None
+    probe_ratio: float | None
+    probe_skew: float | None
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "channel": self.channel,
+            "display": self.display,
+            "label": self.label,
+            "scale": self.scale,
+            "range": self.range,
+            "offset": self.offset,
+            "coupling": self.coupling,
+            "impedance": self.impedance,
+            "invert": self.invert,
+            "bandwidth_limit": self.bandwidth_limit,
+            "units": self.units,
+            "vernier": self.vernier,
+            "probe_ratio": self.probe_ratio,
+            "probe_skew": self.probe_skew,
+        }
 
 
 class ChannelController:
@@ -198,6 +237,42 @@ class ChannelController:
 
         channel = validate_analog_channel(channel, self.capabilities)
         return parse_channel_label(self.scpi.query(channel_label_query(channel)))
+
+    def query_summary(self) -> tuple[ChannelSummaryEntry, ...]:
+        """Query common setup fields for every analog channel."""
+
+        entries = []
+        for channel in range(1, self.capabilities.analog_channels + 1):
+            entries.append(
+                ChannelSummaryEntry(
+                    channel=channel,
+                    display=self._query_optional(lambda: self.query_display(channel)),
+                    label=self._query_optional(lambda: self.query_label(channel)),
+                    scale=self._query_optional(lambda: self.query_scale(channel)),
+                    range=self._query_optional(lambda: self.query_range(channel)),
+                    offset=self._query_optional(lambda: self.query_offset(channel)),
+                    coupling=self._query_optional(lambda: self.query_coupling(channel)),
+                    impedance=self._query_optional(lambda: self.query_impedance(channel)),
+                    invert=self._query_optional(lambda: self.query_invert(channel)),
+                    bandwidth_limit=self._query_optional(
+                        lambda: self.query_bandwidth_limit(channel)
+                    ),
+                    units=self._query_optional(lambda: self.query_units(channel)),
+                    vernier=self._query_optional(lambda: self.query_vernier(channel)),
+                    probe_ratio=self._query_optional(
+                        lambda: self.query_probe_ratio(channel)
+                    ),
+                    probe_skew=self._query_optional(lambda: self.query_probe_skew(channel)),
+                )
+            )
+        return tuple(entries)
+
+    @staticmethod
+    def _query_optional(query: Callable[[], object]) -> object | None:
+        try:
+            return query()
+        except ChannelResponseError:
+            return None
 
 
 def validate_analog_channel(channel: int, capabilities: ScopeCapabilities) -> int:
@@ -492,6 +567,31 @@ def channel_label_query(channel: int) -> str:
     """Build the SCPI query for analog channel label text."""
 
     return f":CHANnel{channel}:LABel?"
+
+
+def channel_summary_queries(capabilities: ScopeCapabilities) -> list[str]:
+    """Build the ordered read-only query list for all analog channels."""
+
+    queries = []
+    for channel in range(1, capabilities.analog_channels + 1):
+        queries.extend(
+            [
+                channel_display_query(channel),
+                channel_label_query(channel),
+                channel_scale_query(channel),
+                channel_range_query(channel),
+                channel_offset_query(channel),
+                channel_coupling_query(channel),
+                channel_impedance_query(channel),
+                channel_invert_query(channel),
+                channel_bandwidth_limit_query(channel),
+                channel_units_query(channel),
+                channel_vernier_query(channel),
+                channel_probe_ratio_query(channel),
+                channel_probe_skew_query(channel),
+            ]
+        )
+    return queries
 
 
 def parse_channel_display(raw: str) -> bool:

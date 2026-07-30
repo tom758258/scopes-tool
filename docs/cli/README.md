@@ -563,6 +563,16 @@ Enable, disable, or query one analog channel display:
 .\.venv\Scripts\scopes-tool.exe channel-display --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --off --log-scpi
 ```
 
+Query a compact read-only summary of all analog channels:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe channel-summary --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
+```
+
+`channel-summary` aggregates common channel and probe setup from the active
+model profile. It sends queries only, does not change channel state, and does
+not include digital/MSO channels or extended probe inventory.
+
 The `channel-display` command first queries `*IDN?` so the channel number can be
 validated against the detected model before any channel display command is sent.
 It prints the planned change or query, then performs one `:SYSTem:ERRor?`
