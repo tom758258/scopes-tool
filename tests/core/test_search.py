@@ -6,11 +6,20 @@ from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.search import (
     SearchController,
+    parse_can_data_length_query,
+    parse_can_id_mode,
+    parse_can_search_mode,
+    parse_i2c_pattern_query,
     parse_search_count,
     parse_search_event,
     parse_search_mode,
+    parse_search_qualifier,
     parse_search_state,
-    parse_can_search_mode,
+    parse_pattern_query,
+    parse_spi_search_mode,
+    parse_spi_width_query,
+    parse_uart_data_query,
+    parse_uart_search_mode,
     parse_i2c_search_mode,
     search_count_query,
     search_event_command,
@@ -273,7 +282,7 @@ def test_core_serial_search_configure_commands(protocol, configure_fn, args, exp
                 ":SEARch:SERial:UART:DATA?": "85",
                 ":SEARch:SERial:UART:QUALifier?": "EQU",
             },
-            {"search_enabled": True, "search_mode": "serial1", "selected": True, "mode": "rx-data", "raw_mode": "RDAT", "data": 85, "qualifier": "equal"},
+            {"search_enabled": True, "raw_search_state": "1", "search_mode": "serial1", "raw_search_mode": "SER1", "selected": True, "mode": "rx-data", "raw_mode": "RDAT", "data": 85, "qualifier": "equal"},
         ),
         (
             "i2c",
@@ -288,7 +297,7 @@ def test_core_serial_search_configure_commands(protocol, configure_fn, args, exp
                 ":SEARch:SERial:IIC:PATTern:DATA2?": "-1",
                 ":SEARch:SERial:IIC:QUALifier?": "EQU",
             },
-            {"search_enabled": True, "search_mode": "serial1", "selected": True, "mode": "read7", "raw_mode": "READ7", "address": 80, "data": 255, "data2": -1, "qualifier": "equal"},
+            {"search_enabled": True, "raw_search_state": "1", "search_mode": "serial1", "raw_search_mode": "SER1", "selected": True, "mode": "read7", "raw_mode": "READ7", "address": 80, "data": 255, "data2": -1, "qualifier": "equal"},
         ),
         (
             "spi",
@@ -301,7 +310,7 @@ def test_core_serial_search_configure_commands(protocol, configure_fn, args, exp
                 ":SEARch:SERial:SPI:PATTern:DATA?": '"0xA5XX"',
                 ":SEARch:SERial:SPI:PATTern:WIDTh?": "8",
             },
-            {"search_enabled": True, "search_mode": "serial1", "selected": True, "mode": "mosi", "raw_mode": "MOSI", "data": "0xA5XX", "raw_data": '"0xA5XX"', "width": 8},
+            {"search_enabled": True, "raw_search_state": "1", "search_mode": "serial1", "raw_search_mode": "SER1", "selected": True, "mode": "mosi", "raw_mode": "MOSI", "data": "0xA5XX", "raw_data": '"0xA5XX"', "width": 8},
         ),
         (
             "can",
@@ -316,7 +325,7 @@ def test_core_serial_search_configure_commands(protocol, configure_fn, args, exp
                 ":SEARch:SERial:CAN:PATTern:ID?": '"0x123"',
                 ":SEARch:SERial:CAN:PATTern:ID:MODE?": "STAN",
             },
-            {"search_enabled": True, "search_mode": "serial1", "selected": True, "mode": "id-data", "raw_mode": "IDD", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"},
+            {"search_enabled": True, "raw_search_state": "1", "search_mode": "serial1", "raw_search_mode": "SER1", "selected": True, "mode": "id-data", "raw_mode": "IDD", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"},
         ),
     ],
 )
@@ -332,10 +341,89 @@ def test_core_serial_search_query_short_readbacks(protocol, query_fn, responses,
 
 @pytest.mark.parametrize(
     "parser, raw",
-    [(parse_i2c_search_mode, "ADDR"), (parse_can_search_mode, "ACK")],
+    [
+        (parse_i2c_search_mode, "ADDR"),
+        (parse_i2c_search_mode, "ADDRESS"),
+        (parse_can_search_mode, "ACK"),
+        (parse_can_search_mode, "STUFFERROR"),
+    ],
 )
 def test_core_serial_search_preserves_unsupported_4000x_modes(parser, raw):
     assert parser(raw) == (None, raw)
+
+
+def test_serial_search_query_preserves_raw_search_values_and_unselected_mode():
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "KEYSIGHT,DSOX3024A,MY12345678,02.41",
+            ":SEARch:STATe?": " 1 ",
+            ":SEARch:MODE?": " EDGE ",
+            ":SEARch:SERial:UART:MODE?": "RDAT",
+            ":SEARch:SERial:UART:DATA?": "85",
+            ":SEARch:SERial:UART:QUALifier?": "EQU",
+        }
+    )
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    result = scope.query_serial_search_uart(1).to_json()
+
+    assert result["raw_search_state"] == "1"
+    assert result["raw_search_mode"] == "EDGE"
+    assert result["search_mode"] == "edge"
+    assert result["selected"] is False
+
+
+@pytest.mark.parametrize(
+    "parser, raw",
+    [
+        (parse_uart_search_mode, "GARBAGE"),
+        (parse_i2c_search_mode, ""),
+        (parse_spi_search_mode, "GARBAGE"),
+        (parse_can_search_mode, "GARBAGE"),
+        (parse_search_qualifier, "BAD"),
+        (parse_can_id_mode, "BAD"),
+    ],
+)
+def test_serial_search_rejects_unknown_readbacks(parser, raw):
+    with pytest.raises(SearchResponseError):
+        parser(raw)
+
+
+def test_serial_search_unknown_mode_error_identifies_field_and_response():
+    with pytest.raises(
+        SearchResponseError,
+        match=r"Could not parse UART serial search mode response: 'GARBAGE'",
+    ):
+        parse_uart_search_mode("GARBAGE")
+
+
+@pytest.mark.parametrize(
+    "parser, raw",
+    [
+        (parse_uart_data_query, "256"),
+        (parse_spi_width_query, "11"),
+        (parse_can_data_length_query, "abc"),
+        (parse_i2c_pattern_query, "1.0"),
+    ],
+)
+def test_serial_search_rejects_malformed_numeric_readbacks(parser, raw):
+    with pytest.raises(SearchResponseError):
+        if parser is parse_i2c_pattern_query:
+            parser(raw, "I2C address")
+        else:
+            parser(raw)
+
+
+@pytest.mark.parametrize("raw", ['"0xA5XX', "0x", "0xGG", "garbage"])
+def test_serial_search_rejects_malformed_pattern_readbacks(raw):
+    with pytest.raises(SearchResponseError):
+        parse_pattern_query(raw)
+
+
+@pytest.mark.parametrize("raw", ['"0xA5XX"', "'0xA5XX'", "0xA5XX"])
+def test_serial_search_pattern_readbacks_are_canonicalized(raw):
+    assert parse_pattern_query(raw) == ("0xA5XX", raw)
 
 
 def test_serial_search_rejects_bus2_for_2000x():

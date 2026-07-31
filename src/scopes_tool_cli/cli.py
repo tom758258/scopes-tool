@@ -4559,6 +4559,50 @@ def _extract_serial_search_settings(args: argparse.Namespace) -> dict[str, objec
     return {f: getattr(args, f) for f in fields if getattr(args, f) is not None}
 
 
+def _canonical_serial_search_settings(
+    args: argparse.Namespace,
+) -> dict[str, object]:
+    settings = _extract_serial_search_settings(args)
+    if "mode" not in settings or settings["mode"] is None:
+        raise ParameterValidationError(f"{args.command} configure requires --mode.")
+
+    protocol = args.command.removeprefix("serial-search-")
+    canonical_settings = dict(settings)
+    if protocol == "uart":
+        canonical_settings["mode"] = validate_uart_search_mode(settings["mode"])
+        if "data" in settings:
+            canonical_settings["data"] = validate_uart_data(settings["data"])
+        if "qualifier" in settings:
+            canonical_settings["qualifier"] = validate_search_qualifier(settings["qualifier"])
+    elif protocol == "i2c":
+        canonical_settings["mode"] = validate_i2c_search_mode(settings["mode"])
+        if "address" in settings:
+            canonical_settings["address"] = validate_i2c_pattern_value(settings["address"], "address")
+        if "data" in settings:
+            canonical_settings["data"] = validate_i2c_pattern_value(settings["data"], "data")
+        if "data2" in settings:
+            canonical_settings["data2"] = validate_i2c_pattern_value(settings["data2"], "data2")
+        if "qualifier" in settings:
+            canonical_settings["qualifier"] = validate_search_qualifier(settings["qualifier"])
+    elif protocol == "spi":
+        canonical_settings["mode"] = validate_spi_search_mode(settings["mode"])
+        if "data" in settings:
+            canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
+        if "width" in settings:
+            canonical_settings["width"] = validate_spi_width(settings["width"])
+    elif protocol == "can":
+        canonical_settings["mode"] = validate_can_search_mode(settings["mode"])
+        if "data" in settings:
+            canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
+        if "data_length" in settings:
+            canonical_settings["data_length"] = validate_can_data_length(settings["data_length"])
+        if "id_val" in settings:
+            canonical_settings["id_val"] = validate_pattern_hex_x(settings["id_val"], "id")
+        if "id_mode" in settings:
+            canonical_settings["id_mode"] = validate_can_id_mode(settings["id_mode"])
+    return canonical_settings
+
+
 def _validate_serial_search_args(args: argparse.Namespace) -> None:
     capabilities = _pre_open_capabilities(args)
     if capabilities is not None:
@@ -7583,7 +7627,7 @@ def _cmd_serial_search(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         else:
-            settings = _extract_serial_search_settings(args)
+            settings = _canonical_serial_search_settings(args)
             config_fn = getattr(scope, f"configure_serial_search_{protocol}")
             state = config_fn(args.bus, **settings)
             cmds_fn = getattr(scopes_tool_core.search, f"serial_search_{protocol}_configure_commands")
@@ -7633,43 +7677,7 @@ def _dry_run_serial_search_plan(
         }
         return [*cmds, ":SYSTem:ERRor?"], [], result
 
-    settings = _extract_serial_search_settings(args)
-    if "mode" not in settings or settings["mode"] is None:
-        raise ParameterValidationError(f"{args.command} configure requires --mode.")
-
-    canonical_settings = dict(settings)
-    if protocol == "uart":
-        canonical_settings["mode"] = validate_uart_search_mode(settings["mode"])
-        if "data" in settings:
-            canonical_settings["data"] = validate_uart_data(settings["data"])
-        if "qualifier" in settings:
-            canonical_settings["qualifier"] = validate_search_qualifier(settings["qualifier"])
-    elif protocol == "i2c":
-        canonical_settings["mode"] = validate_i2c_search_mode(settings["mode"])
-        if "address" in settings:
-            canonical_settings["address"] = validate_i2c_pattern_value(settings["address"], "address")
-        if "data" in settings:
-            canonical_settings["data"] = validate_i2c_pattern_value(settings["data"], "data")
-        if "data2" in settings:
-            canonical_settings["data2"] = validate_i2c_pattern_value(settings["data2"], "data2")
-        if "qualifier" in settings:
-            canonical_settings["qualifier"] = validate_search_qualifier(settings["qualifier"])
-    elif protocol == "spi":
-        canonical_settings["mode"] = validate_spi_search_mode(settings["mode"])
-        if "data" in settings:
-            canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
-        if "width" in settings:
-            canonical_settings["width"] = validate_spi_width(settings["width"])
-    elif protocol == "can":
-        canonical_settings["mode"] = validate_can_search_mode(settings["mode"])
-        if "data" in settings:
-            canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
-        if "data_length" in settings:
-            canonical_settings["data_length"] = validate_can_data_length(settings["data_length"])
-        if "id_val" in settings:
-            canonical_settings["id_val"] = validate_pattern_hex_x(settings["id_val"], "id")
-        if "id_mode" in settings:
-            canonical_settings["id_mode"] = validate_can_id_mode(settings["id_mode"])
+    canonical_settings = _canonical_serial_search_settings(args)
 
     configure_builders = {
         "uart": serial_search_uart_configure_commands,

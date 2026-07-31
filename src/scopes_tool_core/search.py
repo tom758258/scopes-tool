@@ -153,7 +153,7 @@ _I2C_SEARCH_MODE_READBACKS = {
     "READEPROM": "eeprom-read",
 }
 
-_I2C_SEARCH_MODE_UNSUPPORTED_READBACKS = {"ADDR"}
+_I2C_SEARCH_MODE_UNSUPPORTED_READBACKS = {"ADDR", "ADDRESS"}
 
 SPI_SEARCH_MODES = (
     "mosi",
@@ -212,7 +212,9 @@ _CAN_SEARCH_MODE_UNSUPPORTED_READBACKS = {
     "FORM",
     "FORMERROR",
     "STUF",
+    "STUFF",
     "STUFERROR",
+    "STUFFERROR",
     "CRC",
     "CRCERROR",
     "MESS",
@@ -287,7 +289,9 @@ class SearchEventState:
 class SerialSearchUartState:
     bus: int
     search_enabled: bool | None = None
+    raw_search_state: str | None = None
     search_mode: str | None = None
+    raw_search_mode: str | None = None
     selected: bool | None = None
     mode: str | None = None
     raw_mode: str | None = None
@@ -300,8 +304,12 @@ class SerialSearchUartState:
         payload: dict[str, object] = {"bus": self.bus}
         if self.search_enabled is not None:
             payload["search_enabled"] = self.search_enabled
+        if self.raw_search_state is not None:
+            payload["raw_search_state"] = self.raw_search_state
         if self.search_enabled is not None:
             payload["search_mode"] = self.search_mode
+        if self.raw_search_mode is not None:
+            payload["raw_search_mode"] = self.raw_search_mode
         if self.selected is not None:
             payload["selected"] = self.selected
         payload["mode"] = self.mode
@@ -322,7 +330,9 @@ class SerialSearchUartState:
 class SerialSearchI2CState:
     bus: int
     search_enabled: bool | None = None
+    raw_search_state: str | None = None
     search_mode: str | None = None
+    raw_search_mode: str | None = None
     selected: bool | None = None
     mode: str | None = None
     raw_mode: str | None = None
@@ -339,8 +349,12 @@ class SerialSearchI2CState:
         payload: dict[str, object] = {"bus": self.bus}
         if self.search_enabled is not None:
             payload["search_enabled"] = self.search_enabled
+        if self.raw_search_state is not None:
+            payload["raw_search_state"] = self.raw_search_state
         if self.search_enabled is not None:
             payload["search_mode"] = self.search_mode
+        if self.raw_search_mode is not None:
+            payload["raw_search_mode"] = self.raw_search_mode
         if self.selected is not None:
             payload["selected"] = self.selected
         payload["mode"] = self.mode
@@ -369,7 +383,9 @@ class SerialSearchI2CState:
 class SerialSearchSpiState:
     bus: int
     search_enabled: bool | None = None
+    raw_search_state: str | None = None
     search_mode: str | None = None
+    raw_search_mode: str | None = None
     selected: bool | None = None
     mode: str | None = None
     raw_mode: str | None = None
@@ -382,8 +398,12 @@ class SerialSearchSpiState:
         payload: dict[str, object] = {"bus": self.bus}
         if self.search_enabled is not None:
             payload["search_enabled"] = self.search_enabled
+        if self.raw_search_state is not None:
+            payload["raw_search_state"] = self.raw_search_state
         if self.search_enabled is not None:
             payload["search_mode"] = self.search_mode
+        if self.raw_search_mode is not None:
+            payload["raw_search_mode"] = self.raw_search_mode
         if self.selected is not None:
             payload["selected"] = self.selected
         payload["mode"] = self.mode
@@ -404,7 +424,9 @@ class SerialSearchSpiState:
 class SerialSearchCanState:
     bus: int
     search_enabled: bool | None = None
+    raw_search_state: str | None = None
     search_mode: str | None = None
+    raw_search_mode: str | None = None
     selected: bool | None = None
     mode: str | None = None
     raw_mode: str | None = None
@@ -421,8 +443,12 @@ class SerialSearchCanState:
         payload: dict[str, object] = {"bus": self.bus}
         if self.search_enabled is not None:
             payload["search_enabled"] = self.search_enabled
+        if self.raw_search_state is not None:
+            payload["raw_search_state"] = self.raw_search_state
         if self.search_enabled is not None:
             payload["search_mode"] = self.search_mode
+        if self.raw_search_mode is not None:
+            payload["raw_search_mode"] = self.raw_search_mode
         if self.selected is not None:
             payload["selected"] = self.selected
         payload["mode"] = self.mode
@@ -536,13 +562,15 @@ class SearchController:
         selected = search_enabled and (parsed_search_mode == f"serial{canonical_bus}")
 
         mode, _ = parse_uart_search_mode(raw_mode)
-        data, _ = parse_int_query(raw_data)
+        data, _ = parse_uart_data_query(raw_data)
         qualifier, _ = parse_search_qualifier(raw_qualifier)
 
         return SerialSearchUartState(
             bus=canonical_bus,
             search_enabled=search_enabled,
+            raw_search_state=raw_state,
             search_mode=parsed_search_mode,
+            raw_search_mode=raw_search_mode,
             selected=selected,
             mode=mode,
             raw_mode=raw_mode,
@@ -619,15 +647,17 @@ class SearchController:
         selected = search_enabled and (parsed_search_mode == f"serial{canonical_bus}")
 
         mode, _ = parse_i2c_search_mode(raw_mode)
-        address, _ = parse_int_query(raw_address)
-        data, _ = parse_int_query(raw_data)
-        data2, _ = parse_int_query(raw_data2)
+        address, _ = parse_i2c_pattern_query(raw_address, "I2C address")
+        data, _ = parse_i2c_pattern_query(raw_data, "I2C data")
+        data2, _ = parse_i2c_pattern_query(raw_data2, "I2C data2")
         qualifier, _ = parse_search_qualifier(raw_qualifier)
 
         return SerialSearchI2CState(
             bus=canonical_bus,
             search_enabled=search_enabled,
+            raw_search_state=raw_state,
             search_mode=parsed_search_mode,
+            raw_search_mode=raw_search_mode,
             selected=selected,
             mode=mode,
             raw_mode=raw_mode,
@@ -687,12 +717,14 @@ class SearchController:
 
         mode, _ = parse_spi_search_mode(raw_mode)
         data, _ = parse_pattern_query(raw_data)
-        width, _ = parse_int_query(raw_width)
+        width, _ = parse_spi_width_query(raw_width)
 
         return SerialSearchSpiState(
             bus=canonical_bus,
             search_enabled=search_enabled,
+            raw_search_state=raw_state,
             search_mode=parsed_search_mode,
+            raw_search_mode=raw_search_mode,
             selected=selected,
             mode=mode,
             raw_mode=raw_mode,
@@ -770,14 +802,16 @@ class SearchController:
 
         mode, _ = parse_can_search_mode(raw_mode)
         data, _ = parse_pattern_query(raw_data)
-        data_length, _ = parse_int_query(raw_data_length)
+        data_length, _ = parse_can_data_length_query(raw_data_length)
         id_val, _ = parse_pattern_query(raw_id)
         id_mode, _ = parse_can_id_mode(raw_id_mode)
 
         return SerialSearchCanState(
             bus=canonical_bus,
             search_enabled=search_enabled,
+            raw_search_state=raw_state,
             search_mode=parsed_search_mode,
+            raw_search_mode=raw_search_mode,
             selected=selected,
             mode=mode,
             raw_mode=raw_mode,
@@ -1144,13 +1178,23 @@ def parse_search_event(raw: str) -> SearchEventState:
 def parse_uart_search_mode(raw: str) -> tuple[str | None, str]:
     cleaned = raw.strip()
     upper = cleaned.upper()
-    return _UART_SEARCH_MODE_READBACKS.get(upper), cleaned
+    try:
+        return _UART_SEARCH_MODE_READBACKS[upper], cleaned
+    except KeyError as exc:
+        raise SearchResponseError(
+            f"Could not parse UART serial search mode response: {cleaned!r}"
+        ) from exc
 
 
 def parse_search_qualifier(raw: str) -> tuple[str | None, str]:
     cleaned = raw.strip()
     upper = cleaned.upper()
-    return _SEARCH_QUALIFIER_READBACKS.get(upper), cleaned
+    try:
+        return _SEARCH_QUALIFIER_READBACKS[upper], cleaned
+    except KeyError as exc:
+        raise SearchResponseError(
+            f"Could not parse search qualifier response: {cleaned!r}"
+        ) from exc
 
 
 def parse_i2c_search_mode(raw: str) -> tuple[str | None, str]:
@@ -1158,13 +1202,23 @@ def parse_i2c_search_mode(raw: str) -> tuple[str | None, str]:
     upper = cleaned.upper()
     if upper in _I2C_SEARCH_MODE_UNSUPPORTED_READBACKS:
         return None, cleaned
-    return _I2C_SEARCH_MODE_READBACKS.get(upper), cleaned
+    try:
+        return _I2C_SEARCH_MODE_READBACKS[upper], cleaned
+    except KeyError as exc:
+        raise SearchResponseError(
+            f"Could not parse I2C serial search mode response: {cleaned!r}"
+        ) from exc
 
 
 def parse_spi_search_mode(raw: str) -> tuple[str | None, str]:
     cleaned = raw.strip()
     upper = cleaned.upper()
-    return _SPI_SEARCH_MODE_READBACKS.get(upper), cleaned
+    try:
+        return _SPI_SEARCH_MODE_READBACKS[upper], cleaned
+    except KeyError as exc:
+        raise SearchResponseError(
+            f"Could not parse SPI serial search mode response: {cleaned!r}"
+        ) from exc
 
 
 def parse_can_search_mode(raw: str) -> tuple[str | None, str]:
@@ -1172,28 +1226,92 @@ def parse_can_search_mode(raw: str) -> tuple[str | None, str]:
     upper = cleaned.upper()
     if upper in _CAN_SEARCH_MODE_UNSUPPORTED_READBACKS:
         return None, cleaned
-    return _CAN_SEARCH_MODE_READBACKS.get(upper), cleaned
+    try:
+        return _CAN_SEARCH_MODE_READBACKS[upper], cleaned
+    except KeyError as exc:
+        raise SearchResponseError(
+            f"Could not parse CAN serial search mode response: {cleaned!r}"
+        ) from exc
 
 
 def parse_can_id_mode(raw: str) -> tuple[str | None, str]:
     cleaned = raw.strip()
     upper = cleaned.upper()
-    return _CAN_SEARCH_ID_MODE_READBACKS.get(upper), cleaned
+    try:
+        return _CAN_SEARCH_ID_MODE_READBACKS[upper], cleaned
+    except KeyError as exc:
+        raise SearchResponseError(
+            f"Could not parse CAN ID mode response: {cleaned!r}"
+        ) from exc
 
 
-def parse_int_query(raw: str) -> tuple[int | None, str]:
+def _parse_integer_query(
+    raw: str,
+    field: str,
+    validator=None,
+) -> tuple[int, str]:
     cleaned = raw.strip()
     try:
-        return int(cleaned), cleaned
-    except ValueError:
-        return None, cleaned
+        value = int(cleaned)
+    except ValueError as exc:
+        raise SearchResponseError(
+            f"Could not parse {field} response: {cleaned!r}"
+        ) from exc
+    if validator is not None:
+        try:
+            validator(value)
+        except ParameterValidationError as exc:
+            raise SearchResponseError(
+                f"Could not parse {field} response: {cleaned!r}"
+            ) from exc
+    return value, cleaned
+
+
+def parse_uart_data_query(raw: str) -> tuple[int, str]:
+    return _parse_integer_query(raw, "UART serial search data", validate_uart_data)
+
+
+def parse_i2c_pattern_query(raw: str, field: str) -> tuple[int, str]:
+    return _parse_integer_query(raw, field)
+
+
+def parse_spi_width_query(raw: str) -> tuple[int, str]:
+    return _parse_integer_query(raw, "SPI serial search width", validate_spi_width)
+
+
+def parse_can_data_length_query(raw: str) -> tuple[int, str]:
+    return _parse_integer_query(
+        raw, "CAN serial search data length", validate_can_data_length
+    )
+
+
+def parse_int_query(raw: str) -> tuple[int, str]:
+    return _parse_integer_query(raw, "integer")
 
 
 def parse_pattern_query(raw: str) -> tuple[str | None, str]:
     cleaned = raw.strip()
-    unquoted = cleaned.strip('"').strip("'")
+    if not cleaned:
+        raise SearchResponseError(
+            f"Could not parse serial search pattern response: {cleaned!r}"
+        )
+    if cleaned[0] in {'"', "'"}:
+        quote = cleaned[0]
+        if len(cleaned) < 2 or cleaned[-1] != quote:
+            raise SearchResponseError(
+                f"Could not parse serial search pattern response: {cleaned!r}"
+            )
+        unquoted = cleaned[1:-1]
+    elif cleaned[-1] in {'"', "'"}:
+        raise SearchResponseError(
+            f"Could not parse serial search pattern response: {cleaned!r}"
+        )
+    else:
+        unquoted = cleaned
     try:
-        canonical = validate_pattern_hex_x(unquoted)
+        canonical = validate_pattern_hex_x(unquoted, "serial search")
         return canonical, cleaned
-    except ParameterValidationError:
-        return None, cleaned
+    except ParameterValidationError as exc:
+        raise SearchResponseError(
+            f"Could not parse serial search pattern response: {cleaned!r}"
+        ) from exc

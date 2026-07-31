@@ -266,24 +266,34 @@ transfer APIs. The maximum accepted configured save length is model-, option-,
 and instrument-state-dependent; Core enforces the common minimum of 100 points
 and preserves the raw length readback.
 
-Serial Basic P0 is available through `Oscilloscope.query_serial()`,
-`configure_serial_mode()`, `query_serial_mode()`,
-`configure_serial_display()`, and `query_serial_display()`. Aggregate
-`:SBUS<n>?` results preserve the trimmed subsystem response without parsing it.
-Mode and display configuration each send only their target write. Capability
-profiles control the available bus count and settable modes; mode query parsing
-is independent of that configure allowlist. Protocol-specific configuration,
-Lister, export, serial trigger, and serial search are not implemented. Serial
-decode may require an instrument license, and an unlicensed instrument error
-is returned through the existing SCPI error path without a license probe.
+Serial support is delivered in four focused stages:
 
-Serial Basic P1 additionally exposes `configure_serial_uart()` /
-`query_serial_uart()`, `configure_serial_i2c()` / `query_serial_i2c()`,
-`configure_serial_spi()` / `query_serial_spi()`, and
-`configure_serial_can()` / `query_serial_can()`. Configure methods set the
-selected mode first and then write only supplied basic fields in the
-controller-defined order. Query methods verify the current mode before
-querying protocol fields and preserve raw readbacks alongside canonical
-values. Sources are analog `channelN` values bounded by
-`ScopeCapabilities.analog_channels` or `external`. P1 excludes serial trigger,
-Search, Lister, export, and advanced protocol settings.
+- P0 provides basic bus mode and display controls through
+  `Oscilloscope.query_serial()`, `configure_serial_mode()`,
+  `query_serial_mode()`, `configure_serial_display()`, and
+  `query_serial_display()`. Aggregate `:SBUS<n>?` results preserve the
+  trimmed subsystem response without parsing it. Mode and display writes send
+  only their target commands.
+- P1 provides UART, I2C, SPI, and CAN decode configuration through the
+  protocol-specific configure/query methods. Configure methods set the
+  selected mode first and then write supplied fields in controller-defined
+  order. Query methods preserve raw readbacks alongside canonical values. P1
+  does not include Search, serial trigger, Lister, export, or advanced
+  protocol settings.
+- P2 provides Serial Lister display/reference query and configuration plus
+  host-side raw CSV export through `:LISTer:DATA?`. It does not acquire
+  traffic, enable decode, or parse protocol-specific CSV rows.
+- P3 provides UART, I2C, SPI, and CAN Serial Search configure/query controls.
+  The matching Serial bus must first be configured with
+  `configure_serial_uart()`, `configure_serial_i2c()`,
+  `configure_serial_spi()`, or `configure_serial_can()` as appropriate.
+  Serial Search does not query, modify, or force validation of the current
+  SBUS protocol configuration. Query results preserve canonical values and
+  trimmed raw values for both Search state/mode and protocol fields.
+  Known 4000X-only I2C/CAN mode readbacks return `mode: null` while preserving
+  `raw_mode`; other malformed readbacks raise `SearchResponseError`.
+  P3 does not support LIN, advanced protocols, symbolic CAN, or Search export.
+
+Serial decode may require an instrument license. Core does not probe licenses;
+an unavailable option remains a normal instrument error through the existing
+SCPI error path.

@@ -158,18 +158,27 @@ def test_search_event_cli_execution_and_validation(capsys):
             "spi",
         ),
         (
-            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12XX", "--data-length", "2", "--id", "0x123", "--id-mode", "standard"],
+            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12XX", "--data-length", "2", "--id", "0xabc", "--id-mode", "standard"],
             "can",
         ),
     ],
 )
 def test_simulator_cli_serial_search_configure(capsys, cmd_args, expected_protocol):
     assert cli.main([*cmd_args, "--simulate", "--json"]) == 0
-    res = _payload(capsys)["result"]
+    payload = _payload(capsys)
+    res = payload["result"]
     assert res["operation"] == "configure"
     assert res["protocol"] == expected_protocol
     assert res["bus"] == 1
     assert res["state_changing"] is True
+    assert res["commands"] == payload["scpi"]["sent"][1:-1]
+    assert "*IDN?" not in res["commands"]
+    assert ":SYSTem:ERRor?" not in res["commands"]
+    if expected_protocol == "spi":
+        assert ':SEARch:SERial:SPI:PATTern:DATA "0xA5XX"' in res["commands"]
+    if expected_protocol == "can":
+        assert ':SEARch:SERial:CAN:PATTern:DATA "0x12XX"' in res["commands"]
+        assert ':SEARch:SERial:CAN:PATTern:ID "0xABC"' in res["commands"]
 
 
 def test_serial_search_uart_query_json(capsys):
@@ -179,6 +188,8 @@ def test_serial_search_uart_query_json(capsys):
     assert res["protocol"] == "uart"
     assert res["bus"] == 1
     assert res["search_enabled"] is False
+    assert res["raw_search_state"] == "0"
+    assert res["raw_search_mode"] == "OFF"
     assert res["selected"] is False
     assert res["mode"] == "rx-data"
     assert res["raw_mode"] == "RDAT"
@@ -203,9 +214,9 @@ def test_serial_search_uart_query_json(capsys):
             {"mode": "mosi", "data": "0xA5XX", "width": 8},
         ),
         (
-            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12xx", "--data-length", "2", "--id", "0x123", "--id-mode", "standard"],
+            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12xx", "--data-length", "2", "--id", "0xabc", "--id-mode", "standard"],
             "can",
-            {"mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"},
+            {"mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0xABC", "id_mode": "standard"},
         ),
     ],
 )

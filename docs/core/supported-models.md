@@ -183,10 +183,11 @@ the presence of an instrument license.
 Serial Basic P0 keeps aggregate responses raw. Serial Basic P1 implements only
 basic UART, I2C, SPI, and CAN source/decode settings. Serial Lister P2 adds
 global display/reference controls and host-side raw CSV export through
-`:LISTer:DATA?`; it does not implement serial trigger, Search, protocol-specific
-CSV parsing, or instrument-side `:SAVE:LISTer`. Lister display selection `bus2`
-is unavailable on 2000X and available on 3000X/4000X; `all` remains valid on
-2000X.
+`:LISTer:DATA?`; it does not implement serial trigger, protocol-specific CSV
+parsing, or instrument-side `:SAVE:LISTer`. Serial Search P3 provides
+protocol-specific UART, I2C, SPI, and CAN search controls after the matching
+Serial bus has been configured. Lister display selection `bus2` is unavailable
+on 2000X and available on 3000X/4000X; `all` remains valid on 2000X.
 
 These common pack entries describe runtime capability support. They do not
 imply live hardware validation on every supported model, firmware, or USB/LAN

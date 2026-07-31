@@ -1737,7 +1737,8 @@ analog-channel capability. CAN signal definitions use `canh`, `canl`, `rx`,
 worker-live, rejects invalid bus, mode, source, or parameter values using the
 startup model before enqueue, artifact creation, backend open, or SCPI. P1
 does not configure serial trigger, Search, Lister, export, or advanced protocol
-parameters; instrument license errors remain normal instrument errors.
+parameters; Serial Search is provided by the separate P3 commands below.
+Instrument license errors remain normal instrument errors.
 
 ### Serial Lister P2 Commands
 
@@ -1820,9 +1821,30 @@ DSO-X 2000X accepts only `serial1`; 3000X accepts `edge`, `glitch`, `runt`,
 `transition`, `serial1`, and `serial2`; 4000X additionally accepts `peak`.
 Empty arguments, `query: false`, query/configure mixes, unknown keys, wrong
 types, aliases, uppercase values, and unsupported profile modes are rejected.
-Mode-specific search parameters and serial search
-pattern configuration are not implemented. This pack has hardware-free
-validation only; no live hardware validation was performed.
+
+### Serial Search P3 Commands
+
+The worker accepts `serial-search-uart`, `serial-search-i2c`,
+`serial-search-spi`, and `serial-search-can`. Each request requires a valid
+`bus` and either `{"query": true}` or the canonical protocol-specific Search
+fields. The matching Serial bus must already be configured with the related
+P1 command. Serial Search does not query, modify, or force validation of the
+current SBUS protocol configuration.
+
+Query results preserve canonical protocol values and trimmed raw values,
+including `raw_search_state` and `raw_search_mode`. The I2C readbacks `ADDR`
+and `ADDRESS`, and the CAN readbacks `ACK`, `ACKERROR`, `FORM`, `FORMERROR`,
+`STUF`, `STUFF`, `STUFERROR`, `STUFFERROR`, `CRC`, `CRCERROR`, `MESS`,
+`MESSAGE`, `MSIG`, and `MSIGNAL` are known 4000X-only modes and return
+`mode: null` with the original trimmed `raw_mode`. Other unknown or malformed
+readbacks fail with `SearchResponseError`.
+
+Unknown fields, wrong types, query/configure mixes, unavailable buses, and
+unsupported configure values fail before enqueue, artifact creation, backend
+open, or SCPI. These commands create no command artifacts. Serial Search P3
+does not support LIN, advanced protocols, symbolic CAN, or Search export. This
+surface has hardware-free validation only; no live hardware validation was
+performed.
 
 ### Save/Export Pack v1 Commands
 
@@ -2032,8 +2054,9 @@ The `measure-clear`, `measure-show`, `measure-source`, `measure-window`,
 `wgen-voltage`, `wgen-offset`, `wgen-load`, `serial-query`, `serial-mode`,
 `serial-display`, `serial-uart`, `serial-i2c`, `serial-spi`, `serial-can`,
 `serial-lister-query`, `serial-lister-display`, `serial-lister-reference`,
-`search-state`, `search-mode`, `search-count`, and
-`search-event`
+`search-state`, `search-mode`, `search-count`, `search-event`,
+`serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, and
+`serial-search-can`
 commands also do not create command artifacts.
 `serial-lister-export` creates one CSV command artifact at the requested output
 path and otherwise uses the standard worker `request.json` and `result.json`.
