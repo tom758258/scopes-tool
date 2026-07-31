@@ -1625,7 +1625,8 @@ Control Search Basic Pack v1:
 lowercase canonical mode. Configuring a mode sends `:SEARch:STATe 1` before
 `:SEARch:MODE <mode>`. `search-count` is query-only and requires `--query`.
 `search-event` requires `--query` or positive integer `--event`
-(supported on 4000X profile only).
+(supported on 4000X profile only). A query may return event `0` when no search
+event is selected or no search hits are available.
 
 Runtime support is capability-profile guarded: 2000X supports `serial1` only;
 3000X supports `edge`, `glitch`, `runt`, `transition`, `serial1`, and

@@ -244,6 +244,6 @@ def parse_search_event(raw: str) -> SearchEventState:
         raise SearchResponseError(
             f"Could not parse search event response: {raw!r}"
         ) from exc
-    if event <= 0:
+    if event < 0:
         raise SearchResponseError(f"Could not parse search event response: {raw!r}")
     return SearchEventState(event=event, raw=raw_event)

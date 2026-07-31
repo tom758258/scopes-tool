@@ -147,7 +147,7 @@ def test_search_event_scpi_builders_and_validation():
 
 @pytest.mark.parametrize(
     "raw, expected_event, expected_raw",
-    [("1", 1, "1"), ("+1", 1, "+1"), (" 2 \n", 2, "2")],
+    [("1", 1, "1"), ("+1", 1, "+1"), ("+0", 0, "+0"), (" 2 \n", 2, "2")],
 )
 def test_parse_search_event_success(raw, expected_event, expected_raw):
     state = parse_search_event(raw)
@@ -155,7 +155,7 @@ def test_parse_search_event_success(raw, expected_event, expected_raw):
     assert state.raw == expected_raw
 
 
-@pytest.mark.parametrize("raw", ["", "0", "-1", "1.0", "abc"])
+@pytest.mark.parametrize("raw", ["", "-1", "1.0", "abc"])
 def test_parse_search_event_rejects_invalid(raw):
     with pytest.raises(SearchResponseError, match="Could not parse search event response"):
         parse_search_event(raw)
