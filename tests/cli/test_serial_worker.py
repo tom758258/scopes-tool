@@ -4,13 +4,19 @@ from scopes_tool_cli import cli, worker
 from scopes_tool_core.errors import OscilloscopeError
 
 
-def _runtime(tmp_path, model="keysight-dsox4034a"):
+def _runtime(
+    tmp_path,
+    model="keysight-dsox4034a",
+    *,
+    mode="simulate",
+    resource=None,
+):
     return worker.WorkerRuntime(
         host="127.0.0.1",
         port=0,
-        mode="simulate",
+        mode=mode,
         model=model,
-        resource=None,
+        resource=resource,
         artifact_root=tmp_path,
         queue_max=1,
         output_format="jsonl",
@@ -61,6 +67,24 @@ def test_worker_serial_rejects_invalid_2000x_arguments_before_side_effects(
     runtime = _runtime(tmp_path, "keysight-dsox2004a")
     with pytest.raises(OscilloscopeError):
         worker.parse_domain_command(command, arguments, runtime)
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+
+
+def test_worker_live_serial_rejects_invalid_startup_model_arguments_before_side_effects(
+    tmp_path,
+):
+    runtime = _runtime(
+        tmp_path,
+        "keysight-dsox2004a",
+        mode="live",
+        resource="FAKE::SCOPE",
+    )
+
+    with pytest.raises(OscilloscopeError):
+        worker.parse_domain_command("serial-query", {"bus": 2}, runtime)
+
     assert runtime.accepted == 0
     assert runtime.queue.empty()
     assert runtime.jobs == {}

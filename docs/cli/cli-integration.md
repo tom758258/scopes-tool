@@ -27,10 +27,15 @@ Serial Basic P0 adapter commands are `serial-query`, `serial-mode`, and
 `serial-display`. Every command requires `--bus`. Mode and display require
 exactly one of query or configure action; display configuration uses canonical
 `--enabled true|false`. `serial-query` preserves the trimmed aggregate
-subsystem response without deriving mode or display fields. The selected model
-profile validates bus count and settable mode before resource open. P0 does not
-expose protocol-specific configuration, Lister, export, serial trigger, or
-serial search. Missing serial decode licenses remain instrument errors.
+subsystem response without deriving mode or display fields. Simulation and
+dry-run use the selected model profile to validate bus count and settable mode
+before backend open; live workers use their startup model for the same strict
+pre-open validation. A normal live one-shot opens the requested resource,
+queries `*IDN?`, and then validates Serial bus and mode support from the
+detected model before sending any `:SBUS...` command; `--model` does not
+override that detected identity. P0 does not expose protocol-specific
+configuration, Lister, export, serial trigger, or serial search. Missing serial
+decode licenses remain instrument errors.
 
 Search Basic Pack v1 adapter commands are `search-state`, `search-mode`,
 query-only `search-count`, and 4000X `search-event`. Boolean configuration uses canonical

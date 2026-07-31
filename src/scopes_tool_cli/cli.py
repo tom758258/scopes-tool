@@ -4060,7 +4060,7 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
 def _validate_serial_args(args: argparse.Namespace) -> None:
     capabilities = _pre_open_capabilities(args)
     if capabilities is None:
-        capabilities = capabilities_for_model_id(args.model)
+        return
     validate_serial_bus(args.bus, capabilities)
     if args.command == "serial-mode" and not args.query:
         validate_serial_mode(args.mode, capabilities)

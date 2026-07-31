@@ -6,7 +6,11 @@ from dataclasses import dataclass
 
 from .capabilities import ScopeCapabilities
 from .display import parse_display_label
-from .errors import ParameterValidationError, SerialResponseError
+from .errors import (
+    ChannelResponseError,
+    ParameterValidationError,
+    SerialResponseError,
+)
 from .scpi import SCPIClient
 
 
@@ -136,9 +140,15 @@ class SerialController:
     def query_display(self, bus: int) -> SerialDisplayState:
         canonical_bus = validate_serial_bus(bus, self.capabilities)
         raw = self.scpi.query(serial_display_query(canonical_bus)).strip()
+        try:
+            enabled = parse_display_label(raw)
+        except ChannelResponseError as exc:
+            raise SerialResponseError(
+                f"Could not parse serial display response: {raw!r}"
+            ) from exc
         return SerialDisplayState(
             bus=canonical_bus,
-            enabled=parse_display_label(raw),
+            enabled=enabled,
             raw_state=raw,
         )
 

@@ -3,6 +3,7 @@ import json
 import pytest
 
 from scopes_tool_cli import cli
+from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
@@ -54,6 +55,86 @@ def test_serial_simulator_mode_and_display_round_trip():
     assert scope.query_serial_display(2).enabled is False
 
 
+def _patch_live_scope(monkeypatch, idn: str):
+    backend = FakeBackend(
+        responses={
+            "*IDN?": idn,
+            ":SYSTem:ERRor?": '+0,"No error"',
+        }
+    )
+    scope = Oscilloscope(backend)
+    monkeypatch.setattr(
+        cli.Oscilloscope,
+        "open",
+        lambda *unused, **kwargs: scope,
+    )
+    return backend
+
+
+def test_serial_live_uses_detected_4000x_capabilities_not_planning_model(
+    monkeypatch, capsys
+):
+    backend = _patch_live_scope(
+        monkeypatch,
+        "KEYSIGHT TECHNOLOGIES,DSOX4034A,MY00000000,02.50",
+    )
+
+    assert (
+        cli.main(
+            [
+                "serial-mode",
+                "--bus",
+                "2",
+                "--mode",
+                "usb-pd",
+                "--resource",
+                "FAKE::SCOPE",
+                "--model",
+                "keysight-dsox2004a",
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    payload = _payload(capsys)
+    assert payload["ok"] is True
+    assert payload["result"]["mode"] == "usb-pd"
+    assert backend.history == [
+        "*IDN?",
+        ":SBUS2:MODE USBPd",
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_serial_live_uses_detected_2000x_capabilities_before_target_scpi(
+    monkeypatch, capsys
+):
+    backend = _patch_live_scope(
+        monkeypatch,
+        "KEYSIGHT TECHNOLOGIES,DSOX2004A,MY00000000,02.50",
+    )
+
+    assert (
+        cli.main(
+            [
+                "serial-query",
+                "--bus",
+                "2",
+                "--resource",
+                "FAKE::SCOPE",
+                "--json",
+            ]
+        )
+        == 1
+    )
+
+    payload = _payload(capsys)
+    assert payload["ok"] is False
+    assert payload["error"]["type"] == "ParameterValidationError"
+    assert backend.history == ["*IDN?"]
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -61,15 +142,16 @@ def test_serial_simulator_mode_and_display_round_trip():
         ["serial-mode", "--bus", "1", "--mode", "usb-pd"],
     ],
 )
+@pytest.mark.parametrize("run_flags", [["--simulate"], ["--dry-run"]])
 def test_serial_2000x_profile_rejection_happens_before_open(
-    monkeypatch, capsys, args
+    monkeypatch, capsys, args, run_flags
 ):
     monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert (
         cli.main(
             [
                 *args,
-                "--simulate",
+                *run_flags,
                 "--json",
                 "--model",
                 "keysight-dsox2004a",

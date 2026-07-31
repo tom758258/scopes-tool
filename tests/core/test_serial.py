@@ -1,7 +1,7 @@
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model
-from scopes_tool_core.errors import ParameterValidationError
+from scopes_tool_core.errors import ParameterValidationError, SerialResponseError
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.scpi import SCPIClient
@@ -118,6 +118,18 @@ def test_serial_display_query_reuses_boolean_readback_parser(raw, expected):
         "enabled": expected,
         "raw_state": raw,
     }
+
+
+def test_serial_display_malformed_readback_uses_serial_response_error():
+    backend = FakeBackend(responses={":SBUS1:DISPlay?": "MAYBE"})
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    with pytest.raises(SerialResponseError, match="serial display"):
+        controller.query_display(1)
+
+    assert backend.history == [":SBUS1:DISPlay?"]
 
 
 def test_serial_aggregate_query_preserves_trimmed_raw_response():
