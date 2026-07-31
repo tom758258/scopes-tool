@@ -103,10 +103,21 @@ names are intended for package consumers and tests:
 - `SearchModeState`
 - `SearchState`
 - `SERIAL_MODES`
+- `CAN_SIGNAL_DEFINITIONS`
+- `I2C_ADDRESS_SIZES`
+- `SERIAL_BIT_ORDERS`
+- `SPI_CLOCK_SLOPES`
+- `SPI_FRAMINGS`
+- `UART_PARITIES`
+- `UART_POLARITIES`
 - `SerialController`
 - `SerialDisplayState`
+- `SerialCanState`
+- `SerialI2CState`
 - `SerialModeState`
 - `SerialQueryState`
+- `SerialSpiState`
+- `SerialUartState`
 - `MultiChannelWaveformCapture`
 - `OperationCompleteState`
 - `OperationPlan`
@@ -255,3 +266,14 @@ is independent of that configure allowlist. Protocol-specific configuration,
 Lister, export, serial trigger, and serial search are not implemented. Serial
 decode may require an instrument license, and an unlicensed instrument error
 is returned through the existing SCPI error path without a license probe.
+
+Serial Basic P1 additionally exposes `configure_serial_uart()` /
+`query_serial_uart()`, `configure_serial_i2c()` / `query_serial_i2c()`,
+`configure_serial_spi()` / `query_serial_spi()`, and
+`configure_serial_can()` / `query_serial_can()`. Configure methods set the
+selected mode first and then write only supplied basic fields in the
+controller-defined order. Query methods verify the current mode before
+querying protocol fields and preserve raw readbacks alongside canonical
+values. Sources are analog `channelN` values bounded by
+`ScopeCapabilities.analog_channels` or `external`. P1 excludes serial trigger,
+Search, Lister, export, and advanced protocol settings.

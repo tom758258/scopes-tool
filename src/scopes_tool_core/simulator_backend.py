@@ -180,6 +180,7 @@ class SimulatorBackend:
     wgen_load: str = "ONEMeg"
     serial_modes: dict[int, str] = field(default_factory=dict)
     serial_display: dict[int, bool] = field(default_factory=dict)
+    serial_protocol_settings: dict[int, dict[str, str]] = field(default_factory=dict)
     search_enabled: bool = False
     search_mode: str = "SERial1"
     search_count: int = 0
@@ -309,6 +310,35 @@ class SimulatorBackend:
         }
         self.serial_display = {
             bus: self.serial_display.get(bus, False)
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        defaults = {
+            "uart_rx_source": "CHANnel1",
+            "uart_tx_source": "CHANnel1",
+            "uart_baud_rate": "115200",
+            "uart_data_bits": "8",
+            "uart_parity": "NONE",
+            "uart_polarity": "HIGH",
+            "uart_bit_order": "MSBFirst",
+            "iic_clock_source": "CHANnel1",
+            "iic_data_source": "CHANnel2",
+            "iic_address_size": "BIT7",
+            "spi_clock_source": "CHANnel1",
+            "spi_frame_source": "CHANnel2",
+            "spi_mosi_source": "CHANnel3",
+            "spi_miso_source": "CHANnel4",
+            "spi_clock_slope": "POSitive",
+            "spi_bit_order": "MSBFirst",
+            "spi_word_width": "8",
+            "spi_framing": "CHIPselect",
+            "spi_clock_timeout": "1e-06",
+            "can_source": "CHANnel1",
+            "can_baud_rate": "500000",
+            "can_signal_definition": "CANH",
+            "can_sample_point": "75",
+        }
+        self.serial_protocol_settings = {
+            bus: {**defaults, **self.serial_protocol_settings.get(bus, {})}
             for bus in range(1, self._capabilities.serial_bus_count + 1)
         }
         self.signals = {
@@ -502,6 +532,8 @@ class SimulatorBackend:
         ):
             bus = self._validate_serial_bus(int(match.group(1)))
             self.serial_display[bus] = _parse_scpi_bool_write(command)
+        elif self._apply_serial_protocol_write(command):
+            pass
         elif upper.startswith(":SEARCH:STATE "):
             self.search_enabled = _parse_scpi_bool_write(command)
         elif upper.startswith(":SEARCH:MODE "):
@@ -1046,6 +1078,9 @@ class SimulatorBackend:
             return f"{self.wgen_offset_volts:g}"
         if upper == f"{wgen_root}:OUTPUT:LOAD?":
             return self.wgen_load
+        serial_protocol_value = self._query_serial_protocol(command)
+        if serial_protocol_value is not None:
+            return serial_protocol_value
         serial_match = re.fullmatch(
             r":SBUS(\d+)(?::(MODE|DISPLAY))?\?", command, re.IGNORECASE
         )
@@ -2370,6 +2405,28 @@ class SimulatorBackend:
             )
         return bus
 
+    def _apply_serial_protocol_write(self, command: str) -> bool:
+        match = re.fullmatch(r":SBUS(\d+):(UART|IIC|SPI|CAN):(.+?)\s+(.+)", command, re.IGNORECASE)
+        if match is None:
+            return False
+        bus = self._validate_serial_bus(int(match.group(1)))
+        key = _serial_protocol_field_key(bus, match.group(2), match.group(3))
+        if key is None:
+            raise SimulatorBackendError(f"Unsupported simulator serial command: {command}")
+        self.serial_protocol_settings[bus][key] = match.group(4).strip()
+        return True
+
+    def _query_serial_protocol(self, command: str) -> str | None:
+        match = re.fullmatch(r":SBUS(\d+):(UART|IIC|SPI|CAN):(.+?)\?", command, re.IGNORECASE)
+        if match is None:
+            return None
+        bus = self._validate_serial_bus(int(match.group(1)))
+        key = _serial_protocol_field_key(bus, match.group(2), match.group(3))
+        if key is None:
+            raise SimulatorBackendError(f"Unsupported simulator serial query: {command}")
+        value = self.serial_protocol_settings[bus][key]
+        return _serial_protocol_query_value(key, value)
+
     def _apply_annotation_write(self, command: str) -> bool:
         parsed = _parse_annotation_path(command)
         if parsed is None or parsed[2]:
@@ -2495,6 +2552,46 @@ def _parse_positive_scpi_number(value: str) -> float:
     if not math.isfinite(parsed) or parsed <= 0:
         raise SimulatorBackendError("SCPI numeric parameter must be positive and finite.")
     return parsed
+
+
+def _serial_protocol_field_key(bus: int, protocol: str, suffix: str) -> str | None:
+    prefix = protocol.upper() + ":"
+    paths = {
+        "UART:SOURCE:RX": "uart_rx_source",
+        "UART:SOURCE:TX": "uart_tx_source",
+        "UART:BAUDRATE": "uart_baud_rate",
+        "UART:WIDTH": "uart_data_bits",
+        "UART:PARITY": "uart_parity",
+        "UART:POLARITY": "uart_polarity",
+        "UART:BITORDER": "uart_bit_order",
+        "IIC:SOURCE:CLOCK": "iic_clock_source",
+        "IIC:SOURCE:DATA": "iic_data_source",
+        "IIC:ASIZE": "iic_address_size",
+        "SPI:SOURCE:CLOCK": "spi_clock_source",
+        "SPI:SOURCE:FRAME": "spi_frame_source",
+        "SPI:SOURCE:MOSI": "spi_mosi_source",
+        "SPI:SOURCE:MISO": "spi_miso_source",
+        "SPI:CLOCK:SLOPE": "spi_clock_slope",
+        "SPI:BITORDER": "spi_bit_order",
+        "SPI:WIDTH": "spi_word_width",
+        "SPI:FRAMING": "spi_framing",
+        "SPI:CLOCK:TIMEOUT": "spi_clock_timeout",
+        "CAN:SOURCE": "can_source",
+        "CAN:SIGNAL:BAUDRATE": "can_baud_rate",
+        "CAN:SIGNAL:DEFINITION": "can_signal_definition",
+        "CAN:SAMPLEPOINT": "can_sample_point",
+    }
+    return paths.get(prefix + suffix.upper())
+
+
+def _serial_protocol_query_value(key: str, value: str) -> str:
+    if key.endswith("_bit_order"):
+        return {"LSBFirst": "LSBF", "MSBFirst": "MSBF"}.get(value, value)
+    if key == "spi_clock_slope":
+        return {"POSitive": "POS", "NEGative": "NEG"}.get(value, value)
+    if key == "spi_framing":
+        return {"CHIPselect": "CHIP", "NCHipselect": "NCH", "TIMeout": "TIM"}.get(value, value)
+    return value
 
 
 def _parse_scpi_bool_write(command: str) -> bool:

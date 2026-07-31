@@ -245,6 +245,14 @@ Control and setup:
 - `serial-display`: `operation`, `command`, integer `bus`, boolean `enabled`,
   and nullable `raw_state`. Configure results use `raw_state: null` and
   `state_changing: true`; query results preserve `raw_state`.
+- `serial-uart`, `serial-i2c`, `serial-spi`, and `serial-can`: `operation`,
+  `commands`, integer `bus`, canonical protocol fields, and corresponding
+  nullable `raw_*` readbacks. Configure results preserve supplied canonical
+  values, set raw fields to `null`, and include `state_changing: true`; query
+  results query `MODE?` first, preserve raw values, and fail before protocol
+  fields when the current mode does not match. Sources are `channelN` or
+  `external`; I2C is represented by the instrument `IIC` token, and CAN uses
+  `difl` as the canonical differential signal value.
 - `search-state`: `operation` and `command`. Configure results include boolean
   `enabled`, `raw_state: null`, and `state_changing: true`. Query results
   include normalized boolean `enabled` and preserve `raw_state`.

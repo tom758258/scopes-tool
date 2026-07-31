@@ -55,6 +55,60 @@ def test_serial_simulator_mode_and_display_round_trip():
     assert scope.query_serial_display(2).enabled is False
 
 
+@pytest.mark.parametrize(
+    "command, options, field, expected",
+    [
+        ("serial-uart", ["--rx-source", "channel1", "--baud-rate", "115200"], "rx_source", "channel1"),
+        ("serial-i2c", ["--clock-source", "external"], "clock_source", "external"),
+        ("serial-spi", ["--framing", "timeout"], "framing", "timeout"),
+        ("serial-can", ["--signal-definition", "difl"], "signal_definition", "difl"),
+    ],
+)
+def test_serial_protocol_simulator_configure_json(command, options, field, expected, capsys):
+    assert (
+        cli.main(
+            [
+                command,
+                "--bus",
+                "1",
+                *options,
+                "--simulate",
+                "--model",
+                "keysight-dsox4034a",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    result = _payload(capsys)["result"]
+    assert result[field] == expected
+    assert result["commands"][0].startswith(":SBUS1:MODE ")
+
+
+def test_serial_protocol_query_parser_and_json(capsys):
+    parser = cli._build_parser()
+    parsed = parser.parse_args(["serial-can", "--bus", "1", "--query"])
+    assert parsed.command == "serial-can"
+    assert (
+        cli.main(
+            [
+                "serial-uart",
+                "--bus",
+                "1",
+                "--query",
+                "--simulate",
+                "--model",
+                "keysight-dsox4034a",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    result = _payload(capsys)["result"]
+    assert result["mode"] == "uart"
+    assert result["raw_mode"] == "UART"
+
+
 def _patch_live_scope(monkeypatch, idn: str):
     backend = FakeBackend(
         responses={

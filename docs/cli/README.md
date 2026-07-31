@@ -158,6 +158,8 @@ Current implemented scope:
   `demo-query`, `demo-output`, `demo-function`, and `demo-phase`.
 - Query or configure WGEN Basic P1 output, function, frequency, amplitude,
   offset, and load with the `wgen-*` commands.
+- Configure or query basic UART, I2C, SPI, and CAN serial decode settings with
+  `serial-uart`, `serial-i2c`, `serial-spi`, and `serial-can`.
 - Collect read-only diagnostic snapshots with `doctor`.
 - Query multi-channel and optional pair measurement sweeps with
   continue-and-summarize failure handling.
@@ -1581,6 +1583,24 @@ aggregate and focused commands. Configure requests require exactly their
 canonical value field, and WGEN output is enabled only by an explicit
 `{"enabled": true}` request. Validation is hardware-free; no live hardware
 access or validation was performed.
+
+Serial Basic P1 controls common UART, I2C, SPI, and CAN decode settings:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe serial-uart --bus 1 --rx-source channel1 --baud-rate 115200 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-i2c --bus 1 --clock-source channel1 --data-source channel2 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-spi --bus 1 --framing chip-select --word-width 8 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-can --bus 1 --source channel1 --signal-definition difl --sample-point 75 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-uart --bus 1 --query --simulate --json
+```
+
+Each command requires `--bus` and accepts either `--query` or one or more
+configure options. Sources are `channelN` (bounded by the selected model's
+analog channels) or `external`; I2C emits `IIC`; CAN uses canonical signal
+values `canh`, `canl`, `rx`, `tx`, `difl`, and `difh`. Query operations read
+`MODE?` first and preserve raw protocol readbacks. Availability is controlled
+by capability profiles and instrument licensing. Serial trigger, Search,
+Lister, export, and advanced protocol parameters are outside this P1 surface.
 
 Control reference waveform slots:
 

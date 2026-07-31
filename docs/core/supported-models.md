@@ -118,8 +118,9 @@ and USB/LAN or Worker-live path.
   aggregate query helpers. The 2000X/3000X profiles use `:WGEN`; the 4000X
   profile uses only generator 1 through `:WGEN1`. P1 settable functions are
   `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`.
-- Serial Basic P0 raw aggregate query, mode, and display controls. Capability
-  profiles guard bus count and settable modes. Serial decode can require an
+- Serial Basic P0 raw aggregate query, mode, and display controls plus Serial
+  Basic P1 UART, I2C, SPI, and CAN basic protocol settings. Capability profiles
+  guard bus count and settable modes. Serial decode can require an
   instrument license; Core does not probe licenses and preserves instrument
   errors for unavailable hardware or options.
 - Search Basic Pack v1 state and count queries plus profile-guarded mode
@@ -138,7 +139,7 @@ and USB/LAN or Worker-live path.
 
 Series-specific differences:
 
-| Series | Demo Output Pack v1 functions | Serial buses | Serial Basic P0 settable modes | Search Basic Pack v1 modes | Screenshot Format Pack v1 |
+| Series | Demo Output Pack v1 functions | Serial buses | Serial Basic P0/P1 settable modes | Search Basic Pack v1 modes | Screenshot Format Pack v1 |
 | --- | --- | ---: | --- | --- | --- |
 | 2000X | Common/core set | 1 | `can`, `i2c`, `lin`, `spi`, `uart` | `serial1` | No; existing PNG capture remains supported |
 | 3000X | Common/core set plus `i2s`, `can-lin`, `flexray`, `arinc`, `mil`, `mil2` | 2 | `a429`, `flexray`, `can`, `i2s`, `i2c`, `lin`, `m1553`, `spi`, `uart` | `edge`, `glitch`, `runt`, `transition`, `serial1`, `serial2` | No; existing PNG capture remains supported |
@@ -178,9 +179,9 @@ Capability flags for raw waveform points mode and segmented memory remain
 disabled. Serial decode capability represents command-family availability, not
 the presence of an instrument license.
 
-Serial Basic P0 implements only aggregate query, mode, and display. The
-aggregate response remains raw. Protocol-specific configuration, serial
-sources, Lister, export, serial trigger, and serial search are not implemented.
+Serial Basic P0 keeps aggregate responses raw. Serial Basic P1 implements only
+basic UART, I2C, SPI, and CAN source/decode settings; it does not implement
+serial trigger, Search, Lister, export, or advanced protocol parameters.
 
 These common pack entries describe runtime capability support. They do not
 imply live hardware validation on every supported model, firmware, or USB/LAN

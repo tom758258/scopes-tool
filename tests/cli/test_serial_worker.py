@@ -28,6 +28,10 @@ def test_worker_serial_commands_are_allowlisted(tmp_path):
         ("serial-query", {"bus": 1}),
         ("serial-mode", {"bus": 1, "query": True}),
         ("serial-display", {"bus": 1, "query": True}),
+        ("serial-uart", {"bus": 1, "query": True}),
+        ("serial-i2c", {"bus": 1, "query": True}),
+        ("serial-spi", {"bus": 1, "query": True}),
+        ("serial-can", {"bus": 1, "query": True}),
     ]:
         assert command in worker.DOMAIN_COMMANDS
         assert worker.parse_domain_command(
@@ -51,6 +55,17 @@ def test_worker_serial_query_result_preservation(tmp_path):
     assert exit_code == 0
     assert payload["result"]["bus"] == 1
     assert payload["result"]["raw"] == ":SBUS1:DISP 0;MODE UART;"
+
+
+def test_worker_serial_uart_configure_arguments_mapping(tmp_path):
+    parsed = worker.parse_domain_command(
+        "serial-uart",
+        {"bus": 1, "rx_source": "channel1", "baud_rate": 115200},
+        _runtime(tmp_path),
+    )
+    assert parsed.command == "serial-uart"
+    assert parsed.rx_source == "channel1"
+    assert parsed.baud_rate == 115200
 
 
 @pytest.mark.parametrize(

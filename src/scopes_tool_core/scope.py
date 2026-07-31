@@ -67,9 +67,13 @@ from .save_export import (
 from .search import SearchController, SearchCountState, SearchEventState, SearchModeState, SearchState
 from .serial import (
     SerialController,
+    SerialCanState,
     SerialDisplayState,
+    SerialI2CState,
     SerialModeState,
     SerialQueryState,
+    SerialSpiState,
+    SerialUartState,
 )
 from .scpi import SCPIBackend, SCPIClient
 from .screenshot import HardcopyState, ScreenshotCapture, ScreenshotController, ScreenshotOptions
@@ -766,6 +770,46 @@ class Oscilloscope:
         """Query one serial decode bus display state."""
 
         return self._serial_controller().query_display(bus)
+
+    def configure_serial_uart(self, bus: int, **settings: object) -> SerialUartState:
+        """Configure basic UART decode settings."""
+
+        return self._serial_controller().configure_uart(bus, **settings)
+
+    def query_serial_uart(self, bus: int) -> SerialUartState:
+        """Query basic UART decode settings."""
+
+        return self._serial_controller().query_uart(bus)
+
+    def configure_serial_i2c(self, bus: int, **settings: object) -> SerialI2CState:
+        """Configure basic I2C decode settings."""
+
+        return self._serial_controller().configure_i2c(bus, **settings)
+
+    def query_serial_i2c(self, bus: int) -> SerialI2CState:
+        """Query basic I2C decode settings."""
+
+        return self._serial_controller().query_i2c(bus)
+
+    def configure_serial_spi(self, bus: int, **settings: object) -> SerialSpiState:
+        """Configure basic SPI decode settings."""
+
+        return self._serial_controller().configure_spi(bus, **settings)
+
+    def query_serial_spi(self, bus: int) -> SerialSpiState:
+        """Query basic SPI decode settings."""
+
+        return self._serial_controller().query_spi(bus)
+
+    def configure_serial_can(self, bus: int, **settings: object) -> SerialCanState:
+        """Configure basic CAN decode settings."""
+
+        return self._serial_controller().configure_can(bus, **settings)
+
+    def query_serial_can(self, bus: int) -> SerialCanState:
+        """Query basic CAN decode settings."""
+
+        return self._serial_controller().query_can(bus)
 
     def configure_search_state(self, enabled: bool) -> SearchState:
         """Configure waveform search enable state."""

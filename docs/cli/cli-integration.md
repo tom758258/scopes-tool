@@ -33,9 +33,16 @@ before backend open; live workers use their startup model for the same strict
 pre-open validation. A normal live one-shot opens the requested resource,
 queries `*IDN?`, and then validates Serial bus and mode support from the
 detected model before sending any `:SBUS...` command; `--model` does not
-override that detected identity. P0 does not expose protocol-specific
-configuration, Lister, export, serial trigger, or serial search. Missing serial
-decode licenses remain instrument errors.
+override that detected identity. Serial Basic P1 adds `serial-uart`,
+`serial-i2c`, `serial-spi`, and `serial-can` for basic protocol source and
+decode settings. Each command accepts `--query` or one or more protocol
+options, queries `MODE?` before protocol fields, and fails before field queries
+when the mode does not match. Sources use `channelN` (bounded by the model's
+analog-channel capability) or `external`; I2C emits the instrument `IIC` token,
+and CAN uses `difl` as the canonical differential signal value. Capability
+profiles determine bus count and available protocol modes; instrument licenses
+may still be required. P1 does not expose serial trigger, Search, Lister, or
+export configuration.
 
 Search Basic Pack v1 adapter commands are `search-state`, `search-mode`,
 query-only `search-count`, and 4000X `search-event`. Boolean configuration uses canonical

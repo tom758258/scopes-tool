@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+import re
 
 from .capabilities import ScopeCapabilities
 from .display import parse_display_label
@@ -48,6 +50,33 @@ SERIAL_MODE_TOKENS = {
     "uart": "UART",
     "usb": "USB",
     "usb-pd": "USBPd",
+}
+
+UART_PARITIES = ("even", "odd", "none")
+UART_POLARITIES = ("high", "low")
+SERIAL_BIT_ORDERS = ("lsb-first", "msb-first")
+I2C_ADDRESS_SIZES = ("bit7", "bit8")
+SPI_CLOCK_SLOPES = ("positive", "negative")
+SPI_FRAMINGS = ("chip-select", "no-chip-select", "timeout")
+CAN_SIGNAL_DEFINITIONS = ("canh", "canl", "rx", "tx", "difl", "difh")
+
+_UART_PARITY_TOKENS = {"even": "EVEN", "odd": "ODD", "none": "NONE"}
+_UART_POLARITY_TOKENS = {"high": "HIGH", "low": "LOW"}
+_BIT_ORDER_TOKENS = {"lsb-first": "LSBFirst", "msb-first": "MSBFirst"}
+_I2C_ADDRESS_SIZE_TOKENS = {"bit7": "BIT7", "bit8": "BIT8"}
+_SPI_SLOPE_TOKENS = {"positive": "POSitive", "negative": "NEGative"}
+_SPI_FRAMING_TOKENS = {
+    "chip-select": "CHIPselect",
+    "no-chip-select": "NCHipselect",
+    "timeout": "TIMeout",
+}
+_CAN_SIGNAL_TOKENS = {
+    "canh": "CANH",
+    "canl": "CANL",
+    "rx": "RX",
+    "tx": "TX",
+    "difl": "DIFL",
+    "difh": "DIFH",
 }
 
 _SERIAL_MODE_READBACKS = {
@@ -105,8 +134,94 @@ class SerialDisplayState:
         }
 
 
+@dataclass(frozen=True)
+class SerialUartState:
+    bus: int
+    mode: str
+    raw_mode: str | None = None
+    rx_source: str | None = None
+    raw_rx_source: str | None = None
+    tx_source: str | None = None
+    raw_tx_source: str | None = None
+    baud_rate: int | None = None
+    raw_baud_rate: str | None = None
+    data_bits: int | None = None
+    raw_data_bits: str | None = None
+    parity: str | None = None
+    raw_parity: str | None = None
+    polarity: str | None = None
+    raw_polarity: str | None = None
+    bit_order: str | None = None
+    raw_bit_order: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        return {key: value for key, value in self.__dict__.items()}
+
+
+@dataclass(frozen=True)
+class SerialI2CState:
+    bus: int
+    mode: str
+    raw_mode: str | None = None
+    clock_source: str | None = None
+    raw_clock_source: str | None = None
+    data_source: str | None = None
+    raw_data_source: str | None = None
+    address_size: str | None = None
+    raw_address_size: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        return {key: value for key, value in self.__dict__.items()}
+
+
+@dataclass(frozen=True)
+class SerialSpiState:
+    bus: int
+    mode: str
+    raw_mode: str | None = None
+    clock_source: str | None = None
+    raw_clock_source: str | None = None
+    mosi_source: str | None = None
+    raw_mosi_source: str | None = None
+    miso_source: str | None = None
+    raw_miso_source: str | None = None
+    frame_source: str | None = None
+    raw_frame_source: str | None = None
+    clock_slope: str | None = None
+    raw_clock_slope: str | None = None
+    bit_order: str | None = None
+    raw_bit_order: str | None = None
+    word_width: int | None = None
+    raw_word_width: str | None = None
+    framing: str | None = None
+    raw_framing: str | None = None
+    clock_timeout: float | None = None
+    raw_clock_timeout: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        return {key: value for key, value in self.__dict__.items()}
+
+
+@dataclass(frozen=True)
+class SerialCanState:
+    bus: int
+    mode: str
+    raw_mode: str | None = None
+    source: str | None = None
+    raw_source: str | None = None
+    baud_rate: int | None = None
+    raw_baud_rate: str | None = None
+    signal_definition: str | None = None
+    raw_signal_definition: str | None = None
+    sample_point: float | None = None
+    raw_sample_point: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        return {key: value for key, value in self.__dict__.items()}
+
+
 class SerialController:
-    """Controller for Serial Basic P0."""
+    """Controller for the supported basic serial decode controls."""
 
     def __init__(self, scpi: SCPIClient, capabilities: ScopeCapabilities) -> None:
         self.scpi = scpi
@@ -151,6 +266,622 @@ class SerialController:
             enabled=enabled,
             raw_state=raw,
         )
+
+    def configure_uart(
+        self,
+        bus: int,
+        *,
+        rx_source: str | None = None,
+        tx_source: str | None = None,
+        baud_rate: int | None = None,
+        data_bits: int | None = None,
+        parity: str | None = None,
+        polarity: str | None = None,
+        bit_order: str | None = None,
+    ) -> SerialUartState:
+        canonical_bus = validate_serial_bus(bus, self.capabilities)
+        validate_serial_mode("uart", self.capabilities)
+        values = _normalize_uart_values(
+            self.capabilities,
+            rx_source=rx_source,
+            tx_source=tx_source,
+            baud_rate=baud_rate,
+            data_bits=data_bits,
+            parity=parity,
+            polarity=polarity,
+            bit_order=bit_order,
+        )
+        if not any(value is not None for value in values.values()):
+            raise ParameterValidationError("serial-uart configure requires at least one setting.")
+        self.scpi.write(serial_mode_command(canonical_bus, "uart"))
+        for command in serial_uart_configure_commands(canonical_bus, values):
+            self.scpi.write(command)
+        return SerialUartState(bus=canonical_bus, mode="uart", **values)
+
+    def query_uart(self, bus: int) -> SerialUartState:
+        canonical_bus, raw_mode = self._query_protocol_mode(bus, "uart")
+        commands = serial_uart_query_commands(canonical_bus)
+        raw_rx_source = self.scpi.query(commands["rx_source"]).strip()
+        rx_source = parse_serial_source(raw_rx_source, self.capabilities)
+        raw_tx_source = self.scpi.query(commands["tx_source"]).strip()
+        tx_source = parse_serial_source(raw_tx_source, self.capabilities)
+        raw_baud_rate = self.scpi.query(commands["baud_rate"]).strip()
+        baud_rate = _parse_serial_int(raw_baud_rate, "UART baud rate")
+        raw_data_bits = self.scpi.query(commands["data_bits"]).strip()
+        data_bits = _parse_serial_int(raw_data_bits, "UART data bits")
+        raw_parity = self.scpi.query(commands["parity"]).strip()
+        parity = parse_uart_parity(raw_parity)
+        raw_polarity = self.scpi.query(commands["polarity"]).strip()
+        polarity = parse_uart_polarity(raw_polarity)
+        raw_bit_order = self.scpi.query(commands["bit_order"]).strip()
+        bit_order = parse_serial_bit_order(raw_bit_order)
+        return SerialUartState(
+            bus=canonical_bus,
+            mode="uart",
+            raw_mode=raw_mode,
+            rx_source=rx_source,
+            raw_rx_source=raw_rx_source,
+            tx_source=tx_source,
+            raw_tx_source=raw_tx_source,
+            baud_rate=baud_rate,
+            raw_baud_rate=raw_baud_rate,
+            data_bits=data_bits,
+            raw_data_bits=raw_data_bits,
+            parity=parity,
+            raw_parity=raw_parity,
+            polarity=polarity,
+            raw_polarity=raw_polarity,
+            bit_order=bit_order,
+            raw_bit_order=raw_bit_order,
+        )
+
+    def configure_i2c(
+        self,
+        bus: int,
+        *,
+        clock_source: str | None = None,
+        data_source: str | None = None,
+        address_size: str | None = None,
+    ) -> SerialI2CState:
+        canonical_bus = validate_serial_bus(bus, self.capabilities)
+        validate_serial_mode("i2c", self.capabilities)
+        values = _normalize_i2c_values(
+            self.capabilities,
+            clock_source=clock_source,
+            data_source=data_source,
+            address_size=address_size,
+        )
+        if not any(value is not None for value in values.values()):
+            raise ParameterValidationError("serial-i2c configure requires at least one setting.")
+        self.scpi.write(serial_mode_command(canonical_bus, "i2c"))
+        for command in serial_i2c_configure_commands(canonical_bus, values):
+            self.scpi.write(command)
+        return SerialI2CState(bus=canonical_bus, mode="i2c", **values)
+
+    def query_i2c(self, bus: int) -> SerialI2CState:
+        canonical_bus, raw_mode = self._query_protocol_mode(bus, "i2c")
+        commands = serial_i2c_query_commands(canonical_bus)
+        raw_clock_source = self.scpi.query(commands["clock_source"]).strip()
+        clock_source = parse_serial_source(raw_clock_source, self.capabilities)
+        raw_data_source = self.scpi.query(commands["data_source"]).strip()
+        data_source = parse_serial_source(raw_data_source, self.capabilities)
+        raw_address_size = self.scpi.query(commands["address_size"]).strip()
+        address_size = parse_i2c_address_size(raw_address_size)
+        return SerialI2CState(
+            bus=canonical_bus,
+            mode="i2c",
+            raw_mode=raw_mode,
+            clock_source=clock_source,
+            raw_clock_source=raw_clock_source,
+            data_source=data_source,
+            raw_data_source=raw_data_source,
+            address_size=address_size,
+            raw_address_size=raw_address_size,
+        )
+
+    def configure_spi(
+        self,
+        bus: int,
+        *,
+        clock_source: str | None = None,
+        mosi_source: str | None = None,
+        miso_source: str | None = None,
+        frame_source: str | None = None,
+        clock_slope: str | None = None,
+        bit_order: str | None = None,
+        word_width: int | None = None,
+        framing: str | None = None,
+        clock_timeout: float | None = None,
+    ) -> SerialSpiState:
+        canonical_bus = validate_serial_bus(bus, self.capabilities)
+        validate_serial_mode("spi", self.capabilities)
+        values = _normalize_spi_values(
+            self.capabilities,
+            clock_source=clock_source,
+            mosi_source=mosi_source,
+            miso_source=miso_source,
+            frame_source=frame_source,
+            clock_slope=clock_slope,
+            bit_order=bit_order,
+            word_width=word_width,
+            framing=framing,
+            clock_timeout=clock_timeout,
+        )
+        if not any(value is not None for value in values.values()):
+            raise ParameterValidationError("serial-spi configure requires at least one setting.")
+        self.scpi.write(serial_mode_command(canonical_bus, "spi"))
+        for command in serial_spi_configure_commands(canonical_bus, values):
+            self.scpi.write(command)
+        return SerialSpiState(bus=canonical_bus, mode="spi", **values)
+
+    def query_spi(self, bus: int) -> SerialSpiState:
+        canonical_bus, raw_mode = self._query_protocol_mode(bus, "spi")
+        commands = serial_spi_query_commands(canonical_bus)
+        raw_clock_source = self.scpi.query(commands["clock_source"]).strip()
+        clock_source = parse_serial_source(raw_clock_source, self.capabilities)
+        raw_frame_source = self.scpi.query(commands["frame_source"]).strip()
+        frame_source = parse_serial_source(raw_frame_source, self.capabilities)
+        raw_mosi_source = self.scpi.query(commands["mosi_source"]).strip()
+        mosi_source = parse_serial_source(raw_mosi_source, self.capabilities)
+        raw_miso_source = self.scpi.query(commands["miso_source"]).strip()
+        miso_source = parse_serial_source(raw_miso_source, self.capabilities)
+        raw_clock_slope = self.scpi.query(commands["clock_slope"]).strip()
+        clock_slope = parse_spi_clock_slope(raw_clock_slope)
+        raw_bit_order = self.scpi.query(commands["bit_order"]).strip()
+        bit_order = parse_serial_bit_order(raw_bit_order)
+        raw_word_width = self.scpi.query(commands["word_width"]).strip()
+        word_width = _parse_serial_int(raw_word_width, "SPI word width")
+        raw_framing = self.scpi.query(commands["framing"]).strip()
+        framing = parse_spi_framing(raw_framing)
+        raw_clock_timeout = self.scpi.query(commands["clock_timeout"]).strip()
+        clock_timeout = _parse_serial_float(raw_clock_timeout, "SPI clock timeout")
+        return SerialSpiState(
+            bus=canonical_bus,
+            mode="spi",
+            raw_mode=raw_mode,
+            clock_source=clock_source,
+            raw_clock_source=raw_clock_source,
+            mosi_source=mosi_source,
+            raw_mosi_source=raw_mosi_source,
+            miso_source=miso_source,
+            raw_miso_source=raw_miso_source,
+            frame_source=frame_source,
+            raw_frame_source=raw_frame_source,
+            clock_slope=clock_slope,
+            raw_clock_slope=raw_clock_slope,
+            bit_order=bit_order,
+            raw_bit_order=raw_bit_order,
+            word_width=word_width,
+            raw_word_width=raw_word_width,
+            framing=framing,
+            raw_framing=raw_framing,
+            clock_timeout=clock_timeout,
+            raw_clock_timeout=raw_clock_timeout,
+        )
+
+    def configure_can(
+        self,
+        bus: int,
+        *,
+        source: str | None = None,
+        baud_rate: int | None = None,
+        signal_definition: str | None = None,
+        sample_point: float | None = None,
+    ) -> SerialCanState:
+        canonical_bus = validate_serial_bus(bus, self.capabilities)
+        validate_serial_mode("can", self.capabilities)
+        values = _normalize_can_values(
+            self.capabilities,
+            source=source,
+            baud_rate=baud_rate,
+            signal_definition=signal_definition,
+            sample_point=sample_point,
+        )
+        if not any(value is not None for value in values.values()):
+            raise ParameterValidationError("serial-can configure requires at least one setting.")
+        self.scpi.write(serial_mode_command(canonical_bus, "can"))
+        for command in serial_can_configure_commands(canonical_bus, values):
+            self.scpi.write(command)
+        return SerialCanState(bus=canonical_bus, mode="can", **values)
+
+    def query_can(self, bus: int) -> SerialCanState:
+        canonical_bus, raw_mode = self._query_protocol_mode(bus, "can")
+        commands = serial_can_query_commands(canonical_bus)
+        raw_source = self.scpi.query(commands["source"]).strip()
+        source = parse_serial_source(raw_source, self.capabilities)
+        raw_baud_rate = self.scpi.query(commands["baud_rate"]).strip()
+        baud_rate = _parse_serial_int(raw_baud_rate, "CAN baud rate")
+        raw_signal_definition = self.scpi.query(commands["signal_definition"]).strip()
+        signal_definition = parse_can_signal_definition(raw_signal_definition)
+        raw_sample_point = self.scpi.query(commands["sample_point"]).strip()
+        sample_point = _parse_serial_float(raw_sample_point, "CAN sample point")
+        return SerialCanState(
+            bus=canonical_bus,
+            mode="can",
+            raw_mode=raw_mode,
+            source=source,
+            raw_source=raw_source,
+            baud_rate=baud_rate,
+            raw_baud_rate=raw_baud_rate,
+            signal_definition=signal_definition,
+            raw_signal_definition=raw_signal_definition,
+            sample_point=sample_point,
+            raw_sample_point=raw_sample_point,
+        )
+
+    def _query_protocol_mode(self, bus: int, expected: str) -> tuple[int, str]:
+        canonical_bus = validate_serial_bus(bus, self.capabilities)
+        raw_mode = self.scpi.query(serial_mode_query(canonical_bus)).strip()
+        actual = parse_serial_mode(raw_mode)
+        if actual != expected:
+            raise SerialResponseError(
+                f"Serial bus {canonical_bus} is in mode {actual!r}; expected {expected!r}."
+            )
+        return canonical_bus, raw_mode
+
+
+def serial_uart_configure_commands(bus: int, values: dict[str, object]) -> list[str]:
+    bus = _validate_positive_bus(bus)
+    commands: list[str] = []
+    if values.get("rx_source") is not None:
+        commands.append(f":SBUS{bus}:UART:SOURce:RX {_serial_source_token(values['rx_source'])}")
+    if values.get("tx_source") is not None:
+        commands.append(f":SBUS{bus}:UART:SOURce:TX {_serial_source_token(values['tx_source'])}")
+    if values.get("baud_rate") is not None:
+        commands.append(f":SBUS{bus}:UART:BAUDrate {values['baud_rate']}")
+    if values.get("data_bits") is not None:
+        commands.append(f":SBUS{bus}:UART:WIDTh {values['data_bits']}")
+    if values.get("parity") is not None:
+        commands.append(f":SBUS{bus}:UART:PARity {_UART_PARITY_TOKENS[values['parity']]}")
+    if values.get("polarity") is not None:
+        commands.append(f":SBUS{bus}:UART:POLarity {_UART_POLARITY_TOKENS[values['polarity']]}")
+    if values.get("bit_order") is not None:
+        commands.append(f":SBUS{bus}:UART:BITorder {_BIT_ORDER_TOKENS[values['bit_order']]}")
+    return commands
+
+
+def serial_uart_query_commands(bus: int) -> dict[str, str]:
+    bus = _validate_positive_bus(bus)
+    root = f":SBUS{bus}:UART:"
+    return {
+        "rx_source": root + "SOURce:RX?",
+        "tx_source": root + "SOURce:TX?",
+        "baud_rate": root + "BAUDrate?",
+        "data_bits": root + "WIDTh?",
+        "parity": root + "PARity?",
+        "polarity": root + "POLarity?",
+        "bit_order": root + "BITorder?",
+    }
+
+
+def serial_i2c_configure_commands(bus: int, values: dict[str, object]) -> list[str]:
+    bus = _validate_positive_bus(bus)
+    commands: list[str] = []
+    if values.get("clock_source") is not None:
+        commands.append(f":SBUS{bus}:IIC:SOURce:CLOCk {_serial_source_token(values['clock_source'])}")
+    if values.get("data_source") is not None:
+        commands.append(f":SBUS{bus}:IIC:SOURce:DATA {_serial_source_token(values['data_source'])}")
+    if values.get("address_size") is not None:
+        commands.append(f":SBUS{bus}:IIC:ASIZe {_I2C_ADDRESS_SIZE_TOKENS[values['address_size']]}")
+    return commands
+
+
+def serial_i2c_query_commands(bus: int) -> dict[str, str]:
+    bus = _validate_positive_bus(bus)
+    root = f":SBUS{bus}:IIC:"
+    return {
+        "clock_source": root + "SOURce:CLOCk?",
+        "data_source": root + "SOURce:DATA?",
+        "address_size": root + "ASIZe?",
+    }
+
+
+def serial_spi_configure_commands(bus: int, values: dict[str, object]) -> list[str]:
+    bus = _validate_positive_bus(bus)
+    commands: list[str] = []
+    source_fields = (
+        ("clock_source", "CLOCk"),
+        ("frame_source", "FRAMe"),
+        ("mosi_source", "MOSI"),
+        ("miso_source", "MISO"),
+    )
+    for field, token in source_fields:
+        if values.get(field) is not None:
+            commands.append(
+                f":SBUS{bus}:SPI:SOURce:{token} {_serial_source_token(values[field])}"
+            )
+    if values.get("clock_slope") is not None:
+        commands.append(f":SBUS{bus}:SPI:CLOCk:SLOPe {_SPI_SLOPE_TOKENS[values['clock_slope']]}")
+    if values.get("bit_order") is not None:
+        commands.append(f":SBUS{bus}:SPI:BITorder {_BIT_ORDER_TOKENS[values['bit_order']]}")
+    if values.get("word_width") is not None:
+        commands.append(f":SBUS{bus}:SPI:WIDTh {values['word_width']}")
+    if values.get("framing") is not None:
+        commands.append(f":SBUS{bus}:SPI:FRAMing {_SPI_FRAMING_TOKENS[values['framing']]}")
+    if values.get("clock_timeout") is not None:
+        commands.append(f":SBUS{bus}:SPI:CLOCk:TIMeout {_format_serial_number(values['clock_timeout'])}")
+    return commands
+
+
+def serial_spi_query_commands(bus: int) -> dict[str, str]:
+    bus = _validate_positive_bus(bus)
+    root = f":SBUS{bus}:SPI:"
+    return {
+        "clock_source": root + "SOURce:CLOCk?",
+        "frame_source": root + "SOURce:FRAMe?",
+        "mosi_source": root + "SOURce:MOSI?",
+        "miso_source": root + "SOURce:MISO?",
+        "clock_slope": root + "CLOCk:SLOPe?",
+        "bit_order": root + "BITorder?",
+        "word_width": root + "WIDTh?",
+        "framing": root + "FRAMing?",
+        "clock_timeout": root + "CLOCk:TIMeout?",
+    }
+
+
+def serial_can_configure_commands(bus: int, values: dict[str, object]) -> list[str]:
+    bus = _validate_positive_bus(bus)
+    commands: list[str] = []
+    if values.get("source") is not None:
+        commands.append(f":SBUS{bus}:CAN:SOURce {_serial_source_token(values['source'])}")
+    if values.get("baud_rate") is not None:
+        commands.append(f":SBUS{bus}:CAN:SIGNal:BAUDrate {values['baud_rate']}")
+    if values.get("signal_definition") is not None:
+        commands.append(
+            f":SBUS{bus}:CAN:SIGNal:DEFinition {_CAN_SIGNAL_TOKENS[values['signal_definition']]}"
+        )
+    if values.get("sample_point") is not None:
+        commands.append(f":SBUS{bus}:CAN:SAMPlepoint {_format_serial_number(values['sample_point'])}")
+    return commands
+
+
+def serial_can_query_commands(bus: int) -> dict[str, str]:
+    bus = _validate_positive_bus(bus)
+    root = f":SBUS{bus}:CAN:"
+    return {
+        "source": root + "SOURce?",
+        "baud_rate": root + "SIGNal:BAUDrate?",
+        "signal_definition": root + "SIGNal:DEFinition?",
+        "sample_point": root + "SAMPlepoint?",
+    }
+
+
+def normalize_serial_source(value: str, capabilities: ScopeCapabilities) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError("Serial source must be channelN or external.")
+    normalized = value.strip().lower()
+    if normalized == "external":
+        return normalized
+    match = re.fullmatch(r"channel(\d+)", normalized)
+    if match is None:
+        raise ParameterValidationError(
+            "Serial source must be channel1 through channelN or external."
+        )
+    channel = int(match.group(1))
+    if channel < 1 or channel > capabilities.analog_channels:
+        raise ParameterValidationError(
+            f"Serial source channel{channel} is not supported by the selected "
+            f"{capabilities.series} model profile; expected channel1 through "
+            f"channel{capabilities.analog_channels} or external."
+        )
+    return normalized
+
+
+def parse_serial_source(raw: str, capabilities: ScopeCapabilities) -> str:
+    normalized = raw.strip().upper()
+    if normalized in {"EXT", "EXTERNAL"}:
+        return "external"
+    match = re.fullmatch(r"CHAN(?:NEL)?(\d+)", normalized)
+    if match is not None:
+        try:
+            return normalize_serial_source(f"channel{match.group(1)}", capabilities)
+        except ParameterValidationError as exc:
+            raise SerialResponseError(
+                f"Could not parse serial source response: {raw!r}"
+            ) from exc
+    raise SerialResponseError(f"Could not parse serial source response: {raw!r}")
+
+
+def _serial_source_token(value: object) -> str:
+    if not isinstance(value, str):
+        raise ParameterValidationError("Serial source must be normalized before command generation.")
+    if value == "external":
+        return "EXTernal"
+    return f"CHANnel{value.removeprefix('channel')}"
+
+
+def normalize_uart_parity(value: str) -> str:
+    return _normalize_choice(value, UART_PARITIES, "UART parity")
+
+
+def parse_uart_parity(raw: str) -> str:
+    return _parse_choice(raw, {token: canonical for canonical, token in _UART_PARITY_TOKENS.items()}, "UART parity")
+
+
+def normalize_uart_polarity(value: str) -> str:
+    return _normalize_choice(value, UART_POLARITIES, "UART polarity")
+
+
+def parse_uart_polarity(raw: str) -> str:
+    return _parse_choice(raw, {token: canonical for canonical, token in _UART_POLARITY_TOKENS.items()}, "UART polarity")
+
+
+def normalize_serial_bit_order(value: str) -> str:
+    return _normalize_choice(value, SERIAL_BIT_ORDERS, "serial bit order")
+
+
+def parse_serial_bit_order(raw: str) -> str:
+    readbacks = {"LSBF": "lsb-first", "LSBFIRST": "lsb-first", "MSBF": "msb-first", "MSBFIRST": "msb-first"}
+    return _parse_choice(raw, readbacks, "serial bit order")
+
+
+def normalize_i2c_address_size(value: str) -> str:
+    return _normalize_choice(value, I2C_ADDRESS_SIZES, "I2C address size")
+
+
+def parse_i2c_address_size(raw: str) -> str:
+    return _parse_choice(raw, {"BIT7": "bit7", "BIT8": "bit8"}, "I2C address size")
+
+
+def normalize_spi_clock_slope(value: str) -> str:
+    return _normalize_choice(value, SPI_CLOCK_SLOPES, "SPI clock slope")
+
+
+def parse_spi_clock_slope(raw: str) -> str:
+    return _parse_choice(raw, {"POS": "positive", "POSITIVE": "positive", "NEG": "negative", "NEGATIVE": "negative"}, "SPI clock slope")
+
+
+def normalize_spi_framing(value: str) -> str:
+    return _normalize_choice(value, SPI_FRAMINGS, "SPI framing")
+
+
+def parse_spi_framing(raw: str) -> str:
+    return _parse_choice(raw, {"CHIP": "chip-select", "CHIPSELECT": "chip-select", "NCH": "no-chip-select", "NCHIPSELECT": "no-chip-select", "TIM": "timeout", "TIMEOUT": "timeout"}, "SPI framing")
+
+
+def normalize_can_signal_definition(value: str) -> str:
+    return _normalize_choice(value, CAN_SIGNAL_DEFINITIONS, "CAN signal definition")
+
+
+def parse_can_signal_definition(raw: str) -> str:
+    return _parse_choice(raw, {"CANH": "canh", "CANL": "canl", "RX": "rx", "TX": "tx", "DIFL": "difl", "DIFF": "difl", "DIFFERENTIAL": "difl", "DIFH": "difh"}, "CAN signal definition")
+
+
+def _normalize_choice(value: str, choices: tuple[str, ...], label: str) -> str:
+    if not isinstance(value, str) or value not in choices:
+        raise ParameterValidationError(f"{label} must be one of: {', '.join(choices)}.")
+    return value
+
+
+def _parse_choice(raw: str, readbacks: dict[str, str], label: str) -> str:
+    try:
+        return readbacks[raw.strip().upper()]
+    except KeyError as exc:
+        raise SerialResponseError(f"Could not parse {label} response: {raw!r}") from exc
+
+
+def _serial_source_values(capabilities: ScopeCapabilities, *values: str | None) -> list[str | None]:
+    return [None if value is None else normalize_serial_source(value, capabilities) for value in values]
+
+
+def _normalize_uart_values(capabilities: ScopeCapabilities, **values: object) -> dict[str, object]:
+    rx_source, tx_source = _serial_source_values(capabilities, values["rx_source"], values["tx_source"])
+    return {
+        "rx_source": rx_source,
+        "tx_source": tx_source,
+        "baud_rate": None if values["baud_rate"] is None else validate_uart_baud_rate(values["baud_rate"], capabilities),
+        "data_bits": None if values["data_bits"] is None else _validate_int(values["data_bits"], "UART data bits", 5, 9),
+        "parity": None if values["parity"] is None else normalize_uart_parity(values["parity"]),
+        "polarity": None if values["polarity"] is None else normalize_uart_polarity(values["polarity"]),
+        "bit_order": None if values["bit_order"] is None else normalize_serial_bit_order(values["bit_order"]),
+    }
+
+
+def _normalize_i2c_values(capabilities: ScopeCapabilities, **values: object) -> dict[str, object]:
+    clock_source, data_source = _serial_source_values(capabilities, values["clock_source"], values["data_source"])
+    return {
+        "clock_source": clock_source,
+        "data_source": data_source,
+        "address_size": None if values["address_size"] is None else normalize_i2c_address_size(values["address_size"]),
+    }
+
+
+def _normalize_spi_values(capabilities: ScopeCapabilities, **values: object) -> dict[str, object]:
+    clock_source, mosi_source, miso_source, frame_source = _serial_source_values(
+        capabilities,
+        values["clock_source"],
+        values["mosi_source"],
+        values["miso_source"],
+        values["frame_source"],
+    )
+    return {
+        "clock_source": clock_source,
+        "mosi_source": mosi_source,
+        "miso_source": miso_source,
+        "frame_source": frame_source,
+        "clock_slope": None if values["clock_slope"] is None else normalize_spi_clock_slope(values["clock_slope"]),
+        "bit_order": None if values["bit_order"] is None else normalize_serial_bit_order(values["bit_order"]),
+        "word_width": None if values["word_width"] is None else _validate_int(values["word_width"], "SPI word width", 4, 16),
+        "framing": None if values["framing"] is None else normalize_spi_framing(values["framing"]),
+        "clock_timeout": None if values["clock_timeout"] is None else _validate_float(values["clock_timeout"], "SPI clock timeout", 1e-7, 10.0),
+    }
+
+
+def _normalize_can_values(capabilities: ScopeCapabilities, **values: object) -> dict[str, object]:
+    source = _serial_source_values(capabilities, values["source"])[0]
+    return {
+        "source": source,
+        "baud_rate": None if values["baud_rate"] is None else validate_can_baud_rate(values["baud_rate"]),
+        "signal_definition": None if values["signal_definition"] is None else normalize_can_signal_definition(values["signal_definition"]),
+        "sample_point": None if values["sample_point"] is None else validate_can_sample_point(values["sample_point"], capabilities),
+    }
+
+
+def validate_uart_baud_rate(value: object, capabilities: ScopeCapabilities) -> int:
+    baud = _validate_int(value, "UART baud rate", 100, 12_000_000)
+    if baud > 8_000_000 and capabilities.series != "4000X":
+        raise ParameterValidationError("UART baud rate above 8,000,000 is supported only on 4000X.")
+    if baud > 8_000_000 and baud not in {10_000_000, 12_000_000}:
+        raise ParameterValidationError("UART baud rate must be 100-8000000, 10000000, or 12000000.")
+    return baud
+
+
+def validate_can_baud_rate(value: object) -> int:
+    baud = _validate_int(value, "CAN baud rate", 10_000, 5_000_000)
+    if baud == 5_000_000:
+        return baud
+    if baud % 100 != 0 or baud > 4_000_000:
+        raise ParameterValidationError("CAN baud rate must be 10000-4000000 in 100 b/s increments or 5000000.")
+    return baud
+
+
+def validate_can_sample_point(value: object, capabilities: ScopeCapabilities) -> float:
+    sample = _validate_float(value, "CAN sample point", 30.0, 90.0)
+    if capabilities.series == "4000X":
+        return sample
+    if sample not in {60.0, 62.5, 68.0, 70.0, 75.0, 80.0, 87.5}:
+        raise ParameterValidationError(
+            "CAN sample point must be one of 60, 62.5, 68, 70, 75, 80, or 87.5 on 2000X/3000X."
+        )
+    return sample
+
+
+def _validate_int(value: object, label: str, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise ParameterValidationError(f"{label} must be an integer in range {minimum}-{maximum}.")
+    return value
+
+
+def _validate_float(value: object, label: str, minimum: float, maximum: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ParameterValidationError(f"{label} must be a number in range {minimum}-{maximum}.")
+    numeric = float(value)
+    if not math.isfinite(numeric) or not minimum <= numeric <= maximum:
+        raise ParameterValidationError(f"{label} must be a number in range {minimum}-{maximum}.")
+    return numeric
+
+
+def _parse_serial_int(raw: str, label: str) -> int:
+    try:
+        return int(raw.strip())
+    except ValueError as exc:
+        raise SerialResponseError(f"Could not parse {label} response: {raw!r}") from exc
+
+
+def _parse_serial_float(raw: str, label: str) -> float:
+    try:
+        value = float(raw.strip())
+    except ValueError as exc:
+        raise SerialResponseError(f"Could not parse {label} response: {raw!r}") from exc
+    if not math.isfinite(value):
+        raise SerialResponseError(f"Could not parse {label} response: {raw!r}")
+    return value
+
+
+def _format_serial_number(value: object) -> str:
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
 
 
 def serial_bus_query(bus: int) -> str:

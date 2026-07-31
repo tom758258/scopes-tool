@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import io
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import sys
@@ -320,12 +321,38 @@ from scopes_tool_core.search import (
     validate_search_mode,
 )
 from scopes_tool_core.serial import (
+    CAN_SIGNAL_DEFINITIONS,
+    I2C_ADDRESS_SIZES,
+    SERIAL_BIT_ORDERS,
     SERIAL_MODES,
+    SPI_CLOCK_SLOPES,
+    SPI_FRAMINGS,
+    UART_PARITIES,
+    UART_POLARITIES,
     serial_bus_query,
     serial_display_command,
     serial_display_query,
     serial_mode_command,
     serial_mode_query,
+    serial_can_configure_commands,
+    serial_can_query_commands,
+    serial_i2c_configure_commands,
+    serial_i2c_query_commands,
+    serial_spi_configure_commands,
+    serial_spi_query_commands,
+    serial_uart_configure_commands,
+    serial_uart_query_commands,
+    normalize_can_signal_definition,
+    normalize_i2c_address_size,
+    normalize_serial_bit_order,
+    normalize_serial_source,
+    normalize_spi_clock_slope,
+    normalize_spi_framing,
+    normalize_uart_parity,
+    normalize_uart_polarity,
+    validate_can_baud_rate,
+    validate_can_sample_point,
+    validate_uart_baud_rate,
     validate_serial_bus,
     validate_serial_mode,
 )
@@ -1267,6 +1294,57 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     serial_display_action.add_argument("--query", action="store_true")
     serial_display_action.add_argument("--enabled", type=_strict_bool_arg)
+
+    serial_uart_parser = subparsers.add_parser(
+        "serial-uart", allow_abbrev=False, help="configure or query basic UART decode settings"
+    )
+    _add_scope_connection_args(serial_uart_parser)
+    serial_uart_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_uart_parser.add_argument("--query", action="store_true")
+    serial_uart_parser.add_argument("--rx-source")
+    serial_uart_parser.add_argument("--tx-source")
+    serial_uart_parser.add_argument("--baud-rate", type=int)
+    serial_uart_parser.add_argument("--data-bits", type=int)
+    serial_uart_parser.add_argument("--parity", choices=UART_PARITIES)
+    serial_uart_parser.add_argument("--polarity", choices=UART_POLARITIES)
+    serial_uart_parser.add_argument("--bit-order", choices=SERIAL_BIT_ORDERS)
+
+    serial_i2c_parser = subparsers.add_parser(
+        "serial-i2c", allow_abbrev=False, help="configure or query basic I2C decode settings"
+    )
+    _add_scope_connection_args(serial_i2c_parser)
+    serial_i2c_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_i2c_parser.add_argument("--query", action="store_true")
+    serial_i2c_parser.add_argument("--clock-source")
+    serial_i2c_parser.add_argument("--data-source")
+    serial_i2c_parser.add_argument("--address-size", choices=I2C_ADDRESS_SIZES)
+
+    serial_spi_parser = subparsers.add_parser(
+        "serial-spi", allow_abbrev=False, help="configure or query basic SPI decode settings"
+    )
+    _add_scope_connection_args(serial_spi_parser)
+    serial_spi_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_spi_parser.add_argument("--query", action="store_true")
+    serial_spi_parser.add_argument("--clock-source")
+    serial_spi_parser.add_argument("--mosi-source")
+    serial_spi_parser.add_argument("--miso-source")
+    serial_spi_parser.add_argument("--frame-source")
+    serial_spi_parser.add_argument("--clock-slope", choices=SPI_CLOCK_SLOPES)
+    serial_spi_parser.add_argument("--bit-order", choices=SERIAL_BIT_ORDERS)
+    serial_spi_parser.add_argument("--word-width", type=int)
+    serial_spi_parser.add_argument("--framing", choices=SPI_FRAMINGS)
+    serial_spi_parser.add_argument("--clock-timeout", type=float)
+
+    serial_can_parser = subparsers.add_parser(
+        "serial-can", allow_abbrev=False, help="configure or query basic CAN decode settings"
+    )
+    _add_scope_connection_args(serial_can_parser)
+    serial_can_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_can_parser.add_argument("--query", action="store_true")
+    serial_can_parser.add_argument("--source")
+    serial_can_parser.add_argument("--baud-rate", type=int)
+    serial_can_parser.add_argument("--signal-definition", choices=CAN_SIGNAL_DEFINITIONS)
+    serial_can_parser.add_argument("--sample-point", type=float)
 
     search_state_parser = subparsers.add_parser(
         "search-state", allow_abbrev=False, help="configure or query waveform search state"
@@ -3042,7 +3120,15 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "wgen-load",
     }:
         return _cmd_wgen(args)
-    if args.command in {"serial-query", "serial-mode", "serial-display"}:
+    if args.command in {
+        "serial-query",
+        "serial-mode",
+        "serial-display",
+        "serial-uart",
+        "serial-i2c",
+        "serial-spi",
+        "serial-can",
+    }:
         return _cmd_serial(args)
     if args.command in {"search-state", "search-mode", "search-count", "search-event"}:
         return _cmd_search(args)
@@ -3723,6 +3809,10 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         "serial-query",
         "serial-mode",
         "serial-display",
+        "serial-uart",
+        "serial-i2c",
+        "serial-spi",
+        "serial-can",
     }:
         _validate_serial_args(args)
     if getattr(args, "command", None) in {
@@ -4059,11 +4149,144 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
 
 def _validate_serial_args(args: argparse.Namespace) -> None:
     capabilities = _pre_open_capabilities(args)
+    if capabilities is not None:
+        validate_serial_bus(args.bus, capabilities)
+        if args.command == "serial-mode" and not args.query:
+            validate_serial_mode(args.mode, capabilities)
+    if args.command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
+        _validate_serial_protocol_args(args, capabilities)
+
+
+def _validate_serial_protocol_args(
+    args: argparse.Namespace, capabilities: ScopeCapabilities | None
+) -> None:
+    fields_by_command = {
+        "serial-uart": ("rx_source", "tx_source", "baud_rate", "data_bits", "parity", "polarity", "bit_order"),
+        "serial-i2c": ("clock_source", "data_source", "address_size"),
+        "serial-spi": ("clock_source", "mosi_source", "miso_source", "frame_source", "clock_slope", "bit_order", "word_width", "framing", "clock_timeout"),
+        "serial-can": ("source", "baud_rate", "signal_definition", "sample_point"),
+    }
+    fields = fields_by_command[args.command]
+    supplied = {field: getattr(args, field) for field in fields if getattr(args, field) is not None}
+    if args.query:
+        if supplied:
+            raise ParameterValidationError(
+                f"{args.command} --query cannot be combined with configure arguments."
+            )
+        return
+    if not supplied:
+        raise ParameterValidationError(
+            f"{args.command} configure requires at least one setting."
+        )
     if capabilities is None:
         return
-    validate_serial_bus(args.bus, capabilities)
-    if args.command == "serial-mode" and not args.query:
-        validate_serial_mode(args.mode, capabilities)
+    protocol_mode = {
+        "serial-uart": "uart",
+        "serial-i2c": "i2c",
+        "serial-spi": "spi",
+        "serial-can": "can",
+    }[args.command]
+    validate_serial_mode(protocol_mode, capabilities)
+    if args.command == "serial-uart":
+        serial_uart_configure_commands(
+            args.bus,
+            _serial_cli_values(
+                capabilities,
+                protocol=args.command,
+                rx_source=args.rx_source,
+                tx_source=args.tx_source,
+                baud_rate=args.baud_rate,
+                data_bits=args.data_bits,
+                parity=args.parity,
+                polarity=args.polarity,
+                bit_order=args.bit_order,
+            ),
+        )
+    elif args.command == "serial-i2c":
+        serial_i2c_configure_commands(
+            args.bus,
+            _serial_cli_values(
+                capabilities,
+                protocol=args.command,
+                clock_source=args.clock_source,
+                data_source=args.data_source,
+                address_size=args.address_size,
+            ),
+        )
+    elif args.command == "serial-spi":
+        serial_spi_configure_commands(
+            args.bus,
+            _serial_cli_values(
+                capabilities,
+                protocol=args.command,
+                clock_source=args.clock_source,
+                mosi_source=args.mosi_source,
+                miso_source=args.miso_source,
+                frame_source=args.frame_source,
+                clock_slope=args.clock_slope,
+                bit_order=args.bit_order,
+                word_width=args.word_width,
+                framing=args.framing,
+                clock_timeout=args.clock_timeout,
+            ),
+        )
+    else:
+        serial_can_configure_commands(
+            args.bus,
+            _serial_cli_values(
+                capabilities,
+                protocol=args.command,
+                source=args.source,
+                baud_rate=args.baud_rate,
+                signal_definition=args.signal_definition,
+                sample_point=args.sample_point,
+            ),
+        )
+
+
+def _serial_cli_values(
+    capabilities: ScopeCapabilities, *, protocol: str | None = None, **values: object
+) -> dict[str, object]:
+    normalized = dict(values)
+    source_fields = {
+        "rx_source", "tx_source", "clock_source", "data_source", "mosi_source",
+        "miso_source", "frame_source", "source",
+    }
+    for field in source_fields:
+        if normalized.get(field) is not None:
+            normalized[field] = normalize_serial_source(normalized[field], capabilities)
+    if normalized.get("parity") is not None:
+        normalized["parity"] = normalize_uart_parity(normalized["parity"])
+    if normalized.get("polarity") is not None:
+        normalized["polarity"] = normalize_uart_polarity(normalized["polarity"])
+    if normalized.get("bit_order") is not None:
+        normalized["bit_order"] = normalize_serial_bit_order(normalized["bit_order"])
+    if normalized.get("address_size") is not None:
+        normalized["address_size"] = normalize_i2c_address_size(normalized["address_size"])
+    if normalized.get("clock_slope") is not None:
+        normalized["clock_slope"] = normalize_spi_clock_slope(normalized["clock_slope"])
+    if normalized.get("framing") is not None:
+        normalized["framing"] = normalize_spi_framing(normalized["framing"])
+    if normalized.get("signal_definition") is not None:
+        normalized["signal_definition"] = normalize_can_signal_definition(normalized["signal_definition"])
+    if normalized.get("baud_rate") is not None:
+        if protocol == "serial-can":
+            normalized["baud_rate"] = validate_can_baud_rate(normalized["baud_rate"])
+        else:
+            normalized["baud_rate"] = validate_uart_baud_rate(normalized["baud_rate"], capabilities)
+    if normalized.get("data_bits") is not None:
+        if isinstance(normalized["data_bits"], bool) or not isinstance(normalized["data_bits"], int) or not 5 <= normalized["data_bits"] <= 9:
+            raise ParameterValidationError("UART data bits must be an integer in range 5-9.")
+    if normalized.get("word_width") is not None:
+        if isinstance(normalized["word_width"], bool) or not isinstance(normalized["word_width"], int) or not 4 <= normalized["word_width"] <= 16:
+            raise ParameterValidationError("SPI word width must be an integer in range 4-16.")
+    if normalized.get("clock_timeout") is not None:
+        value = normalized["clock_timeout"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 1e-7 <= float(value) <= 10.0 or not math.isfinite(float(value)):
+            raise ParameterValidationError("SPI clock timeout must be a number in range 1e-07-10.0.")
+    if normalized.get("sample_point") is not None:
+        normalized["sample_point"] = validate_can_sample_point(normalized["sample_point"], capabilities)
+    return normalized
 
 
 def _validate_search_args(args: argparse.Namespace) -> None:
@@ -5104,6 +5327,23 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         if not args.query:
             result.update(enabled=args.enabled, state_changing=True)
         return [target, ":SYSTem:ERRor?"], [], result
+    if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
+        commands = _serial_protocol_commands(args, capabilities)
+        result = {
+            "operation": "query" if args.query else "configure",
+            "commands": commands,
+            "bus": args.bus,
+        }
+        if not args.query:
+            result.update(
+                _serial_cli_values(
+                    capabilities,
+                    protocol=command,
+                    **_serial_protocol_settings(args),
+                ),
+                state_changing=True,
+            )
+        return [*commands, ":SYSTem:ERRor?"], [], result
     if command == "search-state":
         target = search_state_query() if args.query else search_state_command(args.enabled)
         result = {"operation": "query" if args.query else "configure", "command": target}
@@ -8739,6 +8979,42 @@ def _cmd_system_status(args: argparse.Namespace) -> int:
         return 1 if entry.is_error else 0
 
 
+def _serial_protocol_settings(args: argparse.Namespace) -> dict[str, object]:
+    fields = {
+        "serial-uart": ("rx_source", "tx_source", "baud_rate", "data_bits", "parity", "polarity", "bit_order"),
+        "serial-i2c": ("clock_source", "data_source", "address_size"),
+        "serial-spi": ("clock_source", "mosi_source", "miso_source", "frame_source", "clock_slope", "bit_order", "word_width", "framing", "clock_timeout"),
+        "serial-can": ("source", "baud_rate", "signal_definition", "sample_point"),
+    }[args.command]
+    return {field: getattr(args, field) for field in fields if getattr(args, field) is not None}
+
+
+def _serial_protocol_commands(
+    args: argparse.Namespace, capabilities: ScopeCapabilities
+) -> list[str]:
+    settings = _serial_cli_values(
+        capabilities,
+        protocol=args.command,
+        **_serial_protocol_settings(args),
+    )
+    mode = {"serial-uart": "uart", "serial-i2c": "i2c", "serial-spi": "spi", "serial-can": "can"}[args.command]
+    if args.query:
+        query_builders = {
+            "serial-uart": serial_uart_query_commands,
+            "serial-i2c": serial_i2c_query_commands,
+            "serial-spi": serial_spi_query_commands,
+            "serial-can": serial_can_query_commands,
+        }
+        return [serial_mode_query(args.bus), *query_builders[args.command](args.bus).values()]
+    builders = {
+        "serial-uart": serial_uart_configure_commands,
+        "serial-i2c": serial_i2c_configure_commands,
+        "serial-spi": serial_spi_configure_commands,
+        "serial-can": serial_can_configure_commands,
+    }
+    return [serial_mode_command(args.bus, mode), *builders[args.command](args.bus, settings)]
+
+
 def _cmd_serial(args: argparse.Namespace) -> int:
     resource = _require_resource(args)
     if resource is None:
@@ -8776,7 +9052,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 **({"state_changing": True} if not args.query else {}),
             )
             print(f"Serial bus {state.bus} mode: {state.mode}")
-        else:
+        elif args.command == "serial-display":
             if args.query:
                 command = serial_display_query(args.bus)
                 state = scope.query_serial_display(args.bus)
@@ -8792,6 +9068,26 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 **({"state_changing": True} if not args.query else {}),
             )
             print(f"Serial bus {state.bus} display enabled: {state.enabled}")
+        else:
+            protocol = args.command.removeprefix("serial-")
+            commands = _serial_protocol_commands(args, scope.capabilities)
+            command = commands[0]
+            settings = _serial_protocol_settings(args)
+            if args.query:
+                state = getattr(scope, f"query_serial_{protocol}")(args.bus)
+                operation = "query"
+            else:
+                state = getattr(scope, f"configure_serial_{protocol}")(
+                    args.bus, **settings
+                )
+                operation = "configure"
+            _json_update_result(
+                operation=operation,
+                commands=commands,
+                **state.to_json(),
+                **({"state_changing": True} if not args.query else {}),
+            )
+            print(f"Serial bus {state.bus} {protocol} mode: {state.mode}")
 
         print(f"Command: {command}")
         entry = scope.query_system_error()

@@ -120,6 +120,10 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "serial-query",
     "serial-mode",
     "serial-display",
+    "serial-uart",
+    "serial-i2c",
+    "serial-spi",
+    "serial-can",
     "search-state",
     "search-mode",
     "search-count",
@@ -1631,8 +1635,54 @@ def _normalize_search_worker_arguments(
 def _normalize_serial_worker_arguments(
     command: str, arguments: dict[str, Any]
 ) -> dict[str, Any]:
-    if command not in {"serial-query", "serial-mode", "serial-display"}:
+    if command not in {
+        "serial-query",
+        "serial-mode",
+        "serial-display",
+        "serial-uart",
+        "serial-i2c",
+        "serial-spi",
+        "serial-can",
+    }:
         return arguments
+
+    if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
+        fields_by_command = {
+            "serial-uart": {"rx_source", "tx_source", "baud_rate", "data_bits", "parity", "polarity", "bit_order"},
+            "serial-i2c": {"clock_source", "data_source", "address_size"},
+            "serial-spi": {"clock_source", "mosi_source", "miso_source", "frame_source", "clock_slope", "bit_order", "word_width", "framing", "clock_timeout"},
+            "serial-can": {"source", "baud_rate", "signal_definition", "sample_point"},
+        }
+        allowed = {"bus", "query"} | fields_by_command[command]
+        unknown = set(arguments) - allowed
+        if unknown:
+            raise OscilloscopeError(
+                f"unknown argument for {command}: {sorted(unknown)[0]}"
+            )
+        bus = arguments.get("bus")
+        if isinstance(bus, bool) or not isinstance(bus, int):
+            raise OscilloscopeError(f"{command} argument bus must be an integer")
+        if arguments.get("query") is True:
+            if set(arguments) != {"bus", "query"}:
+                raise OscilloscopeError(
+                    f"{command} query cannot be combined with configure arguments"
+                )
+            return dict(arguments)
+        if "query" in arguments:
+            raise OscilloscopeError(f"{command} argument query must be exactly true")
+        fields = fields_by_command[command]
+        if not any(field in arguments for field in fields):
+            raise OscilloscopeError(
+                f"{command} configure requires at least one setting"
+            )
+        for field, value in arguments.items():
+            if field in {"rx_source", "tx_source", "clock_source", "data_source", "mosi_source", "miso_source", "frame_source", "source", "parity", "polarity", "bit_order", "address_size", "clock_slope", "framing", "signal_definition"} and not isinstance(value, str):
+                raise OscilloscopeError(f"{command} argument {field} must be a string")
+            if field in {"baud_rate", "data_bits", "word_width"} and (isinstance(value, bool) or not isinstance(value, int)):
+                raise OscilloscopeError(f"{command} argument {field} must be an integer")
+            if field in {"clock_timeout", "sample_point"} and (isinstance(value, bool) or not isinstance(value, (int, float))):
+                raise OscilloscopeError(f"{command} argument {field} must be a number")
+        return dict(arguments)
 
     if command == "serial-query":
         if set(arguments) != {"bus"}:

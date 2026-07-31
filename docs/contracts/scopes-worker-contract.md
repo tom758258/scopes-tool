@@ -141,7 +141,8 @@ Worker `/command` supports the existing Scopes capability surface:
 - `demo-query`, `demo-output`, `demo-function`, `demo-phase`
 - `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
   `wgen-voltage`, `wgen-offset`, `wgen-load`
-- `serial-query`, `serial-mode`, `serial-display`
+- `serial-query`, `serial-mode`, `serial-display`, `serial-uart`, `serial-i2c`,
+  `serial-spi`, `serial-can`
 - `search-state`, `search-mode`, `search-count`, `search-event`
 - `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
   `save-image-ink-saver`, `save-image-factors`, `save-image`,
@@ -1717,6 +1718,26 @@ P0 does not configure protocol parameters, sources, triggers, Search, Lister,
 or export. It does not probe licenses; unavailable serial decode options remain
 normal instrument errors. This surface has hardware-free validation only.
 
+### Serial Basic P1 Commands
+
+The worker also accepts `serial-uart`, `serial-i2c`, `serial-spi`, and
+`serial-can`. Each request requires an integer `bus` and either
+`{"query": true}` or one or more protocol-specific configure fields. The
+canonical fields are the CLI names in snake_case: UART uses `rx_source`,
+`tx_source`, `baud_rate`, `data_bits`, `parity`, `polarity`, and `bit_order`;
+I2C uses `clock_source`, `data_source`, and `address_size`; SPI uses
+`clock_source`, `mosi_source`, `miso_source`, `frame_source`, `clock_slope`,
+`bit_order`, `word_width`, `framing`, and `clock_timeout`; CAN uses `source`,
+`baud_rate`, `signal_definition`, and `sample_point`.
+
+Sources are canonical `channelN` or `external`, bounded by the selected model's
+analog-channel capability. CAN signal definitions use `canh`, `canl`, `rx`,
+`tx`, `difl`, and `difh`. Worker validation reuses the CLI/Core path and, for
+worker-live, rejects invalid bus, mode, source, or parameter values using the
+startup model before enqueue, artifact creation, backend open, or SCPI. P1
+does not configure serial trigger, Search, Lister, export, or advanced protocol
+parameters; instrument license errors remain normal instrument errors.
+
 ### Search Basic Pack v1 Commands
 
 The worker accepts only these canonical argument shapes:
@@ -1971,7 +1992,8 @@ The `measure-clear`, `measure-show`, `measure-source`, `measure-window`,
 `dvm-current`, `dvm-query`, `demo-query`, `demo-output`, `demo-function`,
 `demo-phase`, `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
 `wgen-voltage`, `wgen-offset`, `wgen-load`, `serial-query`, `serial-mode`,
-`serial-display`, `search-state`, `search-mode`, `search-count`, and
+`serial-display`, `serial-uart`, `serial-i2c`, `serial-spi`, `serial-can`,
+`search-state`, `search-mode`, `search-count`, and
 `search-event`
 commands also do not create command artifacts.
 The `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
