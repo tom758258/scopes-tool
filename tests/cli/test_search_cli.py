@@ -154,11 +154,11 @@ def test_search_event_cli_execution_and_validation(capsys):
             "i2c",
         ),
         (
-            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xA5XX", "--width", "8"],
+            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xa5xx", "--width", "8"],
             "spi",
         ),
         (
-            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12XX", "--data-length", "2", "--id", "0xabc", "--id-mode", "standard"],
+            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12xx", "--data-length", "2", "--id", "0xabc", "--id-mode", "standard"],
             "can",
         ),
     ],
@@ -175,8 +175,11 @@ def test_simulator_cli_serial_search_configure(capsys, cmd_args, expected_protoc
     assert "*IDN?" not in res["commands"]
     assert ":SYSTem:ERRor?" not in res["commands"]
     if expected_protocol == "spi":
+        assert res["data"] == "0xA5XX"
         assert ':SEARch:SERial:SPI:PATTern:DATA "0xA5XX"' in res["commands"]
     if expected_protocol == "can":
+        assert res["data"] == "0x12XX"
+        assert res["id"] == "0xABC"
         assert ':SEARch:SERial:CAN:PATTern:DATA "0x12XX"' in res["commands"]
         assert ':SEARch:SERial:CAN:PATTern:ID "0xABC"' in res["commands"]
 
@@ -209,12 +212,12 @@ def test_serial_search_uart_query_json(capsys):
             {"mode": "read7", "address": 80, "data": 165},
         ),
         (
-            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xa5xx", "--width", "8"],
+            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xA5XX", "--width", "8"],
             "spi",
             {"mode": "mosi", "data": "0xA5XX", "width": 8},
         ),
         (
-            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12xx", "--data-length", "2", "--id", "0xabc", "--id-mode", "standard"],
+            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12XX", "--data-length", "2", "--id", "0xABC", "--id-mode", "standard"],
             "can",
             {"mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0xABC", "id_mode": "standard"},
         ),
