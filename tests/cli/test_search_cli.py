@@ -139,3 +139,114 @@ def test_search_event_cli_execution_and_validation(capsys):
     with pytest.raises(SystemExit) as exc:
         cli.main(["search-event", "--event", "0", "--simulate", "--model", "keysight-dsox4034a", "--json"])
     assert exc.value.code == 2
+
+
+
+@pytest.mark.parametrize(
+    "cmd_args, expected_protocol",
+    [
+        (
+            ["serial-search-uart", "--bus", "1", "--mode", "rx-data", "--data", "85", "--qualifier", "equal"],
+            "uart",
+        ),
+        (
+            ["serial-search-i2c", "--bus", "1", "--mode", "read7", "--address", "80", "--data", "255", "--qualifier", "not-equal"],
+            "i2c",
+        ),
+        (
+            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xA5XX", "--width", "8"],
+            "spi",
+        ),
+        (
+            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12XX", "--data-length", "2", "--id", "0x123", "--id-mode", "standard"],
+            "can",
+        ),
+    ],
+)
+def test_simulator_cli_serial_search_configure(capsys, cmd_args, expected_protocol):
+    assert cli.main([*cmd_args, "--simulate", "--json"]) == 0
+    res = _payload(capsys)["result"]
+    assert res["operation"] == "configure"
+    assert res["protocol"] == expected_protocol
+    assert res["bus"] == 1
+    assert res["state_changing"] is True
+
+
+def test_serial_search_uart_query_json(capsys):
+    assert cli.main(["serial-search-uart", "--bus", "1", "--query", "--simulate", "--json"]) == 0
+    res = _payload(capsys)["result"]
+    assert res["operation"] == "query"
+    assert res["protocol"] == "uart"
+    assert res["bus"] == 1
+    assert res["search_enabled"] is False
+    assert res["selected"] is False
+    assert res["mode"] == "rx-data"
+    assert res["raw_mode"] == "RDAT"
+
+
+@pytest.mark.parametrize(
+    "args, protocol, expected",
+    [
+        (
+            ["serial-search-uart", "--bus", "1", "--mode", "rx-data", "--data", "85", "--qualifier", "equal"],
+            "uart",
+            {"mode": "rx-data", "data": 85, "qualifier": "equal"},
+        ),
+        (
+            ["serial-search-i2c", "--bus", "1", "--mode", "read7", "--address", "80", "--data", "165"],
+            "i2c",
+            {"mode": "read7", "address": 80, "data": 165},
+        ),
+        (
+            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xa5xx", "--width", "8"],
+            "spi",
+            {"mode": "mosi", "data": "0xA5XX", "width": 8},
+        ),
+        (
+            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12xx", "--data-length", "2", "--id", "0x123", "--id-mode", "standard"],
+            "can",
+            {"mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"},
+        ),
+    ],
+)
+def test_serial_search_simulator_json_configure(capsys, args, protocol, expected):
+    assert cli.main([*args, "--simulate", "--json"]) == 0
+    result = _payload(capsys)["result"]
+    assert result["operation"] == "configure"
+    assert result["protocol"] == protocol
+    assert result["bus"] == 1
+    assert result["state_changing"] is True
+    for key, value in expected.items():
+        assert result[key] == value
+    assert result["commands"][:2] == [":SEARch:STATe 1", ":SEARch:MODE SERial1"]
+
+
+def test_serial_search_dry_run_planned_order(capsys):
+    args = [
+        "serial-search-uart",
+        "--bus",
+        "1",
+        "--mode",
+        "rx-data",
+        "--data",
+        "85",
+        "--qualifier",
+        "equal",
+        "--dry-run",
+        "--json",
+    ]
+    assert cli.main(args) == 0
+    record = _payload(capsys)
+    assert record["scpi"]["planned"] == [
+        ":SEARch:STATe 1",
+        ":SEARch:MODE SERial1",
+        ":SEARch:SERial:UART:MODE RDATa",
+        ":SEARch:SERial:UART:DATA 85",
+        ":SEARch:SERial:UART:QUALifier EQUal",
+        ":SYSTem:ERRor?",
+    ]
+    res = record["result"]
+    assert res["operation"] == "configure"
+    assert res["protocol"] == "uart"
+    assert res["bus"] == 1
+    assert res["mode"] == "rx-data"

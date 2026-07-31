@@ -173,8 +173,9 @@ Core owns runtime behavior:
   search event count. Mode configuration enables search before setting the
   mode. DSO-X 2000X supports `serial1`; 3000X supports `edge`, `glitch`,
   `runt`, `transition`, `serial1`, and `serial2`; 4000X additionally supports
-  `peak`. Event navigation, mode-specific search parameters, and serial search
-  pattern configuration are not implemented. Coverage is hardware-free; no
+  `peak`. Serial Search P3 adds model-guarded serial search controls for UART,
+  I2C, SPI, and CAN; 2000X exposes bus 1, while 3000X and 4000X expose buses 1
+  and 2. Configure the matching Serial bus before using Serial Search. Coverage is hardware-free; no
   live hardware validation was performed for this pack.
 - Reference Waveform Pack v1 helpers for saving an analog channel to reference
   slot 1 or 2, configuring or querying display and label state, clearing a

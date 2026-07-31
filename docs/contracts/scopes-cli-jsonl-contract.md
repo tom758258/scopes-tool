@@ -279,6 +279,7 @@ Control and setup:
   integer `count`, and preserved `raw_count`.
 - `search-event`: results include `operation`, `command`, `event`, and optional
   `raw` for queries or `state_changing: true` for configuration.
+- `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, `serial-search-can`: configure results include `operation: "configure"`, `protocol`, `bus`, `mode`, `commands`, and `state_changing: true`. Query results include `operation: "query"`, `protocol`, `bus`, `search_enabled`, `search_mode`, `selected`, `mode`, `raw_mode`, plus protocol-specific canonical/raw fields.
 - Save/Export Pack v1 setting queries include `instrument_side: true`,
   `operation: "query"`, the target `command`, a canonical lowercase or boolean
   value, and preserved `raw_response`. Configure results use

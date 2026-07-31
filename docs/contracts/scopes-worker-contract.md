@@ -144,7 +144,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `serial-query`, `serial-mode`, `serial-display`, `serial-uart`, `serial-i2c`,
   `serial-spi`, `serial-can`, `serial-lister-query`, `serial-lister-display`,
   `serial-lister-reference`, `serial-lister-export`
-- `search-state`, `search-mode`, `search-count`, `search-event`
+- `search-state`, `search-mode`, `search-count`, `search-event`, `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, `serial-search-can`
 - `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
   `save-image-ink-saver`, `save-image-factors`, `save-image`,
   `save-waveform-format`, `save-waveform-length`,

@@ -146,3 +146,31 @@ def test_worker_search_event_acceptance_and_rejection(tmp_path):
 
     with pytest.raises(OscilloscopeError, match="not supported by the selected"):
         worker.parse_domain_command("search-event", {"query": True}, runtime_2000x)
+
+
+@pytest.mark.parametrize(
+    "command, arguments",
+    [
+        ("serial-search-uart", {"bus": 1, "mode": "rx-data", "data": 85, "qualifier": "equal"}),
+        ("serial-search-i2c", {"bus": 1, "mode": "read7", "address": 80, "data": 165}),
+        ("serial-search-spi", {"bus": 1, "mode": "mosi", "data": "0xA5XX", "width": 8}),
+        ("serial-search-can", {"bus": 1, "mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"}),
+    ],
+)
+def test_worker_serial_search_accepts_canonical_payloads(tmp_path, command, arguments):
+    assert command in worker.DOMAIN_COMMANDS
+    parsed = worker.parse_domain_command(command, arguments, _runtime(tmp_path))
+    assert parsed.command == command
+    assert parsed.bus == 1
+
+
+def test_worker_serial_search_rejects_unsupported_bus_before_side_effects(tmp_path):
+    runtime = _runtime(tmp_path, "keysight-dsox2004a")
+    with pytest.raises(OscilloscopeError, match="Serial bus 2"):
+        worker.parse_domain_command(
+            "serial-search-uart", {"bus": 2, "mode": "rx-data"}, runtime
+        )
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()

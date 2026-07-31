@@ -10,6 +10,8 @@ from scopes_tool_core.search import (
     parse_search_event,
     parse_search_mode,
     parse_search_state,
+    parse_can_search_mode,
+    parse_i2c_search_mode,
     search_count_query,
     search_event_command,
     search_event_query,
@@ -190,4 +192,171 @@ def test_search_event_unsupported_profiles_reject(model):
         controller.query_event()
     with pytest.raises(ParameterValidationError, match="not supported by the selected"):
         controller.set_event(1)
+    assert backend.history == []
+
+
+@pytest.mark.parametrize(
+    "protocol, configure_fn, args, expected_scpi",
+    [
+        (
+            "uart",
+            "configure_serial_search_uart",
+            {"bus": 1, "mode": "rx-data", "data": 85, "qualifier": "equal"},
+            [
+                ":SEARch:STATe 1",
+                ":SEARch:MODE SERial1",
+                ":SEARch:SERial:UART:MODE RDATa",
+                ":SEARch:SERial:UART:DATA 85",
+                ":SEARch:SERial:UART:QUALifier EQUal",
+            ],
+        ),
+        (
+            "i2c",
+            "configure_serial_search_i2c",
+            {"bus": 1, "mode": "read7", "address": 80, "data": 255, "qualifier": "not-equal"},
+            [
+                ":SEARch:STATe 1",
+                ":SEARch:MODE SERial1",
+                ":SEARch:SERial:IIC:MODE READ7",
+                ":SEARch:SERial:IIC:PATTern:ADDRess 80",
+                ":SEARch:SERial:IIC:PATTern:DATA 255",
+                ":SEARch:SERial:IIC:QUALifier NOTequal",
+            ],
+        ),
+        (
+            "spi",
+            "configure_serial_search_spi",
+            {"bus": 1, "mode": "mosi", "data": "0xA5XX", "width": 8},
+            [
+                ":SEARch:STATe 1",
+                ":SEARch:MODE SERial1",
+                ":SEARch:SERial:SPI:MODE MOSI",
+                ':SEARch:SERial:SPI:PATTern:DATA "0xA5XX"',
+                ":SEARch:SERial:SPI:PATTern:WIDTh 8",
+            ],
+        ),
+        (
+            "can",
+            "configure_serial_search_can",
+            {"bus": 1, "mode": "id-data", "data": "0x12XX", "data_length": 2, "id_val": "0x123", "id_mode": "standard"},
+            [
+                ":SEARch:STATe 1",
+                ":SEARch:MODE SERial1",
+                ":SEARch:SERial:CAN:MODE IDData",
+                ':SEARch:SERial:CAN:PATTern:DATA "0x12XX"',
+                ":SEARch:SERial:CAN:PATTern:DATA:LENGth 2",
+                ':SEARch:SERial:CAN:PATTern:ID "0x123"',
+                ":SEARch:SERial:CAN:PATTern:ID:MODE STANdard",
+            ],
+        ),
+    ],
+)
+def test_core_serial_search_configure_commands(protocol, configure_fn, args, expected_scpi):
+    backend = FakeBackend()
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    getattr(scope, configure_fn)(**args)
+    assert backend.history == ["*IDN?", *expected_scpi]
+
+
+@pytest.mark.parametrize(
+    "protocol, query_fn, responses, check_dict",
+    [
+        (
+            "uart",
+            "query_serial_search_uart",
+            {
+                "*IDN?": "KEYSIGHT,DSOX3024A,MY12345678,02.41",
+                ":SEARch:STATe?": "1",
+                ":SEARch:MODE?": "SER1",
+                ":SEARch:SERial:UART:MODE?": "RDAT",
+                ":SEARch:SERial:UART:DATA?": "85",
+                ":SEARch:SERial:UART:QUALifier?": "EQU",
+            },
+            {"search_enabled": True, "search_mode": "serial1", "selected": True, "mode": "rx-data", "raw_mode": "RDAT", "data": 85, "qualifier": "equal"},
+        ),
+        (
+            "i2c",
+            "query_serial_search_i2c",
+            {
+                "*IDN?": "KEYSIGHT,DSOX3024A,MY12345678,02.41",
+                ":SEARch:STATe?": "1",
+                ":SEARch:MODE?": "SER1",
+                ":SEARch:SERial:IIC:MODE?": "READ7",
+                ":SEARch:SERial:IIC:PATTern:ADDRess?": "80",
+                ":SEARch:SERial:IIC:PATTern:DATA?": "255",
+                ":SEARch:SERial:IIC:PATTern:DATA2?": "-1",
+                ":SEARch:SERial:IIC:QUALifier?": "EQU",
+            },
+            {"search_enabled": True, "search_mode": "serial1", "selected": True, "mode": "read7", "raw_mode": "READ7", "address": 80, "data": 255, "data2": -1, "qualifier": "equal"},
+        ),
+        (
+            "spi",
+            "query_serial_search_spi",
+            {
+                "*IDN?": "KEYSIGHT,DSOX3024A,MY12345678,02.41",
+                ":SEARch:STATe?": "1",
+                ":SEARch:MODE?": "SER1",
+                ":SEARch:SERial:SPI:MODE?": "MOSI",
+                ":SEARch:SERial:SPI:PATTern:DATA?": '"0xA5XX"',
+                ":SEARch:SERial:SPI:PATTern:WIDTh?": "8",
+            },
+            {"search_enabled": True, "search_mode": "serial1", "selected": True, "mode": "mosi", "raw_mode": "MOSI", "data": "0xA5XX", "raw_data": '"0xA5XX"', "width": 8},
+        ),
+        (
+            "can",
+            "query_serial_search_can",
+            {
+                "*IDN?": "KEYSIGHT,DSOX3024A,MY12345678,02.41",
+                ":SEARch:STATe?": "1",
+                ":SEARch:MODE?": "SER1",
+                ":SEARch:SERial:CAN:MODE?": "IDD",
+                ":SEARch:SERial:CAN:PATTern:DATA?": '"0x12XX"',
+                ":SEARch:SERial:CAN:PATTern:DATA:LENGth?": "2",
+                ":SEARch:SERial:CAN:PATTern:ID?": '"0x123"',
+                ":SEARch:SERial:CAN:PATTern:ID:MODE?": "STAN",
+            },
+            {"search_enabled": True, "search_mode": "serial1", "selected": True, "mode": "id-data", "raw_mode": "IDD", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"},
+        ),
+    ],
+)
+def test_core_serial_search_query_short_readbacks(protocol, query_fn, responses, check_dict):
+    backend = FakeBackend(responses=responses)
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    state = getattr(scope, query_fn)(bus=1)
+    res_dict = state.to_json()
+    for k, v in check_dict.items():
+        assert res_dict[k] == v
+
+
+@pytest.mark.parametrize(
+    "parser, raw",
+    [(parse_i2c_search_mode, "ADDR"), (parse_can_search_mode, "ACK")],
+)
+def test_core_serial_search_preserves_unsupported_4000x_modes(parser, raw):
+    assert parser(raw) == (None, raw)
+
+
+def test_serial_search_rejects_bus2_for_2000x():
+    backend = FakeBackend(responses={"*IDN?": "KEYSIGHT,DSOX2004A,MY12345678,02.41"})
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    backend.history.clear()
+    with pytest.raises(ParameterValidationError, match="bus"):
+        scope.configure_serial_search_uart(bus=2, mode="rx-data")
+    assert backend.history == []
+
+
+def test_serial_search_validates_numeric_range_and_patterns():
+    backend = FakeBackend()
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    backend.history.clear()
+    with pytest.raises(ParameterValidationError, match="data"):
+        scope.configure_serial_search_uart(bus=1, mode="rx-data", data=256)
+    with pytest.raises(ParameterValidationError, match="pattern"):
+        scope.configure_serial_search_spi(bus=1, mode="mosi", data="0xGG")
+    with pytest.raises(ParameterValidationError, match="width"):
+        scope.configure_serial_search_spi(bus=1, mode="mosi", width=11)
     assert backend.history == []

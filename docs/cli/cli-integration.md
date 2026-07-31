@@ -41,10 +41,10 @@ when the mode does not match. Sources use `channelN` (bounded by the model's
 analog-channel capability) or `external`; I2C emits the instrument `IIC` token,
 and CAN uses `difl` as the canonical differential signal value. Capability
 profiles determine bus count and available protocol modes; instrument licenses
-may still be required. P1 does not expose serial trigger, Search, Lister, or
-export configuration.
+may still be required. P1 does not expose serial trigger, Lister, or export
+configuration; Search Basic and Serial Search are documented below.
 
-Search Basic Pack v1 adapter commands are `search-state`, `search-mode`,
+Search adapter commands are `search-state`, `search-mode`, `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, `serial-search-can`,
 query-only `search-count`, and 4000X `search-event`. Boolean configuration uses canonical
 `--enabled true|false`; search modes use lowercase canonical values and are
 validated against the selected model capability profile before search SCPI.

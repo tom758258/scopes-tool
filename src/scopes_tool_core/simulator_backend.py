@@ -189,6 +189,22 @@ class SimulatorBackend:
     search_mode: str = "SERial1"
     search_count: int = 0
     search_event: int = 1
+    search_uart_mode: dict[int, str] = field(default_factory=lambda: {1: "RDAT", 2: "RDAT"})
+    search_uart_data: dict[int, int] = field(default_factory=lambda: {1: 0, 2: 0})
+    search_uart_qualifier: dict[int, str] = field(default_factory=lambda: {1: "EQU", 2: "EQU"})
+    search_i2c_mode: dict[int, str] = field(default_factory=lambda: {1: "READ7", 2: "READ7"})
+    search_i2c_address: dict[int, int] = field(default_factory=lambda: {1: -1, 2: -1})
+    search_i2c_data: dict[int, int] = field(default_factory=lambda: {1: -1, 2: -1})
+    search_i2c_data2: dict[int, int] = field(default_factory=lambda: {1: -1, 2: -1})
+    search_i2c_qualifier: dict[int, str] = field(default_factory=lambda: {1: "EQU", 2: "EQU"})
+    search_spi_mode: dict[int, str] = field(default_factory=lambda: {1: "MOSI", 2: "MOSI"})
+    search_spi_data: dict[int, str] = field(default_factory=lambda: {1: "0x00", 2: "0x00"})
+    search_spi_width: dict[int, int] = field(default_factory=lambda: {1: 8, 2: 8})
+    search_can_mode: dict[int, str] = field(default_factory=lambda: {1: "DATA", 2: "DATA"})
+    search_can_data: dict[int, str] = field(default_factory=lambda: {1: "0x00", 2: "0x00"})
+    search_can_data_length: dict[int, int] = field(default_factory=lambda: {1: 1, 2: 1})
+    search_can_id: dict[int, str] = field(default_factory=lambda: {1: "0x00", 2: "0x00"})
+    search_can_id_mode: dict[int, str] = field(default_factory=lambda: {1: "STAN", 2: "STAN"})
     save_pwd: str = ""
     save_filename: str = "scope"
     save_image_format: str = "PNG"
@@ -581,6 +597,57 @@ class SimulatorBackend:
                     f"Search mode {value!r} is not supported by simulator model {self.model}."
                 )
             self.search_mode = scpi_by_canonical[canonical]
+        elif upper.startswith(":SEARCH:SERIAL:UART:MODE "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_uart_mode[bus] = command.split(" ", 1)[1].strip()
+        elif upper.startswith(":SEARCH:SERIAL:UART:DATA "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_uart_data[bus] = int(command.split(" ", 1)[1].strip())
+        elif upper.startswith(":SEARCH:SERIAL:UART:QUALIFIER "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_uart_qualifier[bus] = command.split(" ", 1)[1].strip()
+        elif upper.startswith(":SEARCH:SERIAL:IIC:MODE "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_i2c_mode[bus] = command.split(" ", 1)[1].strip()
+        elif upper.startswith(":SEARCH:SERIAL:IIC:PATTERN:ADDRESS "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_i2c_address[bus] = int(command.split(" ", 1)[1].strip())
+        elif upper.startswith(":SEARCH:SERIAL:IIC:PATTERN:DATA2 "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_i2c_data2[bus] = int(command.split(" ", 1)[1].strip())
+        elif upper.startswith(":SEARCH:SERIAL:IIC:PATTERN:DATA "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_i2c_data[bus] = int(command.split(" ", 1)[1].strip())
+        elif upper.startswith(":SEARCH:SERIAL:IIC:QUALIFIER "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_i2c_qualifier[bus] = command.split(" ", 1)[1].strip()
+        elif upper.startswith(":SEARCH:SERIAL:SPI:MODE "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_spi_mode[bus] = command.split(" ", 1)[1].strip()
+        elif upper.startswith(":SEARCH:SERIAL:SPI:PATTERN:DATA "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            raw_pattern = command.split(" ", 1)[1].strip().strip('"')
+            self.search_spi_data[bus] = raw_pattern.upper() if raw_pattern.lower().startswith("0x") else raw_pattern
+        elif upper.startswith(":SEARCH:SERIAL:SPI:PATTERN:WIDTH "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_spi_width[bus] = int(command.split(" ", 1)[1].strip())
+        elif upper.startswith(":SEARCH:SERIAL:CAN:MODE "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_can_mode[bus] = command.split(" ", 1)[1].strip()
+        elif upper.startswith(":SEARCH:SERIAL:CAN:PATTERN:DATA:LENGTH "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_can_data_length[bus] = int(command.split(" ", 1)[1].strip())
+        elif upper.startswith(":SEARCH:SERIAL:CAN:PATTERN:DATA "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            raw_pattern = command.split(" ", 1)[1].strip().strip('"')
+            self.search_can_data[bus] = raw_pattern.upper() if raw_pattern.lower().startswith("0x") else raw_pattern
+        elif upper.startswith(":SEARCH:SERIAL:CAN:PATTERN:ID:MODE "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            self.search_can_id_mode[bus] = command.split(" ", 1)[1].strip()
+        elif upper.startswith(":SEARCH:SERIAL:CAN:PATTERN:ID "):
+            bus = 2 if self.search_mode == "SERial2" else 1
+            raw_pattern = command.split(" ", 1)[1].strip().strip('"')
+            self.search_can_id[bus] = raw_pattern.upper() if raw_pattern.lower().startswith("0x") else raw_pattern
         elif upper.startswith(":SEARCH:EVENT "):
             if not self._capabilities.supports_search_event_navigation:
                 raise SimulatorBackendError(
@@ -1121,6 +1188,57 @@ class SimulatorBackend:
             return self.search_mode if self.search_enabled else "OFF"
         if upper == ":SEARCH:COUNT?":
             return str(self.search_count)
+        if upper == ":SEARCH:SERIAL:UART:MODE?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return self.search_uart_mode[bus]
+        if upper == ":SEARCH:SERIAL:UART:DATA?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return str(self.search_uart_data[bus])
+        if upper == ":SEARCH:SERIAL:UART:QUALIFIER?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return self.search_uart_qualifier[bus]
+        if upper == ":SEARCH:SERIAL:IIC:MODE?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return self.search_i2c_mode[bus]
+        if upper == ":SEARCH:SERIAL:IIC:PATTERN:ADDRESS?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return str(self.search_i2c_address[bus])
+        if upper == ":SEARCH:SERIAL:IIC:PATTERN:DATA?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return str(self.search_i2c_data[bus])
+        if upper == ":SEARCH:SERIAL:IIC:PATTERN:DATA2?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return str(self.search_i2c_data2[bus])
+        if upper == ":SEARCH:SERIAL:IIC:QUALIFIER?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return self.search_i2c_qualifier[bus]
+        if upper == ":SEARCH:SERIAL:SPI:MODE?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return self.search_spi_mode[bus]
+        if upper == ":SEARCH:SERIAL:SPI:PATTERN:DATA?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            val = self.search_spi_data[bus]
+            return f'"{val}"' if not (val.startswith('"') and val.endswith('"')) else val
+        if upper == ":SEARCH:SERIAL:SPI:PATTERN:WIDTH?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return str(self.search_spi_width[bus])
+        if upper == ":SEARCH:SERIAL:CAN:MODE?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return self.search_can_mode[bus]
+        if upper == ":SEARCH:SERIAL:CAN:PATTERN:DATA?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            val = self.search_can_data[bus]
+            return f'"{val}"' if not (val.startswith('"') and val.endswith('"')) else val
+        if upper == ":SEARCH:SERIAL:CAN:PATTERN:DATA:LENGTH?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return str(self.search_can_data_length[bus])
+        if upper == ":SEARCH:SERIAL:CAN:PATTERN:ID?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            val = self.search_can_id[bus]
+            return f'"{val}"' if not (val.startswith('"') and val.endswith('"')) else val
+        if upper == ":SEARCH:SERIAL:CAN:PATTERN:ID:MODE?":
+            bus = 2 if self.search_mode == "SERial2" else 1
+            return self.search_can_id_mode[bus]
         if upper == ":SEARCH:EVENT?":
             if not self._capabilities.supports_search_event_navigation:
                 raise SimulatorBackendError(

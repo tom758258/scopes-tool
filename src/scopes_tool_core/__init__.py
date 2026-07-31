@@ -56,12 +56,22 @@ from .save_export import (
     SaveWaveformLengthState,
 )
 from .search import (
+    CAN_SEARCH_ID_MODES,
+    CAN_SEARCH_MODES,
+    I2C_SEARCH_MODES,
     SEARCH_MODES,
+    SEARCH_QUALIFIERS,
+    SPI_SEARCH_MODES,
+    UART_SEARCH_MODES,
     SearchController,
     SearchCountState,
     SearchEventState,
     SearchModeState,
     SearchState,
+    SerialSearchUartState,
+    SerialSearchI2CState,
+    SerialSearchSpiState,
+    SerialSearchCanState,
 )
 from .serial import (
     CAN_SIGNAL_DEFINITIONS,
@@ -300,6 +310,10 @@ __all__ = [
     "SearchEventState",
     "SearchModeState",
     "SearchState",
+    "SerialSearchUartState",
+    "SerialSearchI2CState",
+    "SerialSearchSpiState",
+    "SerialSearchCanState",
     "SERIAL_MODES",
     "CAN_SIGNAL_DEFINITIONS",
     "I2C_ADDRESS_SIZES",

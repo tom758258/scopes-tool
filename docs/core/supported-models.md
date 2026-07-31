@@ -162,8 +162,9 @@ pack.
 
 All three profiles support `search-state` and query-only `search-count`.
 `search-mode` enables search before setting the mode. Search event navigation is supported on 4000X via `search-event`.
-Mode-specific search parameter commands and serial search pattern
-configuration are outside Search Basic Pack v1.
+Serial Search P3 provides protocol-specific search controls for UART, I2C, SPI,
+and CAN. 2000X supports bus 1; 3000X and 4000X support buses 1 and 2. The
+selected Serial bus must be configured with the matching Serial command first.
 
 - 2000X and 3000X channel labels allow up to 10 printable ASCII characters.
 - 4000X channel labels allow up to 32 printable ASCII characters.

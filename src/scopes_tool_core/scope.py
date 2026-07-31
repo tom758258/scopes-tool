@@ -64,7 +64,17 @@ from .save_export import (
     SaveWaveformFormatState,
     SaveWaveformLengthState,
 )
-from .search import SearchController, SearchCountState, SearchEventState, SearchModeState, SearchState
+from .search import (
+    SearchController,
+    SearchCountState,
+    SearchEventState,
+    SearchModeState,
+    SearchState,
+    SerialSearchUartState,
+    SerialSearchI2CState,
+    SerialSearchSpiState,
+    SerialSearchCanState,
+)
 from .serial import (
     SerialController,
     SerialCanState,
@@ -878,6 +888,82 @@ class Oscilloscope:
         """Query selected search event."""
 
         return self._search_controller().query_event()
+
+    def configure_serial_search_uart(
+        self,
+        bus: int,
+        mode: str,
+        data: int | None = None,
+        qualifier: str | None = None,
+    ) -> SerialSearchUartState:
+        """Configure UART serial search settings."""
+
+        return self._search_controller().configure_serial_search_uart(
+            bus, mode, data=data, qualifier=qualifier
+        )
+
+    def query_serial_search_uart(self, bus: int) -> SerialSearchUartState:
+        """Query UART serial search settings."""
+
+        return self._search_controller().query_serial_search_uart(bus)
+
+    def configure_serial_search_i2c(
+        self,
+        bus: int,
+        mode: str,
+        address: int | None = None,
+        data: int | None = None,
+        data2: int | None = None,
+        qualifier: str | None = None,
+    ) -> SerialSearchI2CState:
+        """Configure I2C serial search settings."""
+
+        return self._search_controller().configure_serial_search_i2c(
+            bus, mode, address=address, data=data, data2=data2, qualifier=qualifier
+        )
+
+    def query_serial_search_i2c(self, bus: int) -> SerialSearchI2CState:
+        """Query I2C serial search settings."""
+
+        return self._search_controller().query_serial_search_i2c(bus)
+
+    def configure_serial_search_spi(
+        self,
+        bus: int,
+        mode: str,
+        data: str | None = None,
+        width: int | None = None,
+    ) -> SerialSearchSpiState:
+        """Configure SPI serial search settings."""
+
+        return self._search_controller().configure_serial_search_spi(
+            bus, mode, data=data, width=width
+        )
+
+    def query_serial_search_spi(self, bus: int) -> SerialSearchSpiState:
+        """Query SPI serial search settings."""
+
+        return self._search_controller().query_serial_search_spi(bus)
+
+    def configure_serial_search_can(
+        self,
+        bus: int,
+        mode: str,
+        data: str | None = None,
+        data_length: int | None = None,
+        id_val: str | None = None,
+        id_mode: str | None = None,
+    ) -> SerialSearchCanState:
+        """Configure CAN serial search settings."""
+
+        return self._search_controller().configure_serial_search_can(
+            bus, mode, data=data, data_length=data_length, id_val=id_val, id_mode=id_mode
+        )
+
+    def query_serial_search_can(self, bus: int) -> SerialSearchCanState:
+        """Query CAN serial search settings."""
+
+        return self._search_controller().query_serial_search_can(bus)
 
     def configure_save_pwd(self, path: str) -> None:
         """Configure the instrument-side current save directory."""

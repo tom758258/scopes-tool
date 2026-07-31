@@ -18,7 +18,21 @@ from urllib import error as urlerror
 from urllib import request as urlrequest
 from uuid import uuid4
 
-from scopes_tool_core.errors import OscilloscopeError
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
+from scopes_tool_core.search import (
+    validate_can_data_length,
+    validate_can_id_mode,
+    validate_can_search_mode,
+    validate_i2c_pattern_value,
+    validate_i2c_search_mode,
+    validate_pattern_hex_x,
+    validate_search_qualifier,
+    validate_serial_search_bus,
+    validate_spi_search_mode,
+    validate_spi_width,
+    validate_uart_data,
+    validate_uart_search_mode,
+)
 from scopes_tool_core.advanced import (
     FFT_DETECTION_TYPES,
     FFT_GATES,
@@ -132,6 +146,10 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "search-mode",
     "search-count",
     "search-event",
+    "serial-search-uart",
+    "serial-search-i2c",
+    "serial-search-spi",
+    "serial-search-can",
     "save-pwd",
     "save-filename",
     "save-image-format",
@@ -517,6 +535,7 @@ def parse_domain_command(
     arguments = _normalize_wgen_worker_arguments(command, arguments)
     arguments = _normalize_serial_worker_arguments(command, arguments)
     arguments = _normalize_search_worker_arguments(command, arguments, runtime)
+    arguments = _normalize_serial_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_save_export_worker_arguments(command, arguments)
     arguments = _normalize_math_worker_arguments(command, arguments, runtime)
     arguments = _normalize_trigger_edge_worker_arguments(command, arguments)
@@ -1539,6 +1558,138 @@ def _normalize_wgen_worker_arguments(
         raise OscilloscopeError(
             "wgen-load argument load must be one of: one-meg, fifty"
         )
+    return dict(arguments)
+
+
+def _normalize_serial_search_worker_arguments(
+    command: str, arguments: dict[str, Any], runtime: WorkerRuntime
+) -> dict[str, Any]:
+    if command not in {
+        "serial-search-uart",
+        "serial-search-i2c",
+        "serial-search-spi",
+        "serial-search-can",
+    }:
+        return arguments
+
+    capabilities = capabilities_for_model_id(runtime.model)
+    if not capabilities.supports_search_basic:
+        raise OscilloscopeError(
+            f"Search Basic Pack v1 is not supported by the selected "
+            f"{capabilities.series} model profile."
+        )
+
+    protocol = command.removeprefix("serial-search-")
+    if protocol not in capabilities.serial_modes:
+        raise OscilloscopeError(
+            f"Serial mode {protocol!r} is not supported by the selected "
+            f"{capabilities.series} model profile."
+        )
+
+    if "bus" not in arguments:
+        raise OscilloscopeError(f"{command} requires bus")
+    bus = arguments["bus"]
+    if isinstance(bus, bool) or not isinstance(bus, int):
+        raise OscilloscopeError(f"{command} argument bus must be an integer")
+    try:
+        validate_serial_search_bus(bus, capabilities)
+    except ParameterValidationError as exc:
+        raise OscilloscopeError(str(exc)) from exc
+
+    allowed_by_cmd = {
+        "serial-search-uart": {"bus", "query", "mode", "data", "qualifier"},
+        "serial-search-i2c": {"bus", "query", "mode", "address", "data", "data2", "qualifier"},
+        "serial-search-spi": {"bus", "query", "mode", "data", "width"},
+        "serial-search-can": {"bus", "query", "mode", "data", "data_length", "id", "id_mode"},
+    }
+    allowed = allowed_by_cmd[command]
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"unknown argument for {command}: {sorted(unknown)[0]}"
+        )
+
+    if "query" in arguments:
+        if arguments["query"] is not True:
+            raise OscilloscopeError(
+                f"{command} argument query must be strictly boolean True"
+            )
+        if len(set(arguments) - {"bus", "query"}) > 0:
+            raise OscilloscopeError(
+                f"{command} query cannot be combined with configure options"
+            )
+        return dict(arguments)
+
+    if "mode" not in arguments:
+        raise OscilloscopeError(f"{command} configure requires mode")
+
+    mode = arguments["mode"]
+    if not isinstance(mode, str):
+        raise OscilloscopeError(f"{command} argument mode must be a string")
+
+    try:
+        if protocol == "uart":
+            validate_uart_search_mode(mode)
+            if "data" in arguments:
+                data = arguments["data"]
+                if isinstance(data, bool) or not isinstance(data, int):
+                    raise OscilloscopeError(f"{command} argument data must be an integer")
+                validate_uart_data(data)
+            if "qualifier" in arguments:
+                q = arguments["qualifier"]
+                if not isinstance(q, str):
+                    raise OscilloscopeError(f"{command} argument qualifier must be a string")
+                validate_search_qualifier(q)
+        elif protocol == "i2c":
+            validate_i2c_search_mode(mode)
+            for f_name in ("address", "data", "data2"):
+                if f_name in arguments:
+                    val = arguments[f_name]
+                    if isinstance(val, bool) or not isinstance(val, int):
+                        raise OscilloscopeError(f"{command} argument {f_name} must be an integer")
+                    validate_i2c_pattern_value(val, f_name)
+            if "qualifier" in arguments:
+                q = arguments["qualifier"]
+                if not isinstance(q, str):
+                    raise OscilloscopeError(f"{command} argument qualifier must be a string")
+                validate_search_qualifier(q)
+        elif protocol == "spi":
+            validate_spi_search_mode(mode)
+            if "data" in arguments:
+                data = arguments["data"]
+                if not isinstance(data, str):
+                    raise OscilloscopeError(f"{command} argument data must be a string")
+                validate_pattern_hex_x(data, "data")
+            if "width" in arguments:
+                width = arguments["width"]
+                if isinstance(width, bool) or not isinstance(width, int):
+                    raise OscilloscopeError(f"{command} argument width must be an integer")
+                validate_spi_width(width)
+        elif protocol == "can":
+            validate_can_search_mode(mode)
+            if "data" in arguments:
+                data = arguments["data"]
+                if not isinstance(data, str):
+                    raise OscilloscopeError(f"{command} argument data must be a string")
+                validate_pattern_hex_x(data, "data")
+            if "data_length" in arguments:
+                length = arguments["data_length"]
+                if isinstance(length, bool) or not isinstance(length, int):
+                    raise OscilloscopeError(f"{command} argument data_length must be an integer")
+                validate_can_data_length(length)
+            if "id" in arguments:
+                cid = arguments["id"]
+                if not isinstance(cid, str):
+                    raise OscilloscopeError(f"{command} argument id must be a string")
+                validate_pattern_hex_x(cid, "id")
+            if "id_mode" in arguments:
+                id_mode = arguments["id_mode"]
+                if not isinstance(id_mode, str):
+                    raise OscilloscopeError(f"{command} argument id_mode must be a string")
+                validate_can_id_mode(id_mode)
+    except ParameterValidationError as exc:
+        raise OscilloscopeError(str(exc)) from exc
+
     return dict(arguments)
 
 

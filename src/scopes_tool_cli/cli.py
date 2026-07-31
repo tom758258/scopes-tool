@@ -309,8 +309,16 @@ from scopes_tool_core.wgen import (
     wgen_voltage_command,
     wgen_voltage_query,
 )
+import scopes_tool_core.search
 from scopes_tool_core.search import (
+    CAN_SEARCH_ID_MODES,
+    CAN_SEARCH_MODES,
+    I2C_SEARCH_MODES,
     SEARCH_MODES,
+    SEARCH_QUALIFIERS,
+    SPI_SEARCH_MODES,
+    UART_SEARCH_MODES,
+    require_search_basic,
     search_count_query,
     search_event_command,
     search_event_query,
@@ -318,8 +326,28 @@ from scopes_tool_core.search import (
     search_mode_query,
     search_state_command,
     search_state_query,
+    serial_search_can_configure_commands,
+    serial_search_can_query_commands,
+    serial_search_i2c_configure_commands,
+    serial_search_i2c_query_commands,
+    serial_search_spi_configure_commands,
+    serial_search_spi_query_commands,
+    serial_search_uart_configure_commands,
+    serial_search_uart_query_commands,
+    validate_can_data_length,
+    validate_can_id_mode,
+    validate_can_search_mode,
+    validate_i2c_pattern_value,
+    validate_i2c_search_mode,
+    validate_pattern_hex_x,
     validate_search_event,
     validate_search_mode,
+    validate_search_qualifier,
+    validate_serial_search_bus,
+    validate_spi_search_mode,
+    validate_spi_width,
+    validate_uart_data,
+    validate_uart_search_mode,
 )
 from scopes_tool_core.serial import (
     CAN_SIGNAL_DEFINITIONS,
@@ -1451,6 +1479,58 @@ def _build_parser() -> argparse.ArgumentParser:
     search_event_action = search_event_parser.add_mutually_exclusive_group(required=True)
     search_event_action.add_argument("--query", action="store_true")
     search_event_action.add_argument("--event", type=_positive_int)
+
+    serial_search_uart_parser = subparsers.add_parser(
+        "serial-search-uart",
+        allow_abbrev=False,
+        help="configure or query UART search criteria",
+    )
+    _add_scope_connection_args(serial_search_uart_parser)
+    serial_search_uart_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_search_uart_parser.add_argument("--query", action="store_true")
+    serial_search_uart_parser.add_argument("--mode", choices=UART_SEARCH_MODES)
+    serial_search_uart_parser.add_argument("--data", type=int)
+    serial_search_uart_parser.add_argument("--qualifier", choices=SEARCH_QUALIFIERS)
+
+    serial_search_i2c_parser = subparsers.add_parser(
+        "serial-search-i2c",
+        allow_abbrev=False,
+        help="configure or query I2C search criteria",
+    )
+    _add_scope_connection_args(serial_search_i2c_parser)
+    serial_search_i2c_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_search_i2c_parser.add_argument("--query", action="store_true")
+    serial_search_i2c_parser.add_argument("--mode", choices=I2C_SEARCH_MODES)
+    serial_search_i2c_parser.add_argument("--address", type=int)
+    serial_search_i2c_parser.add_argument("--data", type=int)
+    serial_search_i2c_parser.add_argument("--data2", type=int)
+    serial_search_i2c_parser.add_argument("--qualifier", choices=SEARCH_QUALIFIERS)
+
+    serial_search_spi_parser = subparsers.add_parser(
+        "serial-search-spi",
+        allow_abbrev=False,
+        help="configure or query SPI search criteria",
+    )
+    _add_scope_connection_args(serial_search_spi_parser)
+    serial_search_spi_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_search_spi_parser.add_argument("--query", action="store_true")
+    serial_search_spi_parser.add_argument("--mode", choices=SPI_SEARCH_MODES)
+    serial_search_spi_parser.add_argument("--data")
+    serial_search_spi_parser.add_argument("--width", type=int)
+
+    serial_search_can_parser = subparsers.add_parser(
+        "serial-search-can",
+        allow_abbrev=False,
+        help="configure or query CAN search criteria",
+    )
+    _add_scope_connection_args(serial_search_can_parser)
+    serial_search_can_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_search_can_parser.add_argument("--query", action="store_true")
+    serial_search_can_parser.add_argument("--mode", choices=CAN_SEARCH_MODES)
+    serial_search_can_parser.add_argument("--data")
+    serial_search_can_parser.add_argument("--data-length", type=int)
+    serial_search_can_parser.add_argument("--id")
+    serial_search_can_parser.add_argument("--id-mode", choices=CAN_SEARCH_ID_MODES)
 
     save_pwd_parser = subparsers.add_parser(
         "save-pwd", allow_abbrev=False, help="configure or query the instrument save directory"
@@ -3212,7 +3292,16 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "serial-lister-export",
     }:
         return _cmd_serial(args)
-    if args.command in {"search-state", "search-mode", "search-count", "search-event"}:
+    if args.command in {
+        "search-state",
+        "search-mode",
+        "search-count",
+        "search-event",
+        "serial-search-uart",
+        "serial-search-i2c",
+        "serial-search-spi",
+        "serial-search-can",
+    }:
         return _cmd_search(args)
     if args.command in {
         "save-pwd",
@@ -3909,6 +3998,13 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
     }:
         _validate_search_args(args)
     if getattr(args, "command", None) in {
+        "serial-search-uart",
+        "serial-search-i2c",
+        "serial-search-spi",
+        "serial-search-can",
+    }:
+        _validate_serial_search_args(args)
+    if getattr(args, "command", None) in {
         "save-pwd",
         "save-filename",
         "save-image-format",
@@ -4439,6 +4535,83 @@ def _validate_search_args(args: argparse.Namespace) -> None:
         )
     if command == "search-mode" and capabilities is not None:
         validate_search_mode(value, capabilities)
+
+
+def _extract_serial_search_settings(args: argparse.Namespace) -> dict[str, object]:
+    if args.command == "serial-search-can":
+        settings = {}
+        if getattr(args, "mode", None) is not None:
+            settings["mode"] = args.mode
+        if getattr(args, "data", None) is not None:
+            settings["data"] = args.data
+        if getattr(args, "data_length", None) is not None:
+            settings["data_length"] = args.data_length
+        if getattr(args, "id", None) is not None:
+            settings["id_val"] = args.id
+        if getattr(args, "id_mode", None) is not None:
+            settings["id_mode"] = args.id_mode
+        return settings
+    fields = {
+        "serial-search-uart": ("mode", "data", "qualifier"),
+        "serial-search-i2c": ("mode", "address", "data", "data2", "qualifier"),
+        "serial-search-spi": ("mode", "data", "width"),
+    }[args.command]
+    return {f: getattr(args, f) for f in fields if getattr(args, f) is not None}
+
+
+def _validate_serial_search_args(args: argparse.Namespace) -> None:
+    capabilities = _pre_open_capabilities(args)
+    if capabilities is not None:
+        require_search_basic(capabilities)
+        validate_serial_search_bus(args.bus, capabilities)
+        protocol = args.command.removeprefix("serial-search-")
+        validate_serial_mode(protocol, capabilities)
+
+    query = bool(getattr(args, "query", False))
+    settings = _extract_serial_search_settings(args)
+    if query:
+        if settings:
+            raise ParameterValidationError(
+                f"{args.command} --query cannot be combined with configure options."
+            )
+        return
+
+    if "mode" not in settings:
+        raise ParameterValidationError(f"{args.command} configure requires --mode.")
+
+    protocol = args.command.removeprefix("serial-search-")
+    if protocol == "uart":
+        validate_uart_search_mode(settings["mode"])
+        if "data" in settings:
+            validate_uart_data(settings["data"])
+        if "qualifier" in settings:
+            validate_search_qualifier(settings["qualifier"])
+    elif protocol == "i2c":
+        validate_i2c_search_mode(settings["mode"])
+        if "address" in settings:
+            validate_i2c_pattern_value(settings["address"], "address")
+        if "data" in settings:
+            validate_i2c_pattern_value(settings["data"], "data")
+        if "data2" in settings:
+            validate_i2c_pattern_value(settings["data2"], "data2")
+        if "qualifier" in settings:
+            validate_search_qualifier(settings["qualifier"])
+    elif protocol == "spi":
+        validate_spi_search_mode(settings["mode"])
+        if "data" in settings:
+            validate_pattern_hex_x(settings["data"], "data")
+        if "width" in settings:
+            validate_spi_width(settings["width"])
+    elif protocol == "can":
+        validate_can_search_mode(settings["mode"])
+        if "data" in settings:
+            validate_pattern_hex_x(settings["data"], "data")
+        if "data_length" in settings:
+            validate_can_data_length(settings["data_length"])
+        if "id_val" in settings:
+            validate_pattern_hex_x(settings["id_val"], "id")
+        if "id_mode" in settings:
+            validate_can_id_mode(settings["id_mode"])
 
 
 def _validate_save_export_args(args: argparse.Namespace) -> None:
@@ -5547,6 +5720,13 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "event": canonical_event,
             "state_changing": True,
         }
+    if command in {
+        "serial-search-uart",
+        "serial-search-i2c",
+        "serial-search-spi",
+        "serial-search-can",
+    }:
+        return _dry_run_serial_search_plan(args, capabilities)
     if command in {
         "save-pwd",
         "save-filename",
@@ -7369,6 +7549,147 @@ def _cmd_control(args: argparse.Namespace) -> int:
         _json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
+
+
+def _cmd_serial_search(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        print(f"Series: {idn.series or 'unknown'}")
+        if scope.capabilities is None:
+            print("Capabilities: unavailable for this model")
+            return 1
+
+        protocol = args.command.removeprefix("serial-search-")
+        if args.query:
+            query_fn = getattr(scope, f"query_serial_search_{protocol}")
+            state = query_fn(args.bus)
+            cmds_fn = getattr(scopes_tool_core.search, f"serial_search_{protocol}_query_commands")
+            commands = cmds_fn(args.bus)
+            _json_update_result(
+                operation="query",
+                protocol=protocol,
+                commands=commands,
+                **state.to_json(),
+            )
+            print(f"Serial search {protocol} bus {state.bus} selected: {state.selected}")
+            for command in commands:
+                print(f"Command: {command}")
+        else:
+            settings = _extract_serial_search_settings(args)
+            config_fn = getattr(scope, f"configure_serial_search_{protocol}")
+            state = config_fn(args.bus, **settings)
+            cmds_fn = getattr(scopes_tool_core.search, f"serial_search_{protocol}_configure_commands")
+            scpi_cmds = cmds_fn(args.bus, **settings)
+            _json_update_result(
+                operation="configure",
+                protocol=protocol,
+                commands=scpi_cmds,
+                state_changing=True,
+                **state.to_json(),
+            )
+            print(f"Serial search {protocol} bus {state.bus} configured mode: {state.mode}")
+            for command in scpi_cmds:
+                print(f"Command: {command}")
+
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _dry_run_serial_search_plan(
+    args: argparse.Namespace, capabilities: ScopeCapabilities | None
+) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
+    if capabilities is not None:
+        require_search_basic(capabilities)
+        canonical_bus = validate_serial_search_bus(args.bus, capabilities)
+    else:
+        canonical_bus = args.bus
+    protocol = args.command.removeprefix("serial-search-")
+    if capabilities is not None:
+        validate_serial_mode(protocol, capabilities)
+
+    if args.query:
+        query_builders = {
+            "uart": serial_search_uart_query_commands,
+            "i2c": serial_search_i2c_query_commands,
+            "spi": serial_search_spi_query_commands,
+            "can": serial_search_can_query_commands,
+        }
+        cmds = query_builders[protocol](canonical_bus)
+        result = {
+            "operation": "query",
+            "protocol": protocol,
+            "bus": canonical_bus,
+            "commands": cmds,
+        }
+        return [*cmds, ":SYSTem:ERRor?"], [], result
+
+    settings = _extract_serial_search_settings(args)
+    if "mode" not in settings or settings["mode"] is None:
+        raise ParameterValidationError(f"{args.command} configure requires --mode.")
+
+    canonical_settings = dict(settings)
+    if protocol == "uart":
+        canonical_settings["mode"] = validate_uart_search_mode(settings["mode"])
+        if "data" in settings:
+            canonical_settings["data"] = validate_uart_data(settings["data"])
+        if "qualifier" in settings:
+            canonical_settings["qualifier"] = validate_search_qualifier(settings["qualifier"])
+    elif protocol == "i2c":
+        canonical_settings["mode"] = validate_i2c_search_mode(settings["mode"])
+        if "address" in settings:
+            canonical_settings["address"] = validate_i2c_pattern_value(settings["address"], "address")
+        if "data" in settings:
+            canonical_settings["data"] = validate_i2c_pattern_value(settings["data"], "data")
+        if "data2" in settings:
+            canonical_settings["data2"] = validate_i2c_pattern_value(settings["data2"], "data2")
+        if "qualifier" in settings:
+            canonical_settings["qualifier"] = validate_search_qualifier(settings["qualifier"])
+    elif protocol == "spi":
+        canonical_settings["mode"] = validate_spi_search_mode(settings["mode"])
+        if "data" in settings:
+            canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
+        if "width" in settings:
+            canonical_settings["width"] = validate_spi_width(settings["width"])
+    elif protocol == "can":
+        canonical_settings["mode"] = validate_can_search_mode(settings["mode"])
+        if "data" in settings:
+            canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
+        if "data_length" in settings:
+            canonical_settings["data_length"] = validate_can_data_length(settings["data_length"])
+        if "id_val" in settings:
+            canonical_settings["id_val"] = validate_pattern_hex_x(settings["id_val"], "id")
+        if "id_mode" in settings:
+            canonical_settings["id_mode"] = validate_can_id_mode(settings["id_mode"])
+
+    configure_builders = {
+        "uart": serial_search_uart_configure_commands,
+        "i2c": serial_search_i2c_configure_commands,
+        "spi": serial_search_spi_configure_commands,
+        "can": serial_search_can_configure_commands,
+    }
+    scpi_cmds = configure_builders[protocol](canonical_bus, **canonical_settings)
+    json_settings = dict(canonical_settings)
+    if "id_val" in json_settings:
+        json_settings["id"] = json_settings.pop("id_val")
+    result = {
+        "operation": "configure",
+        "protocol": protocol,
+        "bus": canonical_bus,
+        "commands": scpi_cmds,
+        "state_changing": True,
+        **json_settings,
+    }
+    return [*scpi_cmds, ":SYSTem:ERRor?"], [], result
 
 
 def _cmd_channel_display(args: argparse.Namespace) -> int:
@@ -9355,6 +9676,13 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
 
 
 def _cmd_search(args: argparse.Namespace) -> int:
+    if args.command in {
+        "serial-search-uart",
+        "serial-search-i2c",
+        "serial-search-spi",
+        "serial-search-can",
+    }:
+        return _cmd_serial_search(args)
     resource = _require_resource(args)
     if resource is None:
         return 2

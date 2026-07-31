@@ -49,6 +49,48 @@ def test_simulator_accepts_profile_supported_search_modes():
     SimulatorBackend(physical_model_id="keysight-dsox4034a").write(":SEARch:MODE PEAK")
 
 
+@pytest.mark.parametrize(
+    "protocol, configure, query, expected",
+    [
+        (
+            "uart",
+            lambda scope: scope.configure_serial_search_uart(1, "rx-data", data=85, qualifier="equal"),
+            lambda scope: scope.query_serial_search_uart(1),
+            {"mode": "rx-data", "data": 85, "qualifier": "equal", "selected": True},
+        ),
+        (
+            "i2c",
+            lambda scope: scope.configure_serial_search_i2c(1, "nack", address=-1, data=80),
+            lambda scope: scope.query_serial_search_i2c(1),
+            {"mode": "nack", "address": -1, "data": 80, "selected": True},
+        ),
+        (
+            "spi",
+            lambda scope: scope.configure_serial_search_spi(1, "miso", data="0xa5xx", width=8),
+            lambda scope: scope.query_serial_search_spi(1),
+            {"mode": "miso", "data": "0xA5XX", "width": 8, "selected": True},
+        ),
+        (
+            "can",
+            lambda scope: scope.configure_serial_search_can(1, "id-data", data="0x12xx", data_length=2, id_val="0x123", id_mode="standard"),
+            lambda scope: scope.query_serial_search_can(1),
+            {"mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard", "selected": True},
+        ),
+    ],
+)
+def test_simulator_serial_search_round_trip(protocol, configure, query, expected):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    configured = configure(scope)
+    queried = query(scope).to_json()
+
+    assert configured.bus == 1
+    for key, value in expected.items():
+        assert queried[key] == value
+
+
 def test_simulator_search_event_default_and_set():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
     scope = Oscilloscope(backend)

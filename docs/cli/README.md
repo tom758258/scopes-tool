@@ -1707,10 +1707,12 @@ Runtime support is capability-profile guarded: 2000X supports `serial1` only;
 3000X supports `edge`, `glitch`, `runt`, `transition`, `serial1`, and
 `serial2`; 4000X supports those modes plus `peak`. Aliases such as `ser1`,
 `ser2`, `glit`, `tran`, and `off` are rejected. Unsupported modes are rejected
-before search SCPI is sent. Mode-specific search
-parameter commands and serial search pattern configuration are not
-implemented in this pack. Tests are hardware-free; no live hardware validation
-was performed.
+before search SCPI is sent. Serial Search P3 adds `serial-search-uart`,
+`serial-search-i2c`, `serial-search-spi`, and `serial-search-can` for
+protocol-specific criteria. Configure the selected Serial bus first with the
+matching `serial-uart`, `serial-i2c`, `serial-spi`, or `serial-can` command;
+Serial Search does not change or revalidate that bus configuration. Tests are
+hardware-free; no live hardware validation was performed.
 
 Use Save/Export Pack v1 for instrument-side file saving:
 

@@ -102,6 +102,16 @@ names are intended for package consumers and tests:
 - `SearchEventState`
 - `SearchModeState`
 - `SearchState`
+- `SerialSearchUartState`
+- `SerialSearchI2CState`
+- `SerialSearchSpiState`
+- `SerialSearchCanState`
+- `UART_SEARCH_MODES`
+- `I2C_SEARCH_MODES`
+- `SPI_SEARCH_MODES`
+- `CAN_SEARCH_MODES`
+- `CAN_SEARCH_ID_MODES`
+- `SEARCH_QUALIFIERS`
 - `SERIAL_MODES`
 - `CAN_SIGNAL_DEFINITIONS`
 - `I2C_ADDRESS_SIZES`
