@@ -14,6 +14,7 @@ from .capabilities import capabilities_for_model_id
 from .demo import DEMO_FUNCTION_TOKENS
 from .errors import BackendClosedError, OscilloscopeError
 from .identity import VENDOR_REGISTRY, physical_model_for_id
+from .serial import SERIAL_MODE_TOKENS, parse_serial_mode
 from .trigger import OPERATION_CONDITION_RUN_MASK
 from .wgen import WGEN_FUNCTION_TOKENS, WGEN_LOAD_TOKENS
 
@@ -177,6 +178,8 @@ class SimulatorBackend:
     wgen_amplitude_volts: float = 0.5
     wgen_offset_volts: float = 0.0
     wgen_load: str = "ONEMeg"
+    serial_modes: dict[int, str] = field(default_factory=dict)
+    serial_display: dict[int, bool] = field(default_factory=dict)
     search_enabled: bool = False
     search_mode: str = "SERial1"
     search_count: int = 0
@@ -300,6 +303,14 @@ class SimulatorBackend:
             self.resource_name = f"SIM::{self.physical_model_id}::INSTR"
         self._capabilities = capabilities_for_model_id(self.physical_model_id)
         self.system_errors = list(self.system_errors)
+        self.serial_modes = {
+            bus: self.serial_modes.get(bus, SERIAL_MODE_TOKENS["uart"])
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_display = {
+            bus: self.serial_display.get(bus, False)
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
         self.signals = {
             self._validate_channel(channel): _coerce_simulated_signal(signal)
             for channel, signal in self.signals.items()
@@ -477,6 +488,20 @@ class SimulatorBackend:
                     f"Unsupported simulator WGEN load: {token}"
                 )
             self.wgen_load = WGEN_LOAD_TOKENS[load]
+        elif match := re.fullmatch(r":SBUS(\d+):MODE (.+)", command, re.IGNORECASE):
+            bus = self._validate_serial_bus(int(match.group(1)))
+            canonical = parse_serial_mode(match.group(2))
+            if canonical is None or canonical not in self._capabilities.serial_modes:
+                raise SimulatorBackendError(
+                    f"Serial mode {match.group(2)!r} is not supported by "
+                    f"simulator model {self.model}."
+                )
+            self.serial_modes[bus] = SERIAL_MODE_TOKENS[canonical]
+        elif match := re.fullmatch(
+            r":SBUS(\d+):DISPLAY (.+)", command, re.IGNORECASE
+        ):
+            bus = self._validate_serial_bus(int(match.group(1)))
+            self.serial_display[bus] = _parse_scpi_bool_write(command)
         elif upper.startswith(":SEARCH:STATE "):
             self.search_enabled = _parse_scpi_bool_write(command)
         elif upper.startswith(":SEARCH:MODE "):
@@ -1021,6 +1046,21 @@ class SimulatorBackend:
             return f"{self.wgen_offset_volts:g}"
         if upper == f"{wgen_root}:OUTPUT:LOAD?":
             return self.wgen_load
+        serial_match = re.fullmatch(
+            r":SBUS(\d+)(?::(MODE|DISPLAY))?\?", command, re.IGNORECASE
+        )
+        if serial_match is not None:
+            bus = self._validate_serial_bus(int(serial_match.group(1)))
+            setting = serial_match.group(2)
+            if setting is None:
+                enabled = 1 if self.serial_display[bus] else 0
+                return (
+                    f":SBUS{bus}:DISP {enabled};"
+                    f"MODE {self.serial_modes[bus]};"
+                )
+            if setting.upper() == "MODE":
+                return self.serial_modes[bus]
+            return "1" if self.serial_display[bus] else "0"
         if upper == ":SEARCH:STATE?":
             return "1" if self.search_enabled else "0"
         if upper == ":SEARCH:MODE?":
@@ -2320,6 +2360,15 @@ class SimulatorBackend:
                 f"CH{channel} is not available."
             )
         return channel
+
+    def _validate_serial_bus(self, bus: int) -> int:
+        if bus < 1 or bus > self._capabilities.serial_bus_count:
+            raise SimulatorBackendError(
+                f"Simulator model {self.model} has "
+                f"{self._capabilities.serial_bus_count} serial buses; "
+                f"SBUS{bus} is not available."
+            )
+        return bus
 
     def _apply_annotation_write(self, command: str) -> bool:
         parsed = _parse_annotation_path(command)

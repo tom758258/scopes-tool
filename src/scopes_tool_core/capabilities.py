@@ -47,6 +47,8 @@ class ScopeCapabilities:
     math_visualization_operations: frozenset[str] = frozenset()
     supports_advanced_fft: bool = False
     supports_measure_results_dump: bool = False
+    serial_bus_count: int = 0
+    serial_modes: frozenset[str] = frozenset()
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
@@ -74,7 +76,9 @@ _CAPABILITY_PROFILES = {
         supports_delay_measurement=False,
         supports_screenshot=True,
         supports_segmented_memory=False,
-        supports_serial_decode=False,
+        supports_serial_decode=True,
+        serial_bus_count=1,
+        serial_modes=frozenset({"can", "i2c", "lin", "spi", "uart"}),
         math_function_count=1,
         supports_math_goft=True,
         math_filter_operations=frozenset({"low-pass", "high-pass"}),
@@ -107,7 +111,11 @@ _CAPABILITY_PROFILES = {
         supports_measure_results_dump=True,
         supports_screenshot=True,
         supports_segmented_memory=False,
-        supports_serial_decode=False,
+        supports_serial_decode=True,
+        serial_bus_count=2,
+        serial_modes=frozenset(
+            {"a429", "flexray", "can", "i2s", "i2c", "lin", "m1553", "spi", "uart"}
+        ),
         math_function_count=1,
         supports_math_goft=True,
         math_filter_operations=frozenset({"low-pass", "high-pass"}),
@@ -142,7 +150,27 @@ _CAPABILITY_PROFILES = {
         supports_measure_results_dump=True,
         supports_screenshot=True,
         supports_segmented_memory=False,
-        supports_serial_decode=False,
+        supports_serial_decode=True,
+        serial_bus_count=2,
+        serial_modes=frozenset(
+            {
+                "a429",
+                "flexray",
+                "can",
+                "cxpi",
+                "i2s",
+                "i2c",
+                "lin",
+                "m1553",
+                "manchester",
+                "nrz",
+                "sent",
+                "spi",
+                "uart",
+                "usb",
+                "usb-pd",
+            }
+        ),
         math_function_count=4,
         supports_math_cascade=True,
         supports_advanced_fft=True,

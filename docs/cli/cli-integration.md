@@ -23,6 +23,15 @@ WGEN Basic P1 adapter commands are `wgen-query`, `wgen-output`,
 `wgen-load`. The selected model profile determines the concrete `:WGEN` or
 `:WGEN1` SCPI root. The adapter exposes no generator selector in P1.
 
+Serial Basic P0 adapter commands are `serial-query`, `serial-mode`, and
+`serial-display`. Every command requires `--bus`. Mode and display require
+exactly one of query or configure action; display configuration uses canonical
+`--enabled true|false`. `serial-query` preserves the trimmed aggregate
+subsystem response without deriving mode or display fields. The selected model
+profile validates bus count and settable mode before resource open. P0 does not
+expose protocol-specific configuration, Lister, export, serial trigger, or
+serial search. Missing serial decode licenses remain instrument errors.
+
 Search Basic Pack v1 adapter commands are `search-state`, `search-mode`,
 query-only `search-count`, and 4000X `search-event`. Boolean configuration uses canonical
 `--enabled true|false`; search modes use lowercase canonical values and are

@@ -65,6 +65,12 @@ from .save_export import (
     SaveWaveformLengthState,
 )
 from .search import SearchController, SearchCountState, SearchEventState, SearchModeState, SearchState
+from .serial import (
+    SerialController,
+    SerialDisplayState,
+    SerialModeState,
+    SerialQueryState,
+)
 from .scpi import SCPIBackend, SCPIClient
 from .screenshot import HardcopyState, ScreenshotCapture, ScreenshotController, ScreenshotOptions
 from .status import (
@@ -733,6 +739,33 @@ class Oscilloscope:
         """Query aggregate WGEN Basic P1 state."""
 
         return self._wgen_controller().query()
+
+    def query_serial(self, bus: int) -> SerialQueryState:
+        """Query the raw aggregate setup for one serial decode bus."""
+
+        return self._serial_controller().query(bus)
+
+    def configure_serial_mode(self, bus: int, mode: str) -> SerialModeState:
+        """Configure one serial decode bus mode."""
+
+        return self._serial_controller().configure_mode(bus, mode)
+
+    def query_serial_mode(self, bus: int) -> SerialModeState:
+        """Query one serial decode bus mode."""
+
+        return self._serial_controller().query_mode(bus)
+
+    def configure_serial_display(
+        self, bus: int, enabled: bool
+    ) -> SerialDisplayState:
+        """Configure one serial decode bus display state."""
+
+        return self._serial_controller().configure_display(bus, enabled)
+
+    def query_serial_display(self, bus: int) -> SerialDisplayState:
+        """Query one serial decode bus display state."""
+
+        return self._serial_controller().query_display(bus)
 
     def configure_search_state(self, enabled: bool) -> SearchState:
         """Configure waveform search enable state."""
@@ -1686,6 +1719,13 @@ class Oscilloscope:
                 "Search operations require known capabilities; call query_idn() first."
             )
         return SearchController(self.scpi, self.capabilities)
+
+    def _serial_controller(self) -> SerialController:
+        if self.capabilities is None:
+            raise ParameterValidationError(
+                "Serial operations require known capabilities; call query_idn() first."
+            )
+        return SerialController(self.scpi, self.capabilities)
 
     def _reference_waveform_controller(self) -> ReferenceWaveformController:
         if self.capabilities is None:

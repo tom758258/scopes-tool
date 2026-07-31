@@ -118,6 +118,10 @@ and USB/LAN or Worker-live path.
   aggregate query helpers. The 2000X/3000X profiles use `:WGEN`; the 4000X
   profile uses only generator 1 through `:WGEN1`. P1 settable functions are
   `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`.
+- Serial Basic P0 raw aggregate query, mode, and display controls. Capability
+  profiles guard bus count and settable modes. Serial decode can require an
+  instrument license; Core does not probe licenses and preserves instrument
+  errors for unavailable hardware or options.
 - Search Basic Pack v1 state and count queries plus profile-guarded mode
   configuration. Unsupported modes are rejected before search SCPI is sent.
 - Save/Export Pack v1 common instrument-side SAVE commands for current save
@@ -134,11 +138,11 @@ and USB/LAN or Worker-live path.
 
 Series-specific differences:
 
-| Series | Demo Output Pack v1 functions | Search Basic Pack v1 modes | Screenshot Format Pack v1 |
-| --- | --- | --- | --- |
-| 2000X | Common/core set | `serial1` | No; existing PNG capture remains supported |
-| 3000X | Common/core set plus `i2s`, `can-lin`, `flexray`, `arinc`, `mil`, `mil2` | `edge`, `glitch`, `runt`, `transition`, `serial1`, `serial2` | No; existing PNG capture remains supported |
-| 4000X | Same v1 set as 3000X | `edge`, `glitch`, `runt`, `transition`, `serial1`, `serial2`, `peak` | PNG, BMP, BMP8bit, appearance controls, and state query |
+| Series | Demo Output Pack v1 functions | Serial buses | Serial Basic P0 settable modes | Search Basic Pack v1 modes | Screenshot Format Pack v1 |
+| --- | --- | ---: | --- | --- | --- |
+| 2000X | Common/core set | 1 | `can`, `i2c`, `lin`, `spi`, `uart` | `serial1` | No; existing PNG capture remains supported |
+| 3000X | Common/core set plus `i2s`, `can-lin`, `flexray`, `arinc`, `mil`, `mil2` | 2 | `a429`, `flexray`, `can`, `i2s`, `i2c`, `lin`, `m1553`, `spi`, `uart` | `edge`, `glitch`, `runt`, `transition`, `serial1`, `serial2` | No; existing PNG capture remains supported |
+| 4000X | Same v1 set as 3000X | 2 | `a429`, `flexray`, `can`, `cxpi`, `i2s`, `i2c`, `lin`, `m1553`, `manchester`, `nrz`, `sent`, `spi`, `uart`, `usb`, `usb-pd` | `edge`, `glitch`, `runt`, `transition`, `serial1`, `serial2`, `peak` | PNG, BMP, BMP8bit, appearance controls, and state query |
 
 The common/core DEMO set is `sine`, `noisy`, `phase`, `lf-sine`, `am`,
 `rf-burst`, `fm-burst`, `harmonics`, `coupling`, `ringing`, `single`, `clock`,
@@ -170,9 +174,13 @@ configuration are outside Search Basic Pack v1.
   not expose that helper because their delay query depends on measurement
   definition state.
 
-Capability flags for raw waveform points mode, segmented memory, and serial
-decode are currently disabled. Do not treat those future surfaces as supported
-CLI, worker, or Core workflows.
+Capability flags for raw waveform points mode and segmented memory remain
+disabled. Serial decode capability represents command-family availability, not
+the presence of an instrument license.
+
+Serial Basic P0 implements only aggregate query, mode, and display. The
+aggregate response remains raw. Protocol-specific configuration, serial
+sources, Lister, export, serial trigger, and serial search are not implemented.
 
 These common pack entries describe runtime capability support. They do not
 imply live hardware validation on every supported model, firmware, or USB/LAN

@@ -91,12 +91,52 @@ def test_runtime_capabilities_enable_word_and_measurements(model):
     assert capabilities.supports_measurements is True
 
 
-def test_capabilities_keep_unsupported_future_surfaces_disabled():
+def test_capabilities_keep_unimplemented_surfaces_disabled():
     capabilities = capabilities_for_model("DSOX4024A")
 
     assert capabilities.supports_raw_points_mode is False
     assert capabilities.supports_segmented_memory is False
-    assert capabilities.supports_serial_decode is False
+
+
+@pytest.mark.parametrize(
+    ("model", "bus_count", "modes"),
+    [
+        ("DSOX2004A", 1, {"can", "i2c", "lin", "spi", "uart"}),
+        (
+            "DSOX3024A",
+            2,
+            {"a429", "flexray", "can", "i2s", "i2c", "lin", "m1553", "spi", "uart"},
+        ),
+        (
+            "DSOX4024A",
+            2,
+            {
+                "a429",
+                "flexray",
+                "can",
+                "cxpi",
+                "i2s",
+                "i2c",
+                "lin",
+                "m1553",
+                "manchester",
+                "nrz",
+                "sent",
+                "spi",
+                "uart",
+                "usb",
+                "usb-pd",
+            },
+        ),
+    ],
+)
+def test_serial_decode_support_comes_from_capability_profile(
+    model, bus_count, modes
+):
+    capabilities = capabilities_for_model(model)
+    assert capabilities.supports_serial_decode is True
+    assert capabilities.serial_bus_count == bus_count
+    assert capabilities.serial_modes == frozenset(modes)
 
 
 @pytest.mark.parametrize(

@@ -235,6 +235,16 @@ Control and setup:
   nullable `function` plus `function_raw`, `frequency_hz`/`frequency_raw`,
   `amplitude_volts`/`voltage_raw`, `offset_volts`/`offset_raw`, and
   `load`/`load_raw`. Unknown function readbacks use `function: null`.
+- `serial-query`: `operation: "query"`, `command`, integer `bus`, and the
+  trimmed raw aggregate subsystem response in `raw`. It does not derive mode
+  or display fields.
+- `serial-mode`: `operation`, `command`, integer `bus`, nullable canonical
+  `mode`, and nullable `raw_mode`. Configure results use the configured mode,
+  `raw_mode: null`, and `state_changing: true`; query results preserve
+  `raw_mode`. A `NONE` readback uses `mode: null`.
+- `serial-display`: `operation`, `command`, integer `bus`, boolean `enabled`,
+  and nullable `raw_state`. Configure results use `raw_state: null` and
+  `state_changing: true`; query results preserve `raw_state`.
 - `search-state`: `operation` and `command`. Configure results include boolean
   `enabled`, `raw_state: null`, and `state_changing: true`. Query results
   include normalized boolean `enabled` and preserve `raw_state`.
@@ -464,7 +474,8 @@ Capability JSON currently includes `series`, `analog_channels`,
 `supports_delay_measurement`, `supports_measure_results_dump`,
 `supports_screenshot`,
 `supports_screenshot_format_pack`,
-`supports_segmented_memory`, `supports_serial_decode`,
+`supports_segmented_memory`, `supports_serial_decode`, `serial_bus_count`,
+and ordered canonical `serial_modes`,
 `supports_channel_label`, `channel_label_max_length`,
 `supports_display_label`, `supports_annotation`,
 `supports_annotation_position`, `annotation_slots`, and

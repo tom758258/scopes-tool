@@ -102,6 +102,11 @@ names are intended for package consumers and tests:
 - `SearchEventState`
 - `SearchModeState`
 - `SearchState`
+- `SERIAL_MODES`
+- `SerialController`
+- `SerialDisplayState`
+- `SerialModeState`
+- `SerialQueryState`
 - `MultiChannelWaveformCapture`
 - `OperationCompleteState`
 - `OperationPlan`
@@ -239,3 +244,14 @@ host-side files.
 transfer APIs. The maximum accepted configured save length is model-, option-,
 and instrument-state-dependent; Core enforces the common minimum of 100 points
 and preserves the raw length readback.
+
+Serial Basic P0 is available through `Oscilloscope.query_serial()`,
+`configure_serial_mode()`, `query_serial_mode()`,
+`configure_serial_display()`, and `query_serial_display()`. Aggregate
+`:SBUS<n>?` results preserve the trimmed subsystem response without parsing it.
+Mode and display configuration each send only their target write. Capability
+profiles control the available bus count and settable modes; mode query parsing
+is independent of that configure allowlist. Protocol-specific configuration,
+Lister, export, serial trigger, and serial search are not implemented. Serial
+decode may require an instrument license, and an unlicensed instrument error
+is returned through the existing SCPI error path without a license probe.

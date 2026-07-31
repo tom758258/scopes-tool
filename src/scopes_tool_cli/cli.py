@@ -319,6 +319,16 @@ from scopes_tool_core.search import (
     validate_search_event,
     validate_search_mode,
 )
+from scopes_tool_core.serial import (
+    SERIAL_MODES,
+    serial_bus_query,
+    serial_display_command,
+    serial_display_query,
+    serial_mode_command,
+    serial_mode_query,
+    validate_serial_bus,
+    validate_serial_mode,
+)
 from scopes_tool_core.status import (
     system_clear_status_command,
     system_opc_query,
@@ -1225,6 +1235,38 @@ def _build_parser() -> argparse.ArgumentParser:
     wgen_load_action = wgen_load_parser.add_mutually_exclusive_group(required=True)
     wgen_load_action.add_argument("--query", action="store_true")
     wgen_load_action.add_argument("--load", choices=WGEN_LOADS)
+
+    serial_query_parser = subparsers.add_parser(
+        "serial-query",
+        allow_abbrev=False,
+        help="query raw aggregate serial decode bus setup",
+    )
+    _add_scope_connection_args(serial_query_parser)
+    serial_query_parser.add_argument("--bus", type=_positive_int, required=True)
+
+    serial_mode_parser = subparsers.add_parser(
+        "serial-mode",
+        allow_abbrev=False,
+        help="configure or query serial decode bus mode",
+    )
+    _add_scope_connection_args(serial_mode_parser)
+    serial_mode_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_mode_action = serial_mode_parser.add_mutually_exclusive_group(required=True)
+    serial_mode_action.add_argument("--query", action="store_true")
+    serial_mode_action.add_argument("--mode", choices=SERIAL_MODES)
+
+    serial_display_parser = subparsers.add_parser(
+        "serial-display",
+        allow_abbrev=False,
+        help="configure or query serial decode bus display state",
+    )
+    _add_scope_connection_args(serial_display_parser)
+    serial_display_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_display_action = serial_display_parser.add_mutually_exclusive_group(
+        required=True
+    )
+    serial_display_action.add_argument("--query", action="store_true")
+    serial_display_action.add_argument("--enabled", type=_strict_bool_arg)
 
     search_state_parser = subparsers.add_parser(
         "search-state", allow_abbrev=False, help="configure or query waveform search state"
@@ -3000,6 +3042,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "wgen-load",
     }:
         return _cmd_wgen(args)
+    if args.command in {"serial-query", "serial-mode", "serial-display"}:
+        return _cmd_serial(args)
     if args.command in {"search-state", "search-mode", "search-count", "search-event"}:
         return _cmd_search(args)
     if args.command in {
@@ -3676,6 +3720,12 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
     }:
         _validate_wgen_args(args)
     if getattr(args, "command", None) in {
+        "serial-query",
+        "serial-mode",
+        "serial-display",
+    }:
+        _validate_serial_args(args)
+    if getattr(args, "command", None) in {
         "search-state",
         "search-mode",
         "search-count",
@@ -4005,6 +4055,15 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
         validate_wgen_amplitude(args.amplitude)
     elif args.command == "wgen-offset":
         validate_wgen_offset(args.volts)
+
+
+def _validate_serial_args(args: argparse.Namespace) -> None:
+    capabilities = _pre_open_capabilities(args)
+    if capabilities is None:
+        capabilities = capabilities_for_model_id(args.model)
+    validate_serial_bus(args.bus, capabilities)
+    if args.command == "serial-mode" and not args.query:
+        validate_serial_mode(args.mode, capabilities)
 
 
 def _validate_search_args(args: argparse.Namespace) -> None:
@@ -5007,6 +5066,43 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         result = {"operation": "query" if args.query else "configure", "command": target}
         if not args.query:
             result.update(load=args.load, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "serial-query":
+        target = serial_bus_query(args.bus)
+        return [target, ":SYSTem:ERRor?"], [], {
+            "operation": "query",
+            "command": target,
+            "bus": args.bus,
+        }
+    if command == "serial-mode":
+        target = (
+            serial_mode_query(args.bus)
+            if args.query
+            else serial_mode_command(
+                args.bus, validate_serial_mode(args.mode, capabilities)
+            )
+        )
+        result = {
+            "operation": "query" if args.query else "configure",
+            "command": target,
+            "bus": args.bus,
+        }
+        if not args.query:
+            result.update(mode=args.mode, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "serial-display":
+        target = (
+            serial_display_query(args.bus)
+            if args.query
+            else serial_display_command(args.bus, args.enabled)
+        )
+        result = {
+            "operation": "query" if args.query else "configure",
+            "command": target,
+            "bus": args.bus,
+        }
+        if not args.query:
+            result.update(enabled=args.enabled, state_changing=True)
         return [target, ":SYSTem:ERRor?"], [], result
     if command == "search-state":
         target = search_state_query() if args.query else search_state_command(args.enabled)
@@ -6537,6 +6633,10 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "supports_screenshot_format_pack": capabilities.supports_screenshot_format_pack,
         "supports_segmented_memory": capabilities.supports_segmented_memory,
         "supports_serial_decode": capabilities.supports_serial_decode,
+        "serial_bus_count": capabilities.serial_bus_count,
+        "serial_modes": [
+            mode for mode in SERIAL_MODES if mode in capabilities.serial_modes
+        ],
         "reference_waveforms": capabilities.reference_waveforms,
         "supports_channel_label": capabilities.supports_channel_label,
         "channel_label_max_length": capabilities.channel_label_max_length,
@@ -8633,6 +8733,67 @@ def _cmd_system_status(args: argparse.Namespace) -> int:
             print(f"System options: {', '.join(state.options)}")
         print(f"Command: {command}")
 
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0
+
+
+def _cmd_serial(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        print(f"Series: {idn.series or 'unknown'}")
+        if scope.capabilities is None:
+            print("Capabilities: unavailable for this model")
+            return 1
+
+        if args.command == "serial-query":
+            command = serial_bus_query(args.bus)
+            state = scope.query_serial(args.bus)
+            _json_update_result(operation="query", command=command, **state.to_json())
+            print(f"Serial bus {state.bus} raw setup: {state.raw}")
+        elif args.command == "serial-mode":
+            if args.query:
+                command = serial_mode_query(args.bus)
+                state = scope.query_serial_mode(args.bus)
+                operation = "query"
+            else:
+                command = serial_mode_command(args.bus, args.mode)
+                state = scope.configure_serial_mode(args.bus, args.mode)
+                operation = "configure"
+            _json_update_result(
+                operation=operation,
+                command=command,
+                **state.to_json(),
+                **({"state_changing": True} if not args.query else {}),
+            )
+            print(f"Serial bus {state.bus} mode: {state.mode}")
+        else:
+            if args.query:
+                command = serial_display_query(args.bus)
+                state = scope.query_serial_display(args.bus)
+                operation = "query"
+            else:
+                command = serial_display_command(args.bus, args.enabled)
+                state = scope.configure_serial_display(args.bus, args.enabled)
+                operation = "configure"
+            _json_update_result(
+                operation=operation,
+                command=command,
+                **state.to_json(),
+                **({"state_changing": True} if not args.query else {}),
+            )
+            print(f"Serial bus {state.bus} display enabled: {state.enabled}")
+
+        print(f"Command: {command}")
         entry = scope.query_system_error()
         _json_record_system_error(entry)
         print(f"System error: {entry.format()}")

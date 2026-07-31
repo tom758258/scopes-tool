@@ -63,6 +63,13 @@ from .search import (
     SearchModeState,
     SearchState,
 )
+from .serial import (
+    SERIAL_MODES,
+    SerialController,
+    SerialDisplayState,
+    SerialModeState,
+    SerialQueryState,
+)
 from .demo import (
     DEMO_FUNCTIONS,
     DEMO_FUNCTION_TOKENS,
@@ -282,6 +289,11 @@ __all__ = [
     "SearchEventState",
     "SearchModeState",
     "SearchState",
+    "SERIAL_MODES",
+    "SerialController",
+    "SerialDisplayState",
+    "SerialModeState",
+    "SerialQueryState",
     "MultiChannelWaveformCapture",
     "OperationPlan",
     "OperationCompleteState",

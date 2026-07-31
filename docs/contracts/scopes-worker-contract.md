@@ -141,6 +141,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `demo-query`, `demo-output`, `demo-function`, `demo-phase`
 - `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
   `wgen-voltage`, `wgen-offset`, `wgen-load`
+- `serial-query`, `serial-mode`, `serial-display`
 - `search-state`, `search-mode`, `search-count`, `search-event`
 - `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
   `save-image-ink-saver`, `save-image-factors`, `save-image`,
@@ -1678,6 +1679,44 @@ support is not implemented. No empty Worker request shape is reserved for
 them. P9 validation is hardware-free; focused live validation remains required
 per registered model, firmware, transport, and Worker-live path.
 
+### Serial Basic P0 Commands
+
+The worker accepts only these canonical argument shapes:
+
+```json
+{"command": "serial-query", "arguments": {"bus": 1}}
+```
+
+```json
+{"command": "serial-mode", "arguments": {"bus": 1, "query": true}}
+```
+
+```json
+{"command": "serial-mode", "arguments": {"bus": 1, "mode": "uart"}}
+```
+
+```json
+{"command": "serial-display", "arguments": {"bus": 1, "query": true}}
+```
+
+```json
+{"command": "serial-display", "arguments": {"bus": 1, "enabled": true}}
+```
+
+Bus is a non-boolean integer validated against the startup model profile:
+2000X accepts bus 1, while 3000X and 4000X accept buses 1 and 2. Configure
+mode values are lowercase canonical names validated against that profile.
+Display configuration requires a JSON boolean. Query/configure mixes, unknown
+fields, wrong types, unavailable buses, and unsupported configure modes fail
+before enqueue, artifacts, backend open, or SCPI.
+
+`serial-query` sends only `:SBUS<n>?` and preserves the trimmed raw subsystem
+response. Mode and display configuration each send only their target write.
+The worker reuses the CLI/Core result without worker-only business behavior.
+P0 does not configure protocol parameters, sources, triggers, Search, Lister,
+or export. It does not probe licenses; unavailable serial decode options remain
+normal instrument errors. This surface has hardware-free validation only.
+
 ### Search Basic Pack v1 Commands
 
 The worker accepts only these canonical argument shapes:
@@ -1931,8 +1970,9 @@ The `measure-clear`, `measure-show`, `measure-source`, `measure-window`,
 `reference-query`, `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`,
 `dvm-current`, `dvm-query`, `demo-query`, `demo-output`, `demo-function`,
 `demo-phase`, `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
-`wgen-voltage`, `wgen-offset`, `wgen-load`, `search-state`, `search-mode`,
-`search-count`, and `search-event`
+`wgen-voltage`, `wgen-offset`, `wgen-load`, `serial-query`, `serial-mode`,
+`serial-display`, `search-state`, `search-mode`, `search-count`, and
+`search-event`
 commands also do not create command artifacts.
 The `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
 `save-image-ink-saver`, `save-image-factors`, `save-image`,

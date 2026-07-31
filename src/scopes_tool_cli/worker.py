@@ -117,6 +117,9 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "wgen-voltage",
     "wgen-offset",
     "wgen-load",
+    "serial-query",
+    "serial-mode",
+    "serial-display",
     "search-state",
     "search-mode",
     "search-count",
@@ -504,6 +507,7 @@ def parse_domain_command(
     arguments = _normalize_dvm_worker_arguments(command, arguments, runtime)
     arguments = _normalize_demo_worker_arguments(command, arguments, runtime)
     arguments = _normalize_wgen_worker_arguments(command, arguments)
+    arguments = _normalize_serial_worker_arguments(command, arguments)
     arguments = _normalize_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_save_export_worker_arguments(command, arguments)
     arguments = _normalize_math_worker_arguments(command, arguments, runtime)
@@ -1622,6 +1626,55 @@ def _normalize_search_worker_arguments(
             f"{capabilities.series} model profile."
         )
     return dict(arguments)
+
+
+def _normalize_serial_worker_arguments(
+    command: str, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    if command not in {"serial-query", "serial-mode", "serial-display"}:
+        return arguments
+
+    if command == "serial-query":
+        if set(arguments) != {"bus"}:
+            raise OscilloscopeError("serial-query requires exactly bus")
+        bus = arguments["bus"]
+        if isinstance(bus, bool) or not isinstance(bus, int):
+            raise OscilloscopeError("serial-query argument bus must be an integer")
+        return dict(arguments)
+
+    configure_key = "mode" if command == "serial-mode" else "enabled"
+    allowed = {"bus", "query", configure_key}
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"unknown argument for {command}: {sorted(unknown)[0]}"
+        )
+    bus = arguments.get("bus")
+    if isinstance(bus, bool) or not isinstance(bus, int):
+        raise OscilloscopeError(f"{command} argument bus must be an integer")
+    if arguments.get("query") is True:
+        if set(arguments) != {"bus", "query"}:
+            raise OscilloscopeError(
+                f"{command} query cannot be combined with configure arguments"
+            )
+        return dict(arguments)
+    if "query" in arguments:
+        raise OscilloscopeError(f"{command} argument query must be exactly true")
+    if set(arguments) != {"bus", configure_key}:
+        raise OscilloscopeError(
+            f"{command} configure requires exactly bus and {configure_key}"
+        )
+
+    value = arguments[configure_key]
+    if command == "serial-mode":
+        if not isinstance(value, str):
+            raise OscilloscopeError("serial-mode argument mode must be a string")
+        return dict(arguments)
+    if not isinstance(value, bool):
+        raise OscilloscopeError(
+            "serial-display argument enabled must be a boolean"
+        )
+    return {"bus": bus, "enabled": "true" if value else "false"}
 
 
 def _normalize_save_export_worker_arguments(

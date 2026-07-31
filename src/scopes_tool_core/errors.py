@@ -65,6 +65,10 @@ class SearchResponseError(OscilloscopeError, ValueError):
     """Raised when a waveform search query response cannot be parsed."""
 
 
+class SerialResponseError(OscilloscopeError, ValueError):
+    """Raised when a serial decode bus query response cannot be parsed."""
+
+
 class SaveExportResponseError(OscilloscopeError, ValueError):
     """Raised when an instrument-side SAVE query response cannot be parsed."""
 
