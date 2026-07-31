@@ -1,5 +1,16 @@
 # Scopes Tool Changelog
 
+## Unreleased
+
+- Replaces the three copied Common v1 contract documents with the shared
+  v2-only Worker Protocol, CLI JSON/JSONL Contract, and Orchestrator Workflows.
+- Documents the future Common v2 requirements for strict
+  `schema_version: 2`, vendor-qualified model identity, execution context,
+  structured errors, lifecycle correlation, and fail-closed Agent behavior.
+  Scopes implementation conformance will be completed separately; this
+  documentation update does not change the current Worker runtime, device
+  behavior, hardware support, or product scope.
+
 ## 0.1.0
 
 - Publishes one `scopes-tool` distribution containing the
