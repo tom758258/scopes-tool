@@ -759,6 +759,15 @@ def normalize_spi_framing(value: str) -> str:
     return _normalize_choice(value, SPI_FRAMINGS, "SPI framing")
 
 
+def validate_spi_framing_clock_timeout(
+    framing: object | None, clock_timeout: object | None
+) -> None:
+    if clock_timeout is not None and framing != "timeout":
+        raise ParameterValidationError(
+            "SPI clock timeout is only valid when framing is explicitly set to timeout."
+        )
+
+
 def parse_spi_framing(raw: str) -> str:
     return _parse_choice(raw, {"CHIP": "chip-select", "CHIPSELECT": "chip-select", "NCH": "no-chip-select", "NCHIPSELECT": "no-chip-select", "TIM": "timeout", "TIMEOUT": "timeout"}, "SPI framing")
 
@@ -818,7 +827,7 @@ def _normalize_spi_values(capabilities: ScopeCapabilities, **values: object) -> 
         values["miso_source"],
         values["frame_source"],
     )
-    return {
+    normalized = {
         "clock_source": clock_source,
         "mosi_source": mosi_source,
         "miso_source": miso_source,
@@ -829,6 +838,10 @@ def _normalize_spi_values(capabilities: ScopeCapabilities, **values: object) -> 
         "framing": None if values["framing"] is None else normalize_spi_framing(values["framing"]),
         "clock_timeout": None if values["clock_timeout"] is None else _validate_float(values["clock_timeout"], "SPI clock timeout", 1e-7, 10.0),
     }
+    validate_spi_framing_clock_timeout(
+        normalized["framing"], normalized["clock_timeout"]
+    )
+    return normalized
 
 
 def _normalize_can_values(capabilities: ScopeCapabilities, **values: object) -> dict[str, object]:

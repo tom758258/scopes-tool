@@ -1,7 +1,7 @@
 import pytest
 
 from scopes_tool_cli import cli, worker
-from scopes_tool_core.errors import OscilloscopeError
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 
 
 def _runtime(
@@ -84,6 +84,24 @@ def test_worker_serial_uart_configure_execution_preserves_p1_result(tmp_path):
         ":SBUS1:UART:SOURce:RX CHANnel1",
         ":SBUS1:UART:BAUDrate 115200",
     ]
+
+
+def test_worker_serial_spi_rejects_incompatible_framing_and_clock_timeout(tmp_path):
+    runtime = _runtime(tmp_path)
+
+    with pytest.raises(
+        ParameterValidationError,
+        match="framing is explicitly set to timeout",
+    ):
+        worker.parse_domain_command(
+            "serial-spi",
+            {"bus": 1, "framing": "no-chip-select", "clock_timeout": 1e-6},
+            runtime,
+        )
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
 
 
 @pytest.mark.parametrize(

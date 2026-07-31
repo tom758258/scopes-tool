@@ -1602,6 +1602,35 @@ values `canh`, `canl`, `rx`, `tx`, `difl`, and `difh`. Query operations read
 by capability profiles and instrument licensing. Serial trigger, Search,
 Lister, export, and advanced protocol parameters are outside this P1 surface.
 
+For SPI, `chip-select`, `no-chip-select`, and `timeout` are the canonical
+framing choices. Chip-select and no-chip-select framing must not be combined
+with `--clock-timeout`; timeout framing requires `--framing timeout` in the same
+configure request:
+
+```powershell
+scopes-tool serial-spi `
+    --bus 2 `
+    --framing chip-select `
+    --word-width 8
+```
+
+```powershell
+scopes-tool serial-spi `
+    --bus 2 `
+    --framing timeout `
+    --clock-timeout 1e-6 `
+    --word-width 8
+```
+
+Source availability may depend on the other configured Serial bus. If the
+instrument reports a settings conflict, query both buses before changing
+resources:
+
+```powershell
+scopes-tool serial-query --bus 1 --json
+scopes-tool serial-query --bus 2 --json
+```
+
 Control reference waveform slots:
 
 ```powershell

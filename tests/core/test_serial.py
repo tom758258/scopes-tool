@@ -191,6 +191,57 @@ def test_serial_spi_configure_order_and_scpi_mapping():
     ]
 
 
+def test_serial_spi_timeout_framing_configure_order_and_scpi_mapping():
+    backend = FakeBackend()
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX4034A"))
+    controller.configure_spi(2, framing="timeout", clock_timeout=1e-6)
+
+    assert backend.history == [
+        ":SBUS2:MODE SPI",
+        ":SBUS2:SPI:FRAMing TIMeout",
+        ":SBUS2:SPI:CLOCk:TIMeout 1e-06",
+    ]
+
+
+@pytest.mark.parametrize("framing", ["chip-select", "no-chip-select"])
+def test_serial_spi_clock_timeout_rejects_non_timeout_framing(framing):
+    backend = FakeBackend()
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX4034A"))
+
+    with pytest.raises(
+        ParameterValidationError,
+        match="framing is explicitly set to timeout",
+    ):
+        controller.configure_spi(2, framing=framing, clock_timeout=1e-6)
+
+    assert backend.history == []
+
+
+def test_serial_spi_clock_timeout_requires_explicit_framing():
+    backend = FakeBackend()
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX4034A"))
+
+    with pytest.raises(
+        ParameterValidationError,
+        match="framing is explicitly set to timeout",
+    ):
+        controller.configure_spi(2, clock_timeout=1e-6)
+
+    assert backend.history == []
+
+
+def test_serial_spi_timeout_framing_without_clock_timeout_is_allowed():
+    backend = FakeBackend()
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX4034A"))
+
+    controller.configure_spi(2, framing="timeout")
+
+    assert backend.history == [
+        ":SBUS2:MODE SPI",
+        ":SBUS2:SPI:FRAMing TIMeout",
+    ]
+
+
 def test_serial_can_configure_order_and_scpi_mapping():
     backend = FakeBackend()
     controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))

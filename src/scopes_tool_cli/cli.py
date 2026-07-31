@@ -355,6 +355,7 @@ from scopes_tool_core.serial import (
     validate_uart_baud_rate,
     validate_serial_bus,
     validate_serial_mode,
+    validate_spi_framing_clock_timeout,
 )
 from scopes_tool_core.status import (
     system_clear_status_command,
@@ -517,6 +518,10 @@ AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS = 15000
 WORKER_IDN_TIMEOUT_MS = 2000
 _DRIVER_OPTIONAL_LIVE_COMMANDS = {"identify"}
 _JSON_RECORD: dict[str, object] | None = None
+_SERIAL_SOURCE_HELP = (
+    "channelN or external; source availability may depend on the other "
+    "configured Serial bus; query both buses after an instrument settings conflict"
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1301,8 +1306,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_scope_connection_args(serial_uart_parser)
     serial_uart_parser.add_argument("--bus", type=_positive_int, required=True)
     serial_uart_parser.add_argument("--query", action="store_true")
-    serial_uart_parser.add_argument("--rx-source")
-    serial_uart_parser.add_argument("--tx-source")
+    serial_uart_parser.add_argument("--rx-source", help=_SERIAL_SOURCE_HELP)
+    serial_uart_parser.add_argument("--tx-source", help=_SERIAL_SOURCE_HELP)
     serial_uart_parser.add_argument("--baud-rate", type=int)
     serial_uart_parser.add_argument("--data-bits", type=int)
     serial_uart_parser.add_argument("--parity", choices=UART_PARITIES)
@@ -1315,8 +1320,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_scope_connection_args(serial_i2c_parser)
     serial_i2c_parser.add_argument("--bus", type=_positive_int, required=True)
     serial_i2c_parser.add_argument("--query", action="store_true")
-    serial_i2c_parser.add_argument("--clock-source")
-    serial_i2c_parser.add_argument("--data-source")
+    serial_i2c_parser.add_argument("--clock-source", help=_SERIAL_SOURCE_HELP)
+    serial_i2c_parser.add_argument("--data-source", help=_SERIAL_SOURCE_HELP)
     serial_i2c_parser.add_argument("--address-size", choices=I2C_ADDRESS_SIZES)
 
     serial_spi_parser = subparsers.add_parser(
@@ -1325,15 +1330,26 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_scope_connection_args(serial_spi_parser)
     serial_spi_parser.add_argument("--bus", type=_positive_int, required=True)
     serial_spi_parser.add_argument("--query", action="store_true")
-    serial_spi_parser.add_argument("--clock-source")
-    serial_spi_parser.add_argument("--mosi-source")
-    serial_spi_parser.add_argument("--miso-source")
-    serial_spi_parser.add_argument("--frame-source")
+    serial_spi_parser.add_argument("--clock-source", help=_SERIAL_SOURCE_HELP)
+    serial_spi_parser.add_argument("--mosi-source", help=_SERIAL_SOURCE_HELP)
+    serial_spi_parser.add_argument("--miso-source", help=_SERIAL_SOURCE_HELP)
+    serial_spi_parser.add_argument("--frame-source", help=_SERIAL_SOURCE_HELP)
     serial_spi_parser.add_argument("--clock-slope", choices=SPI_CLOCK_SLOPES)
     serial_spi_parser.add_argument("--bit-order", choices=SERIAL_BIT_ORDERS)
     serial_spi_parser.add_argument("--word-width", type=int)
-    serial_spi_parser.add_argument("--framing", choices=SPI_FRAMINGS)
-    serial_spi_parser.add_argument("--clock-timeout", type=float)
+    serial_spi_parser.add_argument(
+        "--framing",
+        choices=SPI_FRAMINGS,
+        help="canonical framing: chip-select, no-chip-select, or timeout",
+    )
+    serial_spi_parser.add_argument(
+        "--clock-timeout",
+        type=float,
+        help=(
+            "SPI clock timeout; only valid when the same configure request "
+            "also provides --framing timeout"
+        ),
+    )
 
     serial_can_parser = subparsers.add_parser(
         "serial-can", allow_abbrev=False, help="configure or query basic CAN decode settings"
@@ -1341,7 +1357,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_scope_connection_args(serial_can_parser)
     serial_can_parser.add_argument("--bus", type=_positive_int, required=True)
     serial_can_parser.add_argument("--query", action="store_true")
-    serial_can_parser.add_argument("--source")
+    serial_can_parser.add_argument("--source", help=_SERIAL_SOURCE_HELP)
     serial_can_parser.add_argument("--baud-rate", type=int)
     serial_can_parser.add_argument("--signal-definition", choices=CAN_SIGNAL_DEFINITIONS)
     serial_can_parser.add_argument("--sample-point", type=float)
@@ -4284,6 +4300,10 @@ def _serial_cli_values(
         value = normalized["clock_timeout"]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 1e-7 <= float(value) <= 10.0 or not math.isfinite(float(value)):
             raise ParameterValidationError("SPI clock timeout must be a number in range 1e-07-10.0.")
+    if protocol == "serial-spi":
+        validate_spi_framing_clock_timeout(
+            normalized.get("framing"), normalized.get("clock_timeout")
+        )
     if normalized.get("sample_point") is not None:
         normalized["sample_point"] = validate_can_sample_point(normalized["sample_point"], capabilities)
     return normalized
@@ -9093,6 +9113,18 @@ def _cmd_serial(args: argparse.Namespace) -> int:
         entry = scope.query_system_error()
         _json_record_system_error(entry)
         print(f"System error: {entry.format()}")
+        if (
+            args.command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}
+            and not args.query
+            and entry.code == -221
+            and entry.message == "Settings conflict"
+        ):
+            print("Hint: Requested Serial settings conflict with current instrument state.")
+            print("Hint: Query both Serial buses.")
+            print(
+                "Hint: Check whether the other bus already uses the requested "
+                "analog channels or protocol resources."
+            )
         return 1 if entry.is_error else 0
 
 

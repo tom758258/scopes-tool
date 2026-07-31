@@ -132,6 +132,118 @@ def test_serial_cli_rejects_noncanonical_source_before_serial_scpi(capsys):
     assert payload["scpi"]["sent"] == []
 
 
+def test_serial_spi_rejects_incompatible_framing_and_clock_timeout(capsys):
+    assert (
+        cli.main(
+            [
+                "serial-spi",
+                "--bus",
+                "1",
+                "--framing",
+                "chip-select",
+                "--clock-timeout",
+                "1e-6",
+                "--simulate",
+                "--model",
+                "keysight-dsox4034a",
+                "--json",
+            ]
+        )
+        == 1
+    )
+    payload = _payload(capsys)
+    assert payload["ok"] is False
+    assert payload["error"]["type"] == "ParameterValidationError"
+    assert "framing is explicitly set to timeout" in payload["error"]["message"]
+    assert payload["scpi"]["sent"] == []
+    assert not any(command.startswith(":SBUS") for command in payload["scpi"]["sent"])
+
+
+def test_serial_spi_live_rejects_before_serial_scpi(monkeypatch, capsys):
+    backend = _patch_live_scope(
+        monkeypatch,
+        "KEYSIGHT TECHNOLOGIES,DSOX4034A,MY00000000,02.50",
+    )
+
+    assert (
+        cli.main(
+            [
+                "serial-spi",
+                "--bus",
+                "2",
+                "--framing",
+                "no-chip-select",
+                "--clock-timeout",
+                "1e-6",
+                "--resource",
+                "FAKE::SCOPE",
+                "--model",
+                "keysight-dsox2004a",
+                "--json",
+            ]
+        )
+        == 1
+    )
+
+    payload = _payload(capsys)
+    assert payload["ok"] is False
+    assert payload["error"]["type"] == "ParameterValidationError"
+    assert backend.history == ["*IDN?"]
+    assert not any(command.startswith(":SBUS") for command in backend.history)
+
+
+def test_serial_spi_help_describes_timeout_framing_and_source_availability(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["serial-spi", "--help"])
+
+    assert exc_info.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "--framing timeout" in help_text
+    assert "chip-select, no-chip-select, or timeout" in help_text
+    assert "source availability may depend on the other configured Serial bus" in help_text
+
+
+def test_serial_settings_conflict_hint_preserves_system_error_json(
+    monkeypatch, capsys
+):
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4034A,MY00000000,02.50",
+            ":SYSTem:ERRor?": '-221,"Settings conflict"',
+        }
+    )
+    scope = Oscilloscope(backend)
+    monkeypatch.setattr(cli.Oscilloscope, "open", lambda *unused, **kwargs: scope)
+
+    assert (
+        cli.main(
+            [
+                "serial-uart",
+                "--bus",
+                "2",
+                "--rx-source",
+                "channel3",
+                "--resource",
+                "FAKE::SCOPE",
+                "--json",
+            ]
+        )
+        == 1
+    )
+
+    payload = _payload(capsys)
+    assert payload["system_error"] == {
+        "code": -221,
+        "message": "Settings conflict",
+        "raw": '-221,"Settings conflict"',
+        "is_error": True,
+    }
+    human_output = "\n".join(payload["result"]["human_output"])
+    assert "Requested Serial settings conflict with current instrument state." in human_output
+    assert "Query both Serial buses." in human_output
+    assert "other bus already uses the requested analog channels or protocol resources." in human_output
+
+
 def _patch_live_scope(monkeypatch, idn: str):
     backend = FakeBackend(
         responses={
