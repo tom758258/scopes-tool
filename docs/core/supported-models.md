@@ -156,8 +156,7 @@ hardware-free support only; no live instrument validation has been run for the
 pack.
 
 All three profiles support `search-state` and query-only `search-count`.
-`search-mode` enables search before setting the mode. Search event navigation is supported on 4000X via `search-
-event`.
+`search-mode` enables search before setting the mode. Search event navigation is supported on 4000X via `search-event`.
 Mode-specific search parameter commands and serial search pattern
 configuration are outside Search Basic Pack v1.
 

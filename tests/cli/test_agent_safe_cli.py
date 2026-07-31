@@ -106,6 +106,7 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         "supports_indexed_annotation": True,
         "supports_50_ohm_impedance": True,
         "supports_search_basic": True,
+        "supports_search_event_navigation": True,
         "search_modes": [
             "serial1",
             "serial2",

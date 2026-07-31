@@ -99,6 +99,7 @@ names are intended for package consumers and tests:
 - `SEARCH_MODES`
 - `SearchController`
 - `SearchCountState`
+- `SearchEventState`
 - `SearchModeState`
 - `SearchState`
 - `MultiChannelWaveformCapture`

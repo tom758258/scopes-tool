@@ -1623,7 +1623,7 @@ Control Search Basic Pack v1:
 `search-state` accepts exactly one of `--query` or
 `--enabled true|false`. `search-mode` accepts exactly one of `--query` or one
 lowercase canonical mode. Configuring a mode sends `:SEARch:STATe 1` before
-`:SEARch:MODE <mode>`.     `search-count` is query-only and requires `--query`. 
+`:SEARch:MODE <mode>`. `search-count` is query-only and requires `--query`.
 `search-event` requires `--query` or positive integer `--event`
 (supported on 4000X profile only).
 
