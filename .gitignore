@@ -14,6 +14,9 @@ venv/
 coverage/
 htmlcov/
 pytest-cache-files-*/
+.tmp_pytest/
+.tmp_pytest_run/
+PATH/
 
 # IDE files
 .vscode/
@@ -24,22 +27,32 @@ pytest-cache-files-*/
 
 # Logs
 *.log
+logs/
+artifacts/
+reports/
+captures/
+*.jsonl
+*.csv
 
 # Build/dist directories
 dist/
 build/
+release/
 target/
 *.egg-info/
 
 # Dependency cache
 .mypy_cache/
 .pytest_cache/
+.pytest_tmp_cli_core_split/
+.pytest_tmp_cli_core_review/
+.tmp_tests/
 
 #NoteBook file
 .obsidian
 
-#Data file
-data
+# Data files
+data/
 
-# Local-only workspace and private historical snapshots
+# Local/private project notes
 Local/
