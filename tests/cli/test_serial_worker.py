@@ -68,6 +68,24 @@ def test_worker_serial_uart_configure_arguments_mapping(tmp_path):
     assert parsed.baud_rate == 115200
 
 
+def test_worker_serial_uart_configure_execution_preserves_p1_result(tmp_path):
+    parsed = worker.parse_domain_command(
+        "serial-uart",
+        {"bus": 1, "rx_source": "channel1", "baud_rate": 115200},
+        _runtime(tmp_path),
+    )
+
+    payload, exit_code = cli._execute_json_command(parsed)
+
+    assert exit_code == 0
+    assert payload["result"]["rx_source"] == "channel1"
+    assert payload["result"]["commands"] == [
+        ":SBUS1:MODE UART",
+        ":SBUS1:UART:SOURce:RX CHANnel1",
+        ":SBUS1:UART:BAUDrate 115200",
+    ]
+
+
 @pytest.mark.parametrize(
     "command, arguments",
     [

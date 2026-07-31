@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import math
 import re
@@ -306,9 +307,17 @@ class SerialController:
         raw_tx_source = self.scpi.query(commands["tx_source"]).strip()
         tx_source = parse_serial_source(raw_tx_source, self.capabilities)
         raw_baud_rate = self.scpi.query(commands["baud_rate"]).strip()
-        baud_rate = _parse_serial_int(raw_baud_rate, "UART baud rate")
+        baud_rate = _parse_serial_int_validated(
+            raw_baud_rate,
+            "UART baud rate",
+            lambda value: validate_uart_baud_rate(value, self.capabilities),
+        )
         raw_data_bits = self.scpi.query(commands["data_bits"]).strip()
-        data_bits = _parse_serial_int(raw_data_bits, "UART data bits")
+        data_bits = _parse_serial_int_validated(
+            raw_data_bits,
+            "UART data bits",
+            lambda value: _validate_int(value, "UART data bits", 5, 9),
+        )
         raw_parity = self.scpi.query(commands["parity"]).strip()
         parity = parse_uart_parity(raw_parity)
         raw_polarity = self.scpi.query(commands["polarity"]).strip()
@@ -430,11 +439,19 @@ class SerialController:
         raw_bit_order = self.scpi.query(commands["bit_order"]).strip()
         bit_order = parse_serial_bit_order(raw_bit_order)
         raw_word_width = self.scpi.query(commands["word_width"]).strip()
-        word_width = _parse_serial_int(raw_word_width, "SPI word width")
+        word_width = _parse_serial_int_validated(
+            raw_word_width,
+            "SPI word width",
+            lambda value: _validate_int(value, "SPI word width", 4, 16),
+        )
         raw_framing = self.scpi.query(commands["framing"]).strip()
         framing = parse_spi_framing(raw_framing)
         raw_clock_timeout = self.scpi.query(commands["clock_timeout"]).strip()
-        clock_timeout = _parse_serial_float(raw_clock_timeout, "SPI clock timeout")
+        clock_timeout = _parse_serial_float_validated(
+            raw_clock_timeout,
+            "SPI clock timeout",
+            lambda value: _validate_float(value, "SPI clock timeout", 1e-7, 10.0),
+        )
         return SerialSpiState(
             bus=canonical_bus,
             mode="spi",
@@ -490,11 +507,19 @@ class SerialController:
         raw_source = self.scpi.query(commands["source"]).strip()
         source = parse_serial_source(raw_source, self.capabilities)
         raw_baud_rate = self.scpi.query(commands["baud_rate"]).strip()
-        baud_rate = _parse_serial_int(raw_baud_rate, "CAN baud rate")
+        baud_rate = _parse_serial_int_validated(
+            raw_baud_rate,
+            "CAN baud rate",
+            validate_can_baud_rate,
+        )
         raw_signal_definition = self.scpi.query(commands["signal_definition"]).strip()
         signal_definition = parse_can_signal_definition(raw_signal_definition)
         raw_sample_point = self.scpi.query(commands["sample_point"]).strip()
-        sample_point = _parse_serial_float(raw_sample_point, "CAN sample point")
+        sample_point = _parse_serial_float_validated(
+            raw_sample_point,
+            "CAN sample point",
+            lambda value: validate_can_sample_point(value, self.capabilities),
+        )
         return SerialCanState(
             bus=canonical_bus,
             mode="can",
@@ -649,10 +674,9 @@ def serial_can_query_commands(bus: int) -> dict[str, str]:
 def normalize_serial_source(value: str, capabilities: ScopeCapabilities) -> str:
     if not isinstance(value, str):
         raise ParameterValidationError("Serial source must be channelN or external.")
-    normalized = value.strip().lower()
-    if normalized == "external":
-        return normalized
-    match = re.fullmatch(r"channel(\d+)", normalized)
+    if value == "external":
+        return value
+    match = re.fullmatch(r"channel([1-9]\d*)", value)
     if match is None:
         raise ParameterValidationError(
             "Serial source must be channel1 through channelN or external."
@@ -664,7 +688,7 @@ def normalize_serial_source(value: str, capabilities: ScopeCapabilities) -> str:
             f"{capabilities.series} model profile; expected channel1 through "
             f"channel{capabilities.analog_channels} or external."
         )
-    return normalized
+    return f"channel{channel}"
 
 
 def parse_serial_source(raw: str, capabilities: ScopeCapabilities) -> str:
@@ -868,6 +892,16 @@ def _parse_serial_int(raw: str, label: str) -> int:
         raise SerialResponseError(f"Could not parse {label} response: {raw!r}") from exc
 
 
+def _parse_serial_int_validated(
+    raw: str, label: str, validator: Callable[[int], int]
+) -> int:
+    value = _parse_serial_int(raw, label)
+    try:
+        return validator(value)
+    except ParameterValidationError as exc:
+        raise SerialResponseError(f"Invalid {label} response: {raw!r}") from exc
+
+
 def _parse_serial_float(raw: str, label: str) -> float:
     try:
         value = float(raw.strip())
@@ -876,6 +910,16 @@ def _parse_serial_float(raw: str, label: str) -> float:
     if not math.isfinite(value):
         raise SerialResponseError(f"Could not parse {label} response: {raw!r}")
     return value
+
+
+def _parse_serial_float_validated(
+    raw: str, label: str, validator: Callable[[float], float]
+) -> float:
+    value = _parse_serial_float(raw, label)
+    try:
+        return validator(value)
+    except ParameterValidationError as exc:
+        raise SerialResponseError(f"Invalid {label} response: {raw!r}") from exc
 
 
 def _format_serial_number(value: object) -> str:

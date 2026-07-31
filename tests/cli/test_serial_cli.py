@@ -109,6 +109,29 @@ def test_serial_protocol_query_parser_and_json(capsys):
     assert result["raw_mode"] == "UART"
 
 
+def test_serial_cli_rejects_noncanonical_source_before_serial_scpi(capsys):
+    assert (
+        cli.main(
+            [
+                "serial-uart",
+                "--bus",
+                "1",
+                "--rx-source",
+                "CHANnel1",
+                "--simulate",
+                "--model",
+                "keysight-dsox4034a",
+                "--json",
+            ]
+        )
+        == 1
+    )
+    payload = _payload(capsys)
+    assert payload["ok"] is False
+    assert payload["error"]["type"] == "ParameterValidationError"
+    assert payload["scpi"]["sent"] == []
+
+
 def _patch_live_scope(monkeypatch, idn: str):
     backend = FakeBackend(
         responses={

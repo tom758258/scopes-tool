@@ -8,7 +8,9 @@ from scopes_tool_core.scpi import SCPIClient
 from scopes_tool_core.simulator_backend import SimulatorBackend
 from scopes_tool_core.serial import (
     SerialController,
+    normalize_serial_source,
     parse_can_signal_definition,
+    parse_serial_source,
     parse_serial_mode,
     serial_bus_query,
     serial_display_command,
@@ -260,6 +262,213 @@ def test_serial_source_uses_analog_channel_capability_and_can_normalize_difl():
         controller.configure_uart(1, rx_source="channel3")
     assert backend.history == []
     assert parse_can_signal_definition("DIFFERENTIAL") == "difl"
+
+
+@pytest.mark.parametrize("value, expected", [("channel1", "channel1"), ("external", "external")])
+def test_serial_source_configure_accepts_only_canonical_values(value, expected):
+    backend = FakeBackend()
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    assert normalize_serial_source(value, controller.capabilities) == expected
+    controller.configure_uart(1, rx_source=value)
+    assert backend.history == [
+        ":SBUS1:MODE UART",
+        f":SBUS1:UART:SOURce:RX {'EXTernal' if value == 'external' else 'CHANnel1'}",
+    ]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "CHANnel1",
+        "CHANNEL1",
+        "External",
+        "EXTernal",
+        " channel1",
+        "channel1 ",
+        "channel01",
+    ],
+)
+def test_serial_source_configure_rejects_noncanonical_values_before_scpi(value):
+    backend = FakeBackend()
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    with pytest.raises(ParameterValidationError):
+        controller.configure_uart(1, rx_source=value)
+    assert backend.history == []
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [("CHAN1", "channel1"), ("CHANNEL1", "channel1"), ("EXT", "external"), ("EXTERNAL", "external")],
+)
+def test_serial_source_readback_accepts_instrument_aliases(raw, expected):
+    assert parse_serial_source(raw, capabilities_for_model("DSOX2004A")) == expected
+
+
+def test_serial_i2c_query_order_and_raw_readbacks():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "IIC",
+            ":SBUS1:IIC:SOURce:CLOCk?": "CHAN1",
+            ":SBUS1:IIC:SOURce:DATA?": "EXTERNAL",
+            ":SBUS1:IIC:ASIZe?": "BIT8",
+        }
+    )
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    state = controller.query_i2c(1)
+
+    assert state.clock_source == "channel1"
+    assert state.data_source == "external"
+    assert state.raw_address_size == "BIT8"
+    assert backend.history == [
+        ":SBUS1:MODE?",
+        ":SBUS1:IIC:SOURce:CLOCk?",
+        ":SBUS1:IIC:SOURce:DATA?",
+        ":SBUS1:IIC:ASIZe?",
+    ]
+
+
+def test_serial_spi_query_order_and_raw_readbacks():
+    backend = FakeBackend(
+        responses={
+            ":SBUS2:MODE?": "SPI",
+            ":SBUS2:SPI:SOURce:CLOCk?": "CHAN1",
+            ":SBUS2:SPI:SOURce:FRAMe?": "CHAN2",
+            ":SBUS2:SPI:SOURce:MOSI?": "CHAN3",
+            ":SBUS2:SPI:SOURce:MISO?": "CHAN4",
+            ":SBUS2:SPI:CLOCk:SLOPe?": "NEG",
+            ":SBUS2:SPI:BITorder?": "LSBF",
+            ":SBUS2:SPI:WIDTh?": "8",
+            ":SBUS2:SPI:FRAMing?": "TIM",
+            ":SBUS2:SPI:CLOCk:TIMeout?": "1e-6",
+        }
+    )
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX4034A"))
+
+    state = controller.query_spi(2)
+
+    assert state.clock_source == "channel1"
+    assert state.framing == "timeout"
+    assert state.raw_word_width == "8"
+    assert backend.history == [
+        ":SBUS2:MODE?",
+        ":SBUS2:SPI:SOURce:CLOCk?",
+        ":SBUS2:SPI:SOURce:FRAMe?",
+        ":SBUS2:SPI:SOURce:MOSI?",
+        ":SBUS2:SPI:SOURce:MISO?",
+        ":SBUS2:SPI:CLOCk:SLOPe?",
+        ":SBUS2:SPI:BITorder?",
+        ":SBUS2:SPI:WIDTh?",
+        ":SBUS2:SPI:FRAMing?",
+        ":SBUS2:SPI:CLOCk:TIMeout?",
+    ]
+
+
+def test_serial_can_query_order_and_raw_readbacks():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "CAN",
+            ":SBUS1:CAN:SOURce?": "CHAN1",
+            ":SBUS1:CAN:SIGNal:BAUDrate?": "500000",
+            ":SBUS1:CAN:SIGNal:DEFinition?": "DIFL",
+            ":SBUS1:CAN:SAMPlepoint?": "75",
+        }
+    )
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    state = controller.query_can(1)
+
+    assert state.source == "channel1"
+    assert state.signal_definition == "difl"
+    assert state.raw_sample_point == "75"
+    assert backend.history == [
+        ":SBUS1:MODE?",
+        ":SBUS1:CAN:SOURce?",
+        ":SBUS1:CAN:SIGNal:BAUDrate?",
+        ":SBUS1:CAN:SIGNal:DEFinition?",
+        ":SBUS1:CAN:SAMPlepoint?",
+    ]
+
+
+@pytest.mark.parametrize(
+    "method, model, responses, expected_history, field",
+    [
+        (
+            "query_uart",
+            "DSOX2004A",
+            {
+                ":SBUS1:MODE?": "UART",
+                ":SBUS1:UART:SOURce:RX?": "CHAN1",
+                ":SBUS1:UART:SOURce:TX?": "CHAN1",
+                ":SBUS1:UART:BAUDrate?": "115200",
+                ":SBUS1:UART:WIDTh?": "10",
+            },
+            [
+                ":SBUS1:MODE?",
+                ":SBUS1:UART:SOURce:RX?",
+                ":SBUS1:UART:SOURce:TX?",
+                ":SBUS1:UART:BAUDrate?",
+                ":SBUS1:UART:WIDTh?",
+            ],
+            "UART data bits",
+        ),
+        (
+            "query_spi",
+            "DSOX4034A",
+            {
+                ":SBUS1:MODE?": "SPI",
+                ":SBUS1:SPI:SOURce:CLOCk?": "CHAN1",
+                ":SBUS1:SPI:SOURce:FRAMe?": "CHAN2",
+                ":SBUS1:SPI:SOURce:MOSI?": "CHAN3",
+                ":SBUS1:SPI:SOURce:MISO?": "CHAN4",
+                ":SBUS1:SPI:CLOCk:SLOPe?": "POS",
+                ":SBUS1:SPI:BITorder?": "MSBF",
+                ":SBUS1:SPI:WIDTh?": "17",
+            },
+            [
+                ":SBUS1:MODE?",
+                ":SBUS1:SPI:SOURce:CLOCk?",
+                ":SBUS1:SPI:SOURce:FRAMe?",
+                ":SBUS1:SPI:SOURce:MOSI?",
+                ":SBUS1:SPI:SOURce:MISO?",
+                ":SBUS1:SPI:CLOCk:SLOPe?",
+                ":SBUS1:SPI:BITorder?",
+                ":SBUS1:SPI:WIDTh?",
+            ],
+            "SPI word width",
+        ),
+        (
+            "query_can",
+            "DSOX2004A",
+            {
+                ":SBUS1:MODE?": "CAN",
+                ":SBUS1:CAN:SOURce?": "CHAN1",
+                ":SBUS1:CAN:SIGNal:BAUDrate?": "500000",
+                ":SBUS1:CAN:SIGNal:DEFinition?": "CANH",
+                ":SBUS1:CAN:SAMPlepoint?": "61",
+            },
+            [
+                ":SBUS1:MODE?",
+                ":SBUS1:CAN:SOURce?",
+                ":SBUS1:CAN:SIGNal:BAUDrate?",
+                ":SBUS1:CAN:SIGNal:DEFinition?",
+                ":SBUS1:CAN:SAMPlepoint?",
+            ],
+            "CAN sample point",
+        ),
+    ],
+)
+def test_serial_numeric_query_readback_validation_stops_at_invalid_field(
+    method, model, responses, expected_history, field
+):
+    backend = FakeBackend(responses=responses)
+    controller = SerialController(SCPIClient(backend), capabilities_for_model(model))
+
+    with pytest.raises(SerialResponseError, match=field):
+        getattr(controller, method)(1)
+    assert backend.history == expected_history
 
 
 @pytest.mark.parametrize(
