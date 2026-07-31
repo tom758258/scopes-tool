@@ -76,6 +76,18 @@ class SearchCountState:
         return {"count": self.count, "raw_count": self.raw_count}
 
 
+@dataclass(frozen=True)
+class SearchEventState:
+    event: int
+    raw: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        payload: dict[str, object] = {"event": self.event}
+        if self.raw is not None:
+            payload["raw"] = self.raw
+        return payload
+
+
 class SearchController:
     """Controller for Search Basic Pack v1."""
 
@@ -109,6 +121,17 @@ class SearchController:
         require_search_basic(self.capabilities)
         return parse_search_count(self.scpi.query(search_count_query()))
 
+    def set_event(self, event: int) -> SearchEventState:
+        require_search_event_navigation(self.capabilities)
+        canonical_event = validate_search_event(event)
+        self.scpi.write(search_event_command(canonical_event))
+        return SearchEventState(event=canonical_event)
+
+    def query_event(self) -> SearchEventState:
+        require_search_event_navigation(self.capabilities)
+        raw = self.scpi.query(search_event_query()).strip()
+        return parse_search_event(raw)
+
 
 def search_state_command(enabled: bool) -> str:
     if not isinstance(enabled, bool):
@@ -131,6 +154,28 @@ def search_mode_query() -> str:
 
 def search_count_query() -> str:
     return ":SEARch:COUNt?"
+
+
+def search_event_command(event: int) -> str:
+    canonical_event = validate_search_event(event)
+    return f":SEARch:EVENt {canonical_event}"
+
+
+def search_event_query() -> str:
+    return ":SEARch:EVENt?"
+
+
+def validate_search_event(event: int) -> int:
+    if isinstance(event, bool) or not isinstance(event, int) or event <= 0:
+        raise ParameterValidationError("Search event must be a positive integer.")
+    return event
+
+
+def require_search_event_navigation(capabilities: ScopeCapabilities) -> None:
+    if not capabilities.supports_search_event_navigation:
+        raise ParameterValidationError(
+            "Search event navigation is not supported by the selected model profile."
+        )
 
 
 def normalize_search_mode(mode: str) -> str:
@@ -189,3 +234,16 @@ def parse_search_count(raw: str) -> SearchCountState:
     if count < 0:
         raise SearchResponseError(f"Could not parse search count response: {raw!r}")
     return SearchCountState(count=count, raw_count=raw_count)
+
+
+def parse_search_event(raw: str) -> SearchEventState:
+    raw_event = raw.strip()
+    try:
+        event = int(raw_event)
+    except ValueError as exc:
+        raise SearchResponseError(
+            f"Could not parse search event response: {raw!r}"
+        ) from exc
+    if event <= 0:
+        raise SearchResponseError(f"Could not parse search event response: {raw!r}")
+    return SearchEventState(event=event, raw=raw_event)

@@ -59,6 +59,7 @@ from .search import (
     SEARCH_MODES,
     SearchController,
     SearchCountState,
+    SearchEventState,
     SearchModeState,
     SearchState,
 )
@@ -278,6 +279,7 @@ __all__ = [
     "SEARCH_MODES",
     "SearchController",
     "SearchCountState",
+    "SearchEventState",
     "SearchModeState",
     "SearchState",
     "MultiChannelWaveformCapture",

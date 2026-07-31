@@ -120,6 +120,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "search-state",
     "search-mode",
     "search-count",
+    "search-event",
     "save-pwd",
     "save-filename",
     "save-image-format",
@@ -1532,8 +1533,40 @@ def _normalize_wgen_worker_arguments(
 def _normalize_search_worker_arguments(
     command: str, arguments: dict[str, Any], runtime: WorkerRuntime
 ) -> dict[str, Any]:
-    if command not in {"search-state", "search-mode", "search-count"}:
+    if command not in {"search-state", "search-mode", "search-count", "search-event"}:
         return arguments
+
+    if command == "search-event":
+        capabilities = capabilities_for_model_id(runtime.model)
+        if not capabilities.supports_search_event_navigation:
+            raise OscilloscopeError(
+                f"Search event navigation is not supported by the selected "
+                f"{capabilities.series} model profile."
+            )
+        allowed = {"query", "event"}
+        unknown = set(arguments) - allowed
+        if unknown:
+            raise OscilloscopeError(
+                f"unknown argument for search-event: {sorted(unknown)[0]}"
+            )
+        if "query" in arguments and "event" in arguments:
+            raise OscilloscopeError(
+                "search-event query cannot be combined with configure options"
+            )
+        if arguments.get("query") is True:
+            if set(arguments) != {"query"}:
+                raise OscilloscopeError("search-event query requires exactly query=true")
+            return dict(arguments)
+        if "query" in arguments:
+            raise OscilloscopeError("search-event argument query must be exactly true")
+        if "event" not in arguments or set(arguments) != {"event"}:
+            raise OscilloscopeError("search-event configure requires exactly event")
+        event = arguments["event"]
+        if isinstance(event, bool) or not isinstance(event, int):
+            raise OscilloscopeError("search-event argument event must be an integer")
+        if event <= 0:
+            raise OscilloscopeError("search-event argument event must be a positive integer")
+        return dict(arguments)
 
     if command == "search-count":
         if set(arguments) != {"query"} or arguments.get("query") is not True:

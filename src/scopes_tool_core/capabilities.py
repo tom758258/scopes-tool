@@ -34,6 +34,7 @@ class ScopeCapabilities:
     supports_indexed_annotation: bool = False
     supports_50_ohm_impedance: bool = False
     supports_search_basic: bool = False
+    supports_search_event_navigation: bool = False
     search_modes: frozenset[str] = frozenset()
     supports_demo: bool = False
     demo_functions: frozenset[str] = frozenset()
@@ -170,6 +171,7 @@ _CAPABILITY_PROFILES = {
         supports_indexed_annotation=True,
         supports_50_ohm_impedance=True,
         supports_search_basic=True,
+        supports_search_event_navigation=True,
         search_modes=frozenset(
             {
                 "edge",

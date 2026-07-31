@@ -141,7 +141,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `demo-query`, `demo-output`, `demo-function`, `demo-phase`
 - `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
   `wgen-voltage`, `wgen-offset`, `wgen-load`
-- `search-state`, `search-mode`, `search-count`
+- `search-state`, `search-mode`, `search-count`, `search-event`
 - `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
   `save-image-ink-saver`, `save-image-factors`, `save-image`,
   `save-waveform-format`, `save-waveform-length`,
@@ -1702,6 +1702,14 @@ The worker accepts only these canonical argument shapes:
 {"command": "search-count", "arguments": {"query": true}}
 ```
 
+```json
+{"command": "search-event", "arguments": {"query": true}}
+```
+
+```json
+{"command": "search-event", "arguments": {"event": 1}}
+```
+
 `search-state` accepts exactly `query: true` or one JSON boolean `enabled`.
 `search-mode` accepts exactly `query: true` or one lowercase canonical mode:
 `serial1`, `serial2`, `edge`, `glitch`, `runt`, `transition`, or `peak`.
@@ -1714,7 +1722,7 @@ DSO-X 2000X accepts only `serial1`; 3000X accepts `edge`, `glitch`, `runt`,
 `transition`, `serial1`, and `serial2`; 4000X additionally accepts `peak`.
 Empty arguments, `query: false`, query/configure mixes, unknown keys, wrong
 types, aliases, uppercase values, and unsupported profile modes are rejected.
-Search event navigation, mode-specific search parameters, and serial search
+Mode-specific search parameters and serial search
 pattern configuration are not implemented. This pack has hardware-free
 validation only; no live hardware validation was performed.
 
@@ -1923,8 +1931,8 @@ The `measure-clear`, `measure-show`, `measure-source`, `measure-window`,
 `reference-query`, `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`,
 `dvm-current`, `dvm-query`, `demo-query`, `demo-output`, `demo-function`,
 `demo-phase`, `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
-`wgen-voltage`, `wgen-offset`, `wgen-load`, `search-state`, `search-mode`, and
-`search-count`
+`wgen-voltage`, `wgen-offset`, `wgen-load`, `search-state`, `search-mode`,
+`search-count`, and `search-event`
 commands also do not create command artifacts.
 The `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
 `save-image-ink-saver`, `save-image-factors`, `save-image`,

@@ -111,3 +111,31 @@ def test_search_count_requires_query(capsys):
         cli.main(["search-count"])
     assert excinfo.value.code == 2
     assert capsys.readouterr().out == ""
+
+
+def test_search_event_cli_execution_and_validation(capsys):
+    assert cli.main(["search-event", "--query", "--simulate", "--model", "keysight-dsox4034a", "--json"]) == 0
+    res_query = _payload(capsys)["result"]
+    assert res_query["operation"] == "query"
+    assert res_query["command"] == ":SEARch:EVENt?"
+    assert res_query["event"] == 1
+    assert res_query["raw"] == "1"
+
+    assert cli.main(["search-event", "--event", "1", "--simulate", "--model", "keysight-dsox4034a", "--json"]) == 0
+    res_cfg = _payload(capsys)["result"]
+    assert res_cfg["operation"] == "configure"
+    assert res_cfg["command"] == ":SEARch:EVENt 1"
+    assert res_cfg["event"] == 1
+    assert res_cfg["state_changing"] is True
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["search-event", "--simulate", "--model", "keysight-dsox4034a", "--json"])
+    assert exc.value.code == 2
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["search-event", "--query", "--event", "1", "--simulate", "--model", "keysight-dsox4034a", "--json"])
+    assert exc.value.code == 2
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["search-event", "--event", "0", "--simulate", "--model", "keysight-dsox4034a", "--json"])
+    assert exc.value.code == 2

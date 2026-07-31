@@ -64,7 +64,7 @@ from .save_export import (
     SaveWaveformFormatState,
     SaveWaveformLengthState,
 )
-from .search import SearchController, SearchCountState, SearchModeState, SearchState
+from .search import SearchController, SearchCountState, SearchEventState, SearchModeState, SearchState
 from .scpi import SCPIBackend, SCPIClient
 from .screenshot import HardcopyState, ScreenshotCapture, ScreenshotController, ScreenshotOptions
 from .status import (
@@ -758,6 +758,16 @@ class Oscilloscope:
         """Query the current waveform search event count."""
 
         return self._search_controller().query_count()
+
+    def configure_search_event(self, event: int) -> SearchEventState:
+        """Configure selected search event."""
+
+        return self._search_controller().set_event(event)
+
+    def query_search_event(self) -> SearchEventState:
+        """Query selected search event."""
+
+        return self._search_controller().query_event()
 
     def configure_save_pwd(self, path: str) -> None:
         """Configure the instrument-side current save directory."""

@@ -7,13 +7,17 @@ from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.search import (
     SearchController,
     parse_search_count,
+    parse_search_event,
     parse_search_mode,
     parse_search_state,
     search_count_query,
+    search_event_command,
+    search_event_query,
     search_mode_command,
     search_mode_query,
     search_state_command,
     search_state_query,
+    validate_search_event,
 )
 from scopes_tool_core.scpi import SCPIClient
 
@@ -131,3 +135,59 @@ def test_query_search_mode_off_preserves_raw_readback():
         "enabled": False,
         "raw_mode": "OFF",
     }
+
+
+def test_search_event_scpi_builders_and_validation():
+    assert search_event_command(2) == ":SEARch:EVENt 2"
+    assert search_event_query() == ":SEARch:EVENt?"
+    for invalid in [0, -1, "1", True, False, 1.5]:
+        with pytest.raises(ParameterValidationError, match="positive integer"):
+            validate_search_event(invalid)
+
+
+@pytest.mark.parametrize(
+    "raw, expected_event, expected_raw",
+    [("1", 1, "1"), ("+1", 1, "+1"), (" 2 \n", 2, "2")],
+)
+def test_parse_search_event_success(raw, expected_event, expected_raw):
+    state = parse_search_event(raw)
+    assert state.event == expected_event
+    assert state.raw == expected_raw
+
+
+@pytest.mark.parametrize("raw", ["", "0", "-1", "1.0", "abc"])
+def test_parse_search_event_rejects_invalid(raw):
+    with pytest.raises(SearchResponseError, match="Could not parse search event response"):
+        parse_search_event(raw)
+
+
+def test_search_event_query_and_set_on_4000x():
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4034A,MY00000000,02.50",
+            ":SEARch:EVENt?": "+3",
+        }
+    )
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    query_res = scope.query_search_event()
+    assert query_res.event == 3
+    assert query_res.raw == "+3"
+    assert query_res.to_json() == {"event": 3, "raw": "+3"}
+
+    set_res = scope.configure_search_event(2)
+    assert set_res.event == 2
+    assert set_res.to_json() == {"event": 2}
+    assert backend.history == ["*IDN?", ":SEARch:EVENt?", ":SEARch:EVENt 2"]
+
+
+@pytest.mark.parametrize("model", ["DSOX2004A", "DSOX3024A"])
+def test_search_event_unsupported_profiles_reject(model):
+    backend = FakeBackend()
+    controller = SearchController(SCPIClient(backend), capabilities_for_model(model))
+    with pytest.raises(ParameterValidationError, match="not supported by the selected"):
+        controller.query_event()
+    with pytest.raises(ParameterValidationError, match="not supported by the selected"):
+        controller.set_event(1)
+    assert backend.history == []

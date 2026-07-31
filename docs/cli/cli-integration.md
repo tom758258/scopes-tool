@@ -23,8 +23,8 @@ WGEN Basic P1 adapter commands are `wgen-query`, `wgen-output`,
 `wgen-load`. The selected model profile determines the concrete `:WGEN` or
 `:WGEN1` SCPI root. The adapter exposes no generator selector in P1.
 
-Search Basic Pack v1 adapter commands are `search-state`, `search-mode`, and
-query-only `search-count`. Boolean configuration uses canonical
+Search Basic Pack v1 adapter commands are `search-state`, `search-mode`,
+query-only `search-count`, and 4000X `search-event`. Boolean configuration uses canonical
 `--enabled true|false`; search modes use lowercase canonical values and are
 validated against the selected model capability profile before search SCPI.
 Mode configuration enables search before selecting the mode.

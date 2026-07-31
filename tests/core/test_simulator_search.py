@@ -47,3 +47,29 @@ def test_simulator_accepts_profile_supported_search_modes():
     SimulatorBackend(physical_model_id="keysight-dsox2004a").write(":SEARch:MODE SERial1")
     SimulatorBackend(physical_model_id="keysight-dsox3024a").write(":SEARch:MODE EDGE")
     SimulatorBackend(physical_model_id="keysight-dsox4034a").write(":SEARch:MODE PEAK")
+
+
+def test_simulator_search_event_default_and_set():
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    assert scope.query_search_event().to_json() == {"event": 1, "raw": "1"}
+    assert scope.configure_search_event(2).to_json() == {"event": 2}
+    assert scope.query_search_event().to_json() == {"event": 2, "raw": "2"}
+
+
+@pytest.mark.parametrize("model_id", ["keysight-dsox2004a", "keysight-dsox3024a"])
+def test_simulator_search_event_unsupported_models_reject(model_id):
+    backend = SimulatorBackend(physical_model_id=model_id)
+    with pytest.raises(SimulatorBackendError, match="not supported by simulator model"):
+        backend.query(":SEARch:EVENt?")
+    with pytest.raises(SimulatorBackendError, match="not supported by simulator model"):
+        backend.write(":SEARch:EVENt 1")
+
+
+@pytest.mark.parametrize("command", [":SEARch:EVENt 0", ":SEARch:EVENt -1", ":SEARch:EVENt abc"])
+def test_simulator_search_event_rejects_invalid_values(command):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
+    with pytest.raises(SimulatorBackendError, match="Invalid search event for simulator"):
+        backend.write(command)

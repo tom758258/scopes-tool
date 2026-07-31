@@ -310,10 +310,13 @@ from scopes_tool_core.wgen import (
 from scopes_tool_core.search import (
     SEARCH_MODES,
     search_count_query,
+    search_event_command,
+    search_event_query,
     search_mode_command,
     search_mode_query,
     search_state_command,
     search_state_query,
+    validate_search_event,
     validate_search_mode,
 )
 from scopes_tool_core.status import (
@@ -1242,6 +1245,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_scope_connection_args(search_count_parser)
     search_count_parser.add_argument("--query", action="store_true", required=True)
+
+    search_event_parser = subparsers.add_parser(
+        "search-event", allow_abbrev=False, help="configure or query selected search event"
+    )
+    _add_scope_connection_args(search_event_parser)
+    search_event_action = search_event_parser.add_mutually_exclusive_group(required=True)
+    search_event_action.add_argument("--query", action="store_true")
+    search_event_action.add_argument("--event", type=_positive_int)
 
     save_pwd_parser = subparsers.add_parser(
         "save-pwd", allow_abbrev=False, help="configure or query the instrument save directory"
@@ -2989,7 +3000,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "wgen-load",
     }:
         return _cmd_wgen(args)
-    if args.command in {"search-state", "search-mode", "search-count"}:
+    if args.command in {"search-state", "search-mode", "search-count", "search-event"}:
         return _cmd_search(args)
     if args.command in {
         "save-pwd",
@@ -3668,6 +3679,7 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         "search-state",
         "search-mode",
         "search-count",
+        "search-event",
     }:
         _validate_search_args(args)
     if getattr(args, "command", None) in {
@@ -3998,6 +4010,23 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
 def _validate_search_args(args: argparse.Namespace) -> None:
     command = args.command
     capabilities = _pre_open_capabilities(args)
+    if command == "search-event":
+        if capabilities is not None and not capabilities.supports_search_event_navigation:
+            raise ParameterValidationError(
+                "Search event navigation is not supported by the selected model profile."
+            )
+        if args.query and args.event is not None:
+            raise ParameterValidationError(
+                "search-event --query cannot be combined with configure options."
+            )
+        if not args.query and args.event is None:
+            raise ParameterValidationError(
+                "search-event configure requires --event."
+            )
+        if not args.query and args.event is not None:
+            validate_search_event(args.event)
+        return
+
     if capabilities is not None and not capabilities.supports_search_basic:
         raise ParameterValidationError(
             "Search Basic Pack v1 is not supported by the selected model profile."
@@ -5006,6 +5035,25 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         return [target, ":SYSTem:ERRor?"], [], {
             "operation": "query",
             "command": target,
+        }
+    if command == "search-event":
+        if capabilities is not None and not capabilities.supports_search_event_navigation:
+            raise ParameterValidationError(
+                "Search event navigation is not supported by the selected model profile."
+            )
+        if args.query:
+            target = search_event_query()
+            return [target, ":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "command": target,
+            }
+        canonical_event = validate_search_event(args.event)
+        target = search_event_command(canonical_event)
+        return [target, ":SYSTem:ERRor?"], [], {
+            "operation": "configure",
+            "command": target,
+            "event": canonical_event,
+            "state_changing": True,
         }
     if command in {
         "save-pwd",
@@ -6499,6 +6547,7 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "supports_indexed_annotation": capabilities.supports_indexed_annotation,
         "supports_50_ohm_impedance": capabilities.supports_50_ohm_impedance,
         "supports_search_basic": capabilities.supports_search_basic,
+        "supports_search_event_navigation": capabilities.supports_search_event_navigation,
         "search_modes": [mode for mode in SEARCH_MODES if mode in capabilities.search_modes],
     }
 
@@ -8641,6 +8690,24 @@ def _cmd_search(args: argparse.Namespace) -> int:
                     print(f"Command: {command}")
             print(f"Search enabled: {state.enabled}")
             print(f"Search mode: {state.mode}")
+        elif args.command == "search-event":
+            if args.query:
+                command = search_event_query()
+                state = scope.query_search_event()
+                _json_update_result(operation="query", command=command, **state.to_json())
+                print(f"Command: {command}")
+                print(f"Search event: {state.event}")
+            else:
+                command = search_event_command(args.event)
+                state = scope.configure_search_event(args.event)
+                _json_update_result(
+                    operation="configure",
+                    command=command,
+                    **state.to_json(),
+                    state_changing=True,
+                )
+                print(f"Command: {command}")
+                print(f"Search event set to {state.event}")
         else:
             command = search_count_query()
             state = scope.query_search_count()

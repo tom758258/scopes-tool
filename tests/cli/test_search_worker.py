@@ -123,3 +123,26 @@ def test_worker_search_simulator_execution(tmp_path):
         ":SEARch:MODE PEAK",
         ":SYSTem:ERRor?",
     ]
+
+
+def test_worker_search_event_acceptance_and_rejection(tmp_path):
+    runtime_4000x = _runtime(tmp_path, "keysight-dsox4034a")
+    runtime_2000x = _runtime(tmp_path, "keysight-dsox2004a")
+
+    p1 = worker.parse_domain_command("search-event", {"query": True}, runtime_4000x)
+    assert p1.command == "search-event"
+
+    p2 = worker.parse_domain_command("search-event", {"event": 1}, runtime_4000x)
+    assert p2.command == "search-event"
+
+    with pytest.raises(OscilloscopeError, match="must be an integer"):
+        worker.parse_domain_command("search-event", {"event": "1"}, runtime_4000x)
+
+    with pytest.raises(OscilloscopeError, match="must be a positive integer"):
+        worker.parse_domain_command("search-event", {"event": 0}, runtime_4000x)
+
+    with pytest.raises(OscilloscopeError, match="unknown argument"):
+        worker.parse_domain_command("search-event", {"event": 1, "unknown": True}, runtime_4000x)
+
+    with pytest.raises(OscilloscopeError, match="not supported by the selected"):
+        worker.parse_domain_command("search-event", {"query": True}, runtime_2000x)

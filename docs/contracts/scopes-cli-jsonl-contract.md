@@ -246,6 +246,8 @@ Control and setup:
   `enabled: false`.
 - `search-count`: query-only results include `operation: "query"`, `command`,
   integer `count`, and preserved `raw_count`.
+- `search-event`: results include `operation`, `command`, `event`, and optional
+  `raw` for queries or `state_changing: true` for configuration.
 - Save/Export Pack v1 setting queries include `instrument_side: true`,
   `operation: "query"`, the target `command`, a canonical lowercase or boolean
   value, and preserved `raw_response`. Configure results use

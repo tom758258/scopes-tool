@@ -156,8 +156,9 @@ hardware-free support only; no live instrument validation has been run for the
 pack.
 
 All three profiles support `search-state` and query-only `search-count`.
-`search-mode` enables search before setting the mode. Search event navigation,
-mode-specific search parameter commands, and serial search pattern
+`search-mode` enables search before setting the mode. Search event navigation is supported on 4000X via `search-
+event`.
+Mode-specific search parameter commands and serial search pattern
 configuration are outside Search Basic Pack v1.
 
 - 2000X and 3000X channel labels allow up to 10 printable ASCII characters.

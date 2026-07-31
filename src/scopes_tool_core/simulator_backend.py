@@ -180,6 +180,7 @@ class SimulatorBackend:
     search_enabled: bool = False
     search_mode: str = "SERial1"
     search_count: int = 0
+    search_event: int = 1
     save_pwd: str = ""
     save_filename: str = "scope"
     save_image_format: str = "PNG"
@@ -508,6 +509,23 @@ class SimulatorBackend:
                     f"Search mode {value!r} is not supported by simulator model {self.model}."
                 )
             self.search_mode = scpi_by_canonical[canonical]
+        elif upper.startswith(":SEARCH:EVENT "):
+            if not self._capabilities.supports_search_event_navigation:
+                raise SimulatorBackendError(
+                    f"Search event navigation is not supported by simulator model {self.model}."
+                )
+            value_str = command.rsplit(" ", 1)[1].strip()
+            try:
+                val = int(value_str)
+            except ValueError as exc:
+                raise SimulatorBackendError(
+                    f"Invalid search event for simulator: {command}"
+                ) from exc
+            if val <= 0:
+                raise SimulatorBackendError(
+                    f"Invalid search event for simulator: {command}"
+                )
+            self.search_event = val
         elif upper.startswith(":SAVE:PWD "):
             self.save_pwd = _parse_quoted_scpi_argument(command, ":SAVE:PWD")
         elif upper.startswith(":SAVE:FILENAME "):
@@ -1009,6 +1027,12 @@ class SimulatorBackend:
             return self.search_mode if self.search_enabled else "OFF"
         if upper == ":SEARCH:COUNT?":
             return str(self.search_count)
+        if upper == ":SEARCH:EVENT?":
+            if not self._capabilities.supports_search_event_navigation:
+                raise SimulatorBackendError(
+                    f"Search event navigation is not supported by simulator model {self.model}."
+                )
+            return str(self.search_event)
         if upper == ":SAVE:PWD?":
             return f'"{self.save_pwd}"'
         if upper == ":SAVE:FILENAME?":
