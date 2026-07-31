@@ -184,6 +184,19 @@ class VisaBackend:
         except Exception as exc:  # pragma: no cover - depends on installed VISA stack
             raise VisaBackendError(f"VISA binary query failed for {command!r}: {exc}") from exc
 
+    def query_binary_bytes(self, command: str) -> bytes:
+        """Query a binary response without PyVISA value decoding."""
+
+        self._ensure_open()
+        self.history.append(command)
+        try:
+            self._resource.write(command)
+            return bytes(self._resource.read_raw())
+        except Exception as exc:  # pragma: no cover - depends on installed VISA stack
+            raise VisaBackendError(
+                f"VISA raw binary query failed for {command!r}: {exc}"
+            ) from exc
+
     def close(self) -> None:
         """Close the VISA session and resource manager."""
 

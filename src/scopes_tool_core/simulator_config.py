@@ -333,9 +333,10 @@ def _apply_errors(kwargs: dict[str, Any], raw: Any, capabilities: ScopeCapabilit
     if system_errors:
         kwargs["system_errors"] = system_errors
     if raw.get("binary_transfer_failure", False):
-        kwargs.setdefault("binary_failures", {})[":WAVeform:DATA?"] = OscilloscopeError(
-            "simulated binary transfer failure"
-        )
+        failure = OscilloscopeError("simulated binary transfer failure")
+        binary_failures = kwargs.setdefault("binary_failures", {})
+        binary_failures[":WAVeform:DATA?"] = failure
+        binary_failures[":LISTer:DATA?"] = failure
     invalid_channels = _parse_channel_list(
         raw.get("invalid_measurement_channels", []),
         "invalid_measurement_channels",

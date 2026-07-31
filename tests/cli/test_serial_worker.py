@@ -32,6 +32,10 @@ def test_worker_serial_commands_are_allowlisted(tmp_path):
         ("serial-i2c", {"bus": 1, "query": True}),
         ("serial-spi", {"bus": 1, "query": True}),
         ("serial-can", {"bus": 1, "query": True}),
+        ("serial-lister-query", {}),
+        ("serial-lister-display", {"query": True}),
+        ("serial-lister-reference", {"query": True}),
+        ("serial-lister-export", {"output": "lister.csv"}),
     ]:
         assert command in worker.DOMAIN_COMMANDS
         assert worker.parse_domain_command(
@@ -84,6 +88,31 @@ def test_worker_serial_uart_configure_execution_preserves_p1_result(tmp_path):
         ":SBUS1:UART:SOURce:RX CHANnel1",
         ":SBUS1:UART:BAUDrate 115200",
     ]
+
+
+def test_worker_serial_lister_export_uses_job_artifact_policy(tmp_path):
+    parsed = worker.parse_domain_command(
+        "serial-lister-export",
+        {"output": "exports/lister.csv"},
+        _runtime(tmp_path),
+        tmp_path / "job",
+    )
+
+    payload, exit_code = cli._execute_json_command(parsed)
+
+    assert exit_code == 0
+    output = tmp_path / "job" / "exports" / "lister.csv"
+    assert output.read_bytes() == b"bus,time,value\r\nSBUS1,0,0\r\n"
+    assert payload["files"] == [{"kind": "csv", "path": str(output)}]
+
+
+def test_worker_serial_lister_rejects_mixed_query_and_configure(tmp_path):
+    with pytest.raises(OscilloscopeError, match="cannot be combined"):
+        worker.parse_domain_command(
+            "serial-lister-display",
+            {"query": True, "selection": "bus1"},
+            _runtime(tmp_path),
+        )
 
 
 def test_worker_serial_spi_rejects_incompatible_framing_and_clock_timeout(tmp_path):

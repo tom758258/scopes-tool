@@ -70,6 +70,9 @@ from .serial import (
     SerialCanState,
     SerialDisplayState,
     SerialI2CState,
+    SerialListerDisplayState,
+    SerialListerReferenceState,
+    SerialListerState,
     SerialModeState,
     SerialQueryState,
     SerialSpiState,
@@ -770,6 +773,36 @@ class Oscilloscope:
         """Query one serial decode bus display state."""
 
         return self._serial_controller().query_display(bus)
+
+    def query_serial_lister(self) -> SerialListerState:
+        """Query global Serial Lister display and reference state."""
+
+        return self._serial_controller().query_lister()
+
+    def configure_serial_lister_display(self, display: str) -> SerialListerDisplayState:
+        """Configure global Serial Lister display selection."""
+
+        return self._serial_controller().configure_lister_display(display)
+
+    def query_serial_lister_display(self) -> SerialListerDisplayState:
+        """Query global Serial Lister display selection."""
+
+        return self._serial_controller().query_lister_display()
+
+    def configure_serial_lister_reference(self, reference: str) -> SerialListerReferenceState:
+        """Configure global Serial Lister reference."""
+
+        return self._serial_controller().configure_lister_reference(reference)
+
+    def query_serial_lister_reference(self) -> SerialListerReferenceState:
+        """Query global Serial Lister reference."""
+
+        return self._serial_controller().query_lister_reference()
+
+    def query_serial_lister_data(self) -> bytes:
+        """Query and decode the raw global Serial Lister data block."""
+
+        return self._serial_controller().query_lister_data()
 
     def configure_serial_uart(self, bus: int, **settings: object) -> SerialUartState:
         """Configure basic UART decode settings."""

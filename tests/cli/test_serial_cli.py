@@ -34,6 +34,95 @@ def test_serial_query_simulator_json_preserves_bus_and_raw(capsys):
     assert result["raw"] == ":SBUS1:DISP 0;MODE UART;"
 
 
+def test_serial_lister_query_simulator_json_does_not_query_data(capsys):
+    assert (
+        cli.main(
+            [
+                "serial-lister-query",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 0
+    )
+    payload = _payload(capsys)
+    assert payload["result"]["display"] == "off"
+    assert payload["result"]["reference"] == "trigger"
+    assert payload["result"]["commands"] == [
+        ":LISTer:DISPlay?",
+        ":LISTer:REFerence?",
+    ]
+    assert ":LISTer:DATA?" not in payload["scpi"]["sent"]
+
+
+def test_serial_lister_display_simulator_configure(capsys):
+    assert (
+        cli.main(
+            [
+                "serial-lister-display",
+                "--selection",
+                "all",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 0
+    )
+    payload = _payload(capsys)
+    assert payload["result"]["display"] == "all"
+    assert payload["result"]["command"] == ":LISTer:DISPlay ALL"
+
+
+def test_serial_lister_reference_simulator_configure(capsys):
+    assert (
+        cli.main(
+            [
+                "serial-lister-reference",
+                "--reference",
+                "previous",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 0
+    )
+    payload = _payload(capsys)
+    assert payload["result"]["reference"] == "previous"
+    assert payload["result"]["command"] == ":LISTer:REFerence PREVious"
+
+
+def test_serial_lister_export_simulator_preserves_file_and_metadata(tmp_path, capsys):
+    output = tmp_path / "lister.csv"
+    assert (
+        cli.main(
+            [
+                "serial-lister-export",
+                "--output",
+                str(output),
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 0
+    )
+    payload = _payload(capsys)
+    expected = b"bus,time,value\r\nSBUS1,0,0\r\n"
+    assert output.read_bytes() == expected
+    assert payload["result"]["bytes_written"] == len(expected)
+    assert payload["result"]["command"] == ":LISTer:DATA?"
+    assert payload["files"] == [{"kind": "csv", "path": str(output)}]
+    assert payload["scpi"]["sent"].count(":LISTer:DATA?") == 1
+    assert "bus,time,value" not in json.dumps(payload)
+
+
 def test_serial_simulator_mode_and_display_round_trip():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
     scope = Oscilloscope(backend)

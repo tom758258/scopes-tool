@@ -122,19 +122,25 @@ def test_visa_backend_opens_resource_delegates_io_and_closes(monkeypatch):
     response = backend.query("*IDN?")
     raw = backend.read_raw()
     binary = backend.query_binary_values(":WAVeform:DATA?", datatype="B")
+    binary_bytes = backend.query_binary_bytes(":LISTer:DATA?")
 
     assert resource.timeout == 5000
     assert response == " response \n"
     assert raw == b"raw-bytes"
     assert binary == [1, 2, 3]
+    assert binary_bytes == b"raw-bytes"
     assert resource.binary_kwargs == [{"datatype": "B"}]
     assert resource.history == [
         ("write", ":RUN"),
         ("query", "*IDN?"),
         ("read_raw",),
         ("query_binary_values", ":WAVeform:DATA?"),
+        ("write", ":LISTer:DATA?"),
+        ("read_raw",),
     ]
-    assert backend.history == [":RUN", "*IDN?", ":WAVeform:DATA?"]
+    assert backend.history == [
+        ":RUN", "*IDN?", ":WAVeform:DATA?", ":LISTer:DATA?"
+    ]
 
     backend.close()
     backend.close()
@@ -191,6 +197,10 @@ def test_visa_backend_wraps_open_failure_and_closes_manager(monkeypatch):
         (
             lambda backend: backend.query_binary_values(":WAVeform:DATA?"),
             "VISA binary query failed for ':WAVeform:DATA?'",
+        ),
+        (
+            lambda backend: backend.query_binary_bytes(":LISTer:DATA?"),
+            "VISA raw binary query failed for ':LISTer:DATA?'",
         ),
     ],
 )

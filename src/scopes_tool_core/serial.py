@@ -60,6 +60,8 @@ I2C_ADDRESS_SIZES = ("bit7", "bit8")
 SPI_CLOCK_SLOPES = ("positive", "negative")
 SPI_FRAMINGS = ("chip-select", "no-chip-select", "timeout")
 CAN_SIGNAL_DEFINITIONS = ("canh", "canl", "rx", "tx", "difl", "difh")
+SERIAL_LISTER_DISPLAYS = ("off", "bus1", "bus2", "all")
+SERIAL_LISTER_REFERENCES = ("trigger", "previous")
 
 _UART_PARITY_TOKENS = {"even": "EVEN", "odd": "ODD", "none": "NONE"}
 _UART_POLARITY_TOKENS = {"high": "HIGH", "low": "LOW"}
@@ -78,6 +80,16 @@ _CAN_SIGNAL_TOKENS = {
     "tx": "TX",
     "difl": "DIFL",
     "difh": "DIFH",
+}
+_SERIAL_LISTER_DISPLAY_TOKENS = {
+    "off": "OFF",
+    "bus1": "SBUS1",
+    "bus2": "SBUS2",
+    "all": "ALL",
+}
+_SERIAL_LISTER_REFERENCE_TOKENS = {
+    "trigger": "TRIGger",
+    "previous": "PREVious",
 }
 
 _SERIAL_MODE_READBACKS = {
@@ -221,6 +233,35 @@ class SerialCanState:
         return {key: value for key, value in self.__dict__.items()}
 
 
+@dataclass(frozen=True)
+class SerialListerState:
+    display: str
+    reference: str
+    raw_display: str
+    raw_reference: str
+
+    def to_json(self) -> dict[str, object]:
+        return {key: value for key, value in self.__dict__.items()}
+
+
+@dataclass(frozen=True)
+class SerialListerDisplayState:
+    display: str
+    raw_display: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        return {key: value for key, value in self.__dict__.items()}
+
+
+@dataclass(frozen=True)
+class SerialListerReferenceState:
+    reference: str
+    raw_reference: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        return {key: value for key, value in self.__dict__.items()}
+
+
 class SerialController:
     """Controller for the supported basic serial decode controls."""
 
@@ -266,6 +307,60 @@ class SerialController:
             bus=canonical_bus,
             enabled=enabled,
             raw_state=raw,
+        )
+
+    def query_lister(self) -> SerialListerState:
+        require_serial_decode(self.capabilities)
+        commands = serial_lister_query_commands()
+        raw_display = self.scpi.query(commands["display"])
+        display = parse_serial_lister_display(raw_display)
+        if display == "bus2" and self.capabilities.serial_bus_count < 2:
+            raise SerialResponseError(
+                f"Lister display response selected bus2, but the selected "
+                f"{self.capabilities.series} model has only one serial bus."
+            )
+        raw_reference = self.scpi.query(commands["reference"])
+        reference = parse_serial_lister_reference(raw_reference)
+        return SerialListerState(
+            display=display,
+            reference=reference,
+            raw_display=raw_display,
+            raw_reference=raw_reference,
+        )
+
+    def configure_lister_display(self, display: str) -> SerialListerDisplayState:
+        canonical = validate_serial_lister_display(display, self.capabilities)
+        self.scpi.write(serial_lister_display_command(canonical))
+        return SerialListerDisplayState(display=canonical)
+
+    def query_lister_display(self) -> SerialListerDisplayState:
+        require_serial_decode(self.capabilities)
+        raw = self.scpi.query(serial_lister_display_query())
+        display = parse_serial_lister_display(raw)
+        if display == "bus2" and self.capabilities.serial_bus_count < 2:
+            raise SerialResponseError(
+                f"Lister display response selected bus2, but the selected "
+                f"{self.capabilities.series} model has only one serial bus."
+            )
+        return SerialListerDisplayState(display=display, raw_display=raw)
+
+    def configure_lister_reference(self, reference: str) -> SerialListerReferenceState:
+        canonical = validate_serial_lister_reference(reference, self.capabilities)
+        self.scpi.write(serial_lister_reference_command(canonical))
+        return SerialListerReferenceState(reference=canonical)
+
+    def query_lister_reference(self) -> SerialListerReferenceState:
+        require_serial_decode(self.capabilities)
+        raw = self.scpi.query(serial_lister_reference_query())
+        return SerialListerReferenceState(
+            reference=parse_serial_lister_reference(raw),
+            raw_reference=raw,
+        )
+
+    def query_lister_data(self) -> bytes:
+        require_serial_decode(self.capabilities)
+        return parse_serial_lister_binary_block(
+            self.scpi.query_binary_bytes(serial_lister_data_query())
         )
 
     def configure_uart(
@@ -669,6 +764,122 @@ def serial_can_query_commands(bus: int) -> dict[str, str]:
         "signal_definition": root + "SIGNal:DEFinition?",
         "sample_point": root + "SAMPlepoint?",
     }
+
+
+def serial_lister_display_command(display: str) -> str:
+    canonical = normalize_serial_lister_display(display)
+    return f":LISTer:DISPlay {_SERIAL_LISTER_DISPLAY_TOKENS[canonical]}"
+
+
+def serial_lister_display_query() -> str:
+    return ":LISTer:DISPlay?"
+
+
+def serial_lister_reference_command(reference: str) -> str:
+    canonical = normalize_serial_lister_reference(reference)
+    return f":LISTer:REFerence {_SERIAL_LISTER_REFERENCE_TOKENS[canonical]}"
+
+
+def serial_lister_reference_query() -> str:
+    return ":LISTer:REFerence?"
+
+
+def serial_lister_query_commands() -> dict[str, str]:
+    return {
+        "display": serial_lister_display_query(),
+        "reference": serial_lister_reference_query(),
+    }
+
+
+def serial_lister_data_query() -> str:
+    return ":LISTer:DATA?"
+
+
+def normalize_serial_lister_display(value: str) -> str:
+    return _normalize_choice(value, SERIAL_LISTER_DISPLAYS, "Lister display")
+
+
+def validate_serial_lister_display(
+    value: str, capabilities: ScopeCapabilities
+) -> str:
+    require_serial_decode(capabilities)
+    canonical = normalize_serial_lister_display(value)
+    if canonical == "bus2" and capabilities.serial_bus_count < 2:
+        raise ParameterValidationError(
+            f"Lister display bus2 is not supported by the selected "
+            f"{capabilities.series} model profile."
+        )
+    return canonical
+
+
+def parse_serial_lister_display(raw: str) -> str:
+    normalized = raw.strip().upper()
+    readbacks = {
+        "OFF": "off",
+        "0": "off",
+        "SBUS1": "bus1",
+        "ON": "bus1",
+        "1": "bus1",
+        "SBUS2": "bus2",
+        "2": "bus2",
+        "ALL": "all",
+    }
+    try:
+        return readbacks[normalized]
+    except KeyError as exc:
+        raise SerialResponseError(
+            f"Could not parse Lister display response: {raw!r}"
+        ) from exc
+
+
+def normalize_serial_lister_reference(value: str) -> str:
+    return _normalize_choice(value, SERIAL_LISTER_REFERENCES, "Lister reference")
+
+
+def validate_serial_lister_reference(
+    value: str, capabilities: ScopeCapabilities
+) -> str:
+    require_serial_decode(capabilities)
+    return normalize_serial_lister_reference(value)
+
+
+def parse_serial_lister_reference(raw: str) -> str:
+    normalized = raw.strip().upper()
+    readbacks = {
+        "TRIGGER": "trigger",
+        "TRIG": "trigger",
+        "PREVIOUS": "previous",
+        "PREV": "previous",
+    }
+    try:
+        return readbacks[normalized]
+    except KeyError as exc:
+        raise SerialResponseError(
+            f"Could not parse Lister reference response: {raw!r}"
+        ) from exc
+
+
+def parse_serial_lister_binary_block(raw: bytes) -> bytes:
+    if len(raw) < 3 or raw[:1] != b"#" or not raw[1:2].isdigit():
+        raise SerialResponseError("Malformed Lister binary block header.")
+    length_digits = raw[1] - ord("0")
+    if length_digits == 0:
+        raise SerialResponseError("Indefinite-length Lister binary blocks are unsupported.")
+    header_end = 2 + length_digits
+    if len(raw) < header_end:
+        raise SerialResponseError("Malformed Lister binary block length header.")
+    length_bytes = raw[2:header_end]
+    if not length_bytes.isdigit():
+        raise SerialResponseError("Malformed Lister binary block length.")
+    payload_length = int(length_bytes)
+    payload_end = header_end + payload_length
+    if len(raw) < payload_end:
+        raise SerialResponseError("Truncated Lister binary block payload.")
+    payload = raw[header_end:payload_end]
+    trailing = raw[payload_end:]
+    if trailing not in {b"", b"\n", b"\r\n"}:
+        raise SerialResponseError("Malformed Lister binary block terminator.")
+    return payload
 
 
 def normalize_serial_source(value: str, capabilities: ScopeCapabilities) -> str:

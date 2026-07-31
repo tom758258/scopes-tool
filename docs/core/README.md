@@ -131,6 +131,12 @@ Core owns runtime behavior:
   lister, mask, multi, power, arbitrary, compliance,
   segmented, setup, and WMEMory export are outside v1. Coverage is
   hardware-free; no live hardware validation was performed.
+- Serial Lister P2 global display/reference query and configuration plus
+  host-side raw CSV export through `:LISTer:DATA?`. The export preserves the
+  instrument payload without protocol-specific parsing and does not enable
+  decode, acquire traffic, or change SBUS display state. Lister display
+  selection uses `off`, `bus1`, `bus2`, and `all`; `bus2` is unavailable on
+  2000X and available on 3000X/4000X profiles.
 - Measurement Control Pack v1 helpers for clearing screen measurements,
   enabling or querying measurement markers, selecting one or two analog
   measurement source channels, and selecting `MAIN`, `ZOOM`, `AUTO`, or

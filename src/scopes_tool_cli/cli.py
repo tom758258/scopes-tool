@@ -107,6 +107,7 @@ from scopes_tool_core.operations import (
 from scopes_tool_core.output_files import (
     capture_output_paths,
     default_capture_csv_path,
+    write_serial_lister_csv,
     write_json_file,
     write_json_file_best_effort,
 )
@@ -325,6 +326,8 @@ from scopes_tool_core.serial import (
     I2C_ADDRESS_SIZES,
     SERIAL_BIT_ORDERS,
     SERIAL_MODES,
+    SERIAL_LISTER_DISPLAYS,
+    SERIAL_LISTER_REFERENCES,
     SPI_CLOCK_SLOPES,
     SPI_FRAMINGS,
     UART_PARITIES,
@@ -336,6 +339,12 @@ from scopes_tool_core.serial import (
     serial_mode_query,
     serial_can_configure_commands,
     serial_can_query_commands,
+    serial_lister_data_query,
+    serial_lister_display_command,
+    serial_lister_display_query,
+    serial_lister_query_commands,
+    serial_lister_reference_command,
+    serial_lister_reference_query,
     serial_i2c_configure_commands,
     serial_i2c_query_commands,
     serial_spi_configure_commands,
@@ -355,7 +364,10 @@ from scopes_tool_core.serial import (
     validate_uart_baud_rate,
     validate_serial_bus,
     validate_serial_mode,
+    validate_serial_lister_display,
+    validate_serial_lister_reference,
     validate_spi_framing_clock_timeout,
+    require_serial_decode,
 )
 from scopes_tool_core.status import (
     system_clear_status_command,
@@ -1299,6 +1311,56 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     serial_display_action.add_argument("--query", action="store_true")
     serial_display_action.add_argument("--enabled", type=_strict_bool_arg)
+
+    serial_lister_query_parser = subparsers.add_parser(
+        "serial-lister-query",
+        allow_abbrev=False,
+        help="query global Serial Lister display and reference state",
+    )
+    _add_scope_connection_args(serial_lister_query_parser)
+
+    serial_lister_display_parser = subparsers.add_parser(
+        "serial-lister-display",
+        allow_abbrev=False,
+        help="configure or query global Serial Lister display selection",
+    )
+    _add_scope_connection_args(serial_lister_display_parser)
+    serial_lister_display_action = serial_lister_display_parser.add_mutually_exclusive_group(
+        required=True
+    )
+    serial_lister_display_action.add_argument("--query", action="store_true")
+    serial_lister_display_action.add_argument(
+        "--selection",
+        choices=SERIAL_LISTER_DISPLAYS,
+        help="canonical selection: off, bus1, bus2, or all",
+    )
+
+    serial_lister_reference_parser = subparsers.add_parser(
+        "serial-lister-reference",
+        allow_abbrev=False,
+        help="configure or query global Serial Lister reference",
+    )
+    _add_scope_connection_args(serial_lister_reference_parser)
+    serial_lister_reference_action = serial_lister_reference_parser.add_mutually_exclusive_group(
+        required=True
+    )
+    serial_lister_reference_action.add_argument("--query", action="store_true")
+    serial_lister_reference_action.add_argument(
+        "--reference", choices=SERIAL_LISTER_REFERENCES
+    )
+
+    serial_lister_export_parser = subparsers.add_parser(
+        "serial-lister-export",
+        allow_abbrev=False,
+        help="export host-side Serial Lister CSV data",
+    )
+    _add_scope_connection_args(serial_lister_export_parser)
+    serial_lister_export_parser.add_argument(
+        "--output",
+        dest="output_path",
+        required=True,
+        help="host CSV output path for :LISTer:DATA? payload",
+    )
 
     serial_uart_parser = subparsers.add_parser(
         "serial-uart", allow_abbrev=False, help="configure or query basic UART decode settings"
@@ -3144,6 +3206,10 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "serial-i2c",
         "serial-spi",
         "serial-can",
+        "serial-lister-query",
+        "serial-lister-display",
+        "serial-lister-reference",
+        "serial-lister-export",
     }:
         return _cmd_serial(args)
     if args.command in {"search-state", "search-mode", "search-count", "search-event"}:
@@ -3829,6 +3895,10 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         "serial-i2c",
         "serial-spi",
         "serial-can",
+        "serial-lister-query",
+        "serial-lister-display",
+        "serial-lister-reference",
+        "serial-lister-export",
     }:
         _validate_serial_args(args)
     if getattr(args, "command", None) in {
@@ -4164,6 +4234,14 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
 
 
 def _validate_serial_args(args: argparse.Namespace) -> None:
+    if args.command in {
+        "serial-lister-query",
+        "serial-lister-display",
+        "serial-lister-reference",
+        "serial-lister-export",
+    }:
+        _validate_serial_lister_args(args)
+        return
     capabilities = _pre_open_capabilities(args)
     if capabilities is not None:
         validate_serial_bus(args.bus, capabilities)
@@ -4171,6 +4249,17 @@ def _validate_serial_args(args: argparse.Namespace) -> None:
             validate_serial_mode(args.mode, capabilities)
     if args.command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
         _validate_serial_protocol_args(args, capabilities)
+
+
+def _validate_serial_lister_args(args: argparse.Namespace) -> None:
+    capabilities = _pre_open_capabilities(args)
+    if capabilities is None:
+        return
+    require_serial_decode(capabilities)
+    if args.command == "serial-lister-display" and not args.query:
+        validate_serial_lister_display(args.selection, capabilities)
+    elif args.command == "serial-lister-reference" and not args.query:
+        validate_serial_lister_reference(args.reference, capabilities)
 
 
 def _validate_serial_protocol_args(
@@ -5347,6 +5436,53 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         if not args.query:
             result.update(enabled=args.enabled, state_changing=True)
         return [target, ":SYSTem:ERRor?"], [], result
+    if command == "serial-lister-query":
+        commands = list(serial_lister_query_commands().values())
+        return [*commands, ":SYSTem:ERRor?"], [], {
+            "operation": "query",
+            "commands": commands,
+        }
+    if command == "serial-lister-display":
+        target = (
+            serial_lister_display_query()
+            if args.query
+            else serial_lister_display_command(
+                validate_serial_lister_display(args.selection, capabilities)
+            )
+        )
+        result = {
+            "operation": "query" if args.query else "configure",
+            "command": target,
+        }
+        if not args.query:
+            result.update(display=args.selection, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "serial-lister-reference":
+        target = (
+            serial_lister_reference_query()
+            if args.query
+            else serial_lister_reference_command(
+                validate_serial_lister_reference(args.reference, capabilities)
+            )
+        )
+        result = {
+            "operation": "query" if args.query else "configure",
+            "command": target,
+        }
+        if not args.query:
+            result.update(reference=args.reference, state_changing=True)
+        return [target, ":SYSTem:ERRor?"], [], result
+    if command == "serial-lister-export":
+        output_path = Path(args.output_path)
+        target = serial_lister_data_query()
+        return [target, ":SYSTem:ERRor?"], [
+            {"kind": "csv", "path": str(output_path)}
+        ], {
+            "operation": "export",
+            "command": target,
+            "output_path": str(output_path),
+            "bytes_written": None,
+        }
     if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
         commands = _serial_protocol_commands(args, capabilities)
         result = {
@@ -9036,6 +9172,13 @@ def _serial_protocol_commands(
 
 
 def _cmd_serial(args: argparse.Namespace) -> int:
+    if args.command in {
+        "serial-lister-query",
+        "serial-lister-display",
+        "serial-lister-reference",
+        "serial-lister-export",
+    }:
+        return _cmd_serial_lister(args)
     resource = _require_resource(args)
     if resource is None:
         return 2
@@ -9125,6 +9268,89 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 "Hint: Check whether the other bus already uses the requested "
                 "analog channels or protocol resources."
             )
+        return 1 if entry.is_error else 0
+
+
+def _cmd_serial_lister(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        print(f"Series: {idn.series or 'unknown'}")
+        if scope.capabilities is None:
+            print("Capabilities: unavailable for this model")
+            return 1
+
+        if args.command == "serial-lister-query":
+            commands = list(serial_lister_query_commands().values())
+            state = scope.query_serial_lister()
+            _json_update_result(
+                operation="query",
+                commands=commands,
+                **state.to_json(),
+            )
+            print(f"Lister display: {state.display}")
+            print(f"Lister reference: {state.reference}")
+            for command in commands:
+                print(f"Command: {command}")
+        elif args.command == "serial-lister-display":
+            if args.query:
+                command = serial_lister_display_query()
+                state = scope.query_serial_lister_display()
+                operation = "query"
+            else:
+                command = serial_lister_display_command(args.selection)
+                state = scope.configure_serial_lister_display(args.selection)
+                operation = "configure"
+            _json_update_result(
+                operation=operation,
+                command=command,
+                **state.to_json(),
+                **({"state_changing": True} if not args.query else {}),
+            )
+            print(f"Lister display: {state.display}")
+            print(f"Command: {command}")
+        elif args.command == "serial-lister-reference":
+            if args.query:
+                command = serial_lister_reference_query()
+                state = scope.query_serial_lister_reference()
+                operation = "query"
+            else:
+                command = serial_lister_reference_command(args.reference)
+                state = scope.configure_serial_lister_reference(args.reference)
+                operation = "configure"
+            _json_update_result(
+                operation=operation,
+                command=command,
+                **state.to_json(),
+                **({"state_changing": True} if not args.query else {}),
+            )
+            print(f"Lister reference: {state.reference}")
+            print(f"Command: {command}")
+        else:
+            command = serial_lister_data_query()
+            payload = scope.query_serial_lister_data()
+            output_path = Path(args.output_path)
+            written_path = write_serial_lister_csv(payload, output_path)
+            _json_update_result(
+                operation="export",
+                command=command,
+                output_path=str(written_path),
+                bytes_written=len(payload),
+            )
+            _json_set_files([{"kind": "csv", "path": str(written_path)}])
+            print(f"Command: {command}")
+            print(f"Lister CSV: {written_path} ({len(payload)} bytes)")
+
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
 

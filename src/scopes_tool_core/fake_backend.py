@@ -26,6 +26,7 @@ class FakeBackend:
     )
     raw_response: bytes = b""
     binary_responses: MutableMapping[str, Sequence[Any]] = field(default_factory=dict)
+    binary_byte_responses: MutableMapping[str, bytes] = field(default_factory=dict)
     binary_query_kwargs: list[dict[str, Any]] = field(default_factory=list)
     history: list[str] = field(default_factory=list)
     resource_name: str = "FAKE::SCOPE"
@@ -67,6 +68,18 @@ class FakeBackend:
         except KeyError as exc:
             raise FakeBackendError(
                 f"No fake binary response configured for query: {command}"
+            ) from exc
+
+    def query_binary_bytes(self, command: str) -> bytes:
+        """Record a raw binary query and return configured bytes."""
+
+        self._ensure_open()
+        self.history.append(command)
+        try:
+            return self.binary_byte_responses[command]
+        except KeyError as exc:
+            raise FakeBackendError(
+                f"No fake raw binary response configured for query: {command}"
             ) from exc
 
     def set_timeout(self, timeout_ms: int | None) -> None:

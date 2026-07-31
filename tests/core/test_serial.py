@@ -15,6 +15,12 @@ from scopes_tool_core.serial import (
     serial_bus_query,
     serial_display_command,
     serial_display_query,
+    serial_lister_data_query,
+    serial_lister_display_command,
+    serial_lister_display_query,
+    serial_lister_query_commands,
+    serial_lister_reference_command,
+    serial_lister_reference_query,
     serial_mode_command,
     serial_mode_query,
     validate_serial_bus,
@@ -240,6 +246,93 @@ def test_serial_spi_timeout_framing_without_clock_timeout_is_allowed():
         ":SBUS2:MODE SPI",
         ":SBUS2:SPI:FRAMing TIMeout",
     ]
+
+
+def test_serial_lister_aggregate_query_preserves_state_and_order():
+    backend = FakeBackend(
+        responses={
+            ":LISTer:DISPlay?": "OFF",
+            ":LISTer:REFerence?": "TRIGger",
+        }
+    )
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    state = controller.query_lister()
+
+    assert state.to_json() == {
+        "display": "off",
+        "reference": "trigger",
+        "raw_display": "OFF",
+        "raw_reference": "TRIGger",
+    }
+    assert backend.history == list(serial_lister_query_commands().values())
+    assert serial_lister_data_query() not in backend.history
+
+
+def test_serial_lister_display_and_reference_round_trip_commands():
+    backend = FakeBackend(
+        responses={
+            ":LISTer:DISPlay?": "SBUS1",
+            ":LISTer:REFerence?": "PREVious",
+        }
+    )
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX4034A")
+    )
+
+    assert controller.configure_lister_display("bus1").display == "bus1"
+    assert controller.query_lister_display().to_json() == {
+        "display": "bus1",
+        "raw_display": "SBUS1",
+    }
+    assert controller.configure_lister_reference("previous").reference == "previous"
+    assert controller.query_lister_reference().to_json() == {
+        "reference": "previous",
+        "raw_reference": "PREVious",
+    }
+    assert backend.history == [
+        serial_lister_display_command("bus1"),
+        serial_lister_display_query(),
+        serial_lister_reference_command("previous"),
+        serial_lister_reference_query(),
+    ]
+
+
+def test_serial_lister_export_preserves_exact_binary_payload():
+    payload = b"header, value\r\nrow, 1\r\n"
+    length = str(len(payload)).encode("ascii")
+    raw_block = b"#" + str(len(length)).encode("ascii") + length + payload + b"\n"
+    backend = FakeBackend(binary_byte_responses={serial_lister_data_query(): raw_block})
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX4034A")
+    )
+
+    assert controller.query_lister_data() == payload
+    assert backend.history == [serial_lister_data_query()]
+
+
+@pytest.mark.parametrize("raw", [b"#210abc\n", b"#10\r\nX"])
+def test_serial_lister_malformed_binary_block_uses_serial_response_error(raw):
+    backend = FakeBackend(binary_byte_responses={serial_lister_data_query(): raw})
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX4034A")
+    )
+
+    with pytest.raises(SerialResponseError, match="Lister binary block"):
+        controller.query_lister_data()
+
+
+def test_serial_lister_2000x_rejects_bus2_before_scpi():
+    backend = FakeBackend()
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    with pytest.raises(ParameterValidationError, match="Lister display bus2"):
+        controller.configure_lister_display("bus2")
+    assert backend.history == []
 
 
 def test_serial_can_configure_order_and_scpi_mapping():

@@ -124,6 +124,10 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "serial-i2c",
     "serial-spi",
     "serial-can",
+    "serial-lister-query",
+    "serial-lister-display",
+    "serial-lister-reference",
+    "serial-lister-export",
     "search-state",
     "search-mode",
     "search-count",
@@ -1643,8 +1647,77 @@ def _normalize_serial_worker_arguments(
         "serial-i2c",
         "serial-spi",
         "serial-can",
+        "serial-lister-query",
+        "serial-lister-display",
+        "serial-lister-reference",
+        "serial-lister-export",
     }:
         return arguments
+
+    if command == "serial-lister-query":
+        if arguments:
+            raise OscilloscopeError("serial-lister-query accepts only an empty object")
+        return {}
+    if command == "serial-lister-display":
+        allowed = {"query", "selection"}
+        unknown = set(arguments) - allowed
+        if unknown:
+            raise OscilloscopeError(
+                f"unknown argument for {command}: {sorted(unknown)[0]}"
+            )
+        if arguments.get("query") is True:
+            if set(arguments) != {"query"}:
+                raise OscilloscopeError(
+                    f"{command} query cannot be combined with configure arguments"
+                )
+            return {"query": True}
+        if "query" in arguments:
+            raise OscilloscopeError(f"{command} argument query must be exactly true")
+        if set(arguments) != {"selection"} or not isinstance(
+            arguments["selection"], str
+        ):
+            raise OscilloscopeError(
+                f"{command} configure requires exactly selection"
+            )
+        if arguments["selection"] not in {"off", "bus1", "bus2", "all"}:
+            raise OscilloscopeError(
+                f"{command} argument selection must be one of: off, bus1, bus2, all"
+            )
+        return dict(arguments)
+    if command == "serial-lister-reference":
+        allowed = {"query", "reference"}
+        unknown = set(arguments) - allowed
+        if unknown:
+            raise OscilloscopeError(
+                f"unknown argument for {command}: {sorted(unknown)[0]}"
+            )
+        if arguments.get("query") is True:
+            if set(arguments) != {"query"}:
+                raise OscilloscopeError(
+                    f"{command} query cannot be combined with configure arguments"
+                )
+            return {"query": True}
+        if "query" in arguments:
+            raise OscilloscopeError(f"{command} argument query must be exactly true")
+        if set(arguments) != {"reference"} or not isinstance(
+            arguments["reference"], str
+        ):
+            raise OscilloscopeError(
+                f"{command} configure requires exactly reference"
+            )
+        if arguments["reference"] not in {"trigger", "previous"}:
+            raise OscilloscopeError(
+                f"{command} argument reference must be one of: trigger, previous"
+            )
+        return dict(arguments)
+    if command == "serial-lister-export":
+        if set(arguments) != {"output"} or not isinstance(arguments["output"], str):
+            raise OscilloscopeError(
+                "serial-lister-export requires exactly a string output"
+            )
+        if not arguments["output"]:
+            raise OscilloscopeError("serial-lister-export output must not be empty")
+        return dict(arguments)
 
     if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
         fields_by_command = {
@@ -2478,6 +2551,9 @@ def _apply_worker_job_paths(args: argparse.Namespace, job_dir: Path) -> None:
     elif command in {"capture-batch", "measure-log", "smoke", "acquisition-check"}:
         output_dir = _worker_path(job_dir, getattr(args, "output_dir", None), ".")
         setattr(args, "output_dir", str(output_dir))
+    elif command == "serial-lister-export":
+        output_path = _worker_path(job_dir, args.output_path, None)
+        setattr(args, "output_path", str(output_path))
 
 
 def _worker_path(job_dir: Path, value: Any, default_name: str | None) -> Path:
@@ -2530,6 +2606,8 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
     if command == "acquisition-check":
         output_dir = Path(args.output_dir)
         return [output_dir / "report.json", output_dir / "scpi.log"]
+    if command == "serial-lister-export":
+        return [Path(args.output_path)]
     return []
 
 

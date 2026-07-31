@@ -30,6 +30,9 @@ class SCPIBackend(Protocol):
     def query_binary_values(self, command: str, **kwargs: Any) -> Sequence[Any]:
         """Send a binary query and return decoded values."""
 
+    def query_binary_bytes(self, command: str) -> bytes:
+        """Send a binary query and return the raw response bytes."""
+
     def close(self) -> None:
         """Close the backend session."""
 
@@ -77,6 +80,15 @@ class SCPIClient:
         values = self.backend.query_binary_values(command, **kwargs)
         self.logger.debug("SCPI << %d binary values", len(values))
         return values
+
+    def query_binary_bytes(self, command: str) -> bytes:
+        """Query binary bytes without decoding or modifying the response."""
+
+        command = _normalize_command(command)
+        self.logger.debug("SCPI >> %s", command)
+        payload = self.backend.query_binary_bytes(command)
+        self.logger.debug("SCPI << %d binary bytes", len(payload))
+        return payload
 
     @property
     def timeout(self) -> int | None:

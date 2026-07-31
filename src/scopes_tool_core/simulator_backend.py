@@ -181,6 +181,10 @@ class SimulatorBackend:
     serial_modes: dict[int, str] = field(default_factory=dict)
     serial_display: dict[int, bool] = field(default_factory=dict)
     serial_protocol_settings: dict[int, dict[str, str]] = field(default_factory=dict)
+    lister_display: str = "OFF"
+    lister_reference: str = "TRIGger"
+    lister_data: bytes = b"bus,time,value\r\nSBUS1,0,0\r\n"
+    binary_byte_overrides: dict[str, bytes] = field(default_factory=dict)
     search_enabled: bool = False
     search_mode: str = "SERial1"
     search_count: int = 0
@@ -312,6 +316,8 @@ class SimulatorBackend:
             bus: self.serial_display.get(bus, False)
             for bus in range(1, self._capabilities.serial_bus_count + 1)
         }
+        self.lister_display = _canonical_lister_display(self.lister_display)
+        self.lister_reference = _canonical_lister_reference(self.lister_reference)
         defaults = {
             "uart_rx_source": "CHANnel1",
             "uart_tx_source": "CHANnel1",
@@ -532,6 +538,15 @@ class SimulatorBackend:
         ):
             bus = self._validate_serial_bus(int(match.group(1)))
             self.serial_display[bus] = _parse_scpi_bool_write(command)
+        elif match := re.fullmatch(r":LISTer:DISPlay (.+)", command, re.IGNORECASE):
+            value = _canonical_lister_display(match.group(1))
+            if value == "SBUS2" and self._capabilities.serial_bus_count < 2:
+                raise SimulatorBackendError(
+                    f"Simulator model {self.model} does not support Lister bus2 display."
+                )
+            self.lister_display = value
+        elif match := re.fullmatch(r":LISTer:REFerence (.+)", command, re.IGNORECASE):
+            self.lister_reference = _canonical_lister_reference(match.group(1))
         elif self._apply_serial_protocol_write(command):
             pass
         elif upper.startswith(":SEARCH:STATE "):
@@ -1029,6 +1044,10 @@ class SimulatorBackend:
             if self.system_errors:
                 return self.system_errors.pop(0)
             return '+0,"No error"'
+        if upper == ":LISTER:DISPLAY?":
+            return self.lister_display
+        if upper == ":LISTER:REFERENCE?":
+            return self.lister_reference
         if upper == ":WAVEFORM:PREAMBLE?":
             return self._waveform_preamble()
         if upper == ":HARDCOPY:INKSAVER?":
@@ -1376,6 +1395,20 @@ class SimulatorBackend:
             self._encode_byte_sample(self._waveform_voltage_at_index(index))
             for index in range(self.waveform_points)
         )
+
+    def query_binary_bytes(self, command: str) -> bytes:
+        """Record a raw binary query and return a deterministic block."""
+
+        self._ensure_open()
+        self.history.append(command)
+        self._raise_configured_failure(self.binary_failures, command)
+        if command in self.binary_byte_overrides:
+            return self.binary_byte_overrides[command]
+        if command.upper() == ":LISTER:DATA?":
+            payload = self.lister_data
+            length = str(len(payload)).encode("ascii")
+            return b"#" + str(len(length)).encode("ascii") + length + payload + b"\n"
+        return self._handle_unknown("binary query", command)
 
     def set_timeout(self, timeout_ms: int | None) -> None:
         """Set simulated timeout."""
@@ -2592,6 +2625,40 @@ def _serial_protocol_query_value(key: str, value: str) -> str:
     if key == "spi_framing":
         return {"CHIPselect": "CHIP", "NCHipselect": "NCH", "TIMeout": "TIM"}.get(value, value)
     return value
+
+
+def _canonical_lister_display(raw: str) -> str:
+    values = {
+        "OFF": "OFF",
+        "0": "OFF",
+        "SBUS1": "SBUS1",
+        "ON": "SBUS1",
+        "1": "SBUS1",
+        "SBUS2": "SBUS2",
+        "2": "SBUS2",
+        "ALL": "ALL",
+    }
+    try:
+        return values[raw.strip().upper()]
+    except KeyError as exc:
+        raise SimulatorBackendError(
+            f"Unsupported simulator Lister display: {raw!r}"
+        ) from exc
+
+
+def _canonical_lister_reference(raw: str) -> str:
+    values = {
+        "TRIGGER": "TRIGger",
+        "TRIG": "TRIGger",
+        "PREVIOUS": "PREVious",
+        "PREV": "PREVious",
+    }
+    try:
+        return values[raw.strip().upper()]
+    except KeyError as exc:
+        raise SimulatorBackendError(
+            f"Unsupported simulator Lister reference: {raw!r}"
+        ) from exc
 
 
 def _parse_scpi_bool_write(command: str) -> bool:

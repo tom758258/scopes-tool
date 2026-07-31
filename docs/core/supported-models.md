@@ -180,8 +180,12 @@ disabled. Serial decode capability represents command-family availability, not
 the presence of an instrument license.
 
 Serial Basic P0 keeps aggregate responses raw. Serial Basic P1 implements only
-basic UART, I2C, SPI, and CAN source/decode settings; it does not implement
-serial trigger, Search, Lister, export, or advanced protocol parameters.
+basic UART, I2C, SPI, and CAN source/decode settings. Serial Lister P2 adds
+global display/reference controls and host-side raw CSV export through
+`:LISTer:DATA?`; it does not implement serial trigger, Search, protocol-specific
+CSV parsing, or instrument-side `:SAVE:LISTer`. Lister display selection `bus2`
+is unavailable on 2000X and available on 3000X/4000X; `all` remains valid on
+2000X.
 
 These common pack entries describe runtime capability support. They do not
 imply live hardware validation on every supported model, firmware, or USB/LAN
@@ -189,8 +193,7 @@ transport.
 
 Save/Export Pack v1 has hardware-free Core, simulator, CLI, and worker
 coverage only. It does not claim live validation and does not include results,
-lister, mask, multi, power, arbitrary, compliance, segmented, setup, or
-WMEMory export.
+mask, multi, power, arbitrary, compliance, segmented, setup, or WMEMory export.
 
 ## Live Validation Summary
 

@@ -253,6 +253,19 @@ Control and setup:
   fields when the current mode does not match. Sources are `channelN` or
   `external`; I2C is represented by the instrument `IIC` token, and CAN uses
   `difl` as the canonical differential signal value.
+- `serial-lister-query`: `operation: "query"`, ordered `commands`, canonical
+  `display` and `reference`, and preserved `raw_display` and `raw_reference`.
+  The aggregate query does not request `:LISTer:DATA?`.
+- `serial-lister-display`: `operation`, `command`, canonical `display`, and
+  nullable `raw_display`. Configure results include `state_changing: true`.
+- `serial-lister-reference`: `operation`, `command`, canonical `reference`,
+  and nullable `raw_reference`. Configure results include
+  `state_changing: true`.
+- `serial-lister-export`: `operation: "export"`, `command: ":LISTer:DATA?"`,
+  `output_path`, and `bytes_written`. The host CSV is listed in the existing
+  top-level `files` artifact list; CSV bytes are not embedded in JSON. Dry-run
+  results do not claim transferred bytes and use the existing null/omitted
+  dry-run convention.
 - `search-state`: `operation` and `command`. Configure results include boolean
   `enabled`, `raw_state: null`, and `state_changing: true`. Query results
   include normalized boolean `enabled` and preserve `raw_state`.

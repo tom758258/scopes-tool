@@ -153,6 +153,19 @@ def write_json_file_best_effort(payload: dict[str, object], path: Path) -> None:
         pass
 
 
+def write_serial_lister_csv(payload: bytes, path: Path) -> Path:
+    """Write an instrument Lister CSV payload without parsing or rewriting it."""
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        return path
+    except OSError as exc:
+        raise OscilloscopeError(
+            _format_plain_output_file_error("Serial Lister CSV", path, exc)
+        ) from exc
+
+
 def _format_output_file_error(file_kind: str, path: Path, exc: OSError) -> str:
     reason = exc.strerror or str(exc)
     if file_kind.startswith("screenshot"):

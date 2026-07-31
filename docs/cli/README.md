@@ -1599,8 +1599,8 @@ configure options. Sources are `channelN` (bounded by the selected model's
 analog channels) or `external`; I2C emits `IIC`; CAN uses canonical signal
 values `canh`, `canl`, `rx`, `tx`, `difl`, and `difh`. Query operations read
 `MODE?` first and preserve raw protocol readbacks. Availability is controlled
-by capability profiles and instrument licensing. Serial trigger, Search,
-Lister, export, and advanced protocol parameters are outside this P1 surface.
+by capability profiles and instrument licensing. Serial trigger, Search, and
+advanced protocol parameters are outside this P1 surface.
 
 For SPI, `chip-select`, `no-chip-select`, and `timeout` are the canonical
 framing choices. Chip-select and no-chip-select framing must not be combined
@@ -1625,6 +1625,32 @@ scopes-tool serial-spi `
 Source availability may depend on the other configured Serial bus. If the
 instrument reports a settings conflict, query both buses before changing
 resources:
+
+```powershell
+scopes-tool serial-query --bus 1 --json
+scopes-tool serial-query --bus 2 --json
+```
+
+Serial Lister P2 provides global display/reference queries and a host-side CSV
+export. It does not enable Serial decode, enable an SBUS display, acquire new
+traffic, or parse CSV rows. Serial decode must already be configured and the
+instrument must contain decoded Lister data. `serial-lister-export` queries
+`:LISTer:DATA?` and writes the payload to the host; it is not the instrument-side
+`:SAVE:LISTer` operation. The canonical display selections are `off`, `bus1`,
+`bus2`, and `all`. DSO-X 2000X does not support selecting `bus2`; DSO-X 3000X
+and 4000X support it.
+
+```powershell
+scopes-tool serial-lister-query --simulate --json
+scopes-tool serial-lister-display --selection bus1 --simulate --json
+scopes-tool serial-lister-display --query --simulate --json
+scopes-tool serial-lister-reference --reference previous --simulate --json
+scopes-tool serial-lister-export --output data\lister.csv --simulate --json
+```
+
+The export preserves the CSV payload bytes and line endings without
+protocol-specific parsing. Query both Serial buses when diagnosing a source or
+resource conflict:
 
 ```powershell
 scopes-tool serial-query --bus 1 --json

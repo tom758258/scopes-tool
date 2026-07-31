@@ -142,7 +142,8 @@ Worker `/command` supports the existing Scopes capability surface:
 - `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
   `wgen-voltage`, `wgen-offset`, `wgen-load`
 - `serial-query`, `serial-mode`, `serial-display`, `serial-uart`, `serial-i2c`,
-  `serial-spi`, `serial-can`
+  `serial-spi`, `serial-can`, `serial-lister-query`, `serial-lister-display`,
+  `serial-lister-reference`, `serial-lister-export`
 - `search-state`, `search-mode`, `search-count`, `search-event`
 - `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
   `save-image-ink-saver`, `save-image-factors`, `save-image`,
@@ -1738,6 +1739,43 @@ startup model before enqueue, artifact creation, backend open, or SCPI. P1
 does not configure serial trigger, Search, Lister, export, or advanced protocol
 parameters; instrument license errors remain normal instrument errors.
 
+### Serial Lister P2 Commands
+
+The worker accepts these exact Lister request shapes:
+
+```json
+{"command": "serial-lister-query", "arguments": {}}
+```
+
+```json
+{"command": "serial-lister-display", "arguments": {"query": true}}
+```
+
+```json
+{"command": "serial-lister-display", "arguments": {"selection": "bus1"}}
+```
+
+```json
+{"command": "serial-lister-reference", "arguments": {"query": true}}
+```
+
+```json
+{"command": "serial-lister-reference", "arguments": {"reference": "previous"}}
+```
+
+```json
+{"command": "serial-lister-export", "arguments": {"output": "lister.csv"}}
+```
+
+Display selections are canonical `off`, `bus1`, `bus2`, and `all`; references
+are canonical `trigger` and `previous`. Query/configure mixes, unknown fields,
+wrong types, and unsupported 2000X `bus2` selection fail before enqueue,
+artifact creation, backend open, or SCPI. Lister query sends only the display
+and reference queries. Lister export sends `:LISTer:DATA?`, writes the raw CSV
+payload as a host artifact, and does not use instrument-side `:SAVE:LISTer` or
+parse protocol rows. Serial decode and decoded Lister data must already exist;
+the worker does not acquire traffic or enable Serial/SBUS displays.
+
 ### Search Basic Pack v1 Commands
 
 The worker accepts only these canonical argument shapes:
@@ -1993,9 +2031,12 @@ The `measure-clear`, `measure-show`, `measure-source`, `measure-window`,
 `demo-phase`, `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
 `wgen-voltage`, `wgen-offset`, `wgen-load`, `serial-query`, `serial-mode`,
 `serial-display`, `serial-uart`, `serial-i2c`, `serial-spi`, `serial-can`,
+`serial-lister-query`, `serial-lister-display`, `serial-lister-reference`,
 `search-state`, `search-mode`, `search-count`, and
 `search-event`
 commands also do not create command artifacts.
+`serial-lister-export` creates one CSV command artifact at the requested output
+path and otherwise uses the standard worker `request.json` and `result.json`.
 The `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
 `save-image-ink-saver`, `save-image-factors`, `save-image`,
 `save-waveform-format`, `save-waveform-length`,
