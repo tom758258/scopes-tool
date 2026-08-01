@@ -1,19 +1,21 @@
 # Scopes Worker Contract
 
-Schema version: `2`
+Common schema version: `2`
 
 Compatibility policy: `v2-only`
 
-Implementation status: `migration-target`
+Implementation status: `Common v2-only conformant`
 
 This is the Scopes worker contract only. It follows
 [Common Worker Protocol](common-worker-protocol.md) for lifecycle concepts and
 defines the Scopes-specific command model, queue behavior, and artifacts.
 
-This document is the future runtime migration target for Scopes. The current
-implementation does not claim Common v2 conformance. Until runtime migration
-is complete, Agents must not send Common v2 requests to the current
-implementation.
+The current Scopes Worker implementation enforces Common schema 2. `/command`
+requests are v2-only: missing schema versions, schema 1, and non-integer schema
+values are rejected. Worker HTTP responses, status responses, JSONL events,
+`request.json`, and `result.json` use schema 2. Scopes execution context remains
+startup-bound; top-level `/command` `context` is forbidden, and the Worker does
+not provide v1 fallback or version negotiation.
 
 ## Cross-Instrument Compatibility
 

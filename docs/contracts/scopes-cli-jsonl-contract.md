@@ -1,10 +1,10 @@
 # Scopes CLI JSON / JSONL Contract
 
-Schema version: `2`
+Common schema version: `2`
 
 Compatibility policy: `v2-only`
 
-Implementation status: `migration-target`
+Implementation status: `Common v2-only conformant`
 
 This document defines Scopes-specific CLI JSON and JSONL payloads. Shared
 envelope rules are defined in
@@ -12,9 +12,11 @@ envelope rules are defined in
 behavior and artifacts are defined in
 [Scopes Worker Contract](scopes-worker-contract.md).
 
-This document is the future runtime migration target for Scopes. The current
-implementation does not claim Common v2 conformance; runtime, client, output,
-and test migration remains a later Part.
+The current Scopes Worker JSONL events, lifecycle client machine JSON, and
+general one-shot CLI machine JSON use Common schema 2. Lifecycle clients reject
+non-v2 Worker responses, and Common-governed boundaries require exact integer
+`schema_version: 2` without v1 fallback or version negotiation. Independently
+versioned domain artifacts retain their existing schemas.
 
 Common fields such as `event`, `schema_version`, `timestamp_utc`, `run_id`,
 `ok`, `message`, `fatal_error`, and `exit_code` keep their Common meanings

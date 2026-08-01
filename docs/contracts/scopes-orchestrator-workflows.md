@@ -1,5 +1,11 @@
 # Scopes Orchestrator Workflows
 
+Common schema version: `2`
+
+Compatibility policy: `v2-only`
+
+Implementation status: `Common v2-only conformant`
+
 This document gives Scopes-specific workflows for agents that drive the
 Keysight oscilloscope CLI and worker. Shared lifecycle ordering is defined in
 [Common Orchestrator Workflows](common-orchestrator-workflows.md). Shared event
@@ -7,11 +13,11 @@ envelope rules are defined in
 [Common CLI JSON / JSONL Contract](common-cli-jsonl-contract.md). Worker
 behavior is defined in [Scopes Worker Contract](scopes-worker-contract.md).
 
-## Common v2 Migration Gate
+## Common v2 Compatibility
 
-Before using this workflow, confirm that the installed version implements
-Common v2. If migration is incomplete, report `Common v2 migration required`
-and stop. Do not send schema 1 and do not use a fallback.
+The current Scopes implementation supports Common schema 2 only. Send exact
+integer `schema_version: 2`; do not send schema 1, use fallback, or perform
+version negotiation. Malformed or non-v2 runtime boundaries fail closed.
 
 ## Worker Workflow
 
