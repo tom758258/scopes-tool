@@ -556,6 +556,7 @@ _CONTROL_COMMANDS = {
 _CAPTURE_DEFAULT_TIMEZONE = timezone(timedelta(hours=8), name="UTC+8")
 AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS = 15000
 WORKER_IDN_TIMEOUT_MS = 2000
+CLI_SCHEMA_VERSION = 2
 _DRIVER_OPTIONAL_LIVE_COMMANDS = {"identify"}
 _JSON_RECORD: dict[str, object] | None = None
 _SERIAL_SOURCE_HELP = (
@@ -590,6 +591,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if getattr(args, "client_json", False):
                 _write_json(
                     {
+                        "schema_version": CLI_SCHEMA_VERSION,
+                        "timestamp_utc": _utc_timestamp(),
                         "ok": False,
                         "status": "error",
                         "error": {"type": type(exc).__name__, "message": str(exc)},
@@ -5232,7 +5235,7 @@ def _json_envelope(args: argparse.Namespace, *, ok: bool, mode: str) -> dict[str
             idn = None
             capabilities = None
     return {
-        "schema_version": 1,
+        "schema_version": CLI_SCHEMA_VERSION,
         "timestamp_utc": _utc_timestamp(),
         "ok": ok,
         "command": args.command,

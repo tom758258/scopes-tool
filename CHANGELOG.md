@@ -2,13 +2,15 @@
 
 ## Unreleased
 
-- Migrates the Scopes Worker runtime and lifecycle clients to Common v2;
-  general CLI machine JSON remains for Part 3.
+- Migrates the Scopes Worker runtime, lifecycle clients, and general one-shot
+  CLI machine JSON to Common v2.
+- Keeps independently versioned domain artifacts on their existing schemas;
+  final validation, conformance status, and Skill updates remain for later Parts.
 - Marks the three Scopes-specific contracts as Common v2-only migration targets.
 - Retains the existing queued-job lifecycle, startup-bound context, commands,
   artifacts, and hardware behavior.
-- Defers runtime, clients, outputs, and tests; this documentation does not
-  claim Common v2 implementation conformance.
+- Defers final validation, conformance status, and Skill updates; these
+  changes do not claim full Common v2 implementation conformance.
 - Replaces the three copied Common v1 contract documents with the shared
   v2-only Worker Protocol, CLI JSON/JSONL Contract, and Orchestrator Workflows.
 - Documents the future Common v2 requirements for strict

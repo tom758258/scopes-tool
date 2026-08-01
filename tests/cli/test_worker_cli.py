@@ -1087,6 +1087,8 @@ def test_worker_label_and_annotation_dry_run_plans_scpi_without_opening_backend(
     assert parsed.command == command
     assert parsed.simulate is True
     assert parsed.json_output is True
+    assert payload["schema_version"] == cli.CLI_SCHEMA_VERSION
+    assert "timestamp_utc" in payload
     assert payload["scpi"]["planned"] == expected_scpi
 
 
@@ -1375,11 +1377,30 @@ def test_stop_is_lifecycle_command_and_stop_acquisition_is_domain(capsys):
     assert cli.main(["stop-acquisition", "--simulate", "--json"]) == 0
 
 
+def test_lifecycle_fallback_error_uses_cli_schema(monkeypatch, capsys):
+    def fail_dispatch(_args):
+        raise OscilloscopeError("lifecycle dispatch failed")
+
+    monkeypatch.setattr(worker, "dispatch_lifecycle_command", fail_dispatch)
+
+    assert cli.main(["stop", "--port", "9", "--json"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["schema_version"] == cli.CLI_SCHEMA_VERSION
+    assert "timestamp_utc" in payload
+    assert payload["ok"] is False
+    assert payload["status"] == "error"
+    assert payload["error"] == {
+        "type": "OscilloscopeError",
+        "message": "lifecycle dispatch failed",
+    }
+
+
 def test_direct_json_envelope_has_schema_and_timestamp(capsys):
     assert cli.main(["identify", "--simulate", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
 
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == cli.CLI_SCHEMA_VERSION
     assert "timestamp_utc" in payload
     assert payload["ok"] is True
 
@@ -2107,6 +2128,8 @@ def test_live_worker_identity_mismatch_fails_before_domain_scpi(monkeypatch, tmp
     payload, exit_code = cli._execute_json_command(parsed)
 
     assert exit_code == 3
+    assert payload["schema_version"] == cli.CLI_SCHEMA_VERSION
+    assert "timestamp_utc" in payload
     assert payload["ok"] is False
     assert payload["error"]["type"] == "identity_mismatch"
     assert payload["error"]["expected_model"] == "keysight-dsox4024a"

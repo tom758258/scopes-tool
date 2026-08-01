@@ -75,4 +75,4 @@ python -m scopes_tool_cli.cli
 
 CLI JSON behavior is documented by the root Scopes contract:
 `docs/contracts/scopes-cli-jsonl-contract.md`. One-shot and lifecycle JSON
-payloads include `schema_version: 1` and `timestamp_utc`.
+payloads include `schema_version: 2` and `timestamp_utc`.

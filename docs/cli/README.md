@@ -34,7 +34,7 @@ The module form remains supported as a development or fallback entry point:
 
 Commands that accept instrument access support dry-run, simulate, and live
 modes. Agents and automation should use dry-run and simulate before requesting
-real hardware access. JSON payloads include `schema_version: 1` and
+real hardware access. JSON payloads include `schema_version: 2` and
 `timestamp_utc`.
 
 Shared machine contracts remain at root:
@@ -236,7 +236,7 @@ Commands that accept instrument connections also accept `--json`, `--simulate`,
 inspect planned SCPI without opening VISA or writing files; add `--json` when
 automation needs the machine-readable payload. Use `--simulate --json` to run
 against the deterministic hardware-free simulator; capture workflows write fake
-output files for offline validation. JSON payloads include `schema_version: 1`
+output files for offline validation. JSON payloads include `schema_version: 2`
 and `timestamp_utc`.
 
 Simulator commands also accept presets, JSON scenarios, repeated signal
