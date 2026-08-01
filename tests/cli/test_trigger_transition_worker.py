@@ -151,7 +151,13 @@ def test_worker_trigger_transition_rejects_invalid_arguments(tmp_path, arguments
 @pytest.mark.parametrize("command", ["transition-trigger", "trigger-rise-fall"])
 def test_worker_rejects_trigger_transition_aliases(command):
     with pytest.raises(OscilloscopeError):
-        worker.validate_command_request({"command": command, "arguments": {"query": True}})
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": command,
+                "arguments": {"query": True},
+            }
+        )
 
 
 def test_worker_trigger_transition_simulator_execution_sends_expected_scpi(tmp_path):

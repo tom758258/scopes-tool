@@ -34,7 +34,11 @@ def _runtime(tmp_path):
 def test_worker_accepts_canonical_system_status_payloads(tmp_path, command, arguments):
     assert command in worker.DOMAIN_COMMANDS
     accepted = worker.validate_command_request(
-        {"command": command, "arguments": arguments}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": command,
+            "arguments": arguments,
+        }
     )
     parsed = worker.parse_domain_command(accepted[0], accepted[1], _runtime(tmp_path))
 
@@ -85,7 +89,11 @@ def test_worker_clear_status_rejects_nonempty_arguments_before_side_effects(
 def test_worker_request_rejects_non_object_system_arguments(arguments):
     with pytest.raises(OscilloscopeError, match="arguments must be a JSON object"):
         worker.validate_command_request(
-            {"command": "system-opc", "arguments": arguments}
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "system-opc",
+                "arguments": arguments,
+            }
         )
 
 
@@ -96,7 +104,11 @@ def test_worker_request_rejects_non_object_system_arguments(arguments):
 def test_worker_rejects_system_status_aliases(alias):
     with pytest.raises(OscilloscopeError, match="unknown command"):
         worker.validate_command_request(
-            {"command": alias, "arguments": {"query": True}}
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": alias,
+                "arguments": {"query": True},
+            }
         )
 
 

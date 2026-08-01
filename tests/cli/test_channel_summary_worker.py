@@ -16,7 +16,11 @@ def _runtime(tmp_path):
 
 def test_channel_summary_worker_reuses_query_only_cli_path(tmp_path):
     accepted = worker.validate_command_request(
-        {"command": "channel-summary", "arguments": {}}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "channel-summary",
+            "arguments": {},
+        }
     )
 
     assert accepted[:2] == ("channel-summary", {})

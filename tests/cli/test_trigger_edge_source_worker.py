@@ -39,6 +39,7 @@ def _worker_server(runtime):
 
 
 def _post_command(runtime, body):
+    body = {**body, "schema_version": worker.WORKER_SCHEMA_VERSION}
     request = urlrequest.Request(
         f"http://127.0.0.1:{runtime.port}/command",
         data=json.dumps(body).encode("utf-8"),
@@ -64,7 +65,11 @@ def _post_command(runtime, body):
 def test_worker_trigger_edge_source_accepts_canonical_json_and_maps_argv(tmp_path, arguments, expected):
     runtime = _runtime(tmp_path)
     command, accepted, job_id = worker.validate_command_request(
-        {"command": "trigger-edge-source", "arguments": arguments}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "trigger-edge-source",
+            "arguments": arguments,
+        }
     )
     parsed = worker.parse_domain_command(command, accepted, runtime)
 

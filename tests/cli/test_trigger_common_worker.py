@@ -39,6 +39,7 @@ def _worker_server(runtime):
 
 
 def _post_command(runtime, body):
+    body = {**body, "schema_version": worker.WORKER_SCHEMA_VERSION}
     request = urlrequest.Request(
         f"http://127.0.0.1:{runtime.port}/command",
         data=json.dumps(body).encode("utf-8"),
@@ -68,7 +69,11 @@ def _post_command(runtime, body):
 )
 def test_worker_trigger_common_commands_are_accepted(command, arguments):
     parsed_command, parsed_arguments, job_id = worker.validate_command_request(
-        {"command": command, "arguments": arguments}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": command,
+            "arguments": arguments,
+        }
     )
 
     assert parsed_command == command

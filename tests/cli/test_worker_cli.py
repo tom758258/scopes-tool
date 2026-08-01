@@ -134,7 +134,9 @@ def _worker_server(runtime):
         thread.join(timeout=2)
 
 
-def _post_command(runtime, body, *, raw=False):
+def _post_command(runtime, body, *, raw=False, add_schema=True):
+    if not raw and add_schema and isinstance(body, dict):
+        body = {**body, "schema_version": worker.WORKER_SCHEMA_VERSION}
     data = body if raw else json.dumps(body).encode("utf-8")
     req = urlrequest.Request(
         f"http://127.0.0.1:{runtime.port}/command",
@@ -260,13 +262,54 @@ def _run_fake_worker_lifecycle(script, *, ready_timeout=1):
 def test_worker_request_rejects_unknown_top_level_field():
     with pytest.raises(OscilloscopeError, match="unknown request field"):
         worker.validate_command_request(
-            {"command": "identify", "arguments": {}, "extra": True}
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "identify",
+                "arguments": {},
+                "extra": True,
+            }
         )
 
 
 def test_worker_request_rejects_unknown_command():
     with pytest.raises(OscilloscopeError, match="unknown command"):
-        worker.validate_command_request({"command": "list-resources", "arguments": {}})
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "list-resources",
+                "arguments": {},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "body",
+    (
+        {"command": "identify", "arguments": {}},
+        {"schema_version": 1, "command": "identify", "arguments": {}},
+        {"schema_version": "2", "command": "identify", "arguments": {}},
+        {"schema_version": 2.0, "command": "identify", "arguments": {}},
+        {"schema_version": True, "command": "identify", "arguments": {}},
+        {"schema_version": None, "command": "identify", "arguments": {}},
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "identify",
+            "arguments": {},
+            "context": {},
+        },
+    ),
+)
+def test_worker_http_rejects_non_v2_requests_before_side_effects(tmp_path, body):
+    runtime = _runtime(tmp_path)
+    with _worker_server(runtime):
+        status, payload = _post_command(runtime, body, add_schema=False)
+
+    assert status == 400
+    assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
+    assert payload["status"] == "error"
+    assert runtime.accepted == 0
+    assert runtime.jobs == {}
+    assert not any(tmp_path.iterdir())
 
 
 def test_worker_screenshot_accepts_canonical_format_pack_arguments(tmp_path):
@@ -334,12 +377,24 @@ def test_worker_screenshot_query_has_no_artifact_path(tmp_path):
 )
 def test_worker_request_rejects_trigger_holdoff_command_aliases(command):
     with pytest.raises(OscilloscopeError, match="unknown command"):
-        worker.validate_command_request({"command": command, "arguments": {}})
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": command,
+                "arguments": {},
+            }
+        )
 
 
 def test_worker_request_rejects_non_object_arguments():
     with pytest.raises(OscilloscopeError, match="arguments"):
-        worker.validate_command_request({"command": "identify", "arguments": []})
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "identify",
+                "arguments": [],
+            }
+        )
 
 
 @pytest.mark.parametrize(
@@ -385,7 +440,12 @@ def test_worker_request_rejects_non_object_arguments():
 )
 def test_worker_request_accepts_trigger_and_acquisition_queries(command, arguments):
     assert worker.validate_command_request(
-        {"command": command, "arguments": arguments, "job_id": "job-1"}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": command,
+            "arguments": arguments,
+            "job_id": "job-1",
+        }
     ) == (command, arguments, "job-1")
 
 
@@ -398,12 +458,14 @@ def test_command_acceptance_returns_common_envelope_and_artifact(tmp_path):
         )
 
     assert status == 202
+    assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert payload["status"] == "accepted"
     assert payload["command"] == "identify"
     assert payload["job_id"] == "job-1"
     assert payload["worker_job_id"]
     request_path = Path(payload["artifact_path"]) / "request.json"
     assert json.loads(request_path.read_text(encoding="utf-8")) == {
+        "schema_version": worker.WORKER_SCHEMA_VERSION,
         "command": "identify",
         "arguments": {},
         "job_id": "job-1",
@@ -428,6 +490,7 @@ def test_command_acceptance_validates_sample_rate_maximum_before_enqueue(tmp_pat
     assert payload["job_id"] == "job-maximum"
     request_path = Path(payload["artifact_path"]) / "request.json"
     assert json.loads(request_path.read_text(encoding="utf-8")) == {
+        "schema_version": worker.WORKER_SCHEMA_VERSION,
         "command": "sample-rate",
         "arguments": {"query": True, "maximum": True},
         "job_id": "job-maximum",
@@ -473,6 +536,7 @@ def test_command_acceptance_validates_points_queries_before_enqueue(tmp_path, co
     assert payload["job_id"] == "job-query"
     request_path = Path(payload["artifact_path"]) / "request.json"
     assert json.loads(request_path.read_text(encoding="utf-8")) == {
+        "schema_version": worker.WORKER_SCHEMA_VERSION,
         "command": command,
         "arguments": {"query": True},
         "job_id": "job-query",
@@ -533,6 +597,7 @@ def test_worker_correlation_flows_through_events_and_artifacts(tmp_path):
 
     worker_job_id = accepted["worker_job_id"]
     assert status == 202
+    assert accepted["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert accepted["status"] == "accepted"
     assert accepted["command"] == "identify"
     assert accepted["job_id"] == client_job_id
@@ -579,8 +644,10 @@ def test_worker_correlation_flows_through_events_and_artifacts(tmp_path):
     assert finished["worker_job_id"] == worker_job_id
     assert finished["command"] == "identify"
     assert request_payload["job_id"] == client_job_id
+    assert request_payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert request_payload["command"] == "identify"
     assert result_payload["run_id"] == runtime.run_id
+    assert result_payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert result_payload["worker_job_id"] == worker_job_id
     assert result_payload["job_id"] == client_job_id
     assert result_payload["command"] == "identify"
@@ -607,6 +674,7 @@ def test_command_validation_errors_use_common_echo_rules(
         status, payload = _post_command(runtime, body, raw=isinstance(body, bytes))
 
     assert status == 400
+    assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert payload["status"] == "error"
     assert payload["command"] == expected_command
     assert payload["job_id"] == expected_job_id
@@ -635,6 +703,7 @@ def test_queue_full_rejection_uses_rejected_reason(tmp_path):
 
     assert status == 429
     assert payload == {
+        "schema_version": worker.WORKER_SCHEMA_VERSION,
         "status": "rejected",
         "command": "identify",
         "job_id": "job-3",
@@ -798,7 +867,11 @@ def test_worker_parses_sample_rate_maximum_query_without_opening_backend():
 def test_worker_request_rejects_removed_memory_depth_command():
     with pytest.raises(OscilloscopeError, match="unknown command: memory-depth"):
         worker.validate_command_request(
-            {"command": "memory-depth", "arguments": {"query": True}}
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "memory-depth",
+                "arguments": {"query": True},
+            }
         )
 
 
@@ -1220,14 +1293,81 @@ def test_send_command_dry_run_does_not_contact_http(capsys):
     assert worker.client_send_command(args) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "dry_run"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert "timestamp_utc" in payload
     assert payload["command"] == "identify"
     assert payload["request"] == {
+        "schema_version": worker.WORKER_SCHEMA_VERSION,
         "command": "identify",
         "arguments": {},
         "job_id": "job-1",
     }
+
+
+def test_send_command_sends_v2_request(monkeypatch, capsys):
+    args = argparse.Namespace(
+        command="send-command",
+        host="127.0.0.1",
+        port=8765,
+        worker_command="identify",
+        arguments_json="{}",
+        job_id="job-1",
+        timeout_ms=1000,
+        format="json",
+        client_json=True,
+        dry_run=False,
+    )
+    sent = {}
+
+    def fake_http_request(_args, _path, *, method, body=None):
+        sent.update(body or {})
+        return {"schema_version": worker.WORKER_SCHEMA_VERSION, "status": "accepted"}, 202
+
+    monkeypatch.setattr(worker, "_http_request", fake_http_request)
+
+    assert worker.client_send_command(args) == 0
+    json.loads(capsys.readouterr().out)
+    assert sent["schema_version"] == worker.WORKER_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {},
+        {"schema_version": None},
+        {"schema_version": 1},
+        {"schema_version": "2"},
+        {"schema_version": 2.0},
+        {"schema_version": True},
+    ),
+)
+def test_lifecycle_client_response_validator_rejects_invalid_schema(payload):
+    with pytest.raises(OscilloscopeError, match="invalid worker response"):
+        worker._validate_client_response(payload)
+
+
+def test_lifecycle_client_fails_closed_on_invalid_worker_response(
+    monkeypatch, capsys
+):
+    args = argparse.Namespace(
+        command="status",
+        host="127.0.0.1",
+        port=8765,
+        timeout_ms=1000,
+        format="json",
+        client_json=True,
+    )
+
+    monkeypatch.setattr(
+        worker,
+        "_http_request",
+        lambda *_args, **_kwargs: ({"schema_version": 1, "status": "ready"}, 200),
+    )
+
+    assert worker.client_get(args, "/status") == 3
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
+    assert payload["status"] == "error"
 
 
 def test_stop_is_lifecycle_command_and_stop_acquisition_is_domain(capsys):
@@ -1275,7 +1415,7 @@ def test_worker_event_payloads_have_required_fields(tmp_path):
     summary = worker._event_payload(runtime, "summary", ok=True, fatal_error=None)
 
     for payload in (ready, started, finished, summary):
-        assert payload["schema_version"] == 1
+        assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
         assert payload["run_id"] == runtime.run_id
         assert "timestamp_utc" in payload
     assert ready["event"] == "ready"
@@ -1338,12 +1478,22 @@ def test_status_and_wait_ready_match_ready_session_and_status_urls(tmp_path, cap
             client_json=True,
         )
         assert worker.client_get(status_args, "/status") == 0
+        stop_args = argparse.Namespace(
+            command="stop",
+            host="127.0.0.1",
+            port=runtime.port,
+            timeout_ms=1000,
+            format="json",
+            client_json=True,
+        )
+        assert worker.client_post(stop_args, "/stop", {}) == 0
 
     output_lines = capsys.readouterr().out.strip().splitlines()
     wait_payload = json.loads(output_lines[0])
     status_payload = json.loads(output_lines[1])
+    stop_payload = json.loads(output_lines[2])
     assert ready["event"] == "ready"
-    assert ready["schema_version"] == 1
+    assert ready["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert ready["service"] == "scopes-tool"
     assert ready["run_id"]
     assert ready["host"] == "127.0.0.1"
@@ -1357,6 +1507,8 @@ def test_status_and_wait_ready_match_ready_session_and_status_urls(tmp_path, cap
     assert "trigger_url" not in ready
     _assert_status_payload_matches_ready(wait_payload, ready)
     _assert_status_payload_matches_ready(status_payload, ready)
+    assert stop_payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
+    assert stop_payload["status"] == "accepted"
 
 
 def test_worker_lifecycle_failure_before_ready_keeps_stderr_diagnostics():
@@ -1507,7 +1659,17 @@ def test_stop_cancels_queued_job_with_terminal_result(tmp_path):
     runtime = _runtime(tmp_path)
     job_dir = tmp_path / "run" / "queued"
     job_dir.mkdir(parents=True)
-    (job_dir / "request.json").write_text("{}", encoding="utf-8")
+    (job_dir / "request.json").write_text(
+        json.dumps(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "identify",
+                "arguments": {},
+                "job_id": "client-job",
+            }
+        ),
+        encoding="utf-8",
+    )
     job = worker.WorkerJob(
         command="identify",
         arguments={},
@@ -1529,7 +1691,17 @@ def test_stop_cancels_queued_job_with_terminal_result(tmp_path):
 
 def _execute_worker_job(runtime, command, arguments, artifact_path):
     artifact_path.mkdir(parents=True)
-    (artifact_path / "request.json").write_text("{}", encoding="utf-8")
+    (artifact_path / "request.json").write_text(
+        json.dumps(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": command,
+                "arguments": arguments,
+                "job_id": "client-job",
+            }
+        ),
+        encoding="utf-8",
+    )
     job = worker.WorkerJob(
         command=command,
         arguments=arguments,

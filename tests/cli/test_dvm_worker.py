@@ -81,7 +81,13 @@ def test_worker_dvm_rejects_noncanonical_payloads_before_artifacts(tmp_path, com
 @pytest.mark.parametrize("command", ["dvm-frequency", "counter-enable", "counter-query"])
 def test_worker_keeps_out_of_scope_commands_unknown(command):
     with pytest.raises(OscilloscopeError, match="unknown command"):
-        worker.validate_command_request({"command": command, "arguments": {}})
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": command,
+                "arguments": {},
+            }
+        )
 
 
 def test_worker_dvm_query_simulator_execution(tmp_path):

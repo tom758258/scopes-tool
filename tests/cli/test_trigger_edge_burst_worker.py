@@ -19,7 +19,11 @@ def _runtime(tmp_path):
 
 def test_worker_trigger_edge_burst_command_is_accepted():
     command, arguments, job_id = worker.validate_command_request(
-        {"command": "trigger-edge-burst", "arguments": {"query": True}}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "trigger-edge-burst",
+            "arguments": {"query": True},
+        }
     )
 
     assert command == "trigger-edge-burst"

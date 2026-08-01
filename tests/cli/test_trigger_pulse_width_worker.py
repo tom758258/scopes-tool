@@ -118,7 +118,13 @@ def test_worker_trigger_pulse_width_rejects_invalid_arguments(tmp_path, argument
 @pytest.mark.parametrize("command", ["trigger-glitch", "trigger-pulse"])
 def test_worker_rejects_trigger_pulse_width_aliases(command):
     with pytest.raises(OscilloscopeError):
-        worker.validate_command_request({"command": command, "arguments": {"query": True}})
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": command,
+                "arguments": {"query": True},
+            }
+        )
 
 
 def test_worker_trigger_pulse_width_simulator_execution_sends_expected_scpi(tmp_path):

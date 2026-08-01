@@ -33,6 +33,7 @@ def _worker_server(runtime):
 
 
 def _post_command(runtime, body):
+    body = {**body, "schema_version": worker.WORKER_SCHEMA_VERSION}
     request = urlrequest.Request(
         f"http://127.0.0.1:{runtime.port}/command",
         data=json.dumps(body).encode("utf-8"), method="POST",

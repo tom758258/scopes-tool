@@ -19,7 +19,11 @@ def _runtime(tmp_path, *, mode="simulate"):
 
 def test_worker_trigger_delay_command_is_accepted():
     command, arguments, job_id = worker.validate_command_request(
-        {"command": "trigger-delay", "arguments": {"query": True}}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "trigger-delay",
+            "arguments": {"query": True},
+        }
     )
 
     assert command == "trigger-delay"

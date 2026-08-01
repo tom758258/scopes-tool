@@ -68,7 +68,13 @@ def test_worker_trigger_pattern_rejects_invalid_arguments(tmp_path, arguments):
 @pytest.mark.parametrize("command", ["pattern-trigger", "trigger-pattern-hex"])
 def test_worker_rejects_trigger_pattern_aliases(command):
     with pytest.raises(OscilloscopeError):
-        worker.validate_command_request({"command": command, "arguments": {"query": True}})
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": command,
+                "arguments": {"query": True},
+            }
+        )
 
 
 def test_worker_trigger_pattern_simulator_execution_sends_expected_scpi(tmp_path):

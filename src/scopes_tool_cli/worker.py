@@ -80,6 +80,9 @@ from scopes_tool_core.wgen import (
 from . import cli as scope_cli
 
 
+WORKER_SCHEMA_VERSION = 2
+
+
 _NON_MATH_DOMAIN_COMMANDS = {
     "identify",
     "check-error",
@@ -356,7 +359,7 @@ class WorkerRuntime:
                 if job.state == "queued"
             ]
         return {
-            "schema_version": 1,
+            "schema_version": WORKER_SCHEMA_VERSION,
             "service": "scopes-tool",
             "status": "stopping" if self.stopping else "ready",
             "run_id": self.run_id,
@@ -450,7 +453,11 @@ def client_send_command(args: argparse.Namespace) -> int:
         return _client_error(args, 2, "invalid arguments JSON", exc)
     if not isinstance(arguments, dict):
         return _client_error(args, 2, "--arguments-json must decode to an object")
-    body = {"command": args.worker_command, "arguments": arguments}
+    body = {
+        "schema_version": WORKER_SCHEMA_VERSION,
+        "command": args.worker_command,
+        "arguments": arguments,
+    }
     if args.job_id is not None:
         body["job_id"] = args.job_id
     if args.dry_run:
@@ -468,6 +475,7 @@ def client_send_command(args: argparse.Namespace) -> int:
 def client_get(args: argparse.Namespace, path: str) -> int:
     try:
         response, status = _http_request(args, path, method="GET")
+        response = _validate_client_response(response)
     except Exception as exc:
         return _client_error(args, 3, "worker request failed", exc)
     _client_print(args, response)
@@ -477,6 +485,7 @@ def client_get(args: argparse.Namespace, path: str) -> int:
 def client_post(args: argparse.Namespace, path: str, body: dict[str, Any]) -> int:
     try:
         response, status = _http_request(args, path, method="POST", body=body)
+        response = _validate_client_response(response)
     except Exception as exc:
         return _client_error(args, 3, "worker request failed", exc)
     _client_print(args, response)
@@ -489,6 +498,7 @@ def client_wait_ready(args: argparse.Namespace) -> int:
     while time.monotonic() < deadline:
         try:
             response, status = _http_request(args, "/status", method="GET")
+            response = _validate_client_response(response)
             if status == 200:
                 _client_print(args, response)
                 return 0
@@ -501,9 +511,19 @@ def client_wait_ready(args: argparse.Namespace) -> int:
 def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None]:
     if not isinstance(body, dict):
         raise OscilloscopeError("request body must be a JSON object")
-    unknown = set(body) - {"command", "arguments", "job_id"}
+    unknown = set(body) - {
+        "schema_version",
+        "command",
+        "arguments",
+        "job_id",
+    }
     if unknown:
         raise OscilloscopeError(f"unknown request field: {sorted(unknown)[0]}")
+    schema_version = body.get("schema_version")
+    if type(schema_version) is not int or schema_version != WORKER_SCHEMA_VERSION:
+        raise OscilloscopeError(
+            f"schema_version must be exactly {WORKER_SCHEMA_VERSION}"
+        )
     command = body.get("command")
     if not isinstance(command, str) or not command:
         raise OscilloscopeError("command must be a non-empty string")
@@ -2510,6 +2530,7 @@ def _make_handler(runtime: WorkerRuntime):
             threading.Thread(target=self.server.shutdown, daemon=True).start()
 
         def _send(self, status: int, payload: dict[str, Any]) -> None:
+            payload = {**payload, "schema_version": WORKER_SCHEMA_VERSION}
             data = json.dumps(payload, sort_keys=True).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
@@ -2591,7 +2612,7 @@ def _write_result(runtime: WorkerRuntime, job: WorkerJob) -> None:
             files = _existing_files(files_value)
         result = job.result.get("result")
     payload = {
-        "schema_version": 1,
+        "schema_version": WORKER_SCHEMA_VERSION,
         "run_id": runtime.run_id,
         "worker_job_id": job.worker_job_id,
         "job_id": job.job_id,
@@ -2611,7 +2632,7 @@ def _write_result(runtime: WorkerRuntime, job: WorkerJob) -> None:
 
 def _event_payload(runtime: WorkerRuntime, event: str, **values: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": WORKER_SCHEMA_VERSION,
         "event": event,
         "run_id": runtime.run_id,
         "timestamp_utc": _now(),
@@ -2810,6 +2831,18 @@ def _http_request(
         return payload, exc.code
 
 
+def _validate_client_response(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise OscilloscopeError("invalid worker response: expected a JSON object")
+    schema_version = payload.get("schema_version")
+    if type(schema_version) is not int or schema_version != WORKER_SCHEMA_VERSION:
+        raise OscilloscopeError(
+            "invalid worker response: "
+            f"schema_version must be exactly {WORKER_SCHEMA_VERSION}"
+        )
+    return payload
+
+
 def _client_print(args: argparse.Namespace, payload: dict[str, Any]) -> None:
     if getattr(args, "client_json", False) or getattr(args, "format", None) == "json":
         scope_cli._write_json(_client_json_payload(args, payload))
@@ -2844,7 +2877,7 @@ def _client_error(
 
 def _client_json_payload(args: argparse.Namespace, payload: dict[str, Any]) -> dict[str, Any]:
     result = dict(payload)
-    result.setdefault("schema_version", 1)
+    result.setdefault("schema_version", WORKER_SCHEMA_VERSION)
     result.setdefault("timestamp_utc", _now())
     if getattr(args, "command", None) == "send-command":
         result.setdefault("command", getattr(args, "worker_command", None))

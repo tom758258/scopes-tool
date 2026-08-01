@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Migrates the Scopes Worker runtime and lifecycle clients to Common v2;
+  general CLI machine JSON remains for Part 3.
 - Marks the three Scopes-specific contracts as Common v2-only migration targets.
 - Retains the existing queued-job lifecycle, startup-bound context, commands,
   artifacts, and hardware behavior.

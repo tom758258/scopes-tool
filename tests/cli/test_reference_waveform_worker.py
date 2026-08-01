@@ -21,7 +21,13 @@ def _runtime(tmp_path):
     ],
 )
 def test_reference_worker_accepts_maps_and_routes_simulator(tmp_path, command, arguments):
-    assert worker.validate_command_request({"command": command, "arguments": arguments})[:2] == (command, arguments)
+    assert worker.validate_command_request(
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": command,
+            "arguments": arguments,
+        }
+    )[:2] == (command, arguments)
     parsed = worker.parse_domain_command(command, arguments, _runtime(tmp_path))
     payload, exit_code = cli._execute_json_command(parsed)
     assert exit_code == 0

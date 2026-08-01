@@ -39,6 +39,7 @@ def _worker_server(runtime):
 
 
 def _post_command(runtime, body):
+    body = {**body, "schema_version": worker.WORKER_SCHEMA_VERSION}
     request = urlrequest.Request(
         f"http://127.0.0.1:{runtime.port}/command",
         data=json.dumps(body).encode("utf-8"),
@@ -54,7 +55,11 @@ def _post_command(runtime, body):
 
 def test_worker_trigger_edge_command_is_accepted():
     command, arguments, job_id = worker.validate_command_request(
-        {"command": "trigger-edge", "arguments": {"query": True}}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "trigger-edge",
+            "arguments": {"query": True},
+        }
     )
 
     assert command == "trigger-edge"

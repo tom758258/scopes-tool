@@ -13,7 +13,11 @@ def _runtime(tmp_path, model="keysight-dsox4024a"):
 
 def test_measure_results_worker_accepts_empty_arguments_without_extra_flags(tmp_path):
     accepted = worker.validate_command_request(
-        {"command": "measure-results", "arguments": {}}
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "measure-results",
+            "arguments": {},
+        }
     )
 
     assert "measure-results" in worker.DOMAIN_COMMANDS
@@ -63,7 +67,13 @@ def test_measure_results_worker_rejects_2000x_through_capability_guard(tmp_path)
     ],
 )
 def test_measurement_worker_accepts_maps_and_routes_simulator(tmp_path, command, arguments):
-    assert worker.validate_command_request({"command": command, "arguments": arguments})[:2] == (command, arguments)
+    assert worker.validate_command_request(
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": command,
+            "arguments": arguments,
+        }
+    )[:2] == (command, arguments)
     parsed = worker.parse_domain_command(command, arguments, _runtime(tmp_path))
     payload, exit_code = cli._execute_json_command(parsed)
     assert exit_code == 0
