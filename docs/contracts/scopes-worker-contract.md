@@ -1,10 +1,19 @@
 # Scopes Worker Contract
 
-Schema version: `1`
+Schema version: `2`
+
+Compatibility policy: `v2-only`
+
+Implementation status: `migration-target`
 
 This is the Scopes worker contract only. It follows
 [Common Worker Protocol](common-worker-protocol.md) for lifecycle concepts and
 defines the Scopes-specific command model, queue behavior, and artifacts.
+
+This document is the future runtime migration target for Scopes. The current
+implementation does not claim Common v2 conformance. Until runtime migration
+is complete, Agents must not send Common v2 requests to the current
+implementation.
 
 ## Cross-Instrument Compatibility
 
@@ -47,6 +56,15 @@ simulator or VISA session. Live jobs always use the startup `--resource` and
 `--model`; command arguments cannot override them. Request validation happens
 before enqueue, artifact creation, session open, or SCPI.
 
+## Startup-Bound Execution Context
+
+Scopes uses a startup-bound execution context. For live workers, startup
+`--model` maps to Common `expected_model_id`; for simulator workers, startup
+`--model` maps to Common `planning_model_id`. Detected live identity remains
+authoritative. Scopes does not send request-level `context` in `/command`
+requests, and command arguments cannot override startup mode, model, or
+resource.
+
 ## Endpoints
 
 `GET /status` is non-mutating. It returns `run_id`, mode, model, resource,
@@ -58,25 +76,32 @@ send SCPI. It does not include `trigger_url`.
 command envelope. It accepts exactly this JSON object:
 
 ```json
-{"command": "identify", "arguments": {}, "job_id": "client-id"}
+{"schema_version": 2, "command": "identify", "arguments": {}, "job_id": "client-id"}
 ```
 
-Allowed top-level fields are the Common fields `command`, `arguments`, and
-`job_id`. `command` must be a known Scopes worker command, `arguments` must be
-omitted or an object, and `job_id` must be omitted or a string. Unknown fields
-and malformed bodies return HTTP `400` and are not enqueued.
+Allowed top-level fields are `schema_version`, `command`, `arguments`, and
+`job_id`. `context` is not an allowed top-level `/command` request field for
+Scopes. Mode, model, and resource are fixed at Worker startup. `command` must
+be a known Scopes worker command, `arguments` must be omitted or an object,
+and `job_id` must be omitted or a string. Unknown fields and malformed bodies
+return HTTP `400` and are not enqueued.
 
-Every `/command` response contains the Common fields `status`, `command`, and
-`job_id`. A safely identifiable client command string and client job string are
-echoed even when validation fails, including unknown commands and unknown
-top-level fields. Malformed JSON, non-object bodies, missing commands, and
-non-string command identities use `command: null`; omitted or non-string
-`job_id` values use `job_id: null`.
+`schema_version` is required and must be the exact JSON integer `2`. Missing
+schema versions, `1`, `"2"`, `2.0`, and `true` are rejected. Scopes does not
+support a v1 fallback.
+
+Every `/command` response contains the Common fields `schema_version`,
+`status`, `command`, and `job_id`. A safely identifiable client command string
+and client job string are echoed even when validation fails, including unknown
+commands and unknown top-level fields. Malformed JSON, non-object bodies,
+missing commands, and non-string command identities use `command: null`; omitted
+or non-string `job_id` values use `job_id: null`.
 
 Accepted responses use HTTP `202` and contain:
 
 ```json
 {
+  "schema_version": 2,
   "status": "accepted",
   "command": "identify",
   "job_id": "client-id",
@@ -93,6 +118,7 @@ Queue, stopping, rate, or other Scopes admission failures use
 
 ```json
 {
+  "schema_version": 2,
   "status": "rejected",
   "command": "identify",
   "job_id": "client-id",
@@ -105,6 +131,7 @@ Validation failures use HTTP `400`, `status: "error"`, the Common
 
 ```json
 {
+  "schema_version": 2,
   "status": "error",
   "command": "identify",
   "job_id": "client-id",
@@ -1996,6 +2023,10 @@ Each accepted job creates:
 data/worker/<run_id>/<worker_job_id>/request.json
 data/worker/<run_id>/<worker_job_id>/result.json
 ```
+
+Worker job `request.json` and terminal `result.json` are Common Worker machine
+artifacts and target exact integer `schema_version: 2`. Their Scopes-specific
+fields and result layout remain unchanged.
 
 `request.json` is written before the `202` response. `result.json` is written
 only for terminal states using a temp file and atomic replace.

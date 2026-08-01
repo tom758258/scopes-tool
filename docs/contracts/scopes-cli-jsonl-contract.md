@@ -1,12 +1,20 @@
 # Scopes CLI JSON / JSONL Contract
 
-Schema version: `1`
+Schema version: `2`
+
+Compatibility policy: `v2-only`
+
+Implementation status: `migration-target`
 
 This document defines Scopes-specific CLI JSON and JSONL payloads. Shared
 envelope rules are defined in
 [Common CLI JSON / JSONL Contract](common-cli-jsonl-contract.md). Scopes worker
 behavior and artifacts are defined in
 [Scopes Worker Contract](scopes-worker-contract.md).
+
+This document is the future runtime migration target for Scopes. The current
+implementation does not claim Common v2 conformance; runtime, client, output,
+and test migration remains a later Part.
 
 Common fields such as `event`, `schema_version`, `timestamp_utc`, `run_id`,
 `ok`, `message`, `fatal_error`, and `exit_code` keep their Common meanings
@@ -24,7 +32,7 @@ Human diagnostics belong on stderr or in text mode. The worker emits:
 - `job_finished`: emitted after terminal `result.json` is written.
 - `summary`: emitted when the worker process exits normally or fatally.
 
-All runtime events include `schema_version: 1`, `timestamp_utc`, and the same
+All runtime events include `schema_version: 2`, `timestamp_utc`, and the same
 `run_id`. The Scopes `ready` event includes `service: "scopes-tool"`,
 `host`, `port`, `mode`, `model`, `resource`, `command_url`, `status_url`, and
 `stop_url`; it means `/command`, `/status`, and `/stop` are reachable. It does
@@ -42,7 +50,7 @@ use `ok: true`. `summary` includes `accepted`, `succeeded`, `failed`,
 `scopes-tool send-command`, `status`, `stop`, and `wait-ready` emit one
 JSON object when called with `--json`.
 
-All worker client JSON includes `schema_version: 1` and `timestamp_utc`.
+All worker client JSON includes `schema_version: 2` and `timestamp_utc`.
 `send-command` uses the worker command name in `command`; `status`, `stop`, and
 `wait-ready` use the lifecycle CLI command name.
 
@@ -77,6 +85,12 @@ HTTP `409`/`429`, and fatal worker failures exit `3`.
 Accepted `/command` responses exit `0`, but accepted does not mean the Scopes
 job succeeded; read worker `result.json` for the terminal result.
 
+Worker execution context is startup-bound. Startup `--model` maps to
+`expected_model_id` in live mode and `planning_model_id` in simulate mode;
+detected live identity remains authoritative. Scopes clients do not add a
+request-level `context` to `/command`, and command arguments cannot override
+startup mode, model, or resource.
+
 ## Single-Response JSON
 
 Commands that accept `--json` write exactly one JSON object to stdout. SCPI
@@ -85,7 +99,7 @@ contract.
 
 Top-level fields currently used by Scopes:
 
-- `schema_version`: integer schema version, currently `1`.
+- `schema_version`: exact integer schema version `2`.
 - `timestamp_utc`: UTC ISO 8601 timestamp with offset.
 - `ok`: boolean result. `false` means the command failed or reported an
   instrument/system-error condition.
@@ -502,7 +516,7 @@ and ordered canonical `serial_modes`,
 `supports_display_label`, `supports_annotation`,
 `supports_annotation_position`, `annotation_slots`, and
 `supports_indexed_annotation`. Consumers must ignore unknown future capability
-fields under schema version `1`. Search Basic Pack v1 additionally reports
+fields under schema version `2`. Search Basic Pack v1 additionally reports
 `supports_search_basic` and ordered canonical `search_modes`.
 
 ## Artifact JSON
@@ -510,26 +524,34 @@ fields under schema version `1`. Search Basic Pack v1 additionally reports
 Scopes artifact JSON is machine-readable and should be preferred over human
 text:
 
+- Worker job `request.json` and terminal `result.json` are Common Worker
+  artifacts targeting exact integer `schema_version: 2`; their existing
+  Scopes-specific fields and result layout remain unchanged.
 - Capture metadata JSON records resource, IDN, waveform format, preamble, point
   counts, per-channel summaries, and optional time-axis tolerance.
-- Capture-batch `manifest.json` uses `schema_version: 1` and records run
+- Capture-batch `manifest.json` remains independently versioned at
+  `schema_version: 1` and records run
   status, resource, backend, IDN, channels, format, requested count, completed
   captures, artifact paths, and per-capture system error.
-- Measure-log `manifest.json` uses `schema_version: 1` and records status,
+- Measure-log `manifest.json` remains independently versioned at
+  `schema_version: 1` and records status,
   resource, backend, IDN, requested row constraints, completed rows, row
   metadata, and system errors.
-- Smoke `report.json` uses `schema_version: 1` and records status, resource,
+- Smoke `report.json` remains independently versioned at `schema_version: 1`
+  and records status, resource,
   backend, IDN, doctor data, measurement records, capture metadata, screenshot
   metadata, warnings, files, and errors.
-- Acquisition-check `report.json` uses `schema_version: 1` and records status,
+- Acquisition-check `report.json` remains independently versioned at
+  `schema_version: 1` and records status,
   resource, backend, IDN, initial/final acquisition state, restore metadata,
   step records, system errors, files, and errors.
 
 ## Compatibility Rules
 
 Consumers must ignore unknown fields. New optional fields may be added under
-schema version `1`. Removing required fields or changing required field types
-requires a major schema version bump.
+Common schema version `2`; independently versioned Scopes domain artifacts
+retain their documented versioning. Removing required fields or changing
+required field types requires a major schema version bump.
 
 Human-readable stdout, stderr, Markdown summaries, and SCPI log text are
 diagnostic output, not the agent contract.

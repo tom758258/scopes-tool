@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Marks the three Scopes-specific contracts as Common v2-only migration targets.
+- Retains the existing queued-job lifecycle, startup-bound context, commands,
+  artifacts, and hardware behavior.
+- Defers runtime, clients, outputs, and tests; this documentation does not
+  claim Common v2 implementation conformance.
 - Replaces the three copied Common v1 contract documents with the shared
   v2-only Worker Protocol, CLI JSON/JSONL Contract, and Orchestrator Workflows.
 - Documents the future Common v2 requirements for strict

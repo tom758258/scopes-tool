@@ -7,7 +7,21 @@ envelope rules are defined in
 [Common CLI JSON / JSONL Contract](common-cli-jsonl-contract.md). Worker
 behavior is defined in [Scopes Worker Contract](scopes-worker-contract.md).
 
+## Common v2 Migration Gate
+
+Before using this workflow, confirm that the installed version implements
+Common v2. If migration is incomplete, report `Common v2 migration required`
+and stop. Do not send schema 1 and do not use a fallback.
+
 ## Worker Workflow
+
+Scopes is a queued-job Worker with a startup-bound execution context. Live
+startup `--model` maps to `expected_model_id`; simulate startup `--model` maps
+to `planning_model_id`; detected live identity remains authoritative. Scopes
+`/command` does not carry request-level `context`, because mode, model, and
+resource are fixed at Worker startup. A top-level `context` field is not
+allowed, and command arguments cannot override startup mode, model, or
+resource.
 
 Start a worker in simulator mode:
 
@@ -202,7 +216,7 @@ def wait_event(name, *, predicate=None, timeout=10):
 try:
     ready = wait_event("ready")
     assert ready["event"] == "ready"
-    assert ready["schema_version"] == 1
+    assert ready["schema_version"] == 2
     assert ready["service"] == "scopes-tool"
     assert ready["run_id"]
     assert ready["host"] == "127.0.0.1"
