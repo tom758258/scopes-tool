@@ -350,14 +350,19 @@ from scopes_tool_core.search import (
     validate_uart_search_mode,
 )
 from scopes_tool_core.serial import (
+    CAN_TRIGGER_ID_MODES,
+    CAN_TRIGGER_TYPES,
     CAN_SIGNAL_DEFINITIONS,
     I2C_ADDRESS_SIZES,
+    I2C_TRIGGER_QUALIFIERS,
+    I2C_TRIGGER_TYPES,
     SERIAL_BIT_ORDERS,
     SERIAL_MODES,
     SERIAL_LISTER_DISPLAYS,
     SERIAL_LISTER_REFERENCES,
     SPI_CLOCK_SLOPES,
     SPI_FRAMINGS,
+    SPI_TRIGGER_TYPES,
     UART_PARITIES,
     UART_POLARITIES,
     UART_TRIGGER_QUALIFIERS,
@@ -385,7 +390,26 @@ from scopes_tool_core.serial import (
     serial_uart_trigger_data_query,
     serial_uart_trigger_qualifier_query,
     serial_uart_trigger_type_query,
+    serial_i2c_trigger_configure_commands,
+    serial_i2c_trigger_data2_query,
+    serial_i2c_trigger_data_query,
+    serial_i2c_trigger_address_query,
+    serial_i2c_trigger_qualifier_query,
+    serial_i2c_trigger_type_query,
+    serial_spi_trigger_configure_commands,
+    serial_spi_trigger_data_query,
+    serial_spi_trigger_type_query,
+    serial_spi_trigger_width_query,
+    serial_can_trigger_configure_commands,
+    serial_can_trigger_data_length_query,
+    serial_can_trigger_data_query,
+    serial_can_trigger_id_mode_query,
+    serial_can_trigger_id_query,
+    serial_can_trigger_type_query,
     validate_serial_uart_trigger_request,
+    validate_serial_i2c_trigger_request,
+    validate_serial_spi_trigger_request,
+    validate_serial_can_trigger_request,
     normalize_can_signal_definition,
     normalize_i2c_address_size,
     normalize_serial_bit_order,
@@ -1429,6 +1453,48 @@ def _build_parser() -> argparse.ArgumentParser:
     serial_uart_trigger_parser.add_argument(
         "--qualifier", choices=UART_TRIGGER_QUALIFIERS
     )
+
+    serial_i2c_trigger_parser = subparsers.add_parser(
+        "serial-trigger-i2c",
+        allow_abbrev=False,
+        help="configure or query basic I2C trigger criteria",
+    )
+    _add_scope_connection_args(serial_i2c_trigger_parser)
+    serial_i2c_trigger_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_i2c_trigger_parser.add_argument("--query", action="store_true")
+    serial_i2c_trigger_parser.add_argument("--type", choices=I2C_TRIGGER_TYPES)
+    serial_i2c_trigger_parser.add_argument("--address", type=_integer_value)
+    serial_i2c_trigger_parser.add_argument("--data", type=_integer_value)
+    serial_i2c_trigger_parser.add_argument("--data2", type=_integer_value)
+    serial_i2c_trigger_parser.add_argument(
+        "--qualifier", choices=I2C_TRIGGER_QUALIFIERS
+    )
+
+    serial_spi_trigger_parser = subparsers.add_parser(
+        "serial-trigger-spi",
+        allow_abbrev=False,
+        help="configure or query basic SPI trigger criteria",
+    )
+    _add_scope_connection_args(serial_spi_trigger_parser)
+    serial_spi_trigger_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_spi_trigger_parser.add_argument("--query", action="store_true")
+    serial_spi_trigger_parser.add_argument("--type", choices=SPI_TRIGGER_TYPES)
+    serial_spi_trigger_parser.add_argument("--width", type=int)
+    serial_spi_trigger_parser.add_argument("--data")
+
+    serial_can_trigger_parser = subparsers.add_parser(
+        "serial-trigger-can",
+        allow_abbrev=False,
+        help="configure or query basic CAN trigger criteria",
+    )
+    _add_scope_connection_args(serial_can_trigger_parser)
+    serial_can_trigger_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_can_trigger_parser.add_argument("--query", action="store_true")
+    serial_can_trigger_parser.add_argument("--type", choices=CAN_TRIGGER_TYPES)
+    serial_can_trigger_parser.add_argument("--id")
+    serial_can_trigger_parser.add_argument("--id-mode", choices=CAN_TRIGGER_ID_MODES)
+    serial_can_trigger_parser.add_argument("--data")
+    serial_can_trigger_parser.add_argument("--data-length", type=int)
 
     serial_i2c_parser = subparsers.add_parser(
         "serial-i2c", allow_abbrev=False, help="configure or query basic I2C decode settings"
@@ -3310,6 +3376,9 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "serial-display",
         "serial-uart",
         "serial-trigger-uart",
+        "serial-trigger-i2c",
+        "serial-trigger-spi",
+        "serial-trigger-can",
         "serial-i2c",
         "serial-spi",
         "serial-can",
@@ -4374,6 +4443,26 @@ def _validate_serial_args(args: argparse.Namespace) -> None:
             type=args.type,
             data=args.data,
             qualifier=args.qualifier,
+            capabilities=capabilities,
+        )
+        return
+    trigger_validators = {
+        "serial-trigger-i2c": validate_serial_i2c_trigger_request,
+        "serial-trigger-spi": validate_serial_spi_trigger_request,
+        "serial-trigger-can": validate_serial_can_trigger_request,
+    }
+    if args.command in trigger_validators:
+        trigger_validators[args.command](
+            args.bus,
+            query=args.query,
+            **{
+                key: getattr(args, key)
+                for key in {
+                    "serial-trigger-i2c": {"type", "address", "data", "data2", "qualifier"},
+                    "serial-trigger-spi": {"type", "width", "data"},
+                    "serial-trigger-can": {"type", "id", "id_mode", "data", "data_length"},
+                }[args.command]
+            },
             capabilities=capabilities,
         )
         return
@@ -5781,6 +5870,68 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 "qualifier": qualifier,
                 "raw_qualifier": None,
                 "state_changing": True,
+            }
+        return [*commands, ":SYSTem:ERRor?"], [], result
+    if command == "serial-trigger-i2c":
+        bus, trigger_type, address, data, data2, qualifier = validate_serial_i2c_trigger_request(
+            args.bus, query=args.query, type=args.type, address=args.address,
+            data=args.data, data2=args.data2, qualifier=args.qualifier,
+            capabilities=capabilities,
+        )
+        if args.query:
+            commands = [serial_mode_query(bus), trigger_mode_query()]
+            result = {"operation": "query", "commands": commands, "protocol": "i2c", "bus": bus}
+        else:
+            commands = _serial_i2c_trigger_commands(args, trigger_type=trigger_type)
+            result = {
+                "operation": "configure", "commands": commands, "protocol": "i2c", "bus": bus,
+                "mode": "i2c", "raw_mode": None, "selected": True,
+                "trigger_mode": f"serial{bus}", "raw_trigger_mode": None,
+                "type": trigger_type, "raw_type": None,
+                "address": address, "raw_address": None,
+                "data": data, "raw_data": None,
+                "data2": data2, "raw_data2": None,
+                "qualifier": qualifier, "raw_qualifier": None,
+                "state_changing": True,
+            }
+        return [*commands, ":SYSTem:ERRor?"], [], result
+    if command == "serial-trigger-spi":
+        bus, trigger_type, width, data = validate_serial_spi_trigger_request(
+            args.bus, query=args.query, type=args.type, width=args.width, data=args.data,
+            capabilities=capabilities,
+        )
+        if args.query:
+            commands = [serial_mode_query(bus), trigger_mode_query()]
+            result = {"operation": "query", "commands": commands, "protocol": "spi", "bus": bus}
+        else:
+            commands = _serial_spi_trigger_commands(args, trigger_type=trigger_type)
+            result = {
+                "operation": "configure", "commands": commands, "protocol": "spi", "bus": bus,
+                "mode": "spi", "raw_mode": None, "selected": True,
+                "trigger_mode": f"serial{bus}", "raw_trigger_mode": None,
+                "type": trigger_type, "raw_type": None,
+                "width": width, "raw_width": None, "data": data, "raw_data": None,
+                "state_changing": True,
+            }
+        return [*commands, ":SYSTem:ERRor?"], [], result
+    if command == "serial-trigger-can":
+        bus, trigger_type, id_value, id_mode, data, data_length = validate_serial_can_trigger_request(
+            args.bus, query=args.query, type=args.type, id=args.id, id_mode=args.id_mode,
+            data=args.data, data_length=args.data_length, capabilities=capabilities,
+        )
+        if args.query:
+            commands = [serial_mode_query(bus), trigger_mode_query()]
+            result = {"operation": "query", "commands": commands, "protocol": "can", "bus": bus}
+        else:
+            commands = _serial_can_trigger_commands(args, trigger_type=trigger_type)
+            result = {
+                "operation": "configure", "commands": commands, "protocol": "can", "bus": bus,
+                "mode": "can", "raw_mode": None, "selected": True,
+                "trigger_mode": f"serial{bus}", "raw_trigger_mode": None,
+                "type": trigger_type, "raw_type": None,
+                "id": id_value, "raw_id": None, "id_mode": id_mode, "raw_id_mode": None,
+                "data": data, "raw_data": None, "data_length": data_length,
+                "raw_data_length": None, "state_changing": True,
             }
         return [*commands, ":SYSTem:ERRor?"], [], result
     if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
@@ -9621,6 +9772,100 @@ def _serial_uart_trigger_commands(
     return commands
 
 
+def _serial_i2c_trigger_read_commands(
+    bus: int, mode: str | None, trigger_type: str | None
+) -> list[str]:
+    commands = [trigger_mode_query()]
+    if mode != "i2c":
+        return commands
+    commands.append(serial_i2c_trigger_type_query(bus))
+    if trigger_type == "address-no-ack":
+        commands.append(serial_i2c_trigger_address_query(bus))
+    elif trigger_type in {"read7", "write7", "write10", "read-eeprom"}:
+        commands.extend([serial_i2c_trigger_address_query(bus), serial_i2c_trigger_data_query(bus)])
+        if trigger_type == "read-eeprom":
+            commands.append(serial_i2c_trigger_qualifier_query(bus))
+    elif trigger_type in {"read7-data2", "write7-data2"}:
+        commands.extend([
+            serial_i2c_trigger_address_query(bus),
+            serial_i2c_trigger_data_query(bus),
+            serial_i2c_trigger_data2_query(bus),
+        ])
+    return commands
+
+
+def _serial_i2c_trigger_commands(
+    args: argparse.Namespace, *, mode: str | None = "i2c", trigger_type: str | None = None
+) -> list[str]:
+    commands = [serial_mode_query(args.bus)]
+    if not args.query:
+        commands.extend(
+            serial_i2c_trigger_configure_commands(
+                args.bus, args.type, args.address, args.data, args.data2, args.qualifier
+            )
+        )
+        commands.append(trigger_mode_serial_command(args.bus))
+    commands.extend(_serial_i2c_trigger_read_commands(args.bus, mode, trigger_type))
+    return commands
+
+
+def _serial_spi_trigger_read_commands(
+    bus: int, mode: str | None, trigger_type: str | None
+) -> list[str]:
+    commands = [trigger_mode_query()]
+    if mode != "spi":
+        return commands
+    commands.append(serial_spi_trigger_type_query(bus))
+    if trigger_type in {"mosi", "miso"}:
+        commands.extend([
+            serial_spi_trigger_width_query(bus, trigger_type),
+            serial_spi_trigger_data_query(bus, trigger_type),
+        ])
+    return commands
+
+
+def _serial_spi_trigger_commands(
+    args: argparse.Namespace, *, mode: str | None = "spi", trigger_type: str | None = None
+) -> list[str]:
+    commands = [serial_mode_query(args.bus)]
+    if not args.query:
+        commands.extend(
+            serial_spi_trigger_configure_commands(args.bus, args.type, args.width, args.data)
+        )
+        commands.append(trigger_mode_serial_command(args.bus))
+    commands.extend(_serial_spi_trigger_read_commands(args.bus, mode, trigger_type))
+    return commands
+
+
+def _serial_can_trigger_read_commands(
+    bus: int, mode: str | None, trigger_type: str | None
+) -> list[str]:
+    commands = [trigger_mode_query()]
+    if mode != "can":
+        return commands
+    commands.append(serial_can_trigger_type_query(bus))
+    if trigger_type in {"data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data"}:
+        commands.extend([serial_can_trigger_id_mode_query(bus), serial_can_trigger_id_query(bus)])
+    if trigger_type == "id-and-data":
+        commands.extend([serial_can_trigger_data_length_query(bus), serial_can_trigger_data_query(bus)])
+    return commands
+
+
+def _serial_can_trigger_commands(
+    args: argparse.Namespace, *, mode: str | None = "can", trigger_type: str | None = None
+) -> list[str]:
+    commands = [serial_mode_query(args.bus)]
+    if not args.query:
+        commands.extend(
+            serial_can_trigger_configure_commands(
+                args.bus, args.type, args.id, args.id_mode, args.data, args.data_length
+            )
+        )
+        commands.append(trigger_mode_serial_command(args.bus))
+    commands.extend(_serial_can_trigger_read_commands(args.bus, mode, trigger_type))
+    return commands
+
+
 def _cmd_serial(args: argparse.Namespace) -> int:
     if args.command in {
         "serial-lister-query",
@@ -9713,6 +9958,45 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 f"Serial bus {state.bus} UART trigger: "
                 f"{state.type or 'unavailable'}"
             )
+        elif args.command in {
+            "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"
+        }:
+            protocol = args.command.removeprefix("serial-trigger-")
+            if args.query:
+                state = getattr(scope, f"query_serial_{protocol}_trigger")(args.bus)
+                operation = "query"
+            else:
+                settings = {
+                    "i2c": {"type": args.type, "address": getattr(args, "address", None), "data": args.data, "data2": getattr(args, "data2", None), "qualifier": getattr(args, "qualifier", None)},
+                    "spi": {"type": args.type, "width": getattr(args, "width", None), "data": args.data},
+                    "can": {"type": args.type, "id": getattr(args, "id", None), "id_mode": getattr(args, "id_mode", None), "data": args.data, "data_length": getattr(args, "data_length", None)},
+                }[protocol]
+                state = getattr(scope, f"configure_serial_{protocol}_trigger")(
+                    args.bus, **settings
+                )
+                operation = "configure"
+            if protocol == "i2c":
+                commands = _serial_i2c_trigger_commands(
+                    args, mode=state.mode, trigger_type=state.type
+                )
+            elif protocol == "spi":
+                commands = _serial_spi_trigger_commands(
+                    args, mode=state.mode, trigger_type=state.type
+                )
+            else:
+                commands = _serial_can_trigger_commands(
+                    args, mode=state.mode, trigger_type=state.type
+                )
+            _json_update_result(
+                operation=operation,
+                commands=commands,
+                **state.to_json(),
+                **({"state_changing": True} if not args.query else {}),
+            )
+            print(
+                f"Serial bus {state.bus} {protocol.upper()} trigger: "
+                f"{state.type or 'unavailable'}"
+            )
         else:
             protocol = args.command.removeprefix("serial-")
             commands = _serial_protocol_commands(args, scope.capabilities)
@@ -9734,7 +10018,9 @@ def _cmd_serial(args: argparse.Namespace) -> int:
             )
             print(f"Serial bus {state.bus} {protocol} mode: {state.mode}")
 
-        if args.command == "serial-trigger-uart":
+        if args.command in {
+            "serial-trigger-uart", "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"
+        }:
             for command in commands:
                 print(f"Command: {command}")
         else:
@@ -13017,6 +13303,13 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be at least 1")
     return parsed
+
+
+def _integer_value(value: str) -> int:
+    try:
+        return int(value, 0)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer or 0x hexadecimal value") from exc
 
 
 def _nonnegative_int(value: str) -> int:

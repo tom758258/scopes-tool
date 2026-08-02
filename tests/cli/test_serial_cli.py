@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 
 import pytest
 
@@ -137,6 +138,79 @@ def test_serial_uart_trigger_query_dry_run_plans_only_unconditional_queries(caps
     assert ":SBUS1:UART:TRIGger:TYPE?" not in result["commands"]
     assert ":SBUS1:UART:TRIGger:DATA?" not in result["commands"]
     assert ":SBUS1:UART:TRIGger:QUALifier?" not in result["commands"]
+
+
+@pytest.mark.parametrize(
+    "command, mode, configure_args, protocol",
+    [
+        (
+            "serial-trigger-i2c",
+            "IIC",
+            ["--type", "read-eeprom", "--address", "0x50", "--data", "0x10", "--qualifier", "equal"],
+            "i2c",
+        ),
+        (
+            "serial-trigger-spi",
+            "SPI",
+            ["--type", "mosi", "--width", "8", "--data", "1010XX01"],
+            "spi",
+        ),
+        (
+            "serial-trigger-can",
+            "CAN",
+            ["--type", "id-and-data", "--id", "0x1", "--id-mode", "standard", "--data", "1010XX01", "--data-length", "1"],
+            "can",
+        ),
+    ],
+)
+def test_serial_trigger_simulator_configure_query_roundtrip(
+    monkeypatch, capsys, command, mode, configure_args, protocol
+):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
+    backend.serial_modes[1] = mode
+    scope = Oscilloscope(backend)
+    monkeypatch.setattr(cli, "_open_scope", lambda args, resource: nullcontext(scope))
+
+    common = [command, "--bus", "1", "--simulate", "--json", "--model", "keysight-dsox2004a"]
+    assert cli.main([*common, *configure_args]) == 0
+    configured = _payload(capsys)["result"]
+    assert configured["protocol"] == protocol
+    assert configured["state_changing"] is True
+    assert configured["selected"] is True
+
+    assert cli.main([*common, "--query"]) == 0
+    queried = _payload(capsys)["result"]
+    assert queried["protocol"] == protocol
+    assert queried["selected"] is True
+
+
+@pytest.mark.parametrize(
+    "command, protocol_specific",
+    [
+        ("serial-trigger-i2c", ":SBUS1:IIC:TRIGger:TYPE?"),
+        ("serial-trigger-spi", ":SBUS1:SPI:TRIGger:TYPE?"),
+        ("serial-trigger-can", ":SBUS1:CAN:TRIGger?"),
+    ],
+)
+def test_serial_trigger_query_dry_run_plans_only_unconditional_queries(
+    capsys, command, protocol_specific
+):
+    assert cli.main(
+        [
+            command,
+            "--bus",
+            "1",
+            "--query",
+            "--dry-run",
+            "--json",
+            "--model",
+            "keysight-dsox2004a",
+        ]
+    ) == 0
+    result = _payload(capsys)["result"]
+    assert result["operation"] == "query"
+    assert result["commands"] == [":SBUS1:MODE?", ":TRIGger:MODE?"]
+    assert protocol_specific not in result["commands"]
 
 
 def test_serial_lister_query_simulator_json_does_not_query_data(capsys):

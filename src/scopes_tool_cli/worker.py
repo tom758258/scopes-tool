@@ -76,7 +76,12 @@ from scopes_tool_core.wgen import (
     validate_wgen_function,
     validate_wgen_offset,
 )
-from scopes_tool_core.serial import validate_serial_uart_trigger_request
+from scopes_tool_core.serial import (
+    validate_serial_can_trigger_request,
+    validate_serial_i2c_trigger_request,
+    validate_serial_spi_trigger_request,
+    validate_serial_uart_trigger_request,
+)
 
 from . import cli as scope_cli
 
@@ -140,6 +145,9 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "serial-display",
     "serial-uart",
     "serial-trigger-uart",
+    "serial-trigger-i2c",
+    "serial-trigger-spi",
+    "serial-trigger-can",
     "serial-i2c",
     "serial-spi",
     "serial-can",
@@ -558,7 +566,10 @@ def parse_domain_command(
     arguments = _normalize_serial_worker_arguments(
         command, arguments, capabilities_for_model_id(runtime.model)
     )
-    if command == "serial-trigger-uart":
+    if command in {
+        "serial-trigger-uart", "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"
+    }:
+        arguments = {"command": command, **arguments}
         return _serial_uart_trigger_worker_namespace(arguments, runtime, job_dir)
     arguments = _normalize_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_serial_search_worker_arguments(command, arguments, runtime)
@@ -1824,6 +1835,9 @@ def _normalize_serial_worker_arguments(
         "serial-display",
         "serial-uart",
         "serial-trigger-uart",
+        "serial-trigger-i2c",
+        "serial-trigger-spi",
+        "serial-trigger-can",
         "serial-i2c",
         "serial-spi",
         "serial-can",
@@ -1898,6 +1912,57 @@ def _normalize_serial_worker_arguments(
         if not arguments["output"]:
             raise OscilloscopeError("serial-lister-export output must not be empty")
         return dict(arguments)
+
+    if command in {"serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"}:
+        fields_by_command = {
+            "serial-trigger-i2c": {"type", "address", "data", "data2", "qualifier"},
+            "serial-trigger-spi": {"type", "width", "data"},
+            "serial-trigger-can": {"type", "id", "id_mode", "data", "data_length"},
+        }
+        allowed = {"bus", "query"} | fields_by_command[command]
+        unknown = set(arguments) - allowed
+        if unknown:
+            raise OscilloscopeError(
+                f"unknown argument for {command}: {sorted(unknown)[0]}"
+            )
+        query = arguments.get("query", False)
+        if "query" in arguments and query is not True:
+            raise OscilloscopeError(f"{command} argument query must be exactly true")
+        validator = {
+            "serial-trigger-i2c": validate_serial_i2c_trigger_request,
+            "serial-trigger-spi": validate_serial_spi_trigger_request,
+            "serial-trigger-can": validate_serial_can_trigger_request,
+        }[command]
+        values = {
+            key: arguments.get(key) for key in fields_by_command[command]
+        }
+        canonical = validator(
+            arguments.get("bus"), query=query, capabilities=capabilities, **values
+        )
+        normalized: dict[str, Any] = {"bus": canonical[0]}
+        if query:
+            normalized["query"] = True
+        elif command == "serial-trigger-i2c":
+            _, trigger_type, address, data, data2, qualifier = canonical
+            normalized.update(type=trigger_type)
+            for key, value in {
+                "address": address, "data": data, "data2": data2, "qualifier": qualifier
+            }.items():
+                if value is not None:
+                    normalized[key] = value
+        elif command == "serial-trigger-spi":
+            _, trigger_type, width, data = canonical
+            normalized.update(type=trigger_type, width=width, data=data)
+        else:
+            _, trigger_type, id_value, id_mode, data, data_length = canonical
+            normalized.update(type=trigger_type)
+            for key, value in {
+                "id": id_value, "id_mode": id_mode, "data": data,
+                "data_length": data_length,
+            }.items():
+                if value is not None:
+                    normalized[key] = value
+        return normalized
 
     if command == "serial-trigger-uart":
         allowed = {"bus", "query", "type", "data", "qualifier"}
@@ -2114,15 +2179,21 @@ def _normalize_save_export_worker_arguments(
 def _serial_uart_trigger_worker_namespace(
     arguments: dict[str, Any], runtime: WorkerRuntime, job_dir: Path | None
 ) -> argparse.Namespace:
-    """Build the small serial trigger runtime namespace without CLI parsing."""
+    """Build a serial trigger runtime namespace without CLI parsing."""
 
     namespace = argparse.Namespace(
-        command="serial-trigger-uart",
+        command=arguments["command"],
         bus=arguments["bus"],
         query=arguments.get("query", False),
         type=arguments.get("type"),
         data=arguments.get("data"),
         qualifier=arguments.get("qualifier"),
+        data2=arguments.get("data2"),
+        address=arguments.get("address"),
+        width=arguments.get("width"),
+        id=arguments.get("id"),
+        id_mode=arguments.get("id_mode"),
+        data_length=arguments.get("data_length"),
         simulate=runtime.mode == "simulate",
         dry_run=False,
         live=runtime.mode == "live",

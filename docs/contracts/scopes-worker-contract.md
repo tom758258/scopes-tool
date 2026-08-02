@@ -171,7 +171,8 @@ Worker `/command` supports the existing Scopes capability surface:
 - `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
   `wgen-voltage`, `wgen-offset`, `wgen-load`
 - `serial-query`, `serial-mode`, `serial-display`, `serial-uart`,
-  `serial-trigger-uart`, `serial-i2c`, `serial-spi`, `serial-can`,
+  `serial-trigger-uart`, `serial-trigger-i2c`, `serial-trigger-spi`,
+  `serial-trigger-can`, `serial-i2c`, `serial-spi`, `serial-can`,
   `serial-lister-query`, `serial-lister-display`,
   `serial-lister-reference`, `serial-lister-export`
 - `search-state`, `search-mode`, `search-count`, `search-event`, `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, `serial-search-can`
@@ -1799,6 +1800,40 @@ UART-specific queries and does not treat the mode mismatch as command failure.
 This command does not modify UART decode settings, enable Serial display, run,
 single, wait, or capture. P0 excludes UART burst, idle time, 9-bit trigger
 comparison, pattern sequence, and LIN/I2C/SPI/CAN or other protocol triggers.
+
+### Serial Trigger P1 Commands
+
+The worker accepts these strict canonical request shapes:
+
+```json
+{"command": "serial-trigger-i2c", "arguments": {"bus": 1, "type": "read-eeprom", "address": 80, "data": 16, "qualifier": "equal"}}
+```
+
+```json
+{"command": "serial-trigger-spi", "arguments": {"bus": 1, "type": "mosi", "width": 8, "data": "1010XX01"}}
+```
+
+```json
+{"command": "serial-trigger-can", "arguments": {"bus": 1, "type": "start-of-frame"}}
+```
+
+Each command also accepts exactly `{"bus": 1, "query": true}` for query.
+Unknown fields, non-canonical values, query/configure mixes, unavailable
+buses, unsupported protocol modes, and invalid cross-field combinations fail
+before enqueue, artifact creation, backend open, or SCPI. I2C address/data
+values are unsigned integer or hexadecimal values; SPI and CAN patterns use
+binary or `0x` hexadecimal syntax with `X` don't-care characters. Configure
+results include `state_changing: true` and create no artifact.
+
+The target Bus must already be configured through Serial P1. Configure queries
+the current Bus mode, writes protocol criteria in documented order, and selects
+the corresponding `SBUS<n>` global Trigger Mode last. Query checks both Bus
+mode and trigger type before requesting only active protocol fields. A mode
+mismatch is successful with `selected: false` and null protocol-specific
+fields, without protocol-specific queries. These commands do not change decode
+settings or display and do not run, single, wait, or capture. P1 includes only
+the common I2C/SPI/CAN trigger subset; UART P0 and Serial Search P3 remain
+separate commands.
 
 ### Serial Lister P2 Commands
 

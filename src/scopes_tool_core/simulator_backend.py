@@ -16,11 +16,22 @@ from .errors import BackendClosedError, OscilloscopeError
 from .identity import VENDOR_REGISTRY, physical_model_for_id
 from .serial import (
     SERIAL_MODE_TOKENS,
+    parse_serial_can_trigger_id_mode,
+    parse_serial_can_trigger_type,
+    parse_serial_i2c_trigger_qualifier,
+    parse_serial_i2c_trigger_type,
+    parse_serial_spi_trigger_type,
+    normalize_serial_trigger_pattern,
     parse_serial_mode,
     parse_serial_uart_trigger_qualifier,
     parse_serial_uart_trigger_type,
     serial_uart_trigger_qualifier_readback,
     serial_uart_trigger_type_readback,
+    serial_can_trigger_type_readback,
+    serial_i2c_trigger_type_readback,
+    serial_spi_trigger_type_readback,
+    normalize_serial_can_trigger_id_mode,
+    validate_serial_can_trigger_data_length,
 )
 from .trigger import OPERATION_CONDITION_RUN_MASK
 from .wgen import WGEN_FUNCTION_TOKENS, WGEN_LOAD_TOKENS
@@ -191,6 +202,19 @@ class SimulatorBackend:
     serial_uart_trigger_types: dict[int, str] = field(default_factory=dict)
     serial_uart_trigger_data: dict[int, int] = field(default_factory=dict)
     serial_uart_trigger_qualifiers: dict[int, str] = field(default_factory=dict)
+    serial_i2c_trigger_types: dict[int, str] = field(default_factory=dict)
+    serial_i2c_trigger_addresses: dict[int, int] = field(default_factory=dict)
+    serial_i2c_trigger_data: dict[int, int] = field(default_factory=dict)
+    serial_i2c_trigger_data2: dict[int, int] = field(default_factory=dict)
+    serial_i2c_trigger_qualifiers: dict[int, str] = field(default_factory=dict)
+    serial_spi_trigger_types: dict[int, str] = field(default_factory=dict)
+    serial_spi_trigger_widths: dict[int, dict[str, int]] = field(default_factory=dict)
+    serial_spi_trigger_data: dict[int, dict[str, str]] = field(default_factory=dict)
+    serial_can_trigger_types: dict[int, str] = field(default_factory=dict)
+    serial_can_trigger_ids: dict[int, str] = field(default_factory=dict)
+    serial_can_trigger_id_modes: dict[int, str] = field(default_factory=dict)
+    serial_can_trigger_data: dict[int, str] = field(default_factory=dict)
+    serial_can_trigger_data_lengths: dict[int, int] = field(default_factory=dict)
     lister_display: str = "OFF"
     lister_reference: str = "TRIGger"
     lister_data: bytes = b"bus,time,value\r\nSBUS1,0,0\r\n"
@@ -383,6 +407,58 @@ class SimulatorBackend:
         }
         self.serial_uart_trigger_qualifiers = {
             bus: self.serial_uart_trigger_qualifiers.get(bus, "EQU")
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_i2c_trigger_types = {
+            bus: self.serial_i2c_trigger_types.get(bus, "READ7")
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_i2c_trigger_addresses = {
+            bus: self.serial_i2c_trigger_addresses.get(bus, 0)
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_i2c_trigger_data = {
+            bus: self.serial_i2c_trigger_data.get(bus, 0)
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_i2c_trigger_data2 = {
+            bus: self.serial_i2c_trigger_data2.get(bus, 0)
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_i2c_trigger_qualifiers = {
+            bus: self.serial_i2c_trigger_qualifiers.get(bus, "EQU")
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_spi_trigger_types = {
+            bus: self.serial_spi_trigger_types.get(bus, "MOSI")
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_spi_trigger_widths = {
+            bus: {"MOSI": 8, "MISO": 8, **self.serial_spi_trigger_widths.get(bus, {})}
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_spi_trigger_data = {
+            bus: {"MOSI": "00000000", "MISO": "00000000", **self.serial_spi_trigger_data.get(bus, {})}
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_can_trigger_types = {
+            bus: self.serial_can_trigger_types.get(bus, "DATA")
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_can_trigger_ids = {
+            bus: self.serial_can_trigger_ids.get(bus, "0" * 29)
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_can_trigger_id_modes = {
+            bus: self.serial_can_trigger_id_modes.get(bus, "STAN")
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_can_trigger_data = {
+            bus: self.serial_can_trigger_data.get(bus, "00000000")
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_can_trigger_data_lengths = {
+            bus: self.serial_can_trigger_data_lengths.get(bus, 1)
             for bus in range(1, self._capabilities.serial_bus_count + 1)
         }
         self.signals = {
@@ -586,6 +662,12 @@ class SimulatorBackend:
         elif match := re.fullmatch(r":LISTer:REFerence (.+)", command, re.IGNORECASE):
             self.lister_reference = _canonical_lister_reference(match.group(1))
         elif self._apply_serial_uart_trigger_write(command):
+            pass
+        elif self._apply_serial_i2c_trigger_write(command):
+            pass
+        elif self._apply_serial_spi_trigger_write(command):
+            pass
+        elif self._apply_serial_can_trigger_write(command):
             pass
         elif self._apply_serial_protocol_write(command):
             pass
@@ -1191,6 +1273,15 @@ class SimulatorBackend:
         serial_uart_trigger_value = self._query_serial_uart_trigger(command)
         if serial_uart_trigger_value is not None:
             return serial_uart_trigger_value
+        serial_i2c_trigger_value = self._query_serial_i2c_trigger(command)
+        if serial_i2c_trigger_value is not None:
+            return serial_i2c_trigger_value
+        serial_spi_trigger_value = self._query_serial_spi_trigger(command)
+        if serial_spi_trigger_value is not None:
+            return serial_spi_trigger_value
+        serial_can_trigger_value = self._query_serial_can_trigger(command)
+        if serial_can_trigger_value is not None:
+            return serial_can_trigger_value
         serial_protocol_value = self._query_serial_protocol(command)
         if serial_protocol_value is not None:
             return serial_protocol_value
@@ -2644,6 +2735,147 @@ class SimulatorBackend:
         if field_name == "DATA":
             return str(self.serial_uart_trigger_data[bus])
         return self.serial_uart_trigger_qualifiers[bus]
+
+    def _apply_serial_i2c_trigger_write(self, command: str) -> bool:
+        match = re.fullmatch(
+            r":SBUS(\d+):IIC:TRIGger:(TYPE|PATTern:ADDRess|PATTern:DATA|PATTern:DATa2|QUALifier)\s+(.+)",
+            command,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return False
+        bus = self._validate_serial_bus(int(match.group(1)))
+        field_name = match.group(2).upper()
+        value = match.group(3).strip()
+        if field_name == "TYPE":
+            self.serial_i2c_trigger_types[bus] = serial_i2c_trigger_type_readback(
+                parse_serial_i2c_trigger_type(value)
+            )
+        elif field_name.endswith("ADDRESS"):
+            self.serial_i2c_trigger_addresses[bus] = int(value, 0)
+        elif field_name.endswith("DATA2"):
+            self.serial_i2c_trigger_data2[bus] = int(value, 0)
+        elif field_name.endswith("DATA"):
+            self.serial_i2c_trigger_data[bus] = int(value, 0)
+        else:
+            self.serial_i2c_trigger_qualifiers[bus] = parse_serial_i2c_trigger_qualifier(value)
+        return True
+
+    def _query_serial_i2c_trigger(self, command: str) -> str | None:
+        match = re.fullmatch(
+            r":SBUS(\d+):IIC:TRIGger:(TYPE|PATTern:ADDRess|PATTern:DATA|PATTern:DATa2|QUALifier)\?",
+            command,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        bus = self._validate_serial_bus(int(match.group(1)))
+        field_name = match.group(2).upper()
+        if field_name == "TYPE":
+            return self.serial_i2c_trigger_types[bus]
+        if field_name.endswith("ADDRESS"):
+            return str(self.serial_i2c_trigger_addresses[bus])
+        if field_name.endswith("DATA2"):
+            return str(self.serial_i2c_trigger_data2[bus])
+        if field_name.endswith("DATA"):
+            return str(self.serial_i2c_trigger_data[bus])
+        return self.serial_i2c_trigger_qualifiers[bus]
+
+    def _apply_serial_spi_trigger_write(self, command: str) -> bool:
+        match = re.fullmatch(
+            r":SBUS(\d+):SPI:TRIGger:(TYPE|PATTern:(MOSI|MISO):(WIDTh|DATA))\s+(.+)",
+            command,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return False
+        bus = self._validate_serial_bus(int(match.group(1)))
+        field_name = match.group(2).upper()
+        channel = (match.group(3) or "").upper()
+        value = match.group(5).strip()
+        if field_name == "TYPE":
+            self.serial_spi_trigger_types[bus] = serial_spi_trigger_type_readback(
+                parse_serial_spi_trigger_type(value)
+            )
+        elif field_name.endswith("WIDTH"):
+            self.serial_spi_trigger_widths[bus][channel] = int(value)
+        else:
+            self.serial_spi_trigger_data[bus][channel] = normalize_serial_trigger_pattern(
+                _parse_scpi_string_arg(value), "SPI trigger data", max_bits=64
+            )
+        return True
+
+    def _query_serial_spi_trigger(self, command: str) -> str | None:
+        match = re.fullmatch(
+            r":SBUS(\d+):SPI:TRIGger:(TYPE|PATTern:(MOSI|MISO):(WIDTh|DATA))\?",
+            command,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        bus = self._validate_serial_bus(int(match.group(1)))
+        field_name = match.group(2).upper()
+        channel = (match.group(3) or "").upper()
+        if field_name == "TYPE":
+            return self.serial_spi_trigger_types[bus]
+        if field_name.endswith("WIDTH"):
+            return str(self.serial_spi_trigger_widths[bus][channel])
+        return f'"{self.serial_spi_trigger_data[bus][channel]}"'
+
+    def _apply_serial_can_trigger_write(self, command: str) -> bool:
+        condition = re.fullmatch(
+            r":SBUS(\d+):CAN:TRIGger\s+(.+)", command, re.IGNORECASE
+        )
+        if condition is not None:
+            bus = self._validate_serial_bus(int(condition.group(1)))
+            self.serial_can_trigger_types[bus] = serial_can_trigger_type_readback(
+                parse_serial_can_trigger_type(condition.group(2).strip())
+            )
+            return True
+        match = re.fullmatch(
+            r":SBUS(\d+):CAN:TRIGger:PATTern:(ID:MODE|ID|DATA:LENGth|DATA)\s+(.+)",
+            command,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return False
+        bus = self._validate_serial_bus(int(match.group(1)))
+        field_name = match.group(2).upper()
+        value = match.group(3).strip()
+        if field_name == "ID:MODE":
+            self.serial_can_trigger_id_modes[bus] = "STAN" if parse_serial_can_trigger_id_mode(value) == "standard" else "EXT"
+        elif field_name == "ID":
+            self.serial_can_trigger_ids[bus] = normalize_serial_trigger_pattern(
+                _parse_scpi_string_arg(value), "CAN trigger ID", max_bits=29
+            )
+        elif field_name == "DATA:LENGTH":
+            self.serial_can_trigger_data_lengths[bus] = int(value)
+        else:
+            self.serial_can_trigger_data[bus] = normalize_serial_trigger_pattern(
+                _parse_scpi_string_arg(value), "CAN trigger data", max_bits=64
+            )
+        return True
+
+    def _query_serial_can_trigger(self, command: str) -> str | None:
+        condition = re.fullmatch(r":SBUS(\d+):CAN:TRIGger\?", command, re.IGNORECASE)
+        if condition is not None:
+            bus = self._validate_serial_bus(int(condition.group(1)))
+            return self.serial_can_trigger_types[bus]
+        match = re.fullmatch(
+            r":SBUS(\d+):CAN:TRIGger:PATTern:(ID:MODE|ID|DATA:LENGth|DATA)\?",
+            command, re.IGNORECASE
+        )
+        if match is None:
+            return None
+        bus = self._validate_serial_bus(int(match.group(1)))
+        field_name = match.group(2).upper()
+        if field_name == "ID:MODE":
+            return self.serial_can_trigger_id_modes[bus]
+        if field_name == "ID":
+            return f'"{self.serial_can_trigger_ids[bus]}"'
+        if field_name == "DATA:LENGTH":
+            return str(self.serial_can_trigger_data_lengths[bus])
+        return f'"{self.serial_can_trigger_data[bus]}"'
 
     def _query_serial_protocol(self, command: str) -> str | None:
         match = re.fullmatch(r":SBUS(\d+):(UART|IIC|SPI|CAN):(.+?)\?", command, re.IGNORECASE)

@@ -30,6 +30,9 @@ def test_worker_serial_commands_are_allowlisted(tmp_path):
         ("serial-display", {"bus": 1, "query": True}),
         ("serial-uart", {"bus": 1, "query": True}),
         ("serial-trigger-uart", {"bus": 1, "query": True}),
+        ("serial-trigger-i2c", {"bus": 1, "query": True}),
+        ("serial-trigger-spi", {"bus": 1, "query": True}),
+        ("serial-trigger-can", {"bus": 1, "query": True}),
         ("serial-i2c", {"bus": 1, "query": True}),
         ("serial-spi", {"bus": 1, "query": True}),
         ("serial-can", {"bus": 1, "query": True}),
@@ -137,6 +140,48 @@ def test_worker_serial_uart_trigger_rejects_unknown_and_mixed_fields(tmp_path):
             "serial-trigger-uart",
             {"bus": 1, "query": True, "type": "rx-start"},
             runtime,
+        )
+
+
+@pytest.mark.parametrize(
+    "command, arguments",
+    [
+        ("serial-trigger-i2c", {"bus": 1, "query": True}),
+        ("serial-trigger-spi", {"bus": 1, "query": True}),
+        ("serial-trigger-can", {"bus": 1, "query": True}),
+    ],
+)
+def test_worker_serial_trigger_commands_route_and_query(tmp_path, command, arguments):
+    runtime = _runtime(tmp_path)
+    parsed = worker.parse_domain_command(command, arguments, runtime)
+    assert parsed.command == command
+    payload, exit_code = cli._execute_json_command(parsed)
+    assert exit_code == 0
+    assert payload["result"]["protocol"] == command.removeprefix("serial-trigger-")
+
+
+def test_worker_serial_trigger_rejects_unknown_and_mixed_fields(tmp_path):
+    runtime = _runtime(tmp_path)
+    with pytest.raises(OscilloscopeError, match="unknown argument"):
+        worker.parse_domain_command(
+            "serial-trigger-spi",
+            {"bus": 1, "query": True, "unexpected": "value"},
+            runtime,
+        )
+    with pytest.raises(OscilloscopeError, match="cannot be combined"):
+        worker.parse_domain_command(
+            "serial-trigger-can",
+            {"bus": 1, "query": True, "type": "start-of-frame"},
+            runtime,
+        )
+
+
+def test_worker_serial_i2c_trigger_rejects_cross_field_request(tmp_path):
+    with pytest.raises(ParameterValidationError, match="requires --address"):
+        worker.parse_domain_command(
+            "serial-trigger-i2c",
+            {"bus": 1, "type": "address-no-ack"},
+            _runtime(tmp_path),
         )
 
 

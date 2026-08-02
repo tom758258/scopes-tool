@@ -282,6 +282,17 @@ Control and setup:
   user must configure the UART bus through Serial P1 first; this command does
   not modify decode settings or run, single, wait, or capture. P0 excludes
   burst, idle-time, 9-bit, pattern-sequence, and other protocol triggers.
+- `serial-trigger-i2c`, `serial-trigger-spi`, and `serial-trigger-can`:
+  `operation`, protocol, integer `bus`, `mode`/`raw_mode`, `selected`,
+  `trigger_mode`/`raw_trigger_mode`, canonical `type`/`raw_type`, and
+  protocol-specific canonical/raw fields. Configure results include
+  `state_changing: true`; criteria writes precede the final
+  `:TRIGger:MODE SBUS<n>` write. Query returns `null` protocol-specific fields
+  and `selected: false` for a nonmatching Bus mode without sending
+  protocol-specific queries. Dry-run query `commands` contain only
+  `:SBUS<n>:MODE?` and `:TRIGger:MODE?`. These commands require Serial P1
+  configuration first, do not change decode settings or display, and do not
+  run, single, wait, or capture.
 - `serial-lister-query`: `operation: "query"`, ordered `commands`, canonical
   `display` and `reference`, and preserved `raw_display` and `raw_reference`.
   The aggregate query does not request `:LISTer:DATA?`.

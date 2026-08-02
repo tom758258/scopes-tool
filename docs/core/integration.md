@@ -282,6 +282,18 @@ Serial support is delivered in five focused surfaces:
   UART decode settings or perform acquisition. P0 excludes burst, idle time,
   9-bit, pattern-sequence, and other protocol triggers. The canonical public
   choices are `UART_TRIGGER_TYPES` and `UART_TRIGGER_QUALIFIERS`.
+- Serial Trigger P1 provides `SerialI2CTriggerState`,
+  `SerialSpiTriggerState`, and `SerialCanTriggerState` through
+  `Oscilloscope.configure_serial_i2c_trigger()`,
+  `query_serial_i2c_trigger()`, `configure_serial_spi_trigger()`,
+  `query_serial_spi_trigger()`, `configure_serial_can_trigger()`, and
+  `query_serial_can_trigger()`. These commands require the matching Serial P1
+  Bus configuration, write protocol criteria before selecting the matching
+  global `SBUS<n>` Trigger Mode, preserve raw readbacks, and do not modify
+  decode settings or run acquisition. They expose only the documented common
+  I2C/SPI/CAN trigger subset; canonical choices are exposed through
+  `I2C_TRIGGER_TYPES`, `I2C_TRIGGER_QUALIFIERS`, `SPI_TRIGGER_TYPES`,
+  `CAN_TRIGGER_TYPES`, and `CAN_TRIGGER_ID_MODES`.
 - P1 provides UART, I2C, SPI, and CAN decode configuration through the
   protocol-specific configure/query methods. Configure methods set the
   selected mode first and then write supplied fields in controller-defined

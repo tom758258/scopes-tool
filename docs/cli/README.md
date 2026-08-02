@@ -1599,8 +1599,8 @@ configure options. Sources are `channelN` (bounded by the selected model's
 analog channels) or `external`; I2C emits `IIC`; CAN uses canonical signal
 values `canh`, `canl`, `rx`, `tx`, `difl`, and `difh`. Query operations read
 `MODE?` first and preserve raw protocol readbacks. Availability is controlled
-by capability profiles and instrument licensing. Serial trigger, Search, and
-advanced protocol parameters are outside this P1 surface.
+by capability profiles and instrument licensing. Serial Search and advanced
+protocol parameters are outside this Serial Basic P1 surface.
 
 Serial UART Trigger P0 configures trigger criteria on a UART bus that the user
 has already configured through Serial P1:
@@ -1628,7 +1628,27 @@ does not change UART decode settings, Serial display, or Serial Bus mode.
 Successful configure operations select the corresponding Serial Bus as the
 global Trigger Mode. This command does not run, single, wait for a trigger, or
 capture. P0 does not include UART burst, idle time, 9-bit alert/data comparison,
-pattern sequence, or other protocol triggers.
+pattern sequence, or other UART trigger extensions.
+
+Serial Trigger P1 adds common I2C, SPI, and CAN criteria. Configure the target
+Bus through Serial P1 first; these commands do not modify decode settings,
+Serial display, or Serial Bus mode. Configure writes all protocol criteria and
+then selects the matching Serial Bus as the global Trigger Mode. They do not
+run, single, wait, or capture. P1 excludes 4000X-only I2C additions, CAN FD,
+and other extended protocol conditions.
+
+```powershell
+scopes-tool serial-trigger-i2c --bus 1 --type read-eeprom --address 0x50 --data 0x10 --qualifier equal
+scopes-tool serial-trigger-spi --bus 1 --type mosi --width 8 --data 1010XX01
+scopes-tool serial-trigger-can --bus 1 --type id-and-data --id 0x1 --id-mode standard --data 1010XX01 --data-length 1
+```
+
+I2C trigger address/data values are unsigned integer or hexadecimal values.
+SPI and CAN trigger patterns accept documented binary or `0x` hexadecimal
+forms with `X` don't-care characters. Query returns only fields used by the
+current trigger type and preserves the instrument's raw readback. Dry-run
+query plans list only `:SBUS<n>:MODE?` and `:TRIGger:MODE?` because the live
+Bus mode and trigger type are not known during planning.
 
 For SPI, `chip-select`, `no-chip-select`, and `timeout` are the canonical
 framing choices. Chip-select and no-chip-select framing must not be combined

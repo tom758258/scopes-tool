@@ -123,6 +123,9 @@ and USB/LAN or Worker-live path.
   guard bus count and settable modes. Serial decode can require an
   instrument license; Core does not probe licenses and preserves instrument
   errors for unavailable hardware or options.
+- Serial Trigger P1 provides the documented common I2C, SPI, and CAN trigger
+  subset on the same capability profiles. It does not add a capability field;
+  model profiles continue to guard bus count and protocol mode availability.
 - Search Basic Pack v1 state and count queries plus profile-guarded mode
   configuration. Unsupported modes are rejected before search SCPI is sent.
 - Save/Export Pack v1 common instrument-side SAVE commands for current save
@@ -183,7 +186,7 @@ the presence of an instrument license.
 Serial Basic P0 keeps aggregate responses raw. Serial Basic P1 implements only
 basic UART, I2C, SPI, and CAN source/decode settings. Serial Lister P2 adds
 global display/reference controls and host-side raw CSV export through
-`:LISTer:DATA?`; it does not implement serial trigger, protocol-specific CSV
+`:LISTer:DATA?`; it does not implement protocol-specific CSV
 parsing, or instrument-side `:SAVE:LISTer`. Serial Search P3 provides
 protocol-specific UART, I2C, SPI, and CAN search controls after the matching
 Serial bus has been configured. Lister display selection `bus2` is unavailable

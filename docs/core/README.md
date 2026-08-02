@@ -137,6 +137,10 @@ Core owns runtime behavior:
   decode, acquire traffic, or change SBUS display state. Lister display
   selection uses `off`, `bus1`, `bus2`, and `all`; `bus2` is unavailable on
   2000X and available on 3000X/4000X profiles.
+- Serial Trigger P1 provides common I2C, SPI, and CAN trigger criteria through
+  Core, CLI, Worker, and Simulator paths. The matching Serial P1 bus must be
+  configured first; trigger configure selects the corresponding `SBUS<n>`
+  Trigger Mode last and does not change decode settings or acquire data.
 - Measurement Control Pack v1 helpers for clearing screen measurements,
   enabling or querying measurement markers, selecting one or two analog
   measurement source channels, and selecting `MAIN`, `ZOOM`, `AUTO`, or

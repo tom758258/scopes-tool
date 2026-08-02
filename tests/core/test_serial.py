@@ -25,6 +25,15 @@ from scopes_tool_core.serial import (
     serial_mode_query,
     parse_serial_uart_trigger_qualifier,
     parse_serial_uart_trigger_type,
+    parse_serial_can_trigger_id_mode,
+    parse_serial_can_trigger_type,
+    parse_serial_i2c_trigger_qualifier,
+    parse_serial_i2c_trigger_type,
+    parse_serial_spi_trigger_type,
+    parse_serial_trigger_pattern,
+    validate_serial_can_trigger_request,
+    validate_serial_i2c_trigger_request,
+    validate_serial_spi_trigger_request,
     validate_serial_bus,
 )
 from dataclasses import replace
@@ -348,6 +357,221 @@ def test_serial_uart_trigger_configure_keeps_trigger_mode_as_last_write():
 
     state_changing = [command for command in backend.history if "?" not in command]
     assert state_changing[-1] == ":TRIGger:MODE SBUS1"
+
+
+def test_serial_i2c_trigger_configure_and_query_order_with_read_eeprom():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "IIC",
+            ":TRIGger:MODE?": "SBUS1",
+            ":SBUS1:IIC:TRIGger:TYPE?": "READE",
+            ":SBUS1:IIC:TRIGger:PATTern:ADDRess?": "0x50",
+            ":SBUS1:IIC:TRIGger:PATTern:DATA?": "0x10",
+            ":SBUS1:IIC:TRIGger:QUALifier?": "GRE",
+        }
+    )
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    state = controller.configure_i2c_trigger(
+        1, type="read-eeprom", address=0x50, data=0x10, qualifier="greater-than"
+    )
+
+    assert state.type == "read-eeprom"
+    assert state.address == 0x50
+    assert state.data == 0x10
+    assert state.qualifier == "greater-than"
+    assert backend.history == [
+        ":SBUS1:MODE?",
+        ":SBUS1:IIC:TRIGger:TYPE READEprom",
+        ":SBUS1:IIC:TRIGger:PATTern:ADDRess 80",
+        ":SBUS1:IIC:TRIGger:PATTern:DATA 16",
+        ":SBUS1:IIC:TRIGger:QUALifier GREaterthan",
+        ":TRIGger:MODE SBUS1",
+        ":TRIGger:MODE?",
+        ":SBUS1:IIC:TRIGger:TYPE?",
+        ":SBUS1:IIC:TRIGger:PATTern:ADDRess?",
+        ":SBUS1:IIC:TRIGger:PATTern:DATA?",
+        ":SBUS1:IIC:TRIGger:QUALifier?",
+    ]
+    assert [command for command in backend.history if "?" not in command][-1] == ":TRIGger:MODE SBUS1"
+
+
+def test_serial_i2c_trigger_rejects_unused_fields_before_scpi():
+    backend = FakeBackend()
+    with pytest.raises(ParameterValidationError, match="cannot use --data"):
+        validate_serial_i2c_trigger_request(
+            1, type="start", data=1, capabilities=capabilities_for_model("DSOX2004A")
+        )
+    assert backend.history == []
+
+
+def test_serial_spi_trigger_configure_order_and_binary_readback():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "SPI",
+            ":TRIGger:MODE?": "SBUS1",
+            ":SBUS1:SPI:TRIGger:TYPE?": "MOSI",
+            ":SBUS1:SPI:TRIGger:PATTern:MOSI:WIDTh?": "16",
+            ":SBUS1:SPI:TRIGger:PATTern:MOSI:DATA?": '"10100101XXXXXXXX"',
+        }
+    )
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    state = controller.configure_spi_trigger(1, type="mosi", width=16, data="0xa5xx")
+
+    assert state.data == "10100101XXXXXXXX"
+    assert state.raw_data == '"10100101XXXXXXXX"'
+    assert backend.history == [
+        ":SBUS1:MODE?",
+        ":SBUS1:SPI:TRIGger:TYPE MOSI",
+        ":SBUS1:SPI:TRIGger:PATTern:MOSI:WIDTh 16",
+        ':SBUS1:SPI:TRIGger:PATTern:MOSI:DATA "0xA5XX"',
+        ":TRIGger:MODE SBUS1",
+        ":TRIGger:MODE?",
+        ":SBUS1:SPI:TRIGger:TYPE?",
+        ":SBUS1:SPI:TRIGger:PATTern:MOSI:WIDTh?",
+        ":SBUS1:SPI:TRIGger:PATTern:MOSI:DATA?",
+    ]
+    assert [command for command in backend.history if "?" not in command][-1] == ":TRIGger:MODE SBUS1"
+
+
+def test_serial_can_trigger_configure_order_and_short_readback():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "CAN",
+            ":TRIGger:MODE?": "SBUS1",
+            ":SBUS1:CAN:TRIGger?": "DATA",
+            ":SBUS1:CAN:TRIGger:PATTern:ID:MODE?": "STAN",
+            ":SBUS1:CAN:TRIGger:PATTern:ID?": '"00000000000000000000000000001"',
+            ":SBUS1:CAN:TRIGger:PATTern:DATA:LENGth?": "1",
+            ":SBUS1:CAN:TRIGger:PATTern:DATA?": '"10100101"',
+        }
+    )
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    state = controller.configure_can_trigger(
+        1, type="id-and-data", id="0x1", id_mode="standard", data="1010xx01", data_length=1
+    )
+
+    assert state.type == "id-and-data"
+    assert state.id_mode == "standard"
+    assert state.id == "00000000000000000000000000001"
+    assert state.data == "10100101"
+    assert backend.history == [
+        ":SBUS1:MODE?",
+        ":SBUS1:CAN:TRIGger:PATTern:ID:MODE STANdard",
+        ':SBUS1:CAN:TRIGger:PATTern:ID "0x1"',
+        ":SBUS1:CAN:TRIGger:PATTern:DATA:LENGth 1",
+        ':SBUS1:CAN:TRIGger:PATTern:DATA "1010XX01"',
+        ":SBUS1:CAN:TRIGger DATA",
+        ":TRIGger:MODE SBUS1",
+        ":TRIGger:MODE?",
+        ":SBUS1:CAN:TRIGger?",
+        ":SBUS1:CAN:TRIGger:PATTern:ID:MODE?",
+        ":SBUS1:CAN:TRIGger:PATTern:ID?",
+        ":SBUS1:CAN:TRIGger:PATTern:DATA:LENGth?",
+        ":SBUS1:CAN:TRIGger:PATTern:DATA?",
+    ]
+    assert [command for command in backend.history if "?" not in command][-1] == ":TRIGger:MODE SBUS1"
+
+
+@pytest.mark.parametrize(
+    "protocol, configure, expected_mode",
+    [
+        ("i2c", {"type": "start"}, "i2c"),
+        ("spi", {"type": "mosi", "width": 8, "data": "10101010"}, "spi"),
+        ("can", {"type": "start-of-frame"}, "can"),
+    ],
+)
+def test_serial_trigger_mode_mismatch_stops_before_protocol_write(protocol, configure, expected_mode):
+    backend = FakeBackend(responses={":SBUS1:MODE?": "UART"})
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+    method = getattr(controller, f"configure_{protocol}_trigger")
+    with pytest.raises(SerialResponseError, match=f"expected '{expected_mode}'"):
+        method(1, **configure)
+    assert backend.history == [":SBUS1:MODE?"]
+
+
+@pytest.mark.parametrize(
+    "protocol, raw_type, expected_queries",
+    [
+        (
+            "i2c", "STAR",
+            [":SBUS1:IIC:TRIGger:TYPE?"],
+        ),
+        (
+            "spi", "MISO",
+            [
+                ":SBUS1:SPI:TRIGger:TYPE?",
+                ":SBUS1:SPI:TRIGger:PATTern:MISO:WIDTh?",
+                ":SBUS1:SPI:TRIGger:PATTern:MISO:DATA?",
+            ],
+        ),
+        (
+            "can", "SOF",
+            [":SBUS1:CAN:TRIGger?"],
+        ),
+    ],
+)
+def test_serial_trigger_query_follows_type_and_omits_inactive_fields(
+    protocol, raw_type, expected_queries
+):
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": {"i2c": "IIC", "spi": "SPI", "can": "CAN"}[protocol],
+            ":TRIGger:MODE?": "EDGE",
+            expected_queries[0]: raw_type,
+            **(
+                {
+                    ":SBUS1:SPI:TRIGger:PATTern:MISO:WIDTh?": "8",
+                    ":SBUS1:SPI:TRIGger:PATTern:MISO:DATA?": '"10101010"',
+                }
+                if protocol == "spi"
+                else {}
+            ),
+        }
+    )
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    state = getattr(controller, f"query_{protocol}_trigger")(1)
+
+    assert state.selected is False
+    assert backend.history == [":SBUS1:MODE?", ":TRIGger:MODE?", *expected_queries]
+
+
+@pytest.mark.parametrize("protocol", ["i2c", "spi", "can"])
+def test_serial_trigger_query_mode_mismatch_omits_protocol_queries(protocol):
+    backend = FakeBackend(
+        responses={":SBUS1:MODE?": "UART", ":TRIGger:MODE?": "SBUS1"}
+    )
+    controller = SerialController(SCPIClient(backend), capabilities_for_model("DSOX2004A"))
+
+    state = getattr(controller, f"query_{protocol}_trigger")(1)
+
+    assert state.selected is False
+    assert state.type is None
+    assert backend.history == [":SBUS1:MODE?", ":TRIGger:MODE?"]
+
+
+@pytest.mark.parametrize(
+    "parser, raw, expected",
+    [
+        (parse_serial_i2c_trigger_type, "READE", "read-eeprom"),
+        (parse_serial_spi_trigger_type, "MOSI", "mosi"),
+        (parse_serial_can_trigger_type, "IDR", "remote-frame-id"),
+    ],
+)
+def test_serial_trigger_short_readbacks_canonicalize(parser, raw, expected):
+    assert parser(raw) == expected
+
+
+def test_serial_trigger_pattern_helper_accepts_binary_hex_and_rejects_dollar():
+    assert parse_serial_trigger_pattern('"1010xx01"') == "1010XX01"
+    assert parse_serial_trigger_pattern("0xa5xx") == "0xA5XX"
+    with pytest.raises(ParameterValidationError, match="binary"):
+        from scopes_tool_core.serial import normalize_serial_trigger_pattern
+
+        normalize_serial_trigger_pattern("10$01", "SPI trigger data")
 
 
 def test_serial_i2c_configure_order_and_scpi_mapping():

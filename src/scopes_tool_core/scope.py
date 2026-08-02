@@ -78,14 +78,17 @@ from .search import (
 from .serial import (
     SerialController,
     SerialCanState,
+    SerialCanTriggerState,
     SerialDisplayState,
     SerialI2CState,
+    SerialI2CTriggerState,
     SerialListerDisplayState,
     SerialListerReferenceState,
     SerialListerState,
     SerialModeState,
     SerialQueryState,
     SerialSpiState,
+    SerialSpiTriggerState,
     SerialUartState,
     SerialUartTriggerState,
 )
@@ -836,6 +839,42 @@ class Oscilloscope:
         """Query UART trigger criteria and active serial trigger selection."""
 
         return self._serial_controller().query_uart_trigger(bus)
+
+    def configure_serial_i2c_trigger(
+        self, bus: int, **settings: object
+    ) -> SerialI2CTriggerState:
+        """Configure I2C trigger criteria without changing I2C decode settings."""
+
+        return self._serial_controller().configure_i2c_trigger(bus, **settings)
+
+    def query_serial_i2c_trigger(self, bus: int) -> SerialI2CTriggerState:
+        """Query I2C trigger criteria and active serial trigger selection."""
+
+        return self._serial_controller().query_i2c_trigger(bus)
+
+    def configure_serial_spi_trigger(
+        self, bus: int, **settings: object
+    ) -> SerialSpiTriggerState:
+        """Configure SPI trigger criteria without changing SPI decode settings."""
+
+        return self._serial_controller().configure_spi_trigger(bus, **settings)
+
+    def query_serial_spi_trigger(self, bus: int) -> SerialSpiTriggerState:
+        """Query SPI trigger criteria and active serial trigger selection."""
+
+        return self._serial_controller().query_spi_trigger(bus)
+
+    def configure_serial_can_trigger(
+        self, bus: int, **settings: object
+    ) -> SerialCanTriggerState:
+        """Configure CAN trigger criteria without changing CAN decode settings."""
+
+        return self._serial_controller().configure_can_trigger(bus, **settings)
+
+    def query_serial_can_trigger(self, bus: int) -> SerialCanTriggerState:
+        """Query CAN trigger criteria and active serial trigger selection."""
+
+        return self._serial_controller().query_can_trigger(bus)
 
     def configure_serial_i2c(self, bus: int, **settings: object) -> SerialI2CState:
         """Configure basic I2C decode settings."""
