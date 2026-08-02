@@ -1602,6 +1602,34 @@ values `canh`, `canl`, `rx`, `tx`, `difl`, and `difh`. Query operations read
 by capability profiles and instrument licensing. Serial trigger, Search, and
 advanced protocol parameters are outside this P1 surface.
 
+Serial UART Trigger P0 configures trigger criteria on a UART bus that the user
+has already configured through Serial P1:
+
+```powershell
+scopes-tool serial-trigger-uart `
+    --bus 1 `
+    --type rx-data `
+    --data 85 `
+    --qualifier equal
+
+scopes-tool serial-trigger-uart `
+    --bus 1 `
+    --type rx-start
+
+scopes-tool serial-trigger-uart --bus 1 --query
+```
+
+The canonical P0 types are `rx-start`, `rx-stop`, `rx-data`, `tx-start`,
+`tx-stop`, `tx-data`, and `parity-error`. Data triggers require the canonical
+qualifier `equal`, `not-equal`, `greater-than`, or `less-than`, plus an
+8-bit unsigned `--data` value from 0 through 255. The command rejects a bus
+whose current mode is not UART before writing any UART trigger criteria; it
+does not change UART decode settings, Serial display, or Serial Bus mode.
+Successful configure operations select the corresponding Serial Bus as the
+global Trigger Mode. This command does not run, single, wait for a trigger, or
+capture. P0 does not include UART burst, idle time, 9-bit alert/data comparison,
+pattern sequence, or other protocol triggers.
+
 For SPI, `chip-select`, `no-chip-select`, and `timeout` are the canonical
 framing choices. Chip-select and no-chip-select framing must not be combined
 with `--clock-timeout`; timeout framing requires `--framing timeout` in the same

@@ -266,7 +266,7 @@ transfer APIs. The maximum accepted configured save length is model-, option-,
 and instrument-state-dependent; Core enforces the common minimum of 100 points
 and preserves the raw length readback.
 
-Serial support is delivered in four focused stages:
+Serial support is delivered in five focused surfaces:
 
 - P0 provides basic bus mode and display controls through
   `Oscilloscope.query_serial()`, `configure_serial_mode()`,
@@ -274,6 +274,14 @@ Serial support is delivered in four focused stages:
   `query_serial_display()`. Aggregate `:SBUS<n>?` results preserve the
   trimmed subsystem response without parsing it. Mode and display writes send
   only their target commands.
+- Serial UART Trigger P0 provides `SerialUartTriggerState` through
+  `Oscilloscope.configure_serial_uart_trigger()` and
+  `Oscilloscope.query_serial_uart_trigger()`. The target UART bus must first
+  be configured through Serial P1. Configure writes UART trigger criteria and
+  selects the matching global `SBUS<n>` Trigger Mode last; it does not modify
+  UART decode settings or perform acquisition. P0 excludes burst, idle time,
+  9-bit, pattern-sequence, and other protocol triggers. The canonical public
+  choices are `UART_TRIGGER_TYPES` and `UART_TRIGGER_QUALIFIERS`.
 - P1 provides UART, I2C, SPI, and CAN decode configuration through the
   protocol-specific configure/query methods. Configure methods set the
   selected mode first and then write supplied fields in controller-defined

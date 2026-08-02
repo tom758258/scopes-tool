@@ -360,6 +360,8 @@ from scopes_tool_core.serial import (
     SPI_FRAMINGS,
     UART_PARITIES,
     UART_POLARITIES,
+    UART_TRIGGER_QUALIFIERS,
+    UART_TRIGGER_TYPES,
     serial_bus_query,
     serial_display_command,
     serial_display_query,
@@ -379,6 +381,11 @@ from scopes_tool_core.serial import (
     serial_spi_query_commands,
     serial_uart_configure_commands,
     serial_uart_query_commands,
+    serial_uart_trigger_configure_commands,
+    serial_uart_trigger_data_query,
+    serial_uart_trigger_qualifier_query,
+    serial_uart_trigger_type_query,
+    validate_serial_uart_trigger_request,
     normalize_can_signal_definition,
     normalize_i2c_address_size,
     normalize_serial_bit_order,
@@ -490,6 +497,8 @@ from scopes_tool_core.trigger import (
     transition_trigger_configure_commands,
     transition_trigger_query_commands,
     trigger_mode_edge_command,
+    trigger_mode_query,
+    trigger_mode_serial_command,
     trigger_hf_reject_command,
     trigger_hf_reject_query,
     trigger_noise_reject_command,
@@ -1406,6 +1415,20 @@ def _build_parser() -> argparse.ArgumentParser:
     serial_uart_parser.add_argument("--parity", choices=UART_PARITIES)
     serial_uart_parser.add_argument("--polarity", choices=UART_POLARITIES)
     serial_uart_parser.add_argument("--bit-order", choices=SERIAL_BIT_ORDERS)
+
+    serial_uart_trigger_parser = subparsers.add_parser(
+        "serial-trigger-uart",
+        allow_abbrev=False,
+        help="configure or query basic UART trigger criteria",
+    )
+    _add_scope_connection_args(serial_uart_trigger_parser)
+    serial_uart_trigger_parser.add_argument("--bus", type=_positive_int, required=True)
+    serial_uart_trigger_parser.add_argument("--query", action="store_true")
+    serial_uart_trigger_parser.add_argument("--type", choices=UART_TRIGGER_TYPES)
+    serial_uart_trigger_parser.add_argument("--data", type=int)
+    serial_uart_trigger_parser.add_argument(
+        "--qualifier", choices=UART_TRIGGER_QUALIFIERS
+    )
 
     serial_i2c_parser = subparsers.add_parser(
         "serial-i2c", allow_abbrev=False, help="configure or query basic I2C decode settings"
@@ -3286,6 +3309,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "serial-mode",
         "serial-display",
         "serial-uart",
+        "serial-trigger-uart",
         "serial-i2c",
         "serial-spi",
         "serial-can",
@@ -3984,6 +4008,7 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         "serial-mode",
         "serial-display",
         "serial-uart",
+        "serial-trigger-uart",
         "serial-i2c",
         "serial-spi",
         "serial-can",
@@ -4342,6 +4367,16 @@ def _validate_serial_args(args: argparse.Namespace) -> None:
         _validate_serial_lister_args(args)
         return
     capabilities = _pre_open_capabilities(args)
+    if args.command == "serial-trigger-uart":
+        validate_serial_uart_trigger_request(
+            args.bus,
+            query=args.query,
+            type=args.type,
+            data=args.data,
+            qualifier=args.qualifier,
+            capabilities=capabilities,
+        )
+        return
     if capabilities is not None:
         validate_serial_bus(args.bus, capabilities)
         if args.command == "serial-mode" and not args.query:
@@ -5703,6 +5738,52 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "output_path": str(output_path),
             "bytes_written": None,
         }
+    if command == "serial-trigger-uart":
+        bus, trigger_type, data, qualifier = validate_serial_uart_trigger_request(
+            args.bus,
+            query=args.query,
+            type=args.type,
+            data=args.data,
+            qualifier=args.qualifier,
+            capabilities=capabilities,
+        )
+        if args.query:
+            commands = [
+                serial_mode_query(bus),
+                trigger_mode_query(),
+                serial_uart_trigger_type_query(bus),
+            ]
+            result = {
+                "operation": "query",
+                "commands": commands,
+                "protocol": "uart",
+                "bus": bus,
+            }
+        else:
+            commands = _serial_uart_trigger_commands(
+                args,
+                mode="uart",
+                trigger_type=trigger_type,
+            )
+            result = {
+                "operation": "configure",
+                "commands": commands,
+                "protocol": "uart",
+                "bus": bus,
+                "mode": "uart",
+                "raw_mode": None,
+                "selected": True,
+                "trigger_mode": f"serial{bus}",
+                "raw_trigger_mode": None,
+                "type": trigger_type,
+                "raw_type": None,
+                "data": data,
+                "raw_data": None,
+                "qualifier": qualifier,
+                "raw_qualifier": None,
+                "state_changing": True,
+            }
+        return [*commands, ":SYSTem:ERRor?"], [], result
     if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
         commands = _serial_protocol_commands(args, capabilities)
         result = {
@@ -9503,6 +9584,44 @@ def _serial_protocol_commands(
     return [serial_mode_command(args.bus, mode), *builders[args.command](args.bus, settings)]
 
 
+def _serial_uart_trigger_read_commands(
+    bus: int, mode: str | None, trigger_type: str | None
+) -> list[str]:
+    commands = [trigger_mode_query()]
+    if mode != "uart":
+        return commands
+    commands.append(serial_uart_trigger_type_query(bus))
+    if trigger_type in {"rx-data", "tx-data"}:
+        commands.extend(
+            [
+                serial_uart_trigger_data_query(bus),
+                serial_uart_trigger_qualifier_query(bus),
+            ]
+        )
+    return commands
+
+
+def _serial_uart_trigger_commands(
+    args: argparse.Namespace,
+    *,
+    mode: str | None = "uart",
+    trigger_type: str | None = None,
+) -> list[str]:
+    commands = [serial_mode_query(args.bus)]
+    if not args.query:
+        commands.extend(
+            serial_uart_trigger_configure_commands(
+                args.bus,
+                args.type,
+                args.data,
+                args.qualifier,
+            )
+        )
+        commands.append(trigger_mode_serial_command(args.bus))
+    commands.extend(_serial_uart_trigger_read_commands(args.bus, mode, trigger_type))
+    return commands
+
+
 def _cmd_serial(args: argparse.Namespace) -> int:
     if args.command in {
         "serial-lister-query",
@@ -9563,6 +9682,38 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 **({"state_changing": True} if not args.query else {}),
             )
             print(f"Serial bus {state.bus} display enabled: {state.enabled}")
+        elif args.command == "serial-trigger-uart":
+            if args.query:
+                state = scope.query_serial_uart_trigger(args.bus)
+                operation = "query"
+                commands = _serial_uart_trigger_commands(
+                    args,
+                    mode=state.mode,
+                    trigger_type=state.type,
+                )
+            else:
+                state = scope.configure_serial_uart_trigger(
+                    args.bus,
+                    type=args.type,
+                    data=args.data,
+                    qualifier=args.qualifier,
+                )
+                operation = "configure"
+                commands = _serial_uart_trigger_commands(
+                    args,
+                    mode=state.mode,
+                    trigger_type=state.type,
+                )
+            _json_update_result(
+                operation=operation,
+                commands=commands,
+                **state.to_json(),
+                **({"state_changing": True} if not args.query else {}),
+            )
+            print(
+                f"Serial bus {state.bus} UART trigger: "
+                f"{state.type or 'unavailable'}"
+            )
         else:
             protocol = args.command.removeprefix("serial-")
             commands = _serial_protocol_commands(args, scope.capabilities)
@@ -9584,7 +9735,11 @@ def _cmd_serial(args: argparse.Namespace) -> int:
             )
             print(f"Serial bus {state.bus} {protocol} mode: {state.mode}")
 
-        print(f"Command: {command}")
+        if args.command == "serial-trigger-uart":
+            for command in commands:
+                print(f"Command: {command}")
+        else:
+            print(f"Command: {command}")
         entry = scope.query_system_error()
         _json_record_system_error(entry)
         print(f"System error: {entry.format()}")

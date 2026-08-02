@@ -29,6 +29,7 @@ def test_worker_serial_commands_are_allowlisted(tmp_path):
         ("serial-mode", {"bus": 1, "query": True}),
         ("serial-display", {"bus": 1, "query": True}),
         ("serial-uart", {"bus": 1, "query": True}),
+        ("serial-trigger-uart", {"bus": 1, "query": True}),
         ("serial-i2c", {"bus": 1, "query": True}),
         ("serial-spi", {"bus": 1, "query": True}),
         ("serial-can", {"bus": 1, "query": True}),
@@ -88,6 +89,55 @@ def test_worker_serial_uart_configure_execution_preserves_p1_result(tmp_path):
         ":SBUS1:UART:SOURce:RX CHANnel1",
         ":SBUS1:UART:BAUDrate 115200",
     ]
+
+
+def test_worker_serial_uart_trigger_configure_execution_uses_shared_core_path(
+    tmp_path,
+):
+    parsed = worker.parse_domain_command(
+        "serial-trigger-uart",
+        {"bus": 1, "type": "rx-data", "data": 85, "qualifier": "equal"},
+        _runtime(tmp_path),
+    )
+
+    assert parsed.command == "serial-trigger-uart"
+    assert parsed.type == "rx-data"
+    assert parsed.data == 85
+    assert parsed.qualifier == "equal"
+    payload, exit_code = cli._execute_json_command(parsed)
+
+    assert exit_code == 0
+    assert payload["result"]["type"] == "rx-data"
+    assert payload["result"]["raw_type"] == "RDAT"
+    assert payload["result"]["selected"] is True
+
+
+def test_worker_serial_uart_trigger_query_succeeds(tmp_path):
+    parsed = worker.parse_domain_command(
+        "serial-trigger-uart", {"bus": 1, "query": True}, _runtime(tmp_path)
+    )
+
+    payload, exit_code = cli._execute_json_command(parsed)
+
+    assert exit_code == 0
+    assert payload["result"]["operation"] == "query"
+    assert payload["result"]["protocol"] == "uart"
+
+
+def test_worker_serial_uart_trigger_rejects_unknown_and_mixed_fields(tmp_path):
+    runtime = _runtime(tmp_path)
+    with pytest.raises(OscilloscopeError, match="unknown argument"):
+        worker.parse_domain_command(
+            "serial-trigger-uart",
+            {"bus": 1, "query": True, "unexpected": "value"},
+            runtime,
+        )
+    with pytest.raises(OscilloscopeError, match="cannot be combined"):
+        worker.parse_domain_command(
+            "serial-trigger-uart",
+            {"bus": 1, "query": True, "type": "rx-start"},
+            runtime,
+        )
 
 
 def test_worker_serial_lister_export_uses_job_artifact_policy(tmp_path):

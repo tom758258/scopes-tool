@@ -53,6 +53,8 @@ from scopes_tool_core.trigger import (
     trigger_sweep_command,
     trigger_sweep_query,
     normalize_trigger_sweep,
+    parse_trigger_mode,
+    trigger_mode_serial_command,
     validate_trigger_level,
 )
 
@@ -95,6 +97,12 @@ def test_edge_trigger_commands_use_keysight_syntax():
     assert edge_trigger_level_query() == ":TRIGger:EDGE:LEVel?"
     assert edge_trigger_slope_command("POSitive") == ":TRIGger:EDGE:SLOPe POSitive"
     assert edge_trigger_slope_query() == ":TRIGger:EDGE:SLOPe?"
+
+
+def test_serial_trigger_mode_uses_shared_trigger_mode_parser():
+    assert trigger_mode_serial_command(2) == ":TRIGger:MODE SBUS2"
+    assert parse_trigger_mode("SBUS1") == "serial1"
+    assert parse_trigger_mode("SBUS2") == "serial2"
 
 @pytest.mark.parametrize(
     "raw, expected",

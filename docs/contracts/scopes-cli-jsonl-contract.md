@@ -269,6 +269,19 @@ Control and setup:
   fields when the current mode does not match. Sources are `channelN` or
   `external`; I2C is represented by the instrument `IIC` token, and CAN uses
   `difl` as the canonical differential signal value.
+- `serial-trigger-uart`: `operation`, `protocol: "uart"`, integer `bus`,
+  `mode`/`raw_mode`, `selected`, `trigger_mode`/`raw_trigger_mode`, and
+  UART trigger `type`/`raw_type`. Data trigger results also include
+  `data`/`raw_data` and `qualifier`/`raw_qualifier`; these fields are null for
+  non-data types or when the bus is not currently in UART mode, and
+  `selected` is false for a non-UART bus. Query returns
+  the current bus and global trigger modes first and does not send
+  UART-specific queries for a non-UART bus. Configure results include
+  `state_changing: true`, write all criteria before the final
+  `:TRIGger:MODE SBUS<n>` selection, and preserve actual raw readbacks. The
+  user must configure the UART bus through Serial P1 first; this command does
+  not modify decode settings or run, single, wait, or capture. P0 excludes
+  burst, idle-time, 9-bit, pattern-sequence, and other protocol triggers.
 - `serial-lister-query`: `operation: "query"`, ordered `commands`, canonical
   `display` and `reference`, and preserved `raw_display` and `raw_reference`.
   The aggregate query does not request `:LISTer:DATA?`.

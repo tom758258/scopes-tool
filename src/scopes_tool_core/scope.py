@@ -87,6 +87,7 @@ from .serial import (
     SerialQueryState,
     SerialSpiState,
     SerialUartState,
+    SerialUartTriggerState,
 )
 from .scpi import SCPIBackend, SCPIClient
 from .screenshot import HardcopyState, ScreenshotCapture, ScreenshotController, ScreenshotOptions
@@ -823,6 +824,18 @@ class Oscilloscope:
         """Query basic UART decode settings."""
 
         return self._serial_controller().query_uart(bus)
+
+    def configure_serial_uart_trigger(
+        self, bus: int, **settings: object
+    ) -> SerialUartTriggerState:
+        """Configure UART trigger criteria without changing UART decode settings."""
+
+        return self._serial_controller().configure_uart_trigger(bus, **settings)
+
+    def query_serial_uart_trigger(self, bus: int) -> SerialUartTriggerState:
+        """Query UART trigger criteria and active serial trigger selection."""
+
+        return self._serial_controller().query_uart_trigger(bus)
 
     def configure_serial_i2c(self, bus: int, **settings: object) -> SerialI2CState:
         """Configure basic I2C decode settings."""

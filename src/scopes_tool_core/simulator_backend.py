@@ -14,7 +14,14 @@ from .capabilities import capabilities_for_model_id
 from .demo import DEMO_FUNCTION_TOKENS
 from .errors import BackendClosedError, OscilloscopeError
 from .identity import VENDOR_REGISTRY, physical_model_for_id
-from .serial import SERIAL_MODE_TOKENS, parse_serial_mode
+from .serial import (
+    SERIAL_MODE_TOKENS,
+    parse_serial_mode,
+    parse_serial_uart_trigger_qualifier,
+    parse_serial_uart_trigger_type,
+    serial_uart_trigger_qualifier_readback,
+    serial_uart_trigger_type_readback,
+)
 from .trigger import OPERATION_CONDITION_RUN_MASK
 from .wgen import WGEN_FUNCTION_TOKENS, WGEN_LOAD_TOKENS
 
@@ -181,6 +188,9 @@ class SimulatorBackend:
     serial_modes: dict[int, str] = field(default_factory=dict)
     serial_display: dict[int, bool] = field(default_factory=dict)
     serial_protocol_settings: dict[int, dict[str, str]] = field(default_factory=dict)
+    serial_uart_trigger_types: dict[int, str] = field(default_factory=dict)
+    serial_uart_trigger_data: dict[int, int] = field(default_factory=dict)
+    serial_uart_trigger_qualifiers: dict[int, str] = field(default_factory=dict)
     lister_display: str = "OFF"
     lister_reference: str = "TRIGger"
     lister_data: bytes = b"bus,time,value\r\nSBUS1,0,0\r\n"
@@ -361,6 +371,18 @@ class SimulatorBackend:
         }
         self.serial_protocol_settings = {
             bus: {**defaults, **self.serial_protocol_settings.get(bus, {})}
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_uart_trigger_types = {
+            bus: self.serial_uart_trigger_types.get(bus, "RDAT")
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_uart_trigger_data = {
+            bus: self.serial_uart_trigger_data.get(bus, 0)
+            for bus in range(1, self._capabilities.serial_bus_count + 1)
+        }
+        self.serial_uart_trigger_qualifiers = {
+            bus: self.serial_uart_trigger_qualifiers.get(bus, "EQU")
             for bus in range(1, self._capabilities.serial_bus_count + 1)
         }
         self.signals = {
@@ -563,6 +585,8 @@ class SimulatorBackend:
             self.lister_display = value
         elif match := re.fullmatch(r":LISTer:REFerence (.+)", command, re.IGNORECASE):
             self.lister_reference = _canonical_lister_reference(match.group(1))
+        elif self._apply_serial_uart_trigger_write(command):
+            pass
         elif self._apply_serial_protocol_write(command):
             pass
         elif upper.startswith(":SEARCH:STATE "):
@@ -1164,6 +1188,9 @@ class SimulatorBackend:
             return f"{self.wgen_offset_volts:g}"
         if upper == f"{wgen_root}:OUTPUT:LOAD?":
             return self.wgen_load
+        serial_uart_trigger_value = self._query_serial_uart_trigger(command)
+        if serial_uart_trigger_value is not None:
+            return serial_uart_trigger_value
         serial_protocol_value = self._query_serial_protocol(command)
         if serial_protocol_value is not None:
             return serial_protocol_value
@@ -2566,6 +2593,57 @@ class SimulatorBackend:
             raise SimulatorBackendError(f"Unsupported simulator serial command: {command}")
         self.serial_protocol_settings[bus][key] = match.group(4).strip()
         return True
+
+    def _apply_serial_uart_trigger_write(self, command: str) -> bool:
+        match = re.fullmatch(
+            r":SBUS(\d+):UART:TRIGger:(TYPE|DATA|QUALifier)\s+(.+)",
+            command,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return False
+        bus = self._validate_serial_bus(int(match.group(1)))
+        field_name = match.group(2).upper()
+        value = match.group(3).strip()
+        if field_name == "TYPE":
+            self.serial_uart_trigger_types[bus] = serial_uart_trigger_type_readback(
+                parse_serial_uart_trigger_type(value)
+            )
+        elif field_name == "DATA":
+            try:
+                data = int(value)
+            except ValueError as exc:
+                raise SimulatorBackendError(
+                    f"Unsupported simulator UART trigger data: {value!r}"
+                ) from exc
+            if not 0 <= data <= 255:
+                raise SimulatorBackendError(
+                    "Simulator UART trigger data must be in range 0-255."
+                )
+            self.serial_uart_trigger_data[bus] = data
+        else:
+            self.serial_uart_trigger_qualifiers[bus] = (
+                serial_uart_trigger_qualifier_readback(
+                    parse_serial_uart_trigger_qualifier(value)
+                )
+            )
+        return True
+
+    def _query_serial_uart_trigger(self, command: str) -> str | None:
+        match = re.fullmatch(
+            r":SBUS(\d+):UART:TRIGger:(TYPE|DATA|QUALifier)\?",
+            command,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        bus = self._validate_serial_bus(int(match.group(1)))
+        field_name = match.group(2).upper()
+        if field_name == "TYPE":
+            return self.serial_uart_trigger_types[bus]
+        if field_name == "DATA":
+            return str(self.serial_uart_trigger_data[bus])
+        return self.serial_uart_trigger_qualifiers[bus]
 
     def _query_serial_protocol(self, command: str) -> str | None:
         match = re.fullmatch(r":SBUS(\d+):(UART|IIC|SPI|CAN):(.+?)\?", command, re.IGNORECASE)

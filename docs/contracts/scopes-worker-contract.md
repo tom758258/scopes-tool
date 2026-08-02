@@ -170,8 +170,9 @@ Worker `/command` supports the existing Scopes capability surface:
 - `demo-query`, `demo-output`, `demo-function`, `demo-phase`
 - `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
   `wgen-voltage`, `wgen-offset`, `wgen-load`
-- `serial-query`, `serial-mode`, `serial-display`, `serial-uart`, `serial-i2c`,
-  `serial-spi`, `serial-can`, `serial-lister-query`, `serial-lister-display`,
+- `serial-query`, `serial-mode`, `serial-display`, `serial-uart`,
+  `serial-trigger-uart`, `serial-i2c`, `serial-spi`, `serial-can`,
+  `serial-lister-query`, `serial-lister-display`,
   `serial-lister-reference`, `serial-lister-export`
 - `search-state`, `search-mode`, `search-count`, `search-event`, `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, `serial-search-can`
 - `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
@@ -1768,6 +1769,36 @@ startup model before enqueue, artifact creation, backend open, or SCPI. P1
 does not configure serial trigger, Search, Lister, export, or advanced protocol
 parameters; Serial Search is provided by the separate P3 commands below.
 Instrument license errors remain normal instrument errors.
+
+### Serial UART Trigger P0 Command
+
+The worker accepts only these canonical UART trigger request shapes:
+
+```json
+{"command": "serial-trigger-uart", "arguments": {"bus": 1, "type": "rx-data", "data": 85, "qualifier": "equal"}}
+```
+
+```json
+{"command": "serial-trigger-uart", "arguments": {"bus": 1, "query": true}}
+```
+
+The canonical types are `rx-start`, `rx-stop`, `rx-data`, `tx-start`,
+`tx-stop`, `tx-data`, and `parity-error`. Data types require both `data` in
+the range 0 through 255 and one of `equal`, `not-equal`, `greater-than`, or
+`less-than`. Non-data types reject both fields. Unknown fields, non-canonical
+values, query/configure mixes, unavailable buses, and models without UART
+decode support fail before enqueue, artifact creation, backend open, or SCPI.
+The worker uses the shared Core request validator and creates no artifact.
+
+The user must configure the target UART bus through Serial P1 first. Configure
+queries the current bus mode, writes UART trigger criteria only when that mode
+is UART, and selects the corresponding `SBUS<n>` as the global Trigger Mode
+last. Query returns the current bus mode and global Trigger Mode; for a
+non-UART bus it returns null UART-specific fields without sending
+UART-specific queries and does not treat the mode mismatch as command failure.
+This command does not modify UART decode settings, enable Serial display, run,
+single, wait, or capture. P0 excludes UART burst, idle time, 9-bit trigger
+comparison, pattern sequence, and LIN/I2C/SPI/CAN or other protocol triggers.
 
 ### Serial Lister P2 Commands
 

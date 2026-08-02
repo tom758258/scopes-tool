@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Adds the Serial UART Trigger P0 vertical slice through Core, CLI, Worker,
+  Simulator, Common v2 JSON, and focused tests. It supports the shared basic
+  UART trigger types and data qualifiers without changing Serial P1 decode
+  configuration or acquisition behavior.
 - Completes Common v2-only migration for the Scopes Worker runtime, lifecycle
   clients, Worker JSONL/artifacts, and general one-shot CLI machine JSON.
 - Passes the hardware-independent test suite, installed simulator/dry-run CLI

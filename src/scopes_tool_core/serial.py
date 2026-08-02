@@ -15,6 +15,7 @@ from .errors import (
     SerialResponseError,
 )
 from .scpi import SCPIClient
+from .trigger import parse_trigger_mode, trigger_mode_query, trigger_mode_serial_command
 
 
 SERIAL_MODES = (
@@ -55,6 +56,21 @@ SERIAL_MODE_TOKENS = {
 
 UART_PARITIES = ("even", "odd", "none")
 UART_POLARITIES = ("high", "low")
+UART_TRIGGER_TYPES = (
+    "rx-start",
+    "rx-stop",
+    "rx-data",
+    "tx-start",
+    "tx-stop",
+    "tx-data",
+    "parity-error",
+)
+UART_TRIGGER_QUALIFIERS = (
+    "equal",
+    "not-equal",
+    "greater-than",
+    "less-than",
+)
 SERIAL_BIT_ORDERS = ("lsb-first", "msb-first")
 I2C_ADDRESS_SIZES = ("bit7", "bit8")
 SPI_CLOCK_SLOPES = ("positive", "negative")
@@ -65,6 +81,62 @@ SERIAL_LISTER_REFERENCES = ("trigger", "previous")
 
 _UART_PARITY_TOKENS = {"even": "EVEN", "odd": "ODD", "none": "NONE"}
 _UART_POLARITY_TOKENS = {"high": "HIGH", "low": "LOW"}
+_UART_TRIGGER_TYPE_TOKENS = {
+    "rx-start": "RSTArt",
+    "rx-stop": "RSTOp",
+    "rx-data": "RDATa",
+    "tx-start": "TSTArt",
+    "tx-stop": "TSTOp",
+    "tx-data": "TDATa",
+    "parity-error": "PARityerror",
+}
+_UART_TRIGGER_TYPE_READBACKS = {
+    "RSTA": "rx-start",
+    "RSTART": "rx-start",
+    "RSTO": "rx-stop",
+    "RSTOP": "rx-stop",
+    "RDAT": "rx-data",
+    "RDATA": "rx-data",
+    "TSTA": "tx-start",
+    "TSTART": "tx-start",
+    "TSTO": "tx-stop",
+    "TSTOP": "tx-stop",
+    "TDAT": "tx-data",
+    "TDATA": "tx-data",
+    "PAR": "parity-error",
+    "PARITYERROR": "parity-error",
+}
+_UART_TRIGGER_TYPE_READBACKS_FOR_CANONICAL = {
+    "rx-start": "RSTA",
+    "rx-stop": "RSTO",
+    "rx-data": "RDAT",
+    "tx-start": "TSTA",
+    "tx-stop": "TSTO",
+    "tx-data": "TDAT",
+    "parity-error": "PAR",
+}
+_UART_TRIGGER_QUALIFIER_TOKENS = {
+    "equal": "EQUal",
+    "not-equal": "NOTequal",
+    "greater-than": "GREaterthan",
+    "less-than": "LESSthan",
+}
+_UART_TRIGGER_QUALIFIER_READBACKS = {
+    "EQU": "equal",
+    "EQUAL": "equal",
+    "NOT": "not-equal",
+    "NOTEQUAL": "not-equal",
+    "GRE": "greater-than",
+    "GREATERTHAN": "greater-than",
+    "LESS": "less-than",
+    "LESSTHAN": "less-than",
+}
+_UART_TRIGGER_QUALIFIER_READBACKS_FOR_CANONICAL = {
+    "equal": "EQU",
+    "not-equal": "NOT",
+    "greater-than": "GRE",
+    "less-than": "LESS",
+}
 _BIT_ORDER_TOKENS = {"lsb-first": "LSBFirst", "msb-first": "MSBFirst"}
 _I2C_ADDRESS_SIZE_TOKENS = {"bit7": "BIT7", "bit8": "BIT8"}
 _SPI_SLOPE_TOKENS = {"positive": "POSitive", "negative": "NEGative"}
@@ -166,6 +238,26 @@ class SerialUartState:
     raw_polarity: str | None = None
     bit_order: str | None = None
     raw_bit_order: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        return {key: value for key, value in self.__dict__.items()}
+
+
+@dataclass(frozen=True)
+class SerialUartTriggerState:
+    protocol: str
+    bus: int
+    mode: str | None
+    raw_mode: str | None
+    selected: bool
+    trigger_mode: str | None
+    raw_trigger_mode: str | None
+    type: str | None
+    raw_type: str | None
+    data: int | None
+    raw_data: str | None
+    qualifier: str | None
+    raw_qualifier: str | None
 
     def to_json(self) -> dict[str, object]:
         return {key: value for key, value in self.__dict__.items()}
@@ -437,6 +529,102 @@ class SerialController:
             raw_polarity=raw_polarity,
             bit_order=bit_order,
             raw_bit_order=raw_bit_order,
+        )
+
+    def configure_uart_trigger(
+        self,
+        bus: int,
+        *,
+        type: str | None = None,
+        data: int | None = None,
+        qualifier: str | None = None,
+    ) -> SerialUartTriggerState:
+        canonical_bus, canonical_type, canonical_data, canonical_qualifier = (
+            validate_serial_uart_trigger_request(
+                bus,
+                type=type,
+                data=data,
+                qualifier=qualifier,
+                capabilities=self.capabilities,
+            )
+        )
+        raw_mode = self.scpi.query(serial_mode_query(canonical_bus)).strip()
+        mode = parse_serial_mode(raw_mode)
+        if mode != "uart":
+            raise SerialResponseError(
+                f"Serial bus {canonical_bus} is in mode {mode!r}; expected 'uart'."
+            )
+
+        for command in serial_uart_trigger_configure_commands(
+            canonical_bus,
+            canonical_type,
+            canonical_data,
+            canonical_qualifier,
+        ):
+            self.scpi.write(command)
+        self.scpi.write(trigger_mode_serial_command(canonical_bus))
+        return self._query_uart_trigger_state(canonical_bus, raw_mode=raw_mode)
+
+    def query_uart_trigger(self, bus: int) -> SerialUartTriggerState:
+        canonical_bus, _, _, _ = validate_serial_uart_trigger_request(
+            bus,
+            query=True,
+            capabilities=self.capabilities,
+        )
+        raw_mode = self.scpi.query(serial_mode_query(canonical_bus)).strip()
+        return self._query_uart_trigger_state(canonical_bus, raw_mode=raw_mode)
+
+    def _query_uart_trigger_state(
+        self, bus: int, *, raw_mode: str
+    ) -> SerialUartTriggerState:
+        mode = parse_serial_mode(raw_mode)
+        raw_trigger_mode = self.scpi.query(trigger_mode_query()).strip()
+        trigger_mode = parse_trigger_mode(raw_trigger_mode)
+        selected = mode == "uart" and trigger_mode == f"serial{bus}"
+        if mode != "uart":
+            return SerialUartTriggerState(
+                protocol="uart",
+                bus=bus,
+                mode=mode,
+                raw_mode=raw_mode,
+                selected=selected,
+                trigger_mode=trigger_mode,
+                raw_trigger_mode=raw_trigger_mode,
+                type=None,
+                raw_type=None,
+                data=None,
+                raw_data=None,
+                qualifier=None,
+                raw_qualifier=None,
+            )
+
+        raw_type = self.scpi.query(serial_uart_trigger_type_query(bus)).strip()
+        trigger_type = parse_serial_uart_trigger_type(raw_type)
+        raw_data = None
+        data = None
+        raw_qualifier = None
+        qualifier = None
+        if trigger_type in {"rx-data", "tx-data"}:
+            raw_data = self.scpi.query(serial_uart_trigger_data_query(bus)).strip()
+            data = parse_serial_uart_trigger_data(raw_data)
+            raw_qualifier = self.scpi.query(
+                serial_uart_trigger_qualifier_query(bus)
+            ).strip()
+            qualifier = parse_serial_uart_trigger_qualifier(raw_qualifier)
+        return SerialUartTriggerState(
+            protocol="uart",
+            bus=bus,
+            mode=mode,
+            raw_mode=raw_mode,
+            selected=selected,
+            trigger_mode=trigger_mode,
+            raw_trigger_mode=raw_trigger_mode,
+            type=trigger_type,
+            raw_type=raw_type,
+            data=data,
+            raw_data=raw_data,
+            qualifier=qualifier,
+            raw_qualifier=raw_qualifier,
         )
 
     def configure_i2c(
@@ -1165,6 +1353,61 @@ def serial_mode_query(bus: int) -> str:
     return f":SBUS{_validate_positive_bus(bus)}:MODE?"
 
 
+def serial_uart_trigger_type_command(bus: int, trigger_type: str) -> str:
+    canonical_type = normalize_serial_uart_trigger_type(trigger_type)
+    return (
+        f":SBUS{_validate_positive_bus(bus)}:UART:TRIGger:TYPE "
+        f"{_UART_TRIGGER_TYPE_TOKENS[canonical_type]}"
+    )
+
+
+def serial_uart_trigger_type_query(bus: int) -> str:
+    return f":SBUS{_validate_positive_bus(bus)}:UART:TRIGger:TYPE?"
+
+
+def serial_uart_trigger_data_command(bus: int, data: int) -> str:
+    canonical_data = _validate_int(data, "UART trigger data", 0, 255)
+    return f":SBUS{_validate_positive_bus(bus)}:UART:TRIGger:DATA {canonical_data}"
+
+
+def serial_uart_trigger_data_query(bus: int) -> str:
+    return f":SBUS{_validate_positive_bus(bus)}:UART:TRIGger:DATA?"
+
+
+def serial_uart_trigger_qualifier_command(bus: int, qualifier: str) -> str:
+    canonical_qualifier = normalize_serial_uart_trigger_qualifier(qualifier)
+    return (
+        f":SBUS{_validate_positive_bus(bus)}:UART:TRIGger:QUALifier "
+        f"{_UART_TRIGGER_QUALIFIER_TOKENS[canonical_qualifier]}"
+    )
+
+
+def serial_uart_trigger_qualifier_query(bus: int) -> str:
+    return f":SBUS{_validate_positive_bus(bus)}:UART:TRIGger:QUALifier?"
+
+
+def serial_uart_trigger_configure_commands(
+    bus: int,
+    trigger_type: str,
+    data: int | None,
+    qualifier: str | None,
+) -> list[str]:
+    canonical_type = normalize_serial_uart_trigger_type(trigger_type)
+    commands = [serial_uart_trigger_type_command(bus, canonical_type)]
+    if canonical_type in {"rx-data", "tx-data"}:
+        if data is None or qualifier is None:
+            raise ParameterValidationError(
+                "UART data trigger requires data and qualifier."
+            )
+        commands.extend(
+            [
+                serial_uart_trigger_data_command(bus, data),
+                serial_uart_trigger_qualifier_command(bus, qualifier),
+            ]
+        )
+    return commands
+
+
 def serial_display_command(bus: int, enabled: bool) -> str:
     if not isinstance(enabled, bool):
         raise ParameterValidationError("Serial display enabled value must be a boolean.")
@@ -1206,6 +1449,57 @@ def validate_serial_mode(mode: str, capabilities: ScopeCapabilities) -> str:
     return canonical
 
 
+def validate_serial_uart_trigger_request(
+    bus: int,
+    *,
+    query: bool = False,
+    type: str | None = None,
+    data: object | None = None,
+    qualifier: str | None = None,
+    capabilities: ScopeCapabilities | None = None,
+) -> tuple[int, str | None, int | None, str | None]:
+    """Validate one UART trigger query or configure request."""
+
+    if not isinstance(query, bool):
+        raise ParameterValidationError(
+            "serial-trigger-uart query must be a boolean."
+        )
+    canonical_bus = (
+        validate_serial_bus(bus, capabilities)
+        if capabilities is not None
+        else _validate_positive_bus(bus)
+    )
+    if capabilities is not None:
+        validate_serial_mode("uart", capabilities)
+
+    if query:
+        if type is not None or data is not None or qualifier is not None:
+            raise ParameterValidationError(
+                "serial-trigger-uart --query cannot be combined with configure arguments."
+            )
+        return canonical_bus, None, None, None
+
+    if type is None:
+        raise ParameterValidationError(
+            "serial-trigger-uart configure requires --type."
+        )
+    canonical_type = normalize_serial_uart_trigger_type(type)
+    data_type = canonical_type in {"rx-data", "tx-data"}
+    if data_type:
+        if data is None or qualifier is None:
+            raise ParameterValidationError(
+                "serial-trigger-uart data types require --data and --qualifier."
+            )
+        canonical_data = _validate_int(data, "UART trigger data", 0, 255)
+        canonical_qualifier = normalize_serial_uart_trigger_qualifier(qualifier)
+        return canonical_bus, canonical_type, canonical_data, canonical_qualifier
+    if data is not None or qualifier is not None:
+        raise ParameterValidationError(
+            "serial-trigger-uart non-data types cannot use --data or --qualifier."
+        )
+    return canonical_bus, canonical_type, None, None
+
+
 def parse_serial_mode(raw: str) -> str | None:
     normalized = raw.strip().upper()
     if normalized == "NONE":
@@ -1216,6 +1510,44 @@ def parse_serial_mode(raw: str) -> str | None:
         raise SerialResponseError(
             f"Could not parse serial mode response: {raw!r}"
         ) from exc
+
+
+def normalize_serial_uart_trigger_type(value: str) -> str:
+    return _normalize_choice(value, UART_TRIGGER_TYPES, "UART trigger type")
+
+
+def parse_serial_uart_trigger_type(raw: str) -> str:
+    return _parse_choice(raw, _UART_TRIGGER_TYPE_READBACKS, "UART trigger type")
+
+
+def serial_uart_trigger_type_readback(trigger_type: str) -> str:
+    canonical = normalize_serial_uart_trigger_type(trigger_type)
+    return _UART_TRIGGER_TYPE_READBACKS_FOR_CANONICAL[canonical]
+
+
+def normalize_serial_uart_trigger_qualifier(value: str) -> str:
+    return _normalize_choice(
+        value, UART_TRIGGER_QUALIFIERS, "UART trigger qualifier"
+    )
+
+
+def parse_serial_uart_trigger_qualifier(raw: str) -> str:
+    return _parse_choice(
+        raw, _UART_TRIGGER_QUALIFIER_READBACKS, "UART trigger qualifier"
+    )
+
+
+def serial_uart_trigger_qualifier_readback(qualifier: str) -> str:
+    canonical = normalize_serial_uart_trigger_qualifier(qualifier)
+    return _UART_TRIGGER_QUALIFIER_READBACKS_FOR_CANONICAL[canonical]
+
+
+def parse_serial_uart_trigger_data(raw: str) -> int:
+    return _parse_serial_int_validated(
+        raw,
+        "UART trigger data",
+        lambda value: _validate_int(value, "UART trigger data", 0, 255),
+    )
 
 
 def require_serial_decode(capabilities: ScopeCapabilities) -> None:

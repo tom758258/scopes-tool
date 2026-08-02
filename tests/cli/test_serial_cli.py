@@ -34,6 +34,85 @@ def test_serial_query_simulator_json_preserves_bus_and_raw(capsys):
     assert result["raw"] == ":SBUS1:DISP 0;MODE UART;"
 
 
+def test_serial_uart_trigger_simulator_json_configure_preserves_readback_and_order(
+    capsys,
+):
+    assert (
+        cli.main(
+            [
+                "serial-trigger-uart",
+                "--bus",
+                "1",
+                "--type",
+                "rx-data",
+                "--data",
+                "85",
+                "--qualifier",
+                "equal",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 0
+    )
+    payload = _payload(capsys)
+    result = payload["result"]
+    assert result["protocol"] == "uart"
+    assert result["type"] == "rx-data"
+    assert result["raw_type"] == "RDAT"
+    assert result["data"] == 85
+    assert result["qualifier"] == "equal"
+    assert result["selected"] is True
+    sent = payload["scpi"]["sent"]
+    assert sent.index(":TRIGger:MODE SBUS1") > sent.index(
+        ":SBUS1:UART:TRIGger:QUALifier EQUal"
+    )
+    assert result["commands"][-5:] == [
+        ":TRIGger:MODE SBUS1",
+        ":TRIGger:MODE?",
+        ":SBUS1:UART:TRIGger:TYPE?",
+        ":SBUS1:UART:TRIGger:DATA?",
+        ":SBUS1:UART:TRIGger:QUALifier?",
+    ]
+
+
+def test_serial_uart_trigger_rejects_non_data_qualifier_before_backend_open(
+    monkeypatch, capsys
+):
+    opened = False
+
+    def fail_open(*args, **kwargs):
+        nonlocal opened
+        opened = True
+        raise AssertionError("backend must not open")
+
+    monkeypatch.setattr(cli, "_open_scope", fail_open)
+    assert (
+        cli.main(
+            [
+                "serial-trigger-uart",
+                "--bus",
+                "1",
+                "--type",
+                "rx-start",
+                "--data",
+                "1",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 1
+    )
+    payload = _payload(capsys)
+    assert payload["error"]["type"] == "ParameterValidationError"
+    assert not opened
+    assert payload["scpi"]["sent"] == []
+
+
 def test_serial_lister_query_simulator_json_does_not_query_data(capsys):
     assert (
         cli.main(

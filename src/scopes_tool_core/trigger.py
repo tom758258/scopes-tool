@@ -1983,6 +1983,12 @@ def trigger_mode_or_command() -> str:
     return ":TRIGger:MODE OR"
 
 
+def trigger_mode_serial_command(bus: int) -> str:
+    """Build the SCPI command that selects a serial bus trigger mode."""
+
+    return f":TRIGger:MODE SBUS{bus}"
+
+
 def trigger_mode_query() -> str:
     """Build the SCPI query for trigger mode."""
 
@@ -3475,6 +3481,10 @@ def parse_trigger_mode(raw: str) -> str | None:
         return "or"
     if normalized in {"EDGE"}:
         return "edge"
+    if normalized == "SBUS1":
+        return "serial1"
+    if normalized == "SBUS2":
+        return "serial2"
     return None
 
 

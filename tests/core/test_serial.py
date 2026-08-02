@@ -23,6 +23,8 @@ from scopes_tool_core.serial import (
     serial_lister_reference_query,
     serial_mode_command,
     serial_mode_query,
+    parse_serial_uart_trigger_qualifier,
+    parse_serial_uart_trigger_type,
     validate_serial_bus,
 )
 from dataclasses import replace
@@ -173,6 +175,179 @@ def test_serial_uart_configure_order_and_scpi_mapping():
         ":SBUS1:UART:BAUDrate 115200",
         ":SBUS1:UART:PARity NONE",
     ]
+
+
+def test_serial_uart_trigger_data_configure_and_query_round_trip():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "UART",
+            ":TRIGger:MODE?": "SBUS1",
+            ":SBUS1:UART:TRIGger:TYPE?": "RDAT",
+            ":SBUS1:UART:TRIGger:DATA?": "85",
+            ":SBUS1:UART:TRIGger:QUALifier?": "EQU",
+        }
+    )
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    state = controller.configure_uart_trigger(
+        1, type="rx-data", data=85, qualifier="equal"
+    )
+
+    assert state.to_json() == {
+        "protocol": "uart",
+        "bus": 1,
+        "mode": "uart",
+        "raw_mode": "UART",
+        "selected": True,
+        "trigger_mode": "serial1",
+        "raw_trigger_mode": "SBUS1",
+        "type": "rx-data",
+        "raw_type": "RDAT",
+        "data": 85,
+        "raw_data": "85",
+        "qualifier": "equal",
+        "raw_qualifier": "EQU",
+    }
+    assert backend.history == [
+        ":SBUS1:MODE?",
+        ":SBUS1:UART:TRIGger:TYPE RDATa",
+        ":SBUS1:UART:TRIGger:DATA 85",
+        ":SBUS1:UART:TRIGger:QUALifier EQUal",
+        ":TRIGger:MODE SBUS1",
+        ":TRIGger:MODE?",
+        ":SBUS1:UART:TRIGger:TYPE?",
+        ":SBUS1:UART:TRIGger:DATA?",
+        ":SBUS1:UART:TRIGger:QUALifier?",
+    ]
+    state = controller.query_uart_trigger(1)
+    assert state.type == "rx-data"
+    assert state.data == 85
+    assert state.qualifier == "equal"
+
+
+def test_serial_uart_trigger_non_data_type_omits_data_criteria():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "UART",
+            ":TRIGger:MODE?": "EDGE",
+            ":SBUS1:UART:TRIGger:TYPE?": "RSTA",
+        }
+    )
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    state = controller.configure_uart_trigger(1, type="rx-start")
+
+    assert state.type == "rx-start"
+    assert state.data is None
+    assert state.qualifier is None
+    assert backend.history == [
+        ":SBUS1:MODE?",
+        ":SBUS1:UART:TRIGger:TYPE RSTArt",
+        ":TRIGger:MODE SBUS1",
+        ":TRIGger:MODE?",
+        ":SBUS1:UART:TRIGger:TYPE?",
+    ]
+
+
+def test_serial_uart_trigger_rejects_mode_mismatch_before_trigger_write():
+    backend = FakeBackend(responses={":SBUS1:MODE?": "IIC"})
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    with pytest.raises(SerialResponseError, match="expected 'uart'"):
+        controller.configure_uart_trigger(
+            1, type="rx-data", data=85, qualifier="equal"
+        )
+
+    assert backend.history == [":SBUS1:MODE?"]
+
+
+def test_serial_uart_trigger_query_non_uart_omits_uart_specific_queries():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "IIC",
+            ":TRIGger:MODE?": "SBUS1",
+        }
+    )
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    state = controller.query_uart_trigger(1)
+
+    assert state.to_json() == {
+        "protocol": "uart",
+        "bus": 1,
+        "mode": "i2c",
+        "raw_mode": "IIC",
+        "selected": False,
+        "trigger_mode": "serial1",
+        "raw_trigger_mode": "SBUS1",
+        "type": None,
+        "raw_type": None,
+        "data": None,
+        "raw_data": None,
+        "qualifier": None,
+        "raw_qualifier": None,
+    }
+    assert backend.history == [":SBUS1:MODE?", ":TRIGger:MODE?"]
+
+
+def test_serial_uart_trigger_abbreviated_readbacks_canonicalize_and_select_last_write():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "UART",
+            ":TRIGger:MODE?": "SBUS1",
+            ":SBUS1:UART:TRIGger:TYPE?": "TDAT",
+            ":SBUS1:UART:TRIGger:DATA?": "7",
+            ":SBUS1:UART:TRIGger:QUALifier?": "GRE",
+        }
+    )
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    state = controller.query_uart_trigger(1)
+
+    assert parse_serial_uart_trigger_type("TDAT") == "tx-data"
+    assert parse_serial_uart_trigger_qualifier("GRE") == "greater-than"
+    assert state.type == "tx-data"
+    assert state.qualifier == "greater-than"
+    assert state.selected is True
+    assert backend.history == [
+        ":SBUS1:MODE?",
+        ":TRIGger:MODE?",
+        ":SBUS1:UART:TRIGger:TYPE?",
+        ":SBUS1:UART:TRIGger:DATA?",
+        ":SBUS1:UART:TRIGger:QUALifier?",
+    ]
+
+
+def test_serial_uart_trigger_configure_keeps_trigger_mode_as_last_write():
+    backend = FakeBackend(
+        responses={
+            ":SBUS1:MODE?": "UART",
+            ":TRIGger:MODE?": "SBUS1",
+            ":SBUS1:UART:TRIGger:TYPE?": "RDAT",
+            ":SBUS1:UART:TRIGger:DATA?": "85",
+            ":SBUS1:UART:TRIGger:QUALifier?": "EQU",
+        }
+    )
+    controller = SerialController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    controller.configure_uart_trigger(
+        1, type="rx-data", data=85, qualifier="equal"
+    )
+
+    state_changing = [command for command in backend.history if "?" not in command]
+    assert state_changing[-1] == ":TRIGger:MODE SBUS1"
 
 
 def test_serial_i2c_configure_order_and_scpi_mapping():

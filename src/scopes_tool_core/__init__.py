@@ -82,6 +82,8 @@ from .serial import (
     SPI_FRAMINGS,
     UART_PARITIES,
     UART_POLARITIES,
+    UART_TRIGGER_QUALIFIERS,
+    UART_TRIGGER_TYPES,
     SerialCanState,
     SerialController,
     SerialDisplayState,
@@ -90,6 +92,7 @@ from .serial import (
     SerialQueryState,
     SerialSpiState,
     SerialUartState,
+    SerialUartTriggerState,
 )
 from .demo import (
     DEMO_FUNCTIONS,
@@ -322,6 +325,8 @@ __all__ = [
     "SPI_FRAMINGS",
     "UART_PARITIES",
     "UART_POLARITIES",
+    "UART_TRIGGER_QUALIFIERS",
+    "UART_TRIGGER_TYPES",
     "SerialCanState",
     "SerialController",
     "SerialDisplayState",
@@ -330,6 +335,7 @@ __all__ = [
     "SerialQueryState",
     "SerialSpiState",
     "SerialUartState",
+    "SerialUartTriggerState",
     "MultiChannelWaveformCapture",
     "OperationPlan",
     "OperationCompleteState",

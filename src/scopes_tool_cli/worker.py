@@ -57,7 +57,7 @@ from scopes_tool_core.advanced import (
     math_vertical_commands,
     math_vertical_query_commands,
 )
-from scopes_tool_core.capabilities import capabilities_for_model_id
+from scopes_tool_core.capabilities import ScopeCapabilities, capabilities_for_model_id
 from scopes_tool_core.channel import validate_analog_channel
 from scopes_tool_core.demo import validate_demo_function, validate_demo_phase
 from scopes_tool_core.identity import physical_model_for_id
@@ -76,6 +76,7 @@ from scopes_tool_core.wgen import (
     validate_wgen_function,
     validate_wgen_offset,
 )
+from scopes_tool_core.serial import validate_serial_uart_trigger_request
 
 from . import cli as scope_cli
 
@@ -138,6 +139,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "serial-mode",
     "serial-display",
     "serial-uart",
+    "serial-trigger-uart",
     "serial-i2c",
     "serial-spi",
     "serial-can",
@@ -553,7 +555,11 @@ def parse_domain_command(
     arguments = _normalize_dvm_worker_arguments(command, arguments, runtime)
     arguments = _normalize_demo_worker_arguments(command, arguments, runtime)
     arguments = _normalize_wgen_worker_arguments(command, arguments)
-    arguments = _normalize_serial_worker_arguments(command, arguments)
+    arguments = _normalize_serial_worker_arguments(
+        command, arguments, capabilities_for_model_id(runtime.model)
+    )
+    if command == "serial-trigger-uart":
+        return _serial_uart_trigger_worker_namespace(arguments, runtime, job_dir)
     arguments = _normalize_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_serial_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_save_export_worker_arguments(command, arguments)
@@ -1808,13 +1814,16 @@ def _normalize_search_worker_arguments(
 
 
 def _normalize_serial_worker_arguments(
-    command: str, arguments: dict[str, Any]
+    command: str,
+    arguments: dict[str, Any],
+    capabilities: ScopeCapabilities | None = None,
 ) -> dict[str, Any]:
     if command not in {
         "serial-query",
         "serial-mode",
         "serial-display",
         "serial-uart",
+        "serial-trigger-uart",
         "serial-i2c",
         "serial-spi",
         "serial-can",
@@ -1889,6 +1898,40 @@ def _normalize_serial_worker_arguments(
         if not arguments["output"]:
             raise OscilloscopeError("serial-lister-export output must not be empty")
         return dict(arguments)
+
+    if command == "serial-trigger-uart":
+        allowed = {"bus", "query", "type", "data", "qualifier"}
+        unknown = set(arguments) - allowed
+        if unknown:
+            raise OscilloscopeError(
+                f"unknown argument for {command}: {sorted(unknown)[0]}"
+            )
+        query = arguments.get("query", False)
+        if "query" in arguments and query is not True:
+            raise OscilloscopeError(
+                f"{command} argument query must be exactly true"
+            )
+        bus, trigger_type, data, qualifier = validate_serial_uart_trigger_request(
+            arguments.get("bus"),
+            query=query,
+            type=arguments.get("type"),
+            data=arguments.get("data"),
+            qualifier=arguments.get("qualifier"),
+            capabilities=capabilities,
+        )
+        normalized: dict[str, Any] = {"bus": bus}
+        if query:
+            normalized["query"] = True
+        else:
+            normalized.update(
+                type=trigger_type,
+                **(
+                    {"data": data, "qualifier": qualifier}
+                    if data is not None
+                    else {}
+                ),
+            )
+        return normalized
 
     if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
         fields_by_command = {
@@ -2066,6 +2109,32 @@ def _normalize_save_export_worker_arguments(
             )
         validate_save_waveform_length(value)
     return dict(arguments)
+
+
+def _serial_uart_trigger_worker_namespace(
+    arguments: dict[str, Any], runtime: WorkerRuntime, job_dir: Path | None
+) -> argparse.Namespace:
+    """Build the small serial trigger runtime namespace without CLI parsing."""
+
+    namespace = argparse.Namespace(
+        command="serial-trigger-uart",
+        bus=arguments["bus"],
+        query=arguments.get("query", False),
+        type=arguments.get("type"),
+        data=arguments.get("data"),
+        qualifier=arguments.get("qualifier"),
+        simulate=runtime.mode == "simulate",
+        dry_run=False,
+        live=runtime.mode == "live",
+        model=runtime.model,
+        resource=runtime.resource,
+        json=True,
+        log_scpi=False,
+        visa_library=None,
+    )
+    if job_dir is not None:
+        _apply_worker_job_paths(namespace, job_dir)
+    return namespace
 
 
 def _normalize_math_worker_arguments(
