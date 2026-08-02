@@ -558,6 +558,29 @@ Worker usage requires the same query-only intent:
 .\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command record-length --arguments-json "{\"query\":true}" --json
 ```
 
+Query segmented-memory state without changing acquisition state:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe segmented-memory --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe segmented-memory --query --dry-run --json
+.\.venv\Scripts\scopes-tool.exe segmented-memory --resource "$env:SCOPES_TOOL_RESOURCE" --query --json --log-scpi
+```
+
+The `segmented-memory` command is P0 query-only support for registered Keysight
+2000X, 3000X, and 4000X profiles. It detects the live model from `*IDN?`, then
+queries `:ACQuire:MODE?`. It queries segmented counts only when the mode is
+segmented, and queries selected index and time tag only when the acquired
+count is greater than zero. The command never enables or disables segmented
+mode, configures a segment count, starts acquisition, captures waveform data,
+or exports artifacts. A 2000X or 3000X instrument may require the SGM option or
+license; the capability flag is not live validation.
+
+Worker usage accepts only the exact query argument object:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command segmented-memory --arguments-json "{\"query\":true}" --json
+```
+
 Run the acquisition configuration validation workflow and write a report
 directory:
 

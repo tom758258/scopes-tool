@@ -411,6 +411,13 @@ Control and setup:
   `unit`, `scpi_command`, and `human_output`.
 - `record-length`: `operation`, `record_length_points`, `raw_value`, `unit`,
   `scpi_command`, and `human_output`.
+- `segmented-memory`: `operation`, normalized `mode`, nullable
+  `configured_segments`, `acquired_segments`, `selected_segment`, and
+  `time_tag_s`, plus preserved `raw_mode`, `raw_configured_segments`,
+  `raw_acquired_segments`, `raw_selected_segment`, and `raw_time_tag`.
+  P0 is query-only; realtime mode leaves segmented-specific fields null, and
+  zero acquired segments leaves selected segment and time tag null. This does
+  not add a schema version.
 - `autoscale`: `operation`, `commands`, `source_channels`, optional
   `fallback`.
 - `setup-save` and `setup-recall`: `operation`, `command`, `slot`, `file`.

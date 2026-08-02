@@ -167,6 +167,11 @@ class SimulatorBackend:
     hardcopy_layout: str = "PORTrait"
     acquisition_type: str = "NORMal"
     acquisition_count: int = 8
+    segmented_mode: str = "RTIM"
+    segmented_configured_segments: int = 1
+    segmented_acquired_segments: int = 0
+    segmented_selected_segment: int = 1
+    segmented_time_tag_s: float = 0.0
     sample_rate_hz: float = 5e9
     maximum_sample_rate_hz: float = 5e9
     acquisition_points: int = 1000000
@@ -1402,6 +1407,16 @@ class SimulatorBackend:
             return annotation_response
         if upper == ":ACQUIRE:TYPE?":
             return self.acquisition_type
+        if upper == ":ACQUIRE:MODE?":
+            return self.segmented_mode
+        if upper == ":ACQUIRE:SEGMENTED:COUNT?":
+            return str(self.segmented_configured_segments)
+        if upper == ":WAVEFORM:SEGMENTED:COUNT?":
+            return str(self.segmented_acquired_segments)
+        if upper == ":ACQUIRE:SEGMENTED:INDEX?":
+            return str(self.segmented_selected_segment)
+        if upper == ":WAVEFORM:SEGMENTED:TTAG?":
+            return f"{self.segmented_time_tag_s:.6E}"
         if upper == ":ACQUIRE:SRATE? MAXIMUM":
             return f"{self.maximum_sample_rate_hz:.6E}"
         if upper == ":ACQUIRE:SRATE?":

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Adds query-only segmented-memory state queries for registered Keysight 2000X,
+  3000X, and 4000X profiles through Core, CLI, Simulator, Worker, and Common
+  v2 JSON. It does not configure segmented mode, acquire waveform data, or
+  export artifacts.
 - Adds the Serial UART Trigger P0 vertical slice through Core, CLI, Worker,
   Simulator, Common v2 JSON, and focused tests. It supports the shared basic
   UART trigger types and data qualifiers without changing Serial P1 decode

@@ -60,6 +60,7 @@ scopes-tool send-command --port 8765 --command sample-rate --arguments-json "{\"
 scopes-tool send-command --port 8765 --command sample-rate --arguments-json "{\"query\":true,\"maximum\":true}" --json
 scopes-tool send-command --port 8765 --command acquisition-points --arguments-json "{\"query\":true}" --json
 scopes-tool send-command --port 8765 --command record-length --arguments-json "{\"query\":true}" --json
+scopes-tool send-command --port 8765 --command segmented-memory --arguments-json "{\"query\":true}" --json
 scopes-tool send-command --port 8765 --command force-trigger --arguments-json "{}" --json
 scopes-tool send-command --port 8765 --command dvm-enable --arguments-json "{\"query\":true}" --json
 scopes-tool send-command --port 8765 --command dvm-source --arguments-json "{\"channel\":1}" --json

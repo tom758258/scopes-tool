@@ -128,8 +128,9 @@ Core owns runtime behavior:
   host-side files. Existing capture and screenshot APIs remain PC-side
   workflows. Image and waveform format queries normalize the read-only `NONE`
   sentinel to canonical `none`; `none` is not a settable format. Results,
-  lister, mask, multi, power, arbitrary, compliance,
-  segmented, setup, and WMEMory export are outside v1. Coverage is
+  lister, mask, multi, power, arbitrary, compliance, setup, and WMEMory export
+  are outside v1. Query-only segmented-memory state is documented separately.
+  Coverage is
   hardware-free; no live hardware validation was performed.
 - Serial Lister P2 global display/reference query and configuration plus
   host-side raw CSV export through `:LISTer:DATA?`. The export preserves the
@@ -196,6 +197,12 @@ Core owns runtime behavior:
   state queries. Existing cross-series color PNG capture remains unchanged.
 - Read-only acquisition points and record-length query helpers, separate from
   waveform transfer points.
+- Query-only segmented-memory state through
+  `Oscilloscope.query_segmented_memory()`. P0 reads acquisition mode, segment
+  counts, selected segment, and time tag without enabling, configuring,
+  acquiring, or exporting segmented data. The capability flag permits this
+  command-family path; it does not claim live validation or an installed SGM
+  option/license on 2000X or 3000X instruments.
 - Explicit triggered-capture wait helpers that arm `:SINGle`, poll
   `:OPERegister:CONDition?`, classify DSO-X 2000X/3000X/4000X completion by
   the Operation Status Condition Run bit, and expose raw poll values for

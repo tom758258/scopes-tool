@@ -30,6 +30,10 @@ from scopes_tool_core.acquisition import (
     sample_rate_query,
     validate_acquisition_count,
 )
+from scopes_tool_core.segmented import (
+    ensure_segmented_memory_supported,
+    segmented_mode_query,
+)
 from scopes_tool_core.advanced import (
     FFT_DETECTION_TYPES,
     FFT_GATES,
@@ -2891,6 +2895,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="query the current analog acquisition record length",
     )
 
+    segmented_memory_parser = subparsers.add_parser(
+        "segmented-memory",
+        allow_abbrev=False,
+        help="query segmented-memory state without changing acquisition state",
+    )
+    _add_scope_connection_args(segmented_memory_parser)
+    segmented_memory_parser.add_argument(
+        "--query",
+        action="store_true",
+        required=True,
+        help="query segmented-memory state",
+    )
+
     acquisition_parser = subparsers.add_parser(
         "acquisition",
         help="configure or query acquisition type and average count",
@@ -3497,6 +3514,9 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         return _cmd_smoke(args)
     if args.command == "sample-rate":
         return _cmd_sample_rate(args)
+
+    if args.command == "segmented-memory":
+        return _cmd_segmented_memory(args)
 
     if args.command == "acquisition-points":
         return _cmd_acquisition_points(args)
@@ -6743,6 +6763,21 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         if getattr(args, "sample_rate_maximum", False):
             result["query_kind"] = "maximum"
         return planned, [], result
+    if command == "segmented-memory":
+        ensure_segmented_memory_supported(capabilities)
+        return ["*IDN?", segmented_mode_query(), ":SYSTem:ERRor?"], [], {
+            "operation": "query",
+            "mode": None,
+            "configured_segments": None,
+            "acquired_segments": None,
+            "selected_segment": None,
+            "time_tag_s": None,
+            "raw_mode": None,
+            "raw_configured_segments": None,
+            "raw_acquired_segments": None,
+            "raw_selected_segment": None,
+            "raw_time_tag": None,
+        }
     if command == "acquisition-points":
         planned = ["*IDN?", acquisition_points_query(), ":SYSTem:ERRor?"]
         return planned, [], {
@@ -11678,6 +11713,35 @@ def _cmd_sample_rate(args: argparse.Namespace) -> int:
         else:
             result["sample_rate_hz"] = sample_rate_hz
         _json_update_result(**result)
+        entry = scope.query_system_error()
+        _json_record_system_error(entry)
+        print("System error: " + entry.format())
+        return 1 if entry.is_error else 0
+
+
+def _cmd_segmented_memory(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
+
+    with _open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        _json_record_scope(scope, idn)
+        _print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        print("Series: " + (idn.series or "unknown"))
+        query_result = scope.query_segmented_memory()
+        result = query_result.to_json()
+        result["operation"] = "query"
+        _json_update_result(**result)
+        print("Planned query: segmented memory state")
+        print("Mode: " + query_result.mode)
+        print("Configured segments: " + str(query_result.configured_segments))
+        print("Acquired segments: " + str(query_result.acquired_segments))
+        print("Selected segment: " + str(query_result.selected_segment))
+        print("Time tag (s): " + str(query_result.time_tag_s))
         entry = scope.query_system_error()
         _json_record_system_error(entry)
         print("System error: " + entry.format())

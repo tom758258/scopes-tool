@@ -179,9 +179,14 @@ selected Serial bus must be configured with the matching Serial command first.
   not expose that helper because their delay query depends on measurement
   definition state.
 
-Capability flags for raw waveform points mode and segmented memory remain
-disabled. Serial decode capability represents command-family availability, not
-the presence of an instrument license.
+Raw waveform points mode remains disabled. Segmented memory is enabled only as
+a query-only command-family capability for the registered 2000X, 3000X, and
+4000X profiles. On 2000X and 3000X instruments, the SGM option/license may be
+required; the capability flag does not claim that the option is installed or
+that live segmented-memory behavior has been validated. No segmented enable,
+disable, count configuration, capture, or export is implemented in P0. Serial
+decode capability represents command-family availability, not the presence of
+an instrument license.
 
 Serial Basic P0 keeps aggregate responses raw. Serial Basic P1 implements only
 basic UART, I2C, SPI, and CAN source/decode settings. Serial Lister P2 adds

@@ -83,3 +83,7 @@ class ScreenshotResponseError(OscilloscopeError, ValueError):
 
 class AcquisitionResponseError(OscilloscopeError, ValueError):
     """Raised when an acquisition query response cannot be parsed."""
+
+
+class SegmentedResponseError(OscilloscopeError, ValueError):
+    """Raised when a segmented-memory query response cannot be parsed."""

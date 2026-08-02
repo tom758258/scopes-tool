@@ -160,7 +160,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `cleanup`
 - `run`, `single`, `stop-acquisition`, `force-trigger`
 - `acquisition`, `acquisition-check`, `sample-rate`, `acquisition-points`,
-  `record-length`
+  `record-length`, `segmented-memory`
 - `capture`, `capture-batch`, `screenshot`, `smoke`
 - `channel-summary`
 - `measure`, `measure-results`, `measure-stats`, `measure-sweep`, `measure-log`,
@@ -313,6 +313,18 @@ form:
 ```json
 {"command": "record-length", "arguments": {"query": true}}
 ```
+
+`segmented-memory` accepts only the exact query-only arguments:
+
+```json
+{"command": "segmented-memory", "arguments": {"query": true}}
+```
+
+The `query` value must be the JSON boolean `true`. Missing, false, non-boolean,
+extra, or unknown arguments are rejected before enqueue, artifact creation,
+backend open, or SCPI. P0 does not accept resource, model, mode, path,
+enable/disable, or segment-count arguments and does not create a domain
+artifact.
 
 System/Status Pack v1 uses only these canonical request shapes:
 

@@ -77,6 +77,8 @@ names are intended for package consumers and tests:
 - `PhysicalModelInfo`
 - `VendorInfo`
 - `Oscilloscope`
+- `SegmentedMemoryController`
+- `SegmentedMemoryQueryResult`
 - `MeasurementController`
 - `MeasurementResult`
 - `MeasurementShowState`

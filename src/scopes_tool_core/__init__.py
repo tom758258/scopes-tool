@@ -73,6 +73,7 @@ from .search import (
     SerialSearchSpiState,
     SerialSearchCanState,
 )
+from .segmented import SegmentedMemoryController, SegmentedMemoryQueryResult
 from .serial import (
     CAN_SIGNAL_DEFINITIONS,
     CAN_TRIGGER_ID_MODES,
@@ -369,6 +370,8 @@ __all__ = [
     "ScreenshotController",
     "ScreenshotOptions",
     "ScopeCapabilities",
+    "SegmentedMemoryController",
+    "SegmentedMemoryQueryResult",
     "SystemErrorEntry",
     "StatusController",
     "StatusRegisterState",

@@ -95,7 +95,7 @@ def test_capabilities_keep_unimplemented_surfaces_disabled():
     capabilities = capabilities_for_model("DSOX4024A")
 
     assert capabilities.supports_raw_points_mode is False
-    assert capabilities.supports_segmented_memory is False
+    assert capabilities.supports_segmented_memory is True
 
 
 @pytest.mark.parametrize(

@@ -64,6 +64,7 @@ from .save_export import (
     SaveWaveformFormatState,
     SaveWaveformLengthState,
 )
+from .segmented import SegmentedMemoryController, SegmentedMemoryQueryResult
 from .search import (
     SearchController,
     SearchCountState,
@@ -1718,6 +1719,11 @@ class Oscilloscope:
 
         return self._acquisition_controller().query_config()
 
+    def query_segmented_memory(self) -> SegmentedMemoryQueryResult:
+        """Query segmented-memory state without changing acquisition state."""
+
+        return self._segmented_memory_controller().query()
+
     def close(self) -> None:
         """Close the underlying backend."""
 
@@ -1997,6 +2003,9 @@ class Oscilloscope:
                 "Acquisition operations require known capabilities; call query_idn() first."
             )
         return AcquisitionController(self.scpi)
+
+    def _segmented_memory_controller(self) -> SegmentedMemoryController:
+        return SegmentedMemoryController(self.scpi, self.capabilities)
 
     def __enter__(self) -> "Oscilloscope":
         return self

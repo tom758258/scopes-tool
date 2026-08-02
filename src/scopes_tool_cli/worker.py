@@ -109,6 +109,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "sample-rate",
     "acquisition-points",
     "record-length",
+    "segmented-memory",
     "channel-summary",
     "capture",
     "capture-batch",
@@ -542,6 +543,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     arguments = body.get("arguments", {})
     if not isinstance(arguments, dict):
         raise OscilloscopeError("arguments must be a JSON object")
+    arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     job_id = body.get("job_id")
     if job_id is not None and not isinstance(job_id, str):
         raise OscilloscopeError("job_id must be a string when provided")
@@ -554,6 +556,7 @@ def parse_domain_command(
     runtime: WorkerRuntime,
     job_dir: Path | None = None,
 ) -> argparse.Namespace:
+    arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_system_status_worker_arguments(command, arguments)
     arguments = _normalize_screenshot_worker_arguments(command, arguments)
     _validate_display_worker_arguments(command, arguments)
@@ -623,6 +626,16 @@ def parse_domain_command(
     )
     scope_cli._dry_run_payload(dry_args)
     return parsed
+
+
+def _normalize_segmented_memory_worker_arguments(
+    command: str, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    if command != "segmented-memory":
+        return arguments
+    if set(arguments) != {"query"} or arguments.get("query") is not True:
+        raise OscilloscopeError("segmented-memory requires exactly query=true")
+    return {"query": True}
 
 
 def _normalize_system_status_worker_arguments(
