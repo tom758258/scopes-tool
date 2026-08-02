@@ -572,8 +572,10 @@ queries `:ACQuire:MODE?`. It queries segmented counts only when the mode is
 segmented, and queries selected index and time tag only when the acquired
 count is greater than zero. The command never enables or disables segmented
 mode, configures a segment count, starts acquisition, captures waveform data,
-or exports artifacts. A 2000X or 3000X instrument may require the SGM option or
-license; the capability flag is not live validation.
+or exports artifacts. Segmented-memory availability may depend on an SGM option
+or license on supported 2000X, 3000X, and 4000X instruments; the capability
+flag permits this documented command-family path but does not claim that the
+option is installed or that live segmented-memory behavior has been validated.
 
 Worker usage accepts only the exact query argument object:
 

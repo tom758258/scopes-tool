@@ -201,8 +201,10 @@ Core owns runtime behavior:
   `Oscilloscope.query_segmented_memory()`. P0 reads acquisition mode, segment
   counts, selected segment, and time tag without enabling, configuring,
   acquiring, or exporting segmented data. The capability flag permits this
-  command-family path; it does not claim live validation or an installed SGM
-  option/license on 2000X or 3000X instruments.
+  command-family path. Segmented-memory availability may depend on an SGM
+  option or license on supported 2000X, 3000X, and 4000X instruments; the
+  capability flag does not claim that the option is installed or that live
+  segmented-memory behavior has been validated.
 - Explicit triggered-capture wait helpers that arm `:SINGle`, poll
   `:OPERegister:CONDition?`, classify DSO-X 2000X/3000X/4000X completion by
   the Operation Status Condition Run bit, and expose raw poll values for

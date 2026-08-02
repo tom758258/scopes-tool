@@ -181,10 +181,12 @@ selected Serial bus must be configured with the matching Serial command first.
 
 Raw waveform points mode remains disabled. Segmented memory is enabled only as
 a query-only command-family capability for the registered 2000X, 3000X, and
-4000X profiles. On 2000X and 3000X instruments, the SGM option/license may be
-required; the capability flag does not claim that the option is installed or
-that live segmented-memory behavior has been validated. No segmented enable,
-disable, count configuration, capture, or export is implemented in P0. Serial
+4000X profiles. Segmented-memory availability may depend on an SGM option or
+license on supported 2000X, 3000X, and 4000X instruments; the capability flag
+permits this documented command-family path but does not claim that the option
+is installed or that live segmented-memory behavior has been validated. No
+segmented enable, disable, count configuration, capture, or export is
+implemented in P0. Serial
 decode capability represents command-family availability, not the presence of
 an instrument license.
 
