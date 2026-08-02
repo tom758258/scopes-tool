@@ -113,6 +113,32 @@ def test_serial_uart_trigger_rejects_non_data_qualifier_before_backend_open(
     assert payload["scpi"]["sent"] == []
 
 
+def test_serial_uart_trigger_query_dry_run_plans_only_unconditional_queries(capsys):
+    assert (
+        cli.main(
+            [
+                "serial-trigger-uart",
+                "--bus",
+                "1",
+                "--query",
+                "--dry-run",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 0
+    )
+    result = _payload(capsys)["result"]
+    assert result["operation"] == "query"
+    assert result["protocol"] == "uart"
+    assert result["bus"] == 1
+    assert result["commands"] == [":SBUS1:MODE?", ":TRIGger:MODE?"]
+    assert ":SBUS1:UART:TRIGger:TYPE?" not in result["commands"]
+    assert ":SBUS1:UART:TRIGger:DATA?" not in result["commands"]
+    assert ":SBUS1:UART:TRIGger:QUALifier?" not in result["commands"]
+
+
 def test_serial_lister_query_simulator_json_does_not_query_data(capsys):
     assert (
         cli.main(

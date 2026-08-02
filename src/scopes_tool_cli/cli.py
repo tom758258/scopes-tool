@@ -5751,7 +5751,6 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             commands = [
                 serial_mode_query(bus),
                 trigger_mode_query(),
-                serial_uart_trigger_type_query(bus),
             ]
             result = {
                 "operation": "query",
