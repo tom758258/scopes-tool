@@ -2253,6 +2253,16 @@ def parse_serial_i2c_trigger_qualifier(raw: str) -> str:
     return _parse_choice(raw, _I2C_TRIGGER_QUALIFIER_READBACKS, "I2C trigger qualifier")
 
 
+def serial_i2c_trigger_qualifier_readback(qualifier: str) -> str:
+    canonical = normalize_serial_i2c_trigger_qualifier(qualifier)
+    return {
+        "equal": "EQU",
+        "not-equal": "NOT",
+        "less-than": "LESS",
+        "greater-than": "GRE",
+    }[canonical]
+
+
 def normalize_serial_spi_trigger_type(value: str) -> str:
     return _normalize_choice(value, SPI_TRIGGER_TYPES, "SPI trigger type")
 

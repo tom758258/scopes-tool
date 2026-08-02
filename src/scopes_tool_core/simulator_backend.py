@@ -28,6 +28,7 @@ from .serial import (
     serial_uart_trigger_qualifier_readback,
     serial_uart_trigger_type_readback,
     serial_can_trigger_type_readback,
+    serial_i2c_trigger_qualifier_readback,
     serial_i2c_trigger_type_readback,
     serial_spi_trigger_type_readback,
     normalize_serial_can_trigger_id_mode,
@@ -2758,7 +2759,9 @@ class SimulatorBackend:
         elif field_name.endswith("DATA"):
             self.serial_i2c_trigger_data[bus] = int(value, 0)
         else:
-            self.serial_i2c_trigger_qualifiers[bus] = parse_serial_i2c_trigger_qualifier(value)
+            self.serial_i2c_trigger_qualifiers[bus] = serial_i2c_trigger_qualifier_readback(
+                parse_serial_i2c_trigger_qualifier(value)
+            )
         return True
 
     def _query_serial_i2c_trigger(self, command: str) -> str | None:

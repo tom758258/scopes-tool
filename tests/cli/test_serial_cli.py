@@ -146,7 +146,7 @@ def test_serial_uart_trigger_query_dry_run_plans_only_unconditional_queries(caps
         (
             "serial-trigger-i2c",
             "IIC",
-            ["--type", "read-eeprom", "--address", "0x50", "--data", "0x10", "--qualifier", "equal"],
+            ["--type", "read-eeprom", "--address", "0x50", "--data", "0x10", "--qualifier", "greater-than"],
             "i2c",
         ),
         (
@@ -177,11 +177,17 @@ def test_serial_trigger_simulator_configure_query_roundtrip(
     assert configured["protocol"] == protocol
     assert configured["state_changing"] is True
     assert configured["selected"] is True
+    if protocol == "i2c":
+        assert configured["qualifier"] == "greater-than"
+        assert configured["raw_qualifier"] == "GRE"
 
     assert cli.main([*common, "--query"]) == 0
     queried = _payload(capsys)["result"]
     assert queried["protocol"] == protocol
     assert queried["selected"] is True
+    if protocol == "i2c":
+        assert queried["qualifier"] == "greater-than"
+        assert queried["raw_qualifier"] == "GRE"
 
 
 @pytest.mark.parametrize(
