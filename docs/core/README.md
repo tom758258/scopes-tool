@@ -207,7 +207,9 @@ Core owns runtime behavior:
   memory depth. Average acquisition must be changed to a non-average type by
   the caller before enabling segmented memory. Availability may depend on an
   SGM option or license; capability support does not claim that the option is
-  installed or that DSO-X 4034A P0/P1 live behavior has been validated.
+  installed. DSO-X 4034A USB live validation passed for the P0 realtime query
+  branch; P0 segmented-mode conditional query branches and P1
+  enable/count/disable configuration remain pending live validation.
 - Explicit triggered-capture wait helpers that arm `:SINGle`, poll
   `:OPERegister:CONDition?`, classify DSO-X 2000X/3000X/4000X completion by
   the Operation Status Condition Run bit, and expose raw poll values for

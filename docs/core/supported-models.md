@@ -185,8 +185,10 @@ mode/count configuration are available for the registered 2000X, 3000X, and
 3000X/4000X, while the actual maximum may be lower for the selected memory
 depth. Segmented-memory availability may depend on an SGM option or license;
 the capability flag permits this documented command-family path but does not
-claim that the option is installed or that DSO-X 4034A P0/P1 live behavior has
-been validated. P1 does not include acquisition, capture, or export. Serial
+claim that the option is installed. DSO-X 4034A USB live validation passed for
+the P0 realtime query branch; P0 segmented-mode conditional query branches and
+P1 enable/count/disable configuration remain pending live validation. P1 does
+not include acquisition, capture, or export. Serial
 decode capability represents command-family availability, not the presence of
 an instrument license.
 
@@ -216,7 +218,7 @@ hardware-free.
 | --- | --- | --- | --- |
 | DSOX4024A | 4000X | USB | Full documented USB hardware plan passed by user report for the supported workflow set. |
 | DSOX4024A | 4000X | LAN | Deferred until an explicit LAN resource is available and approved. |
-| DSOX4034A | 4000X | USB | Focused validations passed by user report for recent compatibility work, including sample-rate, acquisition-points, record-length, force-trigger, triggered capture wait, channel labels, display labels, indexed annotation, Measurement Control Pack v1, and Reference Waveform Pack v1. Measurement-window zoom requires the zoomed timebase to be displayed; source1-only writes may preserve source2; enabling one reference display may turn off the other. A full model matrix remains deferred. |
+| DSOX4034A | 4000X | USB | Focused validations passed by user report for recent compatibility work, including sample-rate, acquisition-points, record-length, force-trigger, triggered capture wait, channel labels, display labels, indexed annotation, Measurement Control Pack v1, and Reference Waveform Pack v1. Segmented Memory P0 realtime query also passed; segmented-mode query branches and P1 configuration remain pending. Measurement-window zoom requires the zoomed timebase to be displayed; source1-only writes may preserve source2; enabling one reference display may turn off the other. A full model matrix remains deferred. |
 | DSOX4034A | 4000X | LAN | Deferred until an explicit LAN resource is available and approved. |
 | DSOX3024A | 3000X | USB or LAN | Runtime profile exists; live validation is deferred until hardware is available. |
 | DSOX2004A | 2000X | USB or LAN | Runtime profile exists; live validation is deferred until hardware is available. |

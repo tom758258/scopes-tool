@@ -578,8 +578,10 @@ Counts are 2-250 on 2000X and 2-1000 on 3000X/4000X; the actual instrument
 maximum may be lower for the selected memory depth. Disable sends only
 `:ACQuire:MODE RTIMe` and does not reset the configured count. These commands
 do not start acquisition, capture waveform data, or export artifacts.
-Availability may depend on an SGM option or license, and DSO-X 4034A P0/P1
-live behavior remains unvalidated.
+Availability may depend on an SGM option or license. DSO-X 4034A USB live
+validation passed for the P0 realtime query branch; P0 segmented-mode
+conditional query branches and P1 enable/count/disable configuration remain
+pending live validation.
 
 Worker usage accepts only these exact argument objects:
 
