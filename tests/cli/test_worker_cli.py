@@ -730,6 +730,49 @@ def test_worker_http_rejects_invalid_capture_wait_trigger_before_artifacts(tmp_p
     assert not list(tmp_path.rglob("request.json"))
 
 
+@pytest.mark.parametrize(
+    "arguments",
+    (
+        {"segments": 2},
+        {"channel": 1},
+        {"channel": True, "segments": 2},
+        {"channel": 1, "segments": 2.0},
+        {"channel": 1, "segments": 1001},
+        {"channel": 5, "segments": 2},
+        {"channel": 1, "segments": 2, "points": "1000"},
+        {"channel": 1, "segments": 2, "format": "BYTE"},
+        {"channel": 1, "segments": 2, "format": 1},
+        {"channel": 1, "segments": 2, "timeout_ms": 0},
+        {"channel": 1, "segments": 2, "poll_interval_ms": False},
+        {"channel": 1, "segments": 2, "output_dir": "out"},
+        {"channel": 1, "segments": 2, "resource": "USB0::FAKE::INSTR"},
+        {"channel": 1, "segments": 2, "firmware": "07.30"},
+    ),
+)
+def test_worker_http_rejects_invalid_segmented_capture_before_artifacts(
+    tmp_path, arguments
+):
+    runtime = _runtime(tmp_path)
+
+    with _worker_server(runtime):
+        status, payload = _post_command(
+            runtime,
+            {
+                "command": "segmented-capture",
+                "arguments": arguments,
+                "job_id": "bad-segmented-capture",
+            },
+        )
+
+    assert status == 400
+    assert payload["status"] == "error"
+    assert payload["command"] == "segmented-capture"
+    assert runtime.accepted == 0
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()
+    assert not list(tmp_path.rglob("request.json"))
+
+
 def test_worker_http_rejects_fifty_ohm_without_allow_before_artifacts(tmp_path):
     runtime = _runtime(tmp_path, model="keysight-dsox3024a")
 
@@ -835,6 +878,59 @@ def test_worker_parses_domain_arguments_without_opening_backend():
     assert parsed.scale_value == 0.5
     assert parsed.simulate is True
     assert parsed.json_output is True
+
+
+def test_worker_segmented_capture_minimal_request_uses_cli_defaults(tmp_path):
+    original = {"channel": 1, "segments": 2}
+    normalized = worker._normalize_segmented_capture_worker_arguments(
+        "segmented-capture", original, _runtime(tmp_path)
+    )
+
+    assert normalized == {
+        "channel": 1,
+        "segments": 2,
+        "points": 1000,
+        "format": "byte",
+        "timeout_ms": 30000,
+        "poll_interval_ms": 100,
+    }
+    assert original == {"channel": 1, "segments": 2}
+    assert worker._normalize_segmented_capture_worker_arguments(
+        "segmented-capture", normalized, _runtime(tmp_path)
+    ) == normalized
+
+    parsed = worker.parse_domain_command(
+        "segmented-capture", original, _runtime(tmp_path)
+    )
+    assert parsed.channel == 1
+    assert parsed.segments == 2
+    assert parsed.points == 1000
+    assert parsed.waveform_format == "byte"
+    assert parsed.timeout_ms == 30000
+    assert parsed.poll_interval_ms == 100
+
+
+def test_worker_segmented_capture_full_request_maps_to_cli_namespace(tmp_path):
+    parsed = worker.parse_domain_command(
+        "segmented-capture",
+        {
+            "channel": 1,
+            "segments": 2,
+            "points": 5000,
+            "format": "word",
+            "timeout_ms": 5000,
+            "poll_interval_ms": 50,
+        },
+        _runtime(tmp_path),
+    )
+
+    assert parsed.channel == 1
+    assert parsed.segments == 2
+    assert parsed.points == 5000
+    assert parsed.waveform_format == "word"
+    assert parsed.timeout_ms == 5000
+    assert parsed.poll_interval_ms == 50
+    assert parsed.output_dir is None
 
 
 def test_worker_parses_sample_rate_query_without_opening_backend():
@@ -1661,6 +1757,26 @@ def test_worker_job_paths_default_under_job_dir(tmp_path):
     assert Path(parsed.plot_path) == job_dir / "plot.png"
 
 
+def test_worker_segmented_capture_uses_child_output_and_overwrite_guard(tmp_path):
+    job_dir = tmp_path / "run" / "job"
+    job_dir.mkdir(parents=True)
+    (job_dir / "request.json").write_text("{}", encoding="utf-8")
+
+    parsed = worker.parse_domain_command(
+        "segmented-capture",
+        {"channel": 1, "segments": 2},
+        _runtime(tmp_path),
+        job_dir,
+    )
+
+    assert Path(parsed.output_dir) == job_dir / "segmented_capture"
+    worker._guard_no_overwrite(parsed, job_dir)
+
+    Path(parsed.output_dir).mkdir()
+    with pytest.raises(OscilloscopeError, match="already exists"):
+        worker._guard_no_overwrite(parsed, job_dir)
+
+
 def test_worker_no_overwrite_guard_rejects_existing_artifact(tmp_path):
     job_dir = tmp_path / "job"
     job_dir.mkdir()
@@ -1784,6 +1900,98 @@ def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
         operation_condition_query(),
         operation_condition_query(),
     ]
+
+
+def test_worker_executes_segmented_capture_with_domain_child_artifacts(tmp_path):
+    runtime = _runtime(tmp_path)
+    original_body = {
+        "command": "segmented-capture",
+        "arguments": {
+            "channel": 1,
+            "segments": 2,
+            "poll_interval_ms": 1,
+        },
+        "job_id": "segmented-job",
+    }
+
+    worker_thread = threading.Thread(
+        target=worker._job_loop, args=(runtime,), daemon=True
+    )
+    worker_thread.start()
+    with _worker_server(runtime):
+        status, accepted = _post_command(runtime, original_body)
+        assert status == 202
+        runtime.queue.join()
+
+    artifact_path = Path(accepted["artifact_path"])
+    request_payload = json.loads(
+        (artifact_path / "request.json").read_text(encoding="utf-8")
+    )
+    result = json.loads(
+        (artifact_path / "result.json").read_text(encoding="utf-8")
+    )
+    domain_dir = artifact_path / "segmented_capture"
+    scpi_log = (domain_dir / "scpi.log").read_text(encoding="utf-8")
+
+    assert request_payload == {
+        **original_body,
+        "schema_version": worker.WORKER_SCHEMA_VERSION,
+    }
+    assert result["state"] == "succeeded"
+    assert result["ok"] is True
+    assert result["result"]["operation"] == "segmented-capture"
+    assert result["result"]["status"] == "completed"
+    assert (domain_dir / "manifest.json").exists()
+    assert (domain_dir / "segment_0001.csv").exists()
+    assert (domain_dir / "segment_0002.csv").exists()
+    assert result["files"] == [
+        {"kind": "manifest", "path": str(domain_dir / "manifest.json")},
+        {"kind": "scpi_log", "path": str(domain_dir / "scpi.log")},
+        {"kind": "csv", "path": str(domain_dir / "segment_0001.csv")},
+        {"kind": "csv", "path": str(domain_dir / "segment_0002.csv")},
+    ]
+    assert scpi_log.count(":SINGle") == 1
+    assert ":WAVeform:SEGMented:ALL OFF" not in scpi_log
+
+
+def test_worker_maps_segmented_capture_partial_result_and_existing_files(
+    tmp_path, monkeypatch
+):
+    runtime = _runtime(tmp_path)
+    artifact_path = tmp_path / "partial"
+
+    def fake_execute(parsed):
+        csv_path = Path(parsed.output_dir) / "segment_0001.csv"
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text("time_s,voltage_v\n0,0\n", encoding="utf-8")
+        return (
+            {
+                "ok": False,
+                "result": {
+                    "operation": "segmented-capture",
+                    "status": "partial",
+                },
+                "files": [{"kind": "csv", "path": str(csv_path)}],
+                "error": {"type": "OscilloscopeError", "message": "partial"},
+            },
+            1,
+        )
+
+    monkeypatch.setattr(worker.scope_cli, "_execute_json_command", fake_execute)
+    _, result = _execute_worker_job(
+        runtime,
+        "segmented-capture",
+        {"channel": 1, "segments": 2},
+        artifact_path,
+    )
+
+    csv_path = artifact_path / "segmented_capture" / "segment_0001.csv"
+    assert result["state"] == "failed"
+    assert result["ok"] is False
+    assert result["result"]["status"] == "partial"
+    assert result["files"] == [{"kind": "csv", "path": str(csv_path)}]
+    assert result["exit_code"] == 1
+    assert csv_path.exists()
 
 
 @pytest.mark.parametrize(

@@ -12,8 +12,11 @@
   remain out of scope.
 - Adds the finite single-channel `segmented-capture` workflow with bounded
   acquired-segment polling, per-segment host CSV export, a shared manifest and
-  SCPI log, and partial-artifact retention on failure. It is not exposed to the
-  Worker and has no live hardware validation yet.
+  SCPI log, and partial-artifact retention on failure. It has no live hardware
+  validation yet.
+- Exposes `segmented-capture` through the Common v2 Scopes Worker with strict
+  startup-bound validation, a Worker-owned artifact child directory, and
+  existing succeeded/failed/cancelled lifecycle semantics.
 - Adds the Serial UART Trigger P0 vertical slice through Core, CLI, Worker,
   Simulator, Common v2 JSON, and focused tests. It supports the shared basic
   UART trigger types and data qualifiers without changing Serial P1 decode

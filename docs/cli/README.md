@@ -603,8 +603,8 @@ preserving completed CSVs and records `partial` or `failed` status. The command
 does not force a trigger, disable segmented mode, restore state, merge CSVs, or
 perform instrument-side save/export. P0 segmented-mode branches, P1
 configuration, and P2 finite capture/export remain pending DSO-X 4034A USB live
-validation. `segmented-capture` is not exposed through the Worker in P2;
-Worker/Common v2 integration is deferred to P3.
+validation. The Common v2 Worker also exposes this workflow through its strict
+`segmented-capture` command contract.
 
 Worker usage accepts only these exact argument objects:
 

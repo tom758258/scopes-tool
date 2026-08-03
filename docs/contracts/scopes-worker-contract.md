@@ -160,7 +160,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `cleanup`
 - `run`, `single`, `stop-acquisition`, `force-trigger`
 - `acquisition`, `acquisition-check`, `sample-rate`, `acquisition-points`,
-  `record-length`, `segmented-memory`
+  `record-length`, `segmented-memory`, `segmented-capture`
 - `capture`, `capture-batch`, `screenshot`, `smoke`
 - `channel-summary`
 - `measure`, `measure-results`, `measure-stats`, `measure-sweep`, `measure-log`,
@@ -335,6 +335,59 @@ enqueue, artifact creation, backend open, or SCPI. Worker validation uses the
 startup-bound model capability: counts are 2-250 on 2000X and 2-1000 on
 3000X/4000X. The worker does not accept resource, model, mode, path, capture,
 or export arguments and does not create a domain artifact for this command.
+
+`segmented-capture` accepts only this Common v2 request shape:
+
+```json
+{
+  "schema_version": 2,
+  "command": "segmented-capture",
+  "arguments": {
+    "channel": 1,
+    "segments": 2,
+    "points": 1000,
+    "format": "byte",
+    "timeout_ms": 30000,
+    "poll_interval_ms": 100
+  },
+  "job_id": "client-job-id"
+}
+```
+
+`channel` and `segments` are required. `points`, `format`, `timeout_ms`, and
+`poll_interval_ms` are optional and default to `1000`, `byte`, `30000`, and
+`100`, respectively. All numeric values must be JSON integers; booleans are
+not integers. `format` must be exactly `byte` or `word`. Channel, segment
+count, point count, and word-format support are validated against the
+startup-bound model capability. Segment counts are 2-250 on 2000X and 2-1000
+on 3000X/4000X. `timeout_ms` and `poll_interval_ms` must be positive. The
+worker does not accept `output_dir`, `output`, `path`, `resource`, `model`,
+`firmware`, `simulate`, `live`, `dry_run`, `json`, `log_scpi`, operation flags,
+or aliases. Unknown keys and invalid values are rejected before enqueue,
+artifact creation, backend open, or SCPI.
+
+The worker reuses the existing one-shot CLI/Core segmented-capture workflow.
+Its job directory contains the original submitted `request.json` and the
+terminal `result.json`; domain artifacts are written below the fixed child
+directory `segmented_capture/`:
+
+```text
+data/worker/<run_id>/<worker_job_id>/
+  request.json
+  result.json
+  segmented_capture/
+    manifest.json
+    scpi.log
+    segment_0001.csv
+```
+
+The child directory is required because the job root already contains
+`request.json`, while the Core workflow requires a new or empty output
+directory. The domain status `completed` maps to Worker `succeeded`; domain
+`partial` or `failed` maps to Worker `failed` while preserving existing files
+and the domain status in `result.json`. Worker cancellation keeps the existing
+cooperative queued/running semantics. The worker accepts no firmware argument;
+Core uses the detected IDN firmware for waveform segmented command gating.
 
 System/Status Pack v1 uses only these canonical request shapes:
 
@@ -2155,6 +2208,9 @@ recorded as absolute paths. Default worker outputs are:
   creates no screenshot artifact.
 - `capture-batch`, `measure-log`, `smoke`, and `acquisition-check`: the job
   directory is the default `output_dir`.
+- `segmented-capture`: the fixed `segmented_capture` child directory below the
+  job directory is the `output_dir`; its manifest, SCPI log, and successfully
+  written per-segment CSV files are domain artifacts.
 
 `sample-rate`, `acquisition-points`, `record-length`, `force-trigger`,
 `system-clear-status`, `system-opc`, `system-status-byte`,

@@ -71,6 +71,10 @@ from scopes_tool_core.save_export import (
     validate_save_quoted_string,
     validate_save_waveform_length,
 )
+from scopes_tool_core.segmented_capture import (
+    SegmentedCaptureRequest,
+    validate_segmented_capture_request,
+)
 from scopes_tool_core.wgen import (
     WGEN_LOADS,
     validate_wgen_amplitude,
@@ -112,6 +116,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "acquisition-points",
     "record-length",
     "segmented-memory",
+    "segmented-capture",
     "channel-summary",
     "capture",
     "capture-batch",
@@ -546,6 +551,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     if not isinstance(arguments, dict):
         raise OscilloscopeError("arguments must be a JSON object")
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
+    arguments = _normalize_segmented_capture_worker_arguments(command, arguments)
     job_id = body.get("job_id")
     if job_id is not None and not isinstance(job_id, str):
         raise OscilloscopeError("job_id must be a string when provided")
@@ -559,6 +565,7 @@ def parse_domain_command(
     job_dir: Path | None = None,
 ) -> argparse.Namespace:
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
+    arguments = _normalize_segmented_capture_worker_arguments(command, arguments, runtime)
     arguments = _normalize_system_status_worker_arguments(command, arguments)
     arguments = _normalize_screenshot_worker_arguments(command, arguments)
     _validate_display_worker_arguments(command, arguments)
@@ -649,6 +656,66 @@ def _normalize_segmented_memory_worker_arguments(
     raise OscilloscopeError(
         "segmented-memory requires exactly one canonical operation"
     )
+
+
+def _normalize_segmented_capture_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+    runtime: WorkerRuntime | None = None,
+) -> dict[str, Any]:
+    if command != "segmented-capture":
+        return arguments
+
+    allowed = {
+        "channel",
+        "segments",
+        "points",
+        "format",
+        "timeout_ms",
+        "poll_interval_ms",
+    }
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"segmented-capture unknown argument: {sorted(unknown)[0]}"
+        )
+
+    for required in ("channel", "segments"):
+        if required not in arguments:
+            raise OscilloscopeError(
+                f"segmented-capture requires argument {required}"
+            )
+
+    values = {
+        "channel": arguments["channel"],
+        "segments": arguments["segments"],
+        "points": arguments.get("points", 1000),
+        "format": arguments.get("format", "byte"),
+        "timeout_ms": arguments.get("timeout_ms", 30000),
+        "poll_interval_ms": arguments.get("poll_interval_ms", 100),
+    }
+    for name in ("channel", "segments", "points", "timeout_ms", "poll_interval_ms"):
+        value = values[name]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise OscilloscopeError(f"segmented-capture argument {name} must be an integer")
+    if not isinstance(values["format"], str) or values["format"] not in {"byte", "word"}:
+        raise OscilloscopeError(
+            "segmented-capture argument format must be exactly byte or word"
+        )
+
+    request = SegmentedCaptureRequest(
+        channel=values["channel"],
+        segments=values["segments"],
+        points=values["points"],
+        waveform_format=values["format"],
+        timeout_ms=values["timeout_ms"],
+        poll_interval_ms=values["poll_interval_ms"],
+    )
+    capabilities = (
+        capabilities_for_model_id(runtime.model) if runtime is not None else None
+    )
+    validate_segmented_capture_request(request, capabilities)
+    return dict(values)
 
 
 def _normalize_system_status_worker_arguments(
@@ -2903,6 +2970,8 @@ def _apply_worker_job_paths(args: argparse.Namespace, job_dir: Path) -> None:
     elif command in {"capture-batch", "measure-log", "smoke", "acquisition-check"}:
         output_dir = _worker_path(job_dir, getattr(args, "output_dir", None), ".")
         setattr(args, "output_dir", str(output_dir))
+    elif command == "segmented-capture":
+        setattr(args, "output_dir", str(job_dir / "segmented_capture"))
     elif command == "serial-lister-export":
         output_path = _worker_path(job_dir, args.output_path, None)
         setattr(args, "output_path", str(output_path))
@@ -2939,6 +3008,8 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
     if command == "capture-batch":
         output_dir = Path(args.output_dir)
         return [output_dir / "manifest.json", output_dir / "scpi.log"]
+    if command == "segmented-capture":
+        return [Path(args.output_dir)]
     if command == "measure-log":
         output_dir = Path(args.output_dir)
         return [
