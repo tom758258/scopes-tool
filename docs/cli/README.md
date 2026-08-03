@@ -595,11 +595,13 @@ Run a finite segmented capture and export each acquired segment to a host CSV:
 
 `segmented-capture` supports one analog channel, BYTE or WORD waveform
 transfer, finite timeout-bounded polling, and the existing waveform decoder.
-`--timeout-ms` is the overall acquisition polling deadline; each polling read
-uses the remaining deadline as its temporary VISA timeout. If a polling read
-times out, the workflow stops issuing SCPI on that session while preserving the
-manifest and `scpi.log`.
-It sends one `:SINGle`, selects each acquired segment, queries its time tag,
+`--timeout-ms` is the overall acquisition deadline covering acquired-count and
+operation-condition readiness polling; each polling read uses the remaining
+deadline as its temporary VISA timeout. After the requested count is acquired,
+the workflow waits for the operation-condition RUN bit to clear before export.
+If any segmented-capture SCPI read times out, the workflow stops issuing SCPI on
+that session while preserving completed CSVs, the manifest, and `scpi.log`.
+It sends one `:SINGle`, selects each ready acquired segment, queries its time tag,
 and writes `segment_0001.csv`, `segment_0002.csv`, and so on immediately after
 each successful waveform transfer. The directory also contains a shared
 `manifest.json` and `scpi.log`. A timeout or later error returns non-zero while
@@ -607,8 +609,8 @@ preserving completed CSVs and records `partial` or `failed` status. The command
 does not force a trigger, disable segmented mode, restore state, merge CSVs, or
 perform instrument-side save/export. P0 segmented-mode branches, P1
 configuration, and P2 finite capture/export remain pending DSO-X 4034A USB live
-validation. The Common v2 Worker also exposes this workflow through its strict
-`segmented-capture` command contract.
+validation. The Common v2 Worker also exposes the same readiness and
+read-timeout semantics through its strict `segmented-capture` command contract.
 
 Worker usage accepts only these exact argument objects:
 

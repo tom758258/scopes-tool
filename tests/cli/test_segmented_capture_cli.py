@@ -51,7 +51,10 @@ def test_segmented_capture_simulate_json_writes_artifacts_and_order(tmp_path, ca
         ":WAVeform:SEGMented:COUNt?",
     ]
     assert payload["scpi"]["sent"].count(":WAVeform:SEGMented:ALL OFF") == 0
-    assert payload["scpi"]["sent"].index(":ACQuire:SEGMented:INDex 1") > 6
+    readiness_index = payload["scpi"]["sent"].index(":OPERegister:CONDition?")
+    first_index = payload["scpi"]["sent"].index(":ACQuire:SEGMented:INDex 1")
+    assert readiness_index > 6
+    assert readiness_index < first_index
     assert payload["scpi"]["sent"][-2:] == [
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",
@@ -89,7 +92,10 @@ def test_segmented_capture_dry_run_is_concrete_and_creates_no_artifacts(tmp_path
         ":WAVeform:SEGMented:COUNt?",
     ]
     assert payload["scpi"]["planned"].count(":WAVeform:SEGMented:ALL OFF") == 0
-    assert payload["scpi"]["planned"].index(":ACQuire:SEGMented:INDex 1") > 6
+    readiness_index = payload["scpi"]["planned"].index(":OPERegister:CONDition?")
+    first_index = payload["scpi"]["planned"].index(":ACQuire:SEGMented:INDex 1")
+    assert readiness_index > 6
+    assert readiness_index < first_index
     assert payload["scpi"]["planned"][-2:] == [
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",

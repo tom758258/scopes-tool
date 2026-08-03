@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -15,10 +16,17 @@ from .batch import (
     relative_manifest_path,
     write_batch_manifest,
 )
+from .acquisition import acquisition_type_query, parse_acquisition_type
 from .capabilities import ScopeCapabilities
 from .channel import validate_analog_channel
-from .errors import OscilloscopeError, ParameterValidationError
+from .errors import OscilloscopeError, ParameterValidationError, WaveformResponseError
 from .operations import OperationResult
+from .status import parse_system_error
+from .trigger import (
+    OPERATION_CONDITION_RUN_MASK,
+    operation_condition_query,
+    parse_operation_condition,
+)
 from .output_files import write_capture_csv_file
 from .scope import Oscilloscope
 from .segmented import (
@@ -28,6 +36,9 @@ from .segmented import (
     segmented_index_command,
     segmented_mode_command,
     segmented_mode_query,
+    parse_segmented_acquired_count,
+    parse_segmented_mode,
+    parse_segmented_time_tag,
     segmented_time_tag_query,
     segmented_waveform_all_command,
     segmented_waveform_count_query,
@@ -36,6 +47,10 @@ from .segmented import (
 )
 from .waveform import (
     SUPPORTED_WAVEFORM_POINTS,
+    WaveformCapture,
+    convert_byte_waveform,
+    convert_word_waveform,
+    parse_waveform_preamble,
     validate_word_format_supported,
     validate_waveform_points,
     waveform_byte_order_command,
@@ -47,6 +62,9 @@ from .waveform import (
     waveform_source_command,
     waveform_unsigned_command,
 )
+
+
+ReadGuard = Callable[[Callable[[], object], str], object]
 
 
 SEGMENTED_CAPTURE_DEFAULT_BASE_DIR = Path("data") / "segmented_captures"
@@ -207,6 +225,7 @@ def plan_segmented_capture(
         segmented_count_command(request.segments),
         ":SINGle",
         segmented_waveform_count_query(),
+        operation_condition_query(),
     ]
     if segmented_waveform_all_supported(capabilities, firmware):
         planned.append(segmented_waveform_all_command(False))
@@ -269,16 +288,28 @@ def _write_manifest(manifest: dict[str, object], path: Path) -> None:
 
 def _best_effort_final_state(
     scope: Oscilloscope,
-    controller: SegmentedMemoryController,
+    guarded_read: ReadGuard,
 ) -> tuple[str | None, dict[str, object] | None]:
     final_mode: str | None = None
     system_error: dict[str, object] | None = None
     try:
-        final_mode = controller.query_mode()
+        raw_mode = guarded_read(
+            lambda: scope.scpi.query(segmented_mode_query()),
+            "segmented capture final mode read timed out",
+        )
+        final_mode = parse_segmented_mode(raw_mode)
+    except SegmentedCaptureTimeout:
+        raise
     except Exception:
         pass
     try:
-        system_error = _system_error_json(scope.query_system_error())
+        raw_error = guarded_read(
+            lambda: scope.scpi.query(":SYSTem:ERRor?"),
+            "segmented capture system-error read timed out",
+        )
+        system_error = _system_error_json(parse_system_error(raw_error))
+    except SegmentedCaptureTimeout:
+        raise
     except Exception:
         pass
     return final_mode, system_error
@@ -310,6 +341,68 @@ def _is_visa_timeout(exc: Exception) -> bool:
         if current.__context__ is not None:
             pending.append(current.__context__)
     return False
+
+
+def _capture_segment_waveform(
+    scope: Oscilloscope,
+    channel: int,
+    points: int,
+    waveform_format: str,
+    index: int,
+    guarded_read: ReadGuard,
+) -> WaveformCapture:
+    """Capture one segmented waveform with guarded metadata/data reads."""
+
+    scope.scpi.write(waveform_source_command(channel))
+    if waveform_format == "WORD":
+        scope.scpi.write(waveform_format_word_command())
+        scope.scpi.write(waveform_byte_order_command("MSBFirst"))
+        scope.scpi.write(waveform_unsigned_command(True))
+    else:
+        scope.scpi.write(waveform_format_byte_command())
+    scope.scpi.write(waveform_points_command(points))
+
+    raw_preamble = guarded_read(
+        lambda: scope.scpi.query(waveform_preamble_query()),
+        f"segmented capture segment {index} waveform metadata read timed out",
+    )
+    preamble = parse_waveform_preamble(raw_preamble)
+    expected_format_code = 1 if waveform_format == "WORD" else 0
+    if preamble.format_code != expected_format_code:
+        format_name = "WORD" if waveform_format == "WORD" else "BYTE"
+        raise WaveformResponseError(
+            f"Expected {format_name} waveform preamble format "
+            f"{expected_format_code}, got {preamble.format_code}."
+        )
+
+    if waveform_format == "WORD":
+        raw_samples = tuple(
+            int(value)
+            for value in guarded_read(
+                lambda: scope.scpi.query_binary_values(
+                    waveform_data_query(),
+                    datatype="H",
+                    is_big_endian=True,
+                ),
+                f"segmented capture segment {index} waveform data read timed out",
+            )
+        )
+        if not raw_samples:
+            raise WaveformResponseError("Waveform data query returned no samples.")
+        return convert_word_waveform(channel, points, preamble, raw_samples)
+
+    raw_samples = tuple(
+        int(value)
+        for value in guarded_read(
+            lambda: scope.scpi.query_binary_values(
+                waveform_data_query(), datatype="B"
+            ),
+            f"segmented capture segment {index} waveform data read timed out",
+        )
+    )
+    if not raw_samples:
+        raise WaveformResponseError("Waveform data query returned no samples.")
+    return convert_byte_waveform(channel, points, preamble, raw_samples)
 
 
 def run_segmented_capture(
@@ -361,9 +454,19 @@ def run_segmented_capture(
     target_started = False
     acquired_segments = 0
     exported_segments = 0
-    session_query_timed_out = False
+    session_read_timed_out = False
     human = [f"Resource: {resource}"]
     controller: SegmentedMemoryController | None = None
+
+    def guarded_read(read: Callable[[], object], message: str) -> object:
+        nonlocal session_read_timed_out
+        try:
+            return read()
+        except Exception as exc:
+            if _is_visa_timeout(exc):
+                session_read_timed_out = True
+                raise SegmentedCaptureTimeout(message) from exc
+            raise
 
     try:
         with capture_batch_scpi_logging(
@@ -372,48 +475,104 @@ def run_segmented_capture(
         ):
             try:
                 _write_manifest(manifest, manifest_path)
-                idn = scope.query_idn()
+                try:
+                    idn = scope.query_idn()
+                except Exception as exc:
+                    if _is_visa_timeout(exc):
+                        session_read_timed_out = True
+                        raise SegmentedCaptureTimeout(
+                            "segmented capture IDN read timed out"
+                        ) from exc
+                    raise
                 manifest["idn"] = idn_manifest_dict(idn)
                 capabilities = scope.capabilities
                 validate_segmented_capture_request(request, capabilities)
                 assert capabilities is not None
                 controller = SegmentedMemoryController(scope.scpi, capabilities)
 
-                manifest["initial_mode"] = controller.query_mode()
+                raw_initial_mode = guarded_read(
+                    lambda: scope.scpi.query(segmented_mode_query()),
+                    "segmented capture initial mode read timed out",
+                )
+                manifest["initial_mode"] = parse_segmented_mode(raw_initial_mode)
                 target_started = True
-                controller.enable(request.segments)
+
+                validate_segmented_count(request.segments, capabilities)
+                raw_acquisition_type = guarded_read(
+                    lambda: scope.scpi.query(acquisition_type_query()),
+                    "segmented capture acquisition-type read timed out",
+                )
+                acquisition_type = parse_acquisition_type(raw_acquisition_type)
+                if acquisition_type == "average":
+                    raise ParameterValidationError(
+                        "segmented memory cannot be enabled while acquisition type is "
+                        "average; configure a non-average acquisition type first."
+                    )
+                scope.scpi.write(segmented_mode_command("segmented"))
+                scope.scpi.write(segmented_count_command(request.segments))
                 manifest["configured_segments"] = request.segments
                 scope.single()
 
                 deadline = time.monotonic() + request.timeout_ms / 1000.0
-                timed_out = False
+                count_phase_timed_out = False
+                ready_confirmed = False
                 original_timeout = scope.scpi.timeout
                 polling_exception: Exception | None = None
                 try:
-                    while True:
+                    while acquired_segments < request.segments:
                         remaining_seconds = deadline - time.monotonic()
                         if remaining_seconds <= 0:
-                            timed_out = True
+                            count_phase_timed_out = True
+                            primary_error = SegmentedCaptureTimeout(
+                                "segmented capture timed out after "
+                                f"{request.timeout_ms} ms with {acquired_segments} of "
+                                f"{request.segments} segments acquired."
+                            )
                             break
 
                         remaining_ms = max(1, math.ceil(remaining_seconds * 1000))
                         scope.scpi.set_timeout(remaining_ms)
-                        try:
-                            acquired_segments = controller.query_acquired_count()
-                        except Exception as exc:
-                            if _is_visa_timeout(exc):
-                                session_query_timed_out = True
-                                raise SegmentedCaptureTimeout(
-                                    "segmented capture polling read timed out after "
-                                    f"{request.timeout_ms} ms with {acquired_segments} of "
-                                    f"{request.segments} segments acquired."
-                                ) from exc
-                            raise
+                        raw_acquired_count = guarded_read(
+                            lambda: scope.scpi.query(segmented_waveform_count_query()),
+                            "segmented capture acquired-count read timed out after "
+                            f"{request.timeout_ms} ms with {acquired_segments} of "
+                            f"{request.segments} segments acquired",
+                        )
+                        acquired_segments = parse_segmented_acquired_count(
+                            raw_acquired_count
+                        )
 
                         manifest["acquired_segments"] = acquired_segments
-                        if acquired_segments >= request.segments:
-                            break
-                        time.sleep(request.poll_interval_ms / 1000.0)
+                        if acquired_segments < request.segments:
+                            time.sleep(request.poll_interval_ms / 1000.0)
+
+                    if not count_phase_timed_out and acquired_segments >= request.segments:
+                        while True:
+                            remaining_seconds = deadline - time.monotonic()
+                            if remaining_seconds <= 0:
+                                primary_error = SegmentedCaptureTimeout(
+                                    "segmented capture readiness timed out after "
+                                    f"{request.timeout_ms} ms with {acquired_segments} of "
+                                    f"{request.segments} segments acquired; acquisition "
+                                    "not ready."
+                                )
+                                break
+
+                            remaining_ms = max(1, math.ceil(remaining_seconds * 1000))
+                            scope.scpi.set_timeout(remaining_ms)
+                            raw_operation_condition = guarded_read(
+                                lambda: scope.scpi.query(operation_condition_query()),
+                                "segmented capture operation-condition read timed out "
+                                f"with {acquired_segments} of {request.segments} "
+                                "segments acquired",
+                            )
+                            operation_condition = parse_operation_condition(
+                                raw_operation_condition
+                            )
+                            if not operation_condition & OPERATION_CONDITION_RUN_MASK:
+                                ready_confirmed = True
+                                break
+                            time.sleep(request.poll_interval_ms / 1000.0)
                 except Exception as exc:
                     polling_exception = exc
                     raise
@@ -424,29 +583,31 @@ def run_segmented_capture(
                         if polling_exception is None:
                             raise
 
-                if timed_out:
-                    primary_error = SegmentedCaptureTimeout(
-                        "segmented capture timed out after "
-                        f"{request.timeout_ms} ms with {acquired_segments} of "
-                        f"{request.segments} segments acquired."
-                    )
-
-                export_count = min(acquired_segments, request.segments)
+                if ready_confirmed:
+                    export_count = min(acquired_segments, request.segments)
+                elif count_phase_timed_out:
+                    export_count = min(acquired_segments, request.segments)
+                else:
+                    export_count = 0
                 if export_count and segmented_waveform_all_supported(
                     capabilities, idn.firmware
                 ):
                     controller.set_waveform_all(False)
                 for index in range(1, export_count + 1):
                     scope.select_segmented_memory(index)
-                    time_tag_s = scope.query_segmented_time_tag()
-                    if waveform_format == "WORD":
-                        capture = scope.capture_waveform_word(
-                            request.channel, points=request.points
-                        )
-                    else:
-                        capture = scope.capture_waveform_byte(
-                            request.channel, points=request.points
-                        )
+                    raw_time_tag = guarded_read(
+                        lambda: scope.scpi.query(segmented_time_tag_query()),
+                        f"segmented capture segment {index} time-tag read timed out",
+                    )
+                    time_tag_s = parse_segmented_time_tag(raw_time_tag)
+                    capture = _capture_segment_waveform(
+                        scope,
+                        request.channel,
+                        request.points,
+                        waveform_format,
+                        index,
+                        guarded_read,
+                    )
                     csv_path = output_dir / f"segment_{index:0{width}d}.csv"
                     written_csv = write_capture_csv_file(capture, csv_path)
                     files.append({"kind": "csv", "path": str(written_csv)})
@@ -464,7 +625,7 @@ def run_segmented_capture(
                     manifest["exported_segments"] = exported_segments
                     _write_manifest(manifest, manifest_path)
 
-                final_mode, system_error = _best_effort_final_state(scope, controller)
+                final_mode, system_error = _best_effort_final_state(scope, guarded_read)
                 manifest["final_mode"] = final_mode
                 manifest["system_error"] = system_error
                 if primary_error is None and final_mode != "segmented":
@@ -479,13 +640,15 @@ def run_segmented_capture(
                     )
             except Exception as exc:
                 primary_error = primary_error or exc
-                if controller is not None and target_started and not session_query_timed_out:
+                if controller is not None and target_started and not session_read_timed_out:
                     is_average_rejection = (
                         isinstance(exc, ParameterValidationError)
                         and "cannot be enabled while acquisition type is average" in str(exc)
                     )
                     if not is_average_rejection:
-                        final_mode, system_error = _best_effort_final_state(scope, controller)
+                        final_mode, system_error = _best_effort_final_state(
+                            scope, guarded_read
+                        )
                         manifest["final_mode"] = final_mode
                         manifest["system_error"] = system_error
 

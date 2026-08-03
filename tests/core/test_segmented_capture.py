@@ -26,10 +26,18 @@ def _scope(**kwargs):
 
 
 class _AcquiredCountSequenceBackend(SimulatorBackend):
-    def __init__(self, acquired_counts, *, firmware="07.20"):
+    def __init__(
+        self,
+        acquired_counts,
+        *,
+        firmware="07.20",
+        operation_conditions=(8, 0),
+    ):
         super().__init__(physical_model_id="keysight-dsox4024a", firmware=firmware)
         self.acquired_counts = list(acquired_counts)
         self.last_acquired_count = 0
+        self.operation_conditions = list(operation_conditions)
+        self.last_operation_condition = 0
 
     def query(self, command):
         if command == ":WAVeform:SEGMented:COUNt?":
@@ -38,12 +46,28 @@ class _AcquiredCountSequenceBackend(SimulatorBackend):
             if self.acquired_counts:
                 self.last_acquired_count = self.acquired_counts.pop(0)
             return str(self.last_acquired_count)
+        if command == ":OPERegister:CONDition?":
+            self._ensure_open()
+            self.history.append(command)
+            if self.operation_conditions:
+                self.last_operation_condition = self.operation_conditions.pop(0)
+            return str(self.last_operation_condition)
         return super().query(command)
 
 
 class _TimeoutTrackingBackend(_AcquiredCountSequenceBackend):
-    def __init__(self, acquired_counts, *, firmware="07.20"):
-        super().__init__(acquired_counts, firmware=firmware)
+    def __init__(
+        self,
+        acquired_counts,
+        *,
+        firmware="07.20",
+        operation_conditions=(8, 0),
+    ):
+        super().__init__(
+            acquired_counts,
+            firmware=firmware,
+            operation_conditions=operation_conditions,
+        )
         self.events = []
 
     def set_timeout(self, timeout_ms):
@@ -76,6 +100,57 @@ class _PollingVisaTimeoutBackend(_TimeoutTrackingBackend):
         if command == ":WAVeform:SEGMented:COUNt?":
             self.count_queries += 1
             if self.count_queries == 2:
+                self._ensure_open()
+                self.events.append(("query", command))
+                self.history.append(command)
+                raise VisaBackendError(
+                    f"VISA query failed for {command!r}: VI_ERROR_TMO"
+                ) from _VisaTimeoutCause()
+        return super().query(command)
+
+
+class _ExportVisaTimeoutBackend(_TimeoutTrackingBackend):
+    def __init__(self, failure_command, *, fail_segment=1):
+        super().__init__([2], operation_conditions=[0])
+        self.failure_command = failure_command
+        self.fail_segment = fail_segment
+
+    def _should_fail(self, command):
+        return (
+            command == self.failure_command
+            and self.segmented_selected_segment == self.fail_segment
+        )
+
+    def query(self, command):
+        if self._should_fail(command):
+            self._ensure_open()
+            self.events.append(("query", command))
+            self.history.append(command)
+            raise VisaBackendError(
+                f"VISA query failed for {command!r}: VI_ERROR_TMO"
+            ) from _VisaTimeoutCause()
+        return super().query(command)
+
+    def query_binary_values(self, command, **kwargs):
+        if self._should_fail(command):
+            self._ensure_open()
+            self.events.append(("query_binary_values", command))
+            self.history.append(command)
+            raise VisaBackendError(
+                f"VISA binary query failed for {command!r}: VI_ERROR_TMO"
+            ) from _VisaTimeoutCause()
+        return super().query_binary_values(command, **kwargs)
+
+
+class _FinalModeVisaTimeoutBackend(_TimeoutTrackingBackend):
+    def __init__(self):
+        super().__init__([2], operation_conditions=[0])
+        self.mode_queries = 0
+
+    def query(self, command):
+        if command == ":ACQuire:MODE?":
+            self.mode_queries += 1
+            if self.mode_queries == 2:
                 self._ensure_open()
                 self.events.append(("query", command))
                 self.history.append(command)
@@ -124,6 +199,8 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp
         ":ACQuire:SEGMented:COUNt 2",
         ":SINGle",
         ":WAVeform:SEGMented:COUNt?",
+        ":OPERegister:CONDition?",
+        ":OPERegister:CONDition?",
         ":WAVeform:SEGMented:ALL OFF",
         ":ACQuire:SEGMented:INDex 1",
         ":WAVeform:SEGMented:TTAG?",
@@ -146,7 +223,7 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp
 
 def test_run_segmented_capture_restores_timeout_before_waveform_export(monkeypatch, tmp_path):
     backend = _TimeoutTrackingBackend([0, 2])
-    clock = iter([100.0, 100.1, 100.5])
+    clock = iter([100.0, 100.1, 100.5, 100.6, 100.7])
     monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
     monkeypatch.setattr(segmented_capture_module.time, "sleep", lambda _: None)
 
@@ -182,7 +259,7 @@ def test_run_segmented_capture_polling_visa_timeout_stops_scpi(tmp_path):
     assert result.result["status"] == "failed"
     assert result.result["acquired_segments"] == 1
     assert result.result["exported_segments"] == 0
-    assert "polling read timed out" in result.result["error"]
+    assert "acquired-count read timed out" in result.result["error"]
     assert "30000 ms" in result.result["error"]
     assert "1 of 2" in result.result["error"]
     assert backend.timeout == 2000
@@ -198,6 +275,243 @@ def test_run_segmented_capture_polling_visa_timeout_stops_scpi(tmp_path):
         if command == ":WAVeform:SEGMented:COUNt?"
     )
     assert backend.history[timeout_query_index + 1 :] == []
+
+
+def test_run_segmented_capture_waits_for_ready_after_count_reaches_target(
+    monkeypatch, tmp_path
+):
+    backend = _TimeoutTrackingBackend(
+        [0, 2], operation_conditions=[8, 8, 0]
+    )
+    clock = iter([0.0, 0.001, 0.002, 0.003, 0.004, 0.005])
+    monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(segmented_capture_module.time, "sleep", lambda _: None)
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["exported_segments"] == 2
+    assert backend.history.count(":SINGle") == 1
+    last_count = max(
+        index
+        for index, command in enumerate(backend.history)
+        if command == ":WAVeform:SEGMented:COUNt?"
+    )
+    first_index = backend.history.index(":ACQuire:SEGMented:INDex 1")
+    condition_indexes = [
+        index
+        for index, command in enumerate(backend.history)
+        if command == ":OPERegister:CONDition?"
+    ]
+    assert condition_indexes
+    assert last_count < condition_indexes[0] < first_index
+    assert (tmp_path / "segment_0001.csv").exists()
+    assert (tmp_path / "segment_0002.csv").exists()
+
+    timeout_events = [value for kind, value in backend.events if kind == "set_timeout"]
+    assert timeout_events[-1] == 2000
+    polling_timeouts = timeout_events[:-1]
+    assert polling_timeouts == sorted(polling_timeouts, reverse=True)
+    assert len(polling_timeouts) == 5
+
+
+def test_run_segmented_capture_ready_deadline_does_not_export(
+    monkeypatch, tmp_path
+):
+    backend = _TimeoutTrackingBackend([2], operation_conditions=[8, 8])
+    clock = iter([0.0, 0.005, 0.01, 0.03])
+    monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(segmented_capture_module.time, "sleep", lambda _: None)
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(
+                1,
+                2,
+                timeout_ms=20,
+                poll_interval_ms=1,
+                output_dir=tmp_path,
+            ),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert result.result["acquired_segments"] == 2
+    assert result.result["exported_segments"] == 0
+    assert "20 ms" in result.result["error"]
+    assert "2 of 2" in result.result["error"]
+    assert "not ready" in result.result["error"]
+    assert backend.timeout == 2000
+    assert backend.history[-2:] == [":ACQuire:MODE?", ":SYSTem:ERRor?"]
+    assert not list(tmp_path.glob("segment_*.csv"))
+    assert not any(
+        command.startswith(":ACQuire:SEGMented:INDex")
+        or command in {
+            ":WAVeform:SEGMented:TTAG?",
+            ":WAVeform:PREamble?",
+            ":WAVeform:DATA?",
+        }
+        for command in backend.history
+    )
+
+
+def test_run_segmented_capture_acquisition_type_timeout_stops_before_writes(tmp_path):
+    backend = _ExportVisaTimeoutBackend(":ACQuire:TYPE?")
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert "acquisition-type read timed out" in result.result["error"]
+    assert backend.history[-1] == ":ACQuire:TYPE?"
+    assert ":ACQuire:MODE SEGMented" not in backend.history
+    assert ":ACQuire:SEGMented:COUNt 2" not in backend.history
+    assert ":ACQuire:MODE?" not in backend.history[backend.history.index(":ACQuire:TYPE?") + 1 :]
+    assert json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))["final_mode"] is None
+
+
+def test_run_segmented_capture_idn_timeout_stops_scpi(tmp_path):
+    backend = _ExportVisaTimeoutBackend("*IDN?")
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert "IDN read timed out" in result.result["error"]
+    assert backend.history == ["*IDN?"]
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["final_mode"] is None
+    assert manifest["system_error"] is None
+
+
+def test_run_segmented_capture_operation_condition_timeout_stops_scpi(tmp_path):
+    backend = _ExportVisaTimeoutBackend(":OPERegister:CONDition?")
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert result.result["acquired_segments"] == 2
+    assert result.result["exported_segments"] == 0
+    assert "operation-condition read timed out" in result.result["error"]
+    assert backend.timeout == 2000
+    timeout_index = backend.history.index(":OPERegister:CONDition?")
+    assert backend.history[timeout_index + 1 :] == []
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["final_mode"] is None
+    assert manifest["system_error"] is None
+    assert (tmp_path / "scpi.log").exists()
+
+
+@pytest.mark.parametrize(
+    "failure_command",
+    [
+        ":WAVeform:SEGMented:TTAG?",
+        ":WAVeform:PREamble?",
+        ":WAVeform:DATA?",
+    ],
+)
+def test_run_segmented_capture_export_read_timeout_stops_scpi(
+    failure_command, tmp_path
+):
+    backend = _ExportVisaTimeoutBackend(failure_command)
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert result.result["exported_segments"] == 0
+    assert "segment 1" in result.result["error"]
+    assert not list(tmp_path.glob("segment_*.csv"))
+    timeout_index = backend.history.index(failure_command)
+    assert backend.history[timeout_index + 1 :] == []
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["final_mode"] is None
+    assert manifest["system_error"] is None
+    assert (tmp_path / "scpi.log").exists()
+
+
+def test_run_segmented_capture_segment_two_timeout_keeps_segment_one(
+    tmp_path,
+):
+    backend = _ExportVisaTimeoutBackend(
+        ":WAVeform:SEGMented:TTAG?", fail_segment=2
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "partial"
+    assert result.result["exported_segments"] == 1
+    assert (tmp_path / "segment_0001.csv").exists()
+    assert not (tmp_path / "segment_0002.csv").exists()
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert [entry["index"] for entry in manifest["segments"]] == [1]
+    assert manifest["final_mode"] is None
+    assert manifest["system_error"] is None
+    timeout_index = max(
+        index
+        for index, command in enumerate(backend.history)
+        if command == ":WAVeform:SEGMented:TTAG?"
+    )
+    assert backend.history[timeout_index + 1 :] == []
+
+
+def test_run_segmented_capture_final_mode_timeout_skips_system_error(tmp_path):
+    backend = _FinalModeVisaTimeoutBackend()
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "partial"
+    assert result.result["exported_segments"] == 2
+    assert "final mode read timed out" in result.result["error"]
+    final_mode_index = max(
+        index
+        for index, command in enumerate(backend.history)
+        if command == ":ACQuire:MODE?"
+    )
+    assert backend.history[final_mode_index + 1 :] == []
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["system_error"] is None
 
 
 def test_run_segmented_capture_normal_deadline_keeps_final_state_queries(
