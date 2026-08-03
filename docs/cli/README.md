@@ -174,6 +174,9 @@ Current implemented scope:
 - Capture a finite batch of waveforms with `capture-batch`, writing per-capture
   CSV and metadata files, `manifest.json`, and `scpi.log` into one run
   directory.
+- Capture finite segmented waveforms from one analog channel with
+  `segmented-capture`, writing one CSV per exported segment plus a shared
+  `manifest.json` and `scpi.log`.
 - Capture the current oscilloscope screen as a PNG, BMP, or BMP8bit image,
   with an optional default timestamped output path under `data`.
 - Provide hardware-free tests through `FakeBackend`.
@@ -582,6 +585,26 @@ Availability may depend on an SGM option or license. DSO-X 4034A USB live
 validation passed for the P0 realtime query branch; P0 segmented-mode
 conditional query branches and P1 enable/count/disable configuration remain
 pending live validation.
+
+Run a finite segmented capture and export each acquired segment to a host CSV:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe segmented-capture --channel 1 --segments 2 --points 1000 --format byte --timeout-ms 30000 --poll-interval-ms 100 --output-dir data\segmented_test --json --simulate
+.\.venv\Scripts\scopes-tool.exe segmented-capture --channel 1 --segments 2 --dry-run --json
+```
+
+`segmented-capture` supports one analog channel, BYTE or WORD waveform
+transfer, finite timeout-bounded polling, and the existing waveform decoder.
+It sends one `:SINGle`, selects each acquired segment, queries its time tag,
+and writes `segment_0001.csv`, `segment_0002.csv`, and so on immediately after
+each successful waveform transfer. The directory also contains a shared
+`manifest.json` and `scpi.log`. A timeout or later error returns non-zero while
+preserving completed CSVs and records `partial` or `failed` status. The command
+does not force a trigger, disable segmented mode, restore state, merge CSVs, or
+perform instrument-side save/export. P0 segmented-mode branches, P1
+configuration, and P2 finite capture/export remain pending DSO-X 4034A USB live
+validation. `segmented-capture` is not exposed through the Worker in P2;
+Worker/Common v2 integration is deferred to P3.
 
 Worker usage accepts only these exact argument objects:
 

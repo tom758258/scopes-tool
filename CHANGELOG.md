@@ -10,6 +10,10 @@
   registered 2000X, 3000X, and 4000X profiles. Counts are validated against
   profile limits before segmented writes; acquisition, capture, and export
   remain out of scope.
+- Adds the finite single-channel `segmented-capture` workflow with bounded
+  acquired-segment polling, per-segment host CSV export, a shared manifest and
+  SCPI log, and partial-artifact retention on failure. It is not exposed to the
+  Worker and has no live hardware validation yet.
 - Adds the Serial UART Trigger P0 vertical slice through Core, CLI, Worker,
   Simulator, Common v2 JSON, and focused tests. It supports the shared basic
   UART trigger types and data qualifiers without changing Serial P1 decode

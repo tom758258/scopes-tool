@@ -179,16 +179,18 @@ selected Serial bus must be configured with the matching Serial command first.
   not expose that helper because their delay query depends on measurement
   definition state.
 
-Raw waveform points mode remains disabled. Segmented memory query and explicit
-mode/count configuration are available for the registered 2000X, 3000X, and
-4000X profiles. The documented count ranges are 2-250 on 2000X and 2-1000 on
-3000X/4000X, while the actual maximum may be lower for the selected memory
-depth. Segmented-memory availability may depend on an SGM option or license;
-the capability flag permits this documented command-family path but does not
-claim that the option is installed. DSO-X 4034A USB live validation passed for
-the P0 realtime query branch; P0 segmented-mode conditional query branches and
-P1 enable/count/disable configuration remain pending live validation. P1 does
-not include acquisition, capture, or export. Serial
+Raw waveform points mode remains disabled. Segmented memory query, explicit
+mode/count configuration, and the finite single-channel `segmented-capture`
+workflow are available for the registered 2000X, 3000X, and 4000X profiles.
+The documented count ranges are 2-250 on 2000X and 2-1000 on 3000X/4000X,
+while the actual maximum may be lower for the selected memory depth.
+Segmented-memory availability may depend on an SGM option or license; the
+capability flag permits this documented command-family path but does not claim
+that the option is installed. DSO-X 4034A USB live validation passed for the
+P0 realtime query branch; P0 segmented-mode conditional query branches, P1
+enable/count/disable configuration, and P2 finite capture/export remain
+pending live validation. P2 does not perform continuous acquisition, restore
+state, or instrument-side save/export. Serial
 decode capability represents command-family availability, not the presence of
 an instrument license.
 
@@ -218,7 +220,7 @@ hardware-free.
 | --- | --- | --- | --- |
 | DSOX4024A | 4000X | USB | Full documented USB hardware plan passed by user report for the supported workflow set. |
 | DSOX4024A | 4000X | LAN | Deferred until an explicit LAN resource is available and approved. |
-| DSOX4034A | 4000X | USB | Focused validations passed by user report for recent compatibility work, including sample-rate, acquisition-points, record-length, force-trigger, triggered capture wait, channel labels, display labels, indexed annotation, Measurement Control Pack v1, and Reference Waveform Pack v1. Segmented Memory P0 realtime query also passed; segmented-mode query branches and P1 configuration remain pending. Measurement-window zoom requires the zoomed timebase to be displayed; source1-only writes may preserve source2; enabling one reference display may turn off the other. A full model matrix remains deferred. |
+| DSOX4034A | 4000X | USB | Focused validations passed by user report for recent compatibility work, including sample-rate, acquisition-points, record-length, force-trigger, triggered capture wait, channel labels, display labels, indexed annotation, Measurement Control Pack v1, and Reference Waveform Pack v1. Segmented Memory P0 realtime query also passed; P0 segmented-mode query branches, P1 configuration, and P2 finite capture/export remain pending. Measurement-window zoom requires the zoomed timebase to be displayed; source1-only writes may preserve source2; enabling one reference display may turn off the other. A full model matrix remains deferred. |
 | DSOX4034A | 4000X | LAN | Deferred until an explicit LAN resource is available and approved. |
 | DSOX3024A | 3000X | USB or LAN | Runtime profile exists; live validation is deferred until hardware is available. |
 | DSOX2004A | 2000X | USB or LAN | Runtime profile exists; live validation is deferred until hardware is available. |

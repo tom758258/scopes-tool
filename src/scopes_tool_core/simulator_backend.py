@@ -488,6 +488,10 @@ class SimulatorBackend:
             self.run_state = {"RUN": "running", "STOP": "stopped", "SINGLE": "single"}[upper[1:]]
             if upper == ":SINGLE":
                 self.operation_condition_index = 0
+                if self.segmented_mode == "SEGM":
+                    self.segmented_acquired_segments = self.segmented_configured_segments
+                    self.segmented_selected_segment = 1
+                    self.segmented_time_tag_s = 0.0
         elif upper == ":TRIGGER:FORCE":
             self.operation_condition_values = list(self.force_operation_condition_values)
             self.operation_condition_index = 0
@@ -567,6 +571,19 @@ class SimulatorBackend:
                 raise SimulatorBackendError(
                     f"Unsupported simulator segmented count: {command}"
                 ) from exc
+        elif upper.startswith(":ACQUIRE:SEGMENTED:INDEX "):
+            try:
+                index = int(command.rsplit(" ", 1)[1])
+            except ValueError as exc:
+                raise SimulatorBackendError(
+                    f"Unsupported simulator segmented index: {command}"
+                ) from exc
+            if index < 1 or index > self.segmented_acquired_segments:
+                raise SimulatorBackendError(
+                    f"Simulator segmented index is not acquired: {index}"
+                )
+            self.segmented_selected_segment = index
+            self.segmented_time_tag_s = (index - 1) * 1e-3
         elif upper.startswith(":ACQUIRE:COUNT "):
             self.acquisition_count = int(command.rsplit(" ", 1)[1])
         elif upper.startswith(":TIMEBASE:SCALE "):

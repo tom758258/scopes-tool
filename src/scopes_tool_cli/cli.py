@@ -37,6 +37,13 @@ from scopes_tool_core.segmented import (
     segmented_mode_query,
     validate_segmented_count,
 )
+from scopes_tool_core.segmented_capture import (
+    SegmentedCaptureRequest,
+    plan_segmented_capture,
+    run_segmented_capture,
+    validate_segmented_capture_output_path,
+    validate_segmented_capture_request,
+)
 from scopes_tool_core.advanced import (
     FFT_DETECTION_TYPES,
     FFT_GATES,
@@ -2931,6 +2938,58 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configured segmented-memory count when enabling",
     )
 
+    segmented_capture_parser = subparsers.add_parser(
+        "segmented-capture",
+        allow_abbrev=False,
+        help="capture finite segmented waveforms to per-segment CSV files",
+    )
+    _add_scope_connection_args(segmented_capture_parser)
+    segmented_capture_parser.add_argument(
+        "--channel",
+        type=_positive_int,
+        required=True,
+        help="single analog channel number",
+    )
+    segmented_capture_parser.add_argument(
+        "--segments",
+        type=int,
+        required=True,
+        help="requested segmented acquisition count",
+    )
+    segmented_capture_parser.add_argument(
+        "--points",
+        type=_waveform_points_arg,
+        default=1000,
+        help="waveform point count; supported values: 1000, 5000, 10000",
+    )
+    segmented_capture_parser.add_argument(
+        "--format",
+        dest="waveform_format",
+        choices=("byte", "word"),
+        default="byte",
+        help="waveform transfer format; defaults to byte",
+    )
+    segmented_capture_parser.add_argument(
+        "--timeout-ms",
+        type=_positive_int,
+        default=30000,
+        help="finite segmented acquisition timeout in milliseconds",
+    )
+    segmented_capture_parser.add_argument(
+        "--poll-interval-ms",
+        type=_positive_int,
+        default=100,
+        help="acquired-segment polling interval in milliseconds",
+    )
+    segmented_capture_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help=(
+            "output directory; defaults to data/segmented_captures/<UTC+8 timestamp>. "
+            "If provided, it must not exist or must be empty"
+        ),
+    )
+
     acquisition_parser = subparsers.add_parser(
         "acquisition",
         help="configure or query acquisition type and average count",
@@ -3541,6 +3600,9 @@ def _dispatch_command(args: argparse.Namespace) -> int:
     if args.command == "segmented-memory":
         return _cmd_segmented_memory(args)
 
+    if args.command == "segmented-capture":
+        return _cmd_segmented_capture(args)
+
     if args.command == "acquisition-points":
         return _cmd_acquisition_points(args)
 
@@ -3645,7 +3707,8 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope:
         if getattr(args, "_worker_live_validation", False):
             scope = _validate_worker_live_identity(args, scope)
         elif isinstance(scope, Oscilloscope):
-            scope = _select_one_shot_live_driver(args, scope)
+            if args.command != "segmented-capture":
+                scope = _select_one_shot_live_driver(args, scope)
         if _JSON_RECORD is not None:
             _JSON_RECORD["backend"] = getattr(scope.backend, "backend", None)
         return scope
@@ -4030,6 +4093,19 @@ def _validate_fft_args(args: argparse.Namespace) -> None:
     )
 
 
+def _segmented_capture_request(args: argparse.Namespace) -> SegmentedCaptureRequest:
+    return SegmentedCaptureRequest(
+        channel=args.channel,
+        segments=args.segments,
+        points=args.points,
+        waveform_format=args.waveform_format,
+        timeout_ms=args.timeout_ms,
+        poll_interval_ms=args.poll_interval_ms,
+        output_dir=args.output_dir,
+        log_scpi=bool(getattr(args, "log_scpi", False)),
+    )
+
+
 def _validate_pre_open_args(args: argparse.Namespace) -> None:
     if getattr(args, "command", None) == "segmented-memory":
         if getattr(args, "enable", False) and args.segments is None:
@@ -4045,6 +4121,13 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
             validate_segmented_count(
                 args.segments, capabilities_for_model_id(args.model)
             )
+    if getattr(args, "command", None) == "segmented-capture":
+        request = _segmented_capture_request(args)
+        validate_segmented_capture_request(request)
+        validate_segmented_capture_output_path(request.output_dir)
+        capabilities = _pre_open_capabilities(args)
+        if capabilities is not None:
+            validate_segmented_capture_request(request, capabilities)
     if getattr(args, "command", None) == "fft":
         _validate_fft_args(args)
     if getattr(args, "command", None) == "screenshot":
@@ -6861,6 +6944,8 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "mode": "realtime",
             "configured_segments": None,
         }
+    if command == "segmented-capture":
+        return plan_segmented_capture(_segmented_capture_request(args), capabilities)
     if command == "acquisition-points":
         planned = ["*IDN?", acquisition_points_query(), ":SYSTem:ERRor?"]
         return planned, [], {
@@ -11847,6 +11932,22 @@ def _cmd_segmented_memory(args: argparse.Namespace) -> int:
         _json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
+
+
+def _cmd_segmented_capture(args: argparse.Namespace) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    request = _segmented_capture_request(args)
+    with _open_scope(args, resource) as scope:
+        operation_result = run_segmented_capture(scope, resource, request)
+        if operation_result.idn is not None:
+            _json_record_scope(scope, operation_result.idn)
+        _apply_operation_result(operation_result)
+        for line in operation_result.human_lines:
+            print(line)
+        return operation_result.exit_code
 
 
 def _cmd_acquisition_points(args: argparse.Namespace) -> int:

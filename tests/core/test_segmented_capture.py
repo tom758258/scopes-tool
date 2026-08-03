@@ -1,0 +1,177 @@
+import json
+
+import pytest
+
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
+from scopes_tool_core.scope import Oscilloscope
+from scopes_tool_core.segmented_capture import (
+    SegmentedCaptureRequest,
+    run_segmented_capture,
+)
+from scopes_tool_core.simulator_backend import SimulatorBackend
+
+
+def _scope(**kwargs):
+    return Oscilloscope(
+        SimulatorBackend(
+            physical_model_id="keysight-dsox4024a",
+            resource_name="SIM::keysight-dsox4024a::INSTR",
+            **kwargs,
+        )
+    )
+
+
+class _AcquiredCountSequenceBackend(SimulatorBackend):
+    def __init__(self, acquired_counts):
+        super().__init__(physical_model_id="keysight-dsox4024a")
+        self.acquired_counts = list(acquired_counts)
+        self.last_acquired_count = 0
+
+    def query(self, command):
+        if command == ":WAVeform:SEGMented:COUNt?":
+            self._ensure_open()
+            self.history.append(command)
+            if self.acquired_counts:
+                self.last_acquired_count = self.acquired_counts.pop(0)
+            return str(self.last_acquired_count)
+        return super().query(command)
+
+
+def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp_path):
+    with _scope() as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["initial_mode"] == "realtime"
+    assert result.result["final_mode"] == "segmented"
+    assert result.result["exported_segments"] == 2
+    assert (tmp_path / "segment_0001.csv").exists()
+    assert (tmp_path / "segment_0002.csv").exists()
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "completed"
+    assert [entry["index"] for entry in manifest["segments"]] == [1, 2]
+    assert [entry["time_tag_s"] for entry in manifest["segments"]] == [0.0, 0.001]
+    assert scope.backend.history == [
+        "*IDN?",
+        ":ACQuire:MODE?",
+        ":ACQuire:TYPE?",
+        ":ACQuire:MODE SEGMented",
+        ":ACQuire:SEGMented:COUNt 2",
+        ":SINGle",
+        ":WAVeform:SEGMented:COUNt?",
+        ":ACQuire:SEGMented:INDex 1",
+        ":WAVeform:SEGMented:TTAG?",
+        ":WAVeform:SOURce CHANnel1",
+        ":WAVeform:FORMat BYTE",
+        ":WAVeform:POINts 1000",
+        ":WAVeform:PREamble?",
+        ":WAVeform:DATA?",
+        ":ACQuire:SEGMented:INDex 2",
+        ":WAVeform:SEGMented:TTAG?",
+        ":WAVeform:SOURce CHANnel1",
+        ":WAVeform:FORMat BYTE",
+        ":WAVeform:POINts 1000",
+        ":WAVeform:PREamble?",
+        ":WAVeform:DATA?",
+        ":ACQuire:MODE?",
+        ":SYSTem:ERRor?",
+    ]
+
+
+def test_run_segmented_capture_rejects_average_before_segmented_write(tmp_path):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a", acquisition_type="AVERage"
+    )
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert ":ACQuire:MODE SEGMented" not in backend.history
+    assert ":SINGle" not in backend.history
+    assert backend.history == ["*IDN?", ":ACQuire:MODE?", ":ACQuire:TYPE?"]
+
+
+def test_run_segmented_capture_zero_acquired_timeout_writes_no_csv(tmp_path):
+    backend = _AcquiredCountSequenceBackend([0, 0])
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(
+                1, 2, timeout_ms=1, poll_interval_ms=1, output_dir=tmp_path
+            ),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert result.result["exported_segments"] == 0
+    assert not list(tmp_path.glob("segment_*.csv"))
+
+
+def test_run_segmented_capture_partial_timeout_keeps_completed_csv(tmp_path):
+    backend = _AcquiredCountSequenceBackend([1, 1])
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(
+                1, 2, timeout_ms=1, poll_interval_ms=1, output_dir=tmp_path
+            ),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "partial"
+    assert result.result["acquired_segments"] == 1
+    assert result.result["exported_segments"] == 1
+    assert (tmp_path / "segment_0001.csv").exists()
+    assert not (tmp_path / "segment_0002.csv").exists()
+
+
+def test_run_segmented_capture_malformed_count_returns_failed_manifest(tmp_path):
+    backend = _AcquiredCountSequenceBackend(["not-a-count"])
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert isinstance(result.result["error"], str)
+    assert not list(tmp_path.glob("segment_*.csv"))
+
+
+def test_run_segmented_capture_rejects_nonempty_output_before_scpi(tmp_path):
+    (tmp_path / "existing.txt").write_text("existing", encoding="utf-8")
+    backend = SimulatorBackend()
+    scope = Oscilloscope(backend)
+
+    with pytest.raises(OscilloscopeError, match="must be empty"):
+        run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
+        )
+
+    assert backend.history == []
+
+
+@pytest.mark.parametrize("segments", [True, 2.0, "2", 1])
+def test_run_segmented_capture_rejects_invalid_static_request(tmp_path, segments):
+    with pytest.raises(ParameterValidationError):
+        run_segmented_capture(
+            _scope(),
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, segments, output_dir=tmp_path),
+        )

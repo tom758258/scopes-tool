@@ -36,6 +36,16 @@ def segmented_index_query() -> str:
     return ":ACQuire:SEGMented:INDex?"
 
 
+def segmented_index_command(index: int) -> str:
+    """Build a validated selected-segment index command."""
+
+    if isinstance(index, bool) or not isinstance(index, int) or index < 1:
+        raise ParameterValidationError(
+            "segmented-memory index must be an integer of at least 1."
+        )
+    return f":ACQuire:SEGMented:INDex {index}"
+
+
 def segmented_time_tag_query() -> str:
     """Build the selected-segment time-tag query."""
 
@@ -223,6 +233,33 @@ class SegmentedMemoryController:
 
         ensure_segmented_memory_supported(self.capabilities)
         self.scpi.write(segmented_mode_command("realtime"))
+
+    def query_mode(self) -> str:
+        """Query and normalize only the current acquisition mode."""
+
+        ensure_segmented_memory_supported(self.capabilities)
+        raw_mode = self.scpi.query(segmented_mode_query()).strip()
+        return parse_segmented_mode(raw_mode)
+
+    def query_acquired_count(self) -> int:
+        """Query and parse the number of acquired segments."""
+
+        ensure_segmented_memory_supported(self.capabilities)
+        return parse_segmented_acquired_count(
+            self.scpi.query(segmented_waveform_count_query())
+        )
+
+    def select_segment(self, index: int) -> None:
+        """Select one acquired segment for subsequent waveform queries."""
+
+        ensure_segmented_memory_supported(self.capabilities)
+        self.scpi.write(segmented_index_command(index))
+
+    def query_time_tag(self) -> float:
+        """Query and parse the selected segment time tag in seconds."""
+
+        ensure_segmented_memory_supported(self.capabilities)
+        return parse_segmented_time_tag(self.scpi.query(segmented_time_tag_query()))
 
     def query(self) -> SegmentedMemoryQueryResult:
         """Query mode and conditionally available segmented-memory readbacks."""

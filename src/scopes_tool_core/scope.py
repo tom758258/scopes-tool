@@ -1734,6 +1734,26 @@ class Oscilloscope:
 
         self._segmented_memory_controller().disable()
 
+    def query_segmented_mode(self) -> str:
+        """Query only the normalized segmented-memory acquisition mode."""
+
+        return self._segmented_memory_controller().query_mode()
+
+    def query_segmented_acquired_count(self) -> int:
+        """Query the number of acquired segmented waveforms."""
+
+        return self._segmented_memory_controller().query_acquired_count()
+
+    def select_segmented_memory(self, index: int) -> None:
+        """Select one acquired segmented waveform index."""
+
+        self._segmented_memory_controller().select_segment(index)
+
+    def query_segmented_time_tag(self) -> float:
+        """Query the selected segmented waveform time tag in seconds."""
+
+        return self._segmented_memory_controller().query_time_tag()
+
     def close(self) -> None:
         """Close the underlying backend."""
 
