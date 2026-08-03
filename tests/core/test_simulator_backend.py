@@ -881,8 +881,9 @@ def test_simulator_waveform_all_uses_instance_firmware_and_strict_support():
         physical_model_id="keysight-dsox4034a", firmware="07.20"
     )
     assert old_firmware.query("*IDN?").endswith(",07.20")
+    assert old_firmware.segmented_waveform_all is False
     with pytest.raises(SimulatorBackendError, match="Unsupported simulator write"):
-        old_firmware.write(":WAVeform:SEGMented:ALL OFF")
+        old_firmware.write(":WAVeform:SEGMented:ALL ON")
     assert old_firmware.segmented_waveform_all is False
 
     non_strict = SimulatorBackend(
@@ -890,7 +891,8 @@ def test_simulator_waveform_all_uses_instance_firmware_and_strict_support():
         firmware="07.20",
         strict_unknown_commands=False,
     )
-    non_strict.write(":WAVeform:SEGMented:ALL OFF")
+    assert non_strict.segmented_waveform_all is False
+    non_strict.write(":WAVeform:SEGMented:ALL ON")
     assert non_strict.segmented_waveform_all is False
 
     new_firmware = SimulatorBackend(
