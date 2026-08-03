@@ -153,8 +153,8 @@ def test_worker_search_event_acceptance_and_rejection(tmp_path):
     [
         ("serial-search-uart", {"bus": 1, "mode": "rx-data", "data": 85, "qualifier": "equal"}),
         ("serial-search-i2c", {"bus": 1, "mode": "read7", "address": 80, "data": 165}),
-        ("serial-search-spi", {"bus": 1, "mode": "mosi", "data": "0xA5XX", "width": 8}),
-        ("serial-search-can", {"bus": 1, "mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"}),
+        ("serial-search-spi", {"bus": 1, "mode": "mosi", "data": "0xA5XX", "width": 2}),
+        ("serial-search-can", {"bus": 1, "mode": "data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"}),
     ],
 )
 def test_worker_serial_search_accepts_canonical_payloads(tmp_path, command, arguments):

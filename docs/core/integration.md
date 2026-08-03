@@ -314,6 +314,12 @@ Serial support is delivered in five focused surfaces:
   trimmed raw values for both Search state/mode and protocol fields.
   Known 4000X-only I2C/CAN mode readbacks return `mode: null` while preserving
   `raw_mode`; other malformed readbacks raise `SearchResponseError`.
+  SPI Search width is measured in bytes; when both `data` and `width` are
+  supplied, the hexadecimal/wildcard pattern must contain exactly `width * 2`
+  digits. CAN `id-data` searches ID only, while `data` searches ID, Data, and
+  DLC. When both CAN `id` and `id-mode` are supplied, standard IDs are limited
+  to `0x000` through `0x7FF`, and extended IDs to `0x00000000` through
+  `0x1FFFFFFF`.
   P3 does not support LIN, advanced protocols, symbolic CAN, or Search export.
 
 Serial decode may require an instrument license. Core does not probe licenses;

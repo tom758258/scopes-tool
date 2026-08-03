@@ -154,11 +154,11 @@ def test_search_event_cli_execution_and_validation(capsys):
             "i2c",
         ),
         (
-            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xa5xx", "--width", "8"],
+            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xa5xx", "--width", "2"],
             "spi",
         ),
         (
-            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12xx", "--data-length", "2", "--id", "0xabc", "--id-mode", "standard"],
+            ["serial-search-can", "--bus", "1", "--mode", "data", "--data", "0x12xx", "--data-length", "2", "--id", "0x123", "--id-mode", "standard"],
             "can",
         ),
     ],
@@ -176,12 +176,16 @@ def test_simulator_cli_serial_search_configure(capsys, cmd_args, expected_protoc
     assert ":SYSTem:ERRor?" not in res["commands"]
     if expected_protocol == "spi":
         assert res["data"] == "0xA5XX"
+        assert res["width"] == 2
+        assert res["commands"].index(":SEARch:SERial:SPI:PATTern:WIDTh 2") < res["commands"].index(':SEARch:SERial:SPI:PATTern:DATA "0xA5XX"')
         assert ':SEARch:SERial:SPI:PATTern:DATA "0xA5XX"' in res["commands"]
     if expected_protocol == "can":
+        assert res["mode"] == "data"
         assert res["data"] == "0x12XX"
-        assert res["id"] == "0xABC"
+        assert res["id"] == "0x123"
         assert ':SEARch:SERial:CAN:PATTern:DATA "0x12XX"' in res["commands"]
-        assert ':SEARch:SERial:CAN:PATTern:ID "0xABC"' in res["commands"]
+        assert res["commands"].index(":SEARch:SERial:CAN:PATTern:ID:MODE STANdard") < res["commands"].index(':SEARch:SERial:CAN:PATTern:ID "0x123"')
+        assert ':SEARch:SERial:CAN:PATTern:ID "0x123"' in res["commands"]
 
 
 def test_serial_search_uart_query_json(capsys):
@@ -212,14 +216,14 @@ def test_serial_search_uart_query_json(capsys):
             {"mode": "read7", "address": 80, "data": 165},
         ),
         (
-            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xA5XX", "--width", "8"],
+            ["serial-search-spi", "--bus", "1", "--mode", "mosi", "--data", "0xA5XX", "--width", "2"],
             "spi",
-            {"mode": "mosi", "data": "0xA5XX", "width": 8},
+            {"mode": "mosi", "data": "0xA5XX", "width": 2},
         ),
         (
-            ["serial-search-can", "--bus", "1", "--mode", "id-data", "--data", "0x12XX", "--data-length", "2", "--id", "0xABC", "--id-mode", "standard"],
+            ["serial-search-can", "--bus", "1", "--mode", "data", "--data", "0x12XX", "--data-length", "2", "--id", "0x123", "--id-mode", "standard"],
             "can",
-            {"mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0xABC", "id_mode": "standard"},
+            {"mode": "data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"},
         ),
     ],
 )
@@ -264,3 +268,126 @@ def test_serial_search_dry_run_planned_order(capsys):
     assert res["protocol"] == "uart"
     assert res["bus"] == 1
     assert res["mode"] == "rx-data"
+
+
+@pytest.mark.parametrize(
+    "args, error_fragment",
+    [
+        (
+            [
+                "serial-search-spi",
+                "--bus",
+                "1",
+                "--mode",
+                "mosi",
+                "--data",
+                "0xA5XX",
+                "--width",
+                "8",
+            ],
+            "pattern",
+        ),
+        (
+            [
+                "serial-search-can",
+                "--bus",
+                "1",
+                "--mode",
+                "id-data",
+                "--data",
+                "0x12XX",
+                "--data-length",
+                "2",
+                "--id",
+                "0x123",
+                "--id-mode",
+                "standard",
+            ],
+            "id-data",
+        ),
+    ],
+)
+def test_serial_search_invalid_cross_field_dry_run_has_no_planned_business_scpi(
+    capsys, args, error_fragment
+):
+    assert cli.main(
+        [*args, "--dry-run", "--json", "--model", "keysight-dsox4034a"]
+    ) == 1
+    payload = _payload(capsys)
+    assert payload["ok"] is False
+    assert payload["error"]["type"] == "ParameterValidationError"
+    assert error_fragment in payload["error"]["message"]
+    assert payload["scpi"]["planned"] == []
+
+
+@pytest.mark.parametrize(
+    "args, expected_result, expected_commands",
+    [
+        (
+            [
+                "serial-search-spi",
+                "--bus",
+                "1",
+                "--mode",
+                "mosi",
+                "--data",
+                "0xa5xx",
+                "--width",
+                "2",
+            ],
+            {"mode": "mosi", "data": "0xA5XX", "width": 2},
+            [
+                ":SEARch:STATe 1",
+                ":SEARch:MODE SERial1",
+                ":SEARch:SERial:SPI:MODE MOSI",
+                ":SEARch:SERial:SPI:PATTern:WIDTh 2",
+                ':SEARch:SERial:SPI:PATTern:DATA "0xA5XX"',
+            ],
+        ),
+        (
+            [
+                "serial-search-can",
+                "--bus",
+                "1",
+                "--mode",
+                "data",
+                "--data",
+                "0x12xx",
+                "--data-length",
+                "2",
+                "--id",
+                "0x123",
+                "--id-mode",
+                "standard",
+            ],
+            {
+                "mode": "data",
+                "data": "0x12XX",
+                "data_length": 2,
+                "id": "0x123",
+                "id_mode": "standard",
+            },
+            [
+                ":SEARch:STATe 1",
+                ":SEARch:MODE SERial1",
+                ":SEARch:SERial:CAN:MODE DATA",
+                ':SEARch:SERial:CAN:PATTern:DATA "0x12XX"',
+                ":SEARch:SERial:CAN:PATTern:DATA:LENGth 2",
+                ":SEARch:SERial:CAN:PATTern:ID:MODE STANdard",
+                ':SEARch:SERial:CAN:PATTern:ID "0x123"',
+            ],
+        ),
+    ],
+)
+def test_serial_search_spi_can_dry_run_canonical_result_and_order(
+    capsys, args, expected_result, expected_commands
+):
+    assert cli.main(
+        [*args, "--dry-run", "--json", "--model", "keysight-dsox4034a"]
+    ) == 0
+    payload = _payload(capsys)
+    result = payload["result"]
+    for key, value in expected_result.items():
+        assert result[key] == value
+    assert result["commands"] == expected_commands
+    assert payload["scpi"]["planned"] == [*expected_commands, ":SYSTem:ERRor?"]

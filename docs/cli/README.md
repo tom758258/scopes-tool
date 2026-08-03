@@ -1784,8 +1784,13 @@ before search SCPI is sent. Serial Search P3 adds `serial-search-uart`,
 `serial-search-i2c`, `serial-search-spi`, and `serial-search-can` for
 protocol-specific criteria. Configure the selected Serial bus first with the
 matching `serial-uart`, `serial-i2c`, `serial-spi`, or `serial-can` command;
-Serial Search does not change or revalidate that bus configuration. Tests are
-hardware-free; no live hardware validation was performed.
+Serial Search does not change or revalidate that bus configuration. SPI Search
+width is measured in bytes, and a supplied pattern must contain exactly
+`width * 2` hexadecimal/wildcard digits. CAN `id-data` is ID-only; use `data`
+to search ID, Data, and DLC. When both `--id` and `--id-mode` are supplied,
+standard IDs must be `0x000` through `0x7FF`, and extended IDs must be
+`0x00000000` through `0x1FFFFFFF`. Tests are hardware-free; no live hardware
+validation was performed.
 
 Use Save/Export Pack v1 for instrument-side file saving:
 

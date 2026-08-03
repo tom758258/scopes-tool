@@ -66,15 +66,15 @@ def test_simulator_accepts_profile_supported_search_modes():
         ),
         (
             "spi",
-            lambda scope: scope.configure_serial_search_spi(1, "miso", data="0xa5xx", width=8),
+            lambda scope: scope.configure_serial_search_spi(1, "miso", data="0xa5xx", width=2),
             lambda scope: scope.query_serial_search_spi(1),
-            {"mode": "miso", "data": "0xA5XX", "width": 8, "selected": True},
+            {"mode": "miso", "data": "0xA5XX", "width": 2, "selected": True},
         ),
         (
             "can",
-            lambda scope: scope.configure_serial_search_can(1, "id-data", data="0x12xx", data_length=2, id_val="0x123", id_mode="standard"),
+            lambda scope: scope.configure_serial_search_can(1, "data", data="0x12xx", data_length=2, id_val="0x123", id_mode="standard"),
             lambda scope: scope.query_serial_search_can(1),
-            {"mode": "id-data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard", "selected": True},
+            {"mode": "data", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard", "selected": True},
         ),
     ],
 )

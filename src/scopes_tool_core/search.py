@@ -685,6 +685,7 @@ class SearchController:
             validate_pattern_hex_x(data, "SPI search data") if data is not None else None
         )
         canonical_width = validate_spi_width(width) if width is not None else None
+        validate_spi_search_pattern_width(canonical_data, canonical_width)
 
         cmds = serial_search_spi_configure_commands(
             canonical_bus,
@@ -757,6 +758,13 @@ class SearchController:
         )
         canonical_id_mode = (
             validate_can_id_mode(id_mode) if id_mode is not None else None
+        )
+        validate_can_search_criteria(
+            canonical_mode,
+            data=canonical_data,
+            data_length=canonical_data_length,
+            id_val=canonical_id,
+            id_mode=canonical_id_mode,
         )
 
         cmds = serial_search_can_configure_commands(
@@ -971,6 +979,19 @@ def validate_spi_width(width: int) -> int:
     return width
 
 
+def validate_spi_search_pattern_width(
+    data: str | None, width: int | None
+) -> None:
+    if data is None or width is None:
+        return
+    expected_digits = width * 2
+    if len(data[2:]) != expected_digits:
+        raise ParameterValidationError(
+            "SPI search data pattern must contain exactly "
+            f"{expected_digits} hexadecimal/wildcard digits for width {width} bytes."
+        )
+
+
 def validate_can_search_mode(mode: str) -> str:
     if not isinstance(mode, str) or mode not in _CAN_SEARCH_MODE_TOKENS:
         raise ParameterValidationError(
@@ -993,6 +1014,32 @@ def validate_can_id_mode(mode: str) -> str:
             "CAN search ID mode must be one of: " + ", ".join(CAN_SEARCH_ID_MODES) + "."
         )
     return mode
+
+
+def validate_can_search_criteria(
+    mode: str,
+    *,
+    data: str | None = None,
+    data_length: int | None = None,
+    id_val: str | None = None,
+    id_mode: str | None = None,
+) -> None:
+    if mode == "id-data" and (data is not None or data_length is not None):
+        raise ParameterValidationError(
+            "CAN search mode 'id-data' cannot use data or data-length; "
+            "use mode 'data' to search ID and Data."
+        )
+
+    if id_val is None or id_mode is None or "X" in id_val[2:]:
+        return
+
+    value = int(id_val[2:], 16)
+    maximum = 0x7FF if id_mode == "standard" else 0x1FFFFFFF
+    if value > maximum:
+        raise ParameterValidationError(
+            f"CAN search {id_mode} ID must be in range 0x000 through "
+            f"0x{maximum:X}."
+        )
 
 
 def serial_search_uart_configure_commands(
@@ -1075,10 +1122,10 @@ def serial_search_spi_configure_commands(
         search_mode_command(f"serial{bus}"),
         f":SEARch:SERial:SPI:MODE {scpi_mode}",
     ]
-    if data is not None:
-        cmds.append(f':SEARch:SERial:SPI:PATTern:DATA "{data}"')
     if width is not None:
         cmds.append(f":SEARch:SERial:SPI:PATTern:WIDTh {width}")
+    if data is not None:
+        cmds.append(f':SEARch:SERial:SPI:PATTern:DATA "{data}"')
     return cmds
 
 
@@ -1110,11 +1157,11 @@ def serial_search_can_configure_commands(
         cmds.append(f':SEARch:SERial:CAN:PATTern:DATA "{data}"')
     if data_length is not None:
         cmds.append(f":SEARch:SERial:CAN:PATTern:DATA:LENGth {data_length}")
-    if id_val is not None:
-        cmds.append(f':SEARch:SERial:CAN:PATTern:ID "{id_val}"')
     if id_mode is not None:
         scpi_id_mode = _CAN_SEARCH_ID_MODE_TOKENS[id_mode]
         cmds.append(f":SEARch:SERial:CAN:PATTern:ID:MODE {scpi_id_mode}")
+    if id_val is not None:
+        cmds.append(f':SEARch:SERial:CAN:PATTern:ID "{id_val}"')
     return cmds
 
 

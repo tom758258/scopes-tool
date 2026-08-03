@@ -235,27 +235,27 @@ def test_search_event_unsupported_profiles_reject(model):
         (
             "spi",
             "configure_serial_search_spi",
-            {"bus": 1, "mode": "mosi", "data": "0xA5XX", "width": 8},
+            {"bus": 1, "mode": "mosi", "data": "0xA5XX", "width": 2},
             [
                 ":SEARch:STATe 1",
                 ":SEARch:MODE SERial1",
                 ":SEARch:SERial:SPI:MODE MOSI",
+                ":SEARch:SERial:SPI:PATTern:WIDTh 2",
                 ':SEARch:SERial:SPI:PATTern:DATA "0xA5XX"',
-                ":SEARch:SERial:SPI:PATTern:WIDTh 8",
             ],
         ),
         (
             "can",
             "configure_serial_search_can",
-            {"bus": 1, "mode": "id-data", "data": "0x12XX", "data_length": 2, "id_val": "0x123", "id_mode": "standard"},
+            {"bus": 1, "mode": "data", "data": "0x12XX", "data_length": 2, "id_val": "0x123", "id_mode": "standard"},
             [
                 ":SEARch:STATe 1",
                 ":SEARch:MODE SERial1",
-                ":SEARch:SERial:CAN:MODE IDData",
+                ":SEARch:SERial:CAN:MODE DATA",
                 ':SEARch:SERial:CAN:PATTern:DATA "0x12XX"',
                 ":SEARch:SERial:CAN:PATTern:DATA:LENGth 2",
-                ':SEARch:SERial:CAN:PATTern:ID "0x123"',
                 ":SEARch:SERial:CAN:PATTern:ID:MODE STANdard",
+                ':SEARch:SERial:CAN:PATTern:ID "0x123"',
             ],
         ),
     ],
@@ -308,9 +308,9 @@ def test_core_serial_search_configure_commands(protocol, configure_fn, args, exp
                 ":SEARch:MODE?": "SER1",
                 ":SEARch:SERial:SPI:MODE?": "MOSI",
                 ":SEARch:SERial:SPI:PATTern:DATA?": '"0xA5XX"',
-                ":SEARch:SERial:SPI:PATTern:WIDTh?": "8",
+                ":SEARch:SERial:SPI:PATTern:WIDTh?": "2",
             },
-            {"search_enabled": True, "raw_search_state": "1", "search_mode": "serial1", "raw_search_mode": "SER1", "selected": True, "mode": "mosi", "raw_mode": "MOSI", "data": "0xA5XX", "raw_data": '"0xA5XX"', "width": 8},
+            {"search_enabled": True, "raw_search_state": "1", "search_mode": "serial1", "raw_search_mode": "SER1", "selected": True, "mode": "mosi", "raw_mode": "MOSI", "data": "0xA5XX", "raw_data": '"0xA5XX"', "width": 2},
         ),
         (
             "can",
@@ -319,13 +319,13 @@ def test_core_serial_search_configure_commands(protocol, configure_fn, args, exp
                 "*IDN?": "KEYSIGHT,DSOX3024A,MY12345678,02.41",
                 ":SEARch:STATe?": "1",
                 ":SEARch:MODE?": "SER1",
-                ":SEARch:SERial:CAN:MODE?": "IDD",
+                ":SEARch:SERial:CAN:MODE?": "DATA",
                 ":SEARch:SERial:CAN:PATTern:DATA?": '"0x12XX"',
                 ":SEARch:SERial:CAN:PATTern:DATA:LENGth?": "2",
                 ":SEARch:SERial:CAN:PATTern:ID?": '"0x123"',
                 ":SEARch:SERial:CAN:PATTern:ID:MODE?": "STAN",
             },
-            {"search_enabled": True, "raw_search_state": "1", "search_mode": "serial1", "raw_search_mode": "SER1", "selected": True, "mode": "id-data", "raw_mode": "IDD", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"},
+            {"search_enabled": True, "raw_search_state": "1", "search_mode": "serial1", "raw_search_mode": "SER1", "selected": True, "mode": "data", "raw_mode": "DATA", "data": "0x12XX", "data_length": 2, "id": "0x123", "id_mode": "standard"},
         ),
     ],
 )
@@ -447,4 +447,45 @@ def test_serial_search_validates_numeric_range_and_patterns():
         scope.configure_serial_search_spi(bus=1, mode="mosi", data="0xGG")
     with pytest.raises(ParameterValidationError, match="width"):
         scope.configure_serial_search_spi(bus=1, mode="mosi", width=11)
+    with pytest.raises(ParameterValidationError, match="pattern"):
+        scope.configure_serial_search_spi(bus=1, mode="mosi", data="0xA5XX", width=8)
+    with pytest.raises(ParameterValidationError, match="id-data"):
+        scope.configure_serial_search_can(
+            bus=1,
+            mode="id-data",
+            data="0x12XX",
+            data_length=2,
+            id_val="0x123",
+            id_mode="standard",
+        )
     assert backend.history == []
+
+
+@pytest.mark.parametrize(
+    "id_mode, id_val, valid",
+    [
+        ("standard", "0x7FF", True),
+        ("standard", "0x800", False),
+        ("standard", "0xABC", False),
+        ("extended", "0xABC", True),
+        ("extended", "0x20000000", False),
+    ],
+)
+def test_serial_search_can_validates_id_range(id_mode, id_val, valid):
+    backend = FakeBackend()
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    backend.history.clear()
+
+    if valid:
+        state = scope.configure_serial_search_can(
+            bus=1, mode="data", id_val=id_val, id_mode=id_mode
+        )
+        assert state.id == id_val.upper().replace("0X", "0x")
+        assert backend.history
+    else:
+        with pytest.raises(ParameterValidationError, match="ID"):
+            scope.configure_serial_search_can(
+                bus=1, mode="data", id_val=id_val, id_mode=id_mode
+            )
+        assert backend.history == []

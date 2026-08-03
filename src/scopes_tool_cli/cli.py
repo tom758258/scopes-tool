@@ -340,6 +340,7 @@ from scopes_tool_core.search import (
     serial_search_uart_query_commands,
     validate_can_data_length,
     validate_can_id_mode,
+    validate_can_search_criteria,
     validate_can_search_mode,
     validate_i2c_pattern_value,
     validate_i2c_search_mode,
@@ -348,6 +349,7 @@ from scopes_tool_core.search import (
     validate_search_mode,
     validate_search_qualifier,
     validate_serial_search_bus,
+    validate_spi_search_pattern_width,
     validate_spi_search_mode,
     validate_spi_width,
     validate_uart_data,
@@ -4737,6 +4739,9 @@ def _canonical_serial_search_settings(
             canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
         if "width" in settings:
             canonical_settings["width"] = validate_spi_width(settings["width"])
+        validate_spi_search_pattern_width(
+            canonical_settings.get("data"), canonical_settings.get("width")
+        )
     elif protocol == "can":
         canonical_settings["mode"] = validate_can_search_mode(settings["mode"])
         if "data" in settings:
@@ -4747,6 +4752,13 @@ def _canonical_serial_search_settings(
             canonical_settings["id_val"] = validate_pattern_hex_x(settings["id_val"], "id")
         if "id_mode" in settings:
             canonical_settings["id_mode"] = validate_can_id_mode(settings["id_mode"])
+        validate_can_search_criteria(
+            canonical_settings["mode"],
+            data=canonical_settings.get("data"),
+            data_length=canonical_settings.get("data_length"),
+            id_val=canonical_settings.get("id_val"),
+            id_mode=canonical_settings.get("id_mode"),
+        )
     return canonical_settings
 
 
@@ -4789,20 +4801,34 @@ def _validate_serial_search_args(args: argparse.Namespace) -> None:
             validate_search_qualifier(settings["qualifier"])
     elif protocol == "spi":
         validate_spi_search_mode(settings["mode"])
+        canonical_data = None
+        canonical_width = None
         if "data" in settings:
-            validate_pattern_hex_x(settings["data"], "data")
+            canonical_data = validate_pattern_hex_x(settings["data"], "data")
         if "width" in settings:
-            validate_spi_width(settings["width"])
+            canonical_width = validate_spi_width(settings["width"])
+        validate_spi_search_pattern_width(canonical_data, canonical_width)
     elif protocol == "can":
-        validate_can_search_mode(settings["mode"])
+        canonical_mode = validate_can_search_mode(settings["mode"])
+        canonical_data = None
+        canonical_data_length = None
+        canonical_id = None
+        canonical_id_mode = None
         if "data" in settings:
-            validate_pattern_hex_x(settings["data"], "data")
+            canonical_data = validate_pattern_hex_x(settings["data"], "data")
         if "data_length" in settings:
-            validate_can_data_length(settings["data_length"])
+            canonical_data_length = validate_can_data_length(settings["data_length"])
         if "id_val" in settings:
-            validate_pattern_hex_x(settings["id_val"], "id")
+            canonical_id = validate_pattern_hex_x(settings["id_val"], "id")
         if "id_mode" in settings:
-            validate_can_id_mode(settings["id_mode"])
+            canonical_id_mode = validate_can_id_mode(settings["id_mode"])
+        validate_can_search_criteria(
+            canonical_mode,
+            data=canonical_data,
+            data_length=canonical_data_length,
+            id_val=canonical_id,
+            id_mode=canonical_id_mode,
+        )
 
 
 def _validate_save_export_args(args: argparse.Namespace) -> None:
