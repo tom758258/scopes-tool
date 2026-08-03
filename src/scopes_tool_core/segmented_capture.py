@@ -30,6 +30,7 @@ from .segmented import (
     segmented_time_tag_query,
     segmented_waveform_all_command,
     segmented_waveform_count_query,
+    segmented_waveform_all_supported,
     validate_segmented_count,
 )
 from .waveform import (
@@ -183,6 +184,8 @@ def _waveform_capture_commands(channel: int, points: int, waveform_format: str) 
 def plan_segmented_capture(
     request: SegmentedCaptureRequest,
     capabilities: ScopeCapabilities,
+    *,
+    firmware: str | None = None,
 ) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
     """Return concrete dry-run SCPI and artifact metadata."""
 
@@ -204,7 +207,7 @@ def plan_segmented_capture(
         ":SINGle",
         segmented_waveform_count_query(),
     ]
-    if capabilities.supports_segmented_waveform_all:
+    if segmented_waveform_all_supported(capabilities, firmware):
         planned.append(segmented_waveform_all_command(False))
     for index in range(1, request.segments + 1):
         planned.extend(
@@ -376,7 +379,9 @@ def run_segmented_capture(
                     )
 
                 export_count = min(acquired_segments, request.segments)
-                if export_count and capabilities.supports_segmented_waveform_all:
+                if export_count and segmented_waveform_all_supported(
+                    capabilities, idn.firmware
+                ):
                     controller.set_waveform_all(False)
                 for index in range(1, export_count + 1):
                     scope.select_segmented_memory(index)

@@ -9,6 +9,7 @@ from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.segmented import (
     segmented_count_command,
     segmented_mode_command,
+    segmented_waveform_all_supported,
     segmented_waveform_all_command,
     parse_segmented_mode,
     validate_segmented_count,
@@ -189,6 +190,28 @@ def test_segmented_waveform_all_command_builds_boolean_write(enabled, token):
 def test_segmented_waveform_all_command_rejects_non_boolean():
     with pytest.raises(ParameterValidationError, match="must be a boolean"):
         segmented_waveform_all_command(1)
+
+
+@pytest.mark.parametrize(
+    ("model", "firmware", "expected"),
+    [
+        ("DSOX4024A", "07.20.2017102615", False),
+        ("DSOX4024A", "07.29", False),
+        ("DSOX4024A", "07.30", True),
+        ("DSOX4024A", "08.00", True),
+        ("DSOX4024A", "build-07.30", False),
+        ("DSOX3024A", "07.30", False),
+    ],
+)
+def test_segmented_waveform_all_support_is_firmware_and_profile_gated(
+    model, firmware, expected
+):
+    assert (
+        segmented_waveform_all_supported(
+            capabilities_for_model(model), firmware
+        )
+        is expected
+    )
 
 
 def test_segmented_malformed_numeric_response_uses_feature_error():

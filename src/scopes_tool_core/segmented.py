@@ -83,6 +83,25 @@ def segmented_count_command(count: int) -> str:
 _REALTIME_READBACKS = {"RTIM", "RTIME", "REALTIME"}
 _SEGMENTED_READBACKS = {"SEGM", "SEGMENTED"}
 _INTEGER_TOKEN = re.compile(r"^[+-]?\d+$")
+_FIRMWARE_PREFIX = re.compile(r"^\s*(\d+)\.(\d+)")
+
+
+def segmented_waveform_all_supported(
+    capabilities: ScopeCapabilities,
+    firmware: str | None,
+) -> bool:
+    """Return whether this instrument can set waveform data for all segments."""
+
+    if not capabilities.supports_segmented_waveform_all or not isinstance(firmware, str):
+        return False
+    match = _FIRMWARE_PREFIX.match(firmware)
+    if match is None:
+        return False
+    try:
+        major, minor = (int(value) for value in match.groups())
+    except ValueError:
+        return False
+    return (major, minor) >= (7, 30)
 
 
 def _response_error(label: str, raw: object) -> SegmentedResponseError:

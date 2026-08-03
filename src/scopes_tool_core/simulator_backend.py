@@ -14,6 +14,7 @@ from .capabilities import capabilities_for_model_id
 from .demo import DEMO_FUNCTION_TOKENS
 from .errors import BackendClosedError, OscilloscopeError
 from .identity import VENDOR_REGISTRY, physical_model_for_id
+from .segmented import segmented_waveform_all_supported
 from .serial import (
     SERIAL_MODE_TOKENS,
     parse_serial_can_trigger_id_mode,
@@ -69,7 +70,7 @@ _TIMING_MEASUREMENT_ITEMS = frozenset(
 _PAIR_MEASUREMENT_ITEMS = frozenset(("phase", "delay"))
 
 
-def simulator_idn(physical_model_id: str) -> str:
+def simulator_idn(physical_model_id: str, *, firmware: str = "07.20") -> str:
     """Return a deterministic IDN string for a registered physical model."""
 
     physical_model = physical_model_for_id(physical_model_id)
@@ -80,7 +81,7 @@ def simulator_idn(physical_model_id: str) -> str:
     )
     return (
         f"{vendor.canonical_manufacturer},{physical_model.canonical_model},"
-        "SIM000000,07.20"
+        f"SIM000000,{firmware}"
     )
 
 
@@ -357,6 +358,7 @@ class SimulatorBackend:
     invalid_measurement_channels: set[int] = field(default_factory=set)
     signals: dict[int, SimulatedSignal] = field(default_factory=dict)
     trigger_alternate_count: int = 0
+    firmware: str = "07.20"
 
     def __post_init__(self) -> None:
         self.physical_model = physical_model_for_id(self.physical_model_id)
@@ -505,7 +507,10 @@ class SimulatorBackend:
         elif upper == ":WAVEFORM:FORMAT WORD":
             self.waveform_format = "WORD"
         elif upper.startswith(":WAVEFORM:SEGMENTED:ALL "):
-            self.segmented_waveform_all = _parse_scpi_bool_write(command)
+            if not segmented_waveform_all_supported(self._capabilities, self.firmware):
+                self._handle_unknown("write", command)
+            else:
+                self.segmented_waveform_all = _parse_scpi_bool_write(command)
         elif upper.startswith(":WAVEFORM:BYTEORDER "):
             self.waveform_byte_order = command.rsplit(" ", 1)[1]
         elif upper.startswith(":WAVEFORM:UNSIGNED "):
@@ -1245,7 +1250,7 @@ class SimulatorBackend:
             return self.query_overrides[command]
         upper = command.upper()
         if upper == "*IDN?":
-            return simulator_idn(self.physical_model_id)
+            return simulator_idn(self.physical_model_id, firmware=self.firmware)
         if upper == "*OPC?":
             return "1"
         if upper == "*STB?":

@@ -876,6 +876,31 @@ def test_simulator_identity_and_capabilities_come_from_physical_model_registry()
     )
 
 
+def test_simulator_waveform_all_uses_instance_firmware_and_strict_support():
+    old_firmware = SimulatorBackend(
+        physical_model_id="keysight-dsox4034a", firmware="07.20"
+    )
+    assert old_firmware.query("*IDN?").endswith(",07.20")
+    with pytest.raises(SimulatorBackendError, match="Unsupported simulator write"):
+        old_firmware.write(":WAVeform:SEGMented:ALL OFF")
+    assert old_firmware.segmented_waveform_all is False
+
+    non_strict = SimulatorBackend(
+        physical_model_id="keysight-dsox4034a",
+        firmware="07.20",
+        strict_unknown_commands=False,
+    )
+    non_strict.write(":WAVeform:SEGMented:ALL OFF")
+    assert non_strict.segmented_waveform_all is False
+
+    new_firmware = SimulatorBackend(
+        physical_model_id="keysight-dsox4034a", firmware="07.30"
+    )
+    assert new_firmware.query("*IDN?").endswith(",07.30")
+    new_firmware.write(":WAVeform:SEGMented:ALL ON")
+    assert new_firmware.segmented_waveform_all is True
+
+
 def test_simulator_rejects_raw_or_unknown_physical_model_identity():
     with pytest.raises(UnsupportedModelError):
         SimulatorBackend(physical_model_id="DSOX4024A")

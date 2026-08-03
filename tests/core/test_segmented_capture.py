@@ -26,8 +26,8 @@ def _scope(**kwargs):
 
 
 class _AcquiredCountSequenceBackend(SimulatorBackend):
-    def __init__(self, acquired_counts):
-        super().__init__(physical_model_id="keysight-dsox4024a")
+    def __init__(self, acquired_counts, *, firmware="07.20"):
+        super().__init__(physical_model_id="keysight-dsox4024a", firmware=firmware)
         self.acquired_counts = list(acquired_counts)
         self.last_acquired_count = 0
 
@@ -45,6 +45,7 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp
     backend = SimulatorBackend(
         physical_model_id="keysight-dsox4024a",
         resource_name="SIM::keysight-dsox4024a::INSTR",
+        firmware="07.30",
     )
     with Oscilloscope(backend) as scope:
         scope.scpi.write(segmented_waveform_all_command(True))
@@ -99,6 +100,29 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp
     ]
 
 
+def test_run_segmented_capture_07_20_omits_waveform_all_command(tmp_path):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4034a",
+        resource_name="SIM::keysight-dsox4034a::INSTR",
+        firmware="07.20.2017102615",
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4034a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert segmented_waveform_all_command(False) not in backend.history
+    assert ":ACQuire:SEGMented:INDex 1" in backend.history
+    assert ":WAVeform:SEGMented:TTAG?" in backend.history
+    assert (tmp_path / "segment_0001.csv").exists()
+    assert (tmp_path / "segment_0002.csv").exists()
+
+
 def test_run_segmented_capture_rejects_average_before_segmented_write(tmp_path):
     backend = SimulatorBackend(
         physical_model_id="keysight-dsox4024a", acquisition_type="AVERage"
@@ -148,7 +172,7 @@ def test_run_segmented_capture_zero_acquired_timeout_writes_no_csv(tmp_path):
 
 
 def test_run_segmented_capture_partial_timeout_keeps_completed_csv(tmp_path):
-    backend = _AcquiredCountSequenceBackend([1, 1])
+    backend = _AcquiredCountSequenceBackend([1, 1], firmware="07.30")
     with Oscilloscope(backend) as scope:
         result = run_segmented_capture(
             scope,
@@ -171,15 +195,22 @@ def test_run_segmented_capture_partial_timeout_keeps_completed_csv(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("model", "contains_all_off"),
-    [("DSOX2004A", False), ("DSOX3024A", False), ("DSOX4024A", True)],
+    ("model", "firmware", "contains_all_off"),
+    [
+        ("DSOX2004A", "07.30", False),
+        ("DSOX3024A", "07.30", False),
+        ("DSOX4024A", None, False),
+        ("DSOX4024A", "07.20", False),
+        ("DSOX4024A", "07.30", True),
+    ],
 )
 def test_segmented_capture_plan_respects_waveform_all_profile_boundary(
-    model, contains_all_off, tmp_path
+    model, firmware, contains_all_off, tmp_path
 ):
     planned, _, _ = plan_segmented_capture(
         SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
         capabilities_for_model(model),
+        firmware=firmware,
     )
 
     all_off = segmented_waveform_all_command(False)
