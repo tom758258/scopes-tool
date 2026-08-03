@@ -17,6 +17,8 @@
 - Exposes `segmented-capture` through the Common v2 Scopes Worker with strict
   startup-bound validation, a Worker-owned artifact child directory, and
   existing succeeded/failed/cancelled lifecycle semantics.
+- Bounds segmented-capture polling reads by the remaining capture timeout and
+  stops issuing SCPI after a polling read timeout.
 - Adds the Serial UART Trigger P0 vertical slice through Core, CLI, Worker,
   Simulator, Common v2 JSON, and focused tests. It supports the shared basic
   UART trigger types and data qualifiers without changing Serial P1 decode

@@ -4,7 +4,7 @@ import pytest
 
 import scopes_tool_core.segmented_capture as segmented_capture_module
 from scopes_tool_core.capabilities import capabilities_for_model
-from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError, VisaBackendError
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.segmented_capture import (
     SegmentedCaptureRequest,
@@ -38,6 +38,50 @@ class _AcquiredCountSequenceBackend(SimulatorBackend):
             if self.acquired_counts:
                 self.last_acquired_count = self.acquired_counts.pop(0)
             return str(self.last_acquired_count)
+        return super().query(command)
+
+
+class _TimeoutTrackingBackend(_AcquiredCountSequenceBackend):
+    def __init__(self, acquired_counts, *, firmware="07.20"):
+        super().__init__(acquired_counts, firmware=firmware)
+        self.events = []
+
+    def set_timeout(self, timeout_ms):
+        self.events.append(("set_timeout", timeout_ms))
+        super().set_timeout(timeout_ms)
+
+    def write(self, command):
+        self.events.append(("write", command))
+        super().write(command)
+
+    def query(self, command):
+        self.events.append(("query", command))
+        return super().query(command)
+
+    def query_binary_values(self, command, **kwargs):
+        self.events.append(("query_binary_values", command))
+        return super().query_binary_values(command, **kwargs)
+
+
+class _VisaTimeoutCause(Exception):
+    error_code = -1073807339
+
+
+class _PollingVisaTimeoutBackend(_TimeoutTrackingBackend):
+    def __init__(self):
+        super().__init__([1])
+        self.count_queries = 0
+
+    def query(self, command):
+        if command == ":WAVeform:SEGMented:COUNt?":
+            self.count_queries += 1
+            if self.count_queries == 2:
+                self._ensure_open()
+                self.events.append(("query", command))
+                self.history.append(command)
+                raise VisaBackendError(
+                    f"VISA query failed for {command!r}: VI_ERROR_TMO"
+                ) from _VisaTimeoutCause()
         return super().query(command)
 
 
@@ -98,6 +142,85 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",
     ]
+
+
+def test_run_segmented_capture_restores_timeout_before_waveform_export(monkeypatch, tmp_path):
+    backend = _TimeoutTrackingBackend([0, 2])
+    clock = iter([100.0, 100.1, 100.5])
+    monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(segmented_capture_module.time, "sleep", lambda _: None)
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    timeout_events = [value for kind, value in backend.events if kind == "set_timeout"]
+    assert timeout_events[0] > 2000
+    assert timeout_events[1] < timeout_events[0]
+    assert timeout_events[-1] == 2000
+    restore_index = backend.events.index(("set_timeout", 2000))
+    first_index = backend.events.index(("write", ":ACQuire:SEGMented:INDex 1"))
+    assert restore_index < first_index
+    assert backend.timeout == 2000
+
+
+def test_run_segmented_capture_polling_visa_timeout_stops_scpi(tmp_path):
+    backend = _PollingVisaTimeoutBackend()
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert result.result["acquired_segments"] == 1
+    assert result.result["exported_segments"] == 0
+    assert "polling read timed out" in result.result["error"]
+    assert "30000 ms" in result.result["error"]
+    assert "1 of 2" in result.result["error"]
+    assert backend.timeout == 2000
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "failed"
+    assert manifest["final_mode"] is None
+    assert manifest["system_error"] is None
+    assert (tmp_path / "scpi.log").exists()
+    assert not list(tmp_path.glob("segment_*.csv"))
+    timeout_query_index = max(
+        index
+        for index, command in enumerate(backend.history)
+        if command == ":WAVeform:SEGMented:COUNt?"
+    )
+    assert backend.history[timeout_query_index + 1 :] == []
+
+
+def test_run_segmented_capture_normal_deadline_keeps_final_state_queries(
+    monkeypatch, tmp_path
+):
+    backend = _AcquiredCountSequenceBackend([0])
+    clock = iter([100.0, 100.01, 100.11])
+    monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(segmented_capture_module.time, "sleep", lambda _: None)
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(
+                1, 2, timeout_ms=100, poll_interval_ms=1, output_dir=tmp_path
+            ),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert result.result["final_mode"] == "segmented"
+    assert backend.history[-2:] == [":ACQuire:MODE?", ":SYSTem:ERRor?"]
 
 
 def test_run_segmented_capture_07_20_omits_waveform_all_command(tmp_path):
@@ -270,6 +393,7 @@ def test_run_segmented_capture_malformed_count_returns_failed_manifest(tmp_path)
     assert result.result["status"] == "failed"
     assert isinstance(result.result["error"], str)
     assert not list(tmp_path.glob("segment_*.csv"))
+    assert backend.history[-2:] == [":ACQuire:MODE?", ":SYSTem:ERRor?"]
 
 
 def test_run_segmented_capture_rejects_nonempty_output_before_scpi(tmp_path):

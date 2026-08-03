@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import time
 
@@ -287,6 +288,30 @@ def _error_text(exc: Exception) -> str:
     return str(exc) or type(exc).__name__
 
 
+def _is_visa_timeout(exc: Exception) -> bool:
+    """Return whether an exception chain contains a VISA read timeout."""
+
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if getattr(current, "error_code", None) in {
+            -1073807339,
+            "-1073807339",
+        }:
+            return True
+        if "VI_ERROR_TMO" in str(current):
+            return True
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        if current.__context__ is not None:
+            pending.append(current.__context__)
+    return False
+
+
 def run_segmented_capture(
     scope: Oscilloscope,
     resource: str,
@@ -336,6 +361,7 @@ def run_segmented_capture(
     target_started = False
     acquired_segments = 0
     exported_segments = 0
+    session_query_timed_out = False
     human = [f"Resource: {resource}"]
     controller: SegmentedMemoryController | None = None
 
@@ -361,15 +387,42 @@ def run_segmented_capture(
 
                 deadline = time.monotonic() + request.timeout_ms / 1000.0
                 timed_out = False
-                while True:
-                    acquired_segments = controller.query_acquired_count()
-                    manifest["acquired_segments"] = acquired_segments
-                    if acquired_segments >= request.segments:
-                        break
-                    if time.monotonic() >= deadline:
-                        timed_out = True
-                        break
-                    time.sleep(request.poll_interval_ms / 1000.0)
+                original_timeout = scope.scpi.timeout
+                polling_exception: Exception | None = None
+                try:
+                    while True:
+                        remaining_seconds = deadline - time.monotonic()
+                        if remaining_seconds <= 0:
+                            timed_out = True
+                            break
+
+                        remaining_ms = max(1, math.ceil(remaining_seconds * 1000))
+                        scope.scpi.set_timeout(remaining_ms)
+                        try:
+                            acquired_segments = controller.query_acquired_count()
+                        except Exception as exc:
+                            if _is_visa_timeout(exc):
+                                session_query_timed_out = True
+                                raise SegmentedCaptureTimeout(
+                                    "segmented capture polling read timed out after "
+                                    f"{request.timeout_ms} ms with {acquired_segments} of "
+                                    f"{request.segments} segments acquired."
+                                ) from exc
+                            raise
+
+                        manifest["acquired_segments"] = acquired_segments
+                        if acquired_segments >= request.segments:
+                            break
+                        time.sleep(request.poll_interval_ms / 1000.0)
+                except Exception as exc:
+                    polling_exception = exc
+                    raise
+                finally:
+                    try:
+                        scope.scpi.set_timeout(original_timeout)
+                    except Exception:
+                        if polling_exception is None:
+                            raise
 
                 if timed_out:
                     primary_error = SegmentedCaptureTimeout(
@@ -426,7 +479,7 @@ def run_segmented_capture(
                     )
             except Exception as exc:
                 primary_error = primary_error or exc
-                if controller is not None and target_started:
+                if controller is not None and target_started and not session_query_timed_out:
                     is_average_rejection = (
                         isinstance(exc, ParameterValidationError)
                         and "cannot be enabled while acquisition type is average" in str(exc)

@@ -595,6 +595,10 @@ Run a finite segmented capture and export each acquired segment to a host CSV:
 
 `segmented-capture` supports one analog channel, BYTE or WORD waveform
 transfer, finite timeout-bounded polling, and the existing waveform decoder.
+`--timeout-ms` is the overall acquisition polling deadline; each polling read
+uses the remaining deadline as its temporary VISA timeout. If a polling read
+times out, the workflow stops issuing SCPI on that session while preserving the
+manifest and `scpi.log`.
 It sends one `:SINGle`, selects each acquired segment, queries its time tag,
 and writes `segment_0001.csv`, `segment_0002.csv`, and so on immediately after
 each successful waveform transfer. The directory also contains a shared
