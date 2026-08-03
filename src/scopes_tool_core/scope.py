@@ -1724,6 +1724,16 @@ class Oscilloscope:
 
         return self._segmented_memory_controller().query()
 
+    def enable_segmented_memory(self, segments: int) -> None:
+        """Enable segmented-memory acquisition with an explicit segment count."""
+
+        self._segmented_memory_controller().enable(segments)
+
+    def disable_segmented_memory(self) -> None:
+        """Disable segmented-memory acquisition without changing its count."""
+
+        self._segmented_memory_controller().disable()
+
     def close(self) -> None:
         """Close the underlying backend."""
 

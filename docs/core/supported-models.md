@@ -179,14 +179,14 @@ selected Serial bus must be configured with the matching Serial command first.
   not expose that helper because their delay query depends on measurement
   definition state.
 
-Raw waveform points mode remains disabled. Segmented memory is enabled only as
-a query-only command-family capability for the registered 2000X, 3000X, and
-4000X profiles. Segmented-memory availability may depend on an SGM option or
-license on supported 2000X, 3000X, and 4000X instruments; the capability flag
-permits this documented command-family path but does not claim that the option
-is installed or that live segmented-memory behavior has been validated. No
-segmented enable, disable, count configuration, capture, or export is
-implemented in P0. Serial
+Raw waveform points mode remains disabled. Segmented memory query and explicit
+mode/count configuration are available for the registered 2000X, 3000X, and
+4000X profiles. The documented count ranges are 2-250 on 2000X and 2-1000 on
+3000X/4000X, while the actual maximum may be lower for the selected memory
+depth. Segmented-memory availability may depend on an SGM option or license;
+the capability flag permits this documented command-family path but does not
+claim that the option is installed or that DSO-X 4034A P0/P1 live behavior has
+been validated. P1 does not include acquisition, capture, or export. Serial
 decode capability represents command-family availability, not the presence of
 an instrument license.
 

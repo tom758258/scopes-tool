@@ -95,6 +95,7 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         "supports_screenshot": True,
         "supports_screenshot_format_pack": True,
         "supports_segmented_memory": True,
+        "segmented_max_segments": 1000,
         "supports_serial_decode": True,
         "serial_bus_count": 2,
         "serial_modes": [

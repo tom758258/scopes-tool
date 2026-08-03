@@ -197,14 +197,17 @@ Core owns runtime behavior:
   state queries. Existing cross-series color PNG capture remains unchanged.
 - Read-only acquisition points and record-length query helpers, separate from
   waveform transfer points.
-- Query-only segmented-memory state through
-  `Oscilloscope.query_segmented_memory()`. P0 reads acquisition mode, segment
-  counts, selected segment, and time tag without enabling, configuring,
-  acquiring, or exporting segmented data. The capability flag permits this
-  command-family path. Segmented-memory availability may depend on an SGM
-  option or license on supported 2000X, 3000X, and 4000X instruments; the
-  capability flag does not claim that the option is installed or that live
-  segmented-memory behavior has been validated.
+- Segmented-memory query and explicit configuration through
+  `Oscilloscope.query_segmented_memory()`,
+  `Oscilloscope.enable_segmented_memory()`, and
+  `Oscilloscope.disable_segmented_memory()`. Configuration selects segmented
+  mode and an explicit count without starting acquisition, capturing waveform
+  data, or exporting artifacts. Counts are limited to 2-250 on 2000X and
+  2-1000 on 3000X/4000X; actual instrument limits may be lower for a selected
+  memory depth. Average acquisition must be changed to a non-average type by
+  the caller before enabling segmented memory. Availability may depend on an
+  SGM option or license; capability support does not claim that the option is
+  installed or that DSO-X 4034A P0/P1 live behavior has been validated.
 - Explicit triggered-capture wait helpers that arm `:SINGle`, poll
   `:OPERegister:CONDition?`, classify DSO-X 2000X/3000X/4000X completion by
   the Operation Status Condition Run bit, and expose raw poll values for

@@ -99,6 +99,14 @@ def test_capabilities_keep_unimplemented_surfaces_disabled():
 
 
 @pytest.mark.parametrize(
+    ("model", "maximum"),
+    [("DSOX2004A", 250), ("DSOX3024A", 1000), ("DSOX4024A", 1000)],
+)
+def test_segmented_memory_maximum_comes_from_capability_profile(model, maximum):
+    assert capabilities_for_model(model).segmented_max_segments == maximum
+
+
+@pytest.mark.parametrize(
     ("model", "bus_count", "modes"),
     [
         ("DSOX2004A", 1, {"can", "i2c", "lin", "spi", "uart"}),

@@ -1,4 +1,4 @@
-"""Query-only segmented-memory support."""
+"""Segmented-memory query and configuration support."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 import math
 import re
 
+from .acquisition import AcquisitionController
 from .capabilities import ScopeCapabilities
 from .errors import ParameterValidationError, SegmentedResponseError
 from .scpi import SCPIClient
@@ -39,6 +40,24 @@ def segmented_time_tag_query() -> str:
     """Build the selected-segment time-tag query."""
 
     return ":WAVeform:SEGMented:TTAG?"
+
+
+def segmented_mode_command(mode: str) -> str:
+    """Build a validated segmented-memory acquisition-mode command."""
+
+    try:
+        token = {"segmented": "SEGMented", "realtime": "RTIMe"}[mode]
+    except KeyError as exc:
+        raise ParameterValidationError(
+            "segmented memory mode must be segmented or realtime."
+        ) from exc
+    return f":ACQuire:MODE {token}"
+
+
+def segmented_count_command(count: int) -> str:
+    """Build the segmented-memory configured-count command."""
+
+    return f":ACQuire:SEGMented:COUNt {count}"
 
 
 _REALTIME_READBACKS = {"RTIM", "RTIME", "REALTIME"}
@@ -144,17 +163,39 @@ class SegmentedMemoryQueryResult:
 def ensure_segmented_memory_supported(
     capabilities: ScopeCapabilities | None,
 ) -> None:
-    """Reject segmented-memory queries when the selected profile is unavailable."""
+    """Reject segmented-memory operations when the selected profile is unavailable."""
 
     if capabilities is None or not capabilities.supports_segmented_memory:
         raise ParameterValidationError(
-            "segmented memory query requires a registered profile with "
+            "segmented memory requires a registered profile with "
             "supports_segmented_memory enabled."
         )
 
 
+def validate_segmented_count(
+    count: object,
+    capabilities: ScopeCapabilities | None,
+) -> int:
+    """Validate a configured segmented-memory count for a capability profile."""
+
+    ensure_segmented_memory_supported(capabilities)
+    if isinstance(count, bool) or not isinstance(count, int):
+        raise ParameterValidationError("segmented memory count must be an integer.")
+    assert capabilities is not None
+    maximum = capabilities.segmented_max_segments
+    if maximum < 2:
+        raise ParameterValidationError(
+            "segmented memory count is unavailable for this capability profile."
+        )
+    if count < 2 or count > maximum:
+        raise ParameterValidationError(
+            f"segmented memory count must be between 2 and {maximum}."
+        )
+    return count
+
+
 class SegmentedMemoryController:
-    """Read segmented-memory state without changing instrument state."""
+    """Query and configure segmented-memory acquisition state."""
 
     def __init__(
         self,
@@ -163,6 +204,25 @@ class SegmentedMemoryController:
     ) -> None:
         self.scpi = scpi
         self.capabilities = capabilities
+
+    def enable(self, segments: int) -> None:
+        """Enable segmented acquisition with an explicit configured count."""
+
+        validated_segments = validate_segmented_count(segments, self.capabilities)
+        acquisition_type = AcquisitionController(self.scpi).query_type()
+        if acquisition_type == "average":
+            raise ParameterValidationError(
+                "segmented memory cannot be enabled while acquisition type is "
+                "average; configure a non-average acquisition type first."
+            )
+        self.scpi.write(segmented_mode_command("segmented"))
+        self.scpi.write(segmented_count_command(validated_segments))
+
+    def disable(self) -> None:
+        """Disable segmented acquisition without changing its configured count."""
+
+        ensure_segmented_memory_supported(self.capabilities)
+        self.scpi.write(segmented_mode_command("realtime"))
 
     def query(self) -> SegmentedMemoryQueryResult:
         """Query mode and conditionally available segmented-memory readbacks."""

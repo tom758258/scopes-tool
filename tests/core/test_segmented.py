@@ -7,7 +7,10 @@ from scopes_tool_core.errors import ParameterValidationError, SegmentedResponseE
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.segmented import (
+    segmented_count_command,
+    segmented_mode_command,
     parse_segmented_mode,
+    validate_segmented_count,
 )
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
@@ -113,6 +116,66 @@ def test_segmented_capability_guard_precedes_mode_query():
     assert backend.history == []
 
 
+@pytest.mark.parametrize(
+    ("model", "count"),
+    [("DSOX2004A", 250), ("DSOX3024A", 1000), ("DSOX4024A", 1000)],
+)
+def test_segmented_count_accepts_profile_maximum(model, count):
+    capabilities = capabilities_for_model(model)
+
+    assert validate_segmented_count(count, capabilities) == count
+
+
+@pytest.mark.parametrize(
+    ("model", "count"),
+    [("DSOX2004A", 251), ("DSOX3024A", 1001), ("DSOX4024A", 1)],
+)
+def test_segmented_count_rejects_outside_profile_range(model, count):
+    with pytest.raises(ParameterValidationError, match="between 2 and"):
+        validate_segmented_count(count, capabilities_for_model(model))
+
+
+@pytest.mark.parametrize("count", [True, 2.0, "2"])
+def test_segmented_count_rejects_non_integer_types(count):
+    with pytest.raises(ParameterValidationError, match="must be an integer"):
+        validate_segmented_count(count, capabilities_for_model("DSOX4024A"))
+
+
+def test_segmented_enable_queries_acquisition_type_before_writes():
+    backend = FakeBackend(responses={":ACQuire:TYPE?": "NORMal"})
+    scope = Oscilloscope(backend)
+    scope.capabilities = capabilities_for_model("DSOX4024A")
+
+    scope.enable_segmented_memory(25)
+
+    assert backend.history == [
+        ":ACQuire:TYPE?",
+        segmented_mode_command("segmented"),
+        segmented_count_command(25),
+    ]
+
+
+def test_segmented_enable_rejects_average_before_segmented_writes():
+    backend = FakeBackend(responses={":ACQuire:TYPE?": "AVERage"})
+    scope = Oscilloscope(backend)
+    scope.capabilities = capabilities_for_model("DSOX4024A")
+
+    with pytest.raises(ParameterValidationError, match="cannot be enabled"):
+        scope.enable_segmented_memory(25)
+
+    assert backend.history == [":ACQuire:TYPE?"]
+
+
+def test_segmented_disable_only_writes_realtime_mode():
+    backend = FakeBackend()
+    scope = Oscilloscope(backend)
+    scope.capabilities = capabilities_for_model("DSOX4024A")
+
+    scope.disable_segmented_memory()
+
+    assert backend.history == [segmented_mode_command("realtime")]
+
+
 def test_segmented_malformed_numeric_response_uses_feature_error():
     backend = FakeBackend(
         responses={
@@ -152,3 +215,21 @@ def test_simulator_segmented_state_uses_query_history():
         ":ACQuire:SEGMented:INDex?",
         ":WAVeform:SEGMented:TTAG?",
     ]
+
+
+def test_simulator_segmented_configuration_updates_query_state_without_acquiring():
+    backend = SimulatorBackend()
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.enable_segmented_memory(25)
+    result = scope.query_segmented_memory()
+    scope.disable_segmented_memory()
+
+    assert result.mode == "segmented"
+    assert result.configured_segments == 25
+    assert result.acquired_segments == 0
+    assert result.selected_segment is None
+    assert result.time_tag_s is None
+    assert backend.segmented_mode == "RTIM"
+    assert backend.segmented_configured_segments == 25

@@ -558,29 +558,35 @@ Worker usage requires the same query-only intent:
 .\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command record-length --arguments-json "{\"query\":true}" --json
 ```
 
-Query segmented-memory state without changing acquisition state:
+Query or explicitly configure segmented-memory acquisition:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe segmented-memory --query --simulate --json
 .\.venv\Scripts\scopes-tool.exe segmented-memory --query --dry-run --json
+.\.venv\Scripts\scopes-tool.exe segmented-memory --enable --segments 25 --simulate --json
+.\.venv\Scripts\scopes-tool.exe segmented-memory --disable --dry-run --json
 .\.venv\Scripts\scopes-tool.exe segmented-memory --resource "$env:SCOPES_TOOL_RESOURCE" --query --json --log-scpi
 ```
 
-The `segmented-memory` command is P0 query-only support for registered Keysight
-2000X, 3000X, and 4000X profiles. It detects the live model from `*IDN?`, then
-queries `:ACQuire:MODE?`. It queries segmented counts only when the mode is
-segmented, and queries selected index and time tag only when the acquired
-count is greater than zero. The command never enables or disables segmented
-mode, configures a segment count, starts acquisition, captures waveform data,
-or exports artifacts. Segmented-memory availability may depend on an SGM option
-or license on supported 2000X, 3000X, and 4000X instruments; the capability
-flag permits this documented command-family path but does not claim that the
-option is installed or that live segmented-memory behavior has been validated.
+The `segmented-memory` command supports query, enable/count, and disable for
+registered Keysight 2000X, 3000X, and 4000X profiles. Query keeps the P0
+conditional readback behavior: configured and acquired counts are queried only
+in segmented mode, and selected index/time tag are queried only when acquired
+segments are nonzero. Enable sends `:ACQuire:TYPE?` first, rejects Average
+acquisition before any segmented write, then sends segmented mode and count.
+Counts are 2-250 on 2000X and 2-1000 on 3000X/4000X; the actual instrument
+maximum may be lower for the selected memory depth. Disable sends only
+`:ACQuire:MODE RTIMe` and does not reset the configured count. These commands
+do not start acquisition, capture waveform data, or export artifacts.
+Availability may depend on an SGM option or license, and DSO-X 4034A P0/P1
+live behavior remains unvalidated.
 
-Worker usage accepts only the exact query argument object:
+Worker usage accepts only these exact argument objects:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command segmented-memory --arguments-json "{\"query\":true}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command segmented-memory --arguments-json "{\"enable\":true,\"segments\":25}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command segmented-memory --arguments-json "{\"disable\":true}" --json
 ```
 
 Run the acquisition configuration validation workflow and write a report

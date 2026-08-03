@@ -49,6 +49,7 @@ class ScopeCapabilities:
     supports_measure_results_dump: bool = False
     serial_bus_count: int = 0
     serial_modes: frozenset[str] = frozenset()
+    segmented_max_segments: int = 0
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
@@ -98,6 +99,7 @@ _CAPABILITY_PROFILES = {
         demo_functions=_DEMO_COMMON_FUNCTIONS,
         supports_wgen=True,
         wgen_scpi_root=":WGEN",
+        segmented_max_segments=250,
     ),
     "keysight-infiniivision-3000x": ScopeCapabilities(
         series="3000X",
@@ -137,6 +139,7 @@ _CAPABILITY_PROFILES = {
         demo_functions=_DEMO_COMMON_FUNCTIONS | _DEMO_3000X_EXTENSIONS,
         supports_wgen=True,
         wgen_scpi_root=":WGEN",
+        segmented_max_segments=1000,
     ),
     "keysight-infiniivision-4000x": ScopeCapabilities(
         series="4000X",
@@ -215,6 +218,7 @@ _CAPABILITY_PROFILES = {
         demo_functions=_DEMO_COMMON_FUNCTIONS | _DEMO_3000X_EXTENSIONS,
         supports_wgen=True,
         wgen_scpi_root=":WGEN1",
+        segmented_max_segments=1000,
     ),
 }
 

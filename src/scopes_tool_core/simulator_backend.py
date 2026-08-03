@@ -550,6 +550,23 @@ class SimulatorBackend:
             pass
         elif upper.startswith(":ACQUIRE:TYPE "):
             self.acquisition_type = command.rsplit(" ", 1)[1]
+        elif upper.startswith(":ACQUIRE:MODE "):
+            mode = command.rsplit(" ", 1)[1].upper()
+            if mode.startswith("SEGM"):
+                self.segmented_mode = "SEGM"
+            elif mode.startswith("RTIM"):
+                self.segmented_mode = "RTIM"
+            else:
+                raise SimulatorBackendError(
+                    f"Unsupported simulator acquisition mode: {command}"
+                )
+        elif upper.startswith(":ACQUIRE:SEGMENTED:COUNT "):
+            try:
+                self.segmented_configured_segments = int(command.rsplit(" ", 1)[1])
+            except ValueError as exc:
+                raise SimulatorBackendError(
+                    f"Unsupported simulator segmented count: {command}"
+                ) from exc
         elif upper.startswith(":ACQUIRE:COUNT "):
             self.acquisition_count = int(command.rsplit(" ", 1)[1])
         elif upper.startswith(":TIMEBASE:SCALE "):

@@ -314,17 +314,27 @@ form:
 {"command": "record-length", "arguments": {"query": true}}
 ```
 
-`segmented-memory` accepts only the exact query-only arguments:
+`segmented-memory` accepts only these exact arguments:
 
 ```json
 {"command": "segmented-memory", "arguments": {"query": true}}
 ```
 
-The `query` value must be the JSON boolean `true`. Missing, false, non-boolean,
-extra, or unknown arguments are rejected before enqueue, artifact creation,
-backend open, or SCPI. P0 does not accept resource, model, mode, path,
-enable/disable, or segment-count arguments and does not create a domain
-artifact.
+```json
+{"command": "segmented-memory", "arguments": {"enable": true, "segments": 25}}
+```
+
+```json
+{"command": "segmented-memory", "arguments": {"disable": true}}
+```
+
+Operation values must be the JSON boolean `true`. Enable requires an integer
+`segments` value; query and disable reject `segments`. Missing, false,
+non-boolean, float, string, extra, or unknown arguments are rejected before
+enqueue, artifact creation, backend open, or SCPI. Worker validation uses the
+startup-bound model capability: counts are 2-250 on 2000X and 2-1000 on
+3000X/4000X. The worker does not accept resource, model, mode, path, capture,
+or export arguments and does not create a domain artifact for this command.
 
 System/Status Pack v1 uses only these canonical request shapes:
 

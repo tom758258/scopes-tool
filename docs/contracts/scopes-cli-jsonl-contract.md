@@ -411,13 +411,15 @@ Control and setup:
   `unit`, `scpi_command`, and `human_output`.
 - `record-length`: `operation`, `record_length_points`, `raw_value`, `unit`,
   `scpi_command`, and `human_output`.
-- `segmented-memory`: `operation`, normalized `mode`, nullable
-  `configured_segments`, `acquired_segments`, `selected_segment`, and
-  `time_tag_s`, plus preserved `raw_mode`, `raw_configured_segments`,
-  `raw_acquired_segments`, `raw_selected_segment`, and `raw_time_tag`.
-  P0 is query-only; realtime mode leaves segmented-specific fields null, and
-  zero acquired segments leaves selected segment and time tag null. This does
-  not add a schema version.
+- `segmented-memory`: query results retain `operation: "query"`, normalized
+  `mode`, nullable `configured_segments`, `acquired_segments`,
+  `selected_segment`, and `time_tag_s`, plus preserved raw readbacks.
+  Configure results are minimal: enable reports `operation: "enable"`,
+  `mode: "segmented"`, and `configured_segments`; disable reports
+  `operation: "disable"`, `mode: "realtime"`, and nullable
+  `configured_segments`. Query realtime mode leaves segmented-specific fields
+  null, and zero acquired segments leaves selected segment and time tag null.
+  Configuration does not start acquisition, capture data, or export artifacts.
 - `autoscale`: `operation`, `commands`, `source_channels`, optional
   `fallback`.
 - `setup-save` and `setup-recall`: `operation`, `command`, `slot`, `file`.
@@ -543,7 +545,7 @@ Capability JSON currently includes `series`, `analog_channels`,
 `supports_delay_measurement`, `supports_measure_results_dump`,
 `supports_screenshot`,
 `supports_screenshot_format_pack`,
-`supports_segmented_memory`, `supports_serial_decode`, `serial_bus_count`,
+  `supports_segmented_memory`, `segmented_max_segments`, `supports_serial_decode`, `serial_bus_count`,
 and ordered canonical `serial_modes`,
 `supports_channel_label`, `channel_label_max_length`,
 `supports_display_label`, `supports_annotation`,

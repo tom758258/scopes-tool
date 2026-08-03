@@ -635,9 +635,20 @@ def _normalize_segmented_memory_worker_arguments(
 ) -> dict[str, Any]:
     if command != "segmented-memory":
         return arguments
-    if set(arguments) != {"query"} or arguments.get("query") is not True:
-        raise OscilloscopeError("segmented-memory requires exactly query=true")
-    return {"query": True}
+    if set(arguments) == {"query"} and arguments.get("query") is True:
+        return {"query": True}
+    if set(arguments) == {"enable", "segments"} and arguments.get("enable") is True:
+        segments = arguments["segments"]
+        if isinstance(segments, bool) or not isinstance(segments, int):
+            raise OscilloscopeError(
+                "segmented-memory enable segments must be an integer"
+            )
+        return {"enable": True, "segments": segments}
+    if set(arguments) == {"disable"} and arguments.get("disable") is True:
+        return {"disable": True}
+    raise OscilloscopeError(
+        "segmented-memory requires exactly one canonical operation"
+    )
 
 
 def _normalize_system_status_worker_arguments(

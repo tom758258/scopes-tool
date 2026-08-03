@@ -32,7 +32,10 @@ from scopes_tool_core.acquisition import (
 )
 from scopes_tool_core.segmented import (
     ensure_segmented_memory_supported,
+    segmented_count_command,
+    segmented_mode_command,
     segmented_mode_query,
+    validate_segmented_count,
 )
 from scopes_tool_core.advanced import (
     FFT_DETECTION_TYPES,
@@ -2900,14 +2903,32 @@ def _build_parser() -> argparse.ArgumentParser:
     segmented_memory_parser = subparsers.add_parser(
         "segmented-memory",
         allow_abbrev=False,
-        help="query segmented-memory state without changing acquisition state",
+        help="query or configure segmented-memory acquisition",
     )
     _add_scope_connection_args(segmented_memory_parser)
-    segmented_memory_parser.add_argument(
+    segmented_operation_group = segmented_memory_parser.add_mutually_exclusive_group(
+        required=True
+    )
+    segmented_operation_group.add_argument(
         "--query",
         action="store_true",
-        required=True,
         help="query segmented-memory state",
+    )
+    segmented_operation_group.add_argument(
+        "--enable",
+        action="store_true",
+        help="enable segmented-memory acquisition",
+    )
+    segmented_operation_group.add_argument(
+        "--disable",
+        action="store_true",
+        help="disable segmented-memory acquisition",
+    )
+    segmented_memory_parser.add_argument(
+        "--segments",
+        type=int,
+        default=None,
+        help="configured segmented-memory count when enabling",
     )
 
     acquisition_parser = subparsers.add_parser(
@@ -4010,6 +4031,20 @@ def _validate_fft_args(args: argparse.Namespace) -> None:
 
 
 def _validate_pre_open_args(args: argparse.Namespace) -> None:
+    if getattr(args, "command", None) == "segmented-memory":
+        if getattr(args, "enable", False) and args.segments is None:
+            raise ParameterValidationError("segmented-memory --enable requires --segments")
+        if not getattr(args, "enable", False) and args.segments is not None:
+            raise ParameterValidationError(
+                "--segments is only valid with segmented-memory --enable"
+            )
+        if (
+            args.segments is not None
+            and (getattr(args, "simulate", False) or getattr(args, "dry_run", False))
+        ):
+            validate_segmented_count(
+                args.segments, capabilities_for_model_id(args.model)
+            )
     if getattr(args, "command", None) == "fft":
         _validate_fft_args(args)
     if getattr(args, "command", None) == "screenshot":
@@ -6790,19 +6825,41 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             result["query_kind"] = "maximum"
         return planned, [], result
     if command == "segmented-memory":
+        if args.query:
+            ensure_segmented_memory_supported(capabilities)
+            return ["*IDN?", segmented_mode_query(), ":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "mode": None,
+                "configured_segments": None,
+                "acquired_segments": None,
+                "selected_segment": None,
+                "time_tag_s": None,
+                "raw_mode": None,
+                "raw_configured_segments": None,
+                "raw_acquired_segments": None,
+                "raw_selected_segment": None,
+                "raw_time_tag": None,
+            }
+        if args.enable:
+            validated_segments = validate_segmented_count(
+                args.segments, capabilities
+            )
+            return [
+                "*IDN?",
+                acquisition_type_query(),
+                segmented_mode_command("segmented"),
+                segmented_count_command(validated_segments),
+                ":SYSTem:ERRor?",
+            ], [], {
+                "operation": "enable",
+                "mode": "segmented",
+                "configured_segments": validated_segments,
+            }
         ensure_segmented_memory_supported(capabilities)
-        return ["*IDN?", segmented_mode_query(), ":SYSTem:ERRor?"], [], {
-            "operation": "query",
-            "mode": None,
+        return ["*IDN?", segmented_mode_command("realtime"), ":SYSTem:ERRor?"], [], {
+            "operation": "disable",
+            "mode": "realtime",
             "configured_segments": None,
-            "acquired_segments": None,
-            "selected_segment": None,
-            "time_tag_s": None,
-            "raw_mode": None,
-            "raw_configured_segments": None,
-            "raw_acquired_segments": None,
-            "raw_selected_segment": None,
-            "raw_time_tag": None,
         }
     if command == "acquisition-points":
         planned = ["*IDN?", acquisition_points_query(), ":SYSTem:ERRor?"]
@@ -7547,6 +7604,7 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "supports_screenshot": capabilities.supports_screenshot,
         "supports_screenshot_format_pack": capabilities.supports_screenshot_format_pack,
         "supports_segmented_memory": capabilities.supports_segmented_memory,
+        "segmented_max_segments": capabilities.segmented_max_segments,
         "supports_serial_decode": capabilities.supports_serial_decode,
         "serial_bus_count": capabilities.serial_bus_count,
         "serial_modes": [
@@ -11758,16 +11816,33 @@ def _cmd_segmented_memory(args: argparse.Namespace) -> int:
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
-        query_result = scope.query_segmented_memory()
-        result = query_result.to_json()
-        result["operation"] = "query"
-        _json_update_result(**result)
-        print("Planned query: segmented memory state")
-        print("Mode: " + query_result.mode)
-        print("Configured segments: " + str(query_result.configured_segments))
-        print("Acquired segments: " + str(query_result.acquired_segments))
-        print("Selected segment: " + str(query_result.selected_segment))
-        print("Time tag (s): " + str(query_result.time_tag_s))
+        if args.query:
+            query_result = scope.query_segmented_memory()
+            result = query_result.to_json()
+            result["operation"] = "query"
+            _json_update_result(**result)
+            print("Planned query: segmented memory state")
+            print("Mode: " + query_result.mode)
+            print("Configured segments: " + str(query_result.configured_segments))
+            print("Acquired segments: " + str(query_result.acquired_segments))
+            print("Selected segment: " + str(query_result.selected_segment))
+            print("Time tag (s): " + str(query_result.time_tag_s))
+        elif args.enable:
+            scope.enable_segmented_memory(args.segments)
+            _json_update_result(
+                operation="enable",
+                mode="segmented",
+                configured_segments=args.segments,
+            )
+            print(f"Configured segmented memory with {args.segments} segments")
+        else:
+            scope.disable_segmented_memory()
+            _json_update_result(
+                operation="disable",
+                mode="realtime",
+                configured_segments=None,
+            )
+            print("Disabled segmented memory")
         entry = scope.query_system_error()
         _json_record_system_error(entry)
         print("System error: " + entry.format())
