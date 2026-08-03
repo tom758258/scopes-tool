@@ -172,6 +172,7 @@ class SimulatorBackend:
     segmented_acquired_segments: int = 0
     segmented_selected_segment: int = 1
     segmented_time_tag_s: float = 0.0
+    segmented_waveform_all: bool = False
     sample_rate_hz: float = 5e9
     maximum_sample_rate_hz: float = 5e9
     acquisition_points: int = 1000000
@@ -503,6 +504,8 @@ class SimulatorBackend:
             self.waveform_format = "BYTE"
         elif upper == ":WAVEFORM:FORMAT WORD":
             self.waveform_format = "WORD"
+        elif upper.startswith(":WAVEFORM:SEGMENTED:ALL "):
+            self.segmented_waveform_all = _parse_scpi_bool_write(command)
         elif upper.startswith(":WAVEFORM:BYTEORDER "):
             self.waveform_byte_order = command.rsplit(" ", 1)[1]
         elif upper.startswith(":WAVEFORM:UNSIGNED "):

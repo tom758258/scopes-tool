@@ -50,6 +50,9 @@ def test_segmented_capture_simulate_json_writes_artifacts_and_order(tmp_path, ca
         ":SINGle",
         ":WAVeform:SEGMented:COUNt?",
     ]
+    assert payload["scpi"]["sent"].count(":WAVeform:SEGMented:ALL OFF") == 1
+    all_off_index = payload["scpi"]["sent"].index(":WAVeform:SEGMented:ALL OFF")
+    assert payload["scpi"]["sent"][all_off_index + 1] == ":ACQuire:SEGMented:INDex 1"
     assert payload["scpi"]["sent"][-2:] == [
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",
@@ -86,6 +89,9 @@ def test_segmented_capture_dry_run_is_concrete_and_creates_no_artifacts(tmp_path
         ":SINGle",
         ":WAVeform:SEGMented:COUNt?",
     ]
+    assert payload["scpi"]["planned"].count(":WAVeform:SEGMented:ALL OFF") == 1
+    all_off_index = payload["scpi"]["planned"].index(":WAVeform:SEGMented:ALL OFF")
+    assert payload["scpi"]["planned"][all_off_index + 1] == ":ACQuire:SEGMented:INDex 1"
     assert payload["scpi"]["planned"][-2:] == [
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",

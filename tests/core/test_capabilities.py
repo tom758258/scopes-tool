@@ -107,6 +107,14 @@ def test_segmented_memory_maximum_comes_from_capability_profile(model, maximum):
 
 
 @pytest.mark.parametrize(
+    ("model", "expected"),
+    [("DSOX2004A", False), ("DSOX3024A", False), ("DSOX4024A", True)],
+)
+def test_segmented_waveform_all_support_is_profile_bound(model, expected):
+    assert capabilities_for_model(model).supports_segmented_waveform_all is expected
+
+
+@pytest.mark.parametrize(
     ("model", "bus_count", "modes"),
     [
         ("DSOX2004A", 1, {"can", "i2c", "lin", "spi", "uart"}),

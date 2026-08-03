@@ -28,6 +28,7 @@ from .segmented import (
     segmented_mode_command,
     segmented_mode_query,
     segmented_time_tag_query,
+    segmented_waveform_all_command,
     segmented_waveform_count_query,
     validate_segmented_count,
 )
@@ -203,6 +204,8 @@ def plan_segmented_capture(
         ":SINGle",
         segmented_waveform_count_query(),
     ]
+    if capabilities.supports_segmented_waveform_all:
+        planned.append(segmented_waveform_all_command(False))
     for index in range(1, request.segments + 1):
         planned.extend(
             [segmented_index_command(index), segmented_time_tag_query()]
@@ -373,6 +376,8 @@ def run_segmented_capture(
                     )
 
                 export_count = min(acquired_segments, request.segments)
+                if export_count and capabilities.supports_segmented_waveform_all:
+                    controller.set_waveform_all(False)
                 for index in range(1, export_count + 1):
                     scope.select_segmented_memory(index)
                     time_tag_s = scope.query_segmented_time_tag()
@@ -386,6 +391,7 @@ def run_segmented_capture(
                         )
                     csv_path = output_dir / f"segment_{index:0{width}d}.csv"
                     written_csv = write_capture_csv_file(capture, csv_path)
+                    files.append({"kind": "csv", "path": str(written_csv)})
                     csv_name = relative_manifest_path(written_csv, output_dir)
                     segment_entry = {
                         "index": index,
@@ -399,7 +405,6 @@ def run_segmented_capture(
                     exported_segments += 1
                     manifest["exported_segments"] = exported_segments
                     _write_manifest(manifest, manifest_path)
-                    files.append({"kind": "csv", "path": str(written_csv)})
 
                 final_mode, system_error = _best_effort_final_state(scope, controller)
                 manifest["final_mode"] = final_mode

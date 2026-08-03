@@ -52,6 +52,16 @@ def segmented_time_tag_query() -> str:
     return ":WAVeform:SEGMented:TTAG?"
 
 
+def segmented_waveform_all_command(enabled: bool) -> str:
+    """Build the waveform all-segments setting command."""
+
+    if not isinstance(enabled, bool):
+        raise ParameterValidationError(
+            "segmented waveform all setting must be a boolean."
+        )
+    return f":WAVeform:SEGMented:ALL {'ON' if enabled else 'OFF'}"
+
+
 def segmented_mode_command(mode: str) -> str:
     """Build a validated segmented-memory acquisition-mode command."""
 
@@ -260,6 +270,19 @@ class SegmentedMemoryController:
 
         ensure_segmented_memory_supported(self.capabilities)
         return parse_segmented_time_tag(self.scpi.query(segmented_time_tag_query()))
+
+    def set_waveform_all(self, enabled: bool) -> None:
+        """Set whether waveform queries return all acquired segments."""
+
+        ensure_segmented_memory_supported(self.capabilities)
+        if (
+            self.capabilities is None
+            or not self.capabilities.supports_segmented_waveform_all
+        ):
+            raise ParameterValidationError(
+                "segmented waveform all setting is not supported by this capability profile."
+            )
+        self.scpi.write(segmented_waveform_all_command(enabled))
 
     def query(self) -> SegmentedMemoryQueryResult:
         """Query mode and conditionally available segmented-memory readbacks."""

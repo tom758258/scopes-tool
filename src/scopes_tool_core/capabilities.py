@@ -50,6 +50,7 @@ class ScopeCapabilities:
     serial_bus_count: int = 0
     serial_modes: frozenset[str] = frozenset()
     segmented_max_segments: int = 0
+    supports_segmented_waveform_all: bool = False
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
@@ -219,6 +220,7 @@ _CAPABILITY_PROFILES = {
         supports_wgen=True,
         wgen_scpi_root=":WGEN1",
         segmented_max_segments=1000,
+        supports_segmented_waveform_all=True,
     ),
 }
 

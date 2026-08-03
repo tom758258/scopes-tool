@@ -9,6 +9,7 @@ from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.segmented import (
     segmented_count_command,
     segmented_mode_command,
+    segmented_waveform_all_command,
     parse_segmented_mode,
     validate_segmented_count,
 )
@@ -174,6 +175,20 @@ def test_segmented_disable_only_writes_realtime_mode():
     scope.disable_segmented_memory()
 
     assert backend.history == [segmented_mode_command("realtime")]
+
+
+@pytest.mark.parametrize(
+    ("enabled", "token"), [(True, "ON"), (False, "OFF")]
+)
+def test_segmented_waveform_all_command_builds_boolean_write(enabled, token):
+    assert segmented_waveform_all_command(enabled) == (
+        f":WAVeform:SEGMented:ALL {token}"
+    )
+
+
+def test_segmented_waveform_all_command_rejects_non_boolean():
+    with pytest.raises(ParameterValidationError, match="must be a boolean"):
+        segmented_waveform_all_command(1)
 
 
 def test_segmented_malformed_numeric_response_uses_feature_error():
