@@ -164,6 +164,47 @@ def test_worker_serial_search_accepts_canonical_payloads(tmp_path, command, argu
     assert parsed.bus == 1
 
 
+@pytest.mark.parametrize(
+    "command, arguments, error_fragment",
+    [
+        (
+            "serial-search-spi",
+            {"bus": 1, "mode": "mosi", "data": "0xA5XX", "width": 8},
+            "pattern",
+        ),
+        (
+            "serial-search-can",
+            {
+                "bus": 1,
+                "mode": "id-data",
+                "data": "0x12XX",
+                "data_length": 2,
+                "id": "0x123",
+                "id_mode": "standard",
+            },
+            "id-data",
+        ),
+        (
+            "serial-search-can",
+            {"bus": 1, "mode": "data", "id": "0x800", "id_mode": "standard"},
+            "ID",
+        ),
+    ],
+)
+def test_worker_serial_search_rejects_invalid_cross_field_payloads(
+    tmp_path, command, arguments, error_fragment
+):
+    runtime = _runtime(tmp_path)
+
+    with pytest.raises(OscilloscopeError, match=error_fragment):
+        worker.parse_domain_command(command, arguments, runtime)
+
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()
+
+
 def test_worker_serial_search_rejects_unsupported_bus_before_side_effects(tmp_path):
     runtime = _runtime(tmp_path, "keysight-dsox2004a")
     with pytest.raises(OscilloscopeError, match="Serial bus 2"):

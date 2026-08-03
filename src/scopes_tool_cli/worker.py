@@ -22,6 +22,7 @@ from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 from scopes_tool_core.search import (
     validate_can_data_length,
     validate_can_id_mode,
+    validate_can_search_criteria,
     validate_can_search_mode,
     validate_i2c_pattern_value,
     validate_i2c_search_mode,
@@ -29,6 +30,7 @@ from scopes_tool_core.search import (
     validate_search_qualifier,
     validate_serial_search_bus,
     validate_spi_search_mode,
+    validate_spi_search_pattern_width,
     validate_spi_width,
     validate_uart_data,
     validate_uart_search_mode,
@@ -1705,38 +1707,52 @@ def _normalize_serial_search_worker_arguments(
                 validate_search_qualifier(q)
         elif protocol == "spi":
             validate_spi_search_mode(mode)
+            canonical_data = None
+            canonical_width = None
             if "data" in arguments:
                 data = arguments["data"]
                 if not isinstance(data, str):
                     raise OscilloscopeError(f"{command} argument data must be a string")
-                validate_pattern_hex_x(data, "data")
+                canonical_data = validate_pattern_hex_x(data, "data")
             if "width" in arguments:
                 width = arguments["width"]
                 if isinstance(width, bool) or not isinstance(width, int):
                     raise OscilloscopeError(f"{command} argument width must be an integer")
-                validate_spi_width(width)
+                canonical_width = validate_spi_width(width)
+            validate_spi_search_pattern_width(canonical_data, canonical_width)
         elif protocol == "can":
-            validate_can_search_mode(mode)
+            canonical_mode = validate_can_search_mode(mode)
+            canonical_data = None
+            canonical_data_length = None
+            canonical_id = None
+            canonical_id_mode = None
             if "data" in arguments:
                 data = arguments["data"]
                 if not isinstance(data, str):
                     raise OscilloscopeError(f"{command} argument data must be a string")
-                validate_pattern_hex_x(data, "data")
+                canonical_data = validate_pattern_hex_x(data, "data")
             if "data_length" in arguments:
                 length = arguments["data_length"]
                 if isinstance(length, bool) or not isinstance(length, int):
                     raise OscilloscopeError(f"{command} argument data_length must be an integer")
-                validate_can_data_length(length)
+                canonical_data_length = validate_can_data_length(length)
             if "id" in arguments:
                 cid = arguments["id"]
                 if not isinstance(cid, str):
                     raise OscilloscopeError(f"{command} argument id must be a string")
-                validate_pattern_hex_x(cid, "id")
+                canonical_id = validate_pattern_hex_x(cid, "id")
             if "id_mode" in arguments:
                 id_mode = arguments["id_mode"]
                 if not isinstance(id_mode, str):
                     raise OscilloscopeError(f"{command} argument id_mode must be a string")
-                validate_can_id_mode(id_mode)
+                canonical_id_mode = validate_can_id_mode(id_mode)
+            validate_can_search_criteria(
+                canonical_mode,
+                data=canonical_data,
+                data_length=canonical_data_length,
+                id_val=canonical_id,
+                id_mode=canonical_id_mode,
+            )
     except ParameterValidationError as exc:
         raise OscilloscopeError(str(exc)) from exc
 
