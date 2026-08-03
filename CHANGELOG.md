@@ -19,6 +19,8 @@
   existing succeeded/failed/cancelled lifecycle semantics.
 - Synchronizes segmented-capture export with operation-condition readiness and
   stops issuing SCPI after any segmented-capture read timeout.
+- Preserves segmented-capture read-timeout phase errors over earlier normal
+  deadline errors.
 - Adds the Serial UART Trigger P0 vertical slice through Core, CLI, Worker,
   Simulator, Common v2 JSON, and focused tests. It supports the shared basic
   UART trigger types and data qualifiers without changing Serial P1 decode

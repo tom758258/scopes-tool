@@ -639,7 +639,12 @@ def run_segmented_capture(
                         "segmented capture finished with an instrument system error."
                     )
             except Exception as exc:
-                primary_error = primary_error or exc
+                if session_read_timed_out and isinstance(
+                    exc, SegmentedCaptureTimeout
+                ):
+                    primary_error = exc
+                else:
+                    primary_error = primary_error or exc
                 if controller is not None and target_started and not session_read_timed_out:
                     is_average_rejection = (
                         isinstance(exc, ParameterValidationError)
@@ -666,7 +671,10 @@ def run_segmented_capture(
             manifest["error"] = error_text
             _write_manifest(manifest, manifest_path)
     except Exception as exc:
-        primary_error = primary_error or exc
+        if session_read_timed_out and isinstance(exc, SegmentedCaptureTimeout):
+            primary_error = exc
+        else:
+            primary_error = primary_error or exc
         manifest["status"] = "partial" if exported_segments else "failed"
         manifest["end_time"] = batch_iso_timestamp()
         manifest["acquired_segments"] = acquired_segments

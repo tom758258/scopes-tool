@@ -607,9 +607,10 @@ each successful waveform transfer. The directory also contains a shared
 `manifest.json` and `scpi.log`. A timeout or later error returns non-zero while
 preserving completed CSVs and records `partial` or `failed` status. The command
 does not force a trigger, disable segmented mode, restore state, merge CSVs, or
-perform instrument-side save/export. P0 segmented-mode branches, P1
-configuration, and P2 finite capture/export remain pending DSO-X 4034A USB live
-validation. The Common v2 Worker also exposes the same readiness and
+perform instrument-side save/export. P0 segmented-mode branches and P1
+configuration have passed focused DSO-X 4034A USB live validation. P2 finite
+capture/export remains pending final live validation. The Common v2 Worker also
+exposes the same readiness and
 read-timeout semantics through its strict `segmented-capture` command contract.
 
 Worker usage accepts only these exact argument objects:
