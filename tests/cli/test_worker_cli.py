@@ -52,6 +52,7 @@ from scopes_tool_core.display import (
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.trigger import (
+    OPERATION_CONDITION_RUN_MASK,
     force_trigger_command,
     operation_condition_query,
     single_command,
@@ -1888,7 +1889,12 @@ def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
     assert result["ok"] is True
     assert result["exit_code"] == 0
     assert result["result"]["trigger"]["outcome"] == "natural"
-    assert result["result"]["trigger"]["raw_values"] == ["8", "0"]
+    trigger_values = [
+        int(value) for value in result["result"]["trigger"]["raw_values"]
+    ]
+    assert len(trigger_values) == 2
+    assert trigger_values[0] & OPERATION_CONDITION_RUN_MASK
+    assert not trigger_values[1] & OPERATION_CONDITION_RUN_MASK
     assert result["files"] == [
         {"kind": "csv", "path": str(artifact_path / "capture.csv")},
         {"kind": "metadata", "path": str(artifact_path / "capture_meta.json")},

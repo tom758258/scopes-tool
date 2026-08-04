@@ -7,6 +7,7 @@ from scopes_tool_cli import cli
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.simulator_backend import SimulatorBackend
+from scopes_tool_core.trigger import OPERATION_CONDITION_RUN_MASK
 
 
 def _json_stdout(capsys):
@@ -502,7 +503,12 @@ def test_capture_simulate_wait_trigger_json_reports_trigger_metadata(capsys, tmp
     payload = _json_stdout(capsys)
     assert csv_path.exists()
     assert payload["result"]["trigger"]["outcome"] == "natural"
-    assert payload["result"]["trigger"]["raw_values"] == ["8", "0"]
+    trigger_values = [
+        int(value) for value in payload["result"]["trigger"]["raw_values"]
+    ]
+    assert len(trigger_values) == 2
+    assert trigger_values[0] & OPERATION_CONDITION_RUN_MASK
+    assert not trigger_values[1] & OPERATION_CONDITION_RUN_MASK
     assert payload["scpi"]["sent"][:4] == [
         "*IDN?",
         ":SINGle",

@@ -7,6 +7,10 @@ from scopes_tool_core.simulator_backend import (
     SimulatorBackendError,
 )
 from scopes_tool_core.capabilities import capabilities_for_model_id
+from scopes_tool_core.trigger import (
+    OPERATION_CONDITION_RUI_ENAB_MASK,
+    OPERATION_CONDITION_RUN_MASK,
+)
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -65,6 +69,20 @@ def test_simulator_allows_supported_control_and_word_waveform_commands():
     assert backend.waveform_unsigned is True
     assert backend.query(":WAVeform:PREamble?").startswith("1,0,1000,")
     assert len(backend.query_binary_values(":WAVeform:DATA?", datatype="H")) == 1000
+
+
+def test_simulator_default_operation_condition_sequence_preserves_remote_readiness():
+    backend = SimulatorBackend()
+
+    backend.write(":SINGle")
+
+    assert backend.query(":OPERegister:CONDition?") == str(
+        OPERATION_CONDITION_RUN_MASK | OPERATION_CONDITION_RUI_ENAB_MASK
+    )
+    assert backend.query(":OPERegister:CONDition?") == str(
+        OPERATION_CONDITION_RUI_ENAB_MASK
+    )
+    assert backend.run_state == "stopped"
 
 
 def test_simulator_state_queries_reflect_channel_timebase_and_trigger_writes():

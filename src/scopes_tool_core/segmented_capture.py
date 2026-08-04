@@ -23,6 +23,7 @@ from .errors import OscilloscopeError, ParameterValidationError, WaveformRespons
 from .operations import OperationResult
 from .status import parse_system_error
 from .trigger import (
+    OPERATION_CONDITION_RUI_ENAB_MASK,
     OPERATION_CONDITION_RUN_MASK,
     operation_condition_query,
     parse_operation_condition,
@@ -569,7 +570,13 @@ def run_segmented_capture(
                             operation_condition = parse_operation_condition(
                                 raw_operation_condition
                             )
-                            if not operation_condition & OPERATION_CONDITION_RUN_MASK:
+                            run_stopped = (
+                                operation_condition & OPERATION_CONDITION_RUN_MASK
+                            ) == 0
+                            remote_interface_enabled = (
+                                operation_condition & OPERATION_CONDITION_RUI_ENAB_MASK
+                            ) != 0
+                            if run_stopped and remote_interface_enabled:
                                 ready_confirmed = True
                                 break
                             time.sleep(request.poll_interval_ms / 1000.0)

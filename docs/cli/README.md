@@ -598,7 +598,8 @@ transfer, finite timeout-bounded polling, and the existing waveform decoder.
 `--timeout-ms` is the overall acquisition deadline covering acquired-count and
 operation-condition readiness polling; each polling read uses the remaining
 deadline as its temporary VISA timeout. After the requested count is acquired,
-the workflow waits for the operation-condition RUN bit to clear before export.
+the workflow waits for the operation-condition RUN bit to clear and the remote
+interface enabled bit to be set before export.
 If any segmented-capture SCPI read times out, the workflow stops issuing SCPI on
 that session while preserving completed CSVs, the manifest, and `scpi.log`.
 It sends one `:SINGle`, selects each ready acquired segment, queries its time tag,

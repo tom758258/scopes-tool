@@ -13,6 +13,10 @@ from scopes_tool_core.segmented_capture import (
 )
 from scopes_tool_core.segmented import segmented_waveform_all_command
 from scopes_tool_core.simulator_backend import SimulatorBackend
+from scopes_tool_core.trigger import (
+    OPERATION_CONDITION_RUI_ENAB_MASK,
+    OPERATION_CONDITION_RUN_MASK,
+)
 
 
 def _scope(**kwargs):
@@ -31,7 +35,10 @@ class _AcquiredCountSequenceBackend(SimulatorBackend):
         acquired_counts,
         *,
         firmware="07.20",
-        operation_conditions=(8, 0),
+        operation_conditions=(
+            OPERATION_CONDITION_RUN_MASK | OPERATION_CONDITION_RUI_ENAB_MASK,
+            OPERATION_CONDITION_RUI_ENAB_MASK,
+        ),
     ):
         super().__init__(physical_model_id="keysight-dsox4024a", firmware=firmware)
         self.acquired_counts = list(acquired_counts)
@@ -61,7 +68,10 @@ class _TimeoutTrackingBackend(_AcquiredCountSequenceBackend):
         acquired_counts,
         *,
         firmware="07.20",
-        operation_conditions=(8, 0),
+        operation_conditions=(
+            OPERATION_CONDITION_RUN_MASK | OPERATION_CONDITION_RUI_ENAB_MASK,
+            OPERATION_CONDITION_RUI_ENAB_MASK,
+        ),
     ):
         super().__init__(
             acquired_counts,
@@ -116,7 +126,7 @@ class _ExportVisaTimeoutBackend(_TimeoutTrackingBackend):
         *,
         fail_segment=1,
         acquired_counts=(2,),
-        operation_conditions=(0,),
+        operation_conditions=(OPERATION_CONDITION_RUI_ENAB_MASK,),
     ):
         super().__init__(
             acquired_counts,
@@ -153,7 +163,12 @@ class _ExportVisaTimeoutBackend(_TimeoutTrackingBackend):
 
 
 class _FinalModeVisaTimeoutBackend(_TimeoutTrackingBackend):
-    def __init__(self, *, acquired_counts=(2,), operation_conditions=(0,)):
+    def __init__(
+        self,
+        *,
+        acquired_counts=(2,),
+        operation_conditions=(OPERATION_CONDITION_RUI_ENAB_MASK,),
+    ):
         super().__init__(
             acquired_counts,
             operation_conditions=operation_conditions,
@@ -294,7 +309,7 @@ def test_run_segmented_capture_waits_for_ready_after_count_reaches_target(
     monkeypatch, tmp_path
 ):
     backend = _TimeoutTrackingBackend(
-        [0, 2], operation_conditions=[8, 8, 0]
+        [0, 2], operation_conditions=[4128, 4128, 4112]
     )
     clock = iter([0.0, 0.001, 0.002, 0.003, 0.004, 0.005])
     monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
@@ -322,8 +337,9 @@ def test_run_segmented_capture_waits_for_ready_after_count_reaches_target(
         for index, command in enumerate(backend.history)
         if command == ":OPERegister:CONDition?"
     ]
-    assert condition_indexes
+    assert len(condition_indexes) == 3
     assert last_count < condition_indexes[0] < first_index
+    assert backend.last_operation_condition == 4112
     assert (tmp_path / "segment_0001.csv").exists()
     assert (tmp_path / "segment_0002.csv").exists()
 
@@ -332,12 +348,32 @@ def test_run_segmented_capture_waits_for_ready_after_count_reaches_target(
     polling_timeouts = timeout_events[:-1]
     assert polling_timeouts == sorted(polling_timeouts, reverse=True)
     assert len(polling_timeouts) == 5
+    restore_index = backend.events.index(("set_timeout", 2000))
+    first_index = backend.events.index(("write", ":ACQuire:SEGMented:INDex 1"))
+    assert restore_index < first_index
+
+
+def test_run_segmented_capture_does_not_require_wait_trig_clear(tmp_path):
+    backend = _TimeoutTrackingBackend([2], operation_conditions=[4144])
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["exported_segments"] == 2
+    assert backend.history.count(":OPERegister:CONDition?") == 1
+    assert backend.last_operation_condition == 4144
 
 
 def test_run_segmented_capture_ready_deadline_does_not_export(
     monkeypatch, tmp_path
 ):
-    backend = _TimeoutTrackingBackend([2], operation_conditions=[8, 8])
+    backend = _TimeoutTrackingBackend([2], operation_conditions=[4128, 4128])
     clock = iter([0.0, 0.005, 0.01, 0.03])
     monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
     monkeypatch.setattr(segmented_capture_module.time, "sleep", lambda _: None)
@@ -362,8 +398,15 @@ def test_run_segmented_capture_ready_deadline_does_not_export(
     assert "20 ms" in result.result["error"]
     assert "2 of 2" in result.result["error"]
     assert "not ready" in result.result["error"]
+    assert "read timed out" not in result.result["error"]
     assert backend.timeout == 2000
     assert backend.history[-2:] == [":ACQuire:MODE?", ":SYSTem:ERRor?"]
+    assert result.result["final_mode"] == "segmented"
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["acquired_segments"] == 2
+    assert manifest["exported_segments"] == 0
+    assert manifest["final_mode"] == "segmented"
+    assert manifest["system_error"]["is_error"] is False
     assert not list(tmp_path.glob("segment_*.csv"))
     assert not any(
         command.startswith(":ACQuire:SEGMented:INDex")

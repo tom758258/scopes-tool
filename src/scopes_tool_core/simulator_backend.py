@@ -35,7 +35,7 @@ from .serial import (
     normalize_serial_can_trigger_id_mode,
     validate_serial_can_trigger_data_length,
 )
-from .trigger import OPERATION_CONDITION_RUN_MASK
+from .trigger import OPERATION_CONDITION_RUI_ENAB_MASK, OPERATION_CONDITION_RUN_MASK
 from .wgen import WGEN_FUNCTION_TOKENS, WGEN_LOAD_TOKENS
 
 
@@ -179,7 +179,10 @@ class SimulatorBackend:
     acquisition_points: int = 1000000
     record_length_points: int = 65536
     operation_condition_values: list[int] = field(
-        default_factory=lambda: [OPERATION_CONDITION_RUN_MASK, 0]
+        default_factory=lambda: [
+            OPERATION_CONDITION_RUN_MASK | OPERATION_CONDITION_RUI_ENAB_MASK,
+            OPERATION_CONDITION_RUI_ENAB_MASK,
+        ]
     )
     force_operation_condition_values: list[int] = field(default_factory=lambda: [0])
     operation_condition_index: int = 0

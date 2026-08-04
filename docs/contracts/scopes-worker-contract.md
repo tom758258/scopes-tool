@@ -361,8 +361,9 @@ not integers. `format` must be exactly `byte` or `word`. Channel, segment
 count, point count, and word-format support are validated against the
 startup-bound model capability. Segment counts are 2-250 on 2000X and 2-1000
 on 3000X/4000X. `timeout_ms` and `poll_interval_ms` must be positive. The worker
-uses the same Core overall timeout, operation-condition readiness, and
-segmented-capture read-timeout semantics; the request schema and defaults
+uses the same Core overall timeout, operation-condition acquisition and
+remote-interface readiness, and segmented-capture read-timeout semantics; the
+request schema and defaults
 remain unchanged. The worker does not accept `output_dir`, `output`, `path`,
 `resource`, `model`,
 `firmware`, `simulate`, `live`, `dry_run`, `json`, `log_scpi`, operation flags,
