@@ -202,10 +202,12 @@ Core owns runtime behavior:
   `Oscilloscope.enable_segmented_memory()`, and
   `Oscilloscope.disable_segmented_memory()`. Configuration selects segmented
   mode and an explicit count without starting acquisition. The finite
-  single-channel `segmented-capture` workflow starts one acquisition, polls
-  acquired segments, and writes one host CSV per exported segment plus a shared
-  manifest and SCPI log. Counts are limited to 2-250 on 2000X and 2-1000 on
-  3000X/4000X; actual instrument limits may be lower for a selected memory
+  single-channel `segmented-capture` workflow starts one acquisition, waits for
+  two consecutive RUN-clear and remote-interface-enabled operation-condition
+  samples, queries the acquired count once, and writes one host CSV per exported
+  segment plus a shared manifest and SCPI log. Counts are limited to 2-250 on
+  2000X and 2-1000 on 3000X/4000X; actual instrument limits may be lower for a
+  selected memory
   depth. Average acquisition must be changed to a non-average type by the
   caller before enabling segmented memory. Capture does not restore state or
   disable segmented mode. Availability may depend on an SGM option or license;

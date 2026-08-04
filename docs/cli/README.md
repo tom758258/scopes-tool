@@ -595,11 +595,16 @@ Run a finite segmented capture and export each acquired segment to a host CSV:
 
 `segmented-capture` supports one analog channel, BYTE or WORD waveform
 transfer, finite timeout-bounded polling, and the existing waveform decoder.
-`--timeout-ms` is the overall acquisition deadline covering acquired-count and
-operation-condition readiness polling; each polling read uses the remaining
-deadline as its temporary VISA timeout. After the requested count is acquired,
-the workflow waits for the operation-condition RUN bit to clear and the remote
-interface enabled bit to be set before export.
+`--timeout-ms` is the overall acquisition deadline covering operation-condition
+readiness polling and the post-readiness acquired-count verification. Before
+stable readiness, the workflow polls only `:OPERegister:CONDition?`; each poll
+uses the remaining deadline as its temporary VISA timeout. Readiness requires
+two consecutive samples with the RUN bit clear and the remote-interface-enabled
+bit set, separated by `--poll-interval-ms`; any non-ready sample resets the
+streak. The WAIT TRIG bit does not need to clear. After stable readiness, the
+workflow queries `:WAVeform:SEGMented:COUNt?` once and starts export only when
+the returned count is at least the requested count. A readiness timeout does not
+query the acquired count or attempt partial export.
 If any segmented-capture SCPI read times out, the workflow stops issuing SCPI on
 that session while preserving completed CSVs, the manifest, and `scpi.log`.
 It sends one `:SINGle`, selects each ready acquired segment, queries its time tag,
@@ -611,8 +616,8 @@ does not force a trigger, disable segmented mode, restore state, merge CSVs, or
 perform instrument-side save/export. P0 segmented-mode branches and P1
 configuration have passed focused DSO-X 4034A USB live validation. P2 finite
 capture/export remains pending final live validation. The Common v2 Worker also
-exposes the same readiness and
-read-timeout semantics through its strict `segmented-capture` command contract.
+exposes the same readiness and read-timeout semantics through its strict
+`segmented-capture` command contract.
 
 Worker usage accepts only these exact argument objects:
 

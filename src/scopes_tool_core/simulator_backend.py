@@ -186,6 +186,9 @@ class SimulatorBackend:
     )
     force_operation_condition_values: list[int] = field(default_factory=lambda: [0])
     operation_condition_index: int = 0
+    _last_operation_condition_value: int | None = field(
+        default=None, init=False, repr=False
+    )
     status_byte: int = 0
     standard_event_status: int = 0
     system_options: str = "0"
@@ -494,13 +497,17 @@ class SimulatorBackend:
             self.run_state = {"RUN": "running", "STOP": "stopped", "SINGLE": "single"}[upper[1:]]
             if upper == ":SINGLE":
                 self.operation_condition_index = 0
+                self._last_operation_condition_value = None
                 if self.segmented_mode == "SEGM":
                     self.segmented_acquired_segments = self.segmented_configured_segments
                     self.segmented_selected_segment = 1
                     self.segmented_time_tag_s = 0.0
+            else:
+                self._last_operation_condition_value = None
         elif upper == ":TRIGGER:FORCE":
             self.operation_condition_values = list(self.force_operation_condition_values)
             self.operation_condition_index = 0
+            self._last_operation_condition_value = None
         elif upper.startswith(":WAVEFORM:SOURCE CHANNEL"):
             self.waveform_source = self._validate_channel(
                 int(command.rsplit("CHANnel", 1)[1])
@@ -1762,11 +1769,12 @@ class SimulatorBackend:
 
     def _operation_condition_value(self) -> int:
         if self.run_state != "single":
-            return 0
+            return self._last_operation_condition_value or 0
         if not self.operation_condition_values:
             return 0
         index = min(self.operation_condition_index, len(self.operation_condition_values) - 1)
         value = int(self.operation_condition_values[index])
+        self._last_operation_condition_value = value
         if self.operation_condition_index < len(self.operation_condition_values) - 1:
             self.operation_condition_index += 1
         elif not value & OPERATION_CONDITION_RUN_MASK:

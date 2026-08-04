@@ -11,15 +11,15 @@
   profile limits before segmented writes; acquisition, capture, and export
   remain out of scope.
 - Adds the finite single-channel `segmented-capture` workflow with bounded
-  acquired-segment polling, per-segment host CSV export, a shared manifest and
-  SCPI log, and partial-artifact retention on failure. It has no live hardware
-  validation yet.
+  operation-condition readiness polling, per-segment host CSV export, a shared
+  manifest and SCPI log, and partial-artifact retention on failure. It has no
+  live hardware validation yet.
 - Exposes `segmented-capture` through the Common v2 Scopes Worker with strict
   startup-bound validation, a Worker-owned artifact child directory, and
   existing succeeded/failed/cancelled lifecycle semantics.
-- Synchronizes segmented-capture export with operation-condition and
-  remote-interface readiness, and stops issuing SCPI after any segmented-capture
-  read timeout.
+- Stabilizes segmented-capture export by requiring two consecutive RUN-clear,
+  remote-interface-enabled operation-condition samples before one acquired-count
+  query, and stops issuing SCPI after any segmented-capture read timeout.
 - Preserves segmented-capture read-timeout phase errors over earlier normal
   deadline errors.
 - Adds the Serial UART Trigger P0 vertical slice through Core, CLI, Worker,

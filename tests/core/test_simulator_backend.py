@@ -74,6 +74,7 @@ def test_simulator_allows_supported_control_and_word_waveform_commands():
 def test_simulator_default_operation_condition_sequence_preserves_remote_readiness():
     backend = SimulatorBackend()
 
+    assert backend.query(":OPERegister:CONDition?") == "0"
     backend.write(":SINGle")
 
     assert backend.query(":OPERegister:CONDition?") == str(
@@ -83,6 +84,11 @@ def test_simulator_default_operation_condition_sequence_preserves_remote_readine
         OPERATION_CONDITION_RUI_ENAB_MASK
     )
     assert backend.run_state == "stopped"
+    assert backend.query(":OPERegister:CONDition?") == str(
+        OPERATION_CONDITION_RUI_ENAB_MASK
+    )
+    backend.write(":STOP")
+    assert backend.query(":OPERegister:CONDition?") == "0"
 
 
 def test_simulator_state_queries_reflect_channel_timebase_and_trigger_writes():

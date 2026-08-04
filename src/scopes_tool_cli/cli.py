@@ -2979,7 +2979,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--poll-interval-ms",
         type=_positive_int,
         default=100,
-        help="acquired-segment polling interval in milliseconds",
+        help="operation-condition readiness polling interval in milliseconds",
     )
     segmented_capture_parser.add_argument(
         "--output-dir",

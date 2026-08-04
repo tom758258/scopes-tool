@@ -41,20 +41,34 @@ def test_segmented_capture_simulate_json_writes_artifacts_and_order(tmp_path, ca
     assert (tmp_path / "scpi.log").exists()
     assert (tmp_path / "segment_0001.csv").exists()
     assert (tmp_path / "segment_0002.csv").exists()
-    assert payload["scpi"]["sent"][:7] == [
+    assert payload["scpi"]["sent"][:10] == [
         "*IDN?",
         ":ACQuire:MODE?",
         ":ACQuire:TYPE?",
         ":ACQuire:MODE SEGMented",
         ":ACQuire:SEGMented:COUNt 2",
         ":SINGle",
+        ":OPERegister:CONDition?",
+        ":OPERegister:CONDition?",
+        ":OPERegister:CONDition?",
         ":WAVeform:SEGMented:COUNt?",
     ]
     assert payload["scpi"]["sent"].count(":WAVeform:SEGMented:ALL OFF") == 0
-    readiness_index = payload["scpi"]["sent"].index(":OPERegister:CONDition?")
+    assert payload["scpi"]["sent"].count(":WAVeform:SEGMented:COUNt?") == 1
+    readiness_indexes = [
+        index
+        for index, command in enumerate(payload["scpi"]["sent"])
+        if command == ":OPERegister:CONDition?"
+    ]
+    count_index = payload["scpi"]["sent"].index(
+        ":WAVeform:SEGMented:COUNt?"
+    )
     first_index = payload["scpi"]["sent"].index(":ACQuire:SEGMented:INDex 1")
-    assert readiness_index > 6
-    assert readiness_index < first_index
+    assert len(readiness_indexes) == 3
+    assert readiness_indexes[-1] < count_index < first_index
+    assert payload["result"]["polling"]["command"] == ":OPERegister:CONDition?"
+    assert "two consecutive" in payload["result"]["polling"]["runtime_behavior"]
+    assert "COUNt? once" in payload["result"]["polling"]["runtime_behavior"]
     assert payload["scpi"]["sent"][-2:] == [
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",
@@ -82,25 +96,30 @@ def test_segmented_capture_dry_run_is_concrete_and_creates_no_artifacts(tmp_path
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["scpi"]["sent"] == []
-    assert payload["scpi"]["planned"][:7] == [
+    assert payload["scpi"]["planned"][:8] == [
         "*IDN?",
         ":ACQuire:MODE?",
         ":ACQuire:TYPE?",
         ":ACQuire:MODE SEGMented",
         ":ACQuire:SEGMented:COUNt 2",
         ":SINGle",
+        ":OPERegister:CONDition?",
         ":WAVeform:SEGMented:COUNt?",
     ]
     assert payload["scpi"]["planned"].count(":WAVeform:SEGMented:ALL OFF") == 0
     readiness_index = payload["scpi"]["planned"].index(":OPERegister:CONDition?")
+    count_index = payload["scpi"]["planned"].index(
+        ":WAVeform:SEGMented:COUNt?"
+    )
     first_index = payload["scpi"]["planned"].index(":ACQuire:SEGMented:INDex 1")
-    assert readiness_index > 6
-    assert readiness_index < first_index
+    assert readiness_index < count_index < first_index
     assert payload["scpi"]["planned"][-2:] == [
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",
     ]
-    assert payload["result"]["polling"]["runtime_behavior"]
+    assert payload["result"]["polling"]["command"] == ":OPERegister:CONDition?"
+    assert "two consecutive" in payload["result"]["polling"]["runtime_behavior"]
+    assert "COUNt? once" in payload["result"]["polling"]["runtime_behavior"]
     assert not output_dir.exists()
 
 

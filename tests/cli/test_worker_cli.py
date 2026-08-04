@@ -1947,6 +1947,8 @@ def test_worker_executes_segmented_capture_with_domain_child_artifacts(tmp_path)
     assert result["ok"] is True
     assert result["result"]["operation"] == "segmented-capture"
     assert result["result"]["status"] == "completed"
+    assert result["result"]["polling"]["command"] == ":OPERegister:CONDition?"
+    assert "two consecutive" in result["result"]["polling"]["runtime_behavior"]
     assert (domain_dir / "manifest.json").exists()
     assert (domain_dir / "segment_0001.csv").exists()
     assert (domain_dir / "segment_0002.csv").exists()
@@ -1957,6 +1959,10 @@ def test_worker_executes_segmented_capture_with_domain_child_artifacts(tmp_path)
         {"kind": "csv", "path": str(domain_dir / "segment_0002.csv")},
     ]
     assert scpi_log.count(":SINGle") == 1
+    assert scpi_log.count(":WAVeform:SEGMented:COUNt?") == 1
+    assert scpi_log.rindex(":OPERegister:CONDition?") < scpi_log.index(
+        ":WAVeform:SEGMented:COUNt?"
+    )
     assert ":WAVeform:SEGMented:ALL OFF" not in scpi_log
 
 
