@@ -151,12 +151,12 @@ Current implemented scope:
   search mode; query the current search event count; and select search events with `search-state`,
   `search-mode`, `search-count`, and `search-event`.
 - Configure/query common instrument-side SAVE settings and start image or
-  waveform saves with the Save/Export Pack v1 commands. These commands make the
+  waveform saves with the instrument-side save commands. These commands make the
   oscilloscope write to its own current save directory or storage device; they
   do not create host-side files.
 - Query or configure the option-dependent built-in DEMO subsystem with
   `demo-query`, `demo-output`, `demo-function`, and `demo-phase`.
-- Query or configure WGEN Basic P1 output, function, frequency, amplitude,
+- Query or configure waveform generator output, function, frequency, amplitude,
   offset, and load with the `wgen-*` commands.
 - Configure or query basic UART, I2C, SPI, and CAN serial decode settings with
   `serial-uart`, `serial-i2c`, `serial-spi`, and `serial-can`.
@@ -188,8 +188,8 @@ does not perform return-to-local behavior. State-changing commands are exposed
 only through explicit CLI commands; `doctor`, `smoke`, and `acquisition-check`
 do not call the new cursor, holdoff, autoscale, setup, statistics, or FFT paths.
 
-No acquisition run-state query is currently exposed. `:RSTate?` timed out on
-the DSO-X 4024A used for validation and is not used by the CLI.
+No acquisition run-state query is currently exposed. `:RSTate?` is not used by
+the CLI.
 
 ## Development
 
@@ -236,7 +236,7 @@ usable vendor backend.
 
 Commands that accept instrument connections also accept `--json`, `--simulate`,
 `--dry-run`, `--model`, and `--live`. Use `--dry-run` to validate arguments and
-inspect planned SCPI without opening VISA or writing files; add `--json` when
+inspect generated SCPI without opening VISA or writing files; add `--json` when
 automation needs the machine-readable payload. Use `--simulate --json` to run
 against the deterministic hardware-free simulator; capture workflows write fake
 output files for offline validation. JSON payloads include `schema_version: 2`
@@ -372,7 +372,7 @@ hit:
 .\.venv\Scripts\scopes-tool.exe check-error --resource "$env:SCOPES_TOOL_RESOURCE" --all --log-scpi
 ```
 
-Use the low-risk System/Status Pack v1 primitives in dry-run or simulation:
+Use the low-risk system and status commands in dry-run or simulation:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe system-clear-status --dry-run --json
@@ -394,13 +394,12 @@ trimmed comma-separated tokens; a `0` response remains `raw: "0"` with an
 `system-standard-event` is a destructive event-register read: `*ESR?` clears
 the events it returns according to SCPI behavior. `system-operation-status`
 uses `:OPERegister:CONDition?`; `:RSTate?` remains intentionally unsupported.
-Use `check-error` to read or drain `:SYSTem:ERRor?`; this pack does not replace
+Use `check-error` to read or drain `:SYSTem:ERRor?`; these commands do not replace
 that command. The CLI keeps its normal one-entry system-error post-check after
-each pack command.
+each command.
 
-This pack has hardware-free Core, CLI, simulator, and worker coverage only.
-No live hardware validation was performed, and no WebUI runtime behavior was
-added.
+These commands use the shared Core, CLI, simulator, and Worker paths and add no
+WebUI runtime behavior.
 
 ### Safe Cleanup Profiles
 
@@ -572,8 +571,8 @@ Query or explicitly configure segmented-memory acquisition:
 ```
 
 The `segmented-memory` command supports query, enable/count, and disable for
-registered Keysight 2000X, 3000X, and 4000X profiles. Query keeps the P0
-conditional readback behavior: configured and acquired counts are queried only
+registered Keysight 2000X, 3000X, and 4000X profiles. Configured and acquired
+counts are queried only
 in segmented mode, and selected index/time tag are queried only when acquired
 segments are nonzero. Enable sends `:ACQuire:TYPE?` first, rejects Average
 acquisition before any segmented write, then sends segmented mode and count.
@@ -581,10 +580,8 @@ Counts are 2-250 on 2000X and 2-1000 on 3000X/4000X; the actual instrument
 maximum may be lower for the selected memory depth. Disable sends only
 `:ACQuire:MODE RTIMe` and does not reset the configured count. These commands
 do not start acquisition, capture waveform data, or export artifacts.
-Availability may depend on an SGM option or license. DSO-X 4034A USB live
-validation passed for the P0 realtime query branch; P0 segmented-mode
-conditional query branches and P1 enable/count/disable configuration remain
-pending live validation.
+Availability may depend on an SGM option or license; capability support does not
+claim that the option is installed.
 
 Run a finite segmented capture and export each acquired segment to a host CSV:
 
@@ -613,9 +610,7 @@ each successful waveform transfer. The directory also contains a shared
 `manifest.json` and `scpi.log`. A timeout or later error returns non-zero while
 preserving completed CSVs and records `partial` or `failed` status. The command
 does not force a trigger, disable segmented mode, restore state, merge CSVs, or
-perform instrument-side save/export. P0 segmented-mode branches and P1
-configuration have passed focused DSO-X 4034A USB live validation. P2 finite
-capture/export remains pending final live validation. The Common v2 Worker also
+perform instrument-side save/export. The Common v2 Worker also
 exposes the same readiness and read-timeout semantics through its strict
 `segmented-capture` command contract.
 
@@ -668,7 +663,7 @@ the same read-only `result.channels` shape.
 
 The `channel-display` command first queries `*IDN?` so the channel number can be
 validated against the detected model before any channel display command is sent.
-It prints the planned change or query, then performs one `:SYSTem:ERRor?`
+It prints the requested change or query, then performs one `:SYSTem:ERRor?`
 post-check. `--query` only reads back the current display state with
 `:CHANnel<n>:DISPlay?`; it should not change the oscilloscope screen.
 
@@ -790,9 +785,8 @@ waveform display data and resets associated measurements. Display persistence
 accepts `minimum`, `infinite`, or finite seconds from `0.1` through `60.0`.
 Waveform intensity accepts integer values from `0` through `100`.
 `display-vectors` supports query and setting ON only; setting OFF is not part
-of this common v1 surface. `display-persistence-clear` is intentionally not
-implemented in this common pack; it may be considered later as a separately
-guarded 2000X-only command with its own validation plan.
+of this common surface. `display-persistence-clear` is not supported in this
+common command set.
 
 Set, clear, or query display annotations:
 
@@ -900,7 +894,7 @@ configure surface is the documented common `CHANnel<n>`, `EXTernal`, and
 analog channels are checked against the selected model profile. It does not
 configure external level/range or WGEN, WMOD, digital/MSO sources. Query JSON
 preserves `raw_source` and normalizes only analog-channel, external, or line;
-`NONE`, WaveGen, digital, unsupported, and future readbacks return null
+`NONE`, WaveGen, digital, unsupported, and unknown readbacks return null
 normalized source fields without failing solely for that readback.
 
 Worker usage accepts only canonical JSON:
@@ -916,11 +910,9 @@ Worker validation requires exactly one operation, lowercase `external` or
 `line`, and a non-boolean integer analog channel within the selected model.
 Query/configure mixes, `query: false`, aliases, camelCase keys, unknown keys,
 uppercase source values, and unsupported source values are rejected before
-enqueue, artifact creation, simulator/VISA session open, or SCPI. This v1
-implementation has hardware-free Core/CLI/simulator/worker coverage only;
-live hardware, LAN, and worker live validation have not been run.
+enqueue, artifact creation, simulator/VISA session open, or SCPI.
 
-Phase 13C - Edge Trigger Slope and Analog Level v1 adds two independent
+Edge Trigger slope and analog level support adds two independent
 commands. `trigger-edge-slope` accepts exactly one of `--query` or
 `--slope positive|negative|either|alternate`:
 
@@ -961,11 +953,10 @@ worker JSON forms are `{"query":true}` or
 Workers reject unknown/alias keys, aliases, query/configure mixes, uppercase
 or undocumented slope values, invalid or boolean channel values, and
 non-finite/non-numeric levels before enqueue, artifacts, simulator/VISA open,
-or SCPI. The documented DSOX2004A, DSOX3024A, DSOX4024A, and DSOX4034A scope
-is hardware-free only; live hardware, LAN, and worker-live validation have not
-run. External, Line, WaveGen, WMOD, and digital/MSO levels are excluded.
+or SCPI. External, Line, WaveGen, WMOD, and digital/MSO levels are excluded.
 
-Phase 14 adds two independent External-input controls. `external-trigger-range`
+External Trigger range and External Edge level support provides two independent
+controls. `external-trigger-range`
 accepts exactly one of `--query` or `--range-volts <finite-positive-number>`:
 
 ```powershell
@@ -978,7 +969,7 @@ query or configure `:EXTernal:PROBe`, change Edge source/mode/level, or alter
 acquisition state. Local validation accepts any finite positive range and does
 not restrict input to 1.6 V or 8 V. The manuals document 8 V at 1:1 probe
 attenuation for 2000X/3000X, and 1.6 V or 8 V at 1:1 for 4000X. Because this
-phase does not inspect probe attenuation, the instrument and its error queue
+command does not inspect probe attenuation, the instrument and its error queue
 remain authoritative for actual model-, firmware-, probe-, and hardware-valid
 range selection. The simulator enforces only finite-positive input and does not
 emulate every model/probe-dependent range rejection.
@@ -1005,10 +996,10 @@ for `trigger-edge-external-level`. Workers reject empty arguments,
 `query: false`, query/configure mixes, unknown or alias keys, booleans,
 non-numeric and non-finite values, and zero/negative External ranges before
 enqueue, artifact creation, simulator/VISA open, or SCPI. These target
-DSOX2004A, DSOX3024A, DSOX4024A, and DSOX4034A paths are hardware-free only;
-live hardware, LAN, and worker-live validation have not been run.
+DSOX2004A, DSOX3024A, DSOX4024A, and DSOX4034A paths retain the documented
+analog and external-source restrictions.
 
-Phase 15 — External Trigger Input Settings v1 adds three independent common
+External Trigger input settings provide three independent common
 DSO-X 2000X/3000X/4000X commands. `external-trigger-probe` accepts exactly
 one of `--query` or `--attenuation <finite-positive-number>` and sends only
 `:EXTernal:PROBe?` or `:EXTernal:PROBe <attenuation>`. It does not apply a
@@ -1021,7 +1012,7 @@ or `:EXTernal:UNITs AMPere`. `external-trigger-settings` is query-only and
 requires explicit `--query`; it sends one `:EXTernal?` query rather than four
 separate queries. Its JSON result preserves `raw_response` and normalizes
 known probe attenuation, range value, units, and BWL readback fields. Units
-readbacks accept `VOLT`, `AMP`, and `AMPere`; unknown future readbacks are
+readbacks accept `VOLT`, `AMP`, and `AMPere`; unknown readbacks are
 preserved without being presented as configure support.
 
 Canonical worker JSON is `{"query":true}` or `{"attenuation":10}` for
@@ -1036,8 +1027,7 @@ for common high-frequency rejection), discover AutoProbe, query probe
 type, convert range/level values, modify trigger source/mode, or control
 acquisition. Real firmware may relate these settings, but the library issues
 no compensating writes; the simulator stores probe, units, range, and External
-Edge level independently to detect unintended side effects. Hardware, LAN, and
-worker-live validation have not been run.
+Edge level independently to detect unintended side effects.
 
 Configure or query common trigger general settings:
 
@@ -1068,11 +1058,7 @@ missing configure options when not querying.
 These commands are explicit one-shot state changes or queries. They do not
 change trigger holdoff, do not add generic trigger settings APIs, do not run,
 stop, single, force trigger, wait for trigger, capture waveform data, or change
-WebUI runtime behavior. This v1 package has hardware-free CLI/Core/simulator
-and worker validation only; live CLI, worker live, LAN, WebUI runtime, DSO-X
-2000X/3000X/4024A/4034A live validation, and prior trigger pack live status
-changes have not been run or made. Phase 10 `trigger-edge` live validation
-remains pending and is not abandoned.
+WebUI runtime behavior.
 
 Worker usage:
 
@@ -1104,15 +1090,15 @@ Set or query fixed trigger holdoff:
 
 `trigger-holdoff --seconds` is an explicit state-changing command. It disables
 random holdoff with `:TRIGger:HOLDoff:RANDom OFF`, then sends
-`:TRIGger:HOLDoff <seconds>`. Query mode sends `:TRIGger:HOLDoff?`. The v1
-range is `40e-9` through `10.0` seconds. `doctor`, `smoke`, and
+`:TRIGger:HOLDoff <seconds>`. Query mode sends `:TRIGger:HOLDoff?`. The
+supported range is `40e-9` through `10.0` seconds. `doctor`, `smoke`, and
 `acquisition-check` never run `trigger-holdoff`.
 
 Worker JSON for `trigger-holdoff` accepts only `{"query": true}` or
 `{"seconds": 0.000001}`. Empty arguments, `query: false`, query combined with
 seconds, string/boolean/null seconds, unknown fields, and holdoff mode aliases
 are rejected before enqueue, artifact creation, simulator/VISA session open, or
-SCPI. Random holdoff and minimum/maximum holdoff commands are not implemented.
+SCPI. Random holdoff and minimum/maximum holdoff commands are not supported.
 
 Configure or query Keysight Edge Trigger Coupling and Reject filter settings with the canonical `trigger-edge-coupling` and `trigger-edge-reject` commands:
 
@@ -1136,7 +1122,11 @@ Each command rejects `--query` combined with configure options and rejects missi
 Changing Edge Trigger coupling may affect the reject filter readback, and changing reject-filter may affect the coupling readback on the real instrument. The system does not attempt to force both simultaneously, automatically restore, or add hidden corrective/extra SCPI commands. Each command configures or queries only its own SCPI setting, and the simulator does not emulate all hardware coupling side effects.
 
 **Distinction from existing commands**:
-The Phase 11 common command `trigger-hf-reject` uses `:TRIGger:HFReject` and represents a general high-frequency reject filter setting. The new `trigger-edge-reject` command is specific to the Edge Trigger surface and operates through the separate `:TRIGger:EDGE:REJect` path. These commands are independent and do not redirect or replace each other.
+The common `trigger-hf-reject` command uses `:TRIGger:HFReject` and represents
+a general high-frequency reject filter setting. The `trigger-edge-reject`
+command is specific to the Edge Trigger surface and operates through the
+separate `:TRIGger:EDGE:REJect` path. These commands are independent and do
+not redirect or replace each other.
 
 Worker usage:
 
@@ -1170,11 +1160,10 @@ polarity and the selected pulse-width qualifier. Range configure maps
 and level responses and tolerates current instrument state such as digital,
 external, or `NONE` source readback.
 
-This slice is analog-channel-only for configure mode. It does not run, stop,
-single, force trigger, wait for a trigger, capture waveform data, or implement
+This command is analog-channel-only for configure mode. It does not run, stop,
+single, force trigger, wait for a trigger, capture waveform data, or support
 pattern, delay, TV, USB, serial bus, digital/MSO, zone, or other trigger types.
-Hardware-free tests cover this command; broader live validation remains opt-in
-and model/transport-specific.
+The command is limited to the documented analog-channel trigger surface.
 
 Worker usage:
 
@@ -1205,12 +1194,10 @@ LOW/HIGH levels only when the source readback safely parses as an analog
 are preserved in JSON with `channel`, `low_level_volts`, and
 `high_level_volts` set to `null`.
 
-This slice is analog-channel-only for configure mode. It does not run, stop,
-single, force trigger, wait for a trigger, capture waveform data, or implement
+This command is analog-channel-only for configure mode. It does not run, stop,
+single, force trigger, wait for a trigger, capture waveform data, or support
 generic trigger configuration, transition, pattern, search, wait, force,
-run/stop, capture, waveform, or WebUI runtime behavior. Hardware-free tests
-cover the CLI, Core, simulator, and worker paths; live hardware validation has
-not been run for `trigger-runt`.
+run/stop, capture, waveform, or WebUI runtime behavior.
 
 Worker usage:
 
@@ -1244,13 +1231,10 @@ analog `CHAN<n>` or `CHANnel<n>` source. Non-analog or unrecognized source
 readbacks are preserved in JSON with `channel`, `low_level_volts`, and
 `high_level_volts` set to `null`.
 
-This v1 slice is analog-channel-only for configure mode. It does not configure
+This command is analog-channel-only for configure mode. It does not configure
 digital/MSO or external transition sources, add aliases, run, stop, single,
-force trigger, wait for a trigger, capture waveform data, or implement generic
-trigger-tree behavior. Hardware-free tests cover the CLI, Core, simulator, and
-worker paths. Live CLI validation, worker live validation, LAN validation,
-WebUI validation, DSO-X 2000X/3000X/4024A/4034A live validation, digital/MSO
-source validation, and broader trigger-tree validation have not been run.
+force trigger, wait for a trigger, capture waveform data, or support generic
+trigger-tree behavior.
 
 Worker usage:
 
@@ -1269,7 +1253,7 @@ the canonical `trigger-delay` command:
 .\.venv\Scripts\scopes-tool.exe trigger-delay --simulate --json --query
 ```
 
-`trigger-delay` v1 configures and queries the Keysight Edge Then Edge / Delay
+`trigger-delay` configures and queries the Keysight Edge Then Edge / Delay
 trigger using `:TRIGger:MODE DELay` and the `:TRIGger:DELay:*` SCPI family.
 Configure mode is state-changing and DSO analog-channel-only: it sets an
 analog arm source channel, arm slope, delay time, Nth trigger edge count,
@@ -1287,10 +1271,7 @@ Query mode reads `:TRIGger:MODE?`,
 digital or unknown source state; configure mode does not accept digital,
 external, level-volts, threshold, source-alias, or generic trigger-tree
 arguments. Every live or simulated command performs one `:SYSTem:ERRor?`
-post-check. This slice has hardware-free CLI, Core, simulator, and worker
-validation only; no live hardware validation, LAN validation, worker live
-validation, DSO-X 2000X/3000X/4024A/4034A live validation, or WebUI runtime
-validation is implied. It does not add run, stop, single, force-trigger,
+post-check. It does not add run, stop, single, force-trigger,
 wait-trigger, or capture integration.
 
 Worker usage:
@@ -1310,13 +1291,13 @@ canonical `trigger-setup-hold` command:
 .\.venv\Scripts\scopes-tool.exe trigger-setup-hold --simulate --json --query
 ```
 
-`trigger-setup-hold` v1 configures and queries the Keysight Setup and Hold
+`trigger-setup-hold` configures and queries the Keysight Setup and Hold
 trigger using `:TRIGger:MODE SHOLd` and the `:TRIGger:SHOLd:*` SCPI family.
 Configure mode is state-changing and DSO analog-channel-only: it sets analog
 clock and data source channels, clock slope, setup time, and hold time. Public
 slope values are only `positive` and `negative`; aliases such as `pos`, `neg`,
 `rising`, and `falling` are rejected. `--setup-time` and `--hold-time` are
-plain seconds values and must be positive finite numbers. v1 does not parse
+plain seconds values and must be positive finite numbers. It does not parse
 time suffixes.
 
 Query mode reads `:TRIGger:MODE?`,
@@ -1333,11 +1314,11 @@ configure options, non-integer channels, channels outside the selected model
 profile, digital/MSO source aliases such as `D0`, `DIG0`, `digital0`, `pod`, or
 `bus`, unknown source aliases, invalid slopes, and non-finite, zero, negative,
 or nonnumeric setup/hold times before instrument access. MSO/digital and
-external setup-hold sources are intentionally unsupported in v1 even though
+external setup-hold sources are intentionally unsupported even though
 the instrument SCPI family may support digital sources on MSO models. This
-command does not implement threshold/level convenience helpers, run, stop,
-single, force trigger, wait-trigger, capture integration, actual
-signal-trigger validation, or a generic trigger-tree framework.
+command does not support threshold/level convenience helpers, run, stop,
+single, force trigger, wait-trigger, capture integration, signal-trigger
+acquisition, or a generic trigger-tree framework.
 
 Worker usage:
 
@@ -1347,11 +1328,7 @@ Worker usage:
 ```
 
 Worker JSON uses canonical keys `setup_time` and `hold_time`, matching the CLI
-`--setup-time` and `--hold-time` options. Focused DSO-X 4034A USB CLI live
-validation passed on 2026-07-08. Worker live, LAN, WebUI, DSO-X
-2000X/3000X/4024A live validation, additional DSO-X 4034A live validation,
-MSO/digital source validation, actual signal-trigger behavior, and broader
-trigger-tree validation have not been run for `trigger-setup-hold`.
+`--setup-time` and `--hold-time` options.
 
 Configure or query DSO analog-channel Nth Edge Burst trigger settings with the
 canonical `trigger-edge-burst` command:
@@ -1365,7 +1342,7 @@ canonical `trigger-edge-burst` command:
 .\.venv\Scripts\scopes-tool.exe trigger-edge-burst --simulate --json --query
 ```
 
-`trigger-edge-burst` v1 configures and queries the Keysight Nth Edge Burst
+`trigger-edge-burst` configures and queries the Keysight Nth Edge Burst
 trigger using `:TRIGger:MODE EBURst`,
 `:TRIGger:EBURst:SOURce`, `:TRIGger:EBURst:SLOPe`,
 `:TRIGger:EBURst:COUNt`, and `:TRIGger:EBURst:IDLE`.
@@ -1379,7 +1356,7 @@ Query mode reads EBURst mode/source/slope/count/idle fields. It reads analog
 edge level only when the source readback safely parses as analog `CHAN<n>` or
 `CHANnel<n>`. Digital, `NONE`, and unknown source readbacks are preserved in
 raw fields and do not fail query solely because the current source is outside
-this v1 configure surface.
+this configure surface.
 
 Worker usage:
 
@@ -1389,15 +1366,14 @@ Worker usage:
 .\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-edge-burst --arguments-json "{\"source_channel\":1,\"slope\":\"positive\",\"count\":3,\"idle_time\":0.000001,\"level_volts\":0.5}" --json
 ```
 
-Worker support has hardware-free validation only. It accepts only `query`,
-`source_channel`, `slope`, `count`, `idle_time`, and optional `level_volts`;
+Worker accepts only `query`, `source_channel`, `slope`, `count`, `idle_time`,
+and optional `level_volts`;
 aliases such as `channel`, `source`, `edge_count`, `idle_time_seconds`,
 `time_seconds`, `trigger_level`, and `level` are not accepted. Focused DSO-X
-4034A USB CLI live validation passed on 2026-07-09. Worker live, LAN, WebUI,
-DSO-X 2000X/3000X/4024A, additional DSO-X 4034A, MSO/digital source
-validation, actual signal-trigger behavior, broader trigger-tree behavior, and
-capture/wait-trigger/run/stop/single workflow integration have not been run or
-implemented for `trigger-edge-burst`.
+4034A behavior, additional model support, MSO/digital source configuration,
+actual signal-trigger behavior, broader trigger-tree behavior, and
+capture/wait-trigger/run/stop/single workflow integration are outside this
+command.
 
 Configure or query DSO analog-channel basic TV / video trigger settings with
 the canonical `trigger-tv` command:
@@ -1411,7 +1387,7 @@ the canonical `trigger-tv` command:
 .\.venv\Scripts\scopes-tool.exe trigger-tv --simulate --json --query
 ```
 
-`trigger-tv` v1 configures and queries the common Keysight TV trigger subtree
+`trigger-tv` configures and queries the common Keysight TV trigger subtree
 using `:TRIGger:MODE TV`, `:TRIGger:TV:SOURce`,
 `:TRIGger:TV:STANdard`, `:TRIGger:TV:MODE`, optional
 `:TRIGger:TV:LINE`, and `:TRIGger:TV:POLarity`. Configure mode is
@@ -1420,7 +1396,7 @@ state-changing and DSO analog-channel-only: it accepts `--source-channel`,
 `--polarity positive|negative`, and optional `--line` only for line modes.
 Extended video standards, UDTV commands, 3000X/4000X-only `LINE` mode,
 digital/MSO, external, USB, NFC, serial/bus, and zone trigger configuration
-are not part of this v1 surface.
+are not part of this command.
 
 Worker usage:
 
@@ -1430,15 +1406,11 @@ Worker usage:
 .\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-tv --arguments-json "{\"source_channel\":1,\"standard\":\"ntsc\",\"mode\":\"line-field1\",\"line\":20,\"polarity\":\"negative\"}" --json
 ```
 
-Worker support has hardware-free validation only. It accepts only `query`,
+Worker accepts only `query`,
 `source_channel`, `standard`, `mode`, `line`, and `polarity`; aliases such as
 `channel`, `source`, `tv_source`, `tv_standard`, `trigger_standard`, `tv_mode`,
 `trigger_mode`, `line_number`, `field`, `pol`, `trigger_polarity`,
 `polarity_raw`, `sourceChannel`, and `source_channel_number` are not accepted.
-Live CLI, worker live, LAN, WebUI, DSO-X 2000X/3000X/4024A/4034A live
-validation, MSO/digital source validation, extended video/UDTV, actual
-signal-trigger behavior, and capture/wait-trigger/run/stop/single workflow
-integration have not been run or implemented for `trigger-tv`.
 
 Configure or query DSO analog ASCII pattern trigger settings with the canonical
 `trigger-pattern` command:
@@ -1450,7 +1422,7 @@ Configure or query DSO analog ASCII pattern trigger settings with the canonical
 .\.venv\Scripts\scopes-tool.exe trigger-pattern --simulate --json --query
 ```
 
-`trigger-pattern` v1 configures and queries the Keysight Pattern trigger using
+`trigger-pattern` configures and queries the Keysight Pattern trigger using
 the DSO analog ASCII entered-pattern surface only. Configure mode is
 state-changing and sends `:TRIGger:MODE PATTern`,
 `:TRIGger:PATTern:FORMat ASCii`, `:TRIGger:PATTern "<pattern>"`, and
@@ -1466,14 +1438,10 @@ readbacks such as `ASC`/`ASCii` to `ascii`, `HEX` to `hex`, and
 `ENT`/`ENTered` to `entered`, while preserving raw pattern response,
 edge-source, and edge readback fields.
 
-This v1 slice does not support HEX configure mode, digital/MSO pattern
+This command does not support HEX configure mode, digital/MSO pattern
 configuration, `R`/`F`, edge source/edge configure parameters, duration
 qualifiers, pattern range commands, source commands, level commands, aliases,
-or generic trigger-tree behavior. Hardware-free Core/CLI/simulator/worker
-tests cover this command. No live hardware validation was run because no
-instrument is currently available. Pending validation includes live CLI,
-worker live, LAN, WebUI, DSO-X 2000X/3000X/4024A/4034A live validation,
-MSO/digital validation, and broader trigger-tree validation.
+or generic trigger-tree behavior.
 
 Worker usage:
 
@@ -1492,7 +1460,7 @@ Configure or query DSO analog-only OR trigger settings with the canonical
 .\.venv\Scripts\scopes-tool.exe trigger-or --simulate --json --query
 ```
 
-`trigger-or` v1 configures and queries the Keysight OR trigger using the DSO
+`trigger-or` configures and queries the Keysight OR trigger using the DSO
 analog-only `:TRIGger:OR` surface. Configure mode is state-changing and sends
 `:TRIGger:MODE OR` followed by `:TRIGger:OR "<pattern>"`. The pattern is a raw
 edge string using only `R` for rising edge, `F` for falling edge, `E` for
@@ -1511,12 +1479,9 @@ Query mode reads `:TRIGger:MODE?` and `:TRIGger:OR?`. JSON preserves
 readbacks to uppercase `pattern`, and tolerates non-OR current trigger mode
 without failing solely because the mode is not OR.
 
-This v1 slice does not implement MSO/digital OR trigger mapping, aliases,
+This command does not support MSO/digital OR trigger mapping, aliases,
 generic trigger-tree behavior, run, stop, single, force trigger, wait for a
-trigger, capture waveform data, or WebUI runtime behavior. Hardware-free
-Core/CLI/simulator/worker tests cover this command. No live hardware
-validation was run. Worker support is hardware-free only until separately
-live-tested.
+trigger, or capture waveform data.
 
 Worker usage:
 
@@ -1556,7 +1521,7 @@ DSO-X 4034A firmware 07.20, setting `zoom` while that timebase is not displayed
 may return `-221,"Settings conflict"`. Use `auto` as the safer portable choice
 when the current zoom state is unknown.
 
-Control or query DVM Common Pack v1:
+Control or query DVM:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe dvm-enable --enabled true --simulate --json
@@ -1581,15 +1546,14 @@ error handling path.
 
 `dvm-frequency`, `:DVM:FREQuency?`, `:DVM:MODE FREQuency`, the independent
 `:COUNter` subsystem, Counter CLI commands, and `:MEASure:COUNter` are
-intentionally unsupported in DVM Common Pack v1. Normal tests are
-hardware-free, and no live hardware validation was performed for this pack.
+intentionally unsupported in this DVM surface.
 
 Worker requests use the same canonical values and require `{"query": true}`
 for query operations. Unknown keys, aliases, mixed query/configure payloads,
 non-boolean `enabled`, and channels outside the model profile are rejected
 before enqueue or artifact/session creation.
 
-Control Demo Output Pack v1:
+Control Demo Output:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe demo-query --simulate --json
@@ -1614,16 +1578,14 @@ The common/core function set is `sine`, `noisy`, `phase`, `lf-sine`, `am`,
 `runt`, `transition`, `setup-hold`, `mso`, `burst`, `glitch`,
 `edge-then-edge`, `i2c`, `uart`, `spi`, `can`, and `lin`. The 3000X and 4000X
 profiles additionally expose `i2s`, `can-lin`, `flexray`, `arinc`, `mil`, and
-`mil2`. Additional 4000X-only DEMO functions are intentionally excluded from
-v1.
+`mil2`. Additional 4000X-only DEMO functions are excluded from the documented
+capability.
 
 DEMO is option-/hardware-dependent. Unsupported live instruments may surface
-errors through the normal post-command instrument error check. This pack has
-hardware-free Core, CLI, simulator, and worker validation only; live hardware,
-USB/LAN, and worker live validation were not run. DEMO commands remain separate
-from WGEN and add no WebUI runtime behavior.
+errors through the normal post-command instrument error check. DEMO commands
+remain separate from WGEN and add no WebUI runtime behavior.
 
-Control WGEN Basic P1:
+Control the waveform generator:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe wgen-query --simulate --json
@@ -1639,21 +1601,20 @@ Control WGEN Basic P1:
 Each focused command requires exactly one query or configure action. The
 settable functions are `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`;
 loads are `one-meg` and `fifty`. Frequency must be finite and greater than
-zero. The conservative P1 software guards are `0 < amplitude <= 5.0` volts and
+zero. The software guards are `0 < amplitude <= 5.0` volts and
 `-2.5 <= offset <= 2.5` volts. Aggregate `wgen-query` queries each field
 individually and preserves raw readbacks. Unknown or extended function
 readbacks produce `function: null` while preserving `function_raw`.
 
 The 2000X and 3000X use `:WGEN`; the 4000X uses generator 1 through `:WGEN1`.
-P1 does not expose generator selection, extended functions, waveform-specific
+The commands do not expose generator selection, extended functions, waveform-specific
 range tables, modulation, arbitrary waveforms, or output synchronization.
 Worker queries require exactly `{"query": true}`; `{}` is rejected for both
 aggregate and focused commands. Configure requests require exactly their
 canonical value field, and WGEN output is enabled only by an explicit
-`{"enabled": true}` request. Validation is hardware-free; no live hardware
-access or validation was performed.
+`{"enabled": true}` request.
 
-Serial Basic P1 controls common UART, I2C, SPI, and CAN decode settings:
+Serial protocol configuration controls common UART, I2C, SPI, and CAN decode settings:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe serial-uart --bus 1 --rx-source channel1 --baud-rate 115200 --simulate --json
@@ -1669,10 +1630,10 @@ analog channels) or `external`; I2C emits `IIC`; CAN uses canonical signal
 values `canh`, `canl`, `rx`, `tx`, `difl`, and `difh`. Query operations read
 `MODE?` first and preserve raw protocol readbacks. Availability is controlled
 by capability profiles and instrument licensing. Serial Search and advanced
-protocol parameters are outside this Serial Basic P1 surface.
+protocol parameters are outside this Serial protocol configuration surface.
 
-Serial UART Trigger P0 configures trigger criteria on a UART bus that the user
-has already configured through Serial P1:
+Serial UART Trigger configures trigger criteria on a UART bus that the user
+has already configured through the matching Serial protocol command:
 
 ```powershell
 scopes-tool serial-trigger-uart `
@@ -1688,7 +1649,7 @@ scopes-tool serial-trigger-uart `
 scopes-tool serial-trigger-uart --bus 1 --query
 ```
 
-The canonical P0 types are `rx-start`, `rx-stop`, `rx-data`, `tx-start`,
+The canonical types are `rx-start`, `rx-stop`, `rx-data`, `tx-start`,
 `tx-stop`, `tx-data`, and `parity-error`. Data triggers require the canonical
 qualifier `equal`, `not-equal`, `greater-than`, or `less-than`, plus an
 8-bit unsigned `--data` value from 0 through 255. The command rejects a bus
@@ -1696,14 +1657,14 @@ whose current mode is not UART before writing any UART trigger criteria; it
 does not change UART decode settings, Serial display, or Serial Bus mode.
 Successful configure operations select the corresponding Serial Bus as the
 global Trigger Mode. This command does not run, single, wait for a trigger, or
-capture. P0 does not include UART burst, idle time, 9-bit alert/data comparison,
+capture. It does not include UART burst, idle time, 9-bit alert/data comparison,
 pattern sequence, or other UART trigger extensions.
 
-Serial Trigger P1 adds common I2C, SPI, and CAN criteria. Configure the target
-Bus through Serial P1 first; these commands do not modify decode settings,
+Serial Trigger adds common I2C, SPI, and CAN criteria. Configure the target
+Bus through the matching Serial protocol command first; these commands do not modify decode settings,
 Serial display, or Serial Bus mode. Configure writes all protocol criteria and
 then selects the matching Serial Bus as the global Trigger Mode. They do not
-run, single, wait, or capture. P1 excludes 4000X-only I2C additions, CAN FD,
+run, single, wait, or capture. The surface excludes 4000X-only I2C additions, CAN FD,
 and other extended protocol conditions.
 
 ```powershell
@@ -1748,7 +1709,7 @@ scopes-tool serial-query --bus 1 --json
 scopes-tool serial-query --bus 2 --json
 ```
 
-Serial Lister P2 provides global display/reference queries and a host-side CSV
+Serial Lister provides global display/reference queries and a host-side CSV
 export. It does not enable Serial decode, enable an SBUS display, acquire new
 traffic, or parse CSV rows. Serial decode must already be configured and the
 instrument must contain decoded Lister data. `serial-lister-export` queries
@@ -1784,21 +1745,19 @@ Control reference waveform slots:
 .\.venv\Scripts\scopes-tool.exe reference-clear --slot 1 --simulate --json
 ```
 
-Reference Waveform Pack v1 supports slots 1 and 2. `reference-save` accepts an
+Reference waveform support covers slots 1 and 2. `reference-save` accepts an
 analog channel source only. `reference-display` configures or queries slot
 display state, `reference-label` configures or queries a 1-10 character
 printable ASCII label without double quotes, and `reference-query` reads both
 display and label state while preserving raw readbacks in JSON. File-based
 `:SAVE:WMEMory`/`:RECall:WMEMory` workflows and reference skew, offset, range,
-and scale controls are not implemented. Focused DSO-X 4034A USB CLI live
-validation passed for save, display, label, query, and clear operations on
-slots 1 and 2. Enabling display for one reference slot may turn off display for
+and scale controls are not supported. Enabling display for one reference slot
+may turn off display for
 the other slot on this instrument; this instrument-managed interaction is
 normal behavior, not a command failure. The simulator tracks the two display
-states independently and does not emulate that interaction. LAN, worker live,
-other-model, and broader reference-waveform validation have not been run.
+states independently and does not emulate that interaction.
 
-Control Search Basic Pack v1:
+Control waveform search:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe search-state --enabled true --simulate --json
@@ -1824,7 +1783,7 @@ Runtime support is capability-profile guarded: 2000X supports `serial1` only;
 3000X supports `edge`, `glitch`, `runt`, `transition`, `serial1`, and
 `serial2`; 4000X supports those modes plus `peak`. Aliases such as `ser1`,
 `ser2`, `glit`, `tran`, and `off` are rejected. Unsupported modes are rejected
-before search SCPI is sent. Serial Search P3 adds `serial-search-uart`,
+before search SCPI is sent. Serial Search adds `serial-search-uart`,
 `serial-search-i2c`, `serial-search-spi`, and `serial-search-can` for
 protocol-specific criteria. Configure the selected Serial bus first with the
 matching `serial-uart`, `serial-i2c`, `serial-spi`, or `serial-can` command;
@@ -1833,10 +1792,9 @@ width is measured in bytes, and a supplied pattern must contain exactly
 `width * 2` hexadecimal/wildcard digits. CAN `id-data` is ID-only; use `data`
 to search ID, Data, and DLC. When both `--id` and `--id-mode` are supplied,
 standard IDs must be `0x000` through `0x7FF`, and extended IDs must be
-`0x00000000` through `0x1FFFFFFF`. Tests are hardware-free; no live hardware
-validation was performed.
+`0x00000000` through `0x1FFFFFFF`.
 
-Use Save/Export Pack v1 for instrument-side file saving:
+Use instrument-side save commands for file saving:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe save-pwd --path "USB:\captures" --simulate --json
@@ -1867,7 +1825,7 @@ quotes, controls, CR/LF, or semicolons. `save-filename --name` is a base name
 only and also rejects path and drive separators. Instrument paths and explicit
 image/waveform file specifications may contain `/`, `\`, and `:`. Values are
 not trimmed, sanitized, escaped, or given automatic extensions. `save-image`
-and `save-waveform` require an explicit filename in v1 for agent safety and
+and `save-waveform` require an explicit filename for agent safety and
 wait for `*OPC?` after starting the save. `save-image` uses a bounded 15-second
 timeout for this completion query and then restores the prior session timeout;
 `save-waveform` retains the current session timeout.
@@ -1875,10 +1833,9 @@ timeout for this completion query and then restores the prior session timeout;
 These commands send `:SAVE...` SCPI so the oscilloscope writes to its own
 current save directory, internal storage, or attached USB storage. They do not
 create or check host-side files. Existing `capture`, `capture-batch`, and
-`screenshot` continue to retrieve bytes and write PC-side artifacts. Save/
-Export Pack v1 excludes results, lister, mask, multi, power, arbitrary,
-compliance, segmented, setup changes, and WMEMory export. It has hardware-free
-validation only; live hardware validation was not performed.
+`screenshot` continue to retrieve bytes and write PC-side artifacts. Instrument-
+side save does not include results, lister, mask, multi, power, arbitrary,
+compliance, segmented, setup changes, or WMEMory export.
 
 Query read-only measurements:
 
@@ -1931,7 +1888,7 @@ measurement sources, or change statistics mode. The command is supported on
 3000X and 4000X only; 2000X users should use individual `measure` queries.
 This parser is unrelated to Counter or `measure-counter`.
 
-The current measurement slice supports `vpp`, `frequency` (`freq` alias),
+The measurement command supports `vpp`, `frequency` (`freq` alias),
 `period`, `vavg`, `vrms`, `ac_rms` (`acrms` and `vrms_ac` aliases),
 `minimum` (`min` and `vmin` aliases), `maximum` (`max` and `vmax` aliases),
 `x_at_max` (`xmax` and `x-at-max` aliases), `x_at_min` (`xmin` and
@@ -2065,11 +2022,10 @@ Capture waveform data:
 .\.venv\Scripts\scopes-tool.exe capture --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --wait-trigger --trigger-timeout-ms 5000 --force-trigger-on-timeout --log-scpi
 ```
 
-The current capture slice supports BYTE and WORD waveform formats with 1000,
+The capture command supports BYTE and WORD waveform formats with 1000,
 5000, and 10000 requested points. BYTE remains the default. WORD capture sets
 `:WAVeform:BYTeorder MSBFirst` and `:WAVeform:UNSigned ON` before reading data.
-Capability flags describe the runtime-supported and guarded feature surface,
-not whether each feature has completed live validation on every model.
+Capability flags describe the runtime-supported and guarded feature surface.
 Repeat `--channel` to capture multiple analog channels sequentially in one
 session. Use `--channel all` to capture every analog channel reported by the
 detected model capability profile; this does not query or filter by displayed
@@ -2109,8 +2065,9 @@ to the timeout. `--force-trigger-on-timeout` is valid only with
 `:TRIGger:FORCe`, then repeats the same finite poll window before capture. The
 command does not use `:TRIGger:STATus?` or `*OPC?`.
 For DSO-X 2000X/3000X/4000X models, operation-condition classification uses
-the Operation Status Condition Run bit: Run set is pending, and Run clear is
-complete. Other live series remain conservative until separately validated.
+the Operation Status Condition Run bit: Run set indicates acquisition in
+progress, and Run clear indicates completion. An unclassified
+operation-condition state on other series does not authorize waveform capture.
 
 Triggered capture JSON adds `result.trigger`. Outcomes are `natural`, `forced`,
 `timeout`, or `unknown`. Only `natural` and `forced` write waveform artifacts.
@@ -2215,17 +2172,12 @@ configure request. Phase reference is accepted only with FFT Phase.
 The command does not automatically enable Math display, configure Zoom or
 timebase, run autoscale, or change acquisition state. The derived query fields
 come from the instrument and do not represent host-side FFT calculation.
-This path has hardware-free validation only; no live hardware validation was
-performed.
+The derived query fields are instrument readbacks, not host-side FFT results.
 
-The P0-P7 instrument-side Math commands are closed under a hardware-free
-consistency gate covering CLI choices, Worker keys, capability guards, Core
-SCPI builders and parsers, simulator round trips, and the 2000X/3000X
-unnumbered versus 4000X indexed function dialect. The supported per-series
-operation matrix is documented in `../core/supported-models.md`. MATH-P8
-bus-timing and bus-state remain unavailable because MSO/digital-channel
-support is not implemented. No Math command performs host-side waveform
-calculation.
+The supported per-series Math operation matrix is documented in
+`../core/supported-models.md`. Math is instrument-side only. Bus timing and
+bus state are not supported because MSO/digital-channel support is not enabled.
+No Math command performs host-side waveform calculation.
 
 `math-display` requires exactly one of `--on`, `--off`, or `--query`.
 `math-vertical` query mode cannot include setters. Configure mode requires
@@ -2237,20 +2189,19 @@ from OFF to ON. To preserve explicit vertical settings, run
 `math-display --function N --on` before applying the desired `math-vertical`
 scale, range, or offset setters. Enabling one 4000X Math slot does not actively
 disable another slot; any single-visible-slot behavior is managed by the
-instrument. MATH-P1 does not configure Math operations or sources, probe
-licenses, or calculate host-side Math. These commands have hardware-free
-validation only; no live hardware validation was performed.
+instrument. Math display and vertical commands do not configure Math
+operations or sources, probe licenses, or calculate host-side Math.
 
 `math-operator` configures or queries one instrument-side dual-source Math
 operator. Configure requires `--operation`, `--source1`, and `--source2`;
-query mode cannot include those options. P2 accepts `add`, `subtract`,
+query mode cannot include those options. The operator accepts `add`, `subtract`,
 `multiply`, and `divide`. Source1 and source2 must both be canonical analog
 channels `channel1` through `channel4` supported by the selected model.
 It does not automatically enable Math display, alter Math vertical settings,
 perform autoscale, calculate host-side waveforms, or probe licenses. Other
 Math operations and reference, Math, bus, digital, external, or expression
-sources are not supported. This path has hardware-free validation only;
-license availability and live instrument behavior have not been validated.
+sources are not supported. License availability remains subject to the live
+instrument error queue.
 
 `math-transform` configures or queries one instrument-side, single-source Math
 transform. Supported operations are `differentiate`, `integrate`, `sqrt`,
@@ -2265,7 +2216,7 @@ function.
 instrument's current values. Query mode cannot include configure options and
 conditionally reads integrate or linear parameters after identifying the
 current operation. It reports an error, without changing state, when the
-current operation is not a P3 transform.
+current operation is not a supported transform.
 
 `math-composite-source` configures or queries the global 2000X/3000X `g(t)`
 source. Configure requires `--operation`, `--source1`, and `--source2`;
@@ -2281,7 +2232,7 @@ filter. `low-pass` and `high-pass` are available on 2000X, 3000X, and 4000X
 and optionally accept a positive finite `--cutoff-hz`. The 4000X path also
 supports `average` with an optional power-of-two `--average-count` from 2
 through 65536, `smooth` with optional odd `--smooth-points` of at least 3,
-and `envelope` without an additional parameter. Sources reuse the P4
+and `envelope` without an additional parameter. Sources reuse the
 single-source contract: analog channels on every series, `composite` on
 2000X/3000X, and a lower-numbered Math function on 4000X. Query first reads
 operation and source, then reads only the parameter applicable to the current
@@ -2310,16 +2261,14 @@ These Math commands do not automatically enable display, change vertical
 settings, run autoscale, install or modify measurements, change acquisition
 state, probe licenses, calculate host-side waveforms, or export waveform data.
 Reference waveform, bus, and digital sources remain unsupported. License
-availability remains subject to the live instrument error queue. These Math
-paths have hardware-free validation only; live instrument behavior and license
-availability have not been validated.
+availability remains subject to the live instrument error queue.
 
 These commands are explicit user actions and are never called by `doctor`,
 `smoke`, or `acquisition-check`. Some change front-panel state, such as cursor,
 holdoff, autoscale, setup, FFT, Math display/vertical controls, and front-panel
 measurement statistics.
 
-Phase 6A `capture-batch` intentionally does not change acquisition mode, wait
+`capture-batch` intentionally does not change acquisition mode, wait
 for a trigger, poll for acquisition completion, change VISA timeout defaults,
 perform return-to-local behavior, start background threads, or run an infinite
 recorder loop.
@@ -2362,10 +2311,11 @@ behavior is preserved.
 `--query-hardcopy` is query-only: it returns canonical area, ink saver,
 palette, layout, and format state with raw readbacks, captures no image bytes,
 and creates no artifact. It cannot be combined with capture or setting
-options. Screenshot Format Pack v1 is not exposed on 2000X or 3000X profiles;
+options. Screenshot format support is not exposed on 2000X or 3000X profiles;
 their existing PNG screenshot behavior is unchanged. Printer jobs,
-hardcopy area selection, and network printer support are outside this pack.
-Instrument-side image saving is a separate Save/Export Pack v1 workflow and
+hardcopy area selection, and network printer support are outside screenshot
+format support. Instrument-side image saving is a separate instrument-side
+save workflow and
 does not change screenshot's PC-side byte retrieval behavior.
 
 ## Tests
@@ -2395,10 +2345,10 @@ may be included for one-shot compatibility and remains required for live
 worker startup. Live checks should begin with USB communication verification
 before running state-changing or artifact-writing commands.
 
-## Hardware Validation
+## Real-Instrument Checks
 
-The public test baseline is the hardware-free pytest suite. Live hardware
-validation is opt-in and should confirm representative workflows for the target
+The public test baseline is the hardware-free pytest suite. Real-instrument
+checks are opt-in and should cover representative workflows for the target
 instrument model and transport:
 
 - `identify` and `check-error` for communication and error-queue behavior.

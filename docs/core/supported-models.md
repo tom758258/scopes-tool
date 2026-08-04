@@ -5,13 +5,13 @@ Command-level behavior remains documented in `../cli/README.md` and
 `../contracts/`.
 
 Capability profiles describe the runtime-supported and guarded feature surface.
-They are not a claim that every feature has completed live validation on every
-model, firmware, or transport.
+They do not detect instrument options or licenses, and live instrument errors
+remain authoritative for unavailable hardware or options.
 
 ## Canonical Physical Model Identity
 
-Scopes Tool exposes a vendor-neutral product API while the currently
-implemented hardware family remains Keysight InfiniiVision. The canonical
+Scopes Tool exposes a vendor-neutral product API while the supported hardware
+family is Keysight InfiniiVision. The canonical
 physical model registry contains:
 
 | Canonical physical model ID | Manufacturer | Model | Series | Capability profile ID | Driver ID |
@@ -21,8 +21,7 @@ physical model registry contains:
 | `keysight-dsox4024a` | Keysight Technologies | DSOX4024A | 4000X | `keysight-infiniivision-4000x` | `keysight-infiniivision` |
 | `keysight-dsox4034a` | Keysight Technologies | DSOX4034A | 4000X | `keysight-infiniivision-4000x` | `keysight-infiniivision` |
 
-Canonical registration identifies a physical model; it does not claim that
-every feature has completed live hardware validation. Each registered model
+Canonical registration identifies a physical model. Each registered model
 explicitly selects its runtime capability profile.
 
 Every registered physical model is protected by a hardware-free consistency
@@ -66,8 +65,8 @@ All supported series profiles currently expose:
 
 ### Instrument-Side Math Matrix
 
-P0-P7 Math support is instrument-side only. Canonical operation and source
-names remain independent of raw SCPI readbacks.
+Math support is instrument-side only. Canonical operation and source names
+remain independent of raw SCPI readbacks.
 
 | Surface | 2000X | 3000X | 4000X |
 | --- | --- | --- | --- |
@@ -87,85 +86,76 @@ cascade sources. The 4000X profile rejects composite/GOFT sources and rejects
 self-reference or forward-reference before backend access. The existing
 `fft` CLI and Worker command remains compatible across all profiles.
 
-MATH-P8 bus-timing and bus-state are blocked by the missing MSO/digital-channel
-foundation. They are absent from enabled capability operations, CLI choices,
-Worker commands, Core builders, and simulator behavior; no hardware-free shell
-is provided. This matrix has hardware-free validation only. Focused live
-validation is still required for each registered model, relevant firmware,
-and USB/LAN or Worker-live path.
+Bus timing and bus state are not supported because the required MSO/digital-
+channel foundation is not available. They are absent from enabled capability
+operations, CLI choices, Worker commands, Core builders, and simulator behavior.
 
 - BYTE and WORD waveform capture with a conservative 10,000-point safe maximum.
 - Read-only measurement helpers and screenshot capture.
-- Measurement Control Pack v1 helpers for clearing measurements, enabling or
+- Measurement control helpers for clearing measurements, enabling or
   querying measurement markers, selecting analog measurement sources, and
   selecting the MAIN, ZOOM, AUTO, or GATE measurement window. ZOOM is
   conditional on the zoomed timebase already being displayed; AUTO is safer
   when that state is unknown. A source1-only write may preserve source2 in
   instrument readback.
-- Reference Waveform Pack v1 helpers for runtime-managed reference waveform
+- Reference waveform helpers for runtime-managed reference waveform
   slots 1 and 2. The instrument may turn off one slot's display when the other
   is enabled.
-- DVM Common Pack v1 helpers for enable, analog source, `dc`, `dc-rms`, and
+- DVM helpers for enable, analog source, `dc`, `dc-rms`, and
   `ac-rms` voltage modes, auto range, current voltage, and aggregate queries.
-  DVM can be option/license dependent. This pack has hardware-free validation
-  only and does not implement DVM frequency, independent `:COUNter`, or
-  `:MEASure:COUNter` support.
-- Demo Output Pack v1 aggregate and focused output/function/phase helpers.
+  DVM can be option/license dependent. It does not support DVM frequency,
+  independent `:COUNter`, or `:MEASure:COUNter` support.
+- DEMO output aggregate and focused output/function/phase helpers.
   DEMO is option-/hardware-dependent; capability profiles guard the documented
   function names before session open, while live instrument errors remain
   authoritative for missing options or hardware.
-- WGEN Basic P1 output, function, frequency, amplitude, offset, load, and
+- Waveform generator output, function, frequency, amplitude, offset, load, and
   aggregate query helpers. The 2000X/3000X profiles use `:WGEN`; the 4000X
-  profile uses only generator 1 through `:WGEN1`. P1 settable functions are
+  profile uses only generator 1 through `:WGEN1`. Settable functions are
   `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`.
-- Serial Basic P0 raw aggregate query, mode, and display controls plus Serial
-  Basic P1 UART, I2C, SPI, and CAN basic protocol settings. Capability profiles
+- Serial bus aggregate query, mode, and display controls plus UART, I2C, SPI,
+  and CAN basic protocol settings. Capability profiles
   guard bus count and settable modes. Serial decode can require an
   instrument license; Core does not probe licenses and preserves instrument
   errors for unavailable hardware or options.
-- Serial Trigger P1 provides the documented common I2C, SPI, and CAN trigger
+- Serial trigger support provides the documented common I2C, SPI, and CAN trigger
   subset on the same capability profiles. It does not add a capability field;
   model profiles continue to guard bus count and protocol mode availability.
-- Search Basic Pack v1 state and count queries plus profile-guarded mode
+- Waveform search state and count queries plus profile-guarded mode
   configuration. Unsupported modes are rejected before search SCPI is sent.
-- Save/Export Pack v1 common instrument-side SAVE commands for current save
+- Instrument-side SAVE commands for current save
   directory and base name, image settings and start, and waveform settings and
   start. All three profiles also expose the query-only maximum-length mode
   readback. The configured waveform length minimum is 100 points; the actual
   maximum remains instrument/model dependent.
 - Analog channel labels, display labels, and display annotation.
-- Hardware-free Core/CLI/simulator/worker support for the documented one-shot
-  trigger packs, including `trigger-tv` basic TV / video trigger configure and
+- Core/CLI/simulator/worker support for the documented one-shot trigger
+  commands, including `trigger-tv` basic TV / video trigger configure and
   query.
 - Triggered capture wait classification for DSO-X 2000X/3000X/4000X using the
   Operation Status Condition Run bit.
 
 Series-specific differences:
 
-| Series | Demo Output Pack v1 functions | Serial buses | Serial Basic P0/P1 settable modes | Search Basic Pack v1 modes | Screenshot Format Pack v1 |
+| Series | DEMO output functions | Serial buses | Serial settable modes | Waveform search modes | Screenshot formats |
 | --- | --- | ---: | --- | --- | --- |
 | 2000X | Common/core set | 1 | `can`, `i2c`, `lin`, `spi`, `uart` | `serial1` | No; existing PNG capture remains supported |
 | 3000X | Common/core set plus `i2s`, `can-lin`, `flexray`, `arinc`, `mil`, `mil2` | 2 | `a429`, `flexray`, `can`, `i2s`, `i2c`, `lin`, `m1553`, `spi`, `uart` | `edge`, `glitch`, `runt`, `transition`, `serial1`, `serial2` | No; existing PNG capture remains supported |
-| 4000X | Same v1 set as 3000X | 2 | `a429`, `flexray`, `can`, `cxpi`, `i2s`, `i2c`, `lin`, `m1553`, `manchester`, `nrz`, `sent`, `spi`, `uart`, `usb`, `usb-pd` | `edge`, `glitch`, `runt`, `transition`, `serial1`, `serial2`, `peak` | PNG, BMP, BMP8bit, appearance controls, and state query |
+| 4000X | Same documented set as 3000X | 2 | `a429`, `flexray`, `can`, `cxpi`, `i2s`, `i2c`, `lin`, `m1553`, `manchester`, `nrz`, `sent`, `spi`, `uart`, `usb`, `usb-pd` | `edge`, `glitch`, `runt`, `transition`, `serial1`, `serial2`, `peak` | PNG, BMP, BMP8bit, appearance controls, and state query |
 
 The common/core DEMO set is `sine`, `noisy`, `phase`, `lf-sine`, `am`,
 `rf-burst`, `fm-burst`, `harmonics`, `coupling`, `ringing`, `single`, `clock`,
 `runt`, `transition`, `setup-hold`, `mso`, `burst`, `glitch`,
-`edge-then-edge`, `i2c`, `uart`, `spi`, `can`, and `lin`. Demo Output Pack v1
-intentionally excludes the additional 4000X-only DEMO functions until their
-short command and readback tokens are added with unambiguous coverage. It does
-not include WGEN behavior and adds no WebUI runtime behavior. Validation is
-hardware-free only; no physical model, firmware revision, USB/LAN path, or
-worker live path was validated for this pack.
+`edge-then-edge`, `i2c`, `uart`, `spi`, `can`, and `lin`. The documented DEMO
+function set excludes additional 4000X-only functions. It does not include WGEN
+behavior and adds no WebUI runtime behavior.
 
-Screenshot Format Pack v1 is capability-gated to 4000X because its explicit
-format transfer uses the documented `:HCOPY:SDUMp` command family. This is
-hardware-free support only; no live instrument validation has been run for the
-pack.
+Screenshot format support is capability-gated to 4000X because its explicit
+format transfer uses the documented `:HCOPY:SDUMp` command family.
 
 All three profiles support `search-state` and query-only `search-count`.
 `search-mode` enables search before setting the mode. Search event navigation is supported on 4000X via `search-event`.
-Serial Search P3 provides protocol-specific search controls for UART, I2C, SPI,
+Serial Search provides protocol-specific search controls for UART, I2C, SPI,
 and CAN. 2000X supports bus 1; 3000X and 4000X support buses 1 and 2. The
 selected Serial bus must be configured with the matching Serial command first.
 
@@ -186,55 +176,17 @@ The documented count ranges are 2-250 on 2000X and 2-1000 on 3000X/4000X,
 while the actual maximum may be lower for the selected memory depth.
 Segmented-memory availability may depend on an SGM option or license; the
 capability flag permits this documented command-family path but does not claim
-that the option is installed. DSO-X 4034A USB live validation passed for the
-P0 realtime query branch; P0 segmented-mode conditional query branches, P1
-enable/count/disable configuration, and P2 finite capture/export remain
-pending live validation. P2 does not perform continuous acquisition, restore
-state, or instrument-side save/export. Serial
+that the option is installed. Segmented capture does not perform continuous
+acquisition, restore state, disable segmented mode, force a trigger, merge CSVs,
+or perform instrument-side save/export. Serial
 decode capability represents command-family availability, not the presence of
 an instrument license.
 
-Serial Basic P0 keeps aggregate responses raw. Serial Basic P1 implements only
-basic UART, I2C, SPI, and CAN source/decode settings. Serial Lister P2 adds
+Serial aggregate responses remain raw. Serial protocol configuration provides
+only basic UART, I2C, SPI, and CAN source/decode settings. Serial Lister adds
 global display/reference controls and host-side raw CSV export through
-`:LISTer:DATA?`; it does not implement protocol-specific CSV
-parsing, or instrument-side `:SAVE:LISTer`. Serial Search P3 provides
+`:LISTer:DATA?`; it does not support protocol-specific CSV
+parsing, or instrument-side `:SAVE:LISTer`. Serial Search provides
 protocol-specific UART, I2C, SPI, and CAN search controls after the matching
 Serial bus has been configured. Lister display selection `bus2` is unavailable
 on 2000X and available on 3000X/4000X; `all` remains valid on 2000X.
-
-These common pack entries describe runtime capability support. They do not
-imply live hardware validation on every supported model, firmware, or USB/LAN
-transport.
-
-Save/Export Pack v1 has hardware-free Core, simulator, CLI, and worker
-coverage only. It does not claim live validation and does not include results,
-mask, multi, power, arbitrary, compliance, segmented, setup, or WMEMory export.
-
-## Live Validation Summary
-
-Live validation is opt-in and model-specific. Normal automated tests remain
-hardware-free.
-
-| Model | Series | Connection | Public validation status |
-| --- | --- | --- | --- |
-| DSOX4024A | 4000X | USB | Full documented USB hardware plan passed by user report for the supported workflow set. |
-| DSOX4024A | 4000X | LAN | Deferred until an explicit LAN resource is available and approved. |
-| DSOX4034A | 4000X | USB | Focused validations passed by user report for recent compatibility work, including sample-rate, acquisition-points, record-length, force-trigger, triggered capture wait, channel labels, display labels, indexed annotation, Measurement Control Pack v1, and Reference Waveform Pack v1. Segmented Memory P0 realtime query also passed; P0 segmented-mode query branches, P1 configuration, and P2 finite capture/export remain pending. Measurement-window zoom requires the zoomed timebase to be displayed; source1-only writes may preserve source2; enabling one reference display may turn off the other. A full model matrix remains deferred. |
-| DSOX4034A | 4000X | LAN | Deferred until an explicit LAN resource is available and approved. |
-| DSOX3024A | 3000X | USB or LAN | Runtime profile exists; live validation is deferred until hardware is available. |
-| DSOX2004A | 2000X | USB or LAN | Runtime profile exists; live validation is deferred until hardware is available. |
-
-Detailed local hardware notes, exact lab resources, serial numbers, report
-paths, and operator context belong in local-only validation notes, not in this
-public document.
-
-## Validation Boundaries
-
-- Public capability JSON reports the runtime-supported feature surface only.
-- Hardware validation must name the real instrument and command that was run.
-- LAN support should be validated only after USB evidence and an explicit
-  operator-selected LAN resource.
-- Worker live validation is separate from one-shot CLI validation.
-- No public document should hard-code private VISA resource strings, serial
-  numbers, lab IP addresses, or local artifact paths.

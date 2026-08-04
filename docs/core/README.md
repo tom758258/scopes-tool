@@ -22,7 +22,7 @@ Core owns runtime behavior:
 - Read-only analog channel summaries that aggregate common channel and probe
   setup for every analog channel in the active capability profile.
 - Simulator and fake backend support for hardware-free tests.
-- MATH-P1 instrument-side Math waveform display and vertical controls through
+- Instrument-side Math waveform display and vertical controls through
   `Oscilloscope.configure_math_display()`, `query_math_display()`,
   `configure_math_vertical()`, and `query_math_vertical()`. The controls use
   the single unindexed `:FUNCtion` subsystem on 2000X/3000X and indexed slots
@@ -32,30 +32,29 @@ Core owns runtime behavior:
   changes from OFF to ON, so callers that need explicit vertical settings
   should enable display before applying scale, range, or offset. Math operation
   selection, sources, host-side Math, license probing, and slot coordination
-  are outside P1. Coverage is hardware-free only; no live validation was
-  performed.
-- MATH-P2 instrument-side dual-source Math operators through
-  `Oscilloscope.configure_math_operator()` and `query_math_operator()`. P2
-  supports `add`, `subtract`, `multiply`, and `divide` with two analog-channel
+-  are not provided by this surface.
+- Instrument-side dual-source Math operators through
+  `Oscilloscope.configure_math_operator()` and `query_math_operator()`. This
+  surface supports `add`, `subtract`, `multiply`, and `divide` with two
+  analog-channel
   sources. Both source1 and source2 remain analog-channel-only on every series.
   It reuses the single unindexed 2000X/3000X Math function and indexed 4000X
   slots, preserves normalized and raw query values, and does not enable display
   or change vertical controls. Reference, Math, bus, digital, external, and
   arbitrary-expression sources are not supported. Capability profiles describe
-  the available runtime path, not validated instrument licenses. Coverage is
-  hardware-free only; no live validation was performed.
-- MATH-P3 instrument-side single-source Math transforms through
-  `Oscilloscope.configure_math_transform()` and `query_math_transform()`. P3
+  the available runtime path and do not detect instrument licenses.
+- Instrument-side single-source Math transforms through
+  `Oscilloscope.configure_math_transform()` and `query_math_transform()`. This
   supports `differentiate`, `integrate`, `sqrt`, `absolute`, `square`, `ln`,
   `log10`, `exp`, `exp10`, and `linear` with one source.
   Integrate optionally sets input offset; linear optionally sets gain and
   linear offset. It reuses the unindexed 2000X/3000X function and indexed
   4000X slots, does not enable display, and leaves license availability to the
-  instrument error queue. P4 permits the 2000X/3000X `composite` GOFT source
-  and a lower-numbered Math function source on 4000X. Reference and bus sources,
-  host-side calculation, and waveform export are not implemented. Coverage is
-  hardware-free only; no live validation was performed.
-- MATH-P4 global GOFT configuration through
+  instrument error queue. The 2000X/3000X path also permits the `composite`
+  GOFT source, and the 4000X path permits a lower-numbered Math function
+  source. Reference and bus sources, host-side calculation, and waveform export
+  are not supported.
+- Instrument-side Math composite and cascade source configuration through
   `Oscilloscope.configure_math_composite_source()` and
   `query_math_composite_source()`. The 2000X/3000X path supports `add`,
   `subtract`, or `multiply` over two analog channels and can feed that result
@@ -63,21 +62,19 @@ Core owns runtime behavior:
   cascade by allowing only a lower-numbered Math function as the
   `math-transform` source. `math-operator` remains analog-channel-only.
   These controls do not calculate or export waveform data, enable display,
-  change vertical settings, or probe licenses. Coverage is hardware-free only;
-  no live validation was performed.
-- MATH-P5 instrument-side Math filters through
+  change vertical settings, or probe licenses.
+- Instrument-side Math filters through
   `Oscilloscope.configure_math_filter()`, `query_math_filter()`, and
   `clear_math()`. All registered series support `low-pass` and `high-pass`;
   4000X additionally supports `average`, `smooth`, and `envelope`. Filter
-  sources reuse the P4 single-source rules: analog channels on all series,
+  sources reuse the single-source rules: analog channels on all series,
   `composite` on 2000X/3000X, and a lower-numbered Math function on 4000X.
   Cutoff, average-count, and smooth-point writes are optional and
   operation-specific. Math clear is available only on profiles that support
   average and uses indexed 4000X `:FUNCtion<n>:CLEar`. These controls do not
   calculate waveforms, enable display, change vertical or acquisition state,
-  probe licenses, or wait for completion. Coverage is hardware-free only; no
-  live validation was performed.
-- MATH-P6 instrument-side visualizations through
+  probe licenses, or wait for completion.
+- Instrument-side Math visualizations through
   `Oscilloscope.configure_math_visualization()` and
   `query_math_visualization()`. All registered series support `magnify` and
   `trend`; 4000X additionally supports `maximum`, `minimum`, `peak`,
@@ -88,9 +85,8 @@ Core owns runtime behavior:
   Math clear applies to 4000X `average`, `max-hold`, and `min-hold`
   accumulations. These controls do not install measurements, calculate or
   export waveform data, enable display, run autoscale, change acquisition
-  state, or probe licenses. Coverage is hardware-free only; no live validation
-  was performed.
-- MATH-P7 completes the existing instrument-side FFT path through
+  state, or probe licenses.
+- Instrument-side FFT through
   `Oscilloscope.configure_fft()` and `query_fft()`. The 2000X/3000X profiles
   retain basic magnitude FFT with the unindexed Math function. The 4000X
   profile adds indexed FFT Phase, start/stop frequency, Main/Zoom gating,
@@ -100,28 +96,25 @@ Core owns runtime behavior:
   valid only for FFT Phase and is queried only when the current operation is
   FFT Phase. These controls do not calculate FFT data on the host, enable Math
   display, configure Zoom or timebase, run autoscale, or change acquisition
-  state. Coverage is hardware-free only; no live validation was performed.
-- MATH-P9 closes the P0-P7 instrument-side Math surface with cross-layer
-  consistency gates for capability operations, Core builders and parsers,
-  CLI choices, Worker schemas, simulator state, function-slot dialects, and
-  legacy FFT behavior. Math remains instrument-side only. MATH-P8 bus-timing
-  and bus-state are not enabled because the required MSO/digital-channel
-  foundation is not implemented. The closure is hardware-free; focused live
-  validation remains required by registered model, firmware, and transport.
-- System/Status Pack v1 helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
+  state.
+- Math is instrument-side only. Bus timing and bus state are not supported
+  because the required MSO/digital-channel foundation is not available; no
+  capability operation, CLI choice, Worker command, Core builder, or simulator
+  behavior is provided for them.
+- System and status helpers for `*CLS`, `*OPC?`, `*STB?`, destructive
   `*ESR?`, `:OPERegister:CONDition?`, and `*OPT?`. Parsers preserve raw
   responses, expose bounded integer register values and stable set-bit indexes,
   and preserve trimmed option tokens including a raw no-option-style `0`.
   `:RSTate?`, service-request or event-enable writes, UI locking, return to
   local, date/time, and a replacement for the existing
-  system-error helpers are not implemented. Coverage is hardware-free; no live
-  hardware validation was performed, and no WebUI runtime behavior was added.
+  system-error helpers are not supported. Core does not add WebUI runtime
+  behavior.
 - Conservative `minimal` and `safe` cleanup profiles compose existing status,
   display, DVM, search, annotation, and Demo helpers. Unsupported steps are
   reported instead of adding new subsystems; cleanup never performs reset,
   preset, autoscale, or broad state restoration.
-- Save/Export Pack v1 helpers for common 2000X/3000X/4000X instrument-side
-  image and waveform file saving. The pack configures the current save
+- Instrument-side image and waveform save helpers for common
+  2000X/3000X/4000X behavior. This surface configures the current save
   directory, base filename, image format/palette/ink-saver/factors, and
   waveform format/length; it can then start an image or waveform save with an
   explicit filename and wait with `*OPC?`. It does not retrieve bytes or create
@@ -129,70 +122,65 @@ Core owns runtime behavior:
   workflows. Image and waveform format queries normalize the read-only `NONE`
   sentinel to canonical `none`; `none` is not a settable format. Results,
   lister, mask, multi, power, arbitrary, compliance, setup, and WMEMory export
-  are outside v1. Query-only segmented-memory state is documented separately.
-  Coverage is
-  hardware-free; no live hardware validation was performed.
-- Serial Lister P2 global display/reference query and configuration plus
+  are not supported. Query and configuration of segmented memory, together
+  with the finite `segmented-capture` workflow, are documented separately.
+- Serial Lister global display/reference query and configuration plus
   host-side raw CSV export through `:LISTer:DATA?`. The export preserves the
   instrument payload without protocol-specific parsing and does not enable
   decode, acquire traffic, or change SBUS display state. Lister display
   selection uses `off`, `bus1`, `bus2`, and `all`; `bus2` is unavailable on
   2000X and available on 3000X/4000X profiles.
-- Serial Trigger P1 provides common I2C, SPI, and CAN trigger criteria through
-  Core, CLI, Worker, and Simulator paths. The matching Serial P1 bus must be
+- Serial trigger support provides common I2C, SPI, and CAN trigger criteria through
+  Core, CLI, Worker, and Simulator paths. The matching Serial bus must be
   configured first; trigger configure selects the corresponding `SBUS<n>`
   Trigger Mode last and does not change decode settings or acquire data.
-- Measurement Control Pack v1 helpers for clearing screen measurements,
+- Measurement control helpers for clearing screen measurements,
   enabling or querying measurement markers, selecting one or two analog
   measurement source channels, and selecting `MAIN`, `ZOOM`, `AUTO`, or
-  `GATE` measurement windows. Marker OFF is intentionally not exposed in v1.
+  `GATE` measurement windows. Marker OFF is not exposed.
   A source1-only write sets source1 but may preserve an existing source2
   selection in instrument readback; callers that require an explicit
   two-source default should set both sources. `ZOOM` is conditional on the
   zoomed timebase already being displayed. DSO-X 4034A firmware 07.20 may
   return `-221,"Settings conflict"` otherwise, so `AUTO` is safer when zoom
   state is unknown.
-- DVM Common Pack v1 helpers for enabling DVM, selecting one analog source,
+- DVM helpers for enabling DVM, selecting one analog source,
   selecting `dc`, `dc-rms`, or `ac-rms` voltage mode, controlling auto range,
   reading current voltage, and querying aggregate state. DVM availability may
   depend on an instrument option or license. `:DVM:FREQuency`, DVM frequency
   mode, the independent `:COUNter` subsystem, and `:MEASure:COUNter` are not
-  implemented. Coverage is hardware-free; no live hardware validation was
-  performed for this pack.
-- Demo Output Pack v1 helpers for querying aggregate built-in DEMO state and
+  supported.
+- Demo output helpers for querying aggregate built-in DEMO state and
   configuring or querying DEMO output, function, and phase. Function sets are
   capability-profile guarded; unknown function readbacks remain available as
   raw values. DEMO is option-/hardware-dependent, so unsupported live
-  instruments may report normal instrument errors. This pack is hardware-free
-  validated only, remains separate from WGEN, excludes additional 4000X-only
-  DEMO functions, and adds no WebUI runtime behavior.
-- WGEN Basic P1 helpers for output, function, frequency, peak-to-peak
+  instruments may report normal instrument errors. It remains separate from
+  WGEN, excludes additional 4000X-only DEMO functions, and adds no WebUI
+  runtime behavior.
+- Waveform generator helpers for output, function, frequency, peak-to-peak
   amplitude, offset, load, and aggregate queries. The 2000X and 3000X use the
   unindexed `:WGEN` subsystem; the 4000X uses generator 1 through `:WGEN1`.
   Settable functions are limited to `sine`, `square`, `ramp`, `pulse`, `noise`,
   and `dc`. Software safety guards require positive finite frequency,
-  `0 < amplitude <= 5.0` volts, and `-2.5 <= offset <= 2.5` volts. Coverage is
-  hardware-free only; no live hardware validation was performed.
-- Search Basic Pack v1 helpers for enabling or disabling waveform search,
+  `0 < amplitude <= 5.0` volts, and `-2.5 <= offset <= 2.5` volts.
+- Waveform search helpers for enabling or disabling waveform search,
   selecting a model-profile-supported basic search mode, and querying the
   search event count. Mode configuration enables search before setting the
   mode. DSO-X 2000X supports `serial1`; 3000X supports `edge`, `glitch`,
   `runt`, `transition`, `serial1`, and `serial2`; 4000X additionally supports
-  `peak`. Serial Search P3 adds model-guarded serial search controls for UART,
+  `peak`. Serial Search adds model-guarded serial search controls for UART,
   I2C, SPI, and CAN; 2000X exposes bus 1, while 3000X and 4000X expose buses 1
-  and 2. Configure the matching Serial bus before using Serial Search. Coverage is hardware-free; no
-  live hardware validation was performed for this pack.
-- Reference Waveform Pack v1 helpers for saving an analog channel to reference
+  and 2. Configure the matching Serial bus before using Serial Search.
+- Reference waveform helpers for saving an analog channel to reference
   slot 1 or 2, configuring or querying display and label state, clearing a
   slot, and querying aggregate display/label state. Labels are limited to
   1-10 printable ASCII characters without double quotes. File-based reference
   save/recall and reference scale, skew, offset, and range controls are not
-  implemented. Focused DSO-X 4034A USB CLI live validation passed for save,
-  display, label, query, and clear operations on both slots. Enabling one
+  supported. Enabling one
   reference slot for display may turn off the other slot on that instrument;
   this is normal instrument-managed display behavior.
 - Read-only analog acquisition sample rate query helpers.
-- Screenshot Format Pack v1 helpers for 4000X screen-dump PNG, BMP, and
+- Screenshot format helpers for 4000X screen-dump PNG, BMP, and
   8-bit BMP capture plus hardcopy ink saver, palette, layout, and aggregate
   state queries. Existing cross-series color PNG capture remains unchanged.
 - Read-only acquisition points and record-length query helpers, separate from
@@ -209,12 +197,10 @@ Core owns runtime behavior:
   2000X and 2-1000 on 3000X/4000X; actual instrument limits may be lower for a
   selected memory
   depth. Average acquisition must be changed to a non-average type by the
-  caller before enabling segmented memory. Capture does not restore state or
-  disable segmented mode. Availability may depend on an SGM option or license;
-  capability support does not claim that the option is installed. DSO-X 4034A
-  USB live validation passed for the P0 realtime query branch; P0
-  segmented-mode conditional query branches, P1 enable/count/disable
-  configuration, and P2 finite capture/export remain pending live validation.
+  caller before enabling segmented memory. Capture does not restore state,
+  disable segmented mode, force a trigger, merge CSVs, or perform
+  instrument-side save/export. Availability may depend on an SGM option or
+  license; capability support does not claim that the option is installed.
 - Explicit triggered-capture wait helpers that arm `:SINGle`, poll
   `:OPERegister:CONDition?`, classify DSO-X 2000X/3000X/4000X completion by
   the Operation Status Condition Run bit, and expose raw poll values for
@@ -227,17 +213,16 @@ Core owns runtime behavior:
   expansion is not included.
 - Edge Trigger source-only helpers exposed through
   `Oscilloscope.configure_trigger_edge_source()` and
-  `Oscilloscope.query_trigger_edge_source()`. This v1 slice uses only
+  `Oscilloscope.query_trigger_edge_source()`. This API uses only
   `:TRIGger:EDGE:SOURce` and configures analog channels, External, or AC Line
   sources without changing trigger mode, level, slope, coupling, reject, or
   acquisition state. The common DSO-X 2000X/3000X/4000X target models support
   `CHANnel<n>`, `EXTernal`, and `LINE`; analog channels are validated against
   the selected model profile. Query parsing preserves the stripped raw source
-  and tolerates unsupported, digital, WaveGen, `NONE`, and future readbacks by
-  returning no normalized source. This implementation is hardware-free only;
-  live validation has not been run. WGEN/WMOD/digital source configuration is
-  not implemented.
-- Phase 13C - Edge Trigger Slope and Analog Level v1 helpers exposed through
+  and tolerates unsupported, digital, WaveGen, `NONE`, and unknown readbacks by
+  returning no normalized source. WGEN/WMOD/digital source configuration is not
+  supported.
+- Edge Trigger slope and analog level helpers exposed through
   `Oscilloscope.configure_trigger_edge_slope()`,
   `Oscilloscope.query_trigger_edge_slope()`,
   `Oscilloscope.configure_trigger_edge_level()`, and
@@ -252,10 +237,9 @@ Core owns runtime behavior:
   or range queries and does not clamp levels. These commands do not switch
   trigger mode or source and do not change coupling, reject, common trigger
   settings, holdoff, acquisition, or channel settings. The documented target
-  DSOX2004A, DSOX3024A, DSOX4024A, and DSOX4034A model coverage is
-  hardware-free only; live validation has not been run. Line, WaveGen, WMOD,
-  and digital/MSO level controls are not implemented.
-- Phase 14 External Trigger Range and External Edge Level v1 helpers exposed
+  DSOX2004A, DSOX3024A, DSOX4024A, and DSOX4034A model coverage is supported.
+  Line, WaveGen, WMOD, and digital/MSO level controls are not supported.
+- External Trigger range and External Edge level helpers exposed
   through `Oscilloscope.configure_external_trigger_range()`,
   `Oscilloscope.query_external_trigger_range()`,
   `Oscilloscope.configure_trigger_edge_external_level()`, and
@@ -268,10 +252,9 @@ Core owns runtime behavior:
   for probe-, model-, firmware-, and hardware-dependent limits. At 1:1, the
   manuals document 8 V for 2000X/3000X and 1.6 V or 8 V for 4000X; this
   hardware-free simulator does not emulate every model/probe-dependent range
-  rejection. Target DSOX2004A, DSOX3024A, DSOX4024A, and DSOX4034A coverage
-  has not received live hardware validation. Line, WaveGen, WMOD, and
-  digital/MSO External-level variants remain out of scope.
-- Phase 15 External Trigger Input Settings v1 helpers exposed through
+  rejection. Line, WaveGen, WMOD, and digital/MSO External-level variants
+  remain out of scope.
+- External Trigger input settings helpers exposed through
   `Oscilloscope.configure_external_trigger_probe()`,
   `Oscilloscope.query_external_trigger_probe()`,
   `Oscilloscope.configure_external_trigger_units()`,
@@ -286,8 +269,7 @@ Core owns runtime behavior:
   high-frequency rejection), AutoProbe discovery, probe-aware range or
   level scaling, trigger mode/source modification, or automatic compensation
   is implemented. The simulator intentionally stores probe attenuation, units,
-  range, and External Edge level independently. These DSO-X 2000X/3000X/4000X
-  paths are hardware-free only; live hardware validation has not been run.
+  range, and External Edge level independently.
 - Common trigger general setting helpers exposed through
   `Oscilloscope.configure_trigger_sweep()`,
   `Oscilloscope.query_trigger_sweep()`,
@@ -295,7 +277,7 @@ Core owns runtime behavior:
   `Oscilloscope.query_trigger_noise_reject()`,
   `Oscilloscope.configure_trigger_hf_reject()`, and
   `Oscilloscope.query_trigger_hf_reject()`. This `trigger-sweep`,
-  `trigger-noise-reject`, and `trigger-hf-reject` v1 slice uses only
+  `trigger-noise-reject`, and `trigger-hf-reject` commands use only
   `:TRIGger:SWEep`, `:TRIGger:NREJect`, and `:TRIGger:HFReject`. Query mode
   preserves raw readbacks while normalizing sweep to `auto` or `normal` and
   the common reject settings to booleans.
@@ -304,80 +286,69 @@ Core owns runtime behavior:
   `Oscilloscope.configure_trigger_edge_coupling()`,
   `Oscilloscope.query_trigger_edge_coupling()`,
   `Oscilloscope.configure_trigger_edge_reject()`, and
-  `Oscilloscope.query_trigger_edge_reject()`. This v1 slice uses only
+  `Oscilloscope.query_trigger_edge_reject()`. These commands use only
   `:TRIGger:EDGE:COUPling` and `:TRIGger:EDGE:REJect`. Each command
   configures or queries its own SCPI setting independently. Query mode
   preserves raw readbacks while normalizing coupling to `ac`, `dc`, or
-  `lf-reject`, and reject to `off`, `lf-reject`, or `hf-reject`. It is
-  hardware-free only so far; no live
-  hardware validation has been run, and it does not add holdoff, generic
-  trigger settings, run, stop, single, force-trigger, wait-trigger, capture, or
-  WebUI runtime behavior.
+  `lf-reject`, and reject to `off`, `lf-reject`, or `hf-reject`. It does not add
+  holdoff, generic trigger settings, run, stop, single, force-trigger,
+  wait-trigger, or capture.
 - Analog-channel pulse-width trigger helpers for the Keysight
-  `:TRIGger:GLITch...` command family. This first slice configures and queries
+  `:TRIGger:GLITch...` command family. These helpers configure and query
   pulse-width trigger state only; it does not run, stop, single, force trigger,
   wait for trigger, or capture waveform data.
 - Analog-channel runt trigger helpers for the Keysight `:TRIGger:RUNT...` and
-  shared `:TRIGger:LEVel:LOW/HIGH` command families. This slice configures and
+  shared `:TRIGger:LEVel:LOW/HIGH` command families. These helpers configure and
   queries runt trigger state only; it does not run, stop, single, force
   trigger, wait for trigger, or capture waveform data.
 - Analog-channel transition trigger helpers for the Keysight
   `:TRIGger:TRANsition...` and shared `:TRIGger:LEVel:LOW/HIGH` command
-  families. This v1 slice configures and queries transition trigger state only;
+  families. These helpers configure and query transition trigger state only;
   it does not run, stop, single, force trigger, wait for trigger, or capture
   waveform data.
 - DSO analog-channel Edge Then Edge / Delay trigger helpers for the Keysight
-  `:TRIGger:DELay...` command family. This `trigger-delay v1` slice
-  configures analog arm and trigger source channels, positive/negative arm and
+  `:TRIGger:DELay...` command family. These `trigger-delay` helpers
+  configure analog arm and trigger source channels, positive/negative arm and
   trigger slopes, delay time, and Nth trigger edge count. Query mode preserves
-  raw readbacks and tolerates digital or unknown source state. It is
-  hardware-free only so far; no live hardware validation has been run, and it
-  does not add run, stop, single, force trigger, wait-trigger, capture, or
-  WebUI runtime behavior.
+  raw readbacks and tolerates digital or unknown source state. It does not add
+  run, stop, single, force trigger, wait-trigger, or capture.
 - DSO analog-channel setup-hold trigger helpers for the Keysight
-  `:TRIGger:SHOLd...` command family. This `trigger-setup-hold v1` slice
-  configures analog clock and data source channels, positive/negative clock
+  `:TRIGger:SHOLd...` command family. These `trigger-setup-hold` helpers
+  configure analog clock and data source channels, positive/negative clock
   slope, setup time, and hold time. Query mode preserves raw readbacks and
   tolerates digital or unknown source state, but configure mode intentionally
-  rejects MSO/digital, external, and unknown sources. Focused DSO-X 4034A USB
-  CLI live validation passed on 2026-07-08. Worker live, LAN, WebUI, other
-  DSO-X models, MSO/digital configuration, signal-trigger behavior, run, stop,
-  single, wait-trigger, capture, and broader trigger-tree behavior remain not
-  run or out of scope.
+  rejects MSO/digital, external, and unknown sources. MSO/digital
+  configuration, signal-trigger behavior, and broader trigger-tree behavior
+  are not supported by this surface.
 - DSO analog-channel Nth Edge Burst trigger helpers for the Keysight
-  `:TRIGger:EBURst...` command family. This `trigger-edge-burst v1` slice
+  `:TRIGger:EBURst...` command family. These `trigger-edge-burst` helpers
   configures `:TRIGger:MODE EBURst`, analog source channel, positive/negative
   slope, edge count, idle time, and optional source-qualified analog
   `:TRIGger:EDGE:LEVel`. Query mode preserves raw source readbacks and
   tolerates digital, `NONE`, or unknown source state without querying analog
-  level unless the source safely parses as analog. Focused DSO-X 4034A USB CLI
-  live validation passed on 2026-07-09. Worker live, LAN, WebUI, other DSO-X
-  models, MSO/digital configuration, signal-trigger behavior, run, stop,
-  single, wait-trigger, capture, and broader trigger-tree behavior remain not
-  run or out of scope.
+  level unless the source safely parses as analog. MSO/digital configuration,
+  signal-trigger behavior, and broader trigger-tree behavior are not supported
+  by this surface.
 - DSO analog-channel basic TV / video trigger helpers for the Keysight
-  `:TRIGger:TV...` command family. This `trigger-tv v1` slice configures
+  `:TRIGger:TV...` command family. These `trigger-tv` helpers configure
   `:TRIGger:MODE TV`, analog source channel, basic standard
   `ntsc`/`pal`/`palm`/`secam`, basic TV mode, optional line number for line
   modes, and positive/negative polarity. Query mode preserves raw readbacks and
   tolerates digital, external, extended-standard, `LINE` mode, or unknown TV
-  subtree states without crashing. It is hardware-free only so far; no live
-  hardware validation has been run, and it does not add extended video/UDTV,
+  subtree states without crashing. It does not add extended video/UDTV,
   MSO/digital or external source configuration, signal-trigger behavior, run,
-  stop, single, wait-trigger, capture, or WebUI runtime behavior.
+  stop, single, wait-trigger, or capture.
 - DSO analog ASCII pattern trigger helpers for the Keysight
-  `:TRIGger:PATTern...` command family. This v1 slice configures
+  `:TRIGger:PATTern...` command family. These helpers configure
   `:TRIGger:MODE PATTern`, `:TRIGger:PATTern:FORMat ASCii`, raw `0/1/X`
   patterns, and `:TRIGger:PATTern:QUALifier ENTered`; query mode preserves
-  raw pattern, edge source, and edge readbacks. It is hardware-free only so
-  far; no live hardware validation has been run.
+  raw pattern, edge source, and edge readbacks.
 - DSO analog-only OR trigger helpers for the Keysight `:TRIGger:OR` command
-  family. This v1 slice configures `:TRIGger:MODE OR` and raw `R/F/E/X` edge
+  family. These helpers configure `:TRIGger:MODE OR` and raw `R/F/E/X` edge
   masks, and queries `:TRIGger:MODE?` plus `:TRIGger:OR?`. Pattern order
   follows Keysight OR trigger bit assignment: CH4, CH3, CH2, CH1 on
   4-channel DSO models and CH2, CH1 on 2-channel DSO models. MSO/digital OR
-  trigger mapping is not implemented. It is hardware-free only so far; no live
-  hardware validation has been run.
+  trigger mapping is not supported.
 - Model capability profiles for the runtime-supported feature surface.
   DSO-X 3000X and 4000X profiles enable 50 ohm channel impedance support;
   DSO-X 2000X profiles keep channel impedance guarded to one-meg only.
@@ -388,8 +359,7 @@ script documentation, or WebUI workflow.
 ## Docs
 
 - Public import and API integration: `docs/integration.md`
-- Supported model profiles and public validation status:
-  `docs/supported-models.md`
+- Supported model profiles: `supported-models.md`
 - Shared CLI, worker, and orchestrator contracts: `../contracts/`
 
 
@@ -414,5 +384,6 @@ CLI `force-trigger` command, which sends `:TRIGger:FORCe` and then performs one
 explicitly opt-in, sends `:SINGle`, polls `:OPERegister:CONDition?`, and may
 send `:TRIGger:FORCe` only when the caller requested force-on-timeout. DSO-X
 2000X/3000X/4000X waits treat the Operation Status Condition Run bit as
-pending when set and complete when clear; other live series remain conservative
-until separately validated.
+indicating acquisition in progress when set and completion when clear; an
+unclassified operation-condition state on other series does not authorize
+waveform capture.

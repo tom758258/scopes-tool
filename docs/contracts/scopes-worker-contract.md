@@ -4,8 +4,6 @@ Common schema version: `2`
 
 Compatibility policy: `v2-only`
 
-Implementation status: `Common v2-only conformant`
-
 This is the Scopes worker contract only. It follows
 [Common Worker Protocol](common-worker-protocol.md) for lifecycle concepts and
 defines the Scopes-specific command model, queue behavior, and artifacts.
@@ -50,7 +48,7 @@ Arguments:
   validation.
 - `--resource`: live resource string, required with `--live`.
 - `--artifact-root`: default `data/worker`.
-- `--queue-max`: accepted pending job limit, default `32`.
+- `--queue-max`: accepted queued-job limit, default `32`.
 - `--format`: `jsonl` or `text`, default `jsonl`.
 
 The worker fixes run context at startup. Every accepted job opens its own
@@ -148,7 +146,7 @@ cancelled jobs, and emits `job_finished` for each cancelled job. Running jobs
 observe cancellation at worker checkpoints or after command return; a blocking
 device read may not stop immediately.
 
-The worker does not implement `/trigger`, `trigger_url`, or `soft-*` endpoints.
+The worker exposes no `/trigger`, `trigger_url`, or `soft-*` endpoints.
 
 ## Command Inventory
 
@@ -236,7 +234,7 @@ accepted as JSON keys, for example:
 
 The existing `screenshot` worker command accepts only canonical `output`,
 `background`, `format`, `ink_saver`, `palette`, `layout`, and
-`query_hardcopy` keys. Screenshot Format Pack v1 examples are:
+`query_hardcopy` keys. Screenshot format examples are:
 
 ```json
 {
@@ -264,8 +262,8 @@ Enum values must be canonical strings and `ink_saver` must be a JSON boolean.
 `query_hardcopy` must be exactly `true` and cannot be combined with capture or
 setting fields. Unknown keys, aliases, wrong JSON types, invalid values, and
 mixed query/capture forms are rejected before enqueue, accepted counters,
-artifact creation, backend open, or SCPI. The format pack is available only
-when the worker's selected model has a 4000X capability profile.
+artifact creation, backend open, or SCPI. The format is available only when
+the worker's selected model has a 4000X capability profile.
 
 Triggered capture is an explicit opt-in extension of `capture`; it is not a new
 worker command:
@@ -292,8 +290,9 @@ valid only with `wait_trigger`; it sends `:TRIGger:FORCe` only after the first
 finite wait times out, then repeats the finite poll window. The worker does not
 use `:TRIGger:STATus?` or `*OPC?`. For DSO-X 2000X/3000X/4000X models,
 operation-condition classification uses the Operation Status Condition Run bit:
-Run set is pending, and Run clear is complete. Other live series remain
-conservative until separately validated.
+Run set indicates an acquisition in progress, and Run clear indicates
+completion. Other live series remain unclassified for operation-condition
+completion and do not authorize capture.
 
 Query-only worker commands require the same explicit CLI query flag in JSON
 form:
@@ -394,7 +393,7 @@ and the domain status in `result.json`. Worker cancellation keeps the existing
 cooperative queued/running semantics. The worker accepts no firmware argument;
 Core uses the detected IDN firmware for waveform segmented command gating.
 
-System/Status Pack v1 uses only these canonical request shapes:
+System and status commands use only these canonical request shapes:
 
 ```json
 {"command": "system-clear-status", "arguments": {}}
@@ -455,11 +454,9 @@ Configure mode requires `source_channel`, `level`, and `slope`. The legacy
 `edge-trigger` command name is not accepted. The worker rejects aliases and
 unknown fields such as `channel`, `source`, `source_ch`, `trigger_source`,
 `level_volts`, `trigger_level`, `edge_slope`, and `mode` before enqueue,
-artifact creation, simulator/VISA open, or SCPI. Worker support has
-hardware-free validation only; live CLI, worker live, LAN, WebUI, DSO-X
-2000X/3000X/4024A/4034A, MSO/digital, external source, actual signal-trigger
-behavior, and broader trigger-tree validation have not been run for this
-cleanup package.
+artifact creation, simulator/VISA open, or SCPI. The command configures or
+queries DSO analog Edge trigger settings; it does not run acquisition or
+broader trigger-tree operations.
 
 `trigger-edge-source` is the canonical source-only Edge Trigger command. It
 uses only `:TRIGger:EDGE:SOURce`: it never sends `:TRIGger:MODE EDGE` and does
@@ -501,11 +498,10 @@ include `channel`, `channel_number`, `sourceChannel`,
 `source_channel_number`, `input`, `input_source`, `trigger_source`,
 `edge_source`, `type`, `kind`, `value`, `mode`, and `enabled`. All such
 validation happens before enqueue, artifact creation, simulator/VISA open, or
-SCPI. This v1 worker support is hardware-free only; live hardware, LAN, and
-worker live validation have not been run. External level/range and WGEN, WMOD,
-digital/MSO source configuration are not included.
+SCPI. External level/range and WGEN, WMOD, digital/MSO source configuration
+are not included.
 
-Phase 13C - Edge Trigger Slope and Analog Level v1 adds two canonical,
+Edge Trigger slope and analog level support provides two canonical,
 independent worker commands. `trigger-edge-slope` accepts only:
 
 ```json
@@ -544,11 +540,10 @@ boolean, string, null, NaN, or infinity). Query cannot be combined with
 commands validate before enqueue, accepted counters, job/artifact creation,
 simulator/VISA open, or SCPI. They use only Edge slope or source-qualified
 analog level SCPI, do not switch trigger mode or source, and do not support
-Line, WaveGen, WMOD, or digital/MSO levels. This target
-DSOX2004A/DSOX3024A/DSOX4024A/DSOX4034A worker support is hardware-free only;
-live hardware, LAN, and worker-live validation have not been run.
+Line, WaveGen, WMOD, or digital/MSO levels. Source channels are validated
+against the selected model profile.
 
-Phase 14 adds two canonical External-input commands. `external-trigger-range`
+External-input support provides two canonical commands. `external-trigger-range`
 accepts only:
 
 ```json
@@ -587,11 +582,9 @@ finite JSON number and may be positive, negative, or zero. Empty arguments,
 `query: false`, query/level mixes, unknown or alias keys, booleans, strings,
 null, NaN, and infinity are rejected before any worker side effect. This
 command neither changes nor queries range, source, or trigger mode; it does
-not clamp to the dynamic External range. Both Phase 14 worker paths are
-hardware-free only; live hardware, LAN, and worker-live validation have not
-been run.
+not clamp to the dynamic External range.
 
-Phase 15 adds three canonical External trigger input commands. The only
+External trigger input support provides three canonical commands. The only
 accepted forms are:
 
 ```json
@@ -624,8 +617,8 @@ wrong types, non-finite values, and oversized numeric values are rejected
 before enqueue, accepted counters, artifacts, simulator/VISA open, or SCPI.
 The SCPI surface is only `:EXTernal:PROBe`, `:EXTernal:UNITs`, and one
 `:EXTernal?` aggregate query. No External BWLimit setter, AutoProbe discovery,
-range/level conversion, trigger mode/source modification, or worker-live
-validation is included.
+range/level conversion, trigger mode/source modification, or additional
+External trigger behavior is included.
 
 `trigger-sweep`, `trigger-noise-reject`, and `trigger-hf-reject` are accepted
 only as canonical common trigger general setting commands:
@@ -725,18 +718,8 @@ Rejected `trigger-edge-coupling` alias keys include `mode`, `value`, `state`, `e
 
 Rejected `trigger-edge-reject` alias keys include `mode`, `value`, `state`, `enabled`, `enable`, `on`, `off`, `filter`, `filter_mode`, `trigger_reject`, `edge_reject`, `reject_mode`, `coupling`, `hf_reject`, and `lf_reject`. Alias values such as `lfr`, `hfr`, `lfreject`, `hfreject`, `lf_reject`, `hf_reject`, `low-frequency-reject`, and `high-frequency-reject` are rejected.
 
-This v1 worker support is hardware-free only. Live worker, LAN, WebUI runtime, DSO-X 2000X/3000X/4024A/4034A live validation, additional MSO/digital source support, trigger-coupling/reject cross-setting side-effects emulator behavior, and run/stop/single/force/wait/capture workflow integration have not been run or implemented.
-
-This v1 worker support is hardware-free only. Live worker, LAN, WebUI runtime,
-DSO-X 2000X/3000X/4024A live validation, additional DSO-X 4034A live validation,
-generic trigger settings, external/MSO/digital trigger behavior, and
-run/stop/single/force/wait/capture workflow integration have not been run or
-implemented for this common trigger settings worker surface. Previous trigger
-pack live validation status is documented in Local validation notes and remains
-unchanged.
-
 `trigger-holdoff` is the canonical worker command for fixed trigger holdoff
-time v1. Query mode accepts only this shape:
+time. Query mode accepts only this shape:
 
 ```json
 {"command": "trigger-holdoff", "arguments": {"query": true}}
@@ -773,9 +756,8 @@ aliases such as `holdoff`, `trigger-hold-off`, `trigger_holdoff`,
 `trigger-holdoff-random`, `trigger-holdoff-minimum`, and
 `trigger-holdoff-maximum` are not accepted.
 
-Random holdoff, minimum/maximum holdoff commands, WebUI runtime behavior, live
-worker validation, LAN validation, and additional model validation are outside
-this fixed-holdoff worker contract unless documented separately.
+Random holdoff and minimum/maximum holdoff commands are outside this
+fixed-holdoff worker contract.
 
 `trigger-pulse-width` is accepted only as the canonical Pulse Width trigger
 command. It uses the underlying Keysight `:TRIGger:GLITch...` SCPI family:
@@ -949,13 +931,12 @@ slope. Query result JSON preserves raw readbacks and tolerates digital or
 unknown source state.
 
 The worker accepts only `query`, `arm_channel`, `arm_slope`,
-`trigger_channel`, `trigger_slope`, `time_seconds`, and `count` for this v1
+`trigger_channel`, `trigger_slope`, `time_seconds`, and `count` for this
 command. It rejects `arm_source`, `trigger_source`, `digital`, `level_volts`,
 `arm_level_volts`, `trigger_level_volts`, digital/MSO threshold fields,
 external source configuration, aliases such as `edge-then-edge`, and generic
-trigger-tree arguments. Worker support has hardware-free validation only; live
-CLI, worker live, LAN, WebUI, DSO-X 2000X/3000X/4024A/4034A, digital/MSO, and
-broader trigger-tree validation have not been run.
+trigger-tree arguments. The command is DSO analog-channel-only and does not
+run acquisition or capture workflows.
 
 `trigger-setup-hold` is accepted only as the canonical Setup and Hold trigger
 command. It uses the Keysight `:TRIGger:SHOLd...` SCPI family:
@@ -987,18 +968,15 @@ readbacks and tolerates digital or unknown source state, but configure rejects
 digital/MSO, external, and unknown source inputs.
 
 The worker accepts only `query`, `clock_channel`, `data_channel`, `slope`,
-`setup_time`, and `hold_time` for this v1 command. The canonical timing keys
+`setup_time`, and `hold_time` for this command. The canonical timing keys
 are `setup_time` and `hold_time`, matching CLI `--setup-time` and
 `--hold-time`; `setup_time_seconds` and `hold_time_seconds` are not accepted.
 It rejects partial configure, `query` values other than exactly `true`,
 `query` combined with configure keys, unknown keys even when false or null,
 source aliases, threshold/level fields, digital/MSO or external source
 configuration, aliases such as `setup-hold-trigger`, and generic trigger-tree
-arguments before enqueue, artifact creation, VISA open, or SCPI. Focused DSO-X
-4034A USB CLI live validation passed on 2026-07-08. Worker live, LAN, WebUI,
-DSO-X 2000X/3000X/4024A live validation, additional DSO-X 4034A live
-validation, MSO/digital source validation, actual signal-trigger behavior, and
-broader trigger-tree validation have not been run.
+arguments before enqueue, artifact creation, VISA open, or SCPI. The command
+does not run acquisition or capture workflows.
 
 `trigger-edge-burst` is accepted only as the canonical Nth Edge Burst trigger
 command. It uses the Keysight `:TRIGger:EBURst...` SCPI family plus optional
@@ -1047,16 +1025,13 @@ source readback safely parses as analog. Query result JSON preserves raw
 readbacks and tolerates digital, `NONE`, or unknown source state.
 
 The worker accepts only `query`, `source_channel`, `slope`, `count`,
-`idle_time`, and `level_volts` for this v1 command. It rejects partial
+`idle_time`, and `level_volts` for this command. It rejects partial
 configure, `query` values other than exactly `true`, `query` combined with
 configure keys, unknown keys even when false or null, `channel`, `source`,
 `edge_count`, `idle_time_seconds`, `time_seconds`, `trigger_level`, `level`,
 digital/MSO or external source configuration, and generic trigger-tree
-arguments before enqueue, artifact creation, VISA open, or SCPI. Worker support
-has hardware-free validation only; live CLI, worker live, LAN, WebUI, DSO-X
-2000X/3000X/4024A/4034A, MSO/digital source validation, actual signal-trigger
-behavior, broader trigger-tree validation, and capture/wait-trigger/run/stop/
-single workflow integration have not been run or implemented.
+arguments before enqueue, artifact creation, VISA open, or SCPI. The command
+does not run acquisition or capture/wait-trigger/run/stop/single workflows.
 
 `trigger-tv` is accepted only as the canonical basic TV / Video trigger
 command. It uses the Keysight `:TRIGger:TV...` SCPI family:
@@ -1105,7 +1080,7 @@ readbacks and tolerates digital, external, extended-standard, unsupported TV
 mode, non-integer line, and unknown polarity states.
 
 The worker accepts only `query`, `source_channel`, `standard`, `mode`, `line`,
-and `polarity` for this v1 command. It rejects partial configure, `query`
+and `polarity` for this command. It rejects partial configure, `query`
 values other than exactly `true`, `query` combined with configure keys, unknown
 keys even when false or null, and aliases such as `channel`, `source`,
 `tv_source`, `tv_standard`, `trigger_standard`, `tv_mode`, `trigger_mode`,
@@ -1113,11 +1088,8 @@ keys even when false or null, and aliases such as `channel`, `source`,
 `sourceChannel`, and `source_channel_number` before enqueue, artifact
 creation, VISA open, or SCPI. Extended video standards, UDTV commands, 3000X/
 4000X-only `LINE` mode, USB, NFC, serial/bus, zone trigger, MSO/digital source,
-external source, actual signal-trigger behavior, run/stop/single/force/wait/
-capture integration, and WebUI runtime are out of scope. Worker support has
-hardware-free validation only; live CLI, worker live, LAN, WebUI, DSO-X
-2000X/3000X/4024A/4034A, MSO/digital, extended video/UDTV, and actual
-signal-trigger validation have not been run.
+and external source are out of scope. The command does not run acquisition or
+run/stop/single/force/wait/capture workflows.
 
 `trigger-pattern` is accepted only as the canonical Pattern trigger command.
 It uses the DSO analog ASCII entered-pattern `:TRIGger:PATTern...` SCPI
@@ -1147,13 +1119,12 @@ edge-source, and edge fields.
 
 The worker does not accept `source`, `level`, `format`, `edge`, `edge_source`,
 `qualifier`, `time_seconds`, `greater_than_seconds`, `less_than_seconds`,
-`range_min_seconds`, or `range_max_seconds` for this v1 command. It does not
+`range_min_seconds`, or `range_max_seconds` for this command. It does not
 support HEX configure mode, digital/MSO pattern configuration, `R`/`F`,
 optional edge parameters, duration qualifiers, pattern range commands,
 source/level commands, aliases such as `pattern-trigger`, or generic
-trigger-tree behavior. Worker support has hardware-free validation only; live
-CLI, worker live, LAN, WebUI, DSO-X 2000X/3000X/4024A/4034A, MSO/digital, and
-broader trigger-tree validation have not been run.
+trigger-tree behavior. The command is limited to the analog ASCII pattern
+surface and does not run acquisition or capture workflows.
 
 `trigger-or` is accepted only as the canonical OR trigger command. It uses the
 DSO analog-only `:TRIGger:OR` SCPI surface:
@@ -1187,10 +1158,9 @@ fail solely because the current trigger mode is not OR.
 
 The worker does not accept `mask`, `channels`, alias fields, source/level,
 format, edge, qualifier, timing, digital/MSO, or generic trigger-tree arguments
-for this v1 command. It does not accept aliases such as `or-trigger` or
-`trigger-or-mask`. Worker support has hardware-free validation only; live CLI,
-worker live, LAN, WebUI, DSO-X 2000X/3000X/4024A/4034A, MSO/digital, and
-broader trigger-tree validation have not been run.
+for this command. It does not accept aliases such as `or-trigger` or
+`trigger-or-mask`. The command is limited to DSO analog channels and does not
+run acquisition or capture workflows.
 
 ### Advanced Channel Commands
 
@@ -1247,10 +1217,6 @@ VISA open, or SCPI. The model capability guard remains in force after opt-in:
 DSO-X 2000X profiles reject `fifty` before `:CHANnel<n>:IMPedance FIFTy` can
 be sent.
 
-Worker support for these commands has hardware-free validation only. Live
-worker validation, LAN validation, WebUI integration, and DSO-X 2000X/3000X
-hardware validation have not been run.
-
 ### Common Display Commands
 
 The worker supports four shared display one-shot commands:
@@ -1302,16 +1268,16 @@ numeric `seconds` for finite seconds. `display-intensity` accepts only `query`
 and `value`, with integer `value` from `0` through `100`, and uses the shared
 `:DISPlay:INTensity:WAVeform` SCPI path.
 `display-vectors` accepts only `query` and `on`; setting OFF is unsupported in
-this common v1 surface.
+this common command surface.
 
 For these commands, unknown keys are rejected before enqueue, artifact
 creation, VISA open, or SCPI. Boolean `query` and `on` keys must be exactly
 `true`; false or null values are rejected instead of being ignored.
-`display-persistence-clear` is not a v1 common worker command.
+`display-persistence-clear` is not a common worker command.
 
 ### Measurement Control And Reference Waveform Commands
 
-The worker accepts the common v1 measurement control commands:
+The worker accepts the common measurement control commands:
 
 ```json
 {"command": "measure-clear", "arguments": {}}
@@ -1344,7 +1310,7 @@ zoomed timebase. On DSO-X 4034A firmware 07.20, selecting it without that
 display state may return `-221,"Settings conflict"`. Callers that do not know
 the current zoom state should prefer `auto`.
 
-The worker also accepts the common v1 reference waveform commands:
+The worker also accepts the common reference waveform commands:
 
 ```json
 {"command": "reference-save", "arguments": {"slot": 1, "source_channel": 1}}
@@ -1372,10 +1338,9 @@ are 1-10 printable ASCII characters without double quotes. Unknown keys and
 invalid values are rejected before enqueue and artifact creation. On DSO-X
 4034A, enabling one reference slot for display may turn off display for the
 other slot. Clients must treat that instrument-managed display interaction as
-normal behavior rather than failure. These observations come from focused USB
-CLI validation; worker live behavior has not been separately validated.
+normal behavior rather than failure.
 
-### DVM Common Pack v1 Commands
+### DVM Commands
 
 The worker accepts only the canonical DVM commands and argument shapes:
 
@@ -1414,12 +1379,11 @@ mixes, aliases, unknown keys, non-boolean `enabled`, and non-integer or invalid
 channels are rejected before enqueue, accepted counters, artifacts,
 simulator/VISA open, or SCPI.
 
-DVM may be option/license dependent on live instruments. DVM Common Pack v1
-does not accept `dvm-frequency`, Counter command names, DVM frequency mode,
-`:COUNter` commands, or `:MEASure:COUNter`. Its validation is hardware-free;
-no live hardware validation was performed for this pack.
+DVM may be option/license dependent on live instruments. DVM does not accept
+`dvm-frequency`, Counter command names, DVM frequency mode, `:COUNter`
+commands, or `:MEASure:COUNter`.
 
-### Demo Output Pack v1 Commands
+### Demo Output Commands
 
 The worker accepts only these exact argument schemas:
 
@@ -1464,13 +1428,12 @@ such as `output`, `on`, `state`, `value`, `signal`, `type`, `demo`, `mode`,
 `angle`, `phase`, and `degree` are rejected before enqueue, accepted counters,
 artifact creation, simulator/VISA open, or SCPI.
 
-DEMO is option-/hardware-dependent, and live missing-option or missing-hardware
-errors use the existing instrument error path. This pack is hardware-free
-validated only. It remains separate from WGEN and does not implement WebUI
-runtime behavior or the additional 4000X-only DEMO functions. It does not claim
-validation across physical models or firmware revisions.
+DEMO is option-/hardware-dependent, and missing-option or missing-hardware
+errors use the existing instrument error path. It remains separate from WGEN
+and does not include WebUI runtime behavior or the additional 4000X-only DEMO
+functions.
 
-### WGEN Basic P1 Commands
+### Waveform Generator Commands
 
 The worker accepts only explicit canonical query or configure shapes:
 
@@ -1497,13 +1460,13 @@ artifact creation, backend open, or SCPI.
 
 The 2000X and 3000X route to `:WGEN`; the 4000X routes only to generator 1
 through `:WGEN1`. Multi-generator selection, modulation, arbitrary waveforms,
-and automatic configure-and-enable batches are outside P1. Worker support is
-hardware-free only; no live hardware validation was performed.
+and automatic configure-and-enable batches are outside this command set.
 
-### MATH-P1 Display And Vertical Commands
+### Math Display And Vertical Commands
 
-MATH-P1 controls instrument-side Math waveform display and vertical settings.
-It preserves the existing `fft` command and adds these worker request shapes:
+Math display and vertical commands control instrument-side Math waveform display
+and vertical settings. They preserve the existing `fft` command and add these
+worker request shapes:
 
 ```json
 {"command": "math-display", "arguments": {"function": 1, "on": true}}
@@ -1536,14 +1499,13 @@ and the worker does not run autoscale. Instrument firmware may recalculate
 vertical scaling when Math display changes from OFF to ON. Clients that require
 explicit vertical settings should submit `math-display` with `on: true` before
 submitting the desired `math-vertical` setters. The worker does not disable
-other 4000X slots; instrument display behavior remains instrument-managed. P1
-does not configure Math operations or sources, probe licenses, or calculate
-host-side Math. It adds no artifacts and has hardware-free validation only; no
-live validation was performed.
+other 4000X slots; instrument display behavior remains instrument-managed. The
+commands do not configure Math operations or sources, probe licenses, or
+calculate host-side Math, and add no artifacts.
 
-### MATH-P2 Dual-Source Operator Command
+### Math Dual-Source Operator Command
 
-MATH-P2 adds one instrument-side dual-source Math command:
+The worker accepts one instrument-side dual-source Math command:
 
 ```json
 {"command": "math-operator", "arguments": {"function": 1, "operation": "subtract", "source1": "channel1", "source2": "channel2"}}
@@ -1561,19 +1523,18 @@ exactly `query: true` and cannot include configure arguments. Unknown
 arguments and incomplete configure requests are rejected before enqueue,
 artifacts, backend open, or SCPI.
 
-The command reuses the P0/P1 function capability and dialect:
+The command reuses the existing Math function capability and dialect:
 2000X/3000X accept only function 1 and use unindexed `:FUNCtion`; 4000X accepts
 functions 1 through 4 and uses indexed `:FUNCtion<n>`. Configure writes only
 operation, source1, and source2 in that order. It does not enable Math display,
 change vertical state, run autoscale, probe licenses, or calculate host-side
 waveforms. Math function sources are not accepted by `math-operator` on any
 series. Reference, bus, digital, external, and expression sources are not
-supported. This command adds no artifacts and has hardware-free validation
-only; no live instrument or license validation was performed.
+supported. This command adds no artifacts.
 
-### MATH-P3 Single-Source Transform Command
+### Math Single-Source Transform Command
 
-MATH-P3 adds one instrument-side single-source Math command:
+The worker accepts one instrument-side single-source Math command:
 
 ```json
 {"command": "math-transform", "arguments": {"function": 1, "operation": "integrate", "source": "channel1", "input_offset": 0}}
@@ -1603,20 +1564,18 @@ unknown keys or values, boolean or non-finite numeric parameters, and
 operation-specific options used with another operation are rejected before
 enqueue, artifacts, backend open, or SCPI.
 
-The command reuses the P0/P1 function capability and dialect:
+The command reuses the existing Math function capability and dialect:
 2000X/3000X accept only function 1 and use unindexed `:FUNCtion`; 4000X accepts
 functions 1 through 4 and uses indexed `:FUNCtion<n>`. Configure writes
 operation, source1, and then any applicable integrate or linear parameters. It
 does not enable Math display, change vertical state, run autoscale, probe
 licenses, or calculate host-side waveforms. Reference waveform sources, bus
 sources, and waveform export are not supported. License availability remains
-subject to the live instrument error queue. The command adds no artifacts and
-has hardware-free validation only; no live instrument or license validation
-was performed.
+subject to the live instrument error queue. The command adds no artifacts.
 
-### MATH-P4 Composite And Cascade Sources
+### Math Composite And Cascade Sources
 
-MATH-P4 adds the global 2000X/3000X GOFT command:
+The worker accepts the global 2000X/3000X GOFT command:
 
 ```json
 {"command": "math-composite-source", "arguments": {"operation": "subtract", "source1": "channel1", "source2": "channel2"}}
@@ -1641,14 +1600,13 @@ as source2. Unknown fields, partial configure requests, query/configure mixes,
 aliases, uppercase values, and unsupported model/source combinations fail
 before enqueue, artifacts, backend open, or SCPI.
 
-P4 configures instrument-side Math only. It does not calculate or export
+This command configures instrument-side Math only. It does not calculate or export
 waveforms, enable display, change vertical state, run autoscale, or probe
-licenses. It adds no artifacts and has hardware-free validation only; no live
-instrument or license validation was performed.
+licenses. It adds no artifacts.
 
-### MATH-P5 Filter And Clear Commands
+### Math Filter And Clear Commands
 
-MATH-P5 adds instrument-side filter configuration and query:
+The worker accepts instrument-side filter configuration and query:
 
 ```json
 {"command": "math-filter", "arguments": {"function": 1, "operation": "low-pass", "source": "channel1", "cutoff_hz": 1000000}}
@@ -1671,14 +1629,14 @@ non-boolean odd integer of at least 3. Query requires exactly `query: true`
 and cannot include configure arguments. Oversized integers that cannot be
 safely serialized are rejected before enqueue.
 
-Filter sources reuse the P4 single-source rules: supported analog channels on
+Filter sources reuse the single-source rules: supported analog channels on
 all series, `composite` only on 2000X/3000X, and only a lower-numbered Math
 function on 4000X. The `math-operator` source contract remains
 analog-channel-only. Unknown fields, irrelevant parameters, unsupported
 operations, functions, or sources, and invalid numeric types fail before
 enqueue, artifacts, backend open, or SCPI.
 
-MATH-P5 also adds 4000X-only accumulation clear:
+The worker also accepts 4000X-only accumulation clear:
 
 ```json
 {"command": "math-clear", "arguments": {"function": 1}}
@@ -1688,14 +1646,13 @@ MATH-P5 also adds 4000X-only accumulation clear:
 `average`, `max-hold`, or `min-hold` accumulation and sends indexed
 `:FUNCtion<n>:CLEar` without querying the current operation, waiting for
 completion, or clearing acquisition or display state.
-Neither P5 command enables Math display, changes vertical or acquisition
-state, runs autoscale, probes licenses, calculates waveform samples, or
-creates domain artifacts. Validation is hardware-free only; live instrument
-and license behavior have not been validated.
+Neither command enables Math display, changes vertical or acquisition state,
+runs autoscale, probes licenses, calculates waveform samples, or creates domain
+artifacts.
 
-### MATH-P6 Visualization And Trend Command
+### Math Visualization And Trend Command
 
-MATH-P6 adds instrument-side visualization configuration and query:
+The worker accepts instrument-side visualization configuration and query:
 
 ```json
 {"command": "math-visualization", "arguments": {"function": 1, "operation": "magnify", "source": "composite"}}
@@ -1725,15 +1682,14 @@ contain a compatible installed measurement.
 Query requires exactly `query: true` with `function` and rejects configure
 arguments. Unknown fields, wrong JSON types, aliases, uppercase values,
 unsupported operations or sources, invalid slots, and operation-specific
-argument conflicts fail before enqueue, artifacts, backend open, or SCPI. P6
-does not enable Math display, change vertical or acquisition state, run
-autoscale, install measurements, probe licenses, calculate waveform samples,
-or export waveform data. Validation is hardware-free only; live instrument and
-license behavior have not been validated.
+argument conflicts fail before enqueue, artifacts, backend open, or SCPI. This
+command does not enable Math display, change vertical or acquisition state, run
+autoscale, install measurements, probe licenses, calculate waveform samples, or
+export waveform data.
 
-### MATH-P7 FFT Completion
+### Math FFT Command
 
-MATH-P7 preserves the existing `fft` worker command and basic request:
+The worker preserves the existing `fft` command and basic request:
 
 ```json
 {"command": "fft", "arguments": {"function": 1, "source_channel": 1}}
@@ -1766,15 +1722,11 @@ start/stop, gate, detector settings, bin size, FFT sample rate, resolution
 bandwidth, and phase reference when the current operation is FFT Phase.
 Advanced controls do not enable Math display, configure Zoom or timebase, run
 autoscale, or change acquisition state. Query-only derived fields are
-instrument readbacks, not host-side FFT results. Validation is hardware-free
-only; no live instrument validation was performed.
+instrument readbacks, not host-side FFT results.
 
-### MATH-P9 Integration Closure
+### Math Command Rules
 
-The P0-P7 Worker surface is closed under a consistency gate that compares the
-canonical CLI arguments with the strict Worker allowlists and verifies that
-enabled capability operations reach Core builders, parsers, and simulator
-state. The public commands remain `fft`, `math-display`, `math-vertical`,
+The public Math commands are `fft`, `math-display`, `math-vertical`,
 `math-operator`, `math-composite-source`, `math-transform`, `math-filter`,
 `math-visualization`, and `math-clear`.
 
@@ -1786,13 +1738,12 @@ inapplicable operation parameters, invalid integers, non-finite numeric
 values, unsupported capabilities, and schema mismatches are rejected before
 enqueue or backend access.
 
-MATH remains instrument-side only. MATH-P8 bus-timing and bus-state are absent
-from `DOMAIN_COMMANDS` and all strict schemas because MSO/digital-channel
-support is not implemented. No empty Worker request shape is reserved for
-them. P9 validation is hardware-free; focused live validation remains required
-per registered model, firmware, transport, and Worker-live path.
+Math remains instrument-side only. Bus timing and bus state are not part of
+`DOMAIN_COMMANDS` or the strict schemas because MSO/digital-channel support is
+outside the supported capability set. No empty Worker request shape is
+reserved for them.
 
-### Serial Basic P0 Commands
+### Serial Query And Display Commands
 
 The worker accepts only these canonical argument shapes:
 
@@ -1826,11 +1777,11 @@ before enqueue, artifacts, backend open, or SCPI.
 `serial-query` sends only `:SBUS<n>?` and preserves the trimmed raw subsystem
 response. Mode and display configuration each send only their target write.
 The worker reuses the CLI/Core result without worker-only business behavior.
-P0 does not configure protocol parameters, sources, triggers, Search, Lister,
-or export. It does not probe licenses; unavailable serial decode options remain
-normal instrument errors. This surface has hardware-free validation only.
+This command set does not configure protocol parameters, sources, triggers,
+Search, Lister, or export. It does not probe licenses; unavailable serial
+decode options remain normal instrument errors.
 
-### Serial Basic P1 Commands
+### Serial Protocol Configuration Commands
 
 The worker also accepts `serial-uart`, `serial-i2c`, `serial-spi`, and
 `serial-can`. Each request requires an integer `bus` and either
@@ -1844,14 +1795,14 @@ I2C uses `clock_source`, `data_source`, and `address_size`; SPI uses
 
 Sources are canonical `channelN` or `external`, bounded by the selected model's
 analog-channel capability. CAN signal definitions use `canh`, `canl`, `rx`,
-`tx`, `difl`, and `difh`. Worker validation reuses the CLI/Core path and, for
-worker-live, rejects invalid bus, mode, source, or parameter values using the
-startup model before enqueue, artifact creation, backend open, or SCPI. P1
-does not configure serial trigger, Search, Lister, export, or advanced protocol
-parameters; Serial Search is provided by the separate P3 commands below.
+`tx`, `difl`, and `difh`. Worker validation reuses the CLI/Core path and
+rejects invalid bus, mode, source, or parameter values using the startup model
+before enqueue, artifact creation, backend open, or SCPI. This command set does
+not configure serial trigger, Search, Lister, export, or advanced protocol
+parameters; Serial Search is provided by the separate commands below.
 Instrument license errors remain normal instrument errors.
 
-### Serial UART Trigger P0 Command
+### Serial UART Trigger Command
 
 The worker accepts only these canonical UART trigger request shapes:
 
@@ -1871,17 +1822,19 @@ values, query/configure mixes, unavailable buses, and models without UART
 decode support fail before enqueue, artifact creation, backend open, or SCPI.
 The worker uses the shared Core request validator and creates no artifact.
 
-The user must configure the target UART bus through Serial P1 first. Configure
-queries the current bus mode, writes UART trigger criteria only when that mode
+The user must configure the target UART bus through the Serial protocol
+configuration command first. Configure mode queries the current bus mode,
+writes UART trigger criteria only when that mode
 is UART, and selects the corresponding `SBUS<n>` as the global Trigger Mode
 last. Query returns the current bus mode and global Trigger Mode; for a
 non-UART bus it returns null UART-specific fields without sending
 UART-specific queries and does not treat the mode mismatch as command failure.
 This command does not modify UART decode settings, enable Serial display, run,
-single, wait, or capture. P0 excludes UART burst, idle time, 9-bit trigger
-comparison, pattern sequence, and LIN/I2C/SPI/CAN or other protocol triggers.
+single, wait, or capture. This command excludes UART burst, idle time, 9-bit
+trigger comparison, pattern sequence, and LIN/I2C/SPI/CAN or other protocol
+triggers.
 
-### Serial Trigger P1 Commands
+### Serial I2C, SPI, And CAN Trigger Commands
 
 The worker accepts these strict canonical request shapes:
 
@@ -1905,17 +1858,18 @@ values are unsigned integer or hexadecimal values; SPI and CAN patterns use
 binary or `0x` hexadecimal syntax with `X` don't-care characters. Configure
 results include `state_changing: true` and create no artifact.
 
-The target Bus must already be configured through Serial P1. Configure queries
+The target Bus must already be configured through the Serial protocol
+configuration command. Configure queries
 the current Bus mode, writes protocol criteria in documented order, and selects
 the corresponding `SBUS<n>` global Trigger Mode last. Query checks both Bus
 mode and trigger type before requesting only active protocol fields. A mode
 mismatch is successful with `selected: false` and null protocol-specific
 fields, without protocol-specific queries. These commands do not change decode
-settings or display and do not run, single, wait, or capture. P1 includes only
-the common I2C/SPI/CAN trigger subset; UART P0 and Serial Search P3 remain
-separate commands.
+settings or display and do not run, single, wait, or capture. This command set
+includes only the common I2C/SPI/CAN trigger subset; UART and Serial Search
+remain separate commands.
 
-### Serial Lister P2 Commands
+### Serial Lister Commands
 
 The worker accepts these exact Lister request shapes:
 
@@ -1952,7 +1906,7 @@ payload as a host artifact, and does not use instrument-side `:SAVE:LISTer` or
 parse protocol rows. Serial decode and decoded Lister data must already exist;
 the worker does not acquire traffic or enable Serial/SBUS displays.
 
-### Search Basic Pack v1 Commands
+### Waveform Search Commands
 
 The worker accepts only these canonical argument shapes:
 
@@ -1997,14 +1951,14 @@ DSO-X 2000X accepts only `serial1`; 3000X accepts `edge`, `glitch`, `runt`,
 Empty arguments, `query: false`, query/configure mixes, unknown keys, wrong
 types, aliases, uppercase values, and unsupported profile modes are rejected.
 
-### Serial Search P3 Commands
+### Serial Search Commands
 
 The worker accepts `serial-search-uart`, `serial-search-i2c`,
 `serial-search-spi`, and `serial-search-can`. Each request requires a valid
 `bus` and either `{"query": true}` or the canonical protocol-specific Search
 fields. The matching Serial bus must already be configured with the related
-P1 command. Serial Search does not query, modify, or force validation of the
-current SBUS protocol configuration.
+Serial protocol configuration command. Serial Search does not query, modify, or
+force validation of the current SBUS protocol configuration.
 
 Query results preserve canonical protocol values and trimmed raw values,
 including `raw_search_state` and `raw_search_mode`. The I2C readbacks `ADDR`
@@ -2016,14 +1970,12 @@ readbacks fail with `SearchResponseError`.
 
 Unknown fields, wrong types, query/configure mixes, unavailable buses, and
 unsupported configure values fail before enqueue, artifact creation, backend
-open, or SCPI. These commands create no command artifacts. Serial Search P3
-does not support LIN, advanced protocols, symbolic CAN, or Search export. This
-surface has hardware-free validation only; no live hardware validation was
-performed.
+open, or SCPI. These commands create no command artifacts. Serial Search does
+not support LIN, advanced protocols, symbolic CAN, or Search export.
 
-### Save/Export Pack v1 Commands
+### Instrument-Side Save Commands
 
-Save/Export Pack v1 is instrument-side file saving. It sends `:SAVE...` SCPI
+Instrument-side save commands send `:SAVE...` SCPI
 so the oscilloscope writes to its current save directory, internal storage, or
 attached USB storage. It does not create host-side image or waveform files,
 does not resolve instrument filenames under the worker job directory, and does
@@ -2080,8 +2032,7 @@ string or numeric booleans, wrong string types, non-integer points, and values
 below 100 are rejected before enqueue, accepted counters, artifact creation,
 simulator/VISA session open, or SCPI. Results, lister, mask, multi, power,
 arbitrary, compliance, segmented, setup changes, and WMEMory export are not
-included. This worker surface has hardware-free validation only; live hardware
-validation was not performed.
+included.
 
 ### Label And Annotation Commands
 
