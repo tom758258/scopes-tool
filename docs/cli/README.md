@@ -1369,9 +1369,9 @@ Worker usage:
 Worker accepts only `query`, `source_channel`, `slope`, `count`, `idle_time`,
 and optional `level_volts`;
 aliases such as `channel`, `source`, `edge_count`, `idle_time_seconds`,
-`time_seconds`, `trigger_level`, and `level` are not accepted. Focused DSO-X
-4034A behavior, additional model support, MSO/digital source configuration,
-actual signal-trigger behavior, broader trigger-tree behavior, and
+`time_seconds`, `trigger_level`, and `level` are not accepted. MSO/digital
+source configuration, actual signal-trigger behavior, broader trigger-tree
+behavior, and
 capture/wait-trigger/run/stop/single workflow integration are outside this
 command.
 
@@ -1752,9 +1752,8 @@ printable ASCII label without double quotes, and `reference-query` reads both
 display and label state while preserving raw readbacks in JSON. File-based
 `:SAVE:WMEMory`/`:RECall:WMEMory` workflows and reference skew, offset, range,
 and scale controls are not supported. Enabling display for one reference slot
-may turn off display for
-the other slot on this instrument; this instrument-managed interaction is
-normal behavior, not a command failure. The simulator tracks the two display
+may turn off display for the other slot; this is an instrument-managed
+interaction, not a command failure. The simulator tracks the two display
 states independently and does not emulate that interaction.
 
 Control waveform search:

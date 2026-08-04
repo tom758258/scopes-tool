@@ -32,7 +32,7 @@ Core owns runtime behavior:
   changes from OFF to ON, so callers that need explicit vertical settings
   should enable display before applying scale, range, or offset. Math operation
   selection, sources, host-side Math, license probing, and slot coordination
--  are not provided by this surface.
+  are not provided by this surface.
 - Instrument-side dual-source Math operators through
   `Oscilloscope.configure_math_operator()` and `query_math_operator()`. This
   surface supports `add`, `subtract`, `multiply`, and `divide` with two
@@ -177,8 +177,8 @@ Core owns runtime behavior:
   1-10 printable ASCII characters without double quotes. File-based reference
   save/recall and reference scale, skew, offset, and range controls are not
   supported. Enabling one
-  reference slot for display may turn off the other slot on that instrument;
-  this is normal instrument-managed display behavior.
+  reference slot for display may turn off the other slot; this is normal
+  instrument-managed display behavior, not a command failure.
 - Read-only analog acquisition sample rate query helpers.
 - Screenshot format helpers for 4000X screen-dump PNG, BMP, and
   8-bit BMP capture plus hardcopy ink saver, palette, layout, and aggregate
