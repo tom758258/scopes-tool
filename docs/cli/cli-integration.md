@@ -12,18 +12,18 @@ CLI-only fields include:
 - stderr SCPI diagnostic handling
 - parser validation messages
 
-DVM Common Pack v1 adapter commands are `dvm-enable`, `dvm-source`,
+DVM adapter commands are `dvm-enable`, `dvm-source`,
 `dvm-mode`, `dvm-auto-range`, `dvm-current`, and `dvm-query`. Boolean
 configuration uses canonical `--enabled true|false`; `dvm-current` and
 `dvm-query` require `--query`. The adapter does not expose DVM frequency,
 independent Counter, or `:MEASure:COUNter` commands.
 
-WGEN Basic P1 adapter commands are `wgen-query`, `wgen-output`,
+WGEN adapter commands are `wgen-query`, `wgen-output`,
 `wgen-function`, `wgen-frequency`, `wgen-voltage`, `wgen-offset`, and
 `wgen-load`. The selected model profile determines the concrete `:WGEN` or
-`:WGEN1` SCPI root. The adapter exposes no generator selector in P1.
+`:WGEN1` SCPI root. The adapter does not expose a generator selector.
 
-Serial Basic P0 adapter commands are `serial-query`, `serial-mode`, and
+Serial configuration commands are `serial-query`, `serial-mode`, and
 `serial-display`. Every command requires `--bus`. Mode and display require
 exactly one of query or configure action; display configuration uses canonical
 `--enabled true|false`. `serial-query` preserves the trimmed aggregate
@@ -33,16 +33,17 @@ before backend open; live workers use their startup model for the same strict
 pre-open validation. A normal live one-shot opens the requested resource,
 queries `*IDN?`, and then validates Serial bus and mode support from the
 detected model before sending any `:SBUS...` command; `--model` does not
-override that detected identity. Serial Basic P1 adds `serial-uart`,
-`serial-i2c`, `serial-spi`, and `serial-can` for basic protocol source and
-decode settings. Each command accepts `--query` or one or more protocol
+override that detected identity. Serial configuration also provides
+`serial-uart`, `serial-i2c`, `serial-spi`, and `serial-can` for basic protocol
+source and decode settings. Each command accepts `--query` or one or more protocol
 options, queries `MODE?` before protocol fields, and fails before field queries
 when the mode does not match. Sources use `channelN` (bounded by the model's
 analog-channel capability) or `external`; I2C emits the instrument `IIC` token,
 and CAN uses `difl` as the canonical differential signal value. Capability
 profiles determine bus count and available protocol modes; instrument licenses
-may still be required. P1 does not expose serial trigger, Lister, or export
-configuration; Search Basic and Serial Search are documented below.
+may still be required. Serial configuration does not expose serial trigger,
+Lister, or export configuration; Search configuration and Serial Search are
+documented below.
 
 Search adapter commands are `search-state`, `search-mode`, `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, `serial-search-can`,
 query-only `search-count`, and 4000X `search-event`. Boolean configuration uses canonical

@@ -188,7 +188,7 @@ Control and setup:
   `:DISPlay:INTensity:WAVeform`.
 - `display-vectors`: `operation: "display-vectors"`, target-only `command`,
   and boolean `value`; query results also include `raw_value`. Setting OFF is
-  unsupported in the v1 common display surface.
+  unsupported in the common display surface.
 - `annotation`: `operation`, `commands`, `slot`, `enabled`, `text`, `color`,
   `background`, `x`, and `y`. Query results always include `x` and `y`; they
   are `null` for models without annotation position support. Annotation query
@@ -244,7 +244,7 @@ Control and setup:
 - `trigger-hf-reject`: `operation` and `command`. Configure results include
   boolean `enabled` and `state_changing: true`. Query results include
   normalized boolean `enabled` and preserved `raw_value`.
-- WGEN Basic P1 focused commands return `operation` and concrete `command`.
+- WGEN commands return `operation` and concrete `command`.
   Configure results include the canonical configured field and
   `state_changing: true`; query results include normalized values and raw
   readbacks. `wgen-query` returns ordered `commands`, `enabled`/`output_raw`,
@@ -279,9 +279,10 @@ Control and setup:
   UART-specific queries for a non-UART bus. Configure results include
   `state_changing: true`, write all criteria before the final
   `:TRIGger:MODE SBUS<n>` selection, and preserve actual raw readbacks. The
-  user must configure the UART bus through Serial P1 first; this command does
-  not modify decode settings or run, single, wait, or capture. P0 excludes
-  burst, idle-time, 9-bit, pattern-sequence, and other protocol triggers.
+  user must configure the UART bus through Serial configuration first; this
+  command does not modify decode settings or run, single, wait, or capture.
+  The supported UART trigger subset excludes burst, idle-time, 9-bit,
+  pattern-sequence, and other protocol triggers.
 - `serial-trigger-i2c`, `serial-trigger-spi`, and `serial-trigger-can`:
   `operation`, protocol, integer `bus`, `mode`/`raw_mode`, `selected`,
   `trigger_mode`/`raw_trigger_mode`, canonical `type`/`raw_type`, and
@@ -290,7 +291,7 @@ Control and setup:
   `:TRIGger:MODE SBUS<n>` write. Query returns `null` protocol-specific fields
   and `selected: false` for a nonmatching Bus mode without sending
   protocol-specific queries. Dry-run query `commands` contain only
-  `:SBUS<n>:MODE?` and `:TRIGger:MODE?`. These commands require Serial P1
+  `:SBUS<n>:MODE?` and `:TRIGger:MODE?`. These commands require Serial
   configuration first, do not change decode settings or display, and do not
   run, single, wait, or capture.
 - `serial-lister-query`: `operation: "query"`, ordered `commands`, canonical
@@ -320,7 +321,7 @@ Control and setup:
 - `search-event`: results include `operation`, `command`, `event`, and optional
   `raw` for queries or `state_changing: true` for configuration.
 - `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, `serial-search-can`: configure results include `operation: "configure"`, `protocol`, `bus`, `mode`, canonical ordered business `commands`, and `state_changing: true`; configure `commands` exclude session-level `*IDN?` and `:SYSTem:ERRor?`. Query results include `operation: "query"`, `protocol`, `bus`, `search_enabled`, trimmed `raw_search_state`, `search_mode`, trimmed `raw_search_mode`, `selected`, `mode`, `raw_mode`, plus protocol-specific canonical/raw fields. The only successful nullable protocol modes are the documented 4000X-only I2C/CAN readbacks; other malformed readbacks fail with `SearchResponseError`.
-- Save/Export Pack v1 setting queries include `instrument_side: true`,
+- Save/export setting queries include `instrument_side: true`,
   `operation: "query"`, the target `command`, a canonical lowercase or boolean
   value, and preserved `raw_response`. Configure results use
   `operation: "configure"`, the canonical input value, and
@@ -363,7 +364,7 @@ Control and setup:
   `slope`, `setup_time_seconds`, `hold_time_seconds`, and
   `state_changing: true`. Query results include normalized `mode`, `raw_mode`,
   clock/data source raw and parsed fields, slope raw and parsed fields,
-  setup/hold time raw and parsed fields, and preserved `raw` readbacks. The v1
+  setup/hold time raw and parsed fields, and preserved `raw` readbacks. The
   configure surface is DSO analog-channel-only; query tolerates digital or
   unknown source readback by leaving parsed analog channels null.
 - `trigger-edge-burst`: `operation` and `commands`. Configure results include
@@ -381,7 +382,7 @@ Control and setup:
   `state_changing: true`. Query results include the same normalized and raw
   readback fields. Query preserves digital, external, extended-standard,
   unsupported TV mode, non-integer line, and unknown polarity readbacks without
-  failing solely because they are outside the v1 configure surface.
+  failing solely because they are outside the configure surface.
 - `trigger-pattern`: `operation` and `commands`. Configure results include
   `mode: "pattern"`, `format: "ascii"`, `pattern`, `qualifier: "entered"`, and
   `state_changing: true`. Query results include normalized `mode`, `format`,
@@ -392,7 +393,7 @@ Control and setup:
   `state_changing: true`. Query results include normalized `mode`, `raw_mode`,
   normalized uppercase `pattern` when the OR readback is a common valid quoted
   or unquoted `R/F/E/X` string, `raw_pattern`, and preserved `raw` readbacks.
-  The v1 mapping is DSO analog-only: pattern positions are CH4, CH3, CH2, CH1
+  The mapping is DSO analog-only: pattern positions are CH4, CH3, CH2, CH1
   on 4-channel DSO models and CH2, CH1 on 2-channel DSO models. MSO/digital OR
   trigger mapping is not implemented.
 - `trigger-holdoff`: query results include `operation: "query"`, `command:
@@ -486,12 +487,7 @@ Control and setup:
   Visualization source may be `composite` on 2000X/3000X or a lower-numbered
   canonical `math1` through `math3` on 4000X.
 
-These P0-P7 Math result shapes remain instrument-side contracts. A consistency
-gate aligns canonical CLI choices, capability guards, Core parsers/builders,
-Worker arguments, simulator behavior, and the 1/1/4 function-slot dialect.
-MATH-P8 bus-timing and bus-state are not enabled because MSO/digital-channel
-support is absent. No bus-operation result shape, host-side Math execution
-mode, waveform Math artifact, or generic expression result is defined.
+These Math result shapes are instrument-side contracts.
 
 Measurement and artifact-producing flows:
 
@@ -559,7 +555,7 @@ and ordered canonical `serial_modes`,
 `supports_display_label`, `supports_annotation`,
 `supports_annotation_position`, `annotation_slots`, and
 `supports_indexed_annotation`. Consumers must ignore unknown future capability
-fields under schema version `2`. Search Basic Pack v1 additionally reports
+fields under schema version `2`. Search additionally reports
 `supports_search_basic` and ordered canonical `search_modes`.
 
 ## Artifact JSON

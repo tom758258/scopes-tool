@@ -3,40 +3,33 @@
 ## Unreleased
 
 - Adds query-only segmented-memory state queries for registered Keysight 2000X,
-  3000X, and 4000X profiles through Core, CLI, Simulator, Worker, and Common
-  v2 JSON. It does not configure segmented mode, acquire waveform data, or
-  export artifacts.
+  3000X, and 4000X profiles. It does not configure segmented mode, acquire
+  waveform data, or export artifacts.
 - Adds explicit segmented-memory enable/count and disable configuration for
   registered 2000X, 3000X, and 4000X profiles. Counts are validated against
-  profile limits before segmented writes; acquisition, capture, and export
-  remain out of scope.
+  profile limits before segmented writes. Configuration does not start
+  acquisition, capture waveform data, or export artifacts.
 - Adds the finite single-channel `segmented-capture` workflow with bounded
   operation-condition readiness polling, per-segment host CSV export, a shared
-  manifest and SCPI log, and partial-artifact retention on failure. It has no
-  live hardware validation yet.
+  manifest and SCPI log, and partial-artifact retention on failure.
 - Exposes `segmented-capture` through the Common v2 Scopes Worker with strict
   startup-bound validation, a Worker-owned artifact child directory, and
   existing succeeded/failed/cancelled lifecycle semantics.
 - Stabilizes segmented-capture export by requiring two consecutive RUN-clear,
   remote-interface-enabled operation-condition samples before one acquired-count
   query, and stops issuing SCPI after any segmented-capture read timeout.
-- Preserves segmented-capture read-timeout phase errors over earlier normal
-  deadline errors.
-- Adds the Serial UART Trigger P0 vertical slice through Core, CLI, Worker,
-  Simulator, Common v2 JSON, and focused tests. It supports the shared basic
-  UART trigger types and data qualifiers without changing Serial P1 decode
-  configuration or acquisition behavior.
-- Adds Serial Trigger P1 common I2C, SPI, and CAN criteria through Core, CLI,
-  Worker, Simulator, and Common v2 JSON without changing Serial decode
-  configuration or acquisition behavior.
-- Completes Common v2-only migration for the Scopes Worker runtime, lifecycle
-  clients, Worker JSONL/artifacts, and general one-shot CLI machine JSON.
-- Passes the hardware-independent test suite, installed simulator/dry-run CLI
-  smokes, and wheel/sdist package build validation.
-- Marks the three Scopes-specific contracts as Common v2-only conformant while
-  preserving independently versioned domain artifact schemas.
-- Leaves Skill and Skill examples for future independent work; Local
-  documentation remains unchanged and out of scope.
+- Preserves segmented-capture read-timeout errors over earlier normal deadline
+  errors.
+- Adds `serial-trigger-uart` support for the shared basic UART trigger types
+  and data qualifiers without changing Serial decode configuration or
+  acquisition behavior.
+- Adds `serial-trigger-i2c`, `serial-trigger-spi`, and `serial-trigger-can`
+  support for common I2C, SPI, and CAN trigger criteria without changing
+  Serial decode configuration or acquisition behavior.
+- Requires Common schema version 2 for Scopes Worker lifecycle JSON, Worker
+  artifacts, and one-shot CLI machine JSON. Lifecycle clients reject non-v2
+  Worker responses without v1 fallback or version negotiation; independently
+  versioned domain artifact schemas remain unchanged.
 
 ## 0.1.0
 

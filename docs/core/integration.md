@@ -220,7 +220,7 @@ Core should remain independent from command-line parser types and WebUI
 controller concepts. Package adapters may call Core, but Core should not import
 from adapter packages.
 
-For 4000X Screenshot Format Pack v1 capture and hardcopy state queries:
+For 4000X Screenshot capture and hardcopy state queries:
 
 ```python
 from scopes_tool_core import ScreenshotOptions
@@ -243,7 +243,7 @@ values plus the corresponding raw instrument readbacks. The existing
 `:DISPlay:DATA? PNG, COLor` behavior remain available for 2000X, 3000X, and
 4000X compatibility.
 
-System/Status Pack v1 is available through `Oscilloscope.clear_status()`,
+System and status operations are available through `Oscilloscope.clear_status()`,
 `query_operation_complete()`, `query_status_byte()`,
 `query_standard_event_status()`, `query_operation_status()`, and
 `query_system_options()`. These methods do not require an IDN or capability
@@ -253,7 +253,7 @@ event-register read. `query_operation_status()` uses
 `:RSTate?` query. Existing `query_system_error()` and `drain_system_errors()`
 remain the APIs for `:SYSTem:ERRor?`.
 
-Save/Export Pack v1 is available through the focused
+Save and export operations are available through the
 `Oscilloscope.configure_save_*()` and `Oscilloscope.query_save_*()` methods,
 plus `save_image(filename)` and `save_waveform(filename)`. These methods send
 `:SAVE...` commands so the oscilloscope writes to its current instrument-side
@@ -268,44 +268,46 @@ transfer APIs. The maximum accepted configured save length is model-, option-,
 and instrument-state-dependent; Core enforces the common minimum of 100 points
 and preserves the raw length readback.
 
-Serial support is delivered in five focused surfaces:
+Serial support includes the following surfaces:
 
-- P0 provides basic bus mode and display controls through
+- Serial configuration provides basic bus mode and display controls through
   `Oscilloscope.query_serial()`, `configure_serial_mode()`,
   `query_serial_mode()`, `configure_serial_display()`, and
   `query_serial_display()`. Aggregate `:SBUS<n>?` results preserve the
   trimmed subsystem response without parsing it. Mode and display writes send
   only their target commands.
-- Serial UART Trigger P0 provides `SerialUartTriggerState` through
+- UART serial trigger provides `SerialUartTriggerState` through
   `Oscilloscope.configure_serial_uart_trigger()` and
   `Oscilloscope.query_serial_uart_trigger()`. The target UART bus must first
-  be configured through Serial P1. Configure writes UART trigger criteria and
-  selects the matching global `SBUS<n>` Trigger Mode last; it does not modify
-  UART decode settings or perform acquisition. P0 excludes burst, idle time,
-  9-bit, pattern-sequence, and other protocol triggers. The canonical public
-  choices are `UART_TRIGGER_TYPES` and `UART_TRIGGER_QUALIFIERS`.
-- Serial Trigger P1 provides `SerialI2CTriggerState`,
+  be configured through Serial configuration. Configure writes UART trigger
+  criteria and selects the matching global `SBUS<n>` Trigger Mode last; it does
+  not modify UART decode settings or perform acquisition. The supported UART
+  trigger subset excludes burst, idle time, 9-bit, pattern-sequence, and other
+  protocol triggers. The canonical public choices are `UART_TRIGGER_TYPES` and
+  `UART_TRIGGER_QUALIFIERS`.
+- I2C/SPI/CAN serial trigger provides `SerialI2CTriggerState`,
   `SerialSpiTriggerState`, and `SerialCanTriggerState` through
   `Oscilloscope.configure_serial_i2c_trigger()`,
   `query_serial_i2c_trigger()`, `configure_serial_spi_trigger()`,
   `query_serial_spi_trigger()`, `configure_serial_can_trigger()`, and
-  `query_serial_can_trigger()`. These commands require the matching Serial P1
-  Bus configuration, write protocol criteria before selecting the matching
+  `query_serial_can_trigger()`. These commands require the matching Serial bus
+  configuration, write protocol criteria before selecting the matching
   global `SBUS<n>` Trigger Mode, preserve raw readbacks, and do not modify
   decode settings or run acquisition. They expose only the documented common
   I2C/SPI/CAN trigger subset; canonical choices are exposed through
   `I2C_TRIGGER_TYPES`, `I2C_TRIGGER_QUALIFIERS`, `SPI_TRIGGER_TYPES`,
   `CAN_TRIGGER_TYPES`, and `CAN_TRIGGER_ID_MODES`.
-- P1 provides UART, I2C, SPI, and CAN decode configuration through the
+- Serial decode configuration provides UART, I2C, SPI, and CAN decode
+  configuration through the
   protocol-specific configure/query methods. Configure methods set the
   selected mode first and then write supplied fields in controller-defined
-  order. Query methods preserve raw readbacks alongside canonical values. P1
-  does not include Search, serial trigger, Lister, export, or advanced
-  protocol settings.
-- P2 provides Serial Lister display/reference query and configuration plus
+  order. Query methods preserve raw readbacks alongside canonical values. Serial
+  decode configuration does not include Search, serial trigger, Lister, export,
+  or advanced protocol settings.
+- Serial Lister provides display/reference query and configuration plus
   host-side raw CSV export through `:LISTer:DATA?`. It does not acquire
   traffic, enable decode, or parse protocol-specific CSV rows.
-- P3 provides UART, I2C, SPI, and CAN Serial Search configure/query controls.
+- Serial Search provides UART, I2C, SPI, and CAN configure/query controls.
   The matching Serial bus must first be configured with
   `configure_serial_uart()`, `configure_serial_i2c()`,
   `configure_serial_spi()`, or `configure_serial_can()` as appropriate.
@@ -320,7 +322,8 @@ Serial support is delivered in five focused surfaces:
   DLC. When both CAN `id` and `id-mode` are supplied, standard IDs are limited
   to `0x000` through `0x7FF`, and extended IDs to `0x00000000` through
   `0x1FFFFFFF`.
-  P3 does not support LIN, advanced protocols, symbolic CAN, or Search export.
+  Serial Search does not support LIN, advanced protocols, symbolic CAN, or
+  Search export.
 
 Serial decode may require an instrument license. Core does not probe licenses;
 an unavailable option remains a normal instrument error through the existing
