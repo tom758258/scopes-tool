@@ -4,8 +4,6 @@ Common schema version: `2`
 
 Compatibility policy: `v2-only`
 
-Implementation status: `Common v2-only conformant`
-
 This document defines Scopes-specific CLI JSON and JSONL payloads. Shared
 envelope rules are defined in
 [Common CLI JSON / JSONL Contract](common-cli-jsonl-contract.md). Scopes worker
@@ -487,7 +485,9 @@ Control and setup:
   Visualization source may be `composite` on 2000X/3000X or a lower-numbered
   canonical `math1` through `math3` on 4000X.
 
-These Math result shapes are instrument-side contracts.
+These Math result shapes are instrument-side contracts. No bus-operation result
+shape, host-side Math execution mode, waveform Math artifact, or generic
+expression result is defined.
 
 Measurement and artifact-producing flows:
 
