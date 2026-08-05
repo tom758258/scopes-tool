@@ -1975,7 +1975,7 @@ def test_worker_maps_segmented_capture_partial_result_and_existing_files(
     def fake_execute(parsed):
         csv_path = Path(parsed.output_dir) / "segment_0001.csv"
         csv_path.parent.mkdir(parents=True, exist_ok=True)
-        csv_path.write_text("time_s,voltage_v\n0,0\n", encoding="utf-8")
+        csv_path.write_text("time_s,ch1_v\n0,0\n", encoding="utf-8")
         return (
             {
                 "ok": False,

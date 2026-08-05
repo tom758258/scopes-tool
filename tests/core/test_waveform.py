@@ -69,22 +69,40 @@ def test_parse_waveform_preamble_rejects_invalid_response(raw):
 def test_convert_byte_waveform_uses_preamble_scaling():
     preamble = parse_waveform_preamble(PREAMBLE)
 
-    capture = convert_byte_waveform(1, 1000, preamble, [128, 129, 130, 127])
+    capture = convert_byte_waveform(
+        1, 1000, preamble, [128, 129, 130, 127], vertical_unit="V"
+    )
 
     assert capture.time_s == pytest.approx((-1e-6, 0.0, 1e-6, 2e-6))
-    assert capture.voltage_v == pytest.approx((-2.56, -2.54, -2.52, -2.58))
+    assert capture.vertical_values == pytest.approx((-2.56, -2.54, -2.52, -2.58))
+    assert capture.vertical_unit == "V"
+
+    amp_capture = convert_byte_waveform(
+        1, 1000, preamble, [128, 129, 130, 127], vertical_unit="A"
+    )
+    assert amp_capture.vertical_values == pytest.approx(capture.vertical_values)
+    assert amp_capture.vertical_unit == "A"
 
 
 def test_convert_byte_waveform_rejects_out_of_range_byte():
     preamble = parse_waveform_preamble(PREAMBLE)
 
     with pytest.raises(WaveformResponseError):
-        convert_byte_waveform(1, 1000, preamble, [256])
+        convert_byte_waveform(1, 1000, preamble, [256], vertical_unit="V")
+
+
+def test_convert_byte_waveform_rejects_unknown_vertical_unit():
+    preamble = parse_waveform_preamble(PREAMBLE)
+
+    with pytest.raises(ParameterValidationError, match="vertical unit must be V or A"):
+        convert_byte_waveform(1, 1000, preamble, [128], vertical_unit="mV")
 
 
 def test_write_waveform_plot_png_writes_png_header_and_dimensions(tmp_path):
     preamble = parse_waveform_preamble(PREAMBLE)
-    capture = convert_byte_waveform(1, 1000, preamble, [128, 129, 130, 127])
+    capture = convert_byte_waveform(
+        1, 1000, preamble, [128, 129, 130, 127], vertical_unit="V"
+    )
 
     path = write_waveform_plot_png(capture, tmp_path / "plot.png", width=320, height=200)
     data = path.read_bytes()
@@ -97,20 +115,23 @@ def test_write_waveform_plot_png_writes_png_header_and_dimensions(tmp_path):
 def test_convert_word_waveform_uses_preamble_scaling():
     preamble = parse_waveform_preamble("1,0,3,1,1.0E-6,0,0,1.0E-4,0,32768")
 
-    capture = convert_word_waveform(1, 1000, preamble, [32768, 32769, 32767])
+    capture = convert_word_waveform(
+        1, 1000, preamble, [32768, 32769, 32767], vertical_unit="V"
+    )
 
     assert capture.format_name == "WORD"
     assert capture.byte_order == "MSBFirst"
     assert capture.unsigned is True
     assert capture.time_s == pytest.approx((0.0, 1e-6, 2e-6))
-    assert capture.voltage_v == pytest.approx((0.0, 0.0001, -0.0001))
+    assert capture.vertical_values == pytest.approx((0.0, 0.0001, -0.0001))
+    assert capture.vertical_unit == "V"
 
 
 def test_convert_word_waveform_rejects_out_of_range_word():
     preamble = parse_waveform_preamble("1,0,1,1,1.0E-6,0,0,1.0E-4,0,32768")
 
     with pytest.raises(WaveformResponseError):
-        convert_word_waveform(1, 1000, preamble, [65536])
+        convert_word_waveform(1, 1000, preamble, [65536], vertical_unit="V")
 
 
 @pytest.mark.parametrize("points", [1000, 5000, 10000])
@@ -280,7 +301,7 @@ def test_waveform_controller_rejects_invalid_channel_before_scpi():
 
 def test_waveform_export_writes_csv_and_metadata(tmp_path):
     preamble = parse_waveform_preamble(PREAMBLE)
-    capture = convert_byte_waveform(1, 1000, preamble, [128, 129])
+    capture = convert_byte_waveform(1, 1000, preamble, [128, 129], vertical_unit="V")
     idn = parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20")
     csv_path = tmp_path / "waveform.csv"
     meta_path = tmp_path / "waveform_meta.json"
@@ -303,7 +324,9 @@ def test_waveform_export_writes_csv_and_metadata(tmp_path):
 
 def test_waveform_export_writes_word_metadata(tmp_path):
     preamble = parse_waveform_preamble("1,0,2,1,1.0E-6,0,0,1.0E-4,0,32768")
-    capture = convert_word_waveform(1, 1000, preamble, [32768, 32769])
+    capture = convert_word_waveform(
+        1, 1000, preamble, [32768, 32769], vertical_unit="V"
+    )
     idn = parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20")
     meta_path = tmp_path / "waveform_meta.json"
 
@@ -317,8 +340,8 @@ def test_waveform_export_writes_word_metadata(tmp_path):
 
 def test_multi_channel_waveform_export_writes_aligned_csv(tmp_path):
     preamble = parse_waveform_preamble(PREAMBLE)
-    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129])
-    ch2 = convert_byte_waveform(2, 1000, preamble, [130, 127])
+    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129], vertical_unit="V")
+    ch2 = convert_byte_waveform(2, 1000, preamble, [130, 127], vertical_unit="V")
     capture = MultiChannelWaveformCapture((ch1, ch2))
     csv_path = tmp_path / "waveform.csv"
 
@@ -333,8 +356,8 @@ def test_multi_channel_waveform_export_writes_aligned_csv(tmp_path):
 
 def test_multi_channel_waveform_export_rejects_mismatched_sample_count(tmp_path):
     preamble = parse_waveform_preamble(PREAMBLE)
-    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129])
-    ch2 = convert_byte_waveform(2, 1000, preamble, [130])
+    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129], vertical_unit="V")
+    ch2 = convert_byte_waveform(2, 1000, preamble, [130], vertical_unit="V")
     capture = MultiChannelWaveformCapture((ch1, ch2))
 
     with pytest.raises(WaveformResponseError, match="has 1 samples"):
@@ -344,12 +367,15 @@ def test_multi_channel_waveform_export_rejects_mismatched_sample_count(tmp_path)
 
 
 def test_multi_channel_waveform_export_rejects_mismatched_time_axis(tmp_path):
-    ch1 = convert_byte_waveform(1, 1000, parse_waveform_preamble(PREAMBLE), [128, 129])
+    ch1 = convert_byte_waveform(
+        1, 1000, parse_waveform_preamble(PREAMBLE), [128, 129], vertical_unit="V"
+    )
     ch2 = convert_byte_waveform(
         2,
         1000,
         parse_waveform_preamble("0,0,2,1,2.0E-6,-1.0E-6,0,2.0E-2,-2.56,128"),
         [130, 127],
+        vertical_unit="V",
     )
     capture = MultiChannelWaveformCapture((ch1, ch2))
 
@@ -361,9 +387,9 @@ def test_multi_channel_waveform_export_rejects_mismatched_time_axis(tmp_path):
 
 def test_multi_channel_waveform_export_tolerates_half_sample_time_axis_drift(tmp_path):
     preamble = parse_waveform_preamble(PREAMBLE)
-    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129])
+    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129], vertical_unit="V")
     ch2 = replace(
-        convert_byte_waveform(2, 1000, preamble, [130, 127]),
+        convert_byte_waveform(2, 1000, preamble, [130, 127], vertical_unit="V"),
         time_s=(-0.5e-6, 0.5e-6),
     )
     capture = MultiChannelWaveformCapture((ch2, ch1))
@@ -382,9 +408,9 @@ def test_multi_channel_waveform_export_rejects_time_axis_drift_beyond_tolerance(
     tmp_path,
 ):
     preamble = parse_waveform_preamble(PREAMBLE)
-    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129])
+    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129], vertical_unit="V")
     ch2 = replace(
-        convert_byte_waveform(2, 1000, preamble, [130, 127]),
+        convert_byte_waveform(2, 1000, preamble, [130, 127], vertical_unit="V"),
         time_s=(-0.9999994e-6, 0.0000006),
     )
     capture = MultiChannelWaveformCapture((ch1, ch2))
@@ -403,8 +429,8 @@ def test_multi_channel_waveform_export_rejects_sample_count_mismatch_with_tolera
     tmp_path,
 ):
     preamble = parse_waveform_preamble(PREAMBLE)
-    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129])
-    ch2 = convert_byte_waveform(2, 1000, preamble, [130])
+    ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129], vertical_unit="V")
+    ch2 = convert_byte_waveform(2, 1000, preamble, [130], vertical_unit="V")
     capture = MultiChannelWaveformCapture((ch1, ch2))
 
     with pytest.raises(WaveformResponseError, match="has 1 samples"):
@@ -419,8 +445,12 @@ def test_multi_channel_waveform_export_rejects_sample_count_mismatch_with_tolera
 
 def test_multi_channel_waveform_export_writes_ordered_metadata(tmp_path):
     preamble = parse_waveform_preamble("1,0,2,1,1.0E-6,0,0,1.0E-4,0,32768")
-    ch2 = convert_word_waveform(2, 5000, preamble, [32768, 32769])
-    ch1 = convert_word_waveform(1, 5000, preamble, [32770, 32767])
+    ch2 = convert_word_waveform(
+        2, 5000, preamble, [32768, 32769], vertical_unit="V"
+    )
+    ch1 = convert_word_waveform(
+        1, 5000, preamble, [32770, 32767], vertical_unit="V"
+    )
     capture = MultiChannelWaveformCapture((ch2, ch1))
     idn = parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20")
     meta_path = tmp_path / "waveform_meta.json"

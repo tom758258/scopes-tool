@@ -9,7 +9,7 @@ import json
 import math
 from pathlib import Path
 import struct
-from typing import Sequence
+from typing import Literal, Sequence, cast
 import zlib
 
 from .capabilities import ScopeCapabilities
@@ -23,6 +23,7 @@ SUPPORTED_BYTE_POINTS = SUPPORTED_WAVEFORM_POINTS
 SUPPORTED_WORD_POINTS = SUPPORTED_WAVEFORM_POINTS
 WORD_BYTE_ORDER = "MSBFirst"
 WORD_UNSIGNED = True
+WaveformVerticalUnit = Literal["V", "A"]
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,8 @@ class WaveformCapture:
     preamble: WaveformPreamble
     raw_samples: tuple[int, ...]
     time_s: tuple[float, ...]
-    voltage_v: tuple[float, ...]
+    vertical_values: tuple[float, ...]
+    vertical_unit: WaveformVerticalUnit
     byte_order: str | None = None
     unsigned: bool | None = None
 
@@ -132,7 +134,9 @@ class WaveformController:
         raw_samples = tuple(int(value) for value in self.scpi.query_binary_values(waveform_data_query(), datatype="B"))
         if not raw_samples:
             raise WaveformResponseError("Waveform data query returned no samples.")
-        return convert_byte_waveform(channel, points, preamble, raw_samples)
+        return convert_byte_waveform(
+            channel, points, preamble, raw_samples, vertical_unit="V"
+        )
 
     def capture_word(self, channel: int, points: int = 1000) -> WaveformCapture:
         """Capture one analog channel using WORD waveform format."""
@@ -160,7 +164,9 @@ class WaveformController:
         )
         if not raw_samples:
             raise WaveformResponseError("Waveform data query returned no samples.")
-        return convert_word_waveform(channel, points, preamble, raw_samples)
+        return convert_word_waveform(
+            channel, points, preamble, raw_samples, vertical_unit="V"
+        )
 
     def capture_channels_byte(
         self, channels: Sequence[int], points: int = 1000
@@ -332,20 +338,31 @@ def parse_waveform_preamble(raw: str) -> WaveformPreamble:
     )
 
 
+def validate_waveform_vertical_unit(unit: str) -> WaveformVerticalUnit:
+    """Validate the supported analog waveform vertical units."""
+
+    if unit not in {"V", "A"}:
+        raise ParameterValidationError("waveform vertical unit must be V or A.")
+    return cast(WaveformVerticalUnit, unit)
+
+
 def convert_byte_waveform(
     channel: int,
     requested_points: int,
     preamble: WaveformPreamble,
     raw_samples: Sequence[int],
+    *,
+    vertical_unit: WaveformVerticalUnit,
 ) -> WaveformCapture:
-    """Convert BYTE waveform samples to time and voltage tuples."""
+    """Convert BYTE waveform samples to time and vertical-value tuples."""
 
     samples = tuple(_validate_byte_sample(value) for value in raw_samples)
+    vertical_unit = validate_waveform_vertical_unit(vertical_unit)
     time_s = tuple(
         (index - preamble.x_reference) * preamble.x_increment + preamble.x_origin
         for index in range(len(samples))
     )
-    voltage_v = tuple(
+    vertical_values = tuple(
         (sample - preamble.y_reference) * preamble.y_increment + preamble.y_origin
         for sample in samples
     )
@@ -356,7 +373,8 @@ def convert_byte_waveform(
         preamble=preamble,
         raw_samples=samples,
         time_s=time_s,
-        voltage_v=voltage_v,
+        vertical_values=vertical_values,
+        vertical_unit=vertical_unit,
     )
 
 
@@ -365,15 +383,18 @@ def convert_word_waveform(
     requested_points: int,
     preamble: WaveformPreamble,
     raw_samples: Sequence[int],
+    *,
+    vertical_unit: WaveformVerticalUnit,
 ) -> WaveformCapture:
-    """Convert unsigned WORD waveform samples to time and voltage tuples."""
+    """Convert unsigned WORD waveform samples to time and vertical-value tuples."""
 
     samples = tuple(_validate_word_sample(value) for value in raw_samples)
+    vertical_unit = validate_waveform_vertical_unit(vertical_unit)
     time_s = tuple(
         (index - preamble.x_reference) * preamble.x_increment + preamble.x_origin
         for index in range(len(samples))
     )
-    voltage_v = tuple(
+    vertical_values = tuple(
         (sample - preamble.y_reference) * preamble.y_increment + preamble.y_origin
         for sample in samples
     )
@@ -384,7 +405,8 @@ def convert_word_waveform(
         preamble=preamble,
         raw_samples=samples,
         time_s=time_s,
-        voltage_v=voltage_v,
+        vertical_values=vertical_values,
+        vertical_unit=vertical_unit,
         byte_order=WORD_BYTE_ORDER,
         unsigned=WORD_UNSIGNED,
     )
@@ -398,7 +420,7 @@ def write_waveform_csv(capture: WaveformCapture, path: str | Path) -> Path:
     with output_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(("time_s", f"ch{capture.channel}_v"))
-        writer.writerows(zip(capture.time_s, capture.voltage_v))
+        writer.writerows(zip(capture.time_s, capture.vertical_values))
     return output_path
 
 
@@ -461,7 +483,7 @@ def write_waveforms_csv(
         )
         for index, time_value in enumerate(reference.time_s):
             writer.writerow(
-                (time_value, *(item.voltage_v[index] for item in capture.captures))
+                (time_value, *(item.vertical_values[index] for item in capture.captures))
             )
     return output_path
 
@@ -595,10 +617,10 @@ def _validate_capture_sample_lengths(capture: WaveformCapture) -> int:
             f"CH{capture.channel} has {sample_count} samples "
             f"but {len(capture.time_s)} time values."
         )
-    if len(capture.voltage_v) != sample_count:
+    if len(capture.vertical_values) != sample_count:
         raise WaveformResponseError(
             f"CH{capture.channel} has {sample_count} samples "
-            f"but {len(capture.voltage_v)} voltages."
+            f"but {len(capture.vertical_values)} vertical values."
         )
     return sample_count
 
@@ -644,7 +666,7 @@ def _plot_png_bytes(
     plot_width = width - margin_left - margin_right
     plot_height = height - margin_top - margin_bottom
     xs = [value for capture in captures for value in capture.time_s]
-    ys = [value for capture in captures for value in capture.voltage_v]
+    ys = [value for capture in captures for value in capture.vertical_values]
     if not xs or not ys:
         raise ValueError("cannot plot an empty waveform capture.")
     xmin, xmax = min(xs), max(xs)
@@ -664,9 +686,9 @@ def _plot_png_bytes(
     grid_color = (225, 225, 225)
     colors = ((31, 119, 180), (214, 39, 40), (44, 160, 44), (148, 103, 189))
 
-    def point(time_s: float, voltage_v: float) -> tuple[int, int]:
+    def point(time_s: float, vertical_value: float) -> tuple[int, int]:
         x = margin_left + round((time_s - xmin) / (xmax - xmin) * (plot_width - 1))
-        y = margin_top + round((ymax - voltage_v) / (ymax - ymin) * (plot_height - 1))
+        y = margin_top + round((ymax - vertical_value) / (ymax - ymin) * (plot_height - 1))
         return x, y
 
     for index in range(6):
@@ -681,8 +703,8 @@ def _plot_png_bytes(
     for capture_index, capture in enumerate(captures):
         color = colors[capture_index % len(colors)]
         points = [
-            point(time_s, voltage_v)
-            for time_s, voltage_v in zip(capture.time_s, capture.voltage_v)
+            point(time_s, vertical_value)
+            for time_s, vertical_value in zip(capture.time_s, capture.vertical_values)
         ]
         for first, second in zip(points, points[1:]):
             _draw_line(pixels, width, height, first[0], first[1], second[0], second[1], color)

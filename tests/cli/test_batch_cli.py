@@ -34,7 +34,8 @@ def _byte_waveform_capture(channel, points=1000):
         preamble=preamble,
         raw_samples=(128, 129),
         time_s=(0.0, 1e-6),
-        voltage_v=(-2.56, -2.54),
+        vertical_values=(-2.56, -2.54),
+        vertical_unit="V",
     )
 
 
@@ -59,7 +60,8 @@ def _word_waveform_capture(channel, points=1000):
         preamble=preamble,
         raw_samples=(32768, 32769),
         time_s=(0.0, 1e-6),
-        voltage_v=(0.0, 0.0001),
+        vertical_values=(0.0, 0.0001),
+        vertical_unit="V",
         byte_order="MSBFirst",
         unsigned=True,
     )

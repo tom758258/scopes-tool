@@ -25,7 +25,7 @@ from scopes_tool_core.waveform import (
 
 
 def _byte_waveform_capture(
-    channel, points=1000, raw_samples=(128, 129), voltage_v=(-2.56, -2.54)
+    channel, points=1000, raw_samples=(128, 129), vertical_values=(-2.56, -2.54)
 ):
     preamble = WaveformPreamble(
         raw="0,0,2,1,1.0E-6,0,0,2.0E-2,-2.56,128",
@@ -47,7 +47,8 @@ def _byte_waveform_capture(
         preamble=preamble,
         raw_samples=raw_samples,
         time_s=(0.0, 1e-6),
-        voltage_v=voltage_v,
+        vertical_values=vertical_values,
+        vertical_unit="V",
     )
 
 
@@ -72,7 +73,8 @@ def _word_waveform_capture(channel, points=1000):
         preamble=preamble,
         raw_samples=(32768, 32769),
         time_s=(0.0, 1e-6),
-        voltage_v=(0.0, 0.0001),
+        vertical_values=(0.0, 0.0001),
+        vertical_unit="V",
         byte_order="MSBFirst",
         unsigned=True,
     )
@@ -2064,7 +2066,8 @@ def test_capture_cli_writes_csv_and_metadata_then_checks_error(monkeypatch, caps
                 preamble=preamble,
                 raw_samples=(128, 129),
                 time_s=(0.0, 1e-6),
-                voltage_v=(-2.56, -2.54),
+                vertical_values=(-2.56, -2.54),
+                vertical_unit="V",
             )
 
         def query_system_error(self):
@@ -2151,7 +2154,8 @@ def test_capture_cli_supports_word_format(monkeypatch, capsys, tmp_path):
                 preamble=preamble,
                 raw_samples=(32768, 32769),
                 time_s=(0.0, 1e-6),
-                voltage_v=(0.0, 0.0001),
+                vertical_values=(0.0, 0.0001),
+                vertical_unit="V",
                 byte_order="MSBFirst",
                 unsigned=True,
             )
@@ -2229,7 +2233,7 @@ def test_capture_cli_writes_multi_channel_csv_and_metadata(monkeypatch, capsys, 
             return MultiChannelWaveformCapture(
                 (
                     _byte_waveform_capture(1, points=points),
-                    _byte_waveform_capture(2, points=points, voltage_v=(-2.52, -2.58)),
+                    _byte_waveform_capture(2, points=points, vertical_values=(-2.52, -2.58)),
                 )
             )
 
@@ -2307,7 +2311,7 @@ def test_capture_cli_allows_opt_in_time_axis_tolerance(monkeypatch, capsys, tmp_
                         _byte_waveform_capture(
                             2,
                             points=points,
-                            voltage_v=(-2.52, -2.58),
+                            vertical_values=(-2.52, -2.58),
                         ),
                         time_s=(0.0000004, 0.0000014),
                     ),
@@ -2854,7 +2858,8 @@ def test_capture_cli_uses_timestamped_default_csv_when_omitted(monkeypatch, caps
                 preamble=preamble,
                 raw_samples=(128, 129),
                 time_s=(0.0, 1e-6),
-                voltage_v=(-2.56, -2.54),
+                vertical_values=(-2.56, -2.54),
+                vertical_unit="V",
             )
 
         def query_system_error(self):
@@ -2923,7 +2928,8 @@ def test_capture_cli_reports_csv_permission_error_without_traceback(monkeypatch,
                 preamble=preamble,
                 raw_samples=(128, 129),
                 time_s=(0.0, 1e-6),
-                voltage_v=(-2.56, -2.54),
+                vertical_values=(-2.56, -2.54),
+                vertical_unit="V",
             )
 
     scope = DummyScope()

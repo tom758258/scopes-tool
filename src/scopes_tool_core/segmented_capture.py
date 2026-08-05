@@ -400,7 +400,9 @@ def _capture_segment_waveform(
         )
         if not raw_samples:
             raise WaveformResponseError("Waveform data query returned no samples.")
-        return convert_word_waveform(channel, points, preamble, raw_samples)
+        return convert_word_waveform(
+            channel, points, preamble, raw_samples, vertical_unit="V"
+        )
 
     raw_samples = tuple(
         int(value)
@@ -413,7 +415,9 @@ def _capture_segment_waveform(
     )
     if not raw_samples:
         raise WaveformResponseError("Waveform data query returned no samples.")
-    return convert_byte_waveform(channel, points, preamble, raw_samples)
+    return convert_byte_waveform(
+        channel, points, preamble, raw_samples, vertical_unit="V"
+    )
 
 
 def run_segmented_capture(
