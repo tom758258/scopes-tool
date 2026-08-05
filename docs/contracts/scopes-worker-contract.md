@@ -2124,8 +2124,9 @@ data/worker/<run_id>/<worker_job_id>/result.json
 ```
 
 Worker job `request.json` and terminal `result.json` are Common Worker machine
-artifacts and target exact integer `schema_version: 2`. Their Scopes-specific
-fields and result layout remain unchanged.
+artifacts and target exact integer `schema_version: 2`. Their Common envelope
+and request fields remain unchanged; command result fields follow the
+corresponding domain contract.
 
 `request.json` is written before the `202` response. `result.json` is written
 only for terminal states using a temp file and atomic replace.

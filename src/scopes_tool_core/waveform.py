@@ -369,6 +369,14 @@ def validate_waveform_vertical_unit(unit: str) -> WaveformVerticalUnit:
     return cast(WaveformVerticalUnit, unit)
 
 
+def waveform_vertical_unit_suffix(
+    vertical_unit: WaveformVerticalUnit,
+) -> Literal["v", "a"]:
+    """Map one supported waveform unit to its CSV column suffix."""
+
+    return {"V": "v", "A": "a"}[validate_waveform_vertical_unit(vertical_unit)]
+
+
 def convert_byte_waveform(
     channel: int,
     requested_points: int,
@@ -442,7 +450,8 @@ def write_waveform_csv(capture: WaveformCapture, path: str | Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(("time_s", f"ch{capture.channel}_v"))
+        suffix = waveform_vertical_unit_suffix(capture.vertical_unit)
+        writer.writerow(("time_s", f"ch{capture.channel}_{suffix}"))
         writer.writerows(zip(capture.time_s, capture.vertical_values))
     return output_path
 
@@ -467,6 +476,7 @@ def write_waveform_metadata(
         "firmware": idn.firmware,
         "resource": resource,
         "channel": capture.channel,
+        "vertical_unit": validate_waveform_vertical_unit(capture.vertical_unit),
         "requested_points": capture.requested_points,
         "actual_points": len(capture.raw_samples),
         "format": capture.format_name,
@@ -502,7 +512,13 @@ def write_waveforms_csv(
     with output_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(
-            ("time_s", *(f"ch{item.channel}_v" for item in capture.captures))
+            (
+                "time_s",
+                *(
+                    f"ch{item.channel}_{waveform_vertical_unit_suffix(item.vertical_unit)}"
+                    for item in capture.captures
+                ),
+            )
         )
         for index, time_value in enumerate(reference.time_s):
             writer.writerow(
@@ -592,6 +608,7 @@ def write_waveform_plot_png(
 def _waveform_channel_metadata(capture: WaveformCapture) -> dict[str, object]:
     metadata: dict[str, object] = {
         "channel": capture.channel,
+        "vertical_unit": validate_waveform_vertical_unit(capture.vertical_unit),
         "actual_points": len(capture.raw_samples),
         "preamble": asdict(capture.preamble),
     }

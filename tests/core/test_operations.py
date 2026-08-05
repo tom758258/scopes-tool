@@ -60,7 +60,25 @@ def test_run_capture_writes_files_and_checks_system_error(tmp_path):
     assert result.exit_code == 0
     assert (tmp_path / "capture.csv").exists()
     assert result.files[1]["kind"] == "metadata"
+    assert result.result["captures"][0]["vertical_unit"] == "V"
     assert scope.backend.history[-1] == ":SYSTem:ERRor?"
+
+
+def test_run_capture_preserves_mixed_channel_units_in_outputs(tmp_path):
+    with _scope(channel_units={1: "VOLT", 2: "AMP"}) as scope:
+        result = run_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            CaptureRequest((1, 2), 1000, csv_path=tmp_path / "capture.csv"),
+        )
+
+    assert [item["vertical_unit"] for item in result.result["captures"]] == ["V", "A"]
+    assert (tmp_path / "capture.csv").read_text(encoding="utf-8").splitlines()[0] == (
+        "time_s,ch1_v,ch2_a"
+    )
+    metadata = json.loads((tmp_path / "capture_meta.json").read_text(encoding="utf-8"))
+    assert [item["vertical_unit"] for item in metadata["channels"]] == ["V", "A"]
+    assert "vertical_unit" not in metadata
 
 
 def test_run_capture_wait_trigger_natural_path_writes_files(tmp_path):
@@ -321,7 +339,14 @@ def test_run_smoke_writes_report(tmp_path):
 
     report = json.loads((tmp_path / "smoke" / "report.json").read_text(encoding="utf-8"))
     assert result.exit_code == 0
+    assert report["schema_version"] == 2
     assert report["status"] == "completed"
+    assert report["capture"]["captures"][0]["vertical_unit"] == "V"
+    assert (tmp_path / "smoke" / "capture.csv").read_text(encoding="utf-8").splitlines()[0] == (
+        "time_s,ch1_v"
+    )
+    metadata = json.loads((tmp_path / "smoke" / "capture_meta.json").read_text(encoding="utf-8"))
+    assert metadata["vertical_unit"] == "V"
     assert result.files[0]["kind"] == "report"
 
 

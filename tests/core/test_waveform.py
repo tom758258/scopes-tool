@@ -383,8 +383,24 @@ def test_waveform_export_writes_csv_and_metadata(tmp_path):
     assert metadata["idn"] == "KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20"
     assert metadata["resource"] == "USB0::FAKE::INSTR"
     assert metadata["channel"] == 1
+    assert metadata["vertical_unit"] == "V"
     assert metadata["actual_points"] == 2
     assert metadata["format"] == "BYTE"
+
+
+def test_waveform_export_writes_amp_csv_and_metadata(tmp_path):
+    preamble = parse_waveform_preamble(PREAMBLE)
+    capture = convert_byte_waveform(1, 1000, preamble, [128, 129], vertical_unit="A")
+    idn = parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20")
+    csv_path = tmp_path / "waveform.csv"
+    meta_path = tmp_path / "waveform_meta.json"
+
+    write_waveform_csv(capture, csv_path)
+    write_waveform_metadata(capture, meta_path, idn=idn, resource="USB0::FAKE::INSTR")
+
+    assert csv_path.read_text(encoding="utf-8").splitlines()[0] == "time_s,ch1_a"
+    metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert metadata["vertical_unit"] == "A"
 
 
 def test_waveform_export_writes_word_metadata(tmp_path):
@@ -406,14 +422,14 @@ def test_waveform_export_writes_word_metadata(tmp_path):
 def test_multi_channel_waveform_export_writes_aligned_csv(tmp_path):
     preamble = parse_waveform_preamble(PREAMBLE)
     ch1 = convert_byte_waveform(1, 1000, preamble, [128, 129], vertical_unit="V")
-    ch2 = convert_byte_waveform(2, 1000, preamble, [130, 127], vertical_unit="V")
+    ch2 = convert_byte_waveform(2, 1000, preamble, [130, 127], vertical_unit="A")
     capture = MultiChannelWaveformCapture((ch1, ch2))
     csv_path = tmp_path / "waveform.csv"
 
     write_waveforms_csv(capture, csv_path)
 
     assert csv_path.read_text(encoding="utf-8").splitlines() == [
-        "time_s,ch1_v,ch2_v",
+        "time_s,ch1_v,ch2_a",
         "-1e-06,-2.56,-2.52",
         "0.0,-2.54,-2.58",
     ]
@@ -511,7 +527,7 @@ def test_multi_channel_waveform_export_rejects_sample_count_mismatch_with_tolera
 def test_multi_channel_waveform_export_writes_ordered_metadata(tmp_path):
     preamble = parse_waveform_preamble("1,0,2,1,1.0E-6,0,0,1.0E-4,0,32768")
     ch2 = convert_word_waveform(
-        2, 5000, preamble, [32768, 32769], vertical_unit="V"
+        2, 5000, preamble, [32768, 32769], vertical_unit="A"
     )
     ch1 = convert_word_waveform(
         1, 5000, preamble, [32770, 32767], vertical_unit="V"
@@ -528,6 +544,8 @@ def test_multi_channel_waveform_export_writes_ordered_metadata(tmp_path):
     assert metadata["requested_points"] == 5000
     assert metadata["format"] == "WORD"
     assert [item["channel"] for item in metadata["channels"]] == [2, 1]
+    assert [item["vertical_unit"] for item in metadata["channels"]] == ["A", "V"]
+    assert "vertical_unit" not in metadata
     assert [item["actual_points"] for item in metadata["channels"]] == [2, 2]
     assert metadata["channels"][0]["byte_order"] == "MSBFirst"
     assert metadata["channels"][0]["unsigned"] is True

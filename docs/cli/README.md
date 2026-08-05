@@ -606,8 +606,10 @@ If any segmented-capture SCPI read times out, the workflow stops issuing SCPI on
 that session while preserving completed CSVs, the manifest, and `scpi.log`.
 It sends one `:SINGle`, selects each ready acquired segment, queries its time tag,
 and writes `segment_0001.csv`, `segment_0002.csv`, and so on immediately after
-each successful waveform transfer. The directory also contains a shared
-`manifest.json` and `scpi.log`. A timeout or later error returns non-zero while
+each successful waveform transfer. Segment CSV columns use the selected
+channel's `_v` or `_a` suffix. The directory also contains a shared
+`manifest.json` with schema version `2` and top-level `vertical_unit`, plus
+`scpi.log`. A timeout or later error returns non-zero while
 preserving completed CSVs and records `partial` or `failed` status. The command
 does not force a trigger, disable segmented mode, restore state, merge CSVs, or
 perform instrument-side save/export. The Common v2 Worker also
@@ -2004,8 +2006,10 @@ default directory already exists. Use `--output-dir DIR` to choose a directory;
 it must not exist or must be empty. The default flow runs a doctor snapshot,
 queries CH1 `vpp` and `vrms`, captures CH1 BYTE waveform data at 1000 points,
 captures a black-background screenshot, and performs a final system error
-post-check. Invalid measurement sentinels are warnings; capture, screenshot,
-backend, output, or system-error failures make the command return non-zero.
+post-check. The Smoke report uses schema version `2`; its capture CSV,
+metadata, and nested capture summary retain the selected `vertical_unit`.
+Invalid measurement sentinels are warnings; capture, screenshot, backend,
+output, or system-error failures make the command return non-zero.
 
 Capture waveform data:
 
@@ -2029,7 +2033,9 @@ Repeat `--channel` to capture multiple analog channels sequentially in one
 session. Use `--channel all` to capture every analog channel reported by the
 detected model capability profile; this does not query or filter by displayed
 channels. Multi-channel CSV output uses the first channel's `time_s` axis and
-writes voltage columns in requested order, such as `time_s,ch1_v,ch2_v`.
+writes vertical columns in requested order, such as `time_s,ch1_v,ch2_a`.
+Volts use the `_v` suffix and amps use `_a`; channels may use mixed vertical
+units in one CSV.
 `--channel all` cannot be combined with explicit channel numbers.
 Duplicate channels and channels outside the detected model capabilities are
 rejected before waveform SCPI is sent. If the captured channel time axes or
@@ -2045,10 +2051,13 @@ If `--csv` is omitted, the CLI writes to `data/YYYY-MM-DD-HH-mm-ss.csv` using
 the `UTC+8` timezone. If `--csv PATH` is provided, it writes exactly to that
 path. Metadata JSON defaults to the same stem with `_meta.json` beside the CSV.
 Single-channel metadata keeps the existing top-level `channel` and
-`actual_points` fields. Multi-channel metadata has top-level IDN, resource,
-model, series, format, and requested point fields plus ordered `channels`
-entries containing each channel number, actual point count, preamble, and WORD
-byte-order fields where applicable.
+`actual_points` fields and records the capture's `vertical_unit` as `"V"` or
+`"A"`. Multi-channel metadata has top-level IDN, resource, model, series,
+format, and requested point fields plus ordered `channels` entries containing
+each channel number, its `vertical_unit`, actual point count, preamble, and
+WORD byte-order fields where applicable. No host-side voltage/current
+conversion is performed; waveform preamble scaling is interpreted in the
+selected channel unit.
 The command performs one `:SYSTem:ERRor?` post-check. It does not change VISA
 timeout, acquisition mode, waveform point mode, or return-to-local behavior. If
 the CSV or metadata file cannot be written because it is open in another

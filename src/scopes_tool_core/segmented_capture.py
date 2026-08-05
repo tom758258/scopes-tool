@@ -252,6 +252,7 @@ def plan_segmented_capture(
         "manifest_path": str(output_dir / "manifest.json"),
         "scpi_log_path": str(output_dir / "scpi.log"),
         "channel": request.channel,
+        "vertical_unit": None,
         "requested_segments": request.segments,
         "configured_segments": request.segments,
         "acquired_segments": None,
@@ -439,7 +440,7 @@ def run_segmented_capture(
     width = max(4, len(str(request.segments)))
     start_time = batch_iso_timestamp()
     manifest: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "operation": "segmented-capture",
         "start_time": start_time,
         "end_time": None,
@@ -449,6 +450,7 @@ def run_segmented_capture(
         "timeout_ms": request.timeout_ms,
         "idn": None,
         "channel": request.channel,
+        "vertical_unit": None,
         "requested_segments": request.segments,
         "configured_segments": None,
         "acquired_segments": 0,
@@ -471,6 +473,7 @@ def run_segmented_capture(
     final_mode: str | None = None
     primary_error: Exception | None = None
     target_started = False
+    vertical_unit: WaveformVerticalUnit | None = None
     acquired_segments = 0
     exported_segments = 0
     session_read_timed_out = False
@@ -535,6 +538,8 @@ def run_segmented_capture(
                     ),
                     "segmented capture channel-unit read timed out",
                 )
+                manifest["vertical_unit"] = vertical_unit
+                _write_manifest(manifest, manifest_path)
                 scope.scpi.write(segmented_mode_command("segmented"))
                 scope.scpi.write(segmented_count_command(request.segments))
                 manifest["configured_segments"] = request.segments
@@ -740,6 +745,7 @@ def run_segmented_capture(
         "manifest_path": str(manifest_path),
         "scpi_log_path": str(scpi_log_path),
         "channel": request.channel,
+        "vertical_unit": manifest["vertical_unit"],
         "requested_segments": request.segments,
         "configured_segments": manifest["configured_segments"],
         "acquired_segments": acquired_segments,

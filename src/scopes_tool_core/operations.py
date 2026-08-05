@@ -52,6 +52,7 @@ from .trigger import TriggerWaitConfig, wait_for_trigger_completion
 from .waveform import (
     MultiChannelWaveformCapture,
     WaveformCapture,
+    validate_waveform_vertical_unit,
     validate_word_format_supported,
     validate_waveform_points,
     waveform_time_axis_tolerance_summary,
@@ -1173,7 +1174,7 @@ def _system_error_from_step(step: dict[str, object]) -> dict[str, object] | None
 
 def _smoke_report(resource: str, files: list[dict[str, str]]) -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "start_time": batch_iso_timestamp(),
         "end_time": None,
         "status": "running",
@@ -1347,6 +1348,7 @@ def _waveform_capture_summary(
 def _single_waveform_capture_summary(capture: WaveformCapture) -> dict[str, object]:
     return {
         "channel": capture.channel,
+        "vertical_unit": validate_waveform_vertical_unit(capture.vertical_unit),
         "requested_points": capture.requested_points,
         "actual_points": len(capture.raw_samples),
         "format": capture.format_name,

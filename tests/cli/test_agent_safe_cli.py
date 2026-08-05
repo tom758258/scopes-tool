@@ -2454,6 +2454,7 @@ def test_capture_simulate_json_reports_files_and_summaries(capsys, tmp_path):
     assert result["requested_points"] == 5000
     assert result["actual_points"] == 5000
     assert result["captures"][0]["channel"] == 1
+    assert result["captures"][0]["vertical_unit"] == "V"
     assert "raw_samples" not in result["captures"][0]
     assert result["captures"][0]["preamble"]["points"] == 5000
 

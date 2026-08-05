@@ -222,9 +222,18 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(
     assert (tmp_path / "segment_0001.csv").exists()
     assert (tmp_path / "segment_0002.csv").exists()
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 2
     assert manifest["status"] == "completed"
+    assert manifest["vertical_unit"] == "A"
     assert [entry["index"] for entry in manifest["segments"]] == [1, 2]
     assert [entry["time_tag_s"] for entry in manifest["segments"]] == [0.0, 0.001]
+    assert result.result["vertical_unit"] == "A"
+    assert (tmp_path / "segment_0001.csv").read_text(encoding="utf-8").splitlines()[0] == (
+        "time_s,ch1_a"
+    )
+    assert (tmp_path / "segment_0002.csv").read_text(encoding="utf-8").splitlines()[0] == (
+        "time_s,ch1_a"
+    )
     assert vertical_units == ["A", "A"]
     assert backend.history.count(":CHANnel1:UNITs?") == 1
     assert backend.segmented_waveform_all is False
@@ -287,6 +296,9 @@ def test_run_segmented_capture_unit_query_timeout_stops_before_capture(tmp_path)
     assert ":ACQuire:MODE SEGMented" not in backend.history
     assert ":SINGle" not in backend.history
     assert ":WAVeform:DATA?" not in backend.history
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["vertical_unit"] is None
+    assert result.result["vertical_unit"] is None
 
 
 def test_run_segmented_capture_restores_timeout_before_waveform_export(monkeypatch, tmp_path):
@@ -662,11 +674,18 @@ def test_run_segmented_capture_07_20_omits_waveform_all_command(tmp_path):
 
     assert result.exit_code == 0
     assert result.result["status"] == "completed"
+    assert result.result["vertical_unit"] == "V"
     assert segmented_waveform_all_command(False) not in backend.history
     assert ":ACQuire:SEGMented:INDex 1" in backend.history
     assert ":WAVeform:SEGMented:TTAG?" in backend.history
     assert (tmp_path / "segment_0001.csv").exists()
     assert (tmp_path / "segment_0002.csv").exists()
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 2
+    assert manifest["vertical_unit"] == "V"
+    assert (tmp_path / "segment_0001.csv").read_text(encoding="utf-8").splitlines()[0] == (
+        "time_s,ch1_v"
+    )
 
 
 def test_run_segmented_capture_rejects_average_before_segmented_write(tmp_path):
@@ -700,7 +719,7 @@ def test_run_segmented_capture_rejects_average_before_segmented_write(tmp_path):
 def test_segmented_capture_plan_respects_waveform_all_profile_boundary(
     model, firmware, contains_all_off, tmp_path
 ):
-    planned, _, _ = plan_segmented_capture(
+    planned, _, result = plan_segmented_capture(
         SegmentedCaptureRequest(1, 2, output_dir=tmp_path),
         capabilities_for_model(model),
         firmware=firmware,
@@ -710,6 +729,7 @@ def test_segmented_capture_plan_respects_waveform_all_profile_boundary(
     assert (all_off in planned) is contains_all_off
     assert planned.count(all_off) == (1 if contains_all_off else 0)
     assert planned.count(":CHANnel1:UNITs?") == 1
+    assert result["vertical_unit"] is None
 
 
 def test_run_segmented_capture_keeps_csv_file_when_manifest_update_fails(
@@ -718,6 +738,7 @@ def test_run_segmented_capture_keeps_csv_file_when_manifest_update_fails(
     backend = SimulatorBackend(
         physical_model_id="keysight-dsox4024a",
         resource_name="SIM::keysight-dsox4024a::INSTR",
+        channel_units={1: "AMP"},
     )
     state = {"failed": False}
     original_write_manifest = segmented_capture_module._write_manifest
@@ -749,6 +770,9 @@ def test_run_segmented_capture_keeps_csv_file_when_manifest_update_fails(
     assert "simulated manifest failure" in result.result["error"]
     assert csv_path.exists()
     assert {"kind": "csv", "path": str(csv_path)} in result.files
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["vertical_unit"] == "A"
+    assert result.result["vertical_unit"] == "A"
 
 
 def test_run_segmented_capture_malformed_count_returns_failed_manifest(tmp_path):

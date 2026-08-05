@@ -423,8 +423,9 @@ Control and setup:
   `status` (`completed`, `partial`, `failed`, or dry-run `planned`),
   `output_dir`, `manifest_path`, `scpi_log_path`, `channel`,
   `requested_segments`, `configured_segments`, `acquired_segments`,
-  `exported_segments`, `points`, `format`, `initial_mode`, `final_mode`, and
-  polling metadata. The top-level `files` list contains the manifest, SCPI log,
+  `exported_segments`, `points`, `format`, `initial_mode`, `final_mode`,
+  `vertical_unit`, and polling metadata. The top-level `files` list contains the
+  manifest, SCPI log,
   and successfully written per-segment CSV files. Samples are not embedded in
   JSON; partial or failed runs preserve already written CSV artifacts.
 - `autoscale`: `operation`, `commands`, `source_channels`, optional
@@ -507,7 +508,8 @@ Measurement and artifact-producing flows:
   `completed_rows`, `csv_path`, `manifest_path`, `scpi_log_path`, and compact
   row records. Measurement values are written to CSV.
 - `capture`: `channels`, `requested_points`, `actual_points`, `format`,
-  `files`, compact per-channel waveform summaries, optional
+  `files`, compact per-channel waveform summaries including each capture's
+  `vertical_unit` (`"V"` or `"A"`), optional
   `time_axis_tolerance`, and optional `trigger` when `--wait-trigger` is used.
   Trigger metadata includes `wait_enabled`, `arm_command`, `poll_source`,
   `poll_command`, `timeout_ms`, `poll_interval_ms`, `force_on_timeout`,
@@ -564,10 +566,15 @@ Scopes artifact JSON is machine-readable and should be preferred over human
 text:
 
 - Worker job `request.json` and terminal `result.json` are Common Worker
-  artifacts targeting exact integer `schema_version: 2`; their existing
-  Scopes-specific fields and result layout remain unchanged.
+  artifacts targeting exact integer `schema_version: 2`; their Common envelope
+  and request fields remain unchanged, while command result fields follow the
+  corresponding domain contract.
 - Capture metadata JSON records resource, IDN, waveform format, preamble, point
-  counts, per-channel summaries, and optional time-axis tolerance.
+  counts, and `vertical_unit`; multi-channel metadata records the unit in each
+  ordered channel entry. CSV waveform columns use `ch<n>_v` for volts and
+  `ch<n>_a` for amps, and multi-channel files may contain mixed units.
+- Segmented-capture `manifest.json` is independently versioned at
+  `schema_version: 2` and records the run's top-level `vertical_unit`.
 - Capture-batch `manifest.json` remains independently versioned at
   `schema_version: 1` and records run
   status, resource, backend, IDN, channels, format, requested count, completed
@@ -576,10 +583,10 @@ text:
   `schema_version: 1` and records status,
   resource, backend, IDN, requested row constraints, completed rows, row
   metadata, and system errors.
-- Smoke `report.json` remains independently versioned at `schema_version: 1`
-  and records status, resource,
-  backend, IDN, doctor data, measurement records, capture metadata, screenshot
-  metadata, warnings, files, and errors.
+- Smoke `report.json` is independently versioned at `schema_version: 2` and
+  records status, resource, backend, IDN, doctor data, measurement records,
+  capture metadata including `vertical_unit`, screenshot metadata, warnings,
+  files, and errors.
 - Acquisition-check `report.json` remains independently versioned at
   `schema_version: 1` and records status,
   resource, backend, IDN, initial/final acquisition state, restore metadata,

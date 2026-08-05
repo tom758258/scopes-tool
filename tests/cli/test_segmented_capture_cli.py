@@ -37,14 +37,22 @@ def test_segmented_capture_simulate_json_writes_artifacts_and_order(tmp_path, ca
     assert payload["result"]["configured_segments"] == 2
     assert payload["result"]["acquired_segments"] == 2
     assert payload["result"]["exported_segments"] == 2
+    assert payload["result"]["vertical_unit"] == "V"
     assert (tmp_path / "manifest.json").exists()
     assert (tmp_path / "scpi.log").exists()
     assert (tmp_path / "segment_0001.csv").exists()
     assert (tmp_path / "segment_0002.csv").exists()
-    assert payload["scpi"]["sent"][:10] == [
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 2
+    assert manifest["vertical_unit"] == "V"
+    assert (tmp_path / "segment_0001.csv").read_text(encoding="utf-8").splitlines()[0] == (
+        "time_s,ch1_v"
+    )
+    assert payload["scpi"]["sent"][:11] == [
         "*IDN?",
         ":ACQuire:MODE?",
         ":ACQuire:TYPE?",
+        ":CHANnel1:UNITs?",
         ":ACQuire:MODE SEGMented",
         ":ACQuire:SEGMented:COUNt 2",
         ":SINGle",
@@ -96,10 +104,11 @@ def test_segmented_capture_dry_run_is_concrete_and_creates_no_artifacts(tmp_path
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["scpi"]["sent"] == []
-    assert payload["scpi"]["planned"][:8] == [
+    assert payload["scpi"]["planned"][:9] == [
         "*IDN?",
         ":ACQuire:MODE?",
         ":ACQuire:TYPE?",
+        ":CHANnel1:UNITs?",
         ":ACQuire:MODE SEGMented",
         ":ACQuire:SEGMented:COUNt 2",
         ":SINGle",
@@ -120,6 +129,8 @@ def test_segmented_capture_dry_run_is_concrete_and_creates_no_artifacts(tmp_path
     assert payload["result"]["polling"]["command"] == ":OPERegister:CONDition?"
     assert "two consecutive" in payload["result"]["polling"]["runtime_behavior"]
     assert "COUNt? once" in payload["result"]["polling"]["runtime_behavior"]
+    assert payload["result"]["vertical_unit"] is None
+    assert payload["scpi"]["planned"].count(":CHANnel1:UNITs?") == 1
     assert not output_dir.exists()
 
 
