@@ -725,8 +725,9 @@ Set or query additional analog channel settings:
 .\.venv\Scripts\scopes-tool.exe channel-invert --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
 .\.venv\Scripts\scopes-tool.exe channel-range --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --volts-full-scale 4 --log-scpi
 .\.venv\Scripts\scopes-tool.exe channel-range --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
-.\.venv\Scripts\scopes-tool.exe channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --units volt --log-scpi
-.\.venv\Scripts\scopes-tool.exe channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 4 --units amp --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 4 --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe channel-units --resource "$env:SCOPES_TOOL_RESOURCE" --channel 4 --units volt --log-scpi
 .\.venv\Scripts\scopes-tool.exe channel-vernier --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --off --log-scpi
 .\.venv\Scripts\scopes-tool.exe channel-vernier --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --query --log-scpi
 .\.venv\Scripts\scopes-tool.exe channel-probe-skew --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --seconds 1e-9 --log-scpi
@@ -743,6 +744,14 @@ opened. In this CLI, 50 ohm channel impedance is supported only on DSO-X 3000X
 and 4000X profiles. DSO-X 2000X channel impedance is one-meg only; even with
 `--allow-50-ohm`, a detected 2000X is rejected after `*IDN?` and before
 `:CHANnel<n>:IMPedance FIFTy`.
+
+Setting `channel-units --units amp` changes the selected channel's vertical
+unit to amperes; use `--query` to read it back and `--units volt` to restore
+voltage units. This setting does not turn a voltage probe into a current probe
+and does not perform host-side voltage-to-current conversion. Configure the
+probe ratio appropriate for the attached current probe. Unit-aware waveform
+captures use `_v` or `_a` CSV column suffixes for voltage and current channels,
+respectively, and report the corresponding vertical unit in capture metadata.
 
 Worker `/command` accepts these advanced channel commands using the same option
 names as JSON keys without leading dashes. For example, `channel-range` uses
