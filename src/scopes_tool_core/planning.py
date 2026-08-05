@@ -14,7 +14,7 @@ from .acquisition import (
     validate_acquisition_count,
 )
 from .capabilities import ScopeCapabilities
-from .channel import validate_analog_channel
+from .channel import channel_units_query, validate_analog_channel
 from .errors import OscilloscopeError
 from .measurements import (
     is_pair_measurement_item,
@@ -300,6 +300,7 @@ def planned_waveform_scpi(
     planned: list[str] = []
     for channel in channels:
         planned.append(waveform_source_command(channel))
+        planned.append(channel_units_query(channel))
         if waveform_format == "word":
             planned.extend(
                 [

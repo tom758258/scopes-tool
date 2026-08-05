@@ -2859,6 +2859,7 @@ def test_capture_simulate_json_binary_failure_reports_single_json_object(
     assert payload["scpi"]["sent"] == [
         "*IDN?",
         ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
         ":WAVeform:FORMat BYTE",
         ":WAVeform:POINts 1000",
         ":WAVeform:PREamble?",

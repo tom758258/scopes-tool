@@ -4,7 +4,11 @@ from dataclasses import replace
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model
-from scopes_tool_core.errors import ParameterValidationError, WaveformResponseError
+from scopes_tool_core.errors import (
+    ChannelResponseError,
+    ParameterValidationError,
+    WaveformResponseError,
+)
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.scpi import SCPIClient
@@ -146,7 +150,10 @@ def test_validate_waveform_points_rejects_unsupported_point_count():
 
 def test_waveform_controller_captures_byte_data():
     backend = FakeBackend(
-        responses={":WAVeform:PREamble?": PREAMBLE},
+        responses={
+            ":CHANnel1:UNITs?": "VOLT",
+            ":WAVeform:PREamble?": PREAMBLE,
+        },
         binary_responses={":WAVeform:DATA?": [128, 129, 130, 127]},
     )
     controller = WaveformController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
@@ -156,8 +163,11 @@ def test_waveform_controller_captures_byte_data():
     assert capture.channel == 1
     assert capture.requested_points == 5000
     assert capture.raw_samples == (128, 129, 130, 127)
+    assert capture.vertical_unit == "V"
+    assert capture.vertical_values == pytest.approx((-2.56, -2.54, -2.52, -2.58))
     assert backend.history == [
         ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
         ":WAVeform:FORMat BYTE",
         ":WAVeform:POINts 5000",
         ":WAVeform:PREamble?",
@@ -165,9 +175,29 @@ def test_waveform_controller_captures_byte_data():
     ]
 
 
+def test_waveform_controller_captures_byte_amp_data_without_rescaling():
+    backend = FakeBackend(
+        responses={
+            ":CHANnel1:UNITs?": "AMP",
+            ":WAVeform:PREamble?": PREAMBLE,
+        },
+        binary_responses={":WAVeform:DATA?": [128, 129, 130, 127]},
+    )
+    controller = WaveformController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
+
+    capture = controller.capture_byte(1, points=5000)
+
+    assert capture.vertical_unit == "A"
+    assert capture.vertical_values == pytest.approx((-2.56, -2.54, -2.52, -2.58))
+    assert backend.history.count(":CHANnel1:UNITs?") == 1
+
+
 def test_waveform_controller_captures_word_data_with_fixed_binary_options():
     backend = FakeBackend(
-        responses={":WAVeform:PREamble?": "1,0,3,1,1.0E-6,0,0,1.0E-4,0,32768"},
+        responses={
+            ":CHANnel1:UNITs?": "AMP",
+            ":WAVeform:PREamble?": "1,0,3,1,1.0E-6,0,0,1.0E-4,0,32768",
+        },
         binary_responses={":WAVeform:DATA?": [32768, 32769, 32767]},
     )
     controller = WaveformController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
@@ -178,8 +208,10 @@ def test_waveform_controller_captures_word_data_with_fixed_binary_options():
     assert capture.requested_points == 10000
     assert capture.raw_samples == (32768, 32769, 32767)
     assert capture.format_name == "WORD"
+    assert capture.vertical_unit == "A"
     assert backend.history == [
         ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
         ":WAVeform:FORMat WORD",
         ":WAVeform:BYTeorder MSBFirst",
         ":WAVeform:UNSigned ON",
@@ -203,7 +235,11 @@ def test_waveform_controller_rejects_unsupported_word_format_before_scpi():
 
 def test_waveform_controller_captures_multiple_byte_channels_in_order():
     backend = FakeBackend(
-        responses={":WAVeform:PREamble?": PREAMBLE},
+        responses={
+            ":CHANnel1:UNITs?": "VOLT",
+            ":CHANnel2:UNITs?": "AMP",
+            ":WAVeform:PREamble?": PREAMBLE,
+        },
         binary_responses={":WAVeform:DATA?": [128, 129, 130, 127]},
     )
     controller = WaveformController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
@@ -213,13 +249,18 @@ def test_waveform_controller_captures_multiple_byte_channels_in_order():
     assert isinstance(capture, MultiChannelWaveformCapture)
     assert capture.channels == (2, 1)
     assert [item.channel for item in capture.captures] == [2, 1]
+    assert [item.vertical_unit for item in capture.captures] == ["A", "V"]
+    assert backend.history.count(":CHANnel1:UNITs?") == 1
+    assert backend.history.count(":CHANnel2:UNITs?") == 1
     assert backend.history == [
         ":WAVeform:SOURce CHANnel2",
+        ":CHANnel2:UNITs?",
         ":WAVeform:FORMat BYTE",
         ":WAVeform:POINts 5000",
         ":WAVeform:PREamble?",
         ":WAVeform:DATA?",
         ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
         ":WAVeform:FORMat BYTE",
         ":WAVeform:POINts 5000",
         ":WAVeform:PREamble?",
@@ -229,7 +270,11 @@ def test_waveform_controller_captures_multiple_byte_channels_in_order():
 
 def test_waveform_controller_captures_multiple_word_channels_in_order():
     backend = FakeBackend(
-        responses={":WAVeform:PREamble?": "1,0,3,1,1.0E-6,0,0,1.0E-4,0,32768"},
+        responses={
+            ":CHANnel1:UNITs?": "VOLT",
+            ":CHANnel3:UNITs?": "VOLT",
+            ":WAVeform:PREamble?": "1,0,3,1,1.0E-6,0,0,1.0E-4,0,32768",
+        },
         binary_responses={":WAVeform:DATA?": [32768, 32769, 32767]},
     )
     controller = WaveformController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
@@ -237,8 +282,10 @@ def test_waveform_controller_captures_multiple_word_channels_in_order():
     capture = controller.capture_channels_word((1, 3), points=10000)
 
     assert capture.channels == (1, 3)
+    assert [item.vertical_unit for item in capture.captures] == ["V", "V"]
     assert backend.history == [
         ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
         ":WAVeform:FORMat WORD",
         ":WAVeform:BYTeorder MSBFirst",
         ":WAVeform:UNSigned ON",
@@ -246,6 +293,7 @@ def test_waveform_controller_captures_multiple_word_channels_in_order():
         ":WAVeform:PREamble?",
         ":WAVeform:DATA?",
         ":WAVeform:SOURce CHANnel3",
+        ":CHANnel3:UNITs?",
         ":WAVeform:FORMat WORD",
         ":WAVeform:BYTeorder MSBFirst",
         ":WAVeform:UNSigned ON",
@@ -271,7 +319,10 @@ def test_waveform_controller_rejects_duplicate_channels_before_scpi():
 
 def test_waveform_controller_rejects_unexpected_word_preamble_format():
     backend = FakeBackend(
-        responses={":WAVeform:PREamble?": PREAMBLE},
+        responses={
+            ":CHANnel1:UNITs?": "VOLT",
+            ":WAVeform:PREamble?": PREAMBLE,
+        },
         binary_responses={":WAVeform:DATA?": [128, 129]},
     )
     controller = WaveformController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
@@ -281,11 +332,25 @@ def test_waveform_controller_rejects_unexpected_word_preamble_format():
 
     assert backend.history == [
         ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
         ":WAVeform:FORMat WORD",
         ":WAVeform:BYTeorder MSBFirst",
         ":WAVeform:UNSigned ON",
         ":WAVeform:POINts 1000",
         ":WAVeform:PREamble?",
+    ]
+
+
+def test_waveform_controller_rejects_unknown_channel_unit_before_waveform_data():
+    backend = FakeBackend(responses={":CHANnel1:UNITs?": "UNKNOWN"})
+    controller = WaveformController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
+
+    with pytest.raises(ChannelResponseError, match="Could not parse channel units"):
+        controller.capture_byte(1, points=1000)
+
+    assert backend.history == [
+        ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
     ]
 
 

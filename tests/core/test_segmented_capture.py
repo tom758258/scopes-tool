@@ -185,11 +185,26 @@ class _FinalModeVisaTimeoutBackend(_TimeoutTrackingBackend):
         return super().query(command)
 
 
-def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp_path):
+def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(
+    monkeypatch, tmp_path
+):
+    vertical_units = []
+    original_convert_byte_waveform = segmented_capture_module.convert_byte_waveform
+
+    def record_vertical_unit(*args, **kwargs):
+        vertical_units.append(kwargs["vertical_unit"])
+        return original_convert_byte_waveform(*args, **kwargs)
+
+    monkeypatch.setattr(
+        segmented_capture_module,
+        "convert_byte_waveform",
+        record_vertical_unit,
+    )
     backend = SimulatorBackend(
         physical_model_id="keysight-dsox4024a",
         resource_name="SIM::keysight-dsox4024a::INSTR",
         firmware="07.30",
+        channel_units={1: "AMP"},
     )
     with Oscilloscope(backend) as scope:
         scope.scpi.write(segmented_waveform_all_command(True))
@@ -210,6 +225,8 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp
     assert manifest["status"] == "completed"
     assert [entry["index"] for entry in manifest["segments"]] == [1, 2]
     assert [entry["time_tag_s"] for entry in manifest["segments"]] == [0.0, 0.001]
+    assert vertical_units == ["A", "A"]
+    assert backend.history.count(":CHANnel1:UNITs?") == 1
     assert backend.segmented_waveform_all is False
     assert backend.history.count(segmented_waveform_all_command(False)) == 1
     all_off_index = backend.history.index(segmented_waveform_all_command(False))
@@ -220,6 +237,7 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp
         "*IDN?",
         ":ACQuire:MODE?",
         ":ACQuire:TYPE?",
+        ":CHANnel1:UNITs?",
         ":ACQuire:MODE SEGMented",
         ":ACQuire:SEGMented:COUNt 2",
         ":SINGle",
@@ -245,6 +263,30 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(tmp
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",
     ]
+
+
+def test_run_segmented_capture_unit_query_timeout_stops_before_capture(tmp_path):
+    backend = SimulatorBackend(
+        query_failures={
+            ":CHANnel1:UNITs?": VisaBackendError(
+                "VISA query failed for ':CHANnel1:UNITs?': VI_ERROR_TMO"
+            )
+        }
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["error"] == "segmented capture channel-unit read timed out"
+    assert backend.history.count(":CHANnel1:UNITs?") == 1
+    assert ":ACQuire:MODE SEGMented" not in backend.history
+    assert ":SINGle" not in backend.history
+    assert ":WAVeform:DATA?" not in backend.history
 
 
 def test_run_segmented_capture_restores_timeout_before_waveform_export(monkeypatch, tmp_path):
@@ -667,6 +709,7 @@ def test_segmented_capture_plan_respects_waveform_all_profile_boundary(
     all_off = segmented_waveform_all_command(False)
     assert (all_off in planned) is contains_all_off
     assert planned.count(all_off) == (1 if contains_all_off else 0)
+    assert planned.count(":CHANnel1:UNITs?") == 1
 
 
 def test_run_segmented_capture_keeps_csv_file_when_manifest_update_fails(

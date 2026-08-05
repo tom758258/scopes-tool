@@ -633,6 +633,7 @@ def test_scope_waveform_capture_uses_capabilities_from_idn():
     backend = FakeBackend(
         responses={
             "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20",
+            ":CHANnel1:UNITs?": "VOLT",
             ":WAVeform:PREamble?": "0,0,2,1,1.0E-6,0,0,2.0E-2,-2.56,128",
         },
         binary_responses={":WAVeform:DATA?": [128, 129]},
@@ -643,9 +644,11 @@ def test_scope_waveform_capture_uses_capabilities_from_idn():
     capture = scope.capture_waveform_byte(1, points=1000)
 
     assert capture.raw_samples == (128, 129)
+    assert capture.vertical_unit == "V"
     assert backend.history == [
         "*IDN?",
         ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
         ":WAVeform:FORMat BYTE",
         ":WAVeform:POINts 1000",
         ":WAVeform:PREamble?",
@@ -657,6 +660,7 @@ def test_scope_word_waveform_capture_uses_capabilities_from_idn():
     backend = FakeBackend(
         responses={
             "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20",
+            ":CHANnel1:UNITs?": "VOLT",
             ":WAVeform:PREamble?": "1,0,2,1,1.0E-6,0,0,1.0E-4,0,32768",
         },
         binary_responses={":WAVeform:DATA?": [32768, 32769]},
@@ -668,9 +672,11 @@ def test_scope_word_waveform_capture_uses_capabilities_from_idn():
 
     assert capture.raw_samples == (32768, 32769)
     assert capture.format_name == "WORD"
+    assert capture.vertical_unit == "V"
     assert backend.history == [
         "*IDN?",
         ":WAVeform:SOURce CHANnel1",
+        ":CHANnel1:UNITs?",
         ":WAVeform:FORMat WORD",
         ":WAVeform:BYTeorder MSBFirst",
         ":WAVeform:UNSigned ON",

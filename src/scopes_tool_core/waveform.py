@@ -13,7 +13,7 @@ from typing import Literal, Sequence, cast
 import zlib
 
 from .capabilities import ScopeCapabilities
-from .channel import validate_analog_channel
+from .channel import ChannelController, ChannelUnits, validate_analog_channel
 from .errors import ParameterValidationError, WaveformResponseError
 from .idn import IDN
 from .scpi import SCPIClient
@@ -111,6 +111,23 @@ class MultiChannelWaveformCapture:
         return self.captures[0].format_name
 
 
+def query_waveform_vertical_unit(
+    scpi: SCPIClient,
+    capabilities: ScopeCapabilities,
+    channel: int,
+) -> WaveformVerticalUnit:
+    """Query and map one channel's unit to the waveform vertical unit."""
+
+    channel_units: ChannelUnits = ChannelController(scpi, capabilities).query_units(channel)
+    if channel_units == "volt":
+        return "V"
+    if channel_units == "amp":
+        return "A"
+    raise WaveformResponseError(
+        f"Unsupported normalized channel units: {channel_units!r}."
+    )
+
+
 class WaveformController:
     """Controls for waveform capture."""
 
@@ -124,6 +141,9 @@ class WaveformController:
         channel = validate_analog_channel(channel, self.capabilities)
         points = validate_waveform_points(points, self.capabilities)
         self.scpi.write(waveform_source_command(channel))
+        vertical_unit = query_waveform_vertical_unit(
+            self.scpi, self.capabilities, channel
+        )
         self.scpi.write(waveform_format_byte_command())
         self.scpi.write(waveform_points_command(points))
         preamble = parse_waveform_preamble(self.scpi.query(waveform_preamble_query()))
@@ -135,7 +155,7 @@ class WaveformController:
         if not raw_samples:
             raise WaveformResponseError("Waveform data query returned no samples.")
         return convert_byte_waveform(
-            channel, points, preamble, raw_samples, vertical_unit="V"
+            channel, points, preamble, raw_samples, vertical_unit=vertical_unit
         )
 
     def capture_word(self, channel: int, points: int = 1000) -> WaveformCapture:
@@ -145,6 +165,9 @@ class WaveformController:
         points = validate_waveform_points(points, self.capabilities)
         validate_word_format_supported(self.capabilities)
         self.scpi.write(waveform_source_command(channel))
+        vertical_unit = query_waveform_vertical_unit(
+            self.scpi, self.capabilities, channel
+        )
         self.scpi.write(waveform_format_word_command())
         self.scpi.write(waveform_byte_order_command(WORD_BYTE_ORDER))
         self.scpi.write(waveform_unsigned_command(WORD_UNSIGNED))
@@ -165,7 +188,7 @@ class WaveformController:
         if not raw_samples:
             raise WaveformResponseError("Waveform data query returned no samples.")
         return convert_word_waveform(
-            channel, points, preamble, raw_samples, vertical_unit="V"
+            channel, points, preamble, raw_samples, vertical_unit=vertical_unit
         )
 
     def capture_channels_byte(

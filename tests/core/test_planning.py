@@ -26,10 +26,13 @@ def test_plan_capture_single_and_all_channels(tmp_path):
         {"kind": "metadata", "path": str(tmp_path / "capture_meta.json")},
     )
     assert single.planned_scpi[-1] == ":SYSTem:ERRor?"
+    assert single.planned_scpi.count(":CHANnel1:UNITs?") == 1
 
     all_channels = plan_capture(CapturePlanRequest(("all",), 1000, "word"), caps)
     assert all_channels.result["channels"] == [1, 2, 3, 4]
     assert ":WAVeform:FORMat WORD" in all_channels.planned_scpi
+    for channel in all_channels.result["channels"]:
+        assert all_channels.planned_scpi.count(f":CHANnel{channel}:UNITs?") == 1
 
 
 def test_plan_doctor_uses_capability_channel_count():

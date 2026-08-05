@@ -18,7 +18,7 @@ from .batch import (
 )
 from .acquisition import acquisition_type_query, parse_acquisition_type
 from .capabilities import ScopeCapabilities
-from .channel import validate_analog_channel
+from .channel import channel_units_query, validate_analog_channel
 from .errors import OscilloscopeError, ParameterValidationError, WaveformResponseError
 from .operations import OperationResult
 from .status import parse_system_error
@@ -49,9 +49,11 @@ from .segmented import (
 from .waveform import (
     SUPPORTED_WAVEFORM_POINTS,
     WaveformCapture,
+    WaveformVerticalUnit,
     convert_byte_waveform,
     convert_word_waveform,
     parse_waveform_preamble,
+    query_waveform_vertical_unit,
     validate_word_format_supported,
     validate_waveform_points,
     waveform_byte_order_command,
@@ -222,6 +224,7 @@ def plan_segmented_capture(
         "*IDN?",
         segmented_mode_query(),
         ":ACQuire:TYPE?",
+        channel_units_query(request.channel),
         segmented_mode_command("segmented"),
         segmented_count_command(request.segments),
         ":SINGle",
@@ -359,6 +362,7 @@ def _capture_segment_waveform(
     channel: int,
     points: int,
     waveform_format: str,
+    vertical_unit: WaveformVerticalUnit,
     index: int,
     guarded_read: ReadGuard,
 ) -> WaveformCapture:
@@ -401,7 +405,7 @@ def _capture_segment_waveform(
         if not raw_samples:
             raise WaveformResponseError("Waveform data query returned no samples.")
         return convert_word_waveform(
-            channel, points, preamble, raw_samples, vertical_unit="V"
+            channel, points, preamble, raw_samples, vertical_unit=vertical_unit
         )
 
     raw_samples = tuple(
@@ -416,7 +420,7 @@ def _capture_segment_waveform(
     if not raw_samples:
         raise WaveformResponseError("Waveform data query returned no samples.")
     return convert_byte_waveform(
-        channel, points, preamble, raw_samples, vertical_unit="V"
+        channel, points, preamble, raw_samples, vertical_unit=vertical_unit
     )
 
 
@@ -523,6 +527,14 @@ def run_segmented_capture(
                         "segmented memory cannot be enabled while acquisition type is "
                         "average; configure a non-average acquisition type first."
                     )
+                vertical_unit = guarded_read(
+                    lambda: query_waveform_vertical_unit(
+                        scope.scpi,
+                        capabilities,
+                        request.channel,
+                    ),
+                    "segmented capture channel-unit read timed out",
+                )
                 scope.scpi.write(segmented_mode_command("segmented"))
                 scope.scpi.write(segmented_count_command(request.segments))
                 manifest["configured_segments"] = request.segments
@@ -630,6 +642,7 @@ def run_segmented_capture(
                         request.channel,
                         request.points,
                         waveform_format,
+                        vertical_unit,
                         index,
                         guarded_read,
                     )
