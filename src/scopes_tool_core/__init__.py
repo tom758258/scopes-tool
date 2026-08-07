@@ -114,6 +114,7 @@ from .demo import (
 )
 from .operations import (
     AcquisitionCheckRequest,
+    CaptureBatchRequest,
     CaptureRequest,
     MeasureLogRequest,
     MeasureRequest,
@@ -122,6 +123,7 @@ from .operations import (
     SmokeRequest,
     run_acquisition_check,
     run_capture,
+    run_capture_batch,
     run_doctor,
     run_measure_log,
     run_measure,
@@ -223,6 +225,12 @@ from .trigger import (
     TvTriggerState,
 )
 from .waveform import MultiChannelWaveformCapture, WaveformCapture, WaveformPreamble
+from .workflow import (
+    ProgressReporter,
+    StopRequested,
+    WorkflowProgress,
+    interruptible_wait,
+)
 
 __all__ = [
     "ChannelController",
@@ -359,6 +367,7 @@ __all__ = [
     "OperationResult",
     "ResolvedRunConfig",
     "RunModeOptions",
+    "CaptureBatchRequest",
     "CaptureRequest",
     "MeasureLogRequest",
     "MeasureRequest",
@@ -391,6 +400,9 @@ __all__ = [
     "WgenVoltageState",
     "WaveformCapture",
     "WaveformPreamble",
+    "ProgressReporter",
+    "StopRequested",
+    "WorkflowProgress",
     "capabilities_for_model",
     "capabilities_for_model_id",
     "canonical_physical_model_id",
@@ -418,12 +430,14 @@ __all__ = [
     "plan_smoke",
     "plan_acquisition_check",
     "run_capture",
+    "run_capture_batch",
     "run_doctor",
     "run_measure_log",
     "run_measure",
     "run_measure_sweep",
     "run_smoke",
     "run_acquisition_check",
+    "interruptible_wait",
 ]
 
 __version__ = "0.1.0"

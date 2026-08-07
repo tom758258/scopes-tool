@@ -2000,7 +2000,9 @@ recorded in the manifest. With `--stop-on-error`, the command stops after the
 row that reports an instrument error, leaves existing files in place, and
 returns non-zero. It does not send `*RST`, change acquisition mode, wait for a
 trigger, change timeout defaults, use background threads, or perform
-return-to-local behavior.
+return-to-local behavior. `Ctrl+C` preserves previously completed rows, does
+not commit a partially collected row, writes manifest status `interrupted`,
+and returns `130`.
 
 Run a capture-safe smoke check:
 

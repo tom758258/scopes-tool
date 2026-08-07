@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Adds Core Workflow Foundation v1 with optional cooperative cancellation,
+  interruptible interval waits, synchronous progress callbacks, and
+  operation-specific sample callbacks.
+- Moves the finite `capture-batch` execution loop into Core and adopts the
+  shared workflow helpers in `measure-log` without changing their CLI commands,
+  SCPI behavior, artifact schemas, or finite count/duration requirements.
+- Connects the existing Worker `/stop` state to running Core measurement and
+  capture workflows so they stop at safe boundaries and preserve completed
+  artifacts. Worker protocol and schema version remain unchanged.
 - Adds query-only segmented-memory state queries for registered Keysight 2000X,
   3000X, and 4000X profiles. It does not configure segmented mode, acquire
   waveform data, or export artifacts.

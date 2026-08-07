@@ -5,8 +5,11 @@ from datetime import datetime
 import pytest
 
 from scopes_tool_core import batch
+from scopes_tool_core import operations
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.idn import parse_idn
+from scopes_tool_core.scope import Oscilloscope
+from scopes_tool_core.simulator_backend import SimulatorBackend
 from scopes_tool_core.status import SystemErrorEntry
 
 
@@ -126,3 +129,99 @@ def test_capture_batch_scpi_logging_writes_package_debug_to_file(tmp_path):
         "scopes_tool_core.scpi DEBUG: SCPI >> *IDN?",
         "scopes_tool_core.scpi DEBUG: SCPI << IDN",
     ]
+
+
+def test_run_capture_batch_completes_and_writes_representative_artifacts(tmp_path):
+    scope = Oscilloscope(
+        SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    )
+    output_dir = tmp_path / "batch"
+
+    result = operations.run_capture_batch(
+        scope,
+        "SIM::keysight-dsox4024a::INSTR",
+        operations.CaptureBatchRequest(
+            channels=[1, 2],
+            requested_count=2,
+            output_dir=output_dir,
+        ),
+    )
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["completed_count"] == 2
+    assert manifest["status"] == "completed"
+    assert len(manifest["captures"]) == 2
+    assert manifest["captures"][0]["csv"] == "waveform_0001.csv"
+    assert (output_dir / "waveform_0001.csv").exists()
+    assert (output_dir / "waveform_0001_meta.json").exists()
+    assert (output_dir / "scpi.log").exists()
+
+
+def test_run_capture_batch_cancels_before_next_capture_and_reports_sample(tmp_path):
+    scope = Oscilloscope(
+        SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    )
+    stop_checks = 0
+    samples = []
+    progress = []
+
+    def stop_requested():
+        nonlocal stop_checks
+        stop_checks += 1
+        return stop_checks >= 2
+
+    result = operations.run_capture_batch(
+        scope,
+        "SIM::keysight-dsox4024a::INSTR",
+        operations.CaptureBatchRequest(
+            channels=[1],
+            requested_count=3,
+            output_dir=tmp_path / "cancelled",
+        ),
+        stop_requested=stop_requested,
+        sample_reporter=samples.append,
+        progress_reporter=progress.append,
+    )
+
+    manifest = json.loads(
+        (tmp_path / "cancelled" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert result.exit_code == 130
+    assert result.result["status"] == "cancelled"
+    assert result.result["error"] is None
+    assert result.result["completed_count"] == 1
+    assert manifest["status"] == "cancelled"
+    assert manifest["error"] is None
+    assert len(samples) == 1
+    assert progress[0].completed_count == 1
+    assert not (tmp_path / "cancelled" / "waveform_0002.csv").exists()
+
+
+def test_run_capture_batch_uses_interruptible_wait_between_captures(
+    tmp_path, monkeypatch
+):
+    scope = Oscilloscope(
+        SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    )
+    waits = []
+
+    def fake_wait(seconds, *, stop_requested=None):
+        waits.append((seconds, stop_requested))
+        return True
+
+    monkeypatch.setattr(operations, "interruptible_wait", fake_wait)
+    result = operations.run_capture_batch(
+        scope,
+        "SIM::keysight-dsox4024a::INSTR",
+        operations.CaptureBatchRequest(
+            channels=[1],
+            requested_count=2,
+            interval_seconds=1.25,
+            output_dir=tmp_path / "wait",
+        ),
+    )
+
+    assert result.exit_code == 0
+    assert waits == [(1.25, None)]

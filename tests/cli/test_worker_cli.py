@@ -1827,6 +1827,67 @@ def test_stop_cancels_queued_job_with_terminal_result(tmp_path):
     assert runtime.cancelled == 1
 
 
+def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
+    tmp_path,
+):
+    import time
+
+    runtime = _runtime(tmp_path)
+    worker_thread = threading.Thread(
+        target=worker._job_loop,
+        args=(runtime,),
+        daemon=True,
+    )
+    worker_thread.start()
+
+    with _worker_server(runtime):
+        status, accepted = _post_command(
+            runtime,
+            {
+                "command": "capture-batch",
+                "arguments": {
+                    "channel": [1],
+                    "count": 3,
+                    "interval_seconds": 30,
+                },
+                "job_id": "cancel-running",
+            },
+        )
+        assert status == 202
+        artifact_path = Path(accepted["artifact_path"])
+        first_capture = artifact_path / "waveform_0001.csv"
+        deadline = time.monotonic() + 2
+        while not first_capture.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert first_capture.exists()
+
+        request = urlrequest.Request(
+            f"http://127.0.0.1:{runtime.port}/stop",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlrequest.urlopen(request, timeout=2) as response:
+            assert response.status == 202
+
+        job = runtime.jobs[accepted["worker_job_id"]]
+        deadline = time.monotonic() + 2
+        while job.state == "running" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert job.state == "cancelled"
+
+    result = json.loads((artifact_path / "result.json").read_text(encoding="utf-8"))
+    manifest = json.loads((artifact_path / "manifest.json").read_text(encoding="utf-8"))
+    assert result["state"] == "cancelled"
+    assert result["exit_code"] == 3
+    assert result["error"]["type"] == "cancelled"
+    assert result["result"]["status"] == "cancelled"
+    assert result["result"]["error"] is None
+    assert result["result"]["completed_count"] == 1
+    assert manifest["status"] == "cancelled"
+    assert not (artifact_path / "waveform_0002.csv").exists()
+
+
 def _execute_worker_job(runtime, command, arguments, artifact_path):
     artifact_path.mkdir(parents=True)
     (artifact_path / "request.json").write_text(
@@ -1972,7 +2033,8 @@ def test_worker_maps_segmented_capture_partial_result_and_existing_files(
     runtime = _runtime(tmp_path)
     artifact_path = tmp_path / "partial"
 
-    def fake_execute(parsed):
+    def fake_execute(parsed, *, stop_requested=None):
+        del stop_requested
         csv_path = Path(parsed.output_dir) / "segment_0001.csv"
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         csv_path.write_text("time_s,ch1_v\n0,0\n", encoding="utf-8")

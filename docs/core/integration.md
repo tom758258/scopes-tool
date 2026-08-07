@@ -136,6 +136,7 @@ names are intended for package consumers and tests:
 - `OperationResult`
 - `ResolvedRunConfig`
 - `RunModeOptions`
+- `CaptureBatchRequest`
 - `CaptureRequest`
 - `MeasureLogRequest`
 - `MeasureRequest`
@@ -170,6 +171,9 @@ names are intended for package consumers and tests:
 - `TvTriggerState`
 - `WaveformCapture`
 - `WaveformPreamble`
+- `ProgressReporter`
+- `StopRequested`
+- `WorkflowProgress`
 - `capabilities_for_model`
 - `capabilities_for_model_id`
 - `canonical_physical_model_id`
@@ -197,12 +201,14 @@ names are intended for package consumers and tests:
 - `plan_smoke`
 - `plan_acquisition_check`
 - `run_capture`
+- `run_capture_batch`
 - `run_doctor`
 - `run_measure_log`
 - `run_measure`
 - `run_measure_sweep`
 - `run_smoke`
 - `run_acquisition_check`
+- `interruptible_wait`
 
 ## Runtime Guidance
 
@@ -219,6 +225,32 @@ replaces the detected identity or its capability profile.
 Core should remain independent from command-line parser types and WebUI
 controller concepts. Package adapters may call Core, but Core should not import
 from adapter packages.
+
+Workflow consumers may pass optional callbacks to `run_measure_log()` and
+`run_capture_batch()`:
+
+```python
+from scopes_tool_core import WorkflowProgress, run_capture_batch
+
+def report_progress(progress: WorkflowProgress) -> None:
+    print(progress.completed_count, progress.total_count)
+
+result = run_capture_batch(
+    scope,
+    resource,
+    request,
+    stop_requested=lambda: stop_event.is_set(),
+    progress_reporter=report_progress,
+    sample_reporter=lambda capture: consume_capture(capture),
+)
+```
+
+Measure-log samples contain `index`, `timestamp_iso`, `elapsed_seconds`,
+`values`, and `system_error`. Capture-batch samples use the compact manifest
+capture entry with `index`, relative CSV and metadata paths, `actual_points`,
+and `system_error`. These are operation-specific payloads; Core does not define
+a universal sample contract. Callbacks are synchronous, run only after the
+corresponding completed data is persisted, and propagate exceptions unchanged.
 
 For 4000X Screenshot capture and hardcopy state queries:
 

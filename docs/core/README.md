@@ -22,6 +22,9 @@ Core owns runtime behavior:
 - Read-only analog channel summaries that aggregate common channel and probe
   setup for every analog channel in the active capability profile.
 - Simulator and fake backend support for hardware-free tests.
+- Finite workflow execution helpers for cooperative cancellation,
+  interruptible waits, synchronous progress reporting, and operation-specific
+  sample reporting. Core owns workflow execution; CLI and Worker are adapters.
 - Instrument-side Math waveform display and vertical controls through
   `Oscilloscope.configure_math_display()`, `query_math_display()`,
   `configure_math_vertical()`, and `query_math_vertical()`. The controls use
@@ -353,8 +356,30 @@ Core owns runtime behavior:
   DSO-X 3000X and 4000X profiles enable 50 ohm channel impedance support;
   DSO-X 2000X profiles keep channel impedance guarded to one-meg only.
 
+## Workflow Foundation
+
+Workflow Foundation v1 is a small synchronous Core layer used by
+`measure-log` and `capture-batch`. `StopRequested`, `WorkflowProgress`,
+`ProgressReporter`, and `interruptible_wait()` provide optional cooperative
+cancellation and progress without an async runtime, scheduler, persistence
+layer, or event bus. A long interval wait checks cancellation periodically;
+an active VISA query is never forcibly interrupted.
+
+`run_measure_log()` and `run_capture_batch()` accept optional stop, progress,
+and operation-specific sample callbacks. Measure-log checks cancellation
+between completed measurement queries and discards an uncommitted partial row.
+Capture-batch retains completed CSV and metadata artifacts and does not begin a
+new capture after cancellation. Reporter callbacks run synchronously after the
+corresponding data is persisted. Reporter exceptions are not suppressed and
+remain the caller's responsibility.
+
+Cooperative cancellation returns Core status `cancelled`, a null error, and
+exit code 130. `KeyboardInterrupt` remains `interrupted` with error
+`KeyboardInterrupt`. Worker job queues, persisted job lifecycle, and HTTP
+control remain adapter responsibilities. Core never imports CLI or WebUI.
+
 Core does not own CLI output schema, command-line parser behavior, console
-script documentation, or WebUI workflow.
+script documentation, Worker persistence, or WebUI presentation.
 
 ## Docs
 

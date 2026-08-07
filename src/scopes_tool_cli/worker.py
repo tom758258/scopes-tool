@@ -2805,7 +2805,10 @@ def _job_loop(runtime: WorkerRuntime) -> None:
                 job.command, job.arguments, runtime, job.artifact_path
             )
             _guard_no_overwrite(parsed, job.artifact_path)
-            payload, exit_code = scope_cli._execute_json_command(parsed)
+            payload, exit_code = scope_cli._execute_json_command(
+                parsed,
+                stop_requested=lambda: job.cancel_requested or runtime.stopping,
+            )
             job.result = payload
             job.exit_code = exit_code
             job.state = (
@@ -2816,7 +2819,7 @@ def _job_loop(runtime: WorkerRuntime) -> None:
             if job.state == "cancelled":
                 job.exit_code = 3
                 job.error = {"type": "cancelled", "message": "cancelled by stop"}
-            if not payload.get("ok", False):
+            elif not payload.get("ok", False):
                 err = payload.get("error")
                 job.error = err if isinstance(err, dict) else None
         except Exception as exc:

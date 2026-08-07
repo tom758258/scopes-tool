@@ -282,3 +282,88 @@ def test_log_measurements_workflow_records_interrupt(tmp_path, monkeypatch):
     manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest_data["status"] == "interrupted"
     assert manifest_data["error"] == "KeyboardInterrupt"
+
+
+def test_log_measurements_workflow_discards_partial_row_on_cancellation(tmp_path):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    csv_path, manifest_path, scpi_log_path = measure_logger.measure_log_paths(tmp_path)
+    stop_checks = 0
+
+    def stop_requested():
+        nonlocal stop_checks
+        stop_checks += 1
+        return stop_checks >= 2
+
+    result = measure_logger.log_measurements_workflow(
+        scope=scope,
+        resource="SIM::keysight-dsox4024a::INSTR",
+        output_dir=tmp_path,
+        csv_path=csv_path,
+        manifest_path=manifest_path,
+        scpi_log_path=scpi_log_path,
+        channels=[1, 2],
+        items=["vpp"],
+        pairs=[],
+        pair_items=[],
+        interval_seconds=0,
+        requested_count=3,
+        requested_duration_seconds=None,
+        stop_on_error=False,
+        stop_requested=stop_requested,
+    )
+
+    assert result.exit_code == 130
+    assert result.manifest.status == "cancelled"
+    assert result.manifest.error is None
+    assert result.manifest.completed_rows == 0
+    with csv_path.open("r", encoding="utf-8") as handle:
+        assert len(list(csv.reader(handle))) == 1
+    assert backend.history.count(":MEASure:VPP? CHANnel1") == 1
+    assert ":MEASure:VPP? CHANnel2" not in backend.history
+
+
+def test_log_measurements_workflow_reports_only_persisted_rows_before_cancel(tmp_path):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    csv_path, manifest_path, scpi_log_path = measure_logger.measure_log_paths(tmp_path)
+    stop_checks = 0
+    samples = []
+    progress = []
+
+    def stop_requested():
+        nonlocal stop_checks
+        stop_checks += 1
+        return stop_checks >= 3
+
+    result = measure_logger.log_measurements_workflow(
+        scope=scope,
+        resource="SIM::keysight-dsox4024a::INSTR",
+        output_dir=tmp_path,
+        csv_path=csv_path,
+        manifest_path=manifest_path,
+        scpi_log_path=scpi_log_path,
+        channels=[1],
+        items=["vpp"],
+        pairs=[],
+        pair_items=[],
+        interval_seconds=0,
+        requested_count=3,
+        requested_duration_seconds=None,
+        stop_on_error=False,
+        stop_requested=stop_requested,
+        sample_reporter=samples.append,
+        progress_reporter=progress.append,
+    )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert result.manifest.status == "cancelled"
+    assert manifest["status"] == "cancelled"
+    assert manifest["error"] is None
+    assert manifest["completed_rows"] == 1
+    assert len(samples) == 1
+    assert float(samples[0]["values"]["ch1_vpp"]) > 0
+    assert progress[0].completed_count == 1
+    assert progress[0].total_count == 3

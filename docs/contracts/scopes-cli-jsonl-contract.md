@@ -521,7 +521,7 @@ Measurement and artifact-producing flows:
   `timeout` and `unknown` outcomes do not write waveform artifacts.
 - `capture-batch`: `status`, `channels`, `format`, `requested_count`,
   `completed_count`, `manifest_path`, `scpi_log_path`, and compact capture
-  entries.
+  entries, plus nullable `error`.
 - `screenshot` capture: `format`, `palette`, `background`, `ink_saver`,
   `layout`, canonical `options`, `byte_count`, `timeout_ms`, `image_path`,
   optional `png_path`, and `files`. Query-only `--query-hardcopy` instead
@@ -534,6 +534,14 @@ Measurement and artifact-producing flows:
 - `acquisition-check`: `status`, `output_dir`, `report_path`, `scpi_log_path`,
   `average_count`, `check_only`, `stopped_on_error`, `initial_acquisition`,
   `restore`, `termination_reason`, `steps`, `final_acquisition`, and `files`.
+
+For `measure-log` and `capture-batch`, cooperative cancellation uses
+`status: "cancelled"`, `error: null`, and one-shot Core/CLI exit code `130`.
+Already persisted rows or captures remain in the result and artifacts; an
+uncommitted partial measurement row is omitted. `KeyboardInterrupt` remains
+distinct as `status: "interrupted"`, `error: "KeyboardInterrupt"`, and exit
+code `130`. A Worker maps cooperative cancellation to its existing terminal
+`state: "cancelled"`, exit code `3`, and top-level cancelled error.
 
 Dry-run payloads include concrete planned SCPI commands and queries in
 `scpi.planned`, plus planned artifact paths. Conditional intent that cannot be
@@ -578,11 +586,13 @@ text:
 - Capture-batch `manifest.json` remains independently versioned at
   `schema_version: 1` and records run
   status, resource, backend, IDN, channels, format, requested count, completed
-  captures, artifact paths, and per-capture system error.
+  captures, artifact paths, per-capture system error, and nullable error.
 - Measure-log `manifest.json` remains independently versioned at
   `schema_version: 1` and records status,
   resource, backend, IDN, requested row constraints, completed rows, row
-  metadata, and system errors.
+  metadata, system errors, and nullable error. Both schema-1 workflow manifests
+  use `cancelled` for cooperative cancellation and `interrupted` for
+  `KeyboardInterrupt` without changing their schema version.
 - Smoke `report.json` is independently versioned at `schema_version: 2` and
   records status, resource, backend, IDN, doctor data, measurement records,
   capture metadata including `vertical_unit`, screenshot metadata, warnings,

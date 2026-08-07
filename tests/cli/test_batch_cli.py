@@ -3,6 +3,8 @@ import json
 import pytest
 
 from scopes_tool_cli import cli
+from scopes_tool_core import operations
+from scopes_tool_core import output_files
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.status import SystemErrorEntry
@@ -185,6 +187,70 @@ def test_capture_batch_cli_runs_two_captures_and_writes_outputs(
     assert f"Manifest: {output_dir / 'manifest.json'}" in out
 
 
+def test_capture_batch_cli_maps_arguments_to_core_request(monkeypatch, tmp_path):
+    scope = _install_batch_scope(monkeypatch, _BatchDummyScope())
+    observed = {}
+
+    def fake_run_capture_batch(
+        actual_scope,
+        resource,
+        request,
+        *,
+        stop_requested=None,
+    ):
+        observed.update(
+            scope=actual_scope,
+            resource=resource,
+            request=request,
+            stop_requested=stop_requested,
+        )
+        return operations.OperationResult(
+            0,
+            {
+                "status": "completed",
+                "completed_count": 0,
+            },
+        )
+
+    monkeypatch.setattr(cli, "run_capture_batch", fake_run_capture_batch)
+    assert (
+        cli.main(
+            [
+                "capture-batch",
+                "--resource",
+                "USB0::FAKE::INSTR",
+                "--channel",
+                "2",
+                "--points",
+                "5000",
+                "--format",
+                "word",
+                "--count",
+                "3",
+                "--interval-seconds",
+                "1.5",
+                "--output-dir",
+                str(tmp_path / "batch"),
+            ]
+        )
+        == 0
+    )
+
+    request = observed["request"]
+    assert observed["scope"] is scope
+    assert observed["resource"] == "USB0::FAKE::INSTR"
+    assert observed["stop_requested"] is None
+    assert request == operations.CaptureBatchRequest(
+        channels=[2],
+        points=5000,
+        waveform_format="word",
+        requested_count=3,
+        interval_seconds=1.5,
+        output_dir=str(tmp_path / "batch"),
+        log_scpi=False,
+    )
+
+
 def test_capture_batch_cli_channel_all_expands_to_detected_model_channels(
     monkeypatch, capsys, tmp_path
 ):
@@ -281,10 +347,14 @@ def test_capture_batch_cli_word_multi_channel_uses_plural_word_api(
     ]
 
 
-def test_capture_batch_cli_sleeps_between_captures_only(monkeypatch, tmp_path):
+def test_capture_batch_cli_uses_interruptible_wait_between_captures(monkeypatch, tmp_path):
     _install_batch_scope(monkeypatch, _BatchDummyScope())
-    sleeps = []
-    monkeypatch.setattr(cli.time, "sleep", lambda seconds: sleeps.append(seconds))
+    waits = []
+    monkeypatch.setattr(
+        operations,
+        "interruptible_wait",
+        lambda seconds, *, stop_requested=None: waits.append(seconds) or True,
+    )
 
     assert (
         cli.main(
@@ -305,7 +375,7 @@ def test_capture_batch_cli_sleeps_between_captures_only(monkeypatch, tmp_path):
         == 0
     )
 
-    assert sleeps == [1.25, 1.25]
+    assert waits == [1.25, 1.25]
 
 
 def test_capture_batch_cli_stops_after_instrument_error(monkeypatch, tmp_path):
@@ -357,7 +427,7 @@ def test_capture_batch_cli_reports_output_write_error_without_traceback(
         del capture
         raise PermissionError(13, "Permission denied", str(path))
 
-    monkeypatch.setattr(cli, "write_waveform_csv", fail_write_waveform_csv)
+    monkeypatch.setattr(output_files, "write_waveform_csv", fail_write_waveform_csv)
 
     assert (
         cli.main(

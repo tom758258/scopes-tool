@@ -143,8 +143,11 @@ Validation failures use HTTP `400`, `status: "error"`, the Common
 `POST /stop` does not enter the normal command queue. It sets cooperative stop,
 rejects new commands, cancels queued jobs, writes terminal `result.json` for
 cancelled jobs, and emits `job_finished` for each cancelled job. Running jobs
-observe cancellation at worker checkpoints or after command return; a blocking
-device read may not stop immediately.
+pass the existing cancellation state into Core workflows. `measure-log` checks
+between completed measurement queries and at persisted-row boundaries;
+`capture-batch` checks between captures; both use interruptible interval waits.
+They stop before the next iteration and preserve completed artifacts. A
+blocking device read is not forcibly interrupted and may not stop immediately.
 
 The worker exposes no `/trigger`, `trigger_url`, or `soft-*` endpoints.
 

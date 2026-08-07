@@ -12,7 +12,6 @@ import math
 import os
 from pathlib import Path
 import sys
-import time
 from typing import Sequence
 
 from scopes_tool_core.acquisition import (
@@ -90,20 +89,12 @@ from scopes_tool_core.advanced import (
     validate_trigger_holdoff,
 )
 from scopes_tool_core.batch import (
-    BatchManifest,
     batch_capture_paths,
-    batch_iso_timestamp,
-    capture_actual_points,
-    capture_batch_scpi_logging,
-    idn_manifest_dict,
-    prepare_batch_output_dir,
-    relative_manifest_path,
-    system_error_manifest_dict,
-    write_batch_manifest,
 )
 from scopes_tool_core.measure_logger import measure_log_paths
 from scopes_tool_core.operations import (
     AcquisitionCheckRequest,
+    CaptureBatchRequest,
     CaptureRequest,
     MeasureLogRequest,
     MeasureRequest,
@@ -112,12 +103,14 @@ from scopes_tool_core.operations import (
     _OperationError,
     run_acquisition_check,
     run_capture,
+    run_capture_batch,
     run_doctor,
     run_measure_log,
     run_measure,
     run_measure_sweep,
     run_smoke,
 )
+from scopes_tool_core.workflow import StopRequested
 from scopes_tool_core.output_files import (
     capture_output_paths,
     default_capture_csv_path,
@@ -591,10 +584,6 @@ from scopes_tool_core.waveform import (
     waveform_preamble_query,
     waveform_source_command,
     waveform_unsigned_command,
-    write_waveform_csv,
-    write_waveform_metadata,
-    write_waveforms_csv,
-    write_waveforms_metadata,
 )
 
 _CONTROL_COMMANDS = {
@@ -3380,7 +3369,11 @@ def _add_scope_connection_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _dispatch_command(args: argparse.Namespace) -> int:
+def _dispatch_command(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
     if args.command == "list-resources":
         return _cmd_list_resources(args)
     if args.command == "hardware-report":
@@ -3587,9 +3580,9 @@ def _dispatch_command(args: argparse.Namespace) -> int:
     if args.command == "capture":
         return _cmd_capture(args)
     if args.command == "capture-batch":
-        return _cmd_capture_batch(args)
+        return _cmd_capture_batch(args, stop_requested=stop_requested)
     if args.command == "measure-log":
-        return _cmd_measure_log(args)
+        return _cmd_measure_log(args, stop_requested=stop_requested)
     if args.command == "screenshot":
         return _cmd_screenshot(args)
     if args.command == "smoke":
@@ -3874,7 +3867,11 @@ def _run_json_command(args: argparse.Namespace) -> int:
     return code
 
 
-def _execute_json_command(args: argparse.Namespace) -> tuple[dict[str, object], int]:
+def _execute_json_command(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> tuple[dict[str, object], int]:
     global _JSON_RECORD
     try:
         mode = _resolve_cli_mode(args)
@@ -3885,7 +3882,7 @@ def _execute_json_command(args: argparse.Namespace) -> tuple[dict[str, object], 
         _JSON_RECORD = {"result": {}, "files": [], "system_error": None}
         buffer = io.StringIO()
         with redirect_stdout(buffer):
-            code = _dispatch_command(args)
+            code = _dispatch_command(args, stop_requested=stop_requested)
         payload = _json_envelope(args, ok=(code == 0), mode=mode)
         _apply_json_record(payload)
         result = payload.setdefault("result", {})
@@ -11454,174 +11451,55 @@ def _capture_trigger_wait_config(args: argparse.Namespace) -> TriggerWaitConfig 
     )
 
 
-def _cmd_capture_batch(args: argparse.Namespace) -> int:
+def _cmd_capture_batch(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
     resource = _require_resource(args)
     if resource is None:
         return 2
 
-    output_dir = prepare_batch_output_dir(args.output_dir)
-    manifest_path = output_dir / "manifest.json"
-    scpi_log_path = output_dir / "scpi.log"
-    manifest = BatchManifest(
-        start_time=batch_iso_timestamp(),
-        end_time=None,
-        status="running",
-        resource=resource,
-        backend=None,
-        timeout_ms=None,
-        idn=None,
-        channels=[],
-        points=args.points,
-        format=args.waveform_format.upper(),
-        requested_count=args.count,
-        interval_seconds=args.interval_seconds,
-    )
-
-    try:
-        with capture_batch_scpi_logging(
-            scpi_log_path,
-            echo_to_stderr=args.log_scpi,
-        ):
-            with _open_scope(args, resource) as scope:
-                idn = scope.query_idn()
-                _json_record_scope(scope, idn)
-                manifest.backend = getattr(scope.backend, "backend", None)
-                manifest.timeout_ms = getattr(scope.backend, "timeout", None)
-                manifest.idn = idn_manifest_dict(idn)
-
-                _print_session_header(scope, resource)
-                print(f"Model: {idn.model}")
-                print(f"Series: {idn.series or 'unknown'}")
-                if scope.capabilities is None:
-                    print("Capabilities: unavailable for this model")
-                    manifest.status = "error"
-                    manifest.error = "Capabilities unavailable for this model"
-                    manifest.end_time = batch_iso_timestamp()
-                    _write_batch_manifest(manifest, manifest_path)
-                    print(f"Output directory: {output_dir}")
-                    print(f"SCPI log: {scpi_log_path}")
-                    print(f"Manifest: {manifest_path}")
-                    return 1
-
-                channels = _resolve_capture_channels(args.channel, scope.capabilities)
-                points = validate_waveform_points(args.points, scope.capabilities)
-                waveform_format = args.waveform_format.upper()
-                if args.waveform_format == "word":
-                    validate_word_format_supported(scope.capabilities)
-                manifest.channels = list(channels)
-                manifest.points = points
-                manifest.format = waveform_format
-
-                _json_set_files([
-                    {"kind": "manifest", "path": str(manifest_path)},
-                    {"kind": "scpi_log", "path": str(scpi_log_path)},
-                ])
-                _json_update_result(
-                    status="running",
-                    channels=list(channels),
-                    format=waveform_format,
-                    points=points,
+    with _open_scope(args, resource) as scope:
+        try:
+            operation_result = run_capture_batch(
+                scope,
+                resource,
+                CaptureBatchRequest(
+                    channels=args.channel,
+                    points=args.points,
+                    waveform_format=args.waveform_format,
                     requested_count=args.count,
-                    completed_count=0,
-                    manifest_path=str(manifest_path),
-                    scpi_log_path=str(scpi_log_path),
-                    captures=[],
-                )
-                print(
-                    f"Planned batch capture: {_format_channel_list(channels)}, "
-                    f"{points} points, {waveform_format} format, "
-                    f"{args.count} captures"
-                )
-                print(f"Interval seconds: {args.interval_seconds}")
-                print(f"Output directory: {output_dir}")
-                _print_waveform_capture_commands(channels, args.waveform_format, points)
+                    interval_seconds=args.interval_seconds,
+                    output_dir=args.output_dir,
+                    log_scpi=args.log_scpi,
+                ),
+                stop_requested=stop_requested,
+            )
+        except _OperationError as exc:
+            operation_result = exc.result
+            if operation_result.idn is not None:
+                _json_record_scope(scope, operation_result.idn)
+            _apply_operation_result(operation_result)
+            for line in operation_result.human_lines:
+                print(line)
+            raise OscilloscopeError(str(exc)) from exc
 
-                for index in range(1, args.count + 1):
-                    print(f"Capture {index}/{args.count}:")
-                    capture = _capture_waveform(scope, channels, args.waveform_format, points)
-                    csv_path, meta_path = batch_capture_paths(output_dir, index, args.count)
-                    written_csv = _write_capture_csv(capture, csv_path)
-                    written_meta = _write_capture_metadata(
-                        capture,
-                        meta_path,
-                        idn=idn,
-                        resource=resource,
-                    )
-                    entry = scope.query_system_error()
-                    _json_record_system_error(entry)
-                    capture_entry = {
-                        "index": index,
-                        "csv": relative_manifest_path(written_csv, output_dir),
-                        "metadata": relative_manifest_path(written_meta, output_dir),
-                        "actual_points": capture_actual_points(capture),
-                        "system_error": system_error_manifest_dict(entry),
-                    }
-                    manifest.captures.append(capture_entry)
-                    if _JSON_RECORD is not None:
-                        result = _JSON_RECORD.setdefault("result", {})
-                        if isinstance(result, dict):
-                            entries = result.setdefault("captures", [])
-                            if isinstance(entries, list):
-                                json_capture_entry = dict(capture_entry)
-                                if isinstance(capture, WaveformCapture):
-                                    json_capture_entry["actual_points"] = {f"CH{capture.channel}": len(capture.raw_samples)}
-                                entries.append(json_capture_entry)
-                            result["completed_count"] = len(entries) if isinstance(entries, list) else index
-                        files = _JSON_RECORD.setdefault("files", [])
-                        if isinstance(files, list):
-                            files.extend([
-                                {"kind": "csv", "path": str(written_csv)},
-                                {"kind": "metadata", "path": str(written_meta)},
-                            ])
-                    print(_format_actual_points(capture))
-                    print(f"CSV: {written_csv}")
-                    print(f"Metadata: {written_meta}")
-                    print(f"System error: {entry.format()}")
-                    if entry.is_error:
-                        manifest.status = "instrument_error"
-                        manifest.end_time = batch_iso_timestamp()
-                        _json_update_result(status=manifest.status, manifest_path=str(manifest_path), scpi_log_path=str(scpi_log_path))
-                        _write_batch_manifest(manifest, manifest_path)
-                        print(f"SCPI log: {scpi_log_path}")
-                        print(f"Manifest: {manifest_path}")
-                        return 1
-                    if index < args.count and args.interval_seconds > 0:
-                        time.sleep(args.interval_seconds)
-
-                manifest.status = "completed"
-                manifest.end_time = batch_iso_timestamp()
-                _json_update_result(status=manifest.status, completed_count=len(manifest.captures), manifest_path=str(manifest_path), scpi_log_path=str(scpi_log_path))
-                _write_batch_manifest(manifest, manifest_path)
-                print(f"SCPI log: {scpi_log_path}")
-                print(f"Manifest: {manifest_path}")
-                return 0
-    except KeyboardInterrupt:
-        manifest.status = "interrupted"
-        manifest.end_time = batch_iso_timestamp()
-        manifest.error = "KeyboardInterrupt"
-        _json_update_result(status=manifest.status, error=manifest.error, completed_count=len(manifest.captures))
-        _write_batch_manifest_best_effort(manifest, manifest_path)
-        print("error: interrupted", file=sys.stderr)
-        return 130
-    except OscilloscopeError as exc:
-        if manifest.status == "running":
-            manifest.status = "error"
-            manifest.end_time = batch_iso_timestamp()
-            manifest.error = str(exc)
-            _json_update_result(status=manifest.status, error=manifest.error, completed_count=len(manifest.captures))
-            _write_batch_manifest_best_effort(manifest, manifest_path)
-        raise
-    except OSError as exc:
-        manifest.status = "error"
-        manifest.end_time = batch_iso_timestamp()
-        manifest.error = str(exc)
-        _write_batch_manifest_best_effort(manifest, manifest_path)
-        raise OscilloscopeError(
-            _format_plain_output_file_error("SCPI log", scpi_log_path, exc)
-        ) from exc
+        if operation_result.idn is not None:
+            _json_record_scope(scope, operation_result.idn)
+        _apply_operation_result(operation_result)
+        for line in operation_result.human_lines:
+            print(line)
+        if operation_result.result.get("status") == "interrupted":
+            print("error: interrupted", file=sys.stderr)
+        return operation_result.exit_code
 
 
-def _cmd_measure_log(args: argparse.Namespace) -> int:
+def _cmd_measure_log(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
     resource = _require_resource(args)
     if resource is None:
         return 2
@@ -11643,6 +11521,7 @@ def _cmd_measure_log(args: argparse.Namespace) -> int:
                     stop_on_error=args.stop_on_error,
                     log_scpi=args.log_scpi,
                 ),
+                stop_requested=stop_requested,
             )
         except _OperationError as exc:
             operation_result = exc.result
@@ -13156,39 +13035,8 @@ def _format_channel_list(channels: Sequence[int]) -> str:
     return ", ".join(f"CH{channel}" for channel in channels)
 
 
-def _format_actual_points(capture: WaveformCapture | MultiChannelWaveformCapture) -> str:
-    if isinstance(capture, MultiChannelWaveformCapture):
-        per_channel = ", ".join(
-            f"CH{item.channel}={len(item.raw_samples)}" for item in capture.captures
-        )
-        return f"Actual points: {per_channel}"
-    return f"Actual points: {len(capture.raw_samples)}"
-
-
 def _format_optional_number(value: float | None) -> str:
     return "unavailable" if value is None else f"{value:.12g}"
-
-
-def _capture_waveform(
-    scope: Oscilloscope,
-    channels: Sequence[int],
-    waveform_format: str,
-    points: int,
-) -> WaveformCapture | MultiChannelWaveformCapture:
-    normalized_format = waveform_format.lower()
-    if normalized_format == "word":
-        if scope.capabilities is None:
-            raise OscilloscopeError("Waveform operations require known capabilities.")
-        validate_word_format_supported(scope.capabilities)
-    if len(channels) == 1:
-        channel = channels[0]
-        if normalized_format == "word":
-            return scope.capture_waveform_word(channel, points=points)
-        return scope.capture_waveform_byte(channel, points=points)
-
-    if normalized_format == "word":
-        return scope.capture_waveforms_word(channels, points=points)
-    return scope.capture_waveforms_byte(channels, points=points)
 
 
 def _resolve_capture_channels(
@@ -13410,50 +13258,6 @@ def _measure_sweep_summary(measurements: Sequence[dict[str, object]]) -> dict[st
     }
 
 
-def _write_capture_csv(
-    capture: WaveformCapture | MultiChannelWaveformCapture,
-    csv_path: Path,
-    *,
-    allow_time_axis_tolerance: bool = False,
-) -> Path:
-    try:
-        if isinstance(capture, MultiChannelWaveformCapture):
-            return write_waveforms_csv(
-                capture,
-                csv_path,
-                allow_time_axis_tolerance=allow_time_axis_tolerance,
-            )
-        return write_waveform_csv(capture, csv_path)
-    except OSError as exc:
-        raise OscilloscopeError(_format_output_file_error("CSV", csv_path, exc)) from exc
-
-
-def _write_capture_metadata(
-    capture: WaveformCapture | MultiChannelWaveformCapture,
-    meta_path: Path,
-    *,
-    idn,
-    resource: str,
-    time_axis_tolerance: dict[str, object] | None = None,
-) -> Path:
-    try:
-        if isinstance(capture, MultiChannelWaveformCapture):
-            if time_axis_tolerance is None:
-                return write_waveforms_metadata(capture, meta_path, idn=idn, resource=resource)
-            return write_waveforms_metadata(
-                capture,
-                meta_path,
-                idn=idn,
-                resource=resource,
-                time_axis_tolerance=time_axis_tolerance,
-            )
-        return write_waveform_metadata(capture, meta_path, idn=idn, resource=resource)
-    except OSError as exc:
-        raise OscilloscopeError(
-            _format_output_file_error("metadata JSON", meta_path, exc)
-        ) from exc
-
-
 def _write_screenshot_png(capture, output_path: Path) -> Path:
     try:
         return write_screenshot_png(capture, output_path)
@@ -13471,25 +13275,6 @@ def _write_screenshot(capture, output_path: Path, format_name: str) -> Path:
         raise OscilloscopeError(
             _format_output_file_error(label, output_path, exc)
         ) from exc
-
-
-def _write_batch_manifest(manifest: BatchManifest, manifest_path: Path) -> Path:
-    try:
-        return write_batch_manifest(manifest, manifest_path)
-    except OSError as exc:
-        raise OscilloscopeError(
-            _format_plain_output_file_error("batch manifest JSON", manifest_path, exc)
-        ) from exc
-
-
-def _write_batch_manifest_best_effort(
-    manifest: BatchManifest,
-    manifest_path: Path,
-) -> None:
-    try:
-        write_batch_manifest(manifest, manifest_path)
-    except OSError:
-        pass
 
 
 def _write_json_file(

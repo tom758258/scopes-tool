@@ -9,11 +9,17 @@ import json
 import logging
 from pathlib import Path
 import time
-from typing import Mapping
+from typing import Callable, Mapping
 
 from .batch import idn_manifest_dict, relative_manifest_path, system_error_manifest_dict
 from .errors import OscilloscopeError
 from .scope import Oscilloscope
+from .workflow import (
+    ProgressReporter,
+    StopRequested,
+    WorkflowProgress,
+    interruptible_wait,
+)
 
 LOGGER_SCHEMA_VERSION = 1
 LOGGER_DEFAULT_TIMEZONE = timezone(timedelta(hours=8), name="UTC+8")
@@ -204,11 +210,16 @@ def log_measurements_workflow(
     requested_count: int | None,
     requested_duration_seconds: float | None,
     stop_on_error: bool,
+    *,
+    stop_requested: StopRequested | None = None,
+    progress_reporter: ProgressReporter | None = None,
+    sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
 ) -> MeasureLogWorkflowResult:
     """Run a finite measurement logging loop and write CSV plus manifest files."""
 
     human: list[str] = []
     last_system_error: dict[str, object] | None = None
+    reporter_failed = False
     manifest = MeasureLogManifest(
         start_time=logger_iso_timestamp(),
         status="running",
@@ -264,23 +275,29 @@ def log_measurements_workflow(
             row_index = 0
 
             while True:
-                # Check bounds
                 if requested_count is not None and row_index >= requested_count:
                     break
                 elapsed = time.perf_counter() - start_perf
                 if requested_duration_seconds is not None and elapsed >= requested_duration_seconds:
                     break
+                if stop_requested is not None and stop_requested():
+                    return _cancel_measurement_log(
+                        manifest,
+                        manifest_path,
+                        human,
+                        last_system_error,
+                    )
 
                 row_index += 1
                 loop_start = time.perf_counter()
                 iso_now = logger_iso_timestamp()
                 elapsed_now = time.perf_counter() - start_perf
 
-                human.append(
+                row_human = [
                     f"Row {row_index}"
                     + (f"/{requested_count}" if requested_count else "")
                     + f" (elapsed {elapsed_now:.2f}s):"
-                )
+                ]
 
                 row_data: dict[str, str] = {
                     "timestamp_iso": iso_now,
@@ -296,14 +313,21 @@ def log_measurements_workflow(
                             res = scope.query_measurement(ch, item)
                             if res.valid and res.value is not None:
                                 val = f"{res.value:.12g}"
-                                human.append(f"  {col}: {val} {res.unit}")
+                                row_human.append(f"  {col}: {val} {res.unit}")
                             else:
-                                human.append(
+                                row_human.append(
                                     f"  {col}: NaN ({res.reason or 'invalid sentinel'})"
                                 )
                         except OscilloscopeError as exc:
                             LOGGER.warning("%s: NaN (query failed: %s)", col, exc)
                         row_data[col] = val
+                        if stop_requested is not None and stop_requested():
+                            return _cancel_measurement_log(
+                                manifest,
+                                manifest_path,
+                                human,
+                                last_system_error,
+                            )
 
                 for src, ref in pairs:
                     for item in pair_items:
@@ -313,14 +337,21 @@ def log_measurements_workflow(
                             res = scope.query_pair_measurement(src, ref, item)
                             if res.valid and res.value is not None:
                                 val = f"{res.value:.12g}"
-                                human.append(f"  {col}: {val} {res.unit}")
+                                row_human.append(f"  {col}: {val} {res.unit}")
                             else:
-                                human.append(
+                                row_human.append(
                                     f"  {col}: NaN ({res.reason or 'invalid sentinel'})"
                                 )
                         except OscilloscopeError as exc:
                             LOGGER.warning("%s: NaN (query failed: %s)", col, exc)
                         row_data[col] = val
+                        if stop_requested is not None and stop_requested():
+                            return _cancel_measurement_log(
+                                manifest,
+                                manifest_path,
+                                human,
+                                last_system_error,
+                            )
 
                 system_err = scope.query_system_error()
 
@@ -339,7 +370,30 @@ def log_measurements_workflow(
                 )
                 last_system_error = system_error_manifest_dict(system_err)
                 write_measure_log_manifest(manifest, manifest_path)
+                human.extend(row_human)
                 human.append(f"System error: {system_err.format()}")
+
+                sample = {
+                    "index": row_index,
+                    "timestamp_iso": iso_now,
+                    "elapsed_seconds": elapsed_now,
+                    "values": {header: row_data[header] for header in headers[2:]},
+                    "system_error": dict(last_system_error),
+                }
+                try:
+                    if sample_reporter is not None:
+                        sample_reporter(sample)
+                    if progress_reporter is not None:
+                        progress_reporter(
+                            WorkflowProgress(
+                                completed_count=row_index,
+                                total_count=requested_count,
+                                elapsed_seconds=time.perf_counter() - start_perf,
+                            )
+                        )
+                except Exception:
+                    reporter_failed = True
+                    raise
 
                 if stop_on_error and system_err.is_error:
                     LOGGER.error(
@@ -357,6 +411,14 @@ def log_measurements_workflow(
                         last_system_error,
                     )
 
+                if stop_requested is not None and stop_requested():
+                    return _cancel_measurement_log(
+                        manifest,
+                        manifest_path,
+                        human,
+                        last_system_error,
+                    )
+
                 if requested_count is not None and row_index >= requested_count:
                     break
                 elapsed_after = time.perf_counter() - start_perf
@@ -365,8 +427,16 @@ def log_measurements_workflow(
 
                 loop_duration = time.perf_counter() - loop_start
                 sleep_time = max(0.0, interval_seconds - loop_duration)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                if sleep_time > 0 and not interruptible_wait(
+                    sleep_time,
+                    stop_requested=stop_requested,
+                ):
+                    return _cancel_measurement_log(
+                        manifest,
+                        manifest_path,
+                        human,
+                        last_system_error,
+                    )
 
             manifest.status = "completed"
             manifest.end_time = logger_iso_timestamp()
@@ -395,6 +465,8 @@ def log_measurements_workflow(
             last_system_error,
         )
     except OSError as exc:
+        if reporter_failed:
+            raise
         manifest.status = "error"
         manifest.error = str(exc)
         manifest.end_time = logger_iso_timestamp()
@@ -406,6 +478,8 @@ def log_measurements_workflow(
             _format_measure_log_file_error("measurement log output", csv_path, exc)
         ) from exc
     except OscilloscopeError as exc:
+        if reporter_failed:
+            raise
         manifest.status = "error"
         manifest.error = str(exc)
         manifest.end_time = logger_iso_timestamp()
@@ -414,6 +488,25 @@ def log_measurements_workflow(
         except OSError:
             pass
         raise
+
+
+def _cancel_measurement_log(
+    manifest: MeasureLogManifest,
+    manifest_path: Path,
+    human: list[str],
+    last_system_error: dict[str, object] | None,
+) -> MeasureLogWorkflowResult:
+    manifest.status = "cancelled"
+    manifest.error = None
+    manifest.end_time = logger_iso_timestamp()
+    write_measure_log_manifest(manifest, manifest_path)
+    human.append("Measurement logging cancelled.")
+    return MeasureLogWorkflowResult(
+        130,
+        manifest,
+        human,
+        last_system_error,
+    )
 
 
 def _touch_measure_log_file(path: Path, file_kind: str) -> None:
