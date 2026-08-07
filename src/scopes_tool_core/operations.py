@@ -23,7 +23,6 @@ from .batch import (
     batch_capture_paths,
     batch_iso_timestamp,
     capture_actual_points,
-    capture_batch_scpi_logging,
     idn_manifest_dict,
     prepare_batch_output_dir,
     relative_manifest_path,
@@ -75,6 +74,7 @@ from .workflow import (
     StopRequested,
     WorkflowProgress,
     interruptible_wait,
+    workflow_scpi_logging,
 )
 
 _DEFAULT_TIMEZONE = timezone(timedelta(hours=8), name="UTC+8")
@@ -339,7 +339,7 @@ def run_capture_batch(
     reporter_failed = False
 
     try:
-        with capture_batch_scpi_logging(
+        with workflow_scpi_logging(
             scpi_log_path,
             echo_to_stderr=request.log_scpi,
         ):
@@ -837,7 +837,7 @@ def run_measure_log(
             raise
 
     try:
-        with capture_batch_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
+        with workflow_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
             idn = scope.query_idn()
             _append_session_header(human, scope, resource)
             human.extend([f"Model: {idn.model}", f"Series: {idn.series or 'unknown'}"])
@@ -958,7 +958,7 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
     human: list[str] = []
     idn = None
     try:
-        with capture_batch_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
+        with workflow_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
             idn = scope.query_idn()
             report["backend"] = getattr(scope.backend, "backend", None)
             report["timeout_ms"] = getattr(scope.backend, "timeout", None)
@@ -1085,7 +1085,7 @@ def run_acquisition_check(
     human: list[str] = []
     idn = None
     try:
-        with capture_batch_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
+        with workflow_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
             idn = scope.query_idn()
             report["backend"] = getattr(scope.backend, "backend", None)
             report["timeout_ms"] = getattr(scope.backend, "timeout", None)

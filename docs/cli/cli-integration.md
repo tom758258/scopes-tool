@@ -7,7 +7,7 @@ in this package.
 CLI-only fields include:
 
 - `measurement_cli_name`
-- command names such as `measure-log`, `capture-batch`, and `hardware-report`
+- command names such as `measure-log`, `capture-batch`, `sequence`, and `hardware-report`
 - process return-code behavior
 - stderr SCPI diagnostic handling
 - parser validation messages
@@ -62,6 +62,12 @@ the selected run-mode session, invoke the Core operation, and render its
 predicate so the Worker can reuse the same operations; normal direct CLI calls
 use the no-op default. The CLI does not maintain a parallel batch loop or
 workflow scheduler.
+
+`sequence` loads a strict JSON document before opening a scope, builds a
+`SequenceRequest`, and delegates planning or execution to Core. Dry-run uses
+`plan_sequence()` and writes no artifacts. Simulate and live execution use
+`run_sequence()`; the CLI does not implement a parallel step loop. Sequence is
+direct-CLI-only in v1 and is not added to the Worker command allowlist.
 
 Workflow `scpi.log` files cover SCPI activity produced during the Core
 operation. Resource opening, live identity validation, driver selection, and

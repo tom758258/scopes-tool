@@ -147,6 +147,9 @@ names are intended for package consumers and tests:
 - `ScreenshotCapture`
 - `ScreenshotController`
 - `ScreenshotOptions`
+- `SequenceDocument`
+- `SequenceRequest`
+- `SequenceStep`
 - `ScopeCapabilities`
 - `SystemErrorEntry`
 - `StatusController`
@@ -199,6 +202,7 @@ names are intended for package consumers and tests:
 - `plan_measure`
 - `plan_measure_sweep`
 - `plan_smoke`
+- `plan_sequence`
 - `plan_acquisition_check`
 - `run_capture`
 - `run_capture_batch`
@@ -208,7 +212,10 @@ names are intended for package consumers and tests:
 - `run_measure_sweep`
 - `run_smoke`
 - `run_acquisition_check`
+- `run_sequence`
 - `interruptible_wait`
+- `load_sequence_document`
+- `normalize_sequence_document`
 
 ## Runtime Guidance
 
@@ -262,6 +269,15 @@ activity from adapter-level resource opening, live identity validation, driver
 selection, or other preflight before the operation is not guaranteed to be
 present. Consumers must not treat this artifact as a complete process or
 session trace or add a parallel adapter logging lifecycle.
+
+Generic Sequence v1 uses `load_sequence_document()`, `plan_sequence()`, and
+`run_sequence()`. Planning validates all steps against one capability profile
+without opening hardware or writing artifacts. Runtime validation uses the
+detected model before creating the run directory. `run_sequence()` accepts the
+same optional stop and progress callbacks as the Workflow Foundation; it does
+not define a sequence-specific progress or sample type. Public document,
+action, result, and artifact behavior is documented in `sequence.md` and
+`sequence.zh-TW.md`.
 
 For 4000X Screenshot capture and hardcopy state queries:
 

@@ -10,7 +10,6 @@ import time
 
 from .batch import (
     batch_iso_timestamp,
-    capture_batch_scpi_logging,
     default_batch_output_dir,
     idn_manifest_dict,
     relative_manifest_path,
@@ -30,6 +29,7 @@ from .trigger import (
 )
 from .output_files import write_capture_csv_file
 from .scope import Oscilloscope
+from .workflow import workflow_scpi_logging
 from .segmented import (
     SegmentedMemoryController,
     ensure_segmented_memory_supported,
@@ -491,7 +491,7 @@ def run_segmented_capture(
             raise
 
     try:
-        with capture_batch_scpi_logging(
+        with workflow_scpi_logging(
             scpi_log_path,
             echo_to_stderr=request.log_scpi,
         ):

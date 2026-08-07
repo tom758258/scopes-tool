@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
+import logging
+from pathlib import Path
+import sys
 import time
-from typing import Callable
+from typing import Callable, Iterator
+
+from .log import LOGGER_NAME
 
 
 StopRequested = Callable[[], bool]
@@ -20,6 +26,45 @@ class WorkflowProgress:
 
 
 ProgressReporter = Callable[[WorkflowProgress], None]
+
+
+@contextmanager
+def workflow_scpi_logging(
+    log_path: str | Path,
+    *,
+    echo_to_stderr: bool = False,
+) -> Iterator[None]:
+    """Log Core workflow SCPI activity to one file for the context lifetime."""
+
+    logger = logging.getLogger(LOGGER_NAME)
+    old_level = logger.level
+    old_propagate = logger.propagate
+    formatter = logging.Formatter("%(name)s %(levelname)s: %(message)s")
+    handlers: list[logging.Handler] = []
+
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    handlers.append(file_handler)
+
+    if echo_to_stderr:
+        stream_handler = logging.StreamHandler(sys.stderr)
+        stream_handler.setLevel(logging.DEBUG)
+        stream_handler.setFormatter(formatter)
+        handlers.append(stream_handler)
+
+    try:
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        for handler in handlers:
+            logger.addHandler(handler)
+        yield
+    finally:
+        for handler in handlers:
+            logger.removeHandler(handler)
+            handler.close()
+        logger.setLevel(old_level)
+        logger.propagate = old_propagate
 
 
 def interruptible_wait(

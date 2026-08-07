@@ -111,6 +111,12 @@ from scopes_tool_core.operations import (
     run_smoke,
 )
 from scopes_tool_core.workflow import StopRequested
+from scopes_tool_core.sequence import (
+    SequenceRequest,
+    load_sequence_document,
+    plan_sequence,
+    run_sequence,
+)
 from scopes_tool_core.output_files import (
     capture_output_paths,
     default_capture_csv_path,
@@ -2806,6 +2812,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="abort logging immediately if an instrument system error is detected",
     )
 
+    sequence_parser = subparsers.add_parser(
+        "sequence",
+        allow_abbrev=False,
+        help="run a finite ordered Generic Sequence v1 JSON document",
+    )
+    _add_scope_connection_args(sequence_parser)
+    sequence_parser.add_argument(
+        "--file",
+        dest="sequence_file",
+        required=True,
+        help="Generic Sequence v1 JSON document path",
+    )
+    sequence_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help=(
+            "sequence run directory; defaults to data/sequences/<UTC+8 timestamp>. "
+            "If provided, it must not exist or must be empty"
+        ),
+    )
+
     screenshot_parser = subparsers.add_parser(
         "screenshot",
         help="capture the current oscilloscope screen to an image file",
@@ -3583,6 +3610,8 @@ def _dispatch_command(
         return _cmd_capture_batch(args, stop_requested=stop_requested)
     if args.command == "measure-log":
         return _cmd_measure_log(args, stop_requested=stop_requested)
+    if args.command == "sequence":
+        return _cmd_sequence(args, stop_requested=stop_requested)
     if args.command == "screenshot":
         return _cmd_screenshot(args)
     if args.command == "smoke":
@@ -3949,6 +3978,22 @@ def _print_text_dry_run_payload(payload: dict[str, object]) -> None:
 
 
 def _print_text_dry_run_summary(command: str, result: dict[str, object]) -> None:
+    if command == "sequence":
+        print(
+            "Planned sequence: "
+            f"{result.get('loop_count')} loop(s), "
+            f"{result.get('step_count')} step(s), "
+            f"{result.get('total_step_executions')} execution(s)"
+        )
+        steps = result.get("steps")
+        if isinstance(steps, list):
+            for step in steps:
+                if isinstance(step, dict):
+                    print(
+                        f"Planned step {step.get('step_index')}: "
+                        f"{step.get('action')} {step.get('parameters')}"
+                    )
+        return
     operation = result.get("operation")
     if command == "trigger-edge-burst":
         if operation == "query":
@@ -5553,6 +5598,14 @@ def _utc_timestamp() -> str:
 
 def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
     command = args.command
+    if command == "sequence":
+        request = SequenceRequest(
+            load_sequence_document(args.sequence_file),
+            output_dir=args.output_dir,
+            log_scpi=bool(args.log_scpi),
+        )
+        plan = plan_sequence(request, capabilities)
+        return list(plan.planned_scpi), list(plan.files), plan.result
     if command == "capture":
         trigger_wait = _capture_trigger_wait_config(args)
         plan = plan_capture(
@@ -11536,6 +11589,37 @@ def _cmd_measure_log(
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
+        return operation_result.exit_code
+
+
+def _cmd_sequence(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
+    document = load_sequence_document(args.sequence_file)
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    with _open_scope(args, resource) as scope:
+        operation_result = run_sequence(
+            scope,
+            resource,
+            SequenceRequest(
+                document,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            stop_requested=stop_requested,
+        )
+        if operation_result.idn is not None:
+            _json_record_scope(scope, operation_result.idn)
+        _apply_operation_result(operation_result)
+        for line in operation_result.human_lines:
+            print(line)
+        if operation_result.result.get("status") == "interrupted":
+            print("error: interrupted", file=sys.stderr)
         return operation_result.exit_code
 
 

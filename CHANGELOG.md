@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Adds Core-owned Generic Sequence Workflow v1 with strict JSON validation,
+  finite ordered loops, cooperative cancellation, progress reporting,
+  deterministic artifacts, and direct CLI live/simulate/dry-run/JSON support.
+- Supports Sequence actions `wait`, `single`, wait-only `wait-trigger`,
+  `measure`, `capture`, `screenshot`, and existing Safe Cleanup without adding
+  Worker or WebUI exposure or new SCPI behavior.
 - Adds Core Workflow Foundation v1 with optional cooperative cancellation,
   interruptible interval waits, synchronous progress callbacks, and
   operation-specific sample callbacks.

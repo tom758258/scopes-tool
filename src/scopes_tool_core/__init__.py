@@ -148,6 +148,15 @@ from .run_config import (
     resolve_run_mode,
 )
 from .screenshot import HardcopyState, ScreenshotCapture, ScreenshotController, ScreenshotOptions
+from .sequence import (
+    SequenceDocument,
+    SequenceRequest,
+    SequenceStep,
+    load_sequence_document,
+    normalize_sequence_document,
+    plan_sequence,
+    run_sequence,
+)
 from .scope import Oscilloscope
 from .status import (
     OperationCompleteState,
@@ -378,6 +387,9 @@ __all__ = [
     "ScreenshotCapture",
     "ScreenshotController",
     "ScreenshotOptions",
+    "SequenceDocument",
+    "SequenceRequest",
+    "SequenceStep",
     "ScopeCapabilities",
     "SegmentedMemoryController",
     "SegmentedMemoryQueryResult",
@@ -428,6 +440,7 @@ __all__ = [
     "plan_measure",
     "plan_measure_sweep",
     "plan_smoke",
+    "plan_sequence",
     "plan_acquisition_check",
     "run_capture",
     "run_capture_batch",
@@ -436,8 +449,11 @@ __all__ = [
     "run_measure",
     "run_measure_sweep",
     "run_smoke",
+    "run_sequence",
     "run_acquisition_check",
     "interruptible_wait",
+    "load_sequence_document",
+    "normalize_sequence_document",
 ]
 
 __version__ = "0.1.0"

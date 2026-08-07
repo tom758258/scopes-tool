@@ -165,6 +165,8 @@ Current implemented scope:
   continue-and-summarize failure handling.
 - Log a finite batch of read-only measurements with `measure-log`, writing a
   CSV, `manifest.json`, and `scpi.log` into one run directory.
+- Run strict finite Generic Sequence v1 JSON documents with `sequence`, using
+  existing Core operations and deterministic capture/screenshot artifacts.
 - Run capture-safe hardware smoke checks that write a report directory with
   JSON, SCPI log, waveform CSV, metadata, and screenshot artifacts.
 - Capture one or more analog channel waveforms in BYTE or WORD format and
@@ -2003,6 +2005,25 @@ trigger, change timeout defaults, use background threads, or perform
 return-to-local behavior. `Ctrl+C` preserves previously completed rows, does
 not commit a partially collected row, writes manifest status `interrupted`,
 and returns `130`.
+
+Run a Generic Sequence v1 document:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe sequence --dry-run --json --file workflow.json
+.\.venv\Scripts\scopes-tool.exe sequence --simulate --file workflow.json --output-dir data\sequence-run
+.\.venv\Scripts\scopes-tool.exe sequence --resource "$env:SCOPES_TOOL_RESOURCE" --file workflow.json
+```
+
+`sequence` accepts strict JSON version 1 and executes a positive finite
+`loop_count` over ordered `steps`. Supported actions are `wait`, `single`,
+`wait-trigger`, `measure`, `capture`, `screenshot`, and `cleanup`.
+`wait-trigger` waits for an acquisition already started by an earlier
+`single`; it does not arm or force a trigger. Execution is single-threaded and
+fail-fast, and cancellation never runs cleanup automatically. Every runtime
+run writes `manifest.json` and `scpi.log`; capture and screenshot files use
+deterministic loop/step paths. Dry-run validates the whole document without
+opening VISA or writing runtime artifacts. See `docs/core/sequence.md` and
+`docs/core/sequence.zh-TW.md` for the complete public schema and semantics.
 
 Run a capture-safe smoke check:
 

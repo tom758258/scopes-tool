@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 import json
-import logging
 from pathlib import Path
-import sys
-from typing import Iterator, Mapping
+from typing import Mapping
 
 from .errors import OscilloscopeError
 from .idn import IDN
-from .log import LOGGER_NAME
 from .status import SystemErrorEntry
 from .waveform import MultiChannelWaveformCapture, WaveformCapture
 
@@ -232,42 +228,3 @@ def write_batch_manifest(
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
     return output_path
-
-
-@contextmanager
-def capture_batch_scpi_logging(
-    log_path: str | Path,
-    *,
-    echo_to_stderr: bool = False,
-) -> Iterator[None]:
-    """Temporarily log package SCPI debug output to a batch scpi.log file."""
-
-    logger = logging.getLogger(LOGGER_NAME)
-    old_level = logger.level
-    old_propagate = logger.propagate
-    formatter = logging.Formatter("%(name)s %(levelname)s: %(message)s")
-    handlers: list[logging.Handler] = []
-
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
-    handlers.append(file_handler)
-
-    if echo_to_stderr:
-        stream_handler = logging.StreamHandler(sys.stderr)
-        stream_handler.setLevel(logging.DEBUG)
-        stream_handler.setFormatter(formatter)
-        handlers.append(stream_handler)
-
-    try:
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-        for handler in handlers:
-            logger.addHandler(handler)
-        yield
-    finally:
-        for handler in handlers:
-            logger.removeHandler(handler)
-            handler.close()
-        logger.setLevel(old_level)
-        logger.propagate = old_propagate

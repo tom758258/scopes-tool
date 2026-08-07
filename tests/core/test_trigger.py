@@ -43,6 +43,7 @@ from scopes_tool_core.trigger import (
     runt_trigger_configure_commands,
     runt_trigger_query_commands,
     wait_for_trigger_completion,
+    wait_for_current_trigger_completion,
     trigger_mode_edge_command,
     trigger_mode_glitch_command,
     trigger_mode_runt_command,
@@ -793,6 +794,22 @@ def test_wait_for_trigger_completion_natural_path_uses_single_and_poll():
     assert result.capture_allowed is True
     assert result.condition_values == (48,)
     assert backend.history == [":SINGle", ":OPERegister:CONDition?"]
+
+
+def test_wait_for_current_trigger_completion_cancels_without_arming_single():
+    clock = _StepClock()
+    backend = FakeBackend(responses={":OPERegister:CONDition?": "56"})
+
+    result = wait_for_current_trigger_completion(
+        SCPIClient(backend),
+        TriggerWaitConfig(100, clock=clock, sleep=clock.sleep),
+        classifier_profile="simulator",
+        stop_requested=lambda: True,
+    )
+
+    assert result.outcome == "cancelled"
+    assert result.capture_allowed is False
+    assert backend.history == [":OPERegister:CONDition?"]
 
 
 def test_wait_for_trigger_completion_timeout_without_real_sleep():

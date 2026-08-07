@@ -11,6 +11,7 @@ from .capabilities import ScopeCapabilities
 from .channel import validate_analog_channel
 from .errors import ParameterValidationError, TriggerResponseError
 from .scpi import SCPIClient
+from .workflow import StopRequested, interruptible_wait
 
 
 _SLOPE_COMMANDS = {
@@ -4068,14 +4069,33 @@ def wait_for_trigger_completion(
     config: TriggerWaitConfig,
     *,
     classifier_profile: str = "live",
+    stop_requested: StopRequested | None = None,
 ) -> TriggerWaitResult:
     """Arm a single acquisition and wait finitely for trigger completion."""
+
+    config = validate_trigger_wait_config(config)
+    scpi.write(single_command())
+    return wait_for_current_trigger_completion(
+        scpi,
+        config,
+        classifier_profile=classifier_profile,
+        stop_requested=stop_requested,
+    )
+
+
+def wait_for_current_trigger_completion(
+    scpi: SCPIClient,
+    config: TriggerWaitConfig,
+    *,
+    classifier_profile: str = "live",
+    stop_requested: StopRequested | None = None,
+) -> TriggerWaitResult:
+    """Wait finitely for an acquisition that has already been armed."""
 
     config = validate_trigger_wait_config(config)
     raw_values: list[str] = []
     condition_values: list[int] = []
     start = config.clock()
-    scpi.write(single_command())
 
     outcome, error = _poll_operation_condition(
         scpi,
@@ -4084,6 +4104,7 @@ def wait_for_trigger_completion(
         raw_values=raw_values,
         condition_values=condition_values,
         classifier_profile=classifier_profile,
+        stop_requested=stop_requested,
     )
     if outcome == "complete":
         return _trigger_wait_result(
@@ -4092,6 +4113,10 @@ def wait_for_trigger_completion(
     if outcome == "unknown":
         return _trigger_wait_result(
             "unknown", False, False, start, config, raw_values, condition_values, error=error
+        )
+    if outcome == "cancelled":
+        return _trigger_wait_result(
+            "cancelled", False, False, start, config, raw_values, condition_values
         )
     if not config.force_on_timeout:
         return _trigger_wait_result(
@@ -4107,6 +4132,7 @@ def wait_for_trigger_completion(
         raw_values=raw_values,
         condition_values=condition_values,
         classifier_profile=classifier_profile,
+        stop_requested=stop_requested,
     )
     if outcome == "complete":
         return _trigger_wait_result(
@@ -4115,6 +4141,10 @@ def wait_for_trigger_completion(
     if outcome == "unknown":
         return _trigger_wait_result(
             "unknown", True, False, start, config, raw_values, condition_values, error=error
+        )
+    if outcome == "cancelled":
+        return _trigger_wait_result(
+            "cancelled", True, False, start, config, raw_values, condition_values
         )
     return _trigger_wait_result(
         "timeout", True, True, start, config, raw_values, condition_values
@@ -4129,6 +4159,7 @@ def _poll_operation_condition(
     raw_values: list[str],
     condition_values: list[int],
     classifier_profile: str,
+    stop_requested: StopRequested | None,
 ) -> tuple[str, str | None]:
     while True:
         try:
@@ -4143,12 +4174,35 @@ def _poll_operation_condition(
             return "complete", None
         if classification == "unknown":
             return "unknown", f"unclassified operation condition value: {value}"
+        if stop_requested is not None and stop_requested():
+            return "cancelled", None
         now = config.clock()
         if now >= deadline:
             return "timeout", None
         sleep_s = min(config.poll_interval_ms / 1000.0, max(0.0, deadline - now))
-        if sleep_s > 0:
-            config.sleep(sleep_s)
+        if sleep_s > 0 and not _wait_for_trigger_poll(
+            config,
+            sleep_s,
+            stop_requested=stop_requested,
+        ):
+            return "cancelled", None
+
+
+def _wait_for_trigger_poll(
+    config: TriggerWaitConfig,
+    seconds: float,
+    *,
+    stop_requested: StopRequested | None,
+) -> bool:
+    if stop_requested is None:
+        config.sleep(seconds)
+        return True
+    if config.sleep is time.sleep and config.clock is time.monotonic:
+        return interruptible_wait(seconds, stop_requested=stop_requested)
+    if stop_requested():
+        return False
+    config.sleep(seconds)
+    return not stop_requested()
 
 
 def _trigger_wait_result(

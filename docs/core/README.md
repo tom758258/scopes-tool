@@ -359,7 +359,7 @@ Core owns runtime behavior:
 ## Workflow Foundation
 
 Workflow Foundation v1 is a small synchronous Core layer used by
-`measure-log` and `capture-batch`. `StopRequested`, `WorkflowProgress`,
+`measure-log`, `capture-batch`, and Generic Sequence v1. `StopRequested`, `WorkflowProgress`,
 `ProgressReporter`, and `interruptible_wait()` provide optional cooperative
 cancellation and progress without an async runtime, scheduler, persistence
 layer, or event bus. A long interval wait checks cancellation periodically;
@@ -372,6 +372,13 @@ Capture-batch retains completed CSV and metadata artifacts and does not begin a
 new capture after cancellation. Reporter callbacks run synchronously after the
 corresponding data is persisted. Reporter exceptions are not suppressed and
 remain the caller's responsibility.
+
+Generic Sequence v1 validates a strict JSON document, then runs existing Core
+operations in finite loop/step order. It supports `wait`, `single`,
+`wait-trigger`, `measure`, `capture`, `screenshot`, and `cleanup`. Trigger wait
+does not arm an acquisition; documents use `single` followed by
+`wait-trigger` when that flow is required. See [Generic Sequence Workflow
+v1](sequence.md) and [繁體中文](sequence.zh-TW.md).
 
 Finite termination precedence is `instrument_error > completed > cancelled`.
 Cooperative cancellation returns Core status `cancelled`, a null error, and
@@ -395,6 +402,7 @@ script documentation, Worker persistence, or WebUI presentation.
 ## Docs
 
 - Public import and API integration: `docs/integration.md`
+- Generic Sequence v1: `sequence.md`, `sequence.zh-TW.md`
 - Supported model profiles: `supported-models.md`
 - Shared CLI, worker, and orchestrator contracts: `../contracts/`
 

@@ -522,6 +522,13 @@ Measurement and artifact-producing flows:
 - `capture-batch`: `status`, `channels`, `format`, `requested_count`,
   `completed_count`, `manifest_path`, `scpi_log_path`, and compact capture
   entries, plus nullable `error`.
+- `sequence`: `status`, document `version`, `loop_count`, `step_count`,
+  `total_step_executions`, `completed_loops`,
+  `completed_step_executions`, nullable `failed_step`, bounded per-document
+  `steps` summaries, `files`, `output_dir`, `manifest_path`, `scpi_log_path`,
+  and nullable `error`. `failed_step` identifies the one-based loop and step,
+  action, and a structured error. Repeated execution records remain in the
+  sequence manifest rather than expanding the one-shot result.
 - `screenshot` capture: `format`, `palette`, `background`, `ink_saver`,
   `layout`, canonical `options`, `byte_count`, `timeout_ms`, `image_path`,
   optional `png_path`, and `files`. Query-only `--query-hardcopy` instead
@@ -535,7 +542,7 @@ Measurement and artifact-producing flows:
   `average_count`, `check_only`, `stopped_on_error`, `initial_acquisition`,
   `restore`, `termination_reason`, `steps`, `final_acquisition`, and `files`.
 
-For `measure-log` and `capture-batch`, cooperative cancellation uses
+For `measure-log`, `capture-batch`, and `sequence`, cooperative cancellation uses
 `status: "cancelled"`, `error: null`, and one-shot Core/CLI exit code `130`.
 Already persisted rows or captures remain in the result and artifacts; an
 uncommitted partial measurement row is omitted. Finite termination precedence
@@ -595,6 +602,10 @@ text:
   `schema_version: 1` and records run
   status, resource, backend, IDN, channels, format, requested count, completed
   captures, artifact paths, per-capture system error, and nullable error.
+- Sequence `manifest.json` is independently versioned at `schema_version: 1`
+  and records the normalized version-1 document, detected execution context,
+  total and completed counts, completed step records, deterministic artifact
+  paths, nullable failed-step details, terminal status, and nullable error.
 - Measure-log `manifest.json` remains independently versioned at
   `schema_version: 1` and records status,
   resource, backend, IDN, requested row constraints, completed rows, row

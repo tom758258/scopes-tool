@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from scopes_tool_core import batch
-from scopes_tool_core import operations
+from scopes_tool_core import operations, workflow
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.scope import Oscilloscope
@@ -117,11 +117,11 @@ def test_write_batch_manifest_json_fields_and_capture_list(tmp_path):
     ]
 
 
-def test_capture_batch_scpi_logging_writes_package_debug_to_file(tmp_path):
+def test_workflow_scpi_logging_writes_package_debug_to_file(tmp_path):
     log_path = tmp_path / "scpi.log"
     logger = logging.getLogger("scopes_tool_core.scpi")
 
-    with batch.capture_batch_scpi_logging(log_path):
+    with workflow.workflow_scpi_logging(log_path):
         logger.debug("SCPI >> *IDN?")
         logger.debug("SCPI << IDN")
 
