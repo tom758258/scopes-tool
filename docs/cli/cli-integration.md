@@ -63,6 +63,13 @@ predicate so the Worker can reuse the same operations; normal direct CLI calls
 use the no-op default. The CLI does not maintain a parallel batch loop or
 workflow scheduler.
 
+Workflow `scpi.log` files cover SCPI activity produced during the Core
+operation. Resource opening, live identity validation, driver selection, and
+other CLI or Worker preflight before that call are outside the workflow log
+boundary and are not guaranteed to appear. The CLI does not wrap the operation
+in a second logging lifecycle, and the artifact is not a complete process or
+session trace.
+
 For one-shot commands, an explicit `--resource` or
 `SCOPES_TOOL_RESOURCE` selects one live instrument. The optional `--live`
 flag is retained for compatibility and conflicts with `--simulate` and

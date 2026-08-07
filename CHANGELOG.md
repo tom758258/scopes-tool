@@ -11,6 +11,12 @@
 - Connects the existing Worker `/stop` state to running Core measurement and
   capture workflows so they stop at safe boundaries and preserve completed
   artifacts. Worker protocol and schema version remain unchanged.
+- Defines finite workflow termination precedence as `instrument_error >
+  completed > cancelled`, so late cancellation does not replace a completed
+  count or duration result.
+- Defines workflow SCPI logs as Core operation execution traces; adapter
+  resource opening, identity validation, driver selection, and preflight are
+  outside the guaranteed log boundary.
 - Adds query-only segmented-memory state queries for registered Keysight 2000X,
   3000X, and 4000X profiles. It does not configure segmented mode, acquire
   waveform data, or export artifacts.

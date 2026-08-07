@@ -252,6 +252,17 @@ and `system_error`. These are operation-specific payloads; Core does not define
 a universal sample contract. Callbacks are synchronous, run only after the
 corresponding completed data is persisted, and propagate exceptions unchanged.
 
+Finite workflow termination uses `instrument_error > completed > cancelled`.
+Once a count or duration completion condition is satisfied, a later observed
+stop request does not replace the completed result. Cancellation is reported
+only when finite work remains.
+
+Workflow `scpi.log` ownership begins and ends with the Core operation. SCPI
+activity from adapter-level resource opening, live identity validation, driver
+selection, or other preflight before the operation is not guaranteed to be
+present. Consumers must not treat this artifact as a complete process or
+session trace or add a parallel adapter logging lifecycle.
+
 For 4000X Screenshot capture and hardcopy state queries:
 
 ```python

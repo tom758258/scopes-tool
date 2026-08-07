@@ -496,6 +496,9 @@ def run_capture_batch(
                         scope,
                     )
 
+                if index >= request.requested_count:
+                    break
+
                 if stop_requested is not None and stop_requested():
                     return _cancel_capture_batch(
                         manifest,

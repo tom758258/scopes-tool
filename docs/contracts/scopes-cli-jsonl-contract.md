@@ -538,10 +538,18 @@ Measurement and artifact-producing flows:
 For `measure-log` and `capture-batch`, cooperative cancellation uses
 `status: "cancelled"`, `error: null`, and one-shot Core/CLI exit code `130`.
 Already persisted rows or captures remain in the result and artifacts; an
-uncommitted partial measurement row is omitted. `KeyboardInterrupt` remains
-distinct as `status: "interrupted"`, `error: "KeyboardInterrupt"`, and exit
-code `130`. A Worker maps cooperative cancellation to its existing terminal
+uncommitted partial measurement row is omitted. Finite termination precedence
+is `instrument_error > completed > cancelled`: cancellation is reported only
+while work remains, and a stop request observed after count or duration
+completion does not replace `completed`. `KeyboardInterrupt` remains distinct
+as `status: "interrupted"`, `error: "KeyboardInterrupt"`, and exit code `130`.
+A Worker maps cooperative cancellation to its existing terminal
 `state: "cancelled"`, exit code `3`, and top-level cancelled error.
+
+A workflow `scpi.log` records SCPI activity produced while its Core operation
+is executing. Adapter-level resource opening, live identity validation, driver
+selection, and other CLI or Worker preflight are outside this boundary and are
+not guaranteed to appear. It is not a complete process or session trace.
 
 Dry-run payloads include concrete planned SCPI commands and queries in
 `scpi.planned`, plus planned artifact paths. Conditional intent that cannot be

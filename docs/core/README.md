@@ -373,10 +373,21 @@ new capture after cancellation. Reporter callbacks run synchronously after the
 corresponding data is persisted. Reporter exceptions are not suppressed and
 remain the caller's responsibility.
 
+Finite termination precedence is `instrument_error > completed > cancelled`.
 Cooperative cancellation returns Core status `cancelled`, a null error, and
-exit code 130. `KeyboardInterrupt` remains `interrupted` with error
-`KeyboardInterrupt`. Worker job queues, persisted job lifecycle, and HTTP
-control remain adapter responsibilities. Core never imports CLI or WebUI.
+exit code 130 only while finite work remains. A stop request observed after the
+count or duration completion condition is satisfied does not replace
+`completed`. `KeyboardInterrupt` remains `interrupted` with error
+`KeyboardInterrupt`.
+
+Workflow `scpi.log` files record SCPI activity produced while the Core
+operation is executing. Resource opening, live identity validation, driver
+selection, and other CLI or Worker preflight before the Core operation are
+outside this boundary and are not guaranteed to appear in the log. The log is
+not a complete process or session trace, and adapters do not maintain a
+parallel workflow logging lifecycle. Worker job queues, persisted job
+lifecycle, and HTTP control remain adapter responsibilities. Core never
+imports CLI or WebUI.
 
 Core does not own CLI output schema, command-line parser behavior, console
 script documentation, Worker persistence, or WebUI presentation.

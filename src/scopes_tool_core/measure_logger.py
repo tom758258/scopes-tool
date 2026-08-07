@@ -411,6 +411,12 @@ def log_measurements_workflow(
                         last_system_error,
                     )
 
+                if requested_count is not None and row_index >= requested_count:
+                    break
+                elapsed_after = time.perf_counter() - start_perf
+                if requested_duration_seconds is not None and elapsed_after >= requested_duration_seconds:
+                    break
+
                 if stop_requested is not None and stop_requested():
                     return _cancel_measurement_log(
                         manifest,
@@ -418,12 +424,6 @@ def log_measurements_workflow(
                         human,
                         last_system_error,
                     )
-
-                if requested_count is not None and row_index >= requested_count:
-                    break
-                elapsed_after = time.perf_counter() - start_perf
-                if requested_duration_seconds is not None and elapsed_after >= requested_duration_seconds:
-                    break
 
                 loop_duration = time.perf_counter() - loop_start
                 sleep_time = max(0.0, interval_seconds - loop_duration)

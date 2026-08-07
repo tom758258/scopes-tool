@@ -148,6 +148,11 @@ between completed measurement queries and at persisted-row boundaries;
 `capture-batch` checks between captures; both use interruptible interval waits.
 They stop before the next iteration and preserve completed artifacts. A
 blocking device read is not forcibly interrupted and may not stop immediately.
+Finite workflow termination precedence is `instrument_error > completed >
+cancelled`; a stop request observed after the count or duration condition is
+complete does not replace the completed Core result. Worker cancellation still
+maps an actually cancelled Core workflow to terminal `cancelled` with exit code
+3.
 
 The worker exposes no `/trigger`, `trigger_url`, or `soft-*` endpoints.
 
@@ -2153,6 +2158,12 @@ Command artifacts keep existing Scopes meanings: CSV waveform data, PNG plots
 or screenshots, metadata JSON, manifests, reports, and `scpi.log` files.
 Worker `result.json` is the orchestrator machine source of truth; human output
 is diagnostic only.
+
+Workflow `scpi.log` files cover SCPI activity produced while the Core operation
+is executing. Worker resource opening, live identity validation, driver
+selection, and other pre-operation adapter activity are outside this boundary
+and are not guaranteed to appear. The Worker does not maintain a parallel
+logging lifecycle, and the artifact is not a complete process or session trace.
 
 Worker path resolution applies only inside worker job execution. Direct
 one-shot CLI commands keep their normal path semantics. For worker jobs,

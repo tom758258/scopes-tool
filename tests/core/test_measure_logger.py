@@ -367,3 +367,49 @@ def test_log_measurements_workflow_reports_only_persisted_rows_before_cancel(tmp
     assert float(samples[0]["values"]["ch1_vpp"]) > 0
     assert progress[0].completed_count == 1
     assert progress[0].total_count == 3
+
+
+def test_log_measurements_workflow_completion_precedes_late_cancellation(tmp_path):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    csv_path, manifest_path, scpi_log_path = measure_logger.measure_log_paths(tmp_path)
+    cancelled = False
+
+    def stop_requested():
+        return cancelled
+
+    def report_sample(_sample):
+        nonlocal cancelled
+        cancelled = True
+
+    result = measure_logger.log_measurements_workflow(
+        scope=scope,
+        resource="SIM::keysight-dsox4024a::INSTR",
+        output_dir=tmp_path,
+        csv_path=csv_path,
+        manifest_path=manifest_path,
+        scpi_log_path=scpi_log_path,
+        channels=[1],
+        items=["vpp"],
+        pairs=[],
+        pair_items=[],
+        interval_seconds=0,
+        requested_count=1,
+        requested_duration_seconds=None,
+        stop_on_error=False,
+        stop_requested=stop_requested,
+        sample_reporter=report_sample,
+    )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert result.manifest.status == "completed"
+    assert result.manifest.error is None
+    assert result.manifest.completed_rows == 1
+    assert manifest["status"] == "completed"
+    assert manifest["error"] is None
+    assert manifest["completed_rows"] == 1
+    with csv_path.open("r", encoding="utf-8") as handle:
+        assert len(list(csv.reader(handle))) == 2
+    assert scpi_log_path.exists()

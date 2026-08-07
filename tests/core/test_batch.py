@@ -199,6 +199,44 @@ def test_run_capture_batch_cancels_before_next_capture_and_reports_sample(tmp_pa
     assert not (tmp_path / "cancelled" / "waveform_0002.csv").exists()
 
 
+def test_run_capture_batch_completion_precedes_late_cancellation(tmp_path):
+    scope = Oscilloscope(
+        SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    )
+    output_dir = tmp_path / "completed"
+    cancelled = False
+
+    def stop_requested():
+        return cancelled
+
+    def report_sample(_sample):
+        nonlocal cancelled
+        cancelled = True
+
+    result = operations.run_capture_batch(
+        scope,
+        "SIM::keysight-dsox4024a::INSTR",
+        operations.CaptureBatchRequest(
+            channels=[1],
+            requested_count=1,
+            output_dir=output_dir,
+        ),
+        stop_requested=stop_requested,
+        sample_reporter=report_sample,
+    )
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["error"] is None
+    assert result.result["completed_count"] == 1
+    assert manifest["status"] == "completed"
+    assert manifest["error"] is None
+    assert len(manifest["captures"]) == 1
+    assert (output_dir / "waveform_0001.csv").exists()
+    assert (output_dir / "waveform_0001_meta.json").exists()
+
+
 def test_run_capture_batch_uses_interruptible_wait_between_captures(
     tmp_path, monkeypatch
 ):
