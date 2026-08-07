@@ -18,6 +18,7 @@ from .operations import (
     CaptureRequest,
     MeasureRequest,
     OperationResult,
+    _OperationError,
     run_capture,
     run_measure,
 )
@@ -186,22 +187,23 @@ def plan_sequence(
 ) -> OperationPlan:
     """Validate and plan one Sequence v1 without opening hardware or writing files."""
 
+    document = _validate_and_normalize_request(request)
     output_dir = (
         Path(request.output_dir)
         if request.output_dir is not None
         else _SEQUENCE_DEFAULT_BASE_DIR / "DRY-RUN"
     )
-    step_plans, planned_scpi = _plan_steps(request.document, capabilities, output_dir)
+    step_plans, planned_scpi = _plan_steps(document, capabilities, output_dir)
     files = (
         {"kind": "manifest", "path": str(output_dir / "manifest.json")},
         {"kind": "scpi_log", "path": str(output_dir / "scpi.log")},
     )
     result = {
         "status": "planned",
-        "version": request.document.version,
-        "loop_count": request.document.loop_count,
-        "step_count": len(request.document.steps),
-        "total_step_executions": request.document.loop_count * len(request.document.steps),
+        "version": document.version,
+        "loop_count": document.loop_count,
+        "step_count": len(document.steps),
+        "total_step_executions": document.loop_count * len(document.steps),
         "completed_loops": 0,
         "completed_step_executions": 0,
         "failed_step": None,
@@ -225,12 +227,16 @@ def run_sequence(
 ) -> OperationResult:
     """Execute one finite ordered Generic Sequence v1 workflow."""
 
+    document = _validate_and_normalize_request(request)
+    if _stop_requested(stop_requested):
+        return _pre_start_cancelled_result(document)
+
     idn = scope.query_idn()
     if scope.capabilities is None:
         raise OscilloscopeError("Capabilities unavailable for this model")
 
     output_dir = _sequence_output_path(request.output_dir)
-    _plan_steps(request.document, scope.capabilities, output_dir)
+    _plan_steps(document, scope.capabilities, output_dir)
     output_dir = _prepare_sequence_output_dir(output_dir)
     manifest_path = output_dir / "manifest.json"
     scpi_log_path = output_dir / "scpi.log"
@@ -246,9 +252,9 @@ def run_sequence(
             "completed_executions": 0,
             "last_result": None,
         }
-        for index, step in enumerate(request.document.steps, start=1)
+        for index, step in enumerate(document.steps, start=1)
     ]
-    total = request.document.loop_count * len(request.document.steps)
+    total = document.loop_count * len(document.steps)
     manifest: dict[str, object] = {
         "schema_version": SEQUENCE_MANIFEST_SCHEMA_VERSION,
         "start_time": _sequence_timestamp(),
@@ -258,7 +264,7 @@ def run_sequence(
         "backend": getattr(scope.backend, "backend", None),
         "timeout_ms": getattr(scope.backend, "timeout", None),
         "idn": _idn_json(idn),
-        "document": request.document.to_json(),
+        "document": document.to_json(),
         "total_step_executions": total,
         "completed_loops": 0,
         "completed_step_executions": 0,
@@ -268,8 +274,8 @@ def run_sequence(
         "error": None,
     }
     human = [
-        f"Sequence: {request.document.loop_count} loop(s), "
-        f"{len(request.document.steps)} step(s), {total} execution(s)",
+        f"Sequence: {document.loop_count} loop(s), "
+        f"{len(document.steps)} step(s), {total} execution(s)",
         f"Output directory: {output_dir}",
     ]
     last_system_error: dict[str, object] | None = None
@@ -278,14 +284,14 @@ def run_sequence(
 
     try:
         with workflow_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
-            for loop_index in range(1, request.document.loop_count + 1):
+            for loop_index in range(1, document.loop_count + 1):
                 if _stop_requested(stop_requested):
                     return _finish_sequence(
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, summaries, human, idn, last_system_error, scope,
                         output_dir, error=None,
                     )
-                for step_index, step in enumerate(request.document.steps, start=1):
+                for step_index, step in enumerate(document.steps, start=1):
                     if _stop_requested(stop_requested):
                         return _finish_sequence(
                             "cancelled", 130, manifest, manifest_path, scpi_log_path,
@@ -296,7 +302,7 @@ def run_sequence(
                         outcome = _execute_step(
                             scope,
                             resource,
-                            request.document,
+                            document,
                             output_dir,
                             loop_index,
                             step_index,
@@ -310,6 +316,9 @@ def run_sequence(
                             output_dir, error=None,
                         )
                     except OscilloscopeError as exc:
+                        _collect_existing_step_artifacts(
+                            files, output_dir, document, loop_index, step_index, step, exc
+                        )
                         failed = _failed_step(loop_index, step_index, step.action, exc)
                         manifest["failed_step"] = failed
                         return _finish_sequence(
@@ -342,7 +351,7 @@ def run_sequence(
 
                     completed = int(manifest["completed_step_executions"]) + 1
                     manifest["completed_step_executions"] = completed
-                    if step_index == len(request.document.steps):
+                    if step_index == len(document.steps):
                         manifest["completed_loops"] = loop_index
                     record = {
                         "loop_index": loop_index,
@@ -359,10 +368,20 @@ def run_sequence(
                     summary["completed_executions"] = int(summary["completed_executions"]) + 1
                     summary["last_result"] = outcome.result
                     manifest["files"] = [_relative_file(item, output_dir) for item in files]
-                    _write_sequence_manifest(manifest, manifest_path)
+                    try:
+                        _write_sequence_manifest(manifest, manifest_path)
+                    except OscilloscopeError as exc:
+                        failed = _failed_step(loop_index, step_index, step.action, exc)
+                        manifest["failed_step"] = failed
+                        return _finish_sequence(
+                            "error", 1, manifest, manifest_path, scpi_log_path,
+                            files, summaries, human, idn, last_system_error, scope,
+                            output_dir, error=str(exc), failed_step=failed,
+                        )
+
                     human.append(
-                        f"Loop {loop_index}/{request.document.loop_count}, "
-                        f"step {step_index}/{len(request.document.steps)}: {step.action} completed"
+                        f"Loop {loop_index}/{document.loop_count}, "
+                        f"step {step_index}/{len(document.steps)}: {step.action} completed"
                     )
                     if progress_reporter is not None:
                         progress_reporter(
@@ -395,8 +414,11 @@ def run_sequence(
         manifest["status"] = "error"
         manifest["end_time"] = _sequence_timestamp()
         manifest["error"] = str(exc)
-        write_json_file_best_effort(manifest, manifest_path)
-        raise OscilloscopeError(f"could not write sequence artifact: {exc}") from exc
+        return _finish_sequence(
+            "error", 1, manifest, manifest_path, scpi_log_path,
+            files, summaries, human, idn, last_system_error, scope,
+            output_dir, error=str(exc),
+        )
 
     raise AssertionError("finite sequence exited without a terminal result")
 
@@ -546,10 +568,8 @@ def _plan_steps(
                 raise ParameterValidationError(
                     f"sequence step {index} screenshot is not supported by this model"
                 )
-            background = str(step.parameters["background"])
             step_scpi = [
                 hardcopy_inksaver_query(),
-                hardcopy_inksaver_command(hardcopy_inksaver_for_background(background)),
                 screenshot_data_query(),
                 ":SYSTem:ERRor?",
             ]
@@ -603,6 +623,9 @@ def _execute_step(
             classifier_profile=_trigger_classifier_profile(scope),
             stop_requested=stop_requested,
         )
+        if result.outcome == "cancelled":
+            raise _SequenceStepCancelled
+
         trigger_result = result.to_json(config)
         trigger_result["arm_command"] = None
         entry = scope.query_system_error()
@@ -613,8 +636,6 @@ def _execute_step(
                 system_error=system_error,
                 status="instrument_error",
             )
-        if result.outcome == "cancelled":
-            raise _SequenceStepCancelled
         status = "completed" if result.outcome in {"natural", "forced"} else "error"
         return _StepOutcome(
             {"trigger": trigger_result, "system_error": system_error},
@@ -712,7 +733,7 @@ def _finish_sequence(
     manifest["error"] = error
     manifest["failed_step"] = failed_step
     manifest["files"] = [_relative_file(item, output_dir) for item in files]
-    _write_sequence_manifest(manifest, manifest_path)
+    write_json_file_best_effort(manifest, manifest_path)
     human.extend(
         [
             f"Sequence status: {status}",
@@ -989,3 +1010,86 @@ def _optional_float(value: object) -> float | None:
 
 def _optional_str(value: object) -> str | None:
     return None if value is None else str(value)
+
+
+def _validate_and_normalize_request(request: SequenceRequest) -> SequenceDocument:
+    if not isinstance(request, SequenceRequest):
+        raise ParameterValidationError("sequence request must be a SequenceRequest")
+    if not isinstance(request.document, SequenceDocument):
+        raise ParameterValidationError("sequence document must be a SequenceDocument")
+    try:
+        payload = request.document.to_json()
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ParameterValidationError(f"invalid sequence document: {exc}") from exc
+    return normalize_sequence_document(payload)
+
+
+def _pre_start_cancelled_result(document: SequenceDocument) -> OperationResult:
+    total = document.loop_count * len(document.steps)
+    summaries = [
+        {
+            "step_index": index,
+            "action": step.action,
+            "parameters": dict(step.parameters),
+            "completed_executions": 0,
+            "last_result": None,
+        }
+        for index, step in enumerate(document.steps, start=1)
+    ]
+    result = {
+        "status": "cancelled",
+        "version": SEQUENCE_VERSION,
+        "loop_count": document.loop_count,
+        "step_count": len(document.steps),
+        "total_step_executions": total,
+        "completed_loops": 0,
+        "completed_step_executions": 0,
+        "failed_step": None,
+        "steps": summaries,
+        "files": [],
+        "output_dir": None,
+        "manifest_path": None,
+        "scpi_log_path": None,
+        "error": None,
+    }
+    return OperationResult(
+        130,
+        result,
+        [],
+        None,
+        ["Sequence execution cancelled before start"],
+        idn=None,
+        backend=None,
+        timeout_ms=None,
+    )
+
+
+def _collect_existing_step_artifacts(
+    files: list[dict[str, str]],
+    output_dir: Path,
+    document: SequenceDocument,
+    loop_index: int,
+    step_index: int,
+    step: SequenceStep,
+    exc: OscilloscopeError,
+) -> None:
+    if isinstance(exc, _OperationError):
+        for item in exc.result.files:
+            p = Path(item["path"])
+            if p.exists() and item not in files:
+                files.append(dict(item))
+        return
+
+    if step.action == "capture":
+        csv_path, meta_path = _capture_paths(output_dir, document, loop_index, step_index)
+        for path, kind in ((csv_path, "csv"), (meta_path, "json")):
+            if path.exists():
+                file_entry = {"kind": kind, "path": str(path)}
+                if file_entry not in files:
+                    files.append(file_entry)
+    elif step.action == "screenshot":
+        output_path = _screenshot_path(output_dir, document, loop_index, step_index)
+        if output_path.exists():
+            file_entry = {"kind": "png", "path": str(output_path)}
+            if file_entry not in files:
+                files.append(file_entry)

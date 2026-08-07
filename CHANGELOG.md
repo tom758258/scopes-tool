@@ -5,6 +5,16 @@
 - Adds Core-owned Generic Sequence Workflow v1 with strict JSON validation,
   finite ordered loops, cooperative cancellation, progress reporting,
   deterministic artifacts, and direct CLI live/simulate/dry-run/JSON support.
+- Hardens Generic Sequence v1 Core public validation to fail closed on raw or
+  invalid SequenceDocument/SequenceStep/SequenceRequest inputs before hardware
+  access or run directory creation.
+- Updates screenshot dry-run SCPI planning to reflect static guaranteed queries
+  without assuming conditional INKSaver background writes.
+- Enforces pre-start cooperative cancellation with zero hardware I/O and zero
+  output directory creation (`output_dir: null`), and suppresses system error
+  queries upon wait-trigger polling cancellation.
+- Preserves existing deterministic artifact files in partial results when a
+  step or manifest write fails, without counting incomplete steps as completed.
 - Supports Sequence actions `wait`, `single`, wait-only `wait-trigger`,
   `measure`, `capture`, `screenshot`, and existing Safe Cleanup without adding
   Worker or WebUI exposure or new SCPI behavior.

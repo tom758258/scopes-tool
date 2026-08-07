@@ -281,3 +281,146 @@ def test_detected_capability_validation_happens_before_output_creation(tmp_path)
         )
 
     assert not output_dir.exists()
+
+
+def test_direct_core_construction_validation_fails_closed_before_hardware_or_files(tmp_path):
+    scope = _scope()
+    output_dir = tmp_path / "never_created"
+
+    doc_zero_loop = sequence.SequenceDocument(
+        version=1,
+        loop_count=0,
+        steps=(sequence.SequenceStep("single", {}),),
+    )
+    with pytest.raises(ParameterValidationError, match="loop_count must be at least 1"):
+        sequence.plan_sequence(sequence.SequenceRequest(doc_zero_loop), scope.capabilities)
+
+    with pytest.raises(ParameterValidationError, match="loop_count must be at least 1"):
+        sequence.run_sequence(
+            scope,
+            RESOURCE,
+            sequence.SequenceRequest(doc_zero_loop, output_dir=output_dir),
+        )
+
+    doc_bad_action = sequence.SequenceDocument(
+        version=1,
+        loop_count=1,
+        steps=(sequence.SequenceStep("invalid-action", {}),),
+    )
+    with pytest.raises(ParameterValidationError, match="action must be one of"):
+        sequence.plan_sequence(sequence.SequenceRequest(doc_bad_action), scope.capabilities)
+
+    with pytest.raises(ParameterValidationError, match="action must be one of"):
+        sequence.run_sequence(
+            scope,
+            RESOURCE,
+            sequence.SequenceRequest(doc_bad_action, output_dir=output_dir),
+        )
+
+    assert not output_dir.exists()
+    assert scope.backend.history.count("*IDN?") == 0
+
+
+def test_screenshot_dry_run_planned_scpi_does_not_include_conditional_inksaver_write():
+    scope = _scope()
+    scope.query_idn()
+    doc = _document(_step("screenshot", background="white"))
+    plan = sequence.plan_sequence(sequence.SequenceRequest(doc), scope.capabilities)
+
+    assert plan.planned_scpi == (
+        ":HARDcopy:INKSaver?",
+        ":DISPlay:DATA? PNG, COLor",
+        ":SYSTem:ERRor?",
+    )
+    assert ":HARDcopy:INKSaver ON" not in plan.planned_scpi
+    assert ":HARDcopy:INKSaver OFF" not in plan.planned_scpi
+
+
+def test_pre_start_cancellation_performs_zero_hardware_io_and_creates_no_directory(tmp_path):
+    scope = _scope()
+    output_dir = tmp_path / "cancelled_pre_start"
+    doc = _document(_step("single"))
+
+    result = sequence.run_sequence(
+        scope,
+        RESOURCE,
+        sequence.SequenceRequest(doc, output_dir=output_dir),
+        stop_requested=lambda: True,
+    )
+
+    assert result.exit_code == 130
+    assert result.result["status"] == "cancelled"
+    assert result.result["output_dir"] is None
+    assert result.result["manifest_path"] is None
+    assert result.result["scpi_log_path"] is None
+    assert result.result["files"] == []
+    assert not output_dir.exists()
+    assert scope.backend.history == []
+
+
+def test_wait_trigger_cancellation_does_not_query_system_error_or_execute_next_step(
+    monkeypatch, tmp_path
+):
+    scope = _scope()
+    calls = []
+
+    def fake_wait(*args, **kwargs):
+        calls.append("wait_for_trigger")
+        from scopes_tool_core.trigger import TriggerWaitResult
+        return TriggerWaitResult("cancelled", False, False, 1, 100.0)
+
+    monkeypatch.setattr(sequence, "wait_for_current_trigger_completion", fake_wait)
+
+    doc = _document(
+        _step("wait-trigger", timeout_seconds=1),
+        _step("single"),
+    )
+
+    result = sequence.run_sequence(
+        scope,
+        RESOURCE,
+        sequence.SequenceRequest(doc, output_dir=tmp_path / "trigger_cancelled"),
+    )
+
+    assert result.exit_code == 130
+    assert result.result["status"] == "cancelled"
+    assert calls == ["wait_for_trigger"]
+    assert "query::SYSTem:ERRor?" not in calls
+    assert scope.backend.history.count(":SINGle") == 0
+
+
+def test_capture_artifact_failure_preserves_existing_csv_partial_result(
+    monkeypatch, tmp_path
+):
+    scope = _scope()
+    output_dir = tmp_path / "partial_artifact"
+    progress = []
+
+    doc = _document(
+        _step("capture", channels=[1]),
+        _step("single"),
+    )
+
+    def failing_run_capture(scp, res, req):
+        req.csv_path.parent.mkdir(parents=True, exist_ok=True)
+        req.csv_path.write_text("time,ch1\n0,1\n", encoding="utf-8")
+        raise OscilloscopeError("mock metadata write error")
+
+    monkeypatch.setattr(sequence, "run_capture", failing_run_capture)
+
+    result = sequence.run_sequence(
+        scope,
+        RESOURCE,
+        sequence.SequenceRequest(doc, output_dir=output_dir),
+        progress_reporter=progress.append,
+    )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["completed_step_executions"] == 0
+    assert progress == []
+
+    file_paths = [item["path"] for item in result.files]
+    assert any("waveform.csv" in p for p in file_paths)
+    assert not any("waveform_meta.json" in p for p in file_paths)
+    assert scope.backend.history.count(":SINGle") == 0
