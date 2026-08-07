@@ -94,6 +94,15 @@ from . import cli as scope_cli
 
 WORKER_SCHEMA_VERSION = 2
 
+_CORE_WORKFLOW_COMMANDS = {"measure-log", "capture-batch"}
+_CORE_WORKFLOW_TERMINAL_STATUSES = {
+    "completed",
+    "cancelled",
+    "instrument_error",
+    "error",
+    "interrupted",
+}
+
 
 _NON_MATH_DOMAIN_COMMANDS = {
     "identify",
@@ -2811,11 +2820,19 @@ def _job_loop(runtime: WorkerRuntime) -> None:
             )
             job.result = payload
             job.exit_code = exit_code
-            job.state = (
-                "cancelled"
-                if job.cancel_requested or runtime.stopping
-                else "succeeded" if exit_code == 0 else "failed"
-            )
+            workflow_status = _core_workflow_result_status(job.command, payload)
+            if workflow_status == "completed":
+                job.state = "succeeded"
+            elif workflow_status == "cancelled":
+                job.state = "cancelled"
+            elif workflow_status is not None:
+                job.state = "failed"
+            else:
+                job.state = (
+                    "cancelled"
+                    if job.cancel_requested or runtime.stopping
+                    else "succeeded" if exit_code == 0 else "failed"
+                )
             if job.state == "cancelled":
                 job.exit_code = 3
                 job.error = {"type": "cancelled", "message": "cancelled by stop"}
@@ -2851,6 +2868,21 @@ def _job_loop(runtime: WorkerRuntime) -> None:
                 error=job.error,
             )
             runtime.queue.task_done()
+
+
+def _core_workflow_result_status(
+    command: str,
+    payload: dict[str, object],
+) -> str | None:
+    if command not in _CORE_WORKFLOW_COMMANDS:
+        return None
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return None
+    status = result.get("status")
+    if status in _CORE_WORKFLOW_TERMINAL_STATUSES:
+        return str(status)
+    return None
 
 
 def _write_result(runtime: WorkerRuntime, job: WorkerJob) -> None:

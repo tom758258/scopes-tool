@@ -14,6 +14,8 @@
 - Defines finite workflow termination precedence as `instrument_error >
   completed > cancelled`, so late cancellation does not replace a completed
   count or duration result.
+- Makes Worker terminal mapping for `measure-log` and `capture-batch` preserve
+  completed and failed Core results when a stop flag arrives after execution.
 - Defines workflow SCPI logs as Core operation execution traces; adapter
   resource opening, identity validation, driver selection, and preflight are
   outside the guaranteed log boundary.

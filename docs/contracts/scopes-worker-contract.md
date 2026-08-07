@@ -150,9 +150,11 @@ They stop before the next iteration and preserve completed artifacts. A
 blocking device read is not forcibly interrupted and may not stop immediately.
 Finite workflow termination precedence is `instrument_error > completed >
 cancelled`; a stop request observed after the count or duration condition is
-complete does not replace the completed Core result. Worker cancellation still
-maps an actually cancelled Core workflow to terminal `cancelled` with exit code
-3.
+complete does not replace the completed Core result. For `measure-log` and
+`capture-batch`, the Worker maps Core `completed` to `succeeded`, Core
+`cancelled` to `cancelled` with exit code 3, and Core `instrument_error` or
+`error` to `failed`. A late Worker stop flag does not replace these
+higher-precedence Core results.
 
 The worker exposes no `/trigger`, `trigger_url`, or `soft-*` endpoints.
 

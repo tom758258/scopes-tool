@@ -1888,6 +1888,60 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
     assert not (artifact_path / "waveform_0002.csv").exists()
 
 
+@pytest.mark.parametrize(
+    ("status", "payload_ok", "exit_code", "expected_state"),
+    (
+        ("completed", True, 0, "succeeded"),
+        ("instrument_error", False, 1, "failed"),
+    ),
+)
+def test_worker_preserves_core_workflow_result_after_late_cancellation(
+    tmp_path,
+    monkeypatch,
+    status,
+    payload_ok,
+    exit_code,
+    expected_state,
+):
+    runtime = _runtime(tmp_path)
+    artifact_path = tmp_path / status
+
+    def fake_execute(_parsed, *, stop_requested=None):
+        del stop_requested
+        job = runtime.jobs[runtime.active_job_id]
+        job.cancel_requested = True
+        return (
+            {
+                "ok": payload_ok,
+                "result": {"status": status},
+                "files": [],
+                "error": (
+                    None
+                    if payload_ok
+                    else {"type": "OscilloscopeError", "message": "instrument error"}
+                ),
+            },
+            exit_code,
+        )
+
+    monkeypatch.setattr(worker.scope_cli, "_execute_json_command", fake_execute)
+    _, result = _execute_worker_job(
+        runtime,
+        "capture-batch",
+        {"channel": [1], "count": 1},
+        artifact_path,
+    )
+
+    assert result["state"] == expected_state
+    assert result["ok"] is (expected_state == "succeeded")
+    assert result["exit_code"] == exit_code
+    assert result["result"]["status"] == status
+    if status == "completed":
+        assert result["error"] is None
+    else:
+        assert result["error"]["type"] == "OscilloscopeError"
+
+
 def _execute_worker_job(runtime, command, arguments, artifact_path):
     artifact_path.mkdir(parents=True)
     (artifact_path / "request.json").write_text(
