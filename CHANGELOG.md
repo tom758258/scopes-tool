@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixes Sequence completion accounting when post-step manifest persistence fails, keeping incomplete steps uncommitted.
 - Adds Core-owned Generic Sequence Workflow v1 with strict JSON validation,
   finite ordered loops, cooperative cancellation, progress reporting,
   deterministic artifacts, and direct CLI live/simulate/dry-run/JSON support.

@@ -1,6 +1,7 @@
 """Finite ordered Generic Sequence v1 workflow support."""
 
 from __future__ import annotations
+import copy
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -350,9 +351,10 @@ def run_sequence(
                         )
 
                     completed = int(manifest["completed_step_executions"]) + 1
-                    manifest["completed_step_executions"] = completed
+                    candidate_manifest = copy.deepcopy(manifest)
+                    candidate_manifest["completed_step_executions"] = completed
                     if step_index == len(document.steps):
-                        manifest["completed_loops"] = loop_index
+                        candidate_manifest["completed_loops"] = loop_index
                     record = {
                         "loop_index": loop_index,
                         "step_index": step_index,
@@ -361,15 +363,12 @@ def run_sequence(
                         "result": outcome.result,
                         "files": [_relative_file(item, output_dir) for item in outcome.files],
                     }
-                    executions = manifest["executions"]
+                    executions = candidate_manifest["executions"]
                     assert isinstance(executions, list)
                     executions.append(record)
-                    summary = summaries[step_index - 1]
-                    summary["completed_executions"] = int(summary["completed_executions"]) + 1
-                    summary["last_result"] = outcome.result
-                    manifest["files"] = [_relative_file(item, output_dir) for item in files]
+                    candidate_manifest["files"] = [_relative_file(item, output_dir) for item in files]
                     try:
-                        _write_sequence_manifest(manifest, manifest_path)
+                        _write_sequence_manifest(candidate_manifest, manifest_path)
                     except OscilloscopeError as exc:
                         failed = _failed_step(loop_index, step_index, step.action, exc)
                         manifest["failed_step"] = failed
@@ -379,6 +378,10 @@ def run_sequence(
                             output_dir, error=str(exc), failed_step=failed,
                         )
 
+                    manifest = candidate_manifest
+                    summary = summaries[step_index - 1]
+                    summary["completed_executions"] = int(summary["completed_executions"]) + 1
+                    summary["last_result"] = outcome.result
                     human.append(
                         f"Loop {loop_index}/{document.loop_count}, "
                         f"step {step_index}/{len(document.steps)}: {step.action} completed"

@@ -385,7 +385,7 @@ def test_wait_trigger_cancellation_does_not_query_system_error_or_execute_next_s
     assert result.exit_code == 130
     assert result.result["status"] == "cancelled"
     assert calls == ["wait_for_trigger"]
-    assert "query::SYSTem:ERRor?" not in calls
+    assert not any("SYSTem:ERRor?" in entry for entry in scope.backend.history)
     assert scope.backend.history.count(":SINGle") == 0
 
 
@@ -424,3 +424,62 @@ def test_capture_artifact_failure_preserves_existing_csv_partial_result(
     assert any("waveform.csv" in p for p in file_paths)
     assert not any("waveform_meta.json" in p for p in file_paths)
     assert scope.backend.history.count(":SINGle") == 0
+
+
+def test_post_step_manifest_persistence_failure_preserves_uncommitted_state_and_multi_loop_last_result(
+    monkeypatch, tmp_path
+):
+    scope = _scope()
+    output_dir = tmp_path / "persistence_failure"
+    progress = []
+
+    doc = _document(
+        _step("wait", seconds=0),
+        loop_count=2,
+    )
+
+    write_calls = 0
+    real_write_manifest = sequence._write_sequence_manifest
+
+    def monkeypatched_write_manifest(manifest, path):
+        nonlocal write_calls
+        write_calls += 1
+        if write_calls == 3:
+            raise OscilloscopeError("mock manifest write failure")
+        real_write_manifest(manifest, path)
+
+    monkeypatch.setattr(sequence, "_write_sequence_manifest", monkeypatched_write_manifest)
+
+    result = sequence.run_sequence(
+        scope,
+        RESOURCE,
+        sequence.SequenceRequest(doc, output_dir=output_dir),
+        progress_reporter=lambda p: progress.append(p.completed_count),
+    )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["error"] == "mock manifest write failure"
+    assert result.result["completed_step_executions"] == 1
+    assert result.result["completed_loops"] == 1
+    assert result.result["failed_step"] == {
+        "loop_index": 2,
+        "step_index": 1,
+        "action": "wait",
+        "error": {
+            "type": "OscilloscopeError",
+            "message": "mock manifest write failure",
+        },
+    }
+    assert result.result["steps"][0]["completed_executions"] == 1
+    assert result.result["steps"][0]["last_result"] == {"seconds": 0.0}
+    assert len(result.result["files"]) == 2
+    assert progress == [1]
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "error"
+    assert manifest["completed_step_executions"] == 1
+    assert manifest["completed_loops"] == 1
+    assert len(manifest["executions"]) == 1
+    assert manifest["executions"][0]["loop_index"] == 1
+    assert manifest["failed_step"]["loop_index"] == 2
