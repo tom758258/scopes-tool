@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Defines Periodic Capture v1 as the product-facing name for the existing
+  `capture-batch` CLI, Worker, and Core workflow, and restricts Worker requests
+  to the Worker-owned job artifact directory.
 - Adds the finite `triggered-measure-loop` Core workflow with CLI and Common v2
   Worker adapters, trigger-wait cancellation, measurement CSV/manifest/SCPI
   artifacts, and representative-cycle dry-run planning.

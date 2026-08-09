@@ -564,6 +564,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     arguments = body.get("arguments", {})
     if not isinstance(arguments, dict):
         raise OscilloscopeError("arguments must be a JSON object")
+    arguments = _normalize_capture_batch_worker_arguments(command, arguments)
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments)
     arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
@@ -579,6 +580,7 @@ def parse_domain_command(
     runtime: WorkerRuntime,
     job_dir: Path | None = None,
 ) -> argparse.Namespace:
+    arguments = _normalize_capture_batch_worker_arguments(command, arguments)
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments, runtime)
     arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
@@ -651,6 +653,28 @@ def parse_domain_command(
     )
     scope_cli._dry_run_payload(dry_args)
     return parsed
+
+
+def _normalize_capture_batch_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if command != "capture-batch":
+        return arguments
+
+    allowed = {
+        "channel",
+        "points",
+        "format",
+        "count",
+        "interval_seconds",
+    }
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"capture-batch unknown argument: {sorted(unknown)[0]}"
+        )
+    return dict(arguments)
 
 
 def _normalize_segmented_memory_worker_arguments(

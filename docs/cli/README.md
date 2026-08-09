@@ -173,9 +173,9 @@ Current implemented scope:
   export CSV plus JSON metadata, with optional PNG plot output, an optional
   default timestamped CSV path under `data`, and optional explicit triggered
   capture via `capture --wait-trigger`.
-- Capture a finite batch of waveforms with `capture-batch`, writing per-capture
-  CSV and metadata files, `manifest.json`, and `scpi.log` into one run
-  directory.
+- Run the Periodic Capture product workflow through `capture-batch`, writing
+  per-capture CSV and metadata files, `manifest.json`, and `scpi.log` into one
+  run directory.
 - Capture finite segmented waveforms from one analog channel with
   `segmented-capture`, writing one CSV per exported segment plus a shared
   `manifest.json` and `scpi.log`.
@@ -2142,10 +2142,16 @@ Capture a finite waveform batch:
 .\.venv\Scripts\scopes-tool.exe capture-batch --resource "$env:SCOPES_TOOL_RESOURCE" --channel all --points 1000 --count 2
 ```
 
+Periodic Capture is the product-facing workflow name; its CLI machine-facing
+command remains `capture-batch`. See `docs/core/periodic-capture.md` and
+`docs/core/periodic-capture.zh-TW.md` for the complete v1 semantics.
+
 `capture-batch` is a conservative finite batch capture command. `--count` is
 required and must be a positive integer. `--interval-seconds` defaults to `0`
-and must be a finite non-negative number; when non-zero, the sleep is applied
-only between captures. The command opens one VISA session, queries `*IDN?`,
+and must be a finite non-negative number. When non-zero, the wait begins after
+the previous capture artifacts and manifest are persisted and reporting is
+complete; it is not an absolute wall-clock cadence. The command opens one VISA
+session, queries `*IDN?`,
 validates the detected capabilities, channels, point count, and waveform
 format, then repeats the existing waveform capture APIs the requested number of
 times. It performs one `:SYSTem:ERRor?` post-check after each capture.

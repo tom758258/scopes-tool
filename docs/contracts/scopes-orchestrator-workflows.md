@@ -19,6 +19,33 @@ The current Scopes implementation supports Common schema 2 only. Send exact
 integer `schema_version: 2`; do not send schema 1, use fallback, or perform
 version negotiation. Malformed or non-v2 runtime boundaries fail closed.
 
+## Periodic Capture Mapping
+
+Periodic Capture is the product-facing workflow name. Both direct CLI and
+Worker automation continue to use the machine-facing command `capture-batch`,
+which delegates to the existing Core `CaptureBatchRequest` and
+`run_capture_batch()` operation. There is no `periodic-capture` command or
+alias.
+
+Submit a Worker job with the existing schema 2 envelope:
+
+```json
+{
+  "schema_version": 2,
+  "command": "capture-batch",
+  "arguments": {
+    "channel": [1],
+    "points": 1000,
+    "format": "byte",
+    "count": 10,
+    "interval_seconds": 3
+  }
+}
+```
+
+The Worker owns the job artifact directory. Orchestrators must not send
+`output_dir` or `log_scpi` for `capture-batch`.
+
 ## Worker Workflow
 
 Scopes is a queued-job Worker with a startup-bound execution context. Live

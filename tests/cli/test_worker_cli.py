@@ -518,6 +518,76 @@ def test_command_acceptance_rejects_sample_rate_maximum_without_query_before_art
     assert not (tmp_path / runtime.run_id).exists()
 
 
+def test_worker_accepts_capture_batch_and_injects_job_output_dir(tmp_path):
+    runtime = _runtime(tmp_path)
+    arguments = {
+        "channel": [1],
+        "points": 1000,
+        "format": "byte",
+        "count": 3,
+        "interval_seconds": 1,
+    }
+
+    with _worker_server(runtime):
+        status, payload = _post_command(
+            runtime,
+            {
+                "command": "capture-batch",
+                "arguments": arguments,
+                "job_id": "periodic-capture",
+            },
+        )
+
+    assert status == 202
+    assert payload["status"] == "accepted"
+    job = runtime.jobs[payload["worker_job_id"]]
+    parsed = worker.parse_domain_command(
+        job.command,
+        job.arguments,
+        runtime,
+        job.artifact_path,
+    )
+    assert parsed.channel == [1]
+    assert parsed.points == 1000
+    assert parsed.waveform_format == "byte"
+    assert parsed.count == 3
+    assert parsed.interval_seconds == 1
+    assert Path(parsed.output_dir) == job.artifact_path
+    assert parsed.log_scpi is False
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    (
+        {"channel": [1], "count": 3, "output_dir": "foo"},
+        {"channel": [1], "count": 3, "log_scpi": True},
+    ),
+)
+def test_worker_rejects_capture_batch_cli_only_arguments_before_artifact(
+    tmp_path, arguments
+):
+    runtime = _runtime(tmp_path)
+
+    with _worker_server(runtime):
+        status, payload = _post_command(
+            runtime,
+            {
+                "command": "capture-batch",
+                "arguments": arguments,
+                "job_id": "invalid-periodic-capture",
+            },
+        )
+
+    assert status == 400
+    assert payload["status"] == "error"
+    assert payload["command"] == "capture-batch"
+    assert payload["job_id"] == "invalid-periodic-capture"
+    assert payload["error"] == "validation_error"
+    assert runtime.accepted == 0
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()
+
+
 @pytest.mark.parametrize("command", ("acquisition-points", "record-length"))
 def test_command_acceptance_validates_points_queries_before_enqueue(tmp_path, command):
     runtime = _runtime(tmp_path)

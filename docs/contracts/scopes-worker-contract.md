@@ -230,6 +230,28 @@ Unsupported command names include `snapshot`, `restore`, `diff`, generic
 `math`, and domain `status`. Worker status is reserved for lifecycle
 `GET /status` and `scopes-tool status`.
 
+Periodic Capture is the product-facing name for the existing Worker
+`capture-batch` command. Its arguments are limited to `channel` (an array of
+channel integers or `"all"`), `points`, `format`, required positive integer
+`count`, and optional non-negative finite `interval_seconds`. Caller-supplied
+`output_dir` and `log_scpi` are rejected before enqueue; the Worker injects and
+owns the job artifact directory. `periodic-capture` is not a Worker command or
+alias.
+
+```json
+{
+  "schema_version": 2,
+  "command": "capture-batch",
+  "arguments": {
+    "channel": [1],
+    "points": 1000,
+    "format": "byte",
+    "count": 10,
+    "interval_seconds": 3
+  }
+}
+```
+
 `triggered-measure-loop` accepts only `channel` (an array of channel integers
 or `"all"`), `items` (string), `pair` (an array of `SRC:REF` strings),
 `pair_items` (string), required positive integer `count`, required positive
@@ -2198,7 +2220,8 @@ Worker path resolution applies only inside worker job execution. Direct
 one-shot CLI commands keep their normal path semantics. For worker jobs,
 relative output paths are resolved under
 `data/worker/<run_id>/<worker_job_id>/`; absolute output paths are allowed and
-recorded as absolute paths. Default worker outputs are:
+recorded as absolute paths when the command-specific schema accepts a path.
+Default worker outputs are:
 
 - `capture`: `capture.csv` and `capture_meta.json` in the job directory; a
   plot is created only when a path string is supplied. With `wait_trigger`,
@@ -2208,7 +2231,8 @@ recorded as absolute paths. Default worker outputs are:
   creates no screenshot artifact.
 - `capture-batch`, `measure-log`, `triggered-measure-loop`, `smoke`, and
   `acquisition-check`: the job directory is the default `output_dir`.
-  `triggered-measure-loop` does not accept a caller-supplied `output_dir`.
+  `capture-batch` and `triggered-measure-loop` do not accept a caller-supplied
+  `output_dir`.
 - `segmented-capture`: the fixed `segmented_capture` child directory below the
   job directory is the `output_dir`; its manifest, SCPI log, and successfully
   written per-segment CSV files are domain artifacts.
