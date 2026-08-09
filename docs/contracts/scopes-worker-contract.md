@@ -145,13 +145,15 @@ rejects new commands, cancels queued jobs, writes terminal `result.json` for
 cancelled jobs, and emits `job_finished` for each cancelled job. Running jobs
 pass the existing cancellation state into Core workflows. `measure-log` checks
 between completed measurement queries and at persisted-row boundaries;
-`capture-batch` checks between captures; both use interruptible interval waits.
+`capture-batch` checks between captures; `triggered-measure-loop` checks during
+trigger polling and interval waits. These workflows use interruptible interval waits.
 They stop before the next iteration and preserve completed artifacts. A
 blocking device read is not forcibly interrupted and may not stop immediately.
 Finite workflow termination precedence is `instrument_error > completed >
 cancelled`; a stop request observed after the count or duration condition is
-complete does not replace the completed Core result. For `measure-log` and
-`capture-batch`, the Worker maps Core `completed` to `succeeded`, Core
+complete does not replace the completed Core result. For `measure-log`,
+`capture-batch`, and `triggered-measure-loop`, the Worker maps Core `completed`
+to `succeeded`, Core
 `cancelled` to `cancelled` with exit code 3, and Core `instrument_error` or
 `error` to `failed`. A late Worker stop flag does not replace these
 higher-precedence Core results.
@@ -172,6 +174,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `capture`, `capture-batch`, `screenshot`, `smoke`
 - `channel-summary`
 - `measure`, `measure-results`, `measure-stats`, `measure-sweep`, `measure-log`,
+  `triggered-measure-loop`,
   `measure-clear`, `measure-show`, `measure-source`, `measure-window`
 - `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`, `dvm-current`,
   `dvm-query`
@@ -226,6 +229,30 @@ by worker `/command`.
 Unsupported command names include `snapshot`, `restore`, `diff`, generic
 `math`, and domain `status`. Worker status is reserved for lifecycle
 `GET /status` and `scopes-tool status`.
+
+`triggered-measure-loop` accepts only `channel` (an array of channel integers
+or `"all"`), `items` (string), `pair` (an array of `SRC:REF` strings),
+`pair_items` (string), required positive integer `count`, required positive
+finite number `trigger_timeout_seconds`, and optional non-negative finite
+number `interval_seconds`. Unknown fields and wrong JSON types are rejected
+before enqueue. In particular, caller-supplied `output_dir` is rejected; the
+Worker injects and owns the job directory.
+
+```json
+{
+  "schema_version": 2,
+  "command": "triggered-measure-loop",
+  "arguments": {
+    "channel": [1, 2],
+    "items": "vpp,frequency",
+    "pair": ["1:2"],
+    "pair_items": "phase",
+    "count": 100,
+    "trigger_timeout_seconds": 5,
+    "interval_seconds": 0
+  }
+}
+```
 
 Arguments use the CLI option names without leading dashes and with underscores
 accepted as JSON keys, for example:
@@ -2179,8 +2206,9 @@ recorded as absolute paths. Default worker outputs are:
 - `screenshot`: `screen.png` in the job directory for default or PNG capture,
   and `screen.bmp` for BMP or BMP8bit capture. Query-only `query_hardcopy`
   creates no screenshot artifact.
-- `capture-batch`, `measure-log`, `smoke`, and `acquisition-check`: the job
-  directory is the default `output_dir`.
+- `capture-batch`, `measure-log`, `triggered-measure-loop`, `smoke`, and
+  `acquisition-check`: the job directory is the default `output_dir`.
+  `triggered-measure-loop` does not accept a caller-supplied `output_dir`.
 - `segmented-capture`: the fixed `segmented_capture` child directory below the
   job directory is the `output_dir`; its manifest, SCPI log, and successfully
   written per-segment CSV files are domain artifacts.

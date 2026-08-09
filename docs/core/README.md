@@ -359,7 +359,8 @@ Core owns runtime behavior:
 ## Workflow Foundation
 
 Workflow Foundation v1 is a small synchronous Core layer used by
-`measure-log`, `capture-batch`, and Generic Sequence v1. `StopRequested`, `WorkflowProgress`,
+`measure-log`, `capture-batch`, Triggered Measurement Loop v1, and Generic
+Sequence v1. `StopRequested`, `WorkflowProgress`,
 `ProgressReporter`, and `interruptible_wait()` provide optional cooperative
 cancellation and progress without an async runtime, scheduler, persistence
 layer, or event bus. A long interval wait checks cancellation periodically;
@@ -372,6 +373,12 @@ Capture-batch retains completed CSV and metadata artifacts and does not begin a
 new capture after cancellation. Reporter callbacks run synchronously after the
 corresponding data is persisted. Reporter exceptions are not suppressed and
 remain the caller's responsibility.
+
+Triggered Measurement Loop v1 owns a finite `Single` -> trigger wait ->
+measurement loop. It preserves completed cycles, stores invalid measurement
+sentinels as `NaN`, and fails immediately on trigger timeout or genuine query,
+transport, parsing, or system errors. See [Triggered Measurement Loop
+v1](triggered-measure-loop.md) and [繁體中文](triggered-measure-loop.zh-TW.md).
 
 Generic Sequence v1 validates a strict JSON document, then runs existing Core
 operations in finite loop/step order. It supports `wait`, `single`,
@@ -402,6 +409,8 @@ script documentation, Worker persistence, or WebUI presentation.
 ## Docs
 
 - Public import and API integration: `docs/integration.md`
+- Triggered Measurement Loop v1: `triggered-measure-loop.md`,
+  `triggered-measure-loop.zh-TW.md`
 - Generic Sequence v1: `sequence.md`, `sequence.zh-TW.md`
 - Supported model profiles: `supported-models.md`
 - Shared CLI, worker, and orchestrator contracts: `../contracts/`

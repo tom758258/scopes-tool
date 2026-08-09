@@ -203,6 +203,7 @@ names are intended for package consumers and tests:
 - `plan_measure_sweep`
 - `plan_smoke`
 - `plan_sequence`
+- `plan_triggered_measure_loop`
 - `plan_acquisition_check`
 - `run_capture`
 - `run_capture_batch`
@@ -213,9 +214,11 @@ names are intended for package consumers and tests:
 - `run_smoke`
 - `run_acquisition_check`
 - `run_sequence`
+- `run_triggered_measure_loop`
 - `interruptible_wait`
 - `load_sequence_document`
 - `normalize_sequence_document`
+- `TriggeredMeasureLoopRequest`
 
 ## Runtime Guidance
 
@@ -278,6 +281,14 @@ same optional stop and progress callbacks as the Workflow Foundation; it does
 not define a sequence-specific progress or sample type. Public document,
 action, result, and artifact behavior is documented in `sequence.md` and
 `sequence.zh-TW.md`.
+
+Triggered Measurement Loop v1 uses `TriggeredMeasureLoopRequest`,
+`plan_triggered_measure_loop()`, and `run_triggered_measure_loop()`. Planning
+validates measurement selection and one representative cycle without opening
+hardware or writing artifacts. Runtime owns the finite acquisition loop and
+accepts the Workflow Foundation stop, progress, and operation-specific sample
+callbacks. Public behavior is documented in `triggered-measure-loop.md` and
+`triggered-measure-loop.zh-TW.md`.
 
 For 4000X Screenshot capture and hardcopy state queries:
 

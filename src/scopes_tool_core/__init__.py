@@ -157,6 +157,11 @@ from .sequence import (
     plan_sequence,
     run_sequence,
 )
+from .triggered_measurement import (
+    TriggeredMeasureLoopRequest,
+    plan_triggered_measure_loop,
+    run_triggered_measure_loop,
+)
 from .scope import Oscilloscope
 from .status import (
     OperationCompleteState,
@@ -390,6 +395,7 @@ __all__ = [
     "SequenceDocument",
     "SequenceRequest",
     "SequenceStep",
+    "TriggeredMeasureLoopRequest",
     "ScopeCapabilities",
     "SegmentedMemoryController",
     "SegmentedMemoryQueryResult",
@@ -441,6 +447,7 @@ __all__ = [
     "plan_measure_sweep",
     "plan_smoke",
     "plan_sequence",
+    "plan_triggered_measure_loop",
     "plan_acquisition_check",
     "run_capture",
     "run_capture_batch",
@@ -450,6 +457,7 @@ __all__ = [
     "run_measure_sweep",
     "run_smoke",
     "run_sequence",
+    "run_triggered_measure_loop",
     "run_acquisition_check",
     "interruptible_wait",
     "load_sequence_document",

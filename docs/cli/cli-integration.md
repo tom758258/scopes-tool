@@ -7,7 +7,8 @@ in this package.
 CLI-only fields include:
 
 - `measurement_cli_name`
-- command names such as `measure-log`, `capture-batch`, `sequence`, and `hardware-report`
+- command names such as `measure-log`, `capture-batch`,
+  `triggered-measure-loop`, `sequence`, and `hardware-report`
 - process return-code behavior
 - stderr SCPI diagnostic handling
 - parser validation messages
@@ -55,13 +56,19 @@ These fields are adapter behavior, not Core schema. Core receives normalized
 requests and returns runtime data; the CLI decides how to render human text,
 JSON stdout, stderr logs, and exit codes.
 
-`measure-log` and `capture-batch` execution is Core-owned. Their CLI adapters
-normalize arguments into `MeasureLogRequest` and `CaptureBatchRequest`, open
+`measure-log`, `capture-batch`, and `triggered-measure-loop` execution is
+Core-owned. Their CLI adapters normalize arguments into `MeasureLogRequest`,
+`CaptureBatchRequest`, or `TriggeredMeasureLoopRequest`, open
 the selected run-mode session, invoke the Core operation, and render its
 `OperationResult`. Internal JSON dispatch accepts an optional cancellation
 predicate so the Worker can reuse the same operations; normal direct CLI calls
 use the no-op default. The CLI does not maintain a parallel batch loop or
 workflow scheduler.
+
+Triggered measurement dry-run delegates one representative cycle to
+`plan_triggered_measure_loop()`. Runtime delegates the finite acquisition loop
+to `run_triggered_measure_loop()`. Direct CLI may provide `--output-dir`; the
+Worker rejects that request field and injects its owned job directory.
 
 `sequence` loads a strict JSON document before opening a scope, builds a
 `SequenceRequest`, and delegates planning or execution to Core. Dry-run uses

@@ -2006,6 +2006,23 @@ return-to-local behavior. `Ctrl+C` preserves previously completed rows, does
 not commit a partially collected row, writes manifest status `interrupted`,
 and returns `130`.
 
+Run a finite triggered measurement loop:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe triggered-measure-loop --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --items vpp,frequency --pair 1:2 --pair-items phase --count 100 --trigger-timeout-seconds 5 --interval-seconds 0
+```
+
+Each cycle sends `Single`, waits for acquisition completion through the
+existing trigger-wait path, queries the selected measurements, checks the
+instrument error queue once, and persists the completed cycle before reporting
+progress. Invalid measurement sentinels are written as `NaN`; query, transport,
+parsing, system-error, and trigger-timeout failures are fail-fast. The command
+writes `measurements.csv`, `manifest.json`, and `scpi.log` under
+`data/triggered_measure_loops/<timestamp>` unless direct CLI supplies
+`--output-dir`. `--dry-run` shows one representative cycle and never opens VISA
+or writes runtime artifacts. See `docs/core/triggered-measure-loop.md` and
+`docs/core/triggered-measure-loop.zh-TW.md`.
+
 Run a Generic Sequence v1 document:
 
 ```powershell

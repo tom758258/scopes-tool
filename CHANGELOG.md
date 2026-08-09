@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Adds the finite `triggered-measure-loop` Core workflow with CLI and Common v2
+  Worker adapters, trigger-wait cancellation, measurement CSV/manifest/SCPI
+  artifacts, and representative-cycle dry-run planning.
+
 - Adds Generic Sequence Workflow v1 in Core and the direct CLI with strict JSON
   documents, finite ordered loops, dry-run planning, deterministic artifacts,
   cooperative cancellation, progress reporting, and the existing `wait`,

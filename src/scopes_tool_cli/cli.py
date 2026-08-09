@@ -117,6 +117,11 @@ from scopes_tool_core.sequence import (
     plan_sequence,
     run_sequence,
 )
+from scopes_tool_core.triggered_measurement import (
+    TriggeredMeasureLoopRequest,
+    plan_triggered_measure_loop,
+    run_triggered_measure_loop,
+)
 from scopes_tool_core.output_files import (
     capture_output_paths,
     default_capture_csv_path,
@@ -2812,6 +2817,64 @@ def _build_parser() -> argparse.ArgumentParser:
         help="abort logging immediately if an instrument system error is detected",
     )
 
+    triggered_measure_loop_parser = subparsers.add_parser(
+        "triggered-measure-loop",
+        allow_abbrev=False,
+        help="run a finite Single, trigger-wait, and measurement loop",
+    )
+    _add_scope_connection_args(triggered_measure_loop_parser)
+    triggered_measure_loop_parser.add_argument(
+        "--channel",
+        "--source-channel",
+        dest="channel",
+        type=_capture_channel_arg,
+        action="append",
+        default=None,
+        help="analog channel to measure; repeat for multiple channels, or use all",
+    )
+    triggered_measure_loop_parser.add_argument(
+        "--items",
+        default="vpp,frequency",
+        help="comma-separated single-channel measurements; defaults to vpp,frequency",
+    )
+    triggered_measure_loop_parser.add_argument(
+        "--pair",
+        action="append",
+        default=[],
+        help="repeatable source/reference channel pairs (SRC:REF)",
+    )
+    triggered_measure_loop_parser.add_argument(
+        "--pair-items",
+        default="phase,delay",
+        help="comma-separated pair measurements; defaults to phase,delay",
+    )
+    triggered_measure_loop_parser.add_argument(
+        "--count",
+        type=_positive_int,
+        required=True,
+        help="finite number of trigger and measurement cycles",
+    )
+    triggered_measure_loop_parser.add_argument(
+        "--trigger-timeout-seconds",
+        type=_positive_plain_float,
+        required=True,
+        help="positive finite timeout for each trigger wait",
+    )
+    triggered_measure_loop_parser.add_argument(
+        "--interval-seconds",
+        type=_nonnegative_finite_float,
+        default=0.0,
+        help="interruptible wait after a persisted cycle; defaults to 0",
+    )
+    triggered_measure_loop_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help=(
+            "workflow run directory; defaults to "
+            "data/triggered_measure_loops/<UTC+8 timestamp>"
+        ),
+    )
+
     sequence_parser = subparsers.add_parser(
         "sequence",
         allow_abbrev=False,
@@ -3610,6 +3673,8 @@ def _dispatch_command(
         return _cmd_capture_batch(args, stop_requested=stop_requested)
     if args.command == "measure-log":
         return _cmd_measure_log(args, stop_requested=stop_requested)
+    if args.command == "triggered-measure-loop":
+        return _cmd_triggered_measure_loop(args, stop_requested=stop_requested)
     if args.command == "sequence":
         return _cmd_sequence(args, stop_requested=stop_requested)
     if args.command == "screenshot":
@@ -3978,6 +4043,12 @@ def _print_text_dry_run_payload(payload: dict[str, object]) -> None:
 
 
 def _print_text_dry_run_summary(command: str, result: dict[str, object]) -> None:
+    if command == "triggered-measure-loop":
+        print(
+            "Planned triggered measurement loop: "
+            f"{result.get('requested_count')} cycle(s)"
+        )
+        return
     if command == "sequence":
         print(
             "Planned sequence: "
@@ -5598,6 +5669,22 @@ def _utc_timestamp() -> str:
 
 def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
     command = args.command
+    if command == "triggered-measure-loop":
+        plan = plan_triggered_measure_loop(
+            TriggeredMeasureLoopRequest(
+                channels=args.channel,
+                items=args.items,
+                pairs=tuple(args.pair),
+                pair_items=args.pair_items,
+                count=args.count,
+                trigger_timeout_seconds=args.trigger_timeout_seconds,
+                interval_seconds=args.interval_seconds,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            capabilities,
+        )
+        return list(plan.planned_scpi), list(plan.files), plan.result
     if command == "sequence":
         request = SequenceRequest(
             load_sequence_document(args.sequence_file),
@@ -11589,6 +11676,42 @@ def _cmd_measure_log(
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
+        return operation_result.exit_code
+
+
+def _cmd_triggered_measure_loop(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    with _open_scope(args, resource) as scope:
+        operation_result = run_triggered_measure_loop(
+            scope,
+            resource,
+            TriggeredMeasureLoopRequest(
+                channels=args.channel,
+                items=args.items,
+                pairs=tuple(args.pair),
+                pair_items=args.pair_items,
+                count=args.count,
+                trigger_timeout_seconds=args.trigger_timeout_seconds,
+                interval_seconds=args.interval_seconds,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            stop_requested=stop_requested,
+        )
+        if operation_result.idn is not None:
+            _json_record_scope(scope, operation_result.idn)
+        _apply_operation_result(operation_result)
+        for line in operation_result.human_lines:
+            print(line)
+        if operation_result.result.get("status") == "interrupted":
+            print("error: interrupted", file=sys.stderr)
         return operation_result.exit_code
 
 

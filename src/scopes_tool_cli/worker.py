@@ -94,7 +94,11 @@ from . import cli as scope_cli
 
 WORKER_SCHEMA_VERSION = 2
 
-_CORE_WORKFLOW_COMMANDS = {"measure-log", "capture-batch"}
+_CORE_WORKFLOW_COMMANDS = {
+    "measure-log",
+    "capture-batch",
+    "triggered-measure-loop",
+}
 _CORE_WORKFLOW_TERMINAL_STATUSES = {
     "completed",
     "cancelled",
@@ -136,6 +140,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "measure-stats",
     "measure-sweep",
     "measure-log",
+    "triggered-measure-loop",
     "measure-clear",
     "measure-show",
     "measure-source",
@@ -561,6 +566,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
         raise OscilloscopeError("arguments must be a JSON object")
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments)
+    arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
     job_id = body.get("job_id")
     if job_id is not None and not isinstance(job_id, str):
         raise OscilloscopeError("job_id must be a string when provided")
@@ -575,6 +581,7 @@ def parse_domain_command(
 ) -> argparse.Namespace:
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments, runtime)
+    arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
     arguments = _normalize_system_status_worker_arguments(command, arguments)
     arguments = _normalize_screenshot_worker_arguments(command, arguments)
     _validate_display_worker_arguments(command, arguments)
@@ -725,6 +732,100 @@ def _normalize_segmented_capture_worker_arguments(
     )
     validate_segmented_capture_request(request, capabilities)
     return dict(values)
+
+
+def _normalize_triggered_measure_loop_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if command != "triggered-measure-loop":
+        return arguments
+
+    allowed = {
+        "channel",
+        "items",
+        "pair",
+        "pair_items",
+        "count",
+        "trigger_timeout_seconds",
+        "interval_seconds",
+    }
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"triggered-measure-loop unknown argument: {sorted(unknown)[0]}"
+        )
+    for required in ("count", "trigger_timeout_seconds"):
+        if required not in arguments:
+            raise OscilloscopeError(
+                f"triggered-measure-loop requires argument {required}"
+            )
+
+    count = arguments["count"]
+    if isinstance(count, bool) or not isinstance(count, int):
+        raise OscilloscopeError(
+            "triggered-measure-loop argument count must be an integer"
+        )
+    if count < 1:
+        raise OscilloscopeError(
+            "triggered-measure-loop argument count must be at least 1"
+        )
+
+    for name, positive in (
+        ("trigger_timeout_seconds", True),
+        ("interval_seconds", False),
+    ):
+        if name not in arguments:
+            continue
+        value = arguments[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise OscilloscopeError(
+                f"triggered-measure-loop argument {name} must be a finite number"
+            )
+        if not math.isfinite(float(value)):
+            raise OscilloscopeError(
+                f"triggered-measure-loop argument {name} must be a finite number"
+            )
+        if positive and value <= 0:
+            raise OscilloscopeError(
+                "triggered-measure-loop argument trigger_timeout_seconds "
+                "must be greater than zero"
+            )
+        if not positive and value < 0:
+            raise OscilloscopeError(
+                "triggered-measure-loop argument interval_seconds must be non-negative"
+            )
+
+    for name in ("items", "pair_items"):
+        if name in arguments and not isinstance(arguments[name], str):
+            raise OscilloscopeError(
+                f"triggered-measure-loop argument {name} must be a string"
+            )
+
+    if "channel" in arguments:
+        channels = arguments["channel"]
+        if not isinstance(channels, list) or not channels:
+            raise OscilloscopeError(
+                "triggered-measure-loop argument channel must be a non-empty array"
+            )
+        for channel in channels:
+            if isinstance(channel, bool) or not (
+                isinstance(channel, int) or channel == "all"
+            ):
+                raise OscilloscopeError(
+                    "triggered-measure-loop channel values must be integers or all"
+                )
+
+    if "pair" in arguments:
+        pairs = arguments["pair"]
+        if not isinstance(pairs, list) or any(
+            not isinstance(pair, str) for pair in pairs
+        ):
+            raise OscilloscopeError(
+                "triggered-measure-loop argument pair must be an array of strings"
+            )
+
+    return dict(arguments)
 
 
 def _normalize_system_status_worker_arguments(
@@ -3002,7 +3103,13 @@ def _apply_worker_job_paths(args: argparse.Namespace, job_dir: Path) -> None:
                 job_dir, getattr(args, "output_path", None), default_name
             )
             setattr(args, "output_path", str(output_path))
-    elif command in {"capture-batch", "measure-log", "smoke", "acquisition-check"}:
+    elif command in {
+        "capture-batch",
+        "measure-log",
+        "triggered-measure-loop",
+        "smoke",
+        "acquisition-check",
+    }:
         output_dir = _worker_path(job_dir, getattr(args, "output_dir", None), ".")
         setattr(args, "output_dir", str(output_dir))
     elif command == "segmented-capture":
@@ -3046,6 +3153,13 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
     if command == "segmented-capture":
         return [Path(args.output_dir)]
     if command == "measure-log":
+        output_dir = Path(args.output_dir)
+        return [
+            output_dir / "measurements.csv",
+            output_dir / "manifest.json",
+            output_dir / "scpi.log",
+        ]
+    if command == "triggered-measure-loop":
         output_dir = Path(args.output_dir)
         return [
             output_dir / "measurements.csv",

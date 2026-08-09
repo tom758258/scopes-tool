@@ -2505,3 +2505,135 @@ def test_live_worker_unknown_identity_fails_before_domain_scpi(
     assert exit_code == 1
     assert payload["ok"] is False
     assert fake_scope.backend.history == ["*IDN?"]
+
+
+def test_worker_triggered_measure_loop_is_allowlisted_and_uses_job_directory(tmp_path):
+    runtime = _runtime(tmp_path)
+    job_dir = tmp_path / "triggered-job"
+    arguments = {
+        "channel": [1, 2],
+        "items": "vpp,frequency",
+        "pair": ["1:2"],
+        "pair_items": "phase",
+        "count": 2,
+        "trigger_timeout_seconds": 1,
+        "interval_seconds": 0,
+    }
+
+    assert "triggered-measure-loop" in worker.DOMAIN_COMMANDS
+    parsed = worker.parse_domain_command(
+        "triggered-measure-loop",
+        arguments,
+        runtime,
+        job_dir,
+    )
+
+    assert Path(parsed.output_dir) == job_dir
+    assert parsed.count == 2
+    assert parsed.trigger_timeout_seconds == 1
+
+
+@pytest.mark.parametrize(
+    "arguments, message",
+    [
+        ({"count": 1, "trigger_timeout_seconds": 1, "output_dir": "escape"}, "unknown argument"),
+        ({"count": True, "trigger_timeout_seconds": 1}, "count must be an integer"),
+        ({"count": 1, "trigger_timeout_seconds": "1"}, "must be a finite number"),
+        ({"count": 1, "trigger_timeout_seconds": 1, "channel": 1}, "non-empty array"),
+        ({"count": 1, "trigger_timeout_seconds": 1, "pair": [1]}, "array of strings"),
+        ({"count": 1, "trigger_timeout_seconds": 1, "interval_seconds": -1}, "must be non-negative"),
+    ],
+)
+def test_worker_triggered_measure_loop_rejects_invalid_arguments(arguments, message):
+    with pytest.raises(OscilloscopeError, match=message):
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "triggered-measure-loop",
+                "arguments": arguments,
+            }
+        )
+
+
+def test_worker_executes_triggered_measure_loop_with_domain_artifacts(tmp_path):
+    artifact_path = tmp_path / "triggered-execution"
+    job, result = _execute_worker_job(
+        _runtime(tmp_path),
+        "triggered-measure-loop",
+        {
+            "channel": [1],
+            "items": "vpp",
+            "count": 2,
+            "trigger_timeout_seconds": 1,
+            "interval_seconds": 0,
+        },
+        artifact_path,
+    )
+
+    assert job.state == "succeeded"
+    assert result["state"] == "succeeded"
+    assert result["result"]["status"] == "completed"
+    assert result["result"]["completed_count"] == 2
+    assert (artifact_path / "measurements.csv").exists()
+    assert (artifact_path / "manifest.json").exists()
+    assert (artifact_path / "scpi.log").exists()
+
+
+def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
+    import time
+
+    runtime = _runtime(tmp_path)
+    worker_thread = threading.Thread(target=worker._job_loop, args=(runtime,), daemon=True)
+    worker_thread.start()
+
+    with _worker_server(runtime):
+        status, accepted = _post_command(
+            runtime,
+            {
+                "command": "triggered-measure-loop",
+                "arguments": {
+                    "channel": [1],
+                    "items": "vpp",
+                    "count": 3,
+                    "trigger_timeout_seconds": 1,
+                    "interval_seconds": 30,
+                },
+                "job_id": "cancel-triggered-loop",
+            },
+        )
+        assert status == 202
+        artifact_path = Path(accepted["artifact_path"])
+        manifest_path = artifact_path / "manifest.json"
+        deadline = time.monotonic() + 2
+        completed_count = 0
+        while time.monotonic() < deadline:
+            if manifest_path.exists():
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                completed_count = manifest["completed_count"]
+                if completed_count == 1:
+                    break
+            time.sleep(0.01)
+        assert completed_count == 1
+
+        request = urlrequest.Request(
+            f"http://127.0.0.1:{runtime.port}/stop",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlrequest.urlopen(request, timeout=2) as response:
+            assert response.status == 202
+
+        job = runtime.jobs[accepted["worker_job_id"]]
+        deadline = time.monotonic() + 2
+        while job.state == "running" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert job.state == "cancelled"
+
+    result = json.loads((artifact_path / "result.json").read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert result["state"] == "cancelled"
+    assert result["exit_code"] == 3
+    assert result["result"]["status"] == "cancelled"
+    assert result["result"]["completed_count"] == 1
+    assert manifest["status"] == "cancelled"

@@ -507,6 +507,11 @@ Measurement and artifact-producing flows:
   `interval_seconds`, `requested_count`, `requested_duration_seconds`,
   `completed_rows`, `csv_path`, `manifest_path`, `scpi_log_path`, and compact
   row records. Measurement values are written to CSV.
+- `triggered-measure-loop`: `status`, `channels`, `items`, `pairs`,
+  `pair_items`, `requested_count`, `completed_count`,
+  `trigger_timeout_seconds`, `interval_seconds`, compact completed cycle
+  summaries, artifact paths, and nullable `error`. Measurement values are
+  written to CSV; normal invalid responses are represented as `NaN`.
 - `capture`: `channels`, `requested_points`, `actual_points`, `format`,
   `files`, compact per-channel waveform summaries including each capture's
   `vertical_unit` (`"V"` or `"A"`), optional
@@ -542,7 +547,7 @@ Measurement and artifact-producing flows:
   `average_count`, `check_only`, `stopped_on_error`, `initial_acquisition`,
   `restore`, `termination_reason`, `steps`, `final_acquisition`, and `files`.
 
-For `measure-log`, `capture-batch`, and `sequence`, cooperative cancellation uses
+For `measure-log`, `capture-batch`, `triggered-measure-loop`, and `sequence`, cooperative cancellation uses
 `status: "cancelled"`, `error: null`, and one-shot Core/CLI exit code `130`.
 Already persisted rows or captures remain in the result and artifacts; an
 uncommitted partial measurement row is omitted. Finite termination precedence
@@ -567,6 +572,11 @@ Simulate and live payloads include sent SCPI history when available. Live JSON
 output with `--log-scpi` includes the recorded sent SCPI history. Raw waveform
 sample arrays are intentionally omitted from top-level JSON; use artifact files
 for raw data.
+
+`triggered-measure-loop` dry-run reports one representative cycle only:
+`:SINGle`, the Operation Status Condition Run-bit query, selected measurement
+queries, and one `:SYSTem:ERRor?`. It also reports the requested finite count;
+the repeated runtime polling and cycles are not expanded into a static list.
 
 Capability JSON currently includes `series`, `analog_channels`,
 `default_waveform_points`, `safe_max_waveform_points`,
