@@ -10,7 +10,7 @@ package behavior, and shared machine contracts.
 
 | Area | Distribution | Import / entry point | Public docs |
 | --- | --- | --- | --- |
-| Core | `scopes-tool` | `scopes_tool_core` | `docs/core/README.md`, `docs/core/integration.md`, `docs/core/periodic-capture.md`, `docs/core/periodic-capture.zh-TW.md`, `docs/core/triggered-measure-loop.md`, `docs/core/triggered-measure-loop.zh-TW.md`, `docs/core/sequence.md`, `docs/core/sequence.zh-TW.md`, `docs/core/supported-models.md` |
+| Core | `scopes-tool` | `scopes_tool_core` | `docs/core/README.md`, `docs/core/integration.md`, `docs/core/periodic-capture.md`, `docs/core/periodic-capture.zh-TW.md`, `docs/core/triggered-measure-loop.md`, `docs/core/triggered-measure-loop.zh-TW.md`, `docs/core/triggered-capture-series.md`, `docs/core/triggered-capture-series.zh-TW.md`, `docs/core/sequence.md`, `docs/core/sequence.zh-TW.md`, `docs/core/supported-models.md` |
 | CLI | `scopes-tool` | `scopes-tool`, `python -m scopes_tool_cli.cli` | `docs/cli/README.md`, `docs/cli/cli-integration.md` |
 | WebUI | `scopes-tool` | `scopes_tool_webui` skeleton | `docs/webui/README.md` |
 
@@ -85,6 +85,9 @@ Area docs:
 - Triggered Measurement Loop v1 behavior in English and Traditional Chinese:
   `docs/core/triggered-measure-loop.md`,
   `docs/core/triggered-measure-loop.zh-TW.md`
+- Triggered Capture Series v1 behavior in English and Traditional Chinese:
+  `docs/core/triggered-capture-series.md`,
+  `docs/core/triggered-capture-series.zh-TW.md`
 - CLI command usage, JSON mode, and automation safety:
   `docs/cli/README.md`
 - WebUI package skeleton and future ownership notes:

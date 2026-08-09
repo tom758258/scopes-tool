@@ -122,6 +122,11 @@ from scopes_tool_core.triggered_measurement import (
     plan_triggered_measure_loop,
     run_triggered_measure_loop,
 )
+from scopes_tool_core.triggered_capture import (
+    TriggeredCaptureSeriesRequest,
+    plan_triggered_capture_series,
+    run_triggered_capture_series,
+)
 from scopes_tool_core.output_files import (
     capture_output_paths,
     default_capture_csv_path,
@@ -2875,6 +2880,62 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    triggered_capture_series_parser = subparsers.add_parser(
+        "triggered-capture-series",
+        allow_abbrev=False,
+        help="run a finite Single, trigger-wait, and waveform capture series",
+    )
+    _add_scope_connection_args(triggered_capture_series_parser)
+    triggered_capture_series_parser.add_argument(
+        "--channel",
+        type=_capture_channel_arg,
+        action="append",
+        required=True,
+        help=(
+            "analog channel number; repeat for aligned multi-channel CSV output, "
+            "or use all for every analog channel on the detected model"
+        ),
+    )
+    triggered_capture_series_parser.add_argument(
+        "--points",
+        type=_waveform_points_arg,
+        default=1000,
+        help="waveform point count; supported values: 1000, 5000, 10000",
+    )
+    triggered_capture_series_parser.add_argument(
+        "--format",
+        dest="waveform_format",
+        choices=("byte", "word"),
+        default="byte",
+        help="waveform transfer format; defaults to byte",
+    )
+    triggered_capture_series_parser.add_argument(
+        "--count",
+        type=_positive_int,
+        required=True,
+        help="finite number of triggered waveform capture cycles",
+    )
+    triggered_capture_series_parser.add_argument(
+        "--trigger-timeout-seconds",
+        type=_positive_plain_float,
+        required=True,
+        help="positive finite timeout for each trigger wait",
+    )
+    triggered_capture_series_parser.add_argument(
+        "--interval-seconds",
+        type=_nonnegative_finite_float,
+        default=0.0,
+        help="interruptible wait after a persisted cycle; defaults to 0",
+    )
+    triggered_capture_series_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help=(
+            "workflow run directory; defaults to "
+            "data/triggered_capture_series/<UTC+8 timestamp>"
+        ),
+    )
+
     sequence_parser = subparsers.add_parser(
         "sequence",
         allow_abbrev=False,
@@ -3675,6 +3736,8 @@ def _dispatch_command(
         return _cmd_measure_log(args, stop_requested=stop_requested)
     if args.command == "triggered-measure-loop":
         return _cmd_triggered_measure_loop(args, stop_requested=stop_requested)
+    if args.command == "triggered-capture-series":
+        return _cmd_triggered_capture_series(args, stop_requested=stop_requested)
     if args.command == "sequence":
         return _cmd_sequence(args, stop_requested=stop_requested)
     if args.command == "screenshot":
@@ -4043,6 +4106,12 @@ def _print_text_dry_run_payload(payload: dict[str, object]) -> None:
 
 
 def _print_text_dry_run_summary(command: str, result: dict[str, object]) -> None:
+    if command == "triggered-capture-series":
+        print(
+            "Planned triggered capture series: "
+            f"{result.get('requested_count')} cycle(s)"
+        )
+        return
     if command == "triggered-measure-loop":
         print(
             "Planned triggered measurement loop: "
@@ -5669,6 +5738,21 @@ def _utc_timestamp() -> str:
 
 def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
     command = args.command
+    if command == "triggered-capture-series":
+        plan = plan_triggered_capture_series(
+            TriggeredCaptureSeriesRequest(
+                channels=args.channel,
+                points=args.points,
+                waveform_format=args.waveform_format,
+                count=args.count,
+                trigger_timeout_seconds=args.trigger_timeout_seconds,
+                interval_seconds=args.interval_seconds,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            capabilities,
+        )
+        return list(plan.planned_scpi), list(plan.files), plan.result
     if command == "triggered-measure-loop":
         plan = plan_triggered_measure_loop(
             TriggeredMeasureLoopRequest(
@@ -11697,6 +11781,41 @@ def _cmd_triggered_measure_loop(
                 items=args.items,
                 pairs=tuple(args.pair),
                 pair_items=args.pair_items,
+                count=args.count,
+                trigger_timeout_seconds=args.trigger_timeout_seconds,
+                interval_seconds=args.interval_seconds,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            stop_requested=stop_requested,
+        )
+        if operation_result.idn is not None:
+            _json_record_scope(scope, operation_result.idn)
+        _apply_operation_result(operation_result)
+        for line in operation_result.human_lines:
+            print(line)
+        if operation_result.result.get("status") == "interrupted":
+            print("error: interrupted", file=sys.stderr)
+        return operation_result.exit_code
+
+
+def _cmd_triggered_capture_series(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    with _open_scope(args, resource) as scope:
+        operation_result = run_triggered_capture_series(
+            scope,
+            resource,
+            TriggeredCaptureSeriesRequest(
+                channels=args.channel,
+                points=args.points,
+                waveform_format=args.waveform_format,
                 count=args.count,
                 trigger_timeout_seconds=args.trigger_timeout_seconds,
                 interval_seconds=args.interval_seconds,

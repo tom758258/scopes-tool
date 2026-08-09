@@ -512,6 +512,11 @@ Measurement and artifact-producing flows:
   `trigger_timeout_seconds`, `interval_seconds`, compact completed cycle
   summaries, artifact paths, and nullable `error`. Measurement values are
   written to CSV; normal invalid responses are represented as `NaN`.
+- `triggered-capture-series`: `status`, `channels`, `points`, `format`,
+  `requested_count`, `completed_count`, `trigger_timeout_seconds`,
+  `interval_seconds`, compact committed `cycles`, `output_dir`,
+  `manifest_path`, `scpi_log_path`, and nullable `error`. Raw waveform data is
+  written to per-cycle CSV and metadata artifacts.
 - `capture`: `channels`, `requested_points`, `actual_points`, `format`,
   `files`, compact per-channel waveform summaries including each capture's
   `vertical_unit` (`"V"` or `"A"`), optional
@@ -547,7 +552,8 @@ Measurement and artifact-producing flows:
   `average_count`, `check_only`, `stopped_on_error`, `initial_acquisition`,
   `restore`, `termination_reason`, `steps`, `final_acquisition`, and `files`.
 
-For `measure-log`, `capture-batch`, `triggered-measure-loop`, and `sequence`, cooperative cancellation uses
+For `measure-log`, `capture-batch`, `triggered-measure-loop`,
+`triggered-capture-series`, and `sequence`, cooperative cancellation uses
 `status: "cancelled"`, `error: null`, and one-shot Core/CLI exit code `130`.
 Already persisted rows or captures remain in the result and artifacts; an
 uncommitted partial measurement row is omitted. Finite termination precedence
@@ -577,6 +583,11 @@ for raw data.
 `:SINGle`, the Operation Status Condition Run-bit query, selected measurement
 queries, and one `:SYSTem:ERRor?`. It also reports the requested finite count;
 the repeated runtime polling and cycles are not expanded into a static list.
+
+`triggered-capture-series` dry-run likewise reports one representative cycle:
+`:SINGle`, one Operation Status Condition query, the selected waveform capture
+SCPI, and one `:SYSTem:ERRor?`. It reports the finite requested count without
+statically repeating trigger polling or cycle SCPI.
 
 Capability JSON currently includes `series`, `analog_channels`,
 `default_waveform_points`, `safe_max_waveform_points`,

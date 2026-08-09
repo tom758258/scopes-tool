@@ -204,6 +204,7 @@ names are intended for package consumers and tests:
 - `plan_smoke`
 - `plan_sequence`
 - `plan_triggered_measure_loop`
+- `plan_triggered_capture_series`
 - `plan_acquisition_check`
 - `run_capture`
 - `run_capture_batch`
@@ -215,10 +216,12 @@ names are intended for package consumers and tests:
 - `run_acquisition_check`
 - `run_sequence`
 - `run_triggered_measure_loop`
+- `run_triggered_capture_series`
 - `interruptible_wait`
 - `load_sequence_document`
 - `normalize_sequence_document`
 - `TriggeredMeasureLoopRequest`
+- `TriggeredCaptureSeriesRequest`
 
 ## Runtime Guidance
 
@@ -289,6 +292,14 @@ hardware or writing artifacts. Runtime owns the finite acquisition loop and
 accepts the Workflow Foundation stop, progress, and operation-specific sample
 callbacks. Public behavior is documented in `triggered-measure-loop.md` and
 `triggered-measure-loop.zh-TW.md`.
+
+Triggered Capture Series v1 uses `TriggeredCaptureSeriesRequest`,
+`plan_triggered_capture_series()`, and `run_triggered_capture_series()`.
+Planning validates one representative trigger-and-waveform cycle without
+opening hardware or writing artifacts. Runtime uses the existing trigger wait,
+waveform capture, artifact, cancellation, progress, and sample-reporting
+primitives. Public behavior is documented in `triggered-capture-series.md` and
+`triggered-capture-series.zh-TW.md`.
 
 For 4000X Screenshot capture and hardcopy state queries:
 

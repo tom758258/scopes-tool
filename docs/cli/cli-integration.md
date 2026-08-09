@@ -8,7 +8,8 @@ CLI-only fields include:
 
 - `measurement_cli_name`
 - command names such as `measure-log`, `capture-batch`,
-  `triggered-measure-loop`, `sequence`, and `hardware-report`
+  `triggered-measure-loop`, `triggered-capture-series`, `sequence`, and
+  `hardware-report`
 - process return-code behavior
 - stderr SCPI diagnostic handling
 - parser validation messages
@@ -56,9 +57,10 @@ These fields are adapter behavior, not Core schema. Core receives normalized
 requests and returns runtime data; the CLI decides how to render human text,
 JSON stdout, stderr logs, and exit codes.
 
-`measure-log`, `capture-batch`, and `triggered-measure-loop` execution is
-Core-owned. Their CLI adapters normalize arguments into `MeasureLogRequest`,
-`CaptureBatchRequest`, or `TriggeredMeasureLoopRequest`, open
+`measure-log`, `capture-batch`, `triggered-measure-loop`, and
+`triggered-capture-series` execution is Core-owned. Their CLI adapters
+normalize arguments into `MeasureLogRequest`, `CaptureBatchRequest`,
+`TriggeredMeasureLoopRequest`, or `TriggeredCaptureSeriesRequest`, open
 the selected run-mode session, invoke the Core operation, and render its
 `OperationResult`. Internal JSON dispatch accepts an optional cancellation
 predicate so the Worker can reuse the same operations; normal direct CLI calls
@@ -69,6 +71,12 @@ Triggered measurement dry-run delegates one representative cycle to
 `plan_triggered_measure_loop()`. Runtime delegates the finite acquisition loop
 to `run_triggered_measure_loop()`. Direct CLI may provide `--output-dir`; the
 Worker rejects that request field and injects its owned job directory.
+
+Triggered capture dry-run delegates one representative cycle to
+`plan_triggered_capture_series()`. Runtime delegates the finite trigger and
+waveform loop to `run_triggered_capture_series()`. Direct CLI may provide
+`--output-dir`; the Worker rejects `output_dir` and `log_scpi` request fields
+and injects its owned job directory.
 
 `sequence` loads a strict JSON document before opening a scope, builds a
 `SequenceRequest`, and delegates planning or execution to Core. Dry-run uses

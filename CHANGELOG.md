@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Adds the finite `triggered-capture-series` Core workflow with CLI and Common
+  v2 Worker adapters, natural trigger waiting, waveform artifacts, strict
+  completion accounting, and representative-cycle dry-run planning.
 - Defines Periodic Capture v1 as the product-facing name for the existing
   `capture-batch` CLI, Worker, and Core workflow, and restricts Worker requests
   to the Worker-owned job artifact directory.

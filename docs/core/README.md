@@ -360,7 +360,8 @@ Core owns runtime behavior:
 
 Workflow Foundation v1 is a small synchronous Core layer used by
 `measure-log`, Periodic Capture v1 through `capture-batch`, Triggered
-Measurement Loop v1, and Generic Sequence v1. `StopRequested`, `WorkflowProgress`,
+Measurement Loop v1, Triggered Capture Series v1, and Generic Sequence v1.
+`StopRequested`, `WorkflowProgress`,
 `ProgressReporter`, and `interruptible_wait()` provide optional cooperative
 cancellation and progress without an async runtime, scheduler, persistence
 layer, or event bus. A long interval wait checks cancellation periodically;
@@ -385,6 +386,13 @@ measurement loop. It preserves completed cycles, stores invalid measurement
 sentinels as `NaN`, and fails immediately on trigger timeout or genuine query,
 transport, parsing, or system errors. See [Triggered Measurement Loop
 v1](triggered-measure-loop.md) and [繁體中文](triggered-measure-loop.zh-TW.md).
+
+Triggered Capture Series v1 owns a finite `Single` -> trigger wait -> waveform
+capture loop. It uses the oscilloscope's existing trigger configuration,
+commits a cycle only after waveform artifacts, the system-error check, and the
+manifest update succeed, and preserves earlier committed cycles. See
+[Triggered Capture Series v1](triggered-capture-series.md) and
+[繁體中文](triggered-capture-series.zh-TW.md).
 
 Generic Sequence v1 validates a strict JSON document, then runs existing Core
 operations in finite loop/step order. It supports `wait`, `single`,
@@ -418,6 +426,8 @@ script documentation, Worker persistence, or WebUI presentation.
 - Periodic Capture v1: `periodic-capture.md`, `periodic-capture.zh-TW.md`
 - Triggered Measurement Loop v1: `triggered-measure-loop.md`,
   `triggered-measure-loop.zh-TW.md`
+- Triggered Capture Series v1: `triggered-capture-series.md`,
+  `triggered-capture-series.zh-TW.md`
 - Generic Sequence v1: `sequence.md`, `sequence.zh-TW.md`
 - Supported model profiles: `supported-models.md`
 - Shared CLI, worker, and orchestrator contracts: `../contracts/`

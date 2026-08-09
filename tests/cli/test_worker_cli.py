@@ -2603,6 +2603,129 @@ def test_worker_triggered_measure_loop_is_allowlisted_and_uses_job_directory(tmp
     assert parsed.trigger_timeout_seconds == 1
 
 
+def test_worker_triggered_capture_series_is_strict_and_uses_job_directory(tmp_path):
+    runtime = _runtime(tmp_path)
+    job_dir = tmp_path / "triggered-capture-job"
+    arguments = {
+        "channel": [1, 2],
+        "points": 1000,
+        "format": "byte",
+        "count": 2,
+        "trigger_timeout_seconds": 1,
+        "interval_seconds": 0,
+    }
+
+    assert "triggered-capture-series" in worker.DOMAIN_COMMANDS
+    command, normalized, job_id = worker.validate_command_request(
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "triggered-capture-series",
+            "arguments": arguments,
+        }
+    )
+    assert command == "triggered-capture-series"
+    assert normalized == arguments
+    assert job_id is None
+    parsed = worker.parse_domain_command(
+        command,
+        normalized,
+        runtime,
+        job_dir,
+    )
+
+    assert parsed.channel == [1, 2]
+    assert parsed.points == 1000
+    assert parsed.waveform_format == "byte"
+    assert parsed.count == 2
+    assert parsed.trigger_timeout_seconds == 1
+    assert parsed.interval_seconds == 0
+    assert Path(parsed.output_dir) == job_dir
+    assert parsed.log_scpi is False
+
+
+@pytest.mark.parametrize(
+    "arguments, message",
+    [
+        ({"count": 1, "trigger_timeout_seconds": 1}, "requires argument channel"),
+        ({"channel": [1], "trigger_timeout_seconds": 1}, "requires argument count"),
+        ({"channel": [1], "count": 1}, "requires argument trigger_timeout_seconds"),
+        ({"channel": [1], "count": True, "trigger_timeout_seconds": 1}, "count must be an integer"),
+        ({"channel": 1, "count": 1, "trigger_timeout_seconds": 1}, "non-empty array"),
+        ({"channel": [1], "count": 1, "trigger_timeout_seconds": "1"}, "must be a finite number"),
+        ({"channel": [1], "count": 1, "trigger_timeout_seconds": 0}, "must be greater than zero"),
+        ({"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "points": 123}, "points is not supported"),
+        ({"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "format": "ascii"}, "format must be exactly byte or word"),
+        ({"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "interval_seconds": -1}, "must be non-negative"),
+        ({"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "unknown": True}, "unknown argument"),
+    ],
+)
+def test_worker_triggered_capture_series_rejects_invalid_arguments(arguments, message):
+    with pytest.raises(OscilloscopeError, match=message):
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "triggered-capture-series",
+                "arguments": arguments,
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {
+            "channel": [1],
+            "count": 1,
+            "trigger_timeout_seconds": 1,
+            "output_dir": "escape",
+        },
+        {
+            "channel": [1],
+            "count": 1,
+            "trigger_timeout_seconds": 1,
+            "log_scpi": True,
+        },
+    ],
+)
+def test_worker_triggered_capture_series_rejects_cli_paths_before_artifacts(
+    monkeypatch, tmp_path, arguments
+):
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(
+        cli.Oscilloscope,
+        "open",
+        staticmethod(
+            lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("opened"))
+        ),
+    )
+
+    with _worker_server(runtime):
+        status, payload = _post_command(
+            runtime,
+            {
+                "command": "triggered-capture-series",
+                "arguments": arguments,
+                "job_id": "invalid-triggered-capture",
+            },
+        )
+
+    assert status == 400
+    assert payload["status"] == "error"
+    assert payload["error"] == "validation_error"
+    assert runtime.accepted == 0
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()
+
+
+def test_worker_triggered_capture_series_uses_core_terminal_status_mapping():
+    payload = {"result": {"status": "instrument_error"}}
+
+    assert (
+        worker._core_workflow_result_status("triggered-capture-series", payload)
+        == "instrument_error"
+    )
+
+
 @pytest.mark.parametrize(
     "arguments, message",
     [

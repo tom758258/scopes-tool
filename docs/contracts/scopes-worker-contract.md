@@ -145,15 +145,16 @@ rejects new commands, cancels queued jobs, writes terminal `result.json` for
 cancelled jobs, and emits `job_finished` for each cancelled job. Running jobs
 pass the existing cancellation state into Core workflows. `measure-log` checks
 between completed measurement queries and at persisted-row boundaries;
-`capture-batch` checks between captures; `triggered-measure-loop` checks during
-trigger polling and interval waits. These workflows use interruptible interval waits.
+`capture-batch` checks between captures; `triggered-measure-loop` and
+`triggered-capture-series` check during trigger polling and interval waits.
+These workflows use interruptible interval waits.
 They stop before the next iteration and preserve completed artifacts. A
 blocking device read is not forcibly interrupted and may not stop immediately.
 Finite workflow termination precedence is `instrument_error > completed >
 cancelled`; a stop request observed after the count or duration condition is
 complete does not replace the completed Core result. For `measure-log`,
-`capture-batch`, and `triggered-measure-loop`, the Worker maps Core `completed`
-to `succeeded`, Core
+`capture-batch`, `triggered-measure-loop`, and `triggered-capture-series`, the
+Worker maps Core `completed` to `succeeded`, Core
 `cancelled` to `cancelled` with exit code 3, and Core `instrument_error` or
 `error` to `failed`. A late Worker stop flag does not replace these
 higher-precedence Core results.
@@ -171,7 +172,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `run`, `single`, `stop-acquisition`, `force-trigger`
 - `acquisition`, `acquisition-check`, `sample-rate`, `acquisition-points`,
   `record-length`, `segmented-memory`, `segmented-capture`
-- `capture`, `capture-batch`, `screenshot`, `smoke`
+- `capture`, `capture-batch`, `triggered-capture-series`, `screenshot`, `smoke`
 - `channel-summary`
 - `measure`, `measure-results`, `measure-stats`, `measure-sweep`, `measure-log`,
   `triggered-measure-loop`,
@@ -248,6 +249,29 @@ alias.
     "format": "byte",
     "count": 10,
     "interval_seconds": 3
+  }
+}
+```
+
+`triggered-capture-series` accepts only required `channel` (a non-empty array
+of positive channel integers or the single value `"all"`), optional `points`,
+optional `format` (`"byte"` or `"word"`), required positive integer `count`,
+required positive finite `trigger_timeout_seconds`, and optional non-negative
+finite `interval_seconds`. Unknown fields and wrong JSON types are rejected
+before enqueue. Caller-supplied `output_dir` and `log_scpi` are rejected; the
+Worker injects and owns the job artifact directory.
+
+```json
+{
+  "schema_version": 2,
+  "command": "triggered-capture-series",
+  "arguments": {
+    "channel": [1],
+    "points": 1000,
+    "format": "byte",
+    "count": 10,
+    "trigger_timeout_seconds": 5,
+    "interval_seconds": 0
   }
 }
 ```
@@ -2229,10 +2253,11 @@ Default worker outputs are:
 - `screenshot`: `screen.png` in the job directory for default or PNG capture,
   and `screen.bmp` for BMP or BMP8bit capture. Query-only `query_hardcopy`
   creates no screenshot artifact.
-- `capture-batch`, `measure-log`, `triggered-measure-loop`, `smoke`, and
-  `acquisition-check`: the job directory is the default `output_dir`.
-  `capture-batch` and `triggered-measure-loop` do not accept a caller-supplied
-  `output_dir`.
+- `capture-batch`, `measure-log`, `triggered-measure-loop`,
+  `triggered-capture-series`, `smoke`, and `acquisition-check`: the job
+  directory is the default `output_dir`. `capture-batch`,
+  `triggered-measure-loop`, and `triggered-capture-series` do not accept a
+  caller-supplied `output_dir`; capture workflows also reject `log_scpi`.
 - `segmented-capture`: the fixed `segmented_capture` child directory below the
   job directory is the `output_dir`; its manifest, SCPI log, and successfully
   written per-segment CSV files are domain artifacts.

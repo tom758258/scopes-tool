@@ -75,6 +75,7 @@ from scopes_tool_core.segmented_capture import (
     SegmentedCaptureRequest,
     validate_segmented_capture_request,
 )
+from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 from scopes_tool_core.wgen import (
     WGEN_LOADS,
     validate_wgen_amplitude,
@@ -98,6 +99,7 @@ _CORE_WORKFLOW_COMMANDS = {
     "measure-log",
     "capture-batch",
     "triggered-measure-loop",
+    "triggered-capture-series",
 }
 _CORE_WORKFLOW_TERMINAL_STATUSES = {
     "completed",
@@ -141,6 +143,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "measure-sweep",
     "measure-log",
     "triggered-measure-loop",
+    "triggered-capture-series",
     "measure-clear",
     "measure-show",
     "measure-source",
@@ -568,6 +571,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments)
     arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
+    arguments = _normalize_triggered_capture_series_worker_arguments(command, arguments)
     job_id = body.get("job_id")
     if job_id is not None and not isinstance(job_id, str):
         raise OscilloscopeError("job_id must be a string when provided")
@@ -584,6 +588,7 @@ def parse_domain_command(
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments, runtime)
     arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
+    arguments = _normalize_triggered_capture_series_worker_arguments(command, arguments)
     arguments = _normalize_system_status_worker_arguments(command, arguments)
     arguments = _normalize_screenshot_worker_arguments(command, arguments)
     _validate_display_worker_arguments(command, arguments)
@@ -847,6 +852,104 @@ def _normalize_triggered_measure_loop_worker_arguments(
         ):
             raise OscilloscopeError(
                 "triggered-measure-loop argument pair must be an array of strings"
+            )
+
+    return dict(arguments)
+
+
+def _normalize_triggered_capture_series_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if command != "triggered-capture-series":
+        return arguments
+
+    allowed = {
+        "channel",
+        "points",
+        "format",
+        "count",
+        "trigger_timeout_seconds",
+        "interval_seconds",
+    }
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"triggered-capture-series unknown argument: {sorted(unknown)[0]}"
+        )
+    for required in ("channel", "count", "trigger_timeout_seconds"):
+        if required not in arguments:
+            raise OscilloscopeError(
+                f"triggered-capture-series requires argument {required}"
+            )
+
+    channels = arguments["channel"]
+    if not isinstance(channels, list) or not channels:
+        raise OscilloscopeError(
+            "triggered-capture-series argument channel must be a non-empty array"
+        )
+    for channel in channels:
+        if isinstance(channel, bool) or not (
+            (isinstance(channel, int) and channel > 0) or channel == "all"
+        ):
+            raise OscilloscopeError(
+                "triggered-capture-series channel values must be positive integers or all"
+            )
+
+    count = arguments["count"]
+    if isinstance(count, bool) or not isinstance(count, int):
+        raise OscilloscopeError(
+            "triggered-capture-series argument count must be an integer"
+        )
+    if count < 1:
+        raise OscilloscopeError(
+            "triggered-capture-series argument count must be at least 1"
+        )
+
+    if "points" in arguments:
+        points = arguments["points"]
+        if isinstance(points, bool) or not isinstance(points, int):
+            raise OscilloscopeError(
+                "triggered-capture-series argument points must be an integer"
+            )
+        if points not in SUPPORTED_WAVEFORM_POINTS:
+            raise OscilloscopeError(
+                "triggered-capture-series argument points is not supported"
+            )
+
+    if "format" in arguments:
+        waveform_format = arguments["format"]
+        if not isinstance(waveform_format, str) or waveform_format not in {
+            "byte",
+            "word",
+        }:
+            raise OscilloscopeError(
+                "triggered-capture-series argument format must be exactly byte or word"
+            )
+
+    for name, positive in (
+        ("trigger_timeout_seconds", True),
+        ("interval_seconds", False),
+    ):
+        if name not in arguments:
+            continue
+        value = arguments[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise OscilloscopeError(
+                f"triggered-capture-series argument {name} must be a finite number"
+            )
+        if not math.isfinite(float(value)):
+            raise OscilloscopeError(
+                f"triggered-capture-series argument {name} must be a finite number"
+            )
+        if positive and value <= 0:
+            raise OscilloscopeError(
+                "triggered-capture-series argument trigger_timeout_seconds "
+                "must be greater than zero"
+            )
+        if not positive and value < 0:
+            raise OscilloscopeError(
+                "triggered-capture-series argument interval_seconds must be non-negative"
             )
 
     return dict(arguments)
@@ -3131,6 +3234,7 @@ def _apply_worker_job_paths(args: argparse.Namespace, job_dir: Path) -> None:
         "capture-batch",
         "measure-log",
         "triggered-measure-loop",
+        "triggered-capture-series",
         "smoke",
         "acquisition-check",
     }:
@@ -3190,6 +3294,9 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
             output_dir / "manifest.json",
             output_dir / "scpi.log",
         ]
+    if command == "triggered-capture-series":
+        output_dir = Path(args.output_dir)
+        return [output_dir / "manifest.json", output_dir / "scpi.log"]
     if command == "smoke":
         output_dir = Path(args.output_dir)
         return [

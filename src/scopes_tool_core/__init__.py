@@ -162,6 +162,11 @@ from .triggered_measurement import (
     plan_triggered_measure_loop,
     run_triggered_measure_loop,
 )
+from .triggered_capture import (
+    TriggeredCaptureSeriesRequest,
+    plan_triggered_capture_series,
+    run_triggered_capture_series,
+)
 from .scope import Oscilloscope
 from .status import (
     OperationCompleteState,
@@ -396,6 +401,7 @@ __all__ = [
     "SequenceRequest",
     "SequenceStep",
     "TriggeredMeasureLoopRequest",
+    "TriggeredCaptureSeriesRequest",
     "ScopeCapabilities",
     "SegmentedMemoryController",
     "SegmentedMemoryQueryResult",
@@ -448,6 +454,7 @@ __all__ = [
     "plan_smoke",
     "plan_sequence",
     "plan_triggered_measure_loop",
+    "plan_triggered_capture_series",
     "plan_acquisition_check",
     "run_capture",
     "run_capture_batch",
@@ -458,6 +465,7 @@ __all__ = [
     "run_smoke",
     "run_sequence",
     "run_triggered_measure_loop",
+    "run_triggered_capture_series",
     "run_acquisition_check",
     "interruptible_wait",
     "load_sequence_document",

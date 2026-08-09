@@ -46,6 +46,33 @@ Submit a Worker job with the existing schema 2 envelope:
 The Worker owns the job artifact directory. Orchestrators must not send
 `output_dir` or `log_scpi` for `capture-batch`.
 
+## Triggered Capture Series
+
+Triggered Capture Series uses the machine-facing CLI and Worker command
+`triggered-capture-series`, which delegates to Core
+`TriggeredCaptureSeriesRequest` and `run_triggered_capture_series()`. It uses
+the trigger configuration already present on the oscilloscope and does not
+configure or force a trigger.
+
+```json
+{
+  "schema_version": 2,
+  "command": "triggered-capture-series",
+  "arguments": {
+    "channel": [1],
+    "points": 1000,
+    "format": "byte",
+    "count": 10,
+    "trigger_timeout_seconds": 5,
+    "interval_seconds": 0
+  }
+}
+```
+
+The Worker owns the job artifact directory. Orchestrators must not send
+`output_dir` or `log_scpi`. A cycle is committed only after waveform artifacts,
+the post-capture system-error check, and the manifest update succeed.
+
 ## Worker Workflow
 
 Scopes is a queued-job Worker with a startup-bound execution context. Live

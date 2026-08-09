@@ -176,6 +176,8 @@ Current implemented scope:
 - Run the Periodic Capture product workflow through `capture-batch`, writing
   per-capture CSV and metadata files, `manifest.json`, and `scpi.log` into one
   run directory.
+- Run Triggered Capture Series through `triggered-capture-series`, waiting for
+  each natural trigger before writing waveform artifacts into one run directory.
 - Capture finite segmented waveforms from one analog channel with
   `segmented-capture`, writing one CSV per exported segment plus a shared
   `manifest.json` and `scpi.log`.
@@ -2022,6 +2024,22 @@ writes `measurements.csv`, `manifest.json`, and `scpi.log` under
 `--output-dir`. `--dry-run` shows one representative cycle and never opens VISA
 or writes runtime artifacts. See `docs/core/triggered-measure-loop.md` and
 `docs/core/triggered-measure-loop.zh-TW.md`.
+
+Run a finite triggered waveform capture series:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe triggered-capture-series --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --points 1000 --format byte --count 10 --trigger-timeout-seconds 5 --interval-seconds 0
+```
+
+Each cycle sends `Single`, waits for the current acquisition to complete using
+the existing trigger-wait path, captures the requested waveform channels,
+writes CSV and metadata, checks the instrument error queue once, commits the
+manifest, and then reports progress. It uses the trigger configuration already
+present on the oscilloscope and never configures or forces a trigger. Direct
+CLI defaults to `data/triggered_capture_series/<timestamp>`; dry-run shows one
+representative cycle without opening VISA or writing artifacts. See
+`docs/core/triggered-capture-series.md` and
+`docs/core/triggered-capture-series.zh-TW.md`.
 
 Run a Generic Sequence v1 document:
 
