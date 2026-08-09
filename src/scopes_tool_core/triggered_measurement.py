@@ -347,11 +347,7 @@ def run_triggered_measure_loop(
         return _finish_result(
             "interrupted", 130, manifest, manifest_path, csv_path,
             scpi_log_path, files, human, idn, last_system_error, scope,
-            error={
-                "type": "KeyboardInterrupt",
-                "cycle_index": current_cycle,
-                "message": "KeyboardInterrupt",
-            },
+            error="KeyboardInterrupt",
             best_effort=True,
         )
     except (OSError, OscilloscopeError) as exc:
@@ -558,7 +554,7 @@ def _finish_result(
     system_error: dict[str, object] | None,
     scope: Oscilloscope,
     *,
-    error: dict[str, object] | None,
+    error: dict[str, object] | str | None,
     best_effort: bool = False,
 ) -> OperationResult:
     manifest["status"] = status

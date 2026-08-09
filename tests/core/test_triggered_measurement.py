@@ -271,3 +271,62 @@ def test_reporters_run_after_csv_and_manifest_persist(tmp_path):
 
     assert result.exit_code == 0
     assert observed == [(1, 1, 2)]
+
+
+def test_keyboard_interrupt_uses_shared_interrupted_contract(monkeypatch, tmp_path):
+    def _raise_keyboard_interrupt(*args, **kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(
+        triggered_measurement,
+        "wait_for_current_trigger_completion",
+        _raise_keyboard_interrupt,
+    )
+    scope = _scope()
+    output_dir = tmp_path / "interrupted"
+
+    result = triggered_measurement.run_triggered_measure_loop(
+        scope,
+        RESOURCE,
+        _request(output_dir),
+    )
+
+    assert result.exit_code == 130
+    assert result.result["status"] == "interrupted"
+    assert result.result["error"] == "KeyboardInterrupt"
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "interrupted"
+    assert manifest["error"] == "KeyboardInterrupt"
+
+
+def test_measurement_query_exception_fails_fast_without_writing_csv_row(monkeypatch, tmp_path):
+    scope = _scope()
+    output_dir = tmp_path / "query-exception"
+
+    def _failing_query_measurement(channel, item):
+        raise triggered_measurement.OscilloscopeError("measurement transport error")
+
+    monkeypatch.setattr(scope, "query_measurement", _failing_query_measurement)
+
+    result = triggered_measurement.run_triggered_measure_loop(
+        scope,
+        RESOURCE,
+        _request(output_dir, count=2),
+    )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["completed_count"] == 0
+    assert result.result["error"]["type"] == "OscilloscopeError"
+    assert scope.backend.history.count(":SINGle") == 1
+    with (output_dir / "measurements.csv").open(encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+    assert len(rows) == 1
+    assert rows[0] == [
+        "index",
+        "timestamp_iso",
+        "elapsed_seconds",
+        "trigger_elapsed_seconds",
+        "ch1_vpp",
+    ]
+
