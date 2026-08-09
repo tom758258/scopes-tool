@@ -205,6 +205,7 @@ names are intended for package consumers and tests:
 - `plan_sequence`
 - `plan_triggered_measure_loop`
 - `plan_triggered_capture_series`
+- `plan_measure_until`
 - `plan_acquisition_check`
 - `run_capture`
 - `run_capture_batch`
@@ -217,11 +218,13 @@ names are intended for package consumers and tests:
 - `run_sequence`
 - `run_triggered_measure_loop`
 - `run_triggered_capture_series`
+- `run_measure_until`
 - `interruptible_wait`
 - `load_sequence_document`
 - `normalize_sequence_document`
 - `TriggeredMeasureLoopRequest`
 - `TriggeredCaptureSeriesRequest`
+- `MeasureUntilRequest`
 
 ## Runtime Guidance
 
@@ -261,14 +264,16 @@ result = run_capture_batch(
 Measure-log samples contain `index`, `timestamp_iso`, `elapsed_seconds`,
 `values`, and `system_error`. Capture-batch samples use the compact manifest
 capture entry with `index`, relative CSV and metadata paths, `actual_points`,
-and `system_error`. These are operation-specific payloads; Core does not define
-a universal sample contract. Callbacks are synchronous, run only after the
-corresponding completed data is persisted, and propagate exceptions unchanged.
+and `system_error`. Measure-until samples contain `index`, `timestamp_iso`,
+`elapsed_seconds`, `value`, `matched`, and `system_error`. These are
+operation-specific payloads; Core does not define a universal sample contract.
+Callbacks are synchronous, run only after the corresponding completed data is
+persisted, and propagate exceptions unchanged.
 
 Finite workflow termination uses `instrument_error > completed > cancelled`.
-Once a count or duration completion condition is satisfied, a later observed
-stop request does not replace the completed result. Cancellation is reported
-only when finite work remains.
+Once a count, duration, or measurement condition is satisfied, a later
+observed stop request does not replace the completed result. Cancellation is
+reported only when finite work remains.
 
 Workflow `scpi.log` ownership begins and ends with the Core operation. SCPI
 activity from adapter-level resource opening, live identity validation, driver
@@ -300,6 +305,14 @@ opening hardware or writing artifacts. Runtime uses the existing trigger wait,
 waveform capture, artifact, cancellation, progress, and sample-reporting
 primitives. Public behavior is documented in `triggered-capture-series.md` and
 `triggered-capture-series.zh-TW.md`.
+
+Measure Until Condition v1 uses `MeasureUntilRequest`,
+`plan_measure_until()`, and `run_measure_until()`. Planning validates one
+representative measurement and system-error iteration without opening hardware
+or writing artifacts. Runtime uses the existing measurement, cancellation,
+relative interval, persistence, progress, and sample-reporting primitives.
+Public behavior is documented in `measure-until.md` and
+`measure-until.zh-TW.md`.
 
 For 4000X Screenshot capture and hardcopy state queries:
 

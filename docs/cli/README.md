@@ -165,6 +165,8 @@ Current implemented scope:
   continue-and-summarize failure handling.
 - Log a finite batch of read-only measurements with `measure-log`, writing a
   CSV, `manifest.json`, and `scpi.log` into one run directory.
+- Query one read-only measurement until a finite numeric condition matches or
+  fails with timeout through `measure-until`.
 - Run strict finite Generic Sequence v1 JSON documents with `sequence`, using
   existing Core operations and deterministic capture/screenshot artifacts.
 - Run capture-safe hardware smoke checks that write a report directory with
@@ -2007,6 +2009,22 @@ trigger, change timeout defaults, use background threads, or perform
 return-to-local behavior. `Ctrl+C` preserves previously completed rows, does
 not commit a partially collected row, writes manifest status `interrupted`,
 and returns `130`.
+
+Measure one value until a condition matches:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe measure-until --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item vpp --operator gt --threshold 3.3 --timeout-seconds 600 --interval-seconds 1
+```
+
+`measure-until` queries one existing non-parameterized single-channel
+measurement without controlling acquisition or trigger state. Each successful
+query is followed by one system-error check and is persisted before reporting.
+Invalid measurement sentinels are written as `NaN` and remain non-matching.
+A matching committed sample exits successfully; an unmet timeout returns exit
+code `1` with `condition_timeout`. Direct CLI artifacts default to
+`data/measure_until/<timestamp>`. Dry-run shows one representative measurement
+query and one `:SYSTem:ERRor?` without opening VISA or writing files. See
+`docs/core/measure-until.md` and `docs/core/measure-until.zh-TW.md`.
 
 Run a finite triggered measurement loop:
 

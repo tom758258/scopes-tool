@@ -97,6 +97,7 @@ WORKER_SCHEMA_VERSION = 2
 
 _CORE_WORKFLOW_COMMANDS = {
     "measure-log",
+    "measure-until",
     "capture-batch",
     "triggered-measure-loop",
     "triggered-capture-series",
@@ -142,6 +143,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "measure-stats",
     "measure-sweep",
     "measure-log",
+    "measure-until",
     "triggered-measure-loop",
     "triggered-capture-series",
     "measure-clear",
@@ -572,6 +574,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments)
     arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
     arguments = _normalize_triggered_capture_series_worker_arguments(command, arguments)
+    arguments = _normalize_measure_until_worker_arguments(command, arguments)
     job_id = body.get("job_id")
     if job_id is not None and not isinstance(job_id, str):
         raise OscilloscopeError("job_id must be a string when provided")
@@ -589,6 +592,7 @@ def parse_domain_command(
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments, runtime)
     arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
     arguments = _normalize_triggered_capture_series_worker_arguments(command, arguments)
+    arguments = _normalize_measure_until_worker_arguments(command, arguments)
     arguments = _normalize_system_status_worker_arguments(command, arguments)
     arguments = _normalize_screenshot_worker_arguments(command, arguments)
     _validate_display_worker_arguments(command, arguments)
@@ -950,6 +954,70 @@ def _normalize_triggered_capture_series_worker_arguments(
         if not positive and value < 0:
             raise OscilloscopeError(
                 "triggered-capture-series argument interval_seconds must be non-negative"
+            )
+
+    return dict(arguments)
+
+
+def _normalize_measure_until_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if command != "measure-until":
+        return arguments
+
+    allowed = {
+        "channel",
+        "item",
+        "operator",
+        "threshold",
+        "timeout_seconds",
+        "interval_seconds",
+    }
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"measure-until unknown argument: {sorted(unknown)[0]}"
+        )
+    for required in ("channel", "item", "operator", "threshold", "timeout_seconds"):
+        if required not in arguments:
+            raise OscilloscopeError(f"measure-until requires argument {required}")
+
+    channel = arguments["channel"]
+    if isinstance(channel, bool) or not isinstance(channel, int):
+        raise OscilloscopeError("measure-until argument channel must be an integer")
+    if channel < 1:
+        raise OscilloscopeError("measure-until argument channel must be at least 1")
+
+    item = arguments["item"]
+    if not isinstance(item, str) or not item:
+        raise OscilloscopeError("measure-until argument item must be a non-empty string")
+
+    operator = arguments["operator"]
+    if not isinstance(operator, str) or operator not in {"gt", "gte", "lt", "lte"}:
+        raise OscilloscopeError(
+            "measure-until argument operator must be exactly gt, gte, lt, or lte"
+        )
+
+    for name in ("threshold", "timeout_seconds", "interval_seconds"):
+        if name not in arguments:
+            continue
+        value = arguments[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise OscilloscopeError(
+                f"measure-until argument {name} must be a finite number"
+            )
+        if not math.isfinite(float(value)):
+            raise OscilloscopeError(
+                f"measure-until argument {name} must be a finite number"
+            )
+        if name == "timeout_seconds" and value <= 0:
+            raise OscilloscopeError(
+                "measure-until argument timeout_seconds must be greater than zero"
+            )
+        if name == "interval_seconds" and value < 0:
+            raise OscilloscopeError(
+                "measure-until argument interval_seconds must be non-negative"
             )
 
     return dict(arguments)
@@ -3233,6 +3301,7 @@ def _apply_worker_job_paths(args: argparse.Namespace, job_dir: Path) -> None:
     elif command in {
         "capture-batch",
         "measure-log",
+        "measure-until",
         "triggered-measure-loop",
         "triggered-capture-series",
         "smoke",
@@ -3281,6 +3350,13 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
     if command == "segmented-capture":
         return [Path(args.output_dir)]
     if command == "measure-log":
+        output_dir = Path(args.output_dir)
+        return [
+            output_dir / "measurements.csv",
+            output_dir / "manifest.json",
+            output_dir / "scpi.log",
+        ]
+    if command == "measure-until":
         output_dir = Path(args.output_dir)
         return [
             output_dir / "measurements.csv",

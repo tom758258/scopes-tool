@@ -7,7 +7,7 @@ in this package.
 CLI-only fields include:
 
 - `measurement_cli_name`
-- command names such as `measure-log`, `capture-batch`,
+- command names such as `measure-log`, `measure-until`, `capture-batch`,
   `triggered-measure-loop`, `triggered-capture-series`, `sequence`, and
   `hardware-report`
 - process return-code behavior
@@ -57,15 +57,21 @@ These fields are adapter behavior, not Core schema. Core receives normalized
 requests and returns runtime data; the CLI decides how to render human text,
 JSON stdout, stderr logs, and exit codes.
 
-`measure-log`, `capture-batch`, `triggered-measure-loop`, and
+`measure-log`, `measure-until`, `capture-batch`, `triggered-measure-loop`, and
 `triggered-capture-series` execution is Core-owned. Their CLI adapters
 normalize arguments into `MeasureLogRequest`, `CaptureBatchRequest`,
-`TriggeredMeasureLoopRequest`, or `TriggeredCaptureSeriesRequest`, open
+`MeasureUntilRequest`, `TriggeredMeasureLoopRequest`, or
+`TriggeredCaptureSeriesRequest`, open
 the selected run-mode session, invoke the Core operation, and render its
 `OperationResult`. Internal JSON dispatch accepts an optional cancellation
 predicate so the Worker can reuse the same operations; normal direct CLI calls
 use the no-op default. The CLI does not maintain a parallel batch loop or
 workflow scheduler.
+
+Measure-until dry-run delegates one representative query and system-error
+check to `plan_measure_until()`. Runtime delegates timeout-bounded polling to
+`run_measure_until()`. Direct CLI may provide `--output-dir`; the Worker
+rejects `output_dir` and `log_scpi` and injects its owned job directory.
 
 Triggered measurement dry-run delegates one representative cycle to
 `plan_triggered_measure_loop()`. Runtime delegates the finite acquisition loop

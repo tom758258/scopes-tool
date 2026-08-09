@@ -507,6 +507,13 @@ Measurement and artifact-producing flows:
   `interval_seconds`, `requested_count`, `requested_duration_seconds`,
   `completed_rows`, `csv_path`, `manifest_path`, `scpi_log_path`, and compact
   row records. Measurement values are written to CSV.
+- `measure-until`: `status`, `channel`, canonical `item`, `operator`,
+  `threshold`, `timeout_seconds`, `interval_seconds`, `completed_count`,
+  `matched`, nullable compact `matched_sample`, nullable `termination_reason`,
+  artifact paths, and nullable `error`. Measurement values are written to CSV;
+  normal invalid responses are represented as `NaN`. A matching condition uses
+  `condition_met`; an unmet timeout is an error using `condition_timeout` and
+  one-shot exit code `1`.
 - `triggered-measure-loop`: `status`, `channels`, `items`, `pairs`,
   `pair_items`, `requested_count`, `completed_count`,
   `trigger_timeout_seconds`, `interval_seconds`, compact completed cycle
@@ -552,15 +559,16 @@ Measurement and artifact-producing flows:
   `average_count`, `check_only`, `stopped_on_error`, `initial_acquisition`,
   `restore`, `termination_reason`, `steps`, `final_acquisition`, and `files`.
 
-For `measure-log`, `capture-batch`, `triggered-measure-loop`,
+For `measure-log`, `measure-until`, `capture-batch`, `triggered-measure-loop`,
 `triggered-capture-series`, and `sequence`, cooperative cancellation uses
 `status: "cancelled"`, `error: null`, and one-shot Core/CLI exit code `130`.
 Already persisted rows or captures remain in the result and artifacts; an
 uncommitted partial measurement row is omitted. Finite termination precedence
 is `instrument_error > completed > cancelled`: cancellation is reported only
-while work remains, and a stop request observed after count or duration
-completion does not replace `completed`. `KeyboardInterrupt` remains distinct
-as `status: "interrupted"`, `error: "KeyboardInterrupt"`, and exit code `130`.
+while work remains, and a stop request observed after count, duration, or
+measurement-condition completion does not replace `completed`.
+`KeyboardInterrupt` remains distinct as `status: "interrupted"`,
+`error: "KeyboardInterrupt"`, and exit code `130`.
 A Worker maps cooperative cancellation to its existing terminal
 `state: "cancelled"`, exit code `3`, and top-level cancelled error.
 
@@ -588,6 +596,10 @@ the repeated runtime polling and cycles are not expanded into a static list.
 `:SINGle`, one Operation Status Condition query, the selected waveform capture
 SCPI, and one `:SYSTem:ERRor?`. It reports the finite requested count without
 statically repeating trigger polling or cycle SCPI.
+
+`measure-until` dry-run reports one representative polling iteration only:
+the selected canonical measurement query and one `:SYSTem:ERRor?`. It reports
+the finite timeout and relative interval without statically expanding polls.
 
 Capability JSON currently includes `series`, `analog_channels`,
 `default_waveform_points`, `safe_max_waveform_points`,

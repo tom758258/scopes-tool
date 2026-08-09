@@ -2726,6 +2726,158 @@ def test_worker_triggered_capture_series_uses_core_terminal_status_mapping():
     )
 
 
+def test_worker_measure_until_is_strict_and_uses_job_directory(tmp_path):
+    runtime = _runtime(tmp_path)
+    job_dir = tmp_path / "measure-until-job"
+    arguments = {
+        "channel": 1,
+        "item": "vpp",
+        "operator": "gt",
+        "threshold": 3.3,
+        "timeout_seconds": 600,
+        "interval_seconds": 1,
+    }
+
+    assert "measure-until" in worker.DOMAIN_COMMANDS
+    command, normalized, job_id = worker.validate_command_request(
+        {
+            "schema_version": worker.WORKER_SCHEMA_VERSION,
+            "command": "measure-until",
+            "arguments": arguments,
+        }
+    )
+    assert command == "measure-until"
+    assert normalized == arguments
+    assert job_id is None
+
+    parsed = worker.parse_domain_command(command, normalized, runtime, job_dir)
+
+    assert parsed.channel == 1
+    assert parsed.item == "vpp"
+    assert parsed.operator == "gt"
+    assert parsed.threshold == 3.3
+    assert parsed.timeout_seconds == 600
+    assert parsed.interval_seconds == 1
+    assert Path(parsed.output_dir) == job_dir
+    assert parsed.log_scpi is False
+
+
+@pytest.mark.parametrize(
+    "arguments, message",
+    [
+        ({"item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 1}, "requires argument channel"),
+        ({"channel": 1, "operator": "gt", "threshold": 1, "timeout_seconds": 1}, "requires argument item"),
+        ({"channel": 1, "item": "vpp", "threshold": 1, "timeout_seconds": 1}, "requires argument operator"),
+        ({"channel": 1, "item": "vpp", "operator": "gt", "timeout_seconds": 1}, "requires argument threshold"),
+        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": 1}, "requires argument timeout_seconds"),
+        ({"channel": [1], "item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 1}, "channel must be an integer"),
+        ({"channel": 1, "item": "vpp", "operator": "eq", "threshold": 1, "timeout_seconds": 1}, "operator must be exactly"),
+        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": True, "timeout_seconds": 1}, "threshold must be a finite number"),
+        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": float("inf"), "timeout_seconds": 1}, "threshold must be a finite number"),
+        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 0}, "timeout_seconds must be greater than zero"),
+        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 1, "interval_seconds": -1}, "interval_seconds must be non-negative"),
+        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 1, "unknown": True}, "unknown argument"),
+    ],
+)
+def test_worker_measure_until_rejects_invalid_arguments(arguments, message):
+    with pytest.raises(OscilloscopeError, match=message):
+        worker.validate_command_request(
+            {
+                "schema_version": worker.WORKER_SCHEMA_VERSION,
+                "command": "measure-until",
+                "arguments": arguments,
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "extra_arguments",
+    [
+        {"output_dir": "escape"},
+        {"log_scpi": True},
+        {"item": "phase"},
+        {"item": "y_at_x"},
+        {"channel": 5},
+    ],
+)
+def test_worker_measure_until_rejects_invalid_public_contract_before_artifacts(
+    monkeypatch, tmp_path, extra_arguments
+):
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(
+        cli.Oscilloscope,
+        "open",
+        staticmethod(
+            lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("opened"))
+        ),
+    )
+    arguments = {
+        "channel": 1,
+        "item": "vpp",
+        "operator": "gt",
+        "threshold": 3.3,
+        "timeout_seconds": 10,
+        **extra_arguments,
+    }
+
+    with _worker_server(runtime):
+        status, payload = _post_command(
+            runtime,
+            {
+                "command": "measure-until",
+                "arguments": arguments,
+                "job_id": "invalid-measure-until",
+            },
+        )
+
+    assert status == 400
+    assert payload["status"] == "error"
+    assert payload["error"] == "validation_error"
+    assert runtime.accepted == 0
+    assert runtime.jobs == {}
+    assert not (tmp_path / runtime.run_id).exists()
+
+
+def test_worker_executes_measure_until_with_owned_artifacts(tmp_path):
+    artifact_path = tmp_path / "measure-until-execution"
+    job, result = _execute_worker_job(
+        _runtime(tmp_path),
+        "measure-until",
+        {
+            "channel": 1,
+            "item": "vpp",
+            "operator": "gt",
+            "threshold": 0,
+            "timeout_seconds": 1,
+            "interval_seconds": 0,
+        },
+        artifact_path,
+    )
+
+    assert job.state == "succeeded"
+    assert result["state"] == "succeeded"
+    assert result["result"]["status"] == "completed"
+    assert result["result"]["termination_reason"] == "condition_met"
+    assert (artifact_path / "measurements.csv").exists()
+    assert (artifact_path / "manifest.json").exists()
+    assert (artifact_path / "scpi.log").exists()
+
+
+@pytest.mark.parametrize(
+    "status, expected",
+    [
+        ("completed", "completed"),
+        ("cancelled", "cancelled"),
+        ("error", "error"),
+        ("instrument_error", "instrument_error"),
+    ],
+)
+def test_worker_measure_until_uses_core_terminal_status_mapping(status, expected):
+    payload = {"result": {"status": status}}
+
+    assert worker._core_workflow_result_status("measure-until", payload) == expected
+
+
 @pytest.mark.parametrize(
     "arguments, message",
     [

@@ -360,7 +360,8 @@ Core owns runtime behavior:
 
 Workflow Foundation v1 is a small synchronous Core layer used by
 `measure-log`, Periodic Capture v1 through `capture-batch`, Triggered
-Measurement Loop v1, Triggered Capture Series v1, and Generic Sequence v1.
+Measurement Loop v1, Triggered Capture Series v1, Measure Until Condition v1,
+and Generic Sequence v1.
 `StopRequested`, `WorkflowProgress`,
 `ProgressReporter`, and `interruptible_wait()` provide optional cooperative
 cancellation and progress without an async runtime, scheduler, persistence
@@ -394,6 +395,13 @@ manifest update succeed, and preserves earlier committed cycles. See
 [Triggered Capture Series v1](triggered-capture-series.md) and
 [繁體中文](triggered-capture-series.zh-TW.md).
 
+Measure Until Condition v1 repeatedly queries one existing non-parameterized
+single-channel measurement until one of four numeric comparisons matches. It
+persists every completed sample, treats invalid measurement sentinels as
+non-matching `NaN`, and treats an unmet finite timeout as failure. See
+[Measure Until Condition v1](measure-until.md) and
+[繁體中文](measure-until.zh-TW.md).
+
 Generic Sequence v1 validates a strict JSON document, then runs existing Core
 operations in finite loop/step order. It supports `wait`, `single`,
 `wait-trigger`, `measure`, `capture`, `screenshot`, and `cleanup`. Trigger wait
@@ -404,7 +412,7 @@ v1](sequence.md) and [繁體中文](sequence.zh-TW.md).
 Finite termination precedence is `instrument_error > completed > cancelled`.
 Cooperative cancellation returns Core status `cancelled`, a null error, and
 exit code 130 only while finite work remains. A stop request observed after the
-count or duration completion condition is satisfied does not replace
+count, duration, or measurement condition is satisfied does not replace
 `completed`. `KeyboardInterrupt` remains `interrupted` with error
 `KeyboardInterrupt`.
 
@@ -428,6 +436,7 @@ script documentation, Worker persistence, or WebUI presentation.
   `triggered-measure-loop.zh-TW.md`
 - Triggered Capture Series v1: `triggered-capture-series.md`,
   `triggered-capture-series.zh-TW.md`
+- Measure Until Condition v1: `measure-until.md`, `measure-until.zh-TW.md`
 - Generic Sequence v1: `sequence.md`, `sequence.zh-TW.md`
 - Supported model profiles: `supported-models.md`
 - Shared CLI, worker, and orchestrator contracts: `../contracts/`

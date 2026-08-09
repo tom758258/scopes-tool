@@ -73,6 +73,32 @@ The Worker owns the job artifact directory. Orchestrators must not send
 `output_dir` or `log_scpi`. A cycle is committed only after waveform artifacts,
 the post-capture system-error check, and the manifest update succeed.
 
+## Measure Until Condition
+
+Measure Until Condition uses the machine-facing CLI and Worker command
+`measure-until`, which delegates to Core `MeasureUntilRequest` and
+`run_measure_until()`. It observes one existing non-parameterized
+single-channel measurement without controlling acquisition or trigger state.
+
+```json
+{
+  "schema_version": 2,
+  "command": "measure-until",
+  "arguments": {
+    "channel": 1,
+    "item": "vpp",
+    "operator": "gt",
+    "threshold": 3.3,
+    "timeout_seconds": 600,
+    "interval_seconds": 1
+  }
+}
+```
+
+The Worker owns the job artifact directory. Orchestrators must not send
+`output_dir` or `log_scpi`. A matching committed sample succeeds with
+`condition_met`; an unmet timeout fails with `condition_timeout`.
+
 ## Worker Workflow
 
 Scopes is a queued-job Worker with a startup-bound execution context. Live

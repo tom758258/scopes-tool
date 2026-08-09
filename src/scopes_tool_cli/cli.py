@@ -127,6 +127,11 @@ from scopes_tool_core.triggered_capture import (
     plan_triggered_capture_series,
     run_triggered_capture_series,
 )
+from scopes_tool_core.measure_until import (
+    MeasureUntilRequest,
+    plan_measure_until,
+    run_measure_until,
+)
 from scopes_tool_core.output_files import (
     capture_output_paths,
     default_capture_csv_path,
@@ -2822,6 +2827,56 @@ def _build_parser() -> argparse.ArgumentParser:
         help="abort logging immediately if an instrument system error is detected",
     )
 
+    measure_until_parser = subparsers.add_parser(
+        "measure-until",
+        allow_abbrev=False,
+        help="query one measurement until a numeric condition matches or times out",
+    )
+    _add_scope_connection_args(measure_until_parser)
+    measure_until_parser.add_argument(
+        "--channel",
+        type=_positive_int,
+        required=True,
+        help="one analog channel number",
+    )
+    measure_until_parser.add_argument(
+        "--item",
+        required=True,
+        help="one non-parameterized single-channel measurement item",
+    )
+    measure_until_parser.add_argument(
+        "--operator",
+        choices=("gt", "gte", "lt", "lte"),
+        required=True,
+        help="numeric comparison operator",
+    )
+    measure_until_parser.add_argument(
+        "--threshold",
+        type=_measurement_finite_float,
+        required=True,
+        help="finite threshold in the measurement item's native unit",
+    )
+    measure_until_parser.add_argument(
+        "--timeout-seconds",
+        type=_positive_plain_float,
+        required=True,
+        help="positive finite workflow timeout",
+    )
+    measure_until_parser.add_argument(
+        "--interval-seconds",
+        type=_nonnegative_finite_float,
+        default=1.0,
+        help="interruptible wait after a persisted non-matching sample; defaults to 1.0",
+    )
+    measure_until_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help=(
+            "workflow run directory; defaults to "
+            "data/measure_until/<UTC+8 timestamp>"
+        ),
+    )
+
     triggered_measure_loop_parser = subparsers.add_parser(
         "triggered-measure-loop",
         allow_abbrev=False,
@@ -3734,6 +3789,8 @@ def _dispatch_command(
         return _cmd_capture_batch(args, stop_requested=stop_requested)
     if args.command == "measure-log":
         return _cmd_measure_log(args, stop_requested=stop_requested)
+    if args.command == "measure-until":
+        return _cmd_measure_until(args, stop_requested=stop_requested)
     if args.command == "triggered-measure-loop":
         return _cmd_triggered_measure_loop(args, stop_requested=stop_requested)
     if args.command == "triggered-capture-series":
@@ -4106,6 +4163,13 @@ def _print_text_dry_run_payload(payload: dict[str, object]) -> None:
 
 
 def _print_text_dry_run_summary(command: str, result: dict[str, object]) -> None:
+    if command == "measure-until":
+        print(
+            "Planned measure until condition: "
+            f"CH{result.get('channel')} {result.get('item')} "
+            f"{result.get('operator')} {result.get('threshold')}"
+        )
+        return
     if command == "triggered-capture-series":
         print(
             "Planned triggered capture series: "
@@ -5738,6 +5802,21 @@ def _utc_timestamp() -> str:
 
 def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
     command = args.command
+    if command == "measure-until":
+        plan = plan_measure_until(
+            MeasureUntilRequest(
+                channel=args.channel,
+                item=args.item,
+                operator=args.operator,
+                threshold=args.threshold,
+                timeout_seconds=args.timeout_seconds,
+                interval_seconds=args.interval_seconds,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            capabilities,
+        )
+        return list(plan.planned_scpi), list(plan.files), plan.result
     if command == "triggered-capture-series":
         plan = plan_triggered_capture_series(
             TriggeredCaptureSeriesRequest(
@@ -11760,6 +11839,41 @@ def _cmd_measure_log(
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
+        return operation_result.exit_code
+
+
+def _cmd_measure_until(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    with _open_scope(args, resource) as scope:
+        operation_result = run_measure_until(
+            scope,
+            resource,
+            MeasureUntilRequest(
+                channel=args.channel,
+                item=args.item,
+                operator=args.operator,
+                threshold=args.threshold,
+                timeout_seconds=args.timeout_seconds,
+                interval_seconds=args.interval_seconds,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            stop_requested=stop_requested,
+        )
+        if operation_result.idn is not None:
+            _json_record_scope(scope, operation_result.idn)
+        _apply_operation_result(operation_result)
+        for line in operation_result.human_lines:
+            print(line)
+        if operation_result.result.get("status") == "interrupted":
+            print("error: interrupted", file=sys.stderr)
         return operation_result.exit_code
 
 

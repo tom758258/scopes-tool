@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Adds the finite `measure-until` Core workflow with CLI and Common v2 Worker
+  adapters, condition and timeout terminal semantics, measurement artifacts,
+  cooperative cancellation, and representative-iteration dry-run planning.
 - Adds the finite `triggered-capture-series` Core workflow with CLI and Common
   v2 Worker adapters, natural trigger waiting, waveform artifacts, strict
   completion accounting, and representative-cycle dry-run planning.
