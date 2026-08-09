@@ -2930,50 +2930,90 @@ def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
     runtime = _runtime(tmp_path)
     worker_thread = threading.Thread(target=worker._job_loop, args=(runtime,), daemon=True)
     worker_thread.start()
+    job = None
 
     with _worker_server(runtime):
-        status, accepted = _post_command(
-            runtime,
-            {
-                "command": "triggered-measure-loop",
-                "arguments": {
-                    "channel": [1],
-                    "items": "vpp",
-                    "count": 3,
-                    "trigger_timeout_seconds": 1,
-                    "interval_seconds": 30,
+        try:
+            status, accepted = _post_command(
+                runtime,
+                {
+                    "command": "triggered-measure-loop",
+                    "arguments": {
+                        "channel": [1],
+                        "items": "vpp",
+                        "count": 3,
+                        "trigger_timeout_seconds": 1,
+                        "interval_seconds": 30,
+                    },
+                    "job_id": "cancel-triggered-loop",
                 },
-                "job_id": "cancel-triggered-loop",
-            },
-        )
-        assert status == 202
-        artifact_path = Path(accepted["artifact_path"])
-        manifest_path = artifact_path / "manifest.json"
-        deadline = time.monotonic() + 2
-        completed_count = 0
-        while time.monotonic() < deadline:
-            if manifest_path.exists():
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                completed_count = manifest["completed_count"]
-                if completed_count == 1:
-                    break
-            time.sleep(0.01)
-        assert completed_count == 1
+            )
+            assert status == 202
+            job = runtime.jobs[accepted["worker_job_id"]]
+            artifact_path = Path(accepted["artifact_path"])
+            manifest_path = artifact_path / "manifest.json"
+            deadline = time.monotonic() + 2
+            completed_count = None
+            last_observation = "manifest was not created"
+            while time.monotonic() < deadline:
+                if manifest_path.exists():
+                    try:
+                        manifest = json.loads(
+                            manifest_path.read_text(encoding="utf-8")
+                        )
+                    except json.JSONDecodeError as exc:
+                        last_observation = f"transient JSON decode error: {exc}"
+                    else:
+                        assert isinstance(manifest, dict), (
+                            "manifest must contain a JSON object"
+                        )
+                        assert "completed_count" in manifest, (
+                            "manifest must contain completed_count"
+                        )
+                        observed_count = manifest["completed_count"]
+                        assert (
+                            isinstance(observed_count, int)
+                            and not isinstance(observed_count, bool)
+                        ), "manifest completed_count must be an integer"
+                        assert observed_count in (0, 1), (
+                            "manifest completed_count must be 0 or 1 before stop"
+                        )
+                        completed_count = observed_count
+                        last_observation = f"completed_count={observed_count}"
+                        if completed_count == 1:
+                            break
+                time.sleep(0.01)
+            assert completed_count == 1, (
+                "manifest did not reach completed_count=1 before deadline; "
+                f"last observation: {last_observation}"
+            )
 
-        request = urlrequest.Request(
-            f"http://127.0.0.1:{runtime.port}/stop",
-            data=b"{}",
-            method="POST",
-            headers={"Content-Type": "application/json"},
-        )
-        with urlrequest.urlopen(request, timeout=2) as response:
-            assert response.status == 202
+            request = urlrequest.Request(
+                f"http://127.0.0.1:{runtime.port}/stop",
+                data=b"{}",
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urlrequest.urlopen(request, timeout=2) as response:
+                assert response.status == 202
 
-        job = runtime.jobs[accepted["worker_job_id"]]
-        deadline = time.monotonic() + 2
-        while job.state == "running" and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert job.state == "cancelled"
+            deadline = time.monotonic() + 2
+            while job.state == "running" and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert job.state == "cancelled"
+        finally:
+            runtime.stopping = True
+            if job is not None and job.state in {"queued", "running"}:
+                job.cancel_requested = True
+                deadline = time.monotonic() + 2
+                while (
+                    job.state in {"queued", "running"}
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.01)
+                assert job.state not in {"queued", "running"}, (
+                    "worker job did not finish after cleanup cancellation"
+                )
 
     result = json.loads((artifact_path / "result.json").read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
