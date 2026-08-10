@@ -2527,3 +2527,34 @@ and other instrument errors remain failures.
 
 The runner's hardware-free preflight checks the required CLI paths only. It is
 not live validation evidence.
+
+#### Segmented Memory Live Validation
+
+Run the optional, license-dependent Segmented Memory validation separately:
+
+```powershell
+.\scripts\live-segmented-check.ps1 -Resource "<VISA_RESOURCE>"
+```
+
+Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output,
+confirm that a stable waveform is visible, and ensure the oscilloscope can
+trigger reliably from that signal. The acquisition mode must be `realtime`
+before the runner starts. After identifying the instrument and checking this
+read-only precondition, the runner displays an operator gate and waits for
+Enter before making any Segmented Memory state change.
+
+The runner temporarily enters Segmented Memory mode, performs a finite BYTE
+capture with two segments, and writes the live capture artifacts under its run
+directory. Cleanup returns the acquisition mode to `realtime`; a cleanup
+failure or non-empty final system error queue makes the validation fail.
+
+Segmented Memory availability may depend on an instrument option or license.
+When the first enable attempt reports the specific missing-hardware condition
+and the error queue is otherwise clean, the runner reports
+`SKIP / NOT AVAILABLE` instead of a validation failure and does not continue
+to the capture case. Transport failures, timeouts, malformed responses, and
+other instrument errors remain failures.
+
+The runner's hardware-free preflight checks the required CLI paths only and
+does not create simulated capture artifacts. It is not live validation
+evidence.
