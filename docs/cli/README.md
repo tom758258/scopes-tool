@@ -233,10 +233,20 @@ The wrapper creates an isolated pytest temporary directory, removes it after a
 successful run, and preserves it after a failure for inspection. Additional
 pytest arguments can be passed after the script path.
 
-PyVISA will use the default VISA backend discovered on the computer. On the
-instrument computer, the preferred backend is the installed Keysight IO
-Libraries vendor VISA backend. `pyvisa-py` is a fallback for systems without a
-usable vendor backend.
+Without `--visa-library`, PyVISA uses `pyvisa.ResourceManager()` and the
+default System VISA runtime discovered on the computer. The generic
+`--visa-library` option passes an explicit selector unchanged to PyVISA, so
+`@py` is recognized as the `pyvisa_py` identity, `@bt` as `pyvisa_bt`, and
+other non-empty selectors as `custom_visa`.
+
+Recognition only identifies the selected backend. It does not install the
+backend or establish Scopes Tool support for it. An explicit `@bt` reaches
+`pyvisa.ResourceManager("@bt")`, but it can load only when the environment
+provides the corresponding backend. Scopes Tool does not bundle `pyvisa_bt`,
+provide a Bluetooth runtime or service, or claim live Bluetooth instrument
+support. On the instrument computer, the preferred live path remains the
+installed Keysight IO Libraries vendor VISA backend; `pyvisa-py` is an
+environment-provided alternative.
 
 ## Agent-safe Automation
 

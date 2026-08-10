@@ -10,12 +10,29 @@ from .log import get_logger
 
 
 ASRL_VERIFY_TIMEOUT_MS = 1000
+BACKEND_SYSTEM_VISA = "system_visa"
+BACKEND_PYVISA_PY = "pyvisa_py"
+BACKEND_PYVISA_BT = "pyvisa_bt"
+BACKEND_CUSTOM_VISA = "custom_visa"
 _SERIAL_TERMINATION_VALUES = {
     "CRLF": "\r\n",
     "LF": "\n",
     "CR": "\r",
     "NONE": None,
 }
+
+
+def normalize_backend(visa_library: str | None) -> str:
+    """Return the canonical identity for a PyVISA library selector."""
+
+    normalized = (visa_library or "").strip().lower()
+    if not normalized or normalized == BACKEND_SYSTEM_VISA:
+        return BACKEND_SYSTEM_VISA
+    if normalized in {"@py", BACKEND_PYVISA_PY}:
+        return BACKEND_PYVISA_PY
+    if normalized in {"@bt", BACKEND_PYVISA_BT}:
+        return BACKEND_PYVISA_BT
+    return BACKEND_CUSTOM_VISA
 
 
 @dataclass(frozen=True)

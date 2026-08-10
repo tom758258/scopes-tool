@@ -285,6 +285,19 @@ def test_list_resources_cli_prints_backend_and_resources(monkeypatch, capsys):
     assert "USB0::0x2A8D::FAKE::INSTR" in out
 
 
+def test_list_resources_cli_passes_visa_library_selector_unchanged(monkeypatch):
+    selectors = []
+
+    def fake_list_visa_resources(visa_library=None):
+        selectors.append(visa_library)
+        return VisaResourceListing(resources=(), backend="Test VISA backend")
+
+    monkeypatch.setattr(cli, "list_visa_resources", fake_list_visa_resources)
+
+    assert cli.main(["list-resources", "--visa-library", "@bt"]) == 0
+    assert selectors == ["@bt"]
+
+
 def test_list_resources_cli_is_passive_and_lists_all_resource_types(monkeypatch, capsys):
     def fake_list_visa_resources(visa_library=None):
         assert visa_library is None

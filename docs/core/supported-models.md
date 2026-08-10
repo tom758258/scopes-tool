@@ -35,6 +35,15 @@ resolved from the detected `*IDN?` identity; planning and expected identities
 cannot override it. Unknown vendors, physical models, or missing or
 unregistered driver IDs fail closed.
 
+## VISA Backend Boundary
+
+Backend identity is not a model capability or a support declaration. Core
+classifies an unset or blank selector as `system_visa`, `@py` as `pyvisa_py`,
+`@bt` as `pyvisa_bt`, and any other non-empty selector as `custom_visa`.
+Scopes Tool does not currently define an exact backend support policy, and no
+existing model capability becomes Bluetooth-supported because `@bt` is
+recognized. There is no current Scopes live Bluetooth support scope.
+
 ## Runtime Profiles
 
 Core resolves live `*IDN?` manufacturer and model fields to a canonical

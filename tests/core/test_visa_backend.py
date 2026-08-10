@@ -6,9 +6,14 @@ import pytest
 from scopes_tool_core.errors import VisaBackendError
 from scopes_tool_core.visa_backend import (
     ASRL_VERIFY_TIMEOUT_MS,
+    BACKEND_CUSTOM_VISA,
+    BACKEND_PYVISA_BT,
+    BACKEND_PYVISA_PY,
+    BACKEND_SYSTEM_VISA,
     VisaBackend,
     is_asrl_resource,
     list_visa_resources,
+    normalize_backend,
     normalize_serial_termination,
     verify_asrl_resource_live,
 )
@@ -75,6 +80,44 @@ def _install_fake_pyvisa(monkeypatch, factory):
         SimpleNamespace(ResourceManager=resource_manager),
     )
     return calls
+
+
+@pytest.mark.parametrize(
+    ("visa_library", "expected"),
+    [
+        (None, BACKEND_SYSTEM_VISA),
+        ("", BACKEND_SYSTEM_VISA),
+        ("   ", BACKEND_SYSTEM_VISA),
+        ("@py", BACKEND_PYVISA_PY),
+        ("@bt", BACKEND_PYVISA_BT),
+        ("@ivi", BACKEND_CUSTOM_VISA),
+        ("system_visa", BACKEND_SYSTEM_VISA),
+        ("pyvisa_py", BACKEND_PYVISA_PY),
+        ("pyvisa_bt", BACKEND_PYVISA_BT),
+        ("custom_visa", BACKEND_CUSTOM_VISA),
+    ],
+)
+def test_normalize_backend_returns_canonical_identity(visa_library, expected):
+    assert normalize_backend(visa_library) == expected
+
+
+@pytest.mark.parametrize(
+    ("visa_library", "expected_args"),
+    [
+        (None, ()),
+        ("@py", ("@py",)),
+        ("@bt", ("@bt",)),
+    ],
+)
+def test_list_visa_resources_preserves_resource_manager_selector(
+    monkeypatch, visa_library, expected_args
+):
+    manager = _FakeResourceManager()
+    calls = _install_fake_pyvisa(monkeypatch, lambda *args: manager)
+
+    list_visa_resources(visa_library)
+
+    assert calls == [expected_args]
 
 
 def test_list_visa_resources_uses_pyvisa_resource_manager_and_closes(monkeypatch):

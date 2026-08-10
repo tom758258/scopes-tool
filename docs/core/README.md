@@ -356,6 +356,22 @@ Core owns runtime behavior:
   DSO-X 3000X and 4000X profiles enable 50 ohm channel impedance support;
   DSO-X 2000X profiles keep channel impedance guarded to one-meg only.
 
+## VISA Backend Identity
+
+Core normalizes PyVISA library selectors into backend identities without
+changing the selector used at runtime. An unset or blank selector maps to
+`system_visa`, `@py` maps to `pyvisa_py`, `@bt` maps to `pyvisa_bt`, and any
+other non-empty selector maps to `custom_visa`. The canonical identity names
+remain unchanged when normalized again.
+
+This classification is separate from PyVISA backend availability and Scopes
+Tool support. When no selector is supplied, Core calls
+`pyvisa.ResourceManager()`. An explicit selector is passed unchanged, including
+`pyvisa.ResourceManager("@py")` or `pyvisa.ResourceManager("@bt")`, and PyVISA
+can load it only when the corresponding backend is installed in the runtime
+environment. Scopes Tool does not bundle `pyvisa_bt`, provide a Bluetooth
+runtime or service, or claim live Bluetooth instrument support.
+
 ## Workflow Foundation
 
 Workflow Foundation v1 is a small synchronous Core layer used by
