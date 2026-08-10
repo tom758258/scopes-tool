@@ -2501,3 +2501,28 @@ FAIL.
 
 Hardware-free preflight and automated tests are not live validation evidence.
 Run this script on the prepared instrument before claiming a live PASS.
+
+#### DVM Live Validation
+
+Run the optional, license-dependent DVM validation separately from the baseline:
+
+```powershell
+.\scripts\live-dvm-check.ps1 -Resource "<VISA_RESOURCE>"
+```
+
+Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
+confirm that a stable waveform is present before continuing through the
+operator gate. The runner temporarily changes DVM settings, and DVM Auto Range
+may also adjust the CH1 vertical scale and offset. It attempts to restore the
+original DVM settings and the CH1 scale and offset through the existing public
+CLI.
+
+DVM availability depends on the instrument option or license. When the
+read-only availability probe reports the specific missing-hardware condition
+for an unavailable or unlicensed feature, the runner reports
+`SKIP / NOT AVAILABLE` instead of a validation failure and performs no
+state-changing DVM test. Transport failures, timeouts, malformed responses,
+and other instrument errors remain failures.
+
+The runner's hardware-free preflight checks the required CLI paths only. It is
+not live validation evidence.
