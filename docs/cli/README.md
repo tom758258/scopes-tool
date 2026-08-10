@@ -2469,3 +2469,35 @@ instrument model and transport:
 
 Do not scan or rotate through resources inside an active live workflow. Use one
 explicit resource selected by the operator for the whole workflow.
+
+### Live CLI Validation
+
+Run the maintained manual baseline for registered Keysight InfiniiVision
+oscilloscopes with an explicit VISA resource:
+
+```powershell
+.\scripts\live-cli-check.ps1 -Resource "<VISA_RESOURCE>"
+```
+
+Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
+confirm that a stable waveform is visible before running the script. After its
+hardware-free preflight, the runner displays the detected instrument and
+resource and waits for Enter before starting any state-changing validation.
+Use Ctrl+C at that gate to cancel.
+
+The runner temporarily changes acquisition, CH1 display and coupling,
+timebase, Edge Trigger, and waveform transfer settings. It promises to restore
+the acquisition type and applicable average count, CH1 display and coupling,
+timebase scale and position, Edge source and slope, and CH1 Edge level. It does
+not modify the run/stop state.
+
+The original generic trigger mode cannot be restored through the existing
+public CLI, so the instrument may remain in Edge mode. Waveform source, format,
+and points are transfer-session settings without an existing public restore
+path; they are not restored, and the transfer format may remain WORD. These
+documented limitations do not make cleanup fail, but any promised restoration
+failure does. The final system error queue must be clean or the run reports
+FAIL.
+
+Hardware-free preflight and automated tests are not live validation evidence.
+Run this script on the prepared instrument before claiming a live PASS.

@@ -11,6 +11,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$modelIds = @{
+    "DSOX4024A" = "keysight-dsox4024a"
+    "DSOX4034A" = "keysight-dsox4034a"
+    "DSOX3024A" = "keysight-dsox3024a"
+    "DSOX2004A" = "keysight-dsox2004a"
+}
+
 function Invoke-Cli {
     param(
         [Parameter(Mandatory = $true)]
@@ -58,6 +65,7 @@ if (-not (Get-Command $Python -ErrorAction SilentlyContinue)) {
 }
 
 foreach ($targetModel in $Model) {
+    $modelId = $modelIds[$targetModel]
     $outputDir = Join-Path $OutputRoot $targetModel
     $reportPath = Join-Path $outputDir "report.json"
     $summaryPath = Join-Path $outputDir "summary.md"
@@ -69,7 +77,7 @@ foreach ($targetModel in $Model) {
         "--dry-run",
         "--json",
         "--model",
-        $targetModel,
+        $modelId,
         "--output-dir",
         $outputDir
     )
@@ -85,7 +93,7 @@ foreach ($targetModel in $Model) {
         "--simulate",
         "--json",
         "--model",
-        $targetModel,
+        $modelId,
         "--output-dir",
         $outputDir
     )
