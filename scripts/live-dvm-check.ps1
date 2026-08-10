@@ -687,6 +687,8 @@ if ($null -ne $dvmSnapshot -and -not $script:FunctionalFailed) {
     Write-Host "Required setup:"
     Write-Host "  - Connect the CH1 probe to the oscilloscope Probe Demo / Probe Comp output."
     Write-Host "  - Confirm a stable waveform is present on CH1."
+    Write-Host "  - Ensure CH1 is not currently used as the oscilloscope trigger source while"
+    Write-Host "    validating DVM Auto Range."
     Write-Host "  - This test will temporarily change DVM settings and may adjust CH1 scale"
     Write-Host "    and offset while DVM Auto Range is enabled."
     Write-Host "  - The original DVM settings and CH1 scale/offset will be restored where"

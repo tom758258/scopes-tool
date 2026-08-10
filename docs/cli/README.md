@@ -2512,10 +2512,11 @@ Run the optional, license-dependent DVM validation separately from the baseline:
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
 confirm that a stable waveform is present before continuing through the
-operator gate. The runner temporarily changes DVM settings, and DVM Auto Range
-may also adjust the CH1 vertical scale and offset. It attempts to restore the
-original DVM settings and the CH1 scale and offset through the existing public
-CLI.
+operator gate. Ensure CH1 is not currently used as the oscilloscope trigger
+source before continuing. The runner temporarily changes DVM settings, and DVM
+Auto Range may also adjust the CH1 vertical scale and offset. It attempts to
+restore the original DVM settings and the CH1 scale and offset through the
+existing public CLI.
 
 DVM availability depends on the instrument option or license. When the
 read-only availability probe reports the specific missing-hardware condition
