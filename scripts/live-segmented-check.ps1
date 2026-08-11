@@ -274,7 +274,11 @@ function Get-ErrorDrain {
         throw "${Stage}: check-error JSON did not contain result data."
     }
     $entriesProperty = $resultProperty.Value.PSObject.Properties["entries"]
-    $entries = if ($null -eq $entriesProperty) { @() } else { @($entriesProperty.Value) }
+    $entries = @(
+        if ($null -ne $entriesProperty) {
+            $entriesProperty.Value
+        }
+    )
     $terminated = $entries.Count -gt 0 -and [int]$entries[-1].code -eq 0
     $errors = @($entries | Where-Object { [int]$_.code -ne 0 })
 

@@ -176,6 +176,142 @@ $failurePreference = [string]$ErrorActionPreference
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
+def test_get_error_drain_normalizes_entries_as_arrays(
+    tmp_path: Path,
+    script_path: Path,
+) -> None:
+    harness_path = tmp_path / f"{script_path.stem}-error-drain-harness.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
+}
+
+$functionAst = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Get-ErrorDrain"
+    )
+}, $true)
+if ($null -eq $functionAst) {
+    throw "Get-ErrorDrain was not found in ${ScriptPath}."
+}
+Invoke-Expression $functionAst.Extent.Text
+
+$script:PayloadIndex = 0
+$script:Payloads = @(
+    [pscustomobject]@{
+        result = [pscustomobject]@{
+            entries = @(
+                [pscustomobject]@{ code = 0; message = "No error" }
+            )
+        }
+    },
+    [pscustomobject]@{
+        result = [pscustomobject]@{
+            entries = @(
+                [pscustomobject]@{ code = -222; message = "known diagnostic" }
+            )
+        }
+    },
+    [pscustomobject]@{
+        result = [pscustomobject]@{
+            entries = @(
+                [pscustomobject]@{ code = -222; message = "known diagnostic" },
+                [pscustomobject]@{ code = 0; message = "No error" }
+            )
+        }
+    }
+)
+
+function Invoke-CliRaw {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $Arguments
+    )
+
+    $payload = $script:Payloads[$script:PayloadIndex]
+    $script:PayloadIndex += 1
+    return [pscustomobject]@{ Payload = $payload }
+}
+
+$Resource = "TEST::INSTR"
+$singletonClean = Get-ErrorDrain -Stage "singleton-clean"
+$singletonError = Get-ErrorDrain -Stage "singleton-error"
+$multipleEntries = Get-ErrorDrain -Stage "multiple-entries"
+
+[ordered]@{
+    clean_entries_count = $singletonClean.Entries.Count
+    clean_errors_count = $singletonClean.Errors.Count
+    clean_terminated = $singletonClean.Terminated
+    error_entries_count = $singletonError.Entries.Count
+    error_errors_count = $singletonError.Errors.Count
+    error_terminated = $singletonError.Terminated
+    error_code = $singletonError.Errors[0].code
+    error_message = $singletonError.Errors[0].message
+    multiple_entries_count = $multipleEntries.Entries.Count
+    multiple_errors_count = $multipleEntries.Errors.Count
+    multiple_terminated = $multipleEntries.Terminated
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["clean_entries_count"] == 1
+    assert result["clean_errors_count"] == 0
+    assert result["clean_terminated"] is True
+    assert result["error_entries_count"] == 1
+    assert result["error_errors_count"] == 1
+    assert result["error_terminated"] is False
+    assert result["error_code"] == -222
+    assert result["error_message"] == "known diagnostic"
+    assert result["multiple_entries_count"] == 2
+    assert result["multiple_errors_count"] == 1
+    assert result["multiple_terminated"] is True
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+@pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
 def test_live_summary_preserves_results_and_diagnostics(
     tmp_path: Path,
     script_path: Path,
