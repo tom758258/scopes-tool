@@ -226,6 +226,30 @@ foreach ($functionName in @(
     Invoke-Expression $functionAst.Extent.Text
 }
 
+foreach ($drainBlock in @(
+    [pscustomobject]@{
+        VariableName = "StaleDrainBlock"
+        Stage = "stale-error-drain"
+    },
+    [pscustomobject]@{
+        VariableName = "FinalDrainBlock"
+        Stage = "final-error-queue"
+    }
+)) {
+    $expectedText = "Get-ErrorDrain -Stage `"$($drainBlock.Stage)`""
+    $matchingBlocks = @($ast.FindAll({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.TryStatementAst] -and
+            $node.Extent.Text.Contains($expectedText)
+        )
+    }, $true))
+    if ($matchingBlocks.Count -ne 1) {
+        throw "Expected one $($drainBlock.Stage) try block in ${ScriptPath}."
+    }
+    Set-Variable -Name $drainBlock.VariableName -Value $matchingBlocks[0].Extent.Text
+}
+
 $supportsSkip = [System.IO.Path]::GetFileName($ScriptPath) -ne "live-cli-check.ps1"
 
 $script:RunRoot = Join-Path $OutputRoot "pass"
@@ -271,6 +295,37 @@ Write-DrainErrors -Errors @(
 ) -CaseName "final-error-queue"
 Write-Summary -Result "FAIL"
 
+function Get-ErrorDrain {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage
+    )
+
+    $errorEntry = switch ($Stage) {
+        "stale-error-drain" {
+            [pscustomobject]@{ code = -350; message = "unterminated stale diagnostic" }
+        }
+        "final-error-queue" {
+            [pscustomobject]@{ code = -222; message = "unterminated final diagnostic" }
+        }
+        default {
+            throw "Unexpected drain stage: ${Stage}"
+        }
+    }
+    return [pscustomobject]@{
+        Errors = @($errorEntry)
+        Terminated = $false
+    }
+}
+
+$script:RunRoot = Join-Path $OutputRoot "final-unterminated"
+New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:FunctionalFailed = $false
+Invoke-Expression $FinalDrainBlock
+Write-Summary -Result "FAIL"
+
 if ($supportsSkip) {
     $script:RunRoot = Join-Path $OutputRoot "skip"
     New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
@@ -286,6 +341,14 @@ if ($supportsSkip) {
     ) -CaseName $caseName
     Write-Summary -Result "SKIP"
 }
+
+$script:RunRoot = Join-Path $OutputRoot "stale-unterminated"
+New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$initialDrainPassed = $false
+Invoke-Expression $StaleDrainBlock
+Write-Summary -Result "FAIL"
 """,
         encoding="utf-8",
     )
@@ -311,7 +374,8 @@ if ($supportsSkip) {
         check=False,
     )
 
-    assert completed.returncode == 0, completed.stderr
+    expected_returncode = 0 if script_path.name == "live-cli-check.ps1" else 1
+    assert completed.returncode == expected_returncode, completed.stderr
     assert "system error -222: known diagnostic" in completed.stdout
 
     pass_bytes = (output_root / "pass" / "summary.md").read_bytes()
@@ -335,6 +399,36 @@ if ($supportsSkip) {
     assert "| final-error-queue | FAIL |" in scpi_summary
     assert "Final error queue contained 1 error(s)." in scpi_summary
     assert "system error -222: known diagnostic" in scpi_summary
+
+    stale_unterminated_bytes = (
+        output_root / "stale-unterminated" / "summary.md"
+    ).read_bytes()
+    stale_unterminated_summary = stale_unterminated_bytes.decode("utf-8")
+    assert not stale_unterminated_bytes.startswith(b"\xef\xbb\xbf")
+    assert "Result: FAIL" in stale_unterminated_summary
+    assert "| stale-error-drain | FAIL |" in stale_unterminated_summary
+    assert (
+        "Initial error queue did not reach code 0 within 30 reads."
+        in stale_unterminated_summary
+    )
+    assert "system error -350: unterminated stale diagnostic" in (
+        stale_unterminated_summary
+    )
+
+    final_unterminated_bytes = (
+        output_root / "final-unterminated" / "summary.md"
+    ).read_bytes()
+    final_unterminated_summary = final_unterminated_bytes.decode("utf-8")
+    assert not final_unterminated_bytes.startswith(b"\xef\xbb\xbf")
+    assert "Result: FAIL" in final_unterminated_summary
+    assert "| final-error-queue | FAIL |" in final_unterminated_summary
+    assert (
+        "Final error queue did not reach code 0 within 30 reads."
+        in final_unterminated_summary
+    )
+    assert "system error -222: unterminated final diagnostic" in (
+        final_unterminated_summary
+    )
 
     if script_path.name != "live-cli-check.ps1":
         skip_bytes = (output_root / "skip" / "summary.md").read_bytes()

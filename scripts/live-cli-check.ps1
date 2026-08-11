@@ -644,12 +644,12 @@ try {
 $initialDrainPassed = $false
 try {
     $initialDrain = Get-ErrorDrain -Stage "stale-error-drain"
-    if (-not $initialDrain.Terminated) {
-        throw "Initial error queue did not reach code 0 within 30 reads."
-    }
     if ($initialDrain.Errors.Count -gt 0) {
         Write-Host "      drained $($initialDrain.Errors.Count) stale system error(s)"
         Write-DrainErrors -Errors $initialDrain.Errors -CaseName "stale-error-drain"
+    }
+    if (-not $initialDrain.Terminated) {
+        throw "Initial error queue did not reach code 0 within 30 reads."
     }
     Add-CaseResult -Name "stale-error-drain" -Passed $true
     $initialDrainPassed = $true
@@ -888,11 +888,13 @@ if ($snapshotComplete -and $stateChangeStarted) {
 
 try {
     $finalDrain = Get-ErrorDrain -Stage "final-error-queue"
+    if ($finalDrain.Errors.Count -gt 0) {
+        Write-DrainErrors -Errors $finalDrain.Errors -CaseName "final-error-queue"
+    }
     if (-not $finalDrain.Terminated) {
         throw "Final error queue did not reach code 0 within 30 reads."
     }
     if ($finalDrain.Errors.Count -gt 0) {
-        Write-DrainErrors -Errors $finalDrain.Errors -CaseName "final-error-queue"
         throw "Final error queue contained $($finalDrain.Errors.Count) error(s)."
     }
     Add-CaseResult -Name "final-error-queue" -Passed $true
