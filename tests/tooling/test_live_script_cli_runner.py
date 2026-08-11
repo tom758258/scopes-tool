@@ -33,8 +33,10 @@ import sys
 
 mode = sys.argv[1]
 print(json.dumps({"ok": True, "result": {"mode": mode}}))
-if mode == "nonempty-stderr":
-    print("known diagnostic", file=sys.stderr)
+if mode in {"nonempty-stderr", "failure-stderr"}:
+    print(f"known diagnostic: {mode}", file=sys.stderr)
+if mode == "failure-stderr":
+    sys.exit(7)
 """,
         encoding="utf-8",
     )
@@ -88,27 +90,34 @@ $Python = $PythonPath
 
 $empty = Invoke-CliRaw -Stage "empty-stderr" -Arguments @("empty-stderr")
 $emptyPath = Join-Path $RunRoot "cli-001-empty-stderr.stderr.txt"
+$emptyPreference = [string]$ErrorActionPreference
 
-$previousErrorActionPreference = $ErrorActionPreference
-# Windows PowerShell promotes native stderr to an error record under Stop.
-$ErrorActionPreference = "Continue"
-try {
-    $nonempty = Invoke-CliRaw -Stage "nonempty-stderr" -Arguments @("nonempty-stderr")
-} finally {
-    $ErrorActionPreference = $previousErrorActionPreference
-}
+$nonempty = Invoke-CliRaw -Stage "nonempty-stderr" -Arguments @("nonempty-stderr")
 $nonemptyPath = Join-Path $RunRoot "cli-002-nonempty-stderr.stderr.txt"
+$nonemptyPreference = [string]$ErrorActionPreference
+
+$failure = Invoke-CliRaw -Stage "failure-stderr" -Arguments @("failure-stderr")
+$failurePath = Join-Path $RunRoot "cli-003-failure-stderr.stderr.txt"
+$failurePreference = [string]$ErrorActionPreference
 
 [ordered]@{
     empty_exit_code = $empty.ExitCode
     empty_ok = $empty.Payload.ok
     empty_stderr = $empty.Stderr
     empty_artifact_exists = Test-Path -LiteralPath $emptyPath
+    empty_preference = $emptyPreference
     nonempty_exit_code = $nonempty.ExitCode
     nonempty_ok = $nonempty.Payload.ok
     nonempty_stderr = $nonempty.Stderr
     nonempty_artifact_exists = Test-Path -LiteralPath $nonemptyPath
     nonempty_artifact = [string](Get-Content -LiteralPath $nonemptyPath -Raw)
+    nonempty_preference = $nonemptyPreference
+    failure_exit_code = $failure.ExitCode
+    failure_mode = $failure.Payload.result.mode
+    failure_stderr = $failure.Stderr
+    failure_artifact_exists = Test-Path -LiteralPath $failurePath
+    failure_artifact = [string](Get-Content -LiteralPath $failurePath -Raw)
+    failure_preference = $failurePreference
 } | ConvertTo-Json -Depth 8 -Compress
 """,
         encoding="utf-8",
@@ -150,8 +159,16 @@ $nonemptyPath = Join-Path $RunRoot "cli-002-nonempty-stderr.stderr.txt"
     assert result["empty_ok"] is True
     assert result["empty_stderr"] == ""
     assert result["empty_artifact_exists"] is False
+    assert result["empty_preference"] == "Stop"
     assert result["nonempty_exit_code"] == 0
     assert result["nonempty_ok"] is True
-    assert "known diagnostic" in result["nonempty_stderr"]
+    assert "known diagnostic: nonempty-stderr" in result["nonempty_stderr"]
     assert result["nonempty_artifact_exists"] is True
-    assert "known diagnostic" in result["nonempty_artifact"]
+    assert "known diagnostic: nonempty-stderr" in result["nonempty_artifact"]
+    assert result["nonempty_preference"] == "Stop"
+    assert result["failure_exit_code"] == 7
+    assert result["failure_mode"] == "failure-stderr"
+    assert "known diagnostic: failure-stderr" in result["failure_stderr"]
+    assert result["failure_artifact_exists"] is True
+    assert "known diagnostic: failure-stderr" in result["failure_artifact"]
+    assert result["failure_preference"] == "Stop"

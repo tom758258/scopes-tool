@@ -75,8 +75,14 @@ function Invoke-CliRaw {
         "cli-{0:D3}-{1}.stderr.txt" -f $script:CliInvocationIndex, $safeStage
     )
 
-    $stdoutLines = @(& $Python -m scopes_tool_cli.cli @Arguments 2> $stderrPath)
-    $exitCode = $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $stdoutLines = @(& $Python -m scopes_tool_cli.cli @Arguments 2> $stderrPath)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     $stderrText = ""
     if (Test-Path -LiteralPath $stderrPath) {
         $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath $stderrPath -Raw)).Trim()
