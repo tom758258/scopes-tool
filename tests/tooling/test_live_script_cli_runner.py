@@ -19,7 +19,7 @@ LIVE_SCRIPTS = (
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
-def test_invoke_cli_raw_handles_empty_and_nonempty_stderr(
+def test_invoke_cli_raw_preserves_native_process_results(
     tmp_path: Path,
     script_path: Path,
 ) -> None:
