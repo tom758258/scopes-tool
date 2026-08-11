@@ -79,7 +79,7 @@ function Invoke-CliRaw {
     $exitCode = $LASTEXITCODE
     $stderrText = ""
     if (Test-Path -LiteralPath $stderrPath) {
-        $stderrText = (Get-Content -LiteralPath $stderrPath -Raw).Trim()
+        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath $stderrPath -Raw)).Trim()
         if ([string]::IsNullOrWhiteSpace($stderrText)) {
             Remove-Item -LiteralPath $stderrPath -Force
         }
