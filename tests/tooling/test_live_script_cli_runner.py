@@ -738,6 +738,404 @@ if (-not $stateGateOpen) {
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+@pytest.mark.parametrize(
+    (
+        "scenario",
+        "expected_status",
+        "expected_stages",
+        "expected_sleeps",
+    ),
+    [
+        (
+            "normal",
+            "PASS",
+            "configuration-enable,configuration-query-segmented,"
+            "configuration-disable,configuration-query-realtime",
+            "500",
+        ),
+        (
+            "transient-allowed",
+            "PASS",
+            "configuration-enable,configuration-query-segmented,"
+            "configuration-query-segmented-recovery-drain,"
+            "configuration-query-segmented-retry,configuration-disable,"
+            "configuration-query-realtime",
+            "500,500,500",
+        ),
+        (
+            "transient-clean",
+            "PASS",
+            "configuration-enable,configuration-query-segmented,"
+            "configuration-query-segmented-recovery-drain,"
+            "configuration-query-segmented-retry,configuration-disable,"
+            "configuration-query-realtime",
+            "500,500,500",
+        ),
+        (
+            "unexpected-recovery-error",
+            "FAIL",
+            "configuration-enable,configuration-query-segmented,"
+            "configuration-query-segmented-recovery-drain,"
+            "configuration-roundtrip-error-drain",
+            "500,500",
+        ),
+        (
+            "non-idn-timeout",
+            "FAIL",
+            "configuration-enable,configuration-query-segmented,"
+            "configuration-roundtrip-error-drain",
+            "500",
+        ),
+        (
+            "retry-failure",
+            "FAIL",
+            "configuration-enable,configuration-query-segmented,"
+            "configuration-query-segmented-recovery-drain,"
+            "configuration-query-segmented-retry,"
+            "configuration-roundtrip-error-drain",
+            "500,500,500",
+        ),
+    ],
+)
+def test_segmented_configuration_readback_recovery(
+    tmp_path: Path,
+    scenario: str,
+    expected_status: str,
+    expected_stages: str,
+    expected_sleeps: str,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-segmented-check.ps1"
+    harness_path = tmp_path / f"segmented-readback-{scenario}.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [string] $Scenario
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse Segmented live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @(
+    "Get-PayloadErrorText",
+    "Add-CaseResult",
+    "Add-Diagnostic",
+    "Get-InvocationFailureDetail",
+    "Get-RequiredResultValue",
+    "Get-ErrorDrain",
+    "Write-DrainErrors",
+    "Drain-AfterFailure",
+    "Invoke-SegmentedConfigurationReadback"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$enableAssignments = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Extent.Text.Contains('Invoke-CliRaw -Stage "configuration-enable"')
+    )
+}, $true))
+if ($enableAssignments.Count -ne 1) {
+    throw "Expected one production configuration-enable assignment."
+}
+
+$configurationBlocks = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.TryStatementAst] -and
+        $node.Extent.Text.Contains("Invoke-SegmentedConfigurationReadback") -and
+        $node.Extent.Text.Contains('Invoke-LiveCli -Stage "configuration-disable"')
+    )
+}, $true))
+if ($configurationBlocks.Count -ne 1) {
+    throw "Expected one production configuration roundtrip try block."
+}
+
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:Sleeps = New-Object System.Collections.Generic.List[int]
+$configurationPassed = $false
+$enableInvocation = $null
+$Resource = "TEST::INSTR"
+
+Write-DrainErrors -Errors @() -CaseName "empty-drain"
+$emptyDrainDiagnosticCount = $script:Diagnostics.Count
+
+function Start-Sleep {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int] $Milliseconds
+    )
+
+    $script:Sleeps.Add($Milliseconds)
+}
+
+function Invoke-CliRaw {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $Arguments
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Arguments[0]
+        arguments = @($Arguments)
+    })
+
+    $exitCode = 0
+    $payload = $null
+    switch ($Stage) {
+        "configuration-enable" {
+            $payload = [pscustomobject]@{ ok = $true; error = $null }
+        }
+        "configuration-query-segmented" {
+            if ($Scenario -eq "normal") {
+                $payload = [pscustomobject]@{
+                    ok = $true
+                    error = $null
+                    result = [pscustomobject]@{
+                        mode = "segmented"
+                        configured_segments = 2
+                    }
+                }
+            } else {
+                $exitCode = if ($Scenario -eq "non-idn-timeout") { 0 } else { 1 }
+                $message = if ($Scenario -eq "non-idn-timeout") {
+                    "VISA query failed for ':WAVeform:DATA?': VI_ERROR_TMO"
+                } else {
+                    "VISA query failed for '*IDN?': VI_ERROR_TMO"
+                }
+                $payload = [pscustomobject]@{
+                    ok = $false
+                    error = [pscustomobject]@{
+                        type = "VisaBackendError"
+                        message = $message
+                    }
+                }
+            }
+        }
+        "configuration-query-segmented-recovery-drain" {
+            $entries = switch ($Scenario) {
+                "transient-allowed" {
+                    @(
+                        [pscustomobject]@{ code = -221; message = "Settings conflict" },
+                        [pscustomobject]@{ code = -420; message = "Query UNTERMINATED" },
+                        [pscustomobject]@{ code = 0; message = "No error" }
+                    )
+                }
+                "transient-clean" {
+                    @([pscustomobject]@{ code = 0; message = "No error" })
+                }
+                "unexpected-recovery-error" {
+                    @(
+                        [pscustomobject]@{ code = -222; message = "Data out of range" },
+                        [pscustomobject]@{ code = 0; message = "No error" }
+                    )
+                }
+                "retry-failure" {
+                    @(
+                        [pscustomobject]@{ code = -221; message = "Settings conflict" },
+                        [pscustomobject]@{ code = 0; message = "No error" }
+                    )
+                }
+                default {
+                    throw "Unexpected recovery drain scenario: ${Scenario}"
+                }
+            }
+            $payload = [pscustomobject]@{
+                ok = $true
+                result = [pscustomobject]@{ entries = @($entries) }
+            }
+        }
+        "configuration-query-segmented-retry" {
+            if ($Scenario -eq "retry-failure") {
+                $payload = [pscustomobject]@{
+                    ok = $false
+                    error = [pscustomobject]@{
+                        type = "VisaBackendError"
+                        message = "retry rejected"
+                    }
+                }
+            } else {
+                $payload = [pscustomobject]@{
+                    ok = $true
+                    error = $null
+                    result = [pscustomobject]@{
+                        mode = "segmented"
+                        configured_segments = 2
+                    }
+                }
+            }
+        }
+        "configuration-roundtrip-error-drain" {
+            $payload = [pscustomobject]@{
+                ok = $true
+                result = [pscustomobject]@{
+                    entries = @(
+                        [pscustomobject]@{ code = 0; message = "No error" }
+                    )
+                }
+            }
+        }
+        default {
+            throw "Unexpected raw CLI stage: ${Stage}"
+        }
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Payload = $payload
+        Stderr = ""
+        Command = "fake-cli $($Arguments -join ' ')"
+    }
+}
+
+function Invoke-LiveCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [string[]] $Arguments = @()
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    switch ($Stage) {
+        "configuration-disable" {
+            return [pscustomobject]@{ ok = $true }
+        }
+        "configuration-query-realtime" {
+            return [pscustomobject]@{
+                ok = $true
+                result = [pscustomobject]@{ mode = "realtime" }
+            }
+        }
+        default {
+            throw "Unexpected live CLI stage: ${Stage}"
+        }
+    }
+}
+
+Invoke-Expression $enableAssignments[0].Extent.Text
+Invoke-Expression $configurationBlocks[0].Extent.Text
+
+$diagnosticMessages = @()
+if ($script:Diagnostics.Contains("segmented configuration roundtrip")) {
+    $diagnosticMessages = @(
+        $script:Diagnostics["segmented configuration roundtrip"] |
+            ForEach-Object { $_ }
+    )
+}
+
+[ordered]@{
+    status = $script:CaseResults["segmented configuration roundtrip"].Status
+    detail = $script:CaseResults["segmented configuration roundtrip"].Detail
+    functional_failed = $script:FunctionalFailed
+    configuration_passed = $configurationPassed
+    empty_drain_diagnostic_count = $emptyDrainDiagnosticCount
+    invocation_stages = (($script:Invocations | ForEach-Object { $_.stage }) -join ",")
+    sleeps = (($script:Sleeps | ForEach-Object { $_ }) -join ",")
+    diagnostics = ($diagnosticMessages -join " | ")
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-Scenario",
+            scenario,
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.splitlines()[-1])
+    assert result["status"] == expected_status
+    assert result["functional_failed"] is (expected_status == "FAIL")
+    assert result["configuration_passed"] is (expected_status == "PASS")
+    assert result["empty_drain_diagnostic_count"] == 0
+    assert result["invocation_stages"] == expected_stages
+    assert result["sleeps"] == expected_sleeps
+    assert result["invocation_stages"].split(",").count("configuration-enable") == 1
+    assert (
+        result["invocation_stages"].split(",").count(
+            "configuration-query-segmented"
+        )
+        == 1
+    )
+    assert (
+        result["invocation_stages"].split(",").count(
+            "configuration-query-segmented-retry"
+        )
+        <= 1
+    )
+    assert "diagnostic error drain failed" not in result["diagnostics"]
+
+    if scenario == "transient-allowed":
+        assert "system error -221: Settings conflict" in result["diagnostics"]
+        assert "system error -420: Query UNTERMINATED" in result["diagnostics"]
+    elif scenario == "unexpected-recovery-error":
+        assert "system error -222: Data out of range" in result["diagnostics"]
+        assert "unexpected system error code(s): -222" in result["detail"]
+    elif scenario == "retry-failure":
+        assert "configuration-query-segmented-retry" in result["detail"]
+        assert "retry rejected" in result["detail"]
+    elif scenario in {"normal", "transient-clean", "non-idn-timeout"}:
+        assert result["diagnostics"] == ""
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
 def test_live_summary_preserves_results_and_diagnostics(
     tmp_path: Path,

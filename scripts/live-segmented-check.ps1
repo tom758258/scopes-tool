@@ -293,6 +293,7 @@ function Get-ErrorDrain {
 function Write-DrainErrors {
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [object[]] $Errors,
 
         [string] $CaseName = ""
@@ -329,6 +330,73 @@ function Drain-AfterFailure {
         Write-Host "      ${message}"
         Add-Diagnostic -Name $CaseName -Message $message
     }
+}
+
+function Invoke-SegmentedConfigurationReadback {
+    $arguments = @(
+        "segmented-memory", "--live", "--resource", $Resource, "--json", "--query"
+    )
+
+    Start-Sleep -Milliseconds 500
+    $invocation = Invoke-CliRaw -Stage "configuration-query-segmented" `
+        -Arguments $arguments
+    $okProperty = $invocation.Payload.PSObject.Properties["ok"]
+    $ok = $null -ne $okProperty -and $okProperty.Value -eq $true
+    if ($invocation.ExitCode -eq 0 -and $ok) {
+        return $invocation.Payload
+    }
+
+    $isTransientTimeout = $false
+    $errorProperty = $invocation.Payload.PSObject.Properties["error"]
+    if ($null -ne $errorProperty -and $null -ne $errorProperty.Value) {
+        $typeProperty = $errorProperty.Value.PSObject.Properties["type"]
+        $messageProperty = $errorProperty.Value.PSObject.Properties["message"]
+        if ($null -ne $typeProperty -and $null -ne $messageProperty) {
+            $errorType = [string]$typeProperty.Value
+            $errorMessage = [string]$messageProperty.Value
+            $isTransientTimeout = (
+                $errorType -eq "VisaBackendError" -and
+                $errorMessage.Contains("*IDN?") -and
+                $errorMessage.Contains("VI_ERROR_TMO")
+            )
+        }
+    }
+    if (-not $isTransientTimeout) {
+        throw (Get-InvocationFailureDetail `
+            -Invocation $invocation -Stage "configuration-query-segmented")
+    }
+
+    Start-Sleep -Milliseconds 500
+    $recoveryDrain = Get-ErrorDrain `
+        -Stage "configuration-query-segmented-recovery-drain"
+    if ($recoveryDrain.Errors.Count -gt 0) {
+        Write-DrainErrors -Errors $recoveryDrain.Errors `
+            -CaseName "segmented configuration roundtrip"
+    }
+    if (-not $recoveryDrain.Terminated) {
+        throw "Configuration readback recovery error queue did not reach code 0."
+    }
+    $unexpectedErrors = @($recoveryDrain.Errors | Where-Object {
+        ([int]$_.code) -notin @(-221, -420)
+    })
+    if ($unexpectedErrors.Count -gt 0) {
+        $unexpectedCodes = @($unexpectedErrors | ForEach-Object { [int]$_.code })
+        throw (
+            "Configuration readback recovery encountered unexpected system " +
+            "error code(s): $($unexpectedCodes -join ', ')."
+        )
+    }
+
+    Start-Sleep -Milliseconds 500
+    $retryInvocation = Invoke-CliRaw `
+        -Stage "configuration-query-segmented-retry" -Arguments $arguments
+    $retryOkProperty = $retryInvocation.Payload.PSObject.Properties["ok"]
+    $retryOk = $null -ne $retryOkProperty -and $retryOkProperty.Value -eq $true
+    if ($retryInvocation.ExitCode -ne 0 -or -not $retryOk) {
+        throw (Get-InvocationFailureDetail `
+            -Invocation $retryInvocation -Stage "configuration-query-segmented-retry")
+    }
+    return $retryInvocation.Payload
 }
 
 function Test-UnavailableProbe {
@@ -740,8 +808,7 @@ if ($realtimePreconditionPassed -and -not $script:FunctionalFailed) {
 
     if (-not $script:SegmentedUnavailable -and -not $script:FunctionalFailed) {
         try {
-            $segmentedReadback = Invoke-LiveCli -Stage "configuration-query-segmented" `
-                -Command "segmented-memory" -Arguments @("--query")
+            $segmentedReadback = Invoke-SegmentedConfigurationReadback
             $mode = [string](Get-RequiredResultValue `
                 -Payload $segmentedReadback -Name "mode" `
                 -Stage "Segmented configuration readback")
