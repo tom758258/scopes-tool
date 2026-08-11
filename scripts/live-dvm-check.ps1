@@ -190,6 +190,19 @@ function Invoke-Cli {
         if (-not [string]::IsNullOrWhiteSpace($payloadError)) {
             $detail += "; error=${payloadError}"
         }
+        $systemErrorProperty = $invocation.Payload.PSObject.Properties["system_error"]
+        if ($null -ne $systemErrorProperty -and $null -ne $systemErrorProperty.Value) {
+            $codeProperty = $systemErrorProperty.Value.PSObject.Properties["code"]
+            $messageProperty = $systemErrorProperty.Value.PSObject.Properties["message"]
+            if ($null -ne $codeProperty -and [int]$codeProperty.Value -ne 0) {
+                $systemErrorDetail = "system error $([int]$codeProperty.Value)"
+                if ($null -ne $messageProperty -and
+                    -not [string]::IsNullOrWhiteSpace([string]$messageProperty.Value)) {
+                    $systemErrorDetail += ": $($messageProperty.Value)"
+                }
+                $detail += "; ${systemErrorDetail}"
+            }
+        }
         if (-not [string]::IsNullOrWhiteSpace($invocation.Stderr)) {
             $detail += "; stderr=$($invocation.Stderr)"
         }
@@ -267,6 +280,7 @@ function Get-ErrorDrain {
 function Write-DrainErrors {
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [object[]] $Errors,
 
         [string] $CaseName = ""
@@ -786,38 +800,70 @@ if ($null -ne $dvmSnapshot -and -not $script:FunctionalFailed) {
     Write-Host "Ctrl+C to cancel."
     [void](Read-Host)
 
-    try {
-        $channelScale = Invoke-LiveCli -Stage "snapshot-channel-scale" `
-            -Command "channel-scale" -Arguments @("--channel", "1", "--query")
-        $channelOffset = Invoke-LiveCli -Stage "snapshot-channel-offset" `
-            -Command "channel-offset" -Arguments @("--channel", "1", "--query")
-        $scaleValue = Assert-FiniteNumber `
-            -Value (Get-RequiredResultValue -Payload $channelScale `
-                -Name "volts_per_division" -Stage "CH1 scale snapshot") `
-            -Label "CH1 scale"
-        if ($scaleValue -le 0) {
-            throw "CH1 scale must be positive."
-        }
-        $offsetValue = Assert-FiniteNumber `
-            -Value (Get-RequiredResultValue -Payload $channelOffset `
-                -Name "volts" -Stage "CH1 offset snapshot") `
-            -Label "CH1 offset"
+    Invoke-DvmCase -Name "auto-range-precondition" -Action {
+        $triggerSource = Invoke-LiveCli -Stage "auto-range-precondition" `
+            -Command "trigger-edge-source" -Arguments @("--query")
+        $source = [string](Get-RequiredResultValue `
+            -Payload $triggerSource -Name "source" -Stage "Edge trigger source")
+        $sourceChannel = Get-RequiredResultValue `
+            -Payload $triggerSource -Name "source_channel" -Stage "Edge trigger source"
 
-        $snapshot = [pscustomobject]@{
-            DvmEnabled = $dvmSnapshot.DvmEnabled
-            DvmSourceChannel = $dvmSnapshot.DvmSourceChannel
-            DvmMode = $dvmSnapshot.DvmMode
-            DvmAutoRange = $dvmSnapshot.DvmAutoRange
-            ChannelScale = $scaleValue
-            ChannelOffset = $offsetValue
+        if ($source -eq "analog-channel") {
+            $channel = 0
+            if ($null -eq $sourceChannel -or
+                -not [int]::TryParse([string]$sourceChannel, [ref]$channel) -or
+                $channel -lt 1) {
+                throw "Edge trigger source returned an invalid analog source_channel."
+            }
+            if ($channel -eq 1) {
+                throw (
+                    "CH1 currently is the Edge trigger source; DVM Auto Range " +
+                    "validation requires another trigger source."
+                )
+            }
+        } elseif ($source -in @("external", "line")) {
+            if ($null -ne $sourceChannel) {
+                throw "Edge trigger source ${source} must return a null source_channel."
+            }
+        } else {
+            throw "Unsupported Edge trigger source readback: ${source}"
         }
-        Add-CaseResult -Name "state-snapshot" -Status "PASS"
-    } catch {
-        $script:FunctionalFailed = $true
-        Add-CaseResult -Name "state-snapshot" -Status "FAIL" `
-            -Detail $_.Exception.Message
-        Drain-AfterFailure -Stage "state-snapshot-error-drain" `
-            -CaseName "state-snapshot"
+    }
+
+    if (-not $script:FunctionalFailed) {
+        try {
+            $channelScale = Invoke-LiveCli -Stage "snapshot-channel-scale" `
+                -Command "channel-scale" -Arguments @("--channel", "1", "--query")
+            $channelOffset = Invoke-LiveCli -Stage "snapshot-channel-offset" `
+                -Command "channel-offset" -Arguments @("--channel", "1", "--query")
+            $scaleValue = Assert-FiniteNumber `
+                -Value (Get-RequiredResultValue -Payload $channelScale `
+                    -Name "volts_per_division" -Stage "CH1 scale snapshot") `
+                -Label "CH1 scale"
+            if ($scaleValue -le 0) {
+                throw "CH1 scale must be positive."
+            }
+            $offsetValue = Assert-FiniteNumber `
+                -Value (Get-RequiredResultValue -Payload $channelOffset `
+                    -Name "volts" -Stage "CH1 offset snapshot") `
+                -Label "CH1 offset"
+
+            $snapshot = [pscustomobject]@{
+                DvmEnabled = $dvmSnapshot.DvmEnabled
+                DvmSourceChannel = $dvmSnapshot.DvmSourceChannel
+                DvmMode = $dvmSnapshot.DvmMode
+                DvmAutoRange = $dvmSnapshot.DvmAutoRange
+                ChannelScale = $scaleValue
+                ChannelOffset = $offsetValue
+            }
+            Add-CaseResult -Name "state-snapshot" -Status "PASS"
+        } catch {
+            $script:FunctionalFailed = $true
+            Add-CaseResult -Name "state-snapshot" -Status "FAIL" `
+                -Detail $_.Exception.Message
+            Drain-AfterFailure -Stage "state-snapshot-error-drain" `
+                -CaseName "state-snapshot"
+        }
     }
 }
 

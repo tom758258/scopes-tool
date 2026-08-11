@@ -311,6 +311,433 @@ $multipleEntries = Get-ErrorDrain -Stage "multiple-entries"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_dvm_write_drain_errors_accepts_empty_collection(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-dvm-check.ps1"
+    harness_path = tmp_path / "dvm-empty-drain-harness.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse DVM live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @("Add-Diagnostic", "Write-DrainErrors")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$script:Diagnostics = [ordered]@{}
+Write-DrainErrors -Errors @() -CaseName "dc"
+
+[ordered]@{
+    diagnostic_count = $script:Diagnostics.Count
+} | ConvertTo-Json -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["diagnostic_count"] == 0
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_dvm_invoke_cli_preserves_nonzero_system_error(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-dvm-check.ps1"
+    harness_path = tmp_path / "dvm-system-error-harness.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse DVM live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @("Get-PayloadErrorText", "Invoke-Cli")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+function Invoke-CliRaw {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $Arguments
+    )
+
+    $payload = switch ($Stage) {
+        "nonzero-system-error" {
+            [pscustomobject]@{
+                ok = $false
+                error = $null
+                system_error = [pscustomobject]@{
+                    code = -221
+                    message = "Settings conflict"
+                }
+            }
+        }
+        "zero-system-error-failure" {
+            [pscustomobject]@{
+                ok = $false
+                error = $null
+                system_error = [pscustomobject]@{
+                    code = 0
+                    message = "No error"
+                }
+            }
+        }
+        "zero-system-error-success" {
+            [pscustomobject]@{
+                ok = $true
+                error = $null
+                system_error = [pscustomobject]@{
+                    code = 0
+                    message = "No error"
+                }
+            }
+        }
+        default {
+            throw "Unexpected stage: ${Stage}"
+        }
+    }
+    $exitCode = if ($Stage -eq "zero-system-error-success") { 0 } else { 1 }
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Payload = $payload
+        Stderr = ""
+        Command = "fake-cli dvm-auto-range --enabled true"
+    }
+}
+
+$nonzeroDetail = ""
+try {
+    Invoke-Cli -Stage "nonzero-system-error" -Arguments @("dvm-auto-range")
+} catch {
+    $nonzeroDetail = $_.Exception.Message
+}
+
+$zeroFailureDetail = ""
+try {
+    Invoke-Cli -Stage "zero-system-error-failure" -Arguments @("dvm-auto-range")
+} catch {
+    $zeroFailureDetail = $_.Exception.Message
+}
+
+$success = Invoke-Cli -Stage "zero-system-error-success" `
+    -Arguments @("dvm-auto-range")
+
+[ordered]@{
+    nonzero_detail = $nonzeroDetail
+    zero_failure_detail = $zeroFailureDetail
+    success_ok = $success.ok
+} | ConvertTo-Json -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert "exited 1" in result["nonzero_detail"]
+    assert "-221" in result["nonzero_detail"]
+    assert "Settings conflict" in result["nonzero_detail"]
+    assert "exited 1" in result["zero_failure_detail"]
+    assert "system error 0" not in result["zero_failure_detail"]
+    assert "No error" not in result["zero_failure_detail"]
+    assert result["success_ok"] is True
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+@pytest.mark.parametrize(
+    ("source_channel", "expected_status", "expected_gate_open"),
+    [(1, "FAIL", False), (2, "PASS", True)],
+)
+def test_dvm_auto_range_trigger_precondition(
+    tmp_path: Path,
+    source_channel: int,
+    expected_status: str,
+    expected_gate_open: bool,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-dvm-check.ps1"
+    harness_path = tmp_path / f"dvm-trigger-precondition-{source_channel}.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [int] $SourceChannel
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse DVM live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @(
+    "Add-CaseResult",
+    "Add-Diagnostic",
+    "Get-RequiredResultValue",
+    "Get-ErrorDrain",
+    "Write-DrainErrors",
+    "Drain-AfterFailure",
+    "Invoke-DvmCase"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$preconditionCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.Extent.Text.Contains('Invoke-DvmCase -Name "auto-range-precondition"')
+    )
+}, $true))
+if ($preconditionCommands.Count -ne 1) {
+    throw "Expected one production auto-range-precondition command."
+}
+
+$stateChangeBlocks = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.IfStatementAst] -and
+        $node.Extent.Text.Contains('Invoke-DvmCase -Name "dc"') -and
+        $node.Extent.Text.Contains('dc-source-set')
+    )
+}, $true))
+if ($stateChangeBlocks.Count -ne 1) {
+    throw "Expected one production DVM state-change block."
+}
+
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$Resource = "TEST::INSTR"
+
+function Invoke-LiveCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [string[]] $Arguments = @()
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($Command -ne "trigger-edge-source") {
+        throw "Unexpected live command: ${Command}"
+    }
+    return [pscustomobject]@{
+        result = [pscustomobject]@{
+            source = "analog-channel"
+            source_channel = $SourceChannel
+        }
+    }
+}
+
+function Invoke-CliRaw {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $Arguments
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Arguments[0]
+        arguments = @($Arguments[1..($Arguments.Count - 1)])
+    })
+    return [pscustomobject]@{
+        ExitCode = 0
+        Payload = [pscustomobject]@{
+            result = [pscustomobject]@{
+                entries = @(
+                    [pscustomobject]@{ code = 0; message = "No error" }
+                )
+            }
+        }
+        Stderr = ""
+        Command = "fake-cli check-error"
+    }
+}
+
+Invoke-Expression $preconditionCommands[0].Extent.Text
+
+$snapshot = [pscustomobject]@{}
+$stateGateExpression = $stateChangeBlocks[0].Clauses[0].Item1.Extent.Text
+$stateGateOpen = [bool](Invoke-Expression $stateGateExpression)
+if (-not $stateGateOpen) {
+    Invoke-Expression $stateChangeBlocks[0].Extent.Text
+}
+
+[ordered]@{
+    status = $script:CaseResults["auto-range-precondition"].Status
+    detail = $script:CaseResults["auto-range-precondition"].Detail
+    functional_failed = $script:FunctionalFailed
+    state_gate_open = $stateGateOpen
+    invocations = @($script:Invocations | ForEach-Object { $_ })
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-SourceChannel",
+            str(source_channel),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.splitlines()[-1])
+    assert result["status"] == expected_status
+    assert result["functional_failed"] is (expected_status == "FAIL")
+    assert result["state_gate_open"] is expected_gate_open
+
+    commands = [invocation["command"] for invocation in result["invocations"]]
+    assert commands[0] == "trigger-edge-source"
+    if source_channel == 1:
+        assert "CH1" in result["detail"]
+        assert "Edge trigger source" in result["detail"]
+        assert "another trigger source" in result["detail"]
+        assert not {
+            "dvm-source",
+            "dvm-auto-range",
+            "dvm-mode",
+            "dvm-enable",
+        }.intersection(commands)
+    else:
+        assert result["detail"] == ""
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
 def test_live_summary_preserves_results_and_diagnostics(
     tmp_path: Path,
