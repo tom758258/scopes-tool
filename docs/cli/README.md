@@ -2589,8 +2589,10 @@ disables Search when the runner enabled it, restores the saved Lister display
 and reference, and returns the global trigger mode to Edge while restoring the
 saved Edge source, slope, and applicable analog level. The public CLI cannot
 recover an arbitrary original trigger mode, so cleanup promises Edge rather
-than the original generic trigger mode. Serial1 may remain configured at the
-documented UART test baseline.
+than the original generic trigger mode. Serial1 is intentionally not restored.
+After successful UART configuration it remains at the documented UART test
+baseline. If UART configuration fails after partial instrument changes,
+Serial1 may retain partial test settings.
 
 An isolated, structured `-241` missing-option response with a normally
 terminated and otherwise clean error drain reports `SKIP / NOT AVAILABLE`.

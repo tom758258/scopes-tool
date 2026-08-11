@@ -962,6 +962,10 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
     Write-Host "    resources."
     Write-Host "  - This validation will temporarily configure Serial1, Lister, Serial Search,"
     Write-Host "    and Serial Trigger."
+    Write-Host "  - Serial1 is intentionally not restored. After successful UART configuration"
+    Write-Host "    it remains at the documented UART test baseline. If UART configuration"
+    Write-Host "    fails after partial instrument changes, Serial1 may retain partial test"
+    Write-Host "    settings."
     Write-Host "  - Search will be disabled during cleanup."
     Write-Host "  - Serial Trigger validation does not arm, run, single, force, or acquire."
     Write-Host "  - Cleanup returns the global trigger mode to Edge; an arbitrary original"
@@ -1025,21 +1029,48 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
             $reportedBytes = [long](Get-RequiredResultValue `
                 -Payload $exportInvocation.Payload -Name "bytes_written" `
                 -Stage "Lister export")
-            $reportedPath = [string](Get-RequiredResultValue `
-                -Payload $exportInvocation.Payload -Name "output_path" `
-                -Stage "Lister export")
             if ($reportedBytes -le 0) {
                 throw "Lister export reported no bytes."
             }
             if (-not (Test-Path -LiteralPath $listerCsvPath -PathType Leaf)) {
                 throw "Lister export did not create ${listerCsvPath}."
             }
-            if (-not (Test-Path -LiteralPath $reportedPath -PathType Leaf)) {
-                throw "Lister export reported a missing path: ${reportedPath}."
+
+            $filesProperty = $exportInvocation.Payload.PSObject.Properties["files"]
+            $reportedCsvFiles = @()
+            if ($null -ne $filesProperty) {
+                $reportedCsvFiles = @($filesProperty.Value | Where-Object {
+                    $null -ne $_ -and
+                        $null -ne $_.PSObject.Properties["kind"] -and
+                        [string]$_.PSObject.Properties["kind"].Value -eq "csv"
+                })
             }
-            $actualBytes = (Get-Item -LiteralPath $reportedPath).Length
+            if ($reportedCsvFiles.Count -ne 1) {
+                throw "Lister export did not report exactly one CSV artifact."
+            }
+            $reportedPathProperty = $reportedCsvFiles[0].PSObject.Properties["path"]
+            if ($null -eq $reportedPathProperty -or
+                [string]::IsNullOrWhiteSpace([string]$reportedPathProperty.Value)) {
+                throw "Lister export CSV artifact did not report a path."
+            }
+            $reportedCsvPath = [string]$reportedPathProperty.Value
+            if (-not (Test-Path -LiteralPath $reportedCsvPath -PathType Leaf)) {
+                throw "Lister export reported a missing path: ${reportedCsvPath}."
+            }
+
+            $requestedItem = Get-Item -LiteralPath $listerCsvPath
+            $reportedItem = Get-Item -LiteralPath $reportedCsvPath
+            if (-not [string]::Equals(
+                $requestedItem.FullName,
+                $reportedItem.FullName,
+                [System.StringComparison]::OrdinalIgnoreCase
+            )) {
+                throw "Lister export reported a different CSV path."
+            }
+
+            $actualBytes = $requestedItem.Length
             if ($actualBytes -le 0) {
-                throw "Lister export file is empty: ${reportedPath}."
+                throw "Lister export file is empty: ${listerCsvPath}."
             }
             if ($reportedBytes -ne $actualBytes) {
                 throw (

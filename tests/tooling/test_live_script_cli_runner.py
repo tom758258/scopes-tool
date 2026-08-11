@@ -1163,6 +1163,208 @@ if ($script:Diagnostics.Contains("segmented configuration roundtrip")) {
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_serial_lister_export_uses_top_level_files_artifact(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-serial-check.ps1"
+    output_path = tmp_path / "uart-lister.csv"
+    harness_path = tmp_path / "serial-lister-export-harness.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [string] $OutputPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse Serial live script: $($parseErrors[0].Message)"
+}
+
+$requiredValueFunction = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Get-RequiredResultValue"
+    )
+}, $true)
+if ($null -eq $requiredValueFunction) {
+    throw "Get-RequiredResultValue was not found in ${ScriptPath}."
+}
+Invoke-Expression $requiredValueFunction.Extent.Text
+
+$listerCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.Extent.Text.Contains('Invoke-SerialCase -Name "UART Lister export"')
+    )
+}, $true))
+if ($listerCommands.Count -ne 1) {
+    throw "Expected one production UART Lister export command."
+}
+
+$script:CaseStatus = ""
+$script:CaseDetail = ""
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:Sleeps = New-Object System.Collections.Generic.List[int]
+$Resource = "TEST::INSTR"
+$listerCsvPath = $OutputPath
+
+function Invoke-SerialCase {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Name,
+
+        [Parameter(Mandatory = $true)]
+        [scriptblock] $Action
+    )
+
+    try {
+        & $Action
+        $script:CaseStatus = "PASS"
+    } catch {
+        $script:CaseStatus = "FAIL"
+        $script:CaseDetail = $_.Exception.Message
+    }
+}
+
+function Start-Sleep {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int] $Milliseconds
+    )
+
+    $script:Sleeps.Add($Milliseconds)
+}
+
+function Invoke-LiveCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [string[]] $Arguments = @()
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($Command -eq "serial-lister-query") {
+        return [pscustomobject]@{
+            result = [pscustomobject]@{
+                display = "all"
+                reference = "trigger"
+            }
+        }
+    }
+    return [pscustomobject]@{ result = [pscustomobject]@{} }
+}
+
+function Invoke-CliRaw {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $Arguments
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Arguments[0]
+        arguments = @($Arguments)
+    })
+    if ($Stage -ne "lister-export") {
+        throw "Unexpected raw invocation stage: ${Stage}"
+    }
+
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes(
+        "bus,time,value`r`nSBUS1,0,1`r`n"
+    )
+    [System.IO.File]::WriteAllBytes($listerCsvPath, $bytes)
+    $reportedPath = (Get-Item -LiteralPath $listerCsvPath).FullName.ToUpperInvariant()
+    return [pscustomobject]@{
+        ExitCode = 0
+        Payload = [pscustomobject]@{
+            ok = $true
+            result = [pscustomobject]@{
+                bytes_written = $bytes.Length
+                command = ":LISTer:DATA?"
+            }
+            files = @(
+                [pscustomobject]@{ kind = "csv"; path = $reportedPath }
+            )
+        }
+        Stderr = ""
+        Command = "fake-cli serial-lister-export"
+    }
+}
+
+Invoke-Expression $listerCommands[0].Extent.Text
+
+$exportInvocations = @($script:Invocations | Where-Object {
+    $_.command -eq "serial-lister-export"
+})
+$outputItem = Get-Item -LiteralPath $listerCsvPath
+[ordered]@{
+    status = $script:CaseStatus
+    detail = $script:CaseDetail
+    export_count = $exportInvocations.Count
+    sleep_values = @($script:Sleeps | ForEach-Object { $_ })
+    output_exists = Test-Path -LiteralPath $listerCsvPath -PathType Leaf
+    output_bytes = $outputItem.Length
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-OutputPath",
+            str(output_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["status"] == "PASS", result["detail"]
+    assert result["detail"] == ""
+    assert result["export_count"] == 1
+    assert result["sleep_values"] == [1000]
+    assert result["output_exists"] is True
+    assert result["output_bytes"] > 0
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
 def test_live_summary_preserves_results_and_diagnostics(
     tmp_path: Path,
