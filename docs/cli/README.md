@@ -2558,3 +2558,43 @@ other instrument errors remain failures.
 The runner's hardware-free preflight checks the required CLI paths only and
 does not create simulated capture artifacts. It is not live validation
 evidence.
+
+#### Serial Live Validation
+
+Run the optional, license-dependent Serial validation separately:
+
+```powershell
+.\scripts\live-serial-check.ps1 -Resource "<VISA_RESOURCE>"
+```
+
+The maintained runner intentionally uses UART as the representative Serial
+protocol instead of repeating the full UART/I2C/SPI/CAN matrix. Prepare Serial
+bus 1 for an external UART TX signal connected to CH1: 115200 baud, 8 data
+bits, no parity, idle high, LSB first, and continuously repeating data value
+`0x01`. CH2 is selected as the UART TX decode source, but live traffic on CH2
+is not required for the representative RX/Lister case.
+
+Search must be OFF before the runner starts; an enabled Search is a failed
+precondition and is not modified. The operator gate appears only after the
+read-only availability, Search, Lister, and Edge Trigger checks pass. Lister
+export requires actual decodable UART traffic. `+109 No Data For Operation`
+means the traffic was not decoded and is a validation failure, not a skip.
+Another configured Serial bus can reserve CH1/CH2 or conflicting protocol
+resources and cause `-221 Settings conflict`; this is also a failure, not
+`NOT AVAILABLE`, and the runner does not change Serial2 automatically.
+
+Serial Search and Serial Trigger validate UART configure/query readback only.
+They do not run, single, force, wait for, or acquire a waveform. Cleanup
+disables Search when the runner enabled it, restores the saved Lister display
+and reference, and returns the global trigger mode to Edge while restoring the
+saved Edge source, slope, and applicable analog level. The public CLI cannot
+recover an arbitrary original trigger mode, so cleanup promises Edge rather
+than the original generic trigger mode. Serial1 may remain configured at the
+documented UART test baseline.
+
+An isolated, structured `-241` missing-option response with a normally
+terminated and otherwise clean error drain reports `SKIP / NOT AVAILABLE`.
+Profile or parameter rejection, `-221`, `+109`, transport failures, timeouts,
+malformed responses, mixed error queues, and other instrument errors remain
+failures. The runner's hardware-free preflight is not live validation evidence;
+run the script on the prepared instrument before claiming a live PASS.

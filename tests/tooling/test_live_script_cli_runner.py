@@ -14,6 +14,7 @@ LIVE_SCRIPTS = (
     REPO_ROOT / "scripts" / "live-cli-check.ps1",
     REPO_ROOT / "scripts" / "live-dvm-check.ps1",
     REPO_ROOT / "scripts" / "live-segmented-check.ps1",
+    REPO_ROOT / "scripts" / "live-serial-check.ps1",
 )
 
 
@@ -311,9 +312,20 @@ $multipleEntries = Get-ErrorDrain -Stage "multiple-entries"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_dvm_write_drain_errors_accepts_empty_collection(tmp_path: Path) -> None:
-    script_path = REPO_ROOT / "scripts" / "live-dvm-check.ps1"
-    harness_path = tmp_path / "dvm-empty-drain-harness.ps1"
+@pytest.mark.parametrize(
+    "script_path",
+    (
+        REPO_ROOT / "scripts" / "live-dvm-check.ps1",
+        REPO_ROOT / "scripts" / "live-segmented-check.ps1",
+        REPO_ROOT / "scripts" / "live-serial-check.ps1",
+    ),
+    ids=lambda path: path.stem,
+)
+def test_optional_write_drain_errors_accepts_empty_collection(
+    tmp_path: Path,
+    script_path: Path,
+) -> None:
+    harness_path = tmp_path / f"{script_path.stem}-empty-drain-harness.ps1"
     harness_path.write_text(
         """\
 param(
@@ -332,7 +344,7 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     [ref] $parseErrors
 )
 if ($parseErrors.Count -ne 0) {
-    throw "Failed to parse DVM live script: $($parseErrors[0].Message)"
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
 }
 
 foreach ($functionName in @("Add-Diagnostic", "Write-DrainErrors")) {
@@ -384,9 +396,19 @@ Write-DrainErrors -Errors @() -CaseName "dc"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_dvm_invoke_cli_preserves_nonzero_system_error(tmp_path: Path) -> None:
-    script_path = REPO_ROOT / "scripts" / "live-dvm-check.ps1"
-    harness_path = tmp_path / "dvm-system-error-harness.ps1"
+@pytest.mark.parametrize(
+    "script_path",
+    (
+        REPO_ROOT / "scripts" / "live-dvm-check.ps1",
+        REPO_ROOT / "scripts" / "live-serial-check.ps1",
+    ),
+    ids=lambda path: path.stem,
+)
+def test_invoke_cli_preserves_nonzero_system_error(
+    tmp_path: Path,
+    script_path: Path,
+) -> None:
+    harness_path = tmp_path / f"{script_path.stem}-system-error-harness.ps1"
     harness_path.write_text(
         """\
 param(
@@ -405,10 +427,15 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     [ref] $parseErrors
 )
 if ($parseErrors.Count -ne 0) {
-    throw "Failed to parse DVM live script: $($parseErrors[0].Message)"
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
 }
 
-foreach ($functionName in @("Get-PayloadErrorText", "Invoke-Cli")) {
+$functionNames = @("Get-PayloadErrorText")
+if ([System.IO.Path]::GetFileName($ScriptPath) -eq "live-serial-check.ps1") {
+    $functionNames += @("Get-PayloadSystemError", "Get-InvocationFailureDetail")
+}
+$functionNames += "Invoke-Cli"
+foreach ($functionName in $functionNames) {
     $functionAst = $ast.Find({
         param($node)
         return (
@@ -1292,9 +1319,14 @@ if ($supportsSkip) {
     New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
     $script:CaseResults = [ordered]@{}
     $script:Diagnostics = [ordered]@{}
-    $caseName = if (
-        [System.IO.Path]::GetFileName($ScriptPath) -eq "live-dvm-check.ps1"
-    ) { "availability" } else { "segmented memory" }
+    $scriptName = [System.IO.Path]::GetFileName($ScriptPath)
+    $caseName = if ($scriptName -eq "live-dvm-check.ps1") {
+        "availability"
+    } elseif ($scriptName -eq "live-serial-check.ps1") {
+        "availability"
+    } else {
+        "segmented memory"
+    }
     Add-CaseResult -Name $caseName -Status "SKIP" `
         -Detail "NOT AVAILABLE: required option/license is not installed."
     Write-DrainErrors -Errors @(
