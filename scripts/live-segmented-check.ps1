@@ -14,6 +14,7 @@ $ErrorActionPreference = "Stop"
 
 $script:CliInvocationIndex = 0
 $script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:SegmentedUnavailable = $false
 
@@ -50,6 +51,66 @@ function Add-CaseResult {
     if (-not [string]::IsNullOrWhiteSpace($Detail)) {
         Write-Host "      ${Detail}"
     }
+}
+
+function Add-Diagnostic {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Name,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Message
+    )
+
+    if (-not $script:Diagnostics.Contains($Name)) {
+        $script:Diagnostics[$Name] = New-Object System.Collections.Generic.List[string]
+    }
+    $script:Diagnostics[$Name].Add($Message)
+}
+
+function Write-Summary {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("PASS", "FAIL", "SKIP")]
+        [string] $Result
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# Scopes Tool Live Validation Summary")
+    $lines.Add("")
+    $lines.Add("Result: ${Result}")
+    $lines.Add("")
+    $lines.Add("| Case | Status | Detail |")
+    $lines.Add("|---|---|---|")
+    foreach ($entry in $script:CaseResults.GetEnumerator()) {
+        $detail = [System.Convert]::ToString($entry.Value.Detail)
+        $detail = $detail.Replace("|", "\|").Replace("`r`n", "<br>")
+        $detail = $detail.Replace("`n", "<br>").Replace("`r", "<br>")
+        $lines.Add("| $($entry.Key) | $($entry.Value.Status) | ${detail} |")
+    }
+
+    if ($script:Diagnostics.Count -gt 0) {
+        $lines.Add("")
+        $lines.Add("## Diagnostics")
+        foreach ($entry in $script:Diagnostics.GetEnumerator()) {
+            $lines.Add("")
+            $lines.Add("### $($entry.Key)")
+            foreach ($message in $entry.Value) {
+                $safeMessage = $message.Replace("`r`n", "<br>")
+                $safeMessage = $safeMessage.Replace("`n", "<br>").Replace("`r", "<br>")
+                $lines.Add("- ${safeMessage}")
+            }
+        }
+    }
+
+    $summaryPath = Join-Path $script:RunRoot "summary.md"
+    $content = ($lines -join [Environment]::NewLine) + [Environment]::NewLine
+    [System.IO.File]::WriteAllText(
+        $summaryPath,
+        $content,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    Write-Host "Summary: ${summaryPath}"
 }
 
 function Invoke-CliRaw {
@@ -228,28 +289,41 @@ function Get-ErrorDrain {
 function Write-DrainErrors {
     param(
         [Parameter(Mandatory = $true)]
-        [object[]] $Errors
+        [object[]] $Errors,
+
+        [string] $CaseName = ""
     )
 
     foreach ($entry in $Errors) {
-        Write-Host "      system error $($entry.code): $($entry.message)"
+        $message = "system error $($entry.code): $($entry.message)"
+        Write-Host "      ${message}"
+        if (-not [string]::IsNullOrWhiteSpace($CaseName)) {
+            Add-Diagnostic -Name $CaseName -Message $message
+        }
     }
 }
 
 function Drain-AfterFailure {
     param(
         [Parameter(Mandatory = $true)]
-        [string] $Stage
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $CaseName
     )
 
     try {
         $drain = Get-ErrorDrain -Stage $Stage
-        Write-DrainErrors -Errors $drain.Errors
+        Write-DrainErrors -Errors $drain.Errors -CaseName $CaseName
         if (-not $drain.Terminated) {
-            Write-Host "      error queue did not reach code 0 within 30 reads"
+            $message = "error queue did not reach code 0 within 30 reads"
+            Write-Host "      ${message}"
+            Add-Diagnostic -Name $CaseName -Message $message
         }
     } catch {
-        Write-Host "      diagnostic error drain failed: $($_.Exception.Message)"
+        $message = "diagnostic error drain failed: $($_.Exception.Message)"
+        Write-Host "      ${message}"
+        Add-Diagnostic -Name $CaseName -Message $message
     }
 }
 
@@ -463,7 +537,8 @@ function Restore-RealtimeMode {
             -Command "segmented-memory" -Arguments @("--disable") | Out-Null
     } catch {
         $restoreErrors.Add("segmented-memory disable: $($_.Exception.Message)")
-        Drain-AfterFailure -Stage "cleanup-segmented-disable-error-drain"
+        Drain-AfterFailure -Stage "cleanup-segmented-disable-error-drain" `
+            -CaseName "cleanup"
     }
 
     try {
@@ -477,7 +552,8 @@ function Restore-RealtimeMode {
         Write-Host "Final acquisition mode: realtime"
     } catch {
         $restoreErrors.Add("realtime readback: $($_.Exception.Message)")
-        Drain-AfterFailure -Stage "cleanup-segmented-query-error-drain"
+        Drain-AfterFailure -Stage "cleanup-segmented-query-error-drain" `
+            -CaseName "cleanup"
     }
 
     if ($restoreErrors.Count -gt 0) {
@@ -510,6 +586,7 @@ try {
     Write-Host "FAIL  Segmented Memory live validation"
     Write-Host "No live hardware was accessed."
     Write-Host "Artifacts: $($script:RunRoot)"
+    Write-Summary -Result "FAIL"
     exit 1
 }
 
@@ -526,6 +603,7 @@ try {
     Write-Host ""
     Write-Host "FAIL  Segmented Memory live validation"
     Write-Host "Artifacts: $($script:RunRoot)"
+    Write-Summary -Result "FAIL"
     exit 1
 }
 
@@ -536,7 +614,7 @@ try {
     }
     if ($initialDrain.Errors.Count -gt 0) {
         Write-Host "      drained $($initialDrain.Errors.Count) stale system error(s)"
-        Write-DrainErrors -Errors $initialDrain.Errors
+        Write-DrainErrors -Errors $initialDrain.Errors -CaseName "stale-error-drain"
     }
     Add-CaseResult -Name "stale-error-drain" -Status "PASS"
 } catch {
@@ -546,6 +624,7 @@ try {
     Write-Host "FAIL  Segmented Memory live validation"
     Write-Host "No state-changing Segmented Memory cases were run."
     Write-Host "Artifacts: $($script:RunRoot)"
+    Write-Summary -Result "FAIL"
     exit 1
 }
 
@@ -576,7 +655,8 @@ try {
         $script:FunctionalFailed = $true
         Add-CaseResult -Name "realtime precondition" -Status "FAIL" `
             -Detail $_.Exception.Message
-        Drain-AfterFailure -Stage "realtime-precondition-error-drain"
+        Drain-AfterFailure -Stage "realtime-precondition-error-drain" `
+            -CaseName "realtime precondition"
     }
 }
 
@@ -618,7 +698,7 @@ if ($realtimePreconditionPassed -and -not $script:FunctionalFailed) {
         if ($enableInvocation.ExitCode -ne 0 -or -not $enableOk) {
             try {
                 $enableDrain = Get-ErrorDrain -Stage "configuration-enable-error-drain"
-                Write-DrainErrors -Errors $enableDrain.Errors
+                Write-DrainErrors -Errors $enableDrain.Errors -CaseName "segmented memory"
             } catch {
                 $enableFailure = "Enable error drain failed: $($_.Exception.Message)"
             }
@@ -638,7 +718,7 @@ if ($realtimePreconditionPassed -and -not $script:FunctionalFailed) {
     } else {
         try {
             $enableDrain = Get-ErrorDrain -Stage "configuration-enable-diagnostic-drain"
-            Write-DrainErrors -Errors $enableDrain.Errors
+            Write-DrainErrors -Errors $enableDrain.Errors -CaseName "segmented memory"
             if (-not $enableDrain.Terminated) {
                 $enableFailure += " Error queue did not reach code 0."
             }
@@ -688,7 +768,8 @@ if ($realtimePreconditionPassed -and -not $script:FunctionalFailed) {
             $script:FunctionalFailed = $true
             Add-CaseResult -Name "segmented configuration roundtrip" -Status "FAIL" `
                 -Detail $_.Exception.Message
-            Drain-AfterFailure -Stage "configuration-roundtrip-error-drain"
+            Drain-AfterFailure -Stage "configuration-roundtrip-error-drain" `
+                -CaseName "segmented configuration roundtrip"
         }
     }
 }
@@ -707,7 +788,8 @@ if ($configurationPassed -and -not $script:FunctionalFailed) {
         $script:FunctionalFailed = $true
         Add-CaseResult -Name "segmented finite capture" -Status "FAIL" `
             -Detail $_.Exception.Message
-        Drain-AfterFailure -Stage "segmented-finite-capture-error-drain"
+        Drain-AfterFailure -Stage "segmented-finite-capture-error-drain" `
+            -CaseName "segmented finite capture"
     }
 }
 
@@ -730,7 +812,7 @@ try {
         throw "Final error queue did not reach code 0 within 30 reads."
     }
     if ($finalDrain.Errors.Count -gt 0) {
-        Write-DrainErrors -Errors $finalDrain.Errors
+        Write-DrainErrors -Errors $finalDrain.Errors -CaseName "final-error-queue"
         throw "Final error queue contained $($finalDrain.Errors.Count) error(s)."
     }
     Add-CaseResult -Name "final-error-queue" -Status "PASS"
@@ -749,15 +831,18 @@ Write-Host "Artifacts: $($script:RunRoot)"
 Write-Host ""
 
 if ($script:FunctionalFailed) {
+    Write-Summary -Result "FAIL"
     Write-Host "FAIL  Segmented Memory live validation"
     exit 1
 }
 
 if ($script:SegmentedUnavailable) {
+    Write-Summary -Result "SKIP"
     Write-Host "SKIP  Segmented Memory live validation"
     Write-Host "      NOT AVAILABLE: required instrument option/license is not installed."
     exit 0
 }
 
+Write-Summary -Result "PASS"
 Write-Host "PASS  Segmented Memory live validation"
 exit 0

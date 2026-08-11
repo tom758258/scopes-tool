@@ -14,6 +14,7 @@ $ErrorActionPreference = "Stop"
 
 $script:CliInvocationIndex = 0
 $script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
 $script:FunctionalFailed = $false
 
 function ConvertTo-InvariantString {
@@ -58,6 +59,67 @@ function Add-CaseResult {
     if (-not [string]::IsNullOrWhiteSpace($Detail)) {
         Write-Host "      ${Detail}"
     }
+}
+
+function Add-Diagnostic {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Name,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Message
+    )
+
+    if (-not $script:Diagnostics.Contains($Name)) {
+        $script:Diagnostics[$Name] = New-Object System.Collections.Generic.List[string]
+    }
+    $script:Diagnostics[$Name].Add($Message)
+}
+
+function Write-Summary {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("PASS", "FAIL", "SKIP")]
+        [string] $Result
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# Scopes Tool Live Validation Summary")
+    $lines.Add("")
+    $lines.Add("Result: ${Result}")
+    $lines.Add("")
+    $lines.Add("| Case | Status | Detail |")
+    $lines.Add("|---|---|---|")
+    foreach ($entry in $script:CaseResults.GetEnumerator()) {
+        $status = if ($entry.Value.Passed) { "PASS" } else { "FAIL" }
+        $detail = [System.Convert]::ToString($entry.Value.Detail)
+        $detail = $detail.Replace("|", "\|").Replace("`r`n", "<br>")
+        $detail = $detail.Replace("`n", "<br>").Replace("`r", "<br>")
+        $lines.Add("| $($entry.Key) | ${status} | ${detail} |")
+    }
+
+    if ($script:Diagnostics.Count -gt 0) {
+        $lines.Add("")
+        $lines.Add("## Diagnostics")
+        foreach ($entry in $script:Diagnostics.GetEnumerator()) {
+            $lines.Add("")
+            $lines.Add("### $($entry.Key)")
+            foreach ($message in $entry.Value) {
+                $safeMessage = $message.Replace("`r`n", "<br>")
+                $safeMessage = $safeMessage.Replace("`n", "<br>").Replace("`r", "<br>")
+                $lines.Add("- ${safeMessage}")
+            }
+        }
+    }
+
+    $summaryPath = Join-Path $script:RunRoot "summary.md"
+    $content = ($lines -join [Environment]::NewLine) + [Environment]::NewLine
+    [System.IO.File]::WriteAllText(
+        $summaryPath,
+        $content,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    Write-Host "Summary: ${summaryPath}"
 }
 
 function Invoke-CliRaw {
@@ -197,28 +259,41 @@ function Get-ErrorDrain {
 function Write-DrainErrors {
     param(
         [Parameter(Mandatory = $true)]
-        [object[]] $Errors
+        [object[]] $Errors,
+
+        [string] $CaseName = ""
     )
 
     foreach ($entry in $Errors) {
-        Write-Host "      system error $($entry.code): $($entry.message)"
+        $message = "system error $($entry.code): $($entry.message)"
+        Write-Host "      ${message}"
+        if (-not [string]::IsNullOrWhiteSpace($CaseName)) {
+            Add-Diagnostic -Name $CaseName -Message $message
+        }
     }
 }
 
 function Drain-AfterFailure {
     param(
         [Parameter(Mandatory = $true)]
-        [string] $Stage
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $CaseName
     )
 
     try {
         $drain = Get-ErrorDrain -Stage $Stage
-        Write-DrainErrors -Errors $drain.Errors
+        Write-DrainErrors -Errors $drain.Errors -CaseName $CaseName
         if (-not $drain.Terminated) {
-            Write-Host "      error queue did not reach code 0 within 30 reads"
+            $message = "error queue did not reach code 0 within 30 reads"
+            Write-Host "      ${message}"
+            Add-Diagnostic -Name $CaseName -Message $message
         }
     } catch {
-        Write-Host "      diagnostic error drain failed: $($_.Exception.Message)"
+        $message = "diagnostic error drain failed: $($_.Exception.Message)"
+        Write-Host "      ${message}"
+        Add-Diagnostic -Name $CaseName -Message $message
     }
 }
 
@@ -322,7 +397,7 @@ function Invoke-BaselineCase {
     } catch {
         $script:FunctionalFailed = $true
         Add-CaseResult -Name $Name -Passed $false -Detail $_.Exception.Message
-        Drain-AfterFailure -Stage "${Name}-error-drain"
+        Drain-AfterFailure -Stage "${Name}-error-drain" -CaseName $Name
     }
 }
 
@@ -508,7 +583,8 @@ function Restore-InstrumentState {
                 -Arguments $step.Arguments | Out-Null
         } catch {
             $restoreErrors.Add("$($step.Name): $($_.Exception.Message)")
-            Drain-AfterFailure -Stage "restore-$($step.Command)-error-drain"
+            Drain-AfterFailure -Stage "restore-$($step.Command)-error-drain" `
+                -CaseName "cleanup"
         }
     }
 
@@ -544,6 +620,7 @@ try {
     Write-Host "FAIL  baseline live validation"
     Write-Host "No live hardware was accessed."
     Write-Host "Artifacts: $($script:RunRoot)"
+    Write-Summary -Result "FAIL"
     exit 1
 }
 
@@ -560,6 +637,7 @@ try {
     Write-Host ""
     Write-Host "FAIL  baseline live validation"
     Write-Host "Artifacts: $($script:RunRoot)"
+    Write-Summary -Result "FAIL"
     exit 1
 }
 
@@ -571,7 +649,7 @@ try {
     }
     if ($initialDrain.Errors.Count -gt 0) {
         Write-Host "      drained $($initialDrain.Errors.Count) stale system error(s)"
-        Write-DrainErrors -Errors $initialDrain.Errors
+        Write-DrainErrors -Errors $initialDrain.Errors -CaseName "stale-error-drain"
     }
     Add-CaseResult -Name "stale-error-drain" -Passed $true
     $initialDrainPassed = $true
@@ -584,6 +662,7 @@ if (-not $initialDrainPassed) {
     Write-Host "FAIL  baseline live validation"
     Write-Host "No state-changing baseline cases were run."
     Write-Host "Artifacts: $($script:RunRoot)"
+    Write-Summary -Result "FAIL"
     exit 1
 }
 
@@ -660,7 +739,7 @@ try {
 } catch {
     $script:FunctionalFailed = $true
     Add-CaseResult -Name "state-snapshot" -Passed $false -Detail $_.Exception.Message
-    Drain-AfterFailure -Stage "state-snapshot-error-drain"
+    Drain-AfterFailure -Stage "state-snapshot-error-drain" -CaseName "state-snapshot"
 }
 
 if ($snapshotComplete) {
@@ -813,7 +892,7 @@ try {
         throw "Final error queue did not reach code 0 within 30 reads."
     }
     if ($finalDrain.Errors.Count -gt 0) {
-        Write-DrainErrors -Errors $finalDrain.Errors
+        Write-DrainErrors -Errors $finalDrain.Errors -CaseName "final-error-queue"
         throw "Final error queue contained $($finalDrain.Errors.Count) error(s)."
     }
     Add-CaseResult -Name "final-error-queue" -Passed $true
@@ -837,9 +916,11 @@ foreach ($entry in $script:CaseResults.GetEnumerator()) {
 Write-Host "Artifacts: $($script:RunRoot)"
 
 if ($script:FunctionalFailed) {
+    Write-Summary -Result "FAIL"
     Write-Host "FAIL  baseline live validation"
     exit 1
 }
 
+Write-Summary -Result "PASS"
 Write-Host "PASS  baseline live validation"
 exit 0
