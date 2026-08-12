@@ -7283,10 +7283,10 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         return planned + [":SYSTem:ERRor?"], [], {"operation": "run", "commands": planned, "source_channels": None if channels is None else list(channels), "acquire_mode": args.acquire_mode, "channels": args.channels}
     if command == "setup-save":
         planned = [setup_save_command(slot=args.slot, file_spec=args.setup_file)]
-        return planned + [":SYSTem:ERRor?"], [], {"operation": "save", "command": planned[0], "slot": args.slot, "file": args.setup_file}
+        return planned + [system_opc_query(), ":SYSTem:ERRor?"], [], {"operation": "save", "command": planned[0], "slot": args.slot, "file": args.setup_file}
     if command == "setup-recall":
         planned = [setup_recall_command(slot=args.slot, file_spec=args.setup_file)]
-        return planned + [":SYSTem:ERRor?"], [], {"operation": "recall", "command": planned[0], "slot": args.slot, "file": args.setup_file}
+        return planned + [system_opc_query(), ":SYSTem:ERRor?"], [], {"operation": "recall", "command": planned[0], "slot": args.slot, "file": args.setup_file}
     if command == "fft":
         if args.fft_query:
             commands = fft_query_commands(args.function, capabilities=capabilities)

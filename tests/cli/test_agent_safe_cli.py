@@ -595,6 +595,54 @@ def test_advanced_autoscale_dry_run_json_accepts_2000x_and_3000x(monkeypatch, ca
         assert payload["scpi"]["planned"] == [":AUToscale", ":SYSTem:ERRor?"]
 
 
+@pytest.mark.parametrize(
+    ("command", "arguments", "expected_operation", "expected_command"),
+    [
+        (
+            "setup-save",
+            ["--file", "\\usb\\setup.scp"],
+            "save",
+            ':SAVE:SETup "\\usb\\setup.scp"',
+        ),
+        (
+            "setup-recall",
+            ["--slot", "3"],
+            "recall",
+            ":RECall:SETup 3",
+        ),
+    ],
+)
+def test_setup_dry_run_reports_completion_barrier(
+    command, arguments, expected_operation, expected_command, capsys
+):
+    assert (
+        cli.main(
+            [
+                command,
+                "--dry-run",
+                "--json",
+                "--model",
+                "keysight-dsox4034a",
+                *arguments,
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_stdout(capsys)
+    assert payload["scpi"]["planned"] == [
+        expected_command,
+        "*OPC?",
+        ":SYSTem:ERRor?",
+    ]
+    assert payload["result"] == {
+        "operation": expected_operation,
+        "command": expected_command,
+        "slot": 3 if command == "setup-recall" else None,
+        "file": "\\usb\\setup.scp" if command == "setup-save" else None,
+    }
+
+
 def test_acquisition_check_simulate_json_writes_report_and_scpi_log(capsys, tmp_path):
     output_dir = tmp_path / "acq-check"
 

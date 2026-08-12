@@ -17,10 +17,12 @@ from .channel import (
 )
 from .errors import ChannelResponseError, ParameterValidationError
 from .scpi import SCPIClient
+from .status import parse_operation_complete, system_opc_query
 
 
 TRIGGER_HOLDOFF_MIN_SECONDS = 40e-9
 TRIGGER_HOLDOFF_MAX_SECONDS = 10.0
+_SETUP_COMPLETION_TIMEOUT_MS = 15000
 
 _AUTOSCALE_ACQUIRE_MODES = {"normal": "NORMal", "current": "CURRent"}
 _AUTOSCALE_CHANNEL_MODES = {"all": "ALL", "displayed": "DISPlayed"}
@@ -518,9 +520,21 @@ class SetupController:
 
     def save(self, *, slot: int | None = None, file_spec: str | None = None) -> None:
         self.scpi.write(setup_save_command(slot=slot, file_spec=file_spec))
+        original_timeout = self.scpi.timeout
+        self.scpi.set_timeout(_SETUP_COMPLETION_TIMEOUT_MS)
+        try:
+            parse_operation_complete(self.scpi.query(system_opc_query()))
+        finally:
+            self.scpi.set_timeout(original_timeout)
 
     def recall(self, *, slot: int | None = None, file_spec: str | None = None) -> None:
         self.scpi.write(setup_recall_command(slot=slot, file_spec=file_spec))
+        original_timeout = self.scpi.timeout
+        self.scpi.set_timeout(_SETUP_COMPLETION_TIMEOUT_MS)
+        try:
+            parse_operation_complete(self.scpi.query(system_opc_query()))
+        finally:
+            self.scpi.set_timeout(original_timeout)
 
 
 class FFTController:
