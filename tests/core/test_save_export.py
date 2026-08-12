@@ -155,11 +155,34 @@ def test_save_image_restores_original_timeout_when_opc_query_raises():
     assert backend.timeout == 2000
 
 
-def test_save_waveform_keeps_existing_opc_timeout_behavior():
+def test_save_waveform_temporarily_uses_bounded_opc_timeout_and_restores_original(
+    monkeypatch,
+):
     backend = FakeBackend(responses={"*OPC?": "1"}, timeout=2000)
-    SaveExportController(SCPIClient(backend)).save_waveform("USB:/wave.csv")
+    opc_query_timeouts = []
+    query = backend.query
 
-    assert backend.timeout_history == []
+    def record_query_timeout(command):
+        opc_query_timeouts.append(backend.timeout)
+        return query(command)
+
+    monkeypatch.setattr(backend, "query", record_query_timeout)
+    result = SaveExportController(SCPIClient(backend)).save_waveform("USB:/wave.csv")
+
+    assert result.raw_operation_complete == "1"
+    assert opc_query_timeouts == [15000]
+    assert backend.timeout_history == [15000, 2000]
+    assert backend.timeout == 2000
+    assert backend.history == [':SAVE:WAVeform "USB:/wave.csv"', "*OPC?"]
+
+
+def test_save_waveform_restores_original_timeout_when_opc_query_raises():
+    backend = FakeBackend(responses={}, timeout=2000)
+
+    with pytest.raises(FakeBackendError):
+        SaveExportController(SCPIClient(backend)).save_waveform("USB:/wave.csv")
+
+    assert backend.timeout_history == [15000, 2000]
     assert backend.timeout == 2000
     assert backend.history == [':SAVE:WAVeform "USB:/wave.csv"', "*OPC?"]
 

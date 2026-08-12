@@ -2399,6 +2399,12 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert '"disable_wgen"' in script
     assert '"wgen_not_implemented"' in script
     assert 'SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")' in script
+    assert 'Stage "preflight-p3-save-waveform-length-max-query"' in preflight
+    assert '-Command "save-waveform-length-max"' in preflight
+    assert '-Arguments @("--query")' in preflight
+    assert '-Stage "snapshot-save-waveform-length-max"' in script
+    assert '-Command "save-waveform-length-max" -Arguments @("--query")' in script
+    assert "SaveWaveformLengthMax = if" in script
     assert '@("--format", "none")' not in script
     assert '"\\usb\\scopes-tool-live-${timestamp}.scp"' in script
     assert '"--slot"' not in script[script.index('Invoke-BaselineCase -Name "setup-lifecycle"'):]
@@ -2406,6 +2412,195 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert "Leave DEMO output OFF" in script
     assert "External trigger input" in script
     assert "Math Function 1 is disposable" in script
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_save_export_preserves_primary_error_and_enforces_prerequisite(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-save-export-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+$functionAst = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Invoke-BaselineCase"
+    )
+}, $true)
+if ($null -eq $functionAst) { throw "Missing Invoke-BaselineCase." }
+Invoke-Expression $functionAst.Extent.Text
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"save-export`"")
+    )
+}, $true))
+if ($matchingCommands.Count -ne 1) { throw "Expected one save-export case." }
+$caseBlock = $matchingCommands[0].Extent.Text
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Add-Diagnostic {
+    param([string] $Name, [string] $Message)
+    if (-not $script:Diagnostics.Contains($Name)) {
+        $script:Diagnostics[$Name] = New-Object System.Collections.Generic.List[string]
+    }
+    $script:Diagnostics[$Name].Add($Message)
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+function Assert-ScpiSentPrefix {
+    param([object] $Payload, [string] $ExpectedPrefix, [string] $Label)
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add($Stage)
+    if ($script:Scenario -eq "body-and-restore-fail" -and
+        $Stage -eq "save-image-format-png") {
+        throw "body primary failure"
+    }
+    if ($script:Scenario -in @("body-and-restore-fail", "restore-only-fail") -and
+        $Stage -eq "save-image-format-restore") {
+        throw "image restore failure"
+    }
+    if ($Stage -eq "save-image") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            instrument_side = $true
+            operation_complete = $true
+            filename = $Arguments[1]
+        } }
+    }
+    if ($Stage -eq "save-waveform") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            instrument_side = $true
+            operation_complete = $true
+            filename = $Arguments[1]
+        } }
+    }
+    return [pscustomobject]@{ result = [pscustomobject]@{} }
+}
+
+function Invoke-Scenario {
+    param([string] $Name, [bool] $LengthMax)
+    $script:Scenario = $Name
+    $script:CaseResults = [ordered]@{}
+    $script:Diagnostics = [ordered]@{}
+    $script:FunctionalFailed = $false
+    $script:DrainCalls = 0
+    $script:Invocations = New-Object System.Collections.Generic.List[string]
+    $snapshot = [pscustomobject]@{
+        SaveImageFormat = "png"
+        SaveWaveformFormat = "csv"
+        SaveWaveformLength = 2000
+        SaveWaveformLengthMax = $LengthMax
+    }
+    $timestamp = "test"
+    Invoke-Expression $caseBlock
+    return [pscustomobject]@{
+        passed = $script:CaseResults["save-export"].Passed
+        detail = $script:CaseResults["save-export"].Detail
+        diagnostics = @(
+            if ($script:Diagnostics.Contains("save-export")) {
+                $script:Diagnostics["save-export"] | ForEach-Object { [string]$_ }
+            }
+        )
+        invocations = @($script:Invocations | ForEach-Object { $_ })
+        functional_failed = $script:FunctionalFailed
+        drain_calls = $script:DrainCalls
+    }
+}
+
+[ordered]@{
+    body_and_restore_fail = Invoke-Scenario `
+        -Name "body-and-restore-fail" -LengthMax $false
+    restore_only_fail = Invoke-Scenario `
+        -Name "restore-only-fail" -LengthMax $false
+    max_enabled = Invoke-Scenario -Name "max-enabled" -LengthMax $true
+} | ConvertTo-Json -Depth 10 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    combined = result["body_and_restore_fail"]
+    assert combined["passed"] is False
+    assert "body primary failure" in combined["detail"]
+    assert "image restore failure" not in combined["detail"]
+    assert any("image restore failure" in item for item in combined["diagnostics"])
+    assert combined["invocations"][-3:] == [
+        "save-image-format-restore",
+        "save-waveform-format-restore",
+        "save-waveform-length-restore",
+    ]
+
+    restore_only = result["restore_only_fail"]
+    assert restore_only["passed"] is False
+    assert "image restore failure" in restore_only["detail"]
+    assert restore_only["functional_failed"] is True
+    assert restore_only["drain_calls"] == 1
+
+    max_enabled = result["max_enabled"]
+    assert max_enabled["passed"] is False
+    assert "acceptance prerequisite failed" in max_enabled["detail"]
+    assert not any(
+        stage
+        in {
+            "save-image-format-png",
+            "save-image",
+            "save-waveform-format-csv",
+            "save-waveform-length-1000",
+            "save-waveform",
+        }
+        for stage in max_enabled["invocations"]
+    )
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")

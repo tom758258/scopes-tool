@@ -13,7 +13,7 @@ SAVE_IMAGE_FORMATS = ("png", "bmp", "bmp8", "bmp24")
 SAVE_IMAGE_PALETTES = ("color", "grayscale")
 SAVE_WAVEFORM_FORMATS = ("ascii-xy", "csv", "binary")
 
-_SAVE_IMAGE_COMPLETION_TIMEOUT_MS = 15000
+_SAVE_COMPLETION_TIMEOUT_MS = 15000
 
 _SAVE_IMAGE_FORMAT_COMMANDS = {
     "png": "PNG",
@@ -221,7 +221,7 @@ class SaveExportController:
         command = save_image_command(filename)
         self.scpi.write(command)
         original_timeout = self.scpi.timeout
-        self.scpi.set_timeout(_SAVE_IMAGE_COMPLETION_TIMEOUT_MS)
+        self.scpi.set_timeout(_SAVE_COMPLETION_TIMEOUT_MS)
         try:
             complete = parse_operation_complete(self.scpi.query(system_opc_query()))
         finally:
@@ -254,7 +254,12 @@ class SaveExportController:
     def save_waveform(self, filename: str) -> SaveOperationResult:
         command = save_waveform_command(filename)
         self.scpi.write(command)
-        complete = parse_operation_complete(self.scpi.query(system_opc_query()))
+        original_timeout = self.scpi.timeout
+        self.scpi.set_timeout(_SAVE_COMPLETION_TIMEOUT_MS)
+        try:
+            complete = parse_operation_complete(self.scpi.query(system_opc_query()))
+        finally:
+            self.scpi.set_timeout(original_timeout)
         return SaveOperationResult(
             operation="save-waveform",
             filename=filename,

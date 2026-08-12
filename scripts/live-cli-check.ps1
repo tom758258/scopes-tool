@@ -600,6 +600,9 @@ function Invoke-HardwareFreePreflight {
     Invoke-ModeCli -Stage "preflight-p3-trigger-edge-external-level-query" `
         -Command "trigger-edge-external-level" -ModeArguments $simulate `
         -Arguments @("--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-p3-save-waveform-length-max-query" `
+        -Command "save-waveform-length-max" -ModeArguments $simulate `
+        -Arguments @("--query") | Out-Null
 
     Invoke-ModeCli -Stage "preflight-identify" -Command "identify" `
         -ModeArguments $simulate | Out-Null
@@ -1305,6 +1308,7 @@ try {
     $saveImageFormat = $null
     $saveWaveformFormat = $null
     $saveWaveformLength = $null
+    $saveWaveformLengthMax = $null
     if ($p3Enabled) {
         $triggerEdgeCoupling = Invoke-LiveCli -Stage "snapshot-trigger-edge-coupling" `
             -Command "trigger-edge-coupling" -Arguments @("--query")
@@ -1326,6 +1330,9 @@ try {
             -Command "save-waveform-format" -Arguments @("--query")
         $saveWaveformLength = Invoke-LiveCli -Stage "snapshot-save-waveform-length" `
             -Command "save-waveform-length" -Arguments @("--query")
+        $saveWaveformLengthMax = Invoke-LiveCli `
+            -Stage "snapshot-save-waveform-length-max" `
+            -Command "save-waveform-length-max" -Arguments @("--query")
     }
 
     $annotationState = $null
@@ -1420,6 +1427,7 @@ try {
         SaveImageFormat = if ($null -ne $saveImageFormat) { [string]$saveImageFormat.result.format } else { "none" }
         SaveWaveformFormat = if ($null -ne $saveWaveformFormat) { [string]$saveWaveformFormat.result.format } else { "none" }
         SaveWaveformLength = if ($null -ne $saveWaveformLength) { [int]$saveWaveformLength.result.points } else { 0 }
+        SaveWaveformLengthMax = if ($null -ne $saveWaveformLengthMax) { [bool]$saveWaveformLengthMax.result.enabled } else { $false }
     }
     $snapshotComplete = $true
 } catch {
@@ -2583,7 +2591,16 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
         Invoke-BaselineCase -Name "save-export" -Action {
+            $primaryException = $null
+            $firstRestoreException = $null
             try {
+                if ([bool]$snapshot.SaveWaveformLengthMax) {
+                    throw (
+                        "Save/export acceptance prerequisite failed: " +
+                        "maximum waveform save length is enabled; " +
+                        "the 1000-point CSV path was not executed."
+                    )
+                }
                 $imageFile = "\usb\scopes-tool-live-${timestamp}.png"
                 $waveformFile = "\usb\scopes-tool-live-${timestamp}.csv"
                 Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
@@ -2611,21 +2628,57 @@ if ($snapshotComplete) {
                     [string]$waveform.result.filename -ne $waveformFile) {
                     throw "Instrument waveform save result is invalid."
                 }
+            } catch {
+                $primaryException = $_.Exception
             } finally {
                 if ([string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
-                    Invoke-LiveCli -Stage "save-image-format-restore" `
-                        -Command "save-image-format" `
-                        -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
-                } elseif ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
-                    Invoke-LiveCli -Stage "save-waveform-format-restore" `
-                        -Command "save-waveform-format" `
-                        -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
+                    try {
+                        Invoke-LiveCli -Stage "save-image-format-restore" `
+                            -Command "save-image-format" `
+                            -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-export" -Message (
+                            "image format restore failed: $($_.Exception.Message)"
+                        )
+                    }
+                }
+                if ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+                    try {
+                        Invoke-LiveCli -Stage "save-waveform-format-restore" `
+                            -Command "save-waveform-format" `
+                            -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-export" -Message (
+                            "waveform format restore failed: $($_.Exception.Message)"
+                        )
+                    }
                 }
                 if ([int]$snapshot.SaveWaveformLength -gt 0) {
-                    Invoke-LiveCli -Stage "save-waveform-length-restore" `
-                        -Command "save-waveform-length" `
-                        -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
+                    try {
+                        Invoke-LiveCli -Stage "save-waveform-length-restore" `
+                            -Command "save-waveform-length" `
+                            -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-export" -Message (
+                            "waveform length restore failed: $($_.Exception.Message)"
+                        )
+                    }
                 }
+            }
+            if ($null -ne $primaryException) {
+                throw $primaryException
+            }
+            if ($null -ne $firstRestoreException) {
+                throw $firstRestoreException
             }
         }
     }
