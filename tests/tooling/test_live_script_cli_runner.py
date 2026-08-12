@@ -2194,6 +2194,123 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
     assert '"--log-scpi"' not in invoke_live_cli
 
 
+def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    for case_name in (
+        "channel-vertical",
+        "channel-probe",
+        "channel-advanced",
+        "display-settings",
+        "display-annotation",
+        "search-basic",
+        "screenshot-bmp",
+        "waveform-amp",
+    ):
+        assert f'Invoke-BaselineCase -Name "{case_name}"' in script
+
+    for command in (
+        "channel-label",
+        "channel-scale",
+        "channel-offset",
+        "channel-probe",
+        "channel-bandwidth-limit",
+        "channel-impedance",
+        "channel-invert",
+        "channel-range",
+        "channel-units",
+        "channel-vernier",
+        "channel-probe-skew",
+        "display-label",
+        "display-persistence",
+        "display-intensity",
+        "display-vectors",
+        "annotation",
+        "search-state",
+        "search-mode",
+        "search-count",
+        "search-event",
+    ):
+        assert f'Command = "{command}"' in script or f'Command "{command}"' in script
+
+    preflight_start = script.index("function Invoke-HardwareFreePreflight {")
+    preflight_end = script.index("\nfunction Restore-InstrumentState {", preflight_start)
+    preflight = script[preflight_start:preflight_end]
+    for command in (
+        "channel-label",
+        "channel-scale",
+        "channel-offset",
+        "channel-probe",
+        "channel-bandwidth-limit",
+        "channel-impedance",
+        "channel-invert",
+        "channel-range",
+        "channel-units",
+        "channel-vernier",
+        "channel-probe-skew",
+        "display-label",
+        "display-persistence",
+        "display-intensity",
+        "display-vectors",
+        "annotation",
+        "search-state",
+        "search-mode",
+        "search-count",
+        "search-event",
+    ):
+        assert f'Command = "{command}"' in preflight
+    assert '"--format", "bmp"' in preflight
+
+    channel_vertical_start = script.index(
+        'Invoke-BaselineCase -Name "channel-vertical"'
+    )
+    channel_vertical_end = script.index(
+        '\n    if (-not $script:FunctionalFailed)', channel_vertical_start + 1
+    )
+    channel_vertical = script[channel_vertical_start:channel_vertical_end]
+    assert channel_vertical.index('Stage "channel-scale-set-p2"') < (
+        channel_vertical.index('Stage "channel-scale-query-p2"')
+    )
+    assert channel_vertical.index('Stage "channel-scale-query-p2"') < (
+        channel_vertical.index('Stage "channel-range-set"')
+    )
+    assert channel_vertical.index('Stage "channel-range-set"') < (
+        channel_vertical.index('Stage "channel-range-query"')
+    )
+
+    assert '$identity.capabilities.supports_screenshot_format_pack' in script
+    assert '$identity.capabilities.supports_search_event_navigation' in script
+    assert '"edge" -in @($identity.capabilities.search_modes)' in script
+    assert 'Stage "waveform-amp-unit-restore"' in script
+    assert 'Stage "waveform-amp-unit-restore-query"' in script
+
+    restore_start = script.index("function Restore-InstrumentState {")
+    restore_end = script.index("\nif ([string]::IsNullOrWhiteSpace", restore_start)
+    restore = script[restore_start:restore_end]
+    for command in (
+        "channel-label",
+        "channel-scale",
+        "channel-offset",
+        "channel-probe",
+        "channel-bandwidth-limit",
+        "channel-impedance",
+        "channel-invert",
+        "channel-range",
+        "channel-units",
+        "channel-vernier",
+        "channel-probe-skew",
+        "display-label",
+        "display-persistence",
+        "display-intensity",
+        "annotation",
+        "search-state",
+        "search-mode",
+    ):
+        assert f'Command = "{command}"' in restore
+
+
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_p1_cases_validate_payloads_and_scpi_history(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -2387,3 +2504,395 @@ Invoke-Expression $caseBlock
     assert "empty SCPI history" in result["failure_detail"]
     assert result["failure_functional_failed"] is True
     assert result["failure_drain_calls"] == 1
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_p2_amp_case_validates_artifacts_and_restores_unit(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    artifact_root = tmp_path / "artifacts"
+    artifact_root.mkdir()
+    harness_path = tmp_path / "baseline-p2-amp-harness.ps1"
+    harness_path.write_text(
+        r'''
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [string] $ArtifactRoot
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @(
+    "Assert-FileNonEmpty",
+    "Assert-Capture",
+    "Assert-ScpiSent",
+    "Invoke-BaselineCase"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"waveform-amp`"")
+    )
+}, $true))
+if ($matchingCommands.Count -ne 1) {
+    throw "Expected one waveform-amp case in ${ScriptPath}."
+}
+$caseBlock = $matchingCommands[0].Extent.Text
+
+$script:liveArtifactRoot = $ArtifactRoot
+$script:snapshot = [pscustomobject]@{ ChannelUnits = "volt" }
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:EmptyCaptureHistory = $false
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    switch ($Stage) {
+        "waveform-amp-unit-set" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:UNITs AMP") }
+                result = [pscustomobject]@{ command = ":CHANnel1:UNITs AMP"; units = "amp" }
+            }
+        }
+        "waveform-amp-unit-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:UNITs?") }
+                result = [pscustomobject]@{ units = "amp" }
+            }
+        }
+        "waveform-amp-capture" {
+            $csvPath = Join-Path $ArtifactRoot "waveform-amp.csv"
+            $metadataPath = Join-Path $ArtifactRoot "waveform-amp-meta.json"
+            [System.IO.File]::WriteAllText($csvPath, "time_s,ch1_a`n0,1`n")
+            [System.IO.File]::WriteAllText(
+                $metadataPath,
+                '{"format":"BYTE","actual_points":1,"vertical_unit":"A"}'
+            )
+            $sent = if ($script:EmptyCaptureHistory) {
+                @()
+            } else {
+                @(":CHANnel1:UNITs?", ":WAVeform:FORMat BYTE", ":WAVeform:DATA?")
+            }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = $sent }
+                result = [pscustomobject]@{
+                    format = "BYTE"
+                    actual_points = 1
+                    captures = @([pscustomobject]@{ vertical_unit = "A" })
+                }
+            }
+        }
+        "waveform-amp-unit-restore" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:UNITs VOLT") }
+                result = [pscustomobject]@{ command = ":CHANnel1:UNITs VOLT" }
+            }
+        }
+        "waveform-amp-unit-restore-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:UNITs?") }
+                result = [pscustomobject]@{ units = "volt" }
+            }
+        }
+        default { throw "Unexpected stage: ${Stage}" }
+    }
+}
+
+Invoke-Expression $caseBlock
+$passResult = $script:CaseResults["waveform-amp"].Passed
+$passInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:EmptyCaptureHistory = $true
+Invoke-Expression $caseBlock
+
+[ordered]@{
+    pass_result = $passResult
+    pass_invocations = $passInvocations
+    failure_passed = $script:CaseResults["waveform-amp"].Passed
+    failure_detail = $script:CaseResults["waveform-amp"].Detail
+    failure_functional_failed = $script:FunctionalFailed
+    failure_drain_calls = $script:DrainCalls
+    failure_invocations = @($script:Invocations | ForEach-Object { $_ })
+} | ConvertTo-Json -Depth 12 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-ArtifactRoot",
+            str(artifact_root),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["pass_result"] is True
+    assert [entry["stage"] for entry in result["pass_invocations"]][-2:] == [
+        "waveform-amp-unit-restore",
+        "waveform-amp-unit-restore-query",
+    ]
+    assert result["failure_passed"] is False
+    assert "empty SCPI history" in result["failure_detail"]
+    assert result["failure_functional_failed"] is True
+    assert result["failure_drain_calls"] == 1
+    assert [entry["stage"] for entry in result["failure_invocations"]][-2:] == [
+        "waveform-amp-unit-restore",
+        "waveform-amp-unit-restore-query",
+    ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_p2_restore_executes_public_cli_steps(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-p2-restore-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @(
+    "ConvertTo-InvariantString", "Assert-NearlyEqual", "Restore-InstrumentState"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:DrainCalls = 0
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    switch ($Stage) {
+        "restore-channel-summary-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ channels = @(
+                [pscustomobject]@{
+                    label = "Original"
+                    scale = 1.0
+                    range = 8.0
+                    offset = 0.0
+                    bandwidth_limit = $false
+                    impedance = "one_meg"
+                    invert = $false
+                    units = "volt"
+                    vernier = $false
+                    probe_ratio = 10.0
+                    probe_skew = 0.0
+                }
+            ) } }
+        }
+        "restore-display-label-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ display_label = $true } }
+        }
+        "restore-display-persistence-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ mode = "minimum"; seconds = $null } }
+        }
+        "restore-display-intensity-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ value = 50 } }
+        }
+        "restore-display-vectors-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ value = $true } }
+        }
+        "restore-annotation-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{
+                enabled = $false
+                text = "Original annotation"
+                color = "WHITE"
+                background = "OPAQ"
+                x = 20
+                y = 30
+            } }
+        }
+        "restore-search-state-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ enabled = $false } }
+        }
+        default { return [pscustomobject]@{ result = [pscustomobject]@{} } }
+    }
+}
+
+$snapshot = [pscustomobject]@{
+    ChannelProbeSkew = 0.0
+    ChannelVernier = $false
+    ChannelUnits = "volt"
+    ChannelInvert = $false
+    ChannelImpedance = "one_meg"
+    ChannelBandwidthLimit = $false
+    ChannelProbeRatio = 10.0
+    ChannelRange = 8.0
+    ChannelScale = 1.0
+    ChannelOffset = 0.0
+    ChannelLabel = "Original"
+    DisplayIntensity = 50
+    DisplayPersistenceSeconds = $null
+    DisplayPersistenceMode = "minimum"
+    DisplayLabels = $true
+    TriggerLevel = 0.0
+    TriggerSlope = "positive"
+    TriggerSource = "analog-channel"
+    TriggerSourceChannel = 1
+    TimebasePosition = 0.0
+    TimebaseScale = 0.001
+    ChannelCoupling = "dc"
+    ChannelDisplay = $true
+    AcquisitionType = "normal"
+    AcquisitionCount = 1
+    DisplayVectors = $true
+    AnnotationRestorable = $true
+    AnnotationEnabled = $false
+    AnnotationText = "Original annotation"
+    AnnotationColor = "WHITE"
+    AnnotationBackground = "OPAQ"
+    AnnotationX = 20
+    AnnotationY = 30
+    SearchRestorable = $true
+    SearchMode = "edge"
+    SearchEnabled = $false
+}
+
+Restore-InstrumentState -Snapshot $snapshot
+[ordered]@{
+    invocations = @($script:Invocations | ForEach-Object { $_ })
+    drain_calls = $script:DrainCalls
+} | ConvertTo-Json -Depth 10 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    commands = [entry["command"] for entry in result["invocations"]]
+    for command in (
+        "channel-label",
+        "channel-scale",
+        "channel-offset",
+        "channel-probe",
+        "channel-bandwidth-limit",
+        "channel-impedance",
+        "channel-invert",
+        "channel-range",
+        "channel-units",
+        "channel-vernier",
+        "channel-probe-skew",
+        "display-label",
+        "display-persistence",
+        "display-intensity",
+        "display-vectors",
+        "annotation",
+        "search-mode",
+        "search-state",
+    ):
+        assert command in commands
+    assert result["drain_calls"] == 0

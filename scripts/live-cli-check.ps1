@@ -397,7 +397,10 @@ function Assert-Capture {
         [string] $CsvPath,
 
         [Parameter(Mandatory = $true)]
-        [string] $MetadataPath
+        [string] $MetadataPath,
+
+        [ValidateSet("", "V", "A")]
+        [string] $ExpectedVerticalUnit = ""
     )
 
     if ([string]$Payload.result.format -ne $ExpectedFormat) {
@@ -415,6 +418,16 @@ function Assert-Capture {
     }
     if ([int]$metadata.actual_points -le 0) {
         throw "${ExpectedFormat} metadata reports no samples."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedVerticalUnit)) {
+        $captures = @($Payload.result.captures)
+        if ($captures.Count -ne 1 -or
+            [string]$captures[0].vertical_unit -ne $ExpectedVerticalUnit) {
+            throw "${ExpectedFormat} capture did not report vertical unit ${ExpectedVerticalUnit}."
+        }
+        if ([string]$metadata.vertical_unit -ne $ExpectedVerticalUnit) {
+            throw "${ExpectedFormat} metadata did not report vertical unit ${ExpectedVerticalUnit}."
+        }
     }
 }
 
@@ -467,6 +480,29 @@ function Invoke-HardwareFreePreflight {
         -ModeArguments $dryRun -Arguments @(
             "--source-channel", "1", "--level", "0", "--slope", "positive"
         ) | Out-Null
+    foreach ($item in @(
+        [pscustomobject]@{ Command = "channel-label"; Arguments = @("--channel", "1", "--text", "P2") },
+        [pscustomobject]@{ Command = "channel-scale"; Arguments = @("--channel", "1", "--volts-per-division", "0.5") },
+        [pscustomobject]@{ Command = "channel-offset"; Arguments = @("--channel", "1", "--volts", "0") },
+        [pscustomobject]@{ Command = "channel-probe"; Arguments = @("--channel", "1", "--ratio", "10") },
+        [pscustomobject]@{ Command = "channel-bandwidth-limit"; Arguments = @("--channel", "1", "--off") },
+        [pscustomobject]@{ Command = "channel-impedance"; Arguments = @("--channel", "1", "--impedance", "one-meg") },
+        [pscustomobject]@{ Command = "channel-invert"; Arguments = @("--channel", "1", "--off") },
+        [pscustomobject]@{ Command = "channel-range"; Arguments = @("--channel", "1", "--volts-full-scale", "4") },
+        [pscustomobject]@{ Command = "channel-units"; Arguments = @("--channel", "1", "--units", "amp") },
+        [pscustomobject]@{ Command = "channel-vernier"; Arguments = @("--channel", "1", "--off") },
+        [pscustomobject]@{ Command = "channel-probe-skew"; Arguments = @("--channel", "1", "--seconds", "0") },
+        [pscustomobject]@{ Command = "display-label"; Arguments = @("--on") },
+        [pscustomobject]@{ Command = "display-persistence"; Arguments = @("--mode", "minimum") },
+        [pscustomobject]@{ Command = "display-intensity"; Arguments = @("--value", "75") },
+        [pscustomobject]@{ Command = "display-vectors"; Arguments = @("--on") },
+        [pscustomobject]@{ Command = "annotation"; Arguments = @("--slot", "1", "--on", "--text", "P2") },
+        [pscustomobject]@{ Command = "search-state"; Arguments = @("--enabled", "true") },
+        [pscustomobject]@{ Command = "search-mode"; Arguments = @("--mode", "edge") }
+    )) {
+        Invoke-ModeCli -Stage "preflight-$($item.Command)-set" -Command $item.Command `
+            -ModeArguments $dryRun -Arguments $item.Arguments | Out-Null
+    }
 
     Invoke-ModeCli -Stage "preflight-identify" -Command "identify" `
         -ModeArguments $simulate | Out-Null
@@ -516,6 +552,31 @@ function Invoke-HardwareFreePreflight {
         -ModeArguments $simulate -Arguments @("--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-level-query" -Command "trigger-edge-level" `
         -ModeArguments $simulate -Arguments @("--source-channel", "1", "--query") | Out-Null
+    foreach ($item in @(
+        [pscustomobject]@{ Command = "channel-label"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-scale"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-offset"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-probe"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-bandwidth-limit"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-impedance"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-invert"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-range"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-units"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-vernier"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "channel-probe-skew"; Arguments = @("--channel", "1", "--query") },
+        [pscustomobject]@{ Command = "display-label"; Arguments = @("--query") },
+        [pscustomobject]@{ Command = "display-persistence"; Arguments = @("--query") },
+        [pscustomobject]@{ Command = "display-intensity"; Arguments = @("--query") },
+        [pscustomobject]@{ Command = "display-vectors"; Arguments = @("--query") },
+        [pscustomobject]@{ Command = "annotation"; Arguments = @("--slot", "1", "--query") },
+        [pscustomobject]@{ Command = "search-state"; Arguments = @("--query") },
+        [pscustomobject]@{ Command = "search-mode"; Arguments = @("--query") },
+        [pscustomobject]@{ Command = "search-count"; Arguments = @("--query") },
+        [pscustomobject]@{ Command = "search-event"; Arguments = @("--query") }
+    )) {
+        Invoke-ModeCli -Stage "preflight-$($item.Command)-query" -Command $item.Command `
+            -ModeArguments $simulate -Arguments $item.Arguments | Out-Null
+    }
 
     $measurements = @{}
     foreach ($item in @("vpp", "frequency", "period")) {
@@ -554,6 +615,14 @@ function Invoke-HardwareFreePreflight {
     }
     Assert-FileNonEmpty -Path $screenshotPath -Label "4000X simulator screenshot"
 
+    $bmpPath = Join-Path $artifactRoot "screenshot-4000x.bmp"
+    $bmp = Invoke-ModeCli -Stage "preflight-screenshot-bmp" -Command "screenshot" `
+        -ModeArguments $simulate -Arguments @("--format", "bmp", "--output", $bmpPath)
+    if ([string]$bmp.result.format -ne "BMP" -or [int]$bmp.result.byte_count -le 0) {
+        throw "4000X simulator BMP screenshot result is invalid."
+    }
+    Assert-FileNonEmpty -Path $bmpPath -Label "4000X simulator BMP screenshot"
+
     $legacyScreenshotPath = Join-Path $artifactRoot "screenshot-2000x.png"
     $legacyScreenshot = Invoke-ModeCli -Stage "preflight-screenshot-2000x" -Command "screenshot" `
         -ModeArguments @("--simulate", "--model", "keysight-dsox2004a") -Arguments @(
@@ -574,6 +643,102 @@ function Restore-InstrumentState {
     $restoreErrors = [System.Collections.Generic.List[string]]::new()
 
     $restoreSteps = @(
+        [pscustomobject]@{
+            Name = "CH1 probe skew"
+            Command = "channel-probe-skew"
+            Arguments = @(
+                "--channel", "1", "--seconds",
+                (ConvertTo-InvariantString -Value ([double]$Snapshot.ChannelProbeSkew))
+            )
+        },
+        [pscustomobject]@{
+            Name = "CH1 vernier"
+            Command = "channel-vernier"
+            Arguments = @("--channel", "1", $(if ($Snapshot.ChannelVernier) { "--on" } else { "--off" }))
+        },
+        [pscustomobject]@{
+            Name = "CH1 units"
+            Command = "channel-units"
+            Arguments = @("--channel", "1", "--units", [string]$Snapshot.ChannelUnits)
+        },
+        [pscustomobject]@{
+            Name = "CH1 invert"
+            Command = "channel-invert"
+            Arguments = @("--channel", "1", $(if ($Snapshot.ChannelInvert) { "--on" } else { "--off" }))
+        },
+        [pscustomobject]@{
+            Name = "CH1 impedance"
+            Command = "channel-impedance"
+            Arguments = @(
+                "--channel", "1", "--impedance",
+                $(if ($Snapshot.ChannelImpedance -eq "one_meg") { "one-meg" } else { "fifty" })
+            ) + $(if ($Snapshot.ChannelImpedance -eq "fifty") { @("--allow-50-ohm") } else { @() })
+        },
+        [pscustomobject]@{
+            Name = "CH1 bandwidth limit"
+            Command = "channel-bandwidth-limit"
+            Arguments = @("--channel", "1", $(if ($Snapshot.ChannelBandwidthLimit) { "--on" } else { "--off" }))
+        },
+        [pscustomobject]@{
+            Name = "CH1 probe ratio"
+            Command = "channel-probe"
+            Arguments = @(
+                "--channel", "1", "--ratio",
+                (ConvertTo-InvariantString -Value ([double]$Snapshot.ChannelProbeRatio)
+                )
+            )
+        },
+        [pscustomobject]@{
+            Name = "CH1 range"
+            Command = "channel-range"
+            Arguments = @(
+                "--channel", "1", "--volts-full-scale",
+                (ConvertTo-InvariantString -Value ([double]$Snapshot.ChannelRange))
+            )
+        },
+        [pscustomobject]@{
+            Name = "CH1 scale"
+            Command = "channel-scale"
+            Arguments = @(
+                "--channel", "1", "--volts-per-division",
+                (ConvertTo-InvariantString -Value ([double]$Snapshot.ChannelScale))
+            )
+        },
+        [pscustomobject]@{
+            Name = "CH1 offset"
+            Command = "channel-offset"
+            Arguments = @(
+                "--channel", "1", "--volts",
+                (ConvertTo-InvariantString -Value ([double]$Snapshot.ChannelOffset))
+            )
+        },
+        [pscustomobject]@{
+            Name = "CH1 label"
+            Command = "channel-label"
+            Arguments = @("--channel", "1", "--text", [string]$Snapshot.ChannelLabel)
+        },
+        [pscustomobject]@{
+            Name = "display intensity"
+            Command = "display-intensity"
+            Arguments = @("--value", [string]$Snapshot.DisplayIntensity)
+        },
+        [pscustomobject]@{
+            Name = "display persistence"
+            Command = "display-persistence"
+            Arguments = if ($null -ne $Snapshot.DisplayPersistenceSeconds) {
+                @(
+                    "--seconds",
+                    (ConvertTo-InvariantString -Value ([double]$Snapshot.DisplayPersistenceSeconds))
+                )
+            } else {
+                @("--mode", [string]$Snapshot.DisplayPersistenceMode)
+            }
+        },
+        [pscustomobject]@{
+            Name = "display labels"
+            Command = "display-label"
+            Arguments = @($(if ($Snapshot.DisplayLabels) { "--on" } else { "--off" }))
+        },
         [pscustomobject]@{
             Name = "CH1 Edge level"
             Command = "trigger-edge-level"
@@ -637,6 +802,46 @@ function Restore-InstrumentState {
         Arguments = $acquisitionArguments
     }
 
+    if ($Snapshot.DisplayVectors) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "display vectors"
+            Command = "display-vectors"
+            Arguments = @("--on")
+        }
+    }
+    if ($Snapshot.AnnotationRestorable) {
+        $annotationArguments = @(
+            "--slot", "1",
+            $(if ($Snapshot.AnnotationEnabled) { "--on" } else { "--off" }),
+            "--text", [string]$Snapshot.AnnotationText,
+            "--color", [string]$Snapshot.AnnotationColor,
+            "--background", [string]$Snapshot.AnnotationBackground
+        )
+        if ($null -ne $Snapshot.AnnotationX -and $null -ne $Snapshot.AnnotationY) {
+            $annotationArguments += @(
+                "--x", [string]$Snapshot.AnnotationX,
+                "--y", [string]$Snapshot.AnnotationY
+            )
+        }
+        $restoreSteps += [pscustomobject]@{
+            Name = "annotation slot 1"
+            Command = "annotation"
+            Arguments = $annotationArguments
+        }
+    }
+    if ($Snapshot.SearchRestorable) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "search mode"
+            Command = "search-mode"
+            Arguments = @("--mode", [string]$Snapshot.SearchMode)
+        }
+        $restoreSteps += [pscustomobject]@{
+            Name = "search state"
+            Command = "search-state"
+            Arguments = @("--enabled", ([string][bool]$Snapshot.SearchEnabled).ToLowerInvariant())
+        }
+    }
+
     foreach ($step in $restoreSteps) {
         try {
             Invoke-LiveCli -Stage "restore-$($step.Command)" -Command $step.Command `
@@ -645,6 +850,83 @@ function Restore-InstrumentState {
             $restoreErrors.Add("$($step.Name): $($_.Exception.Message)")
             Drain-AfterFailure -Stage "restore-$($step.Command)-error-drain" `
                 -CaseName "cleanup"
+        }
+    }
+
+    if ($restoreErrors.Count -eq 0) {
+        try {
+            $summary = Invoke-LiveCli -Stage "restore-channel-summary-query" `
+                -Command "channel-summary"
+            $channel = @($summary.result.channels)[0]
+            if ([string]$channel.label -ne [string]$Snapshot.ChannelLabel -or
+                [bool]$channel.bandwidth_limit -ne [bool]$Snapshot.ChannelBandwidthLimit -or
+                [string]$channel.impedance -ne [string]$Snapshot.ChannelImpedance -or
+                [bool]$channel.invert -ne [bool]$Snapshot.ChannelInvert -or
+                [string]$channel.units -ne [string]$Snapshot.ChannelUnits -or
+                [bool]$channel.vernier -ne [bool]$Snapshot.ChannelVernier) {
+                throw "CH1 restored state does not match the snapshot."
+            }
+            Assert-NearlyEqual -Actual ([double]$channel.scale) `
+                -Expected ([double]$Snapshot.ChannelScale) -Label "Restored CH1 scale"
+            Assert-NearlyEqual -Actual ([double]$channel.range) `
+                -Expected ([double]$Snapshot.ChannelRange) -Label "Restored CH1 range"
+            Assert-NearlyEqual -Actual ([double]$channel.offset) `
+                -Expected ([double]$Snapshot.ChannelOffset) -Label "Restored CH1 offset"
+            Assert-NearlyEqual -Actual ([double]$channel.probe_ratio) `
+                -Expected ([double]$Snapshot.ChannelProbeRatio) -Label "Restored CH1 probe ratio"
+            Assert-NearlyEqual -Actual ([double]$channel.probe_skew) `
+                -Expected ([double]$Snapshot.ChannelProbeSkew) -Label "Restored CH1 probe skew"
+
+            $labels = Invoke-LiveCli -Stage "restore-display-label-query" `
+                -Command "display-label" -Arguments @("--query")
+            $persistence = Invoke-LiveCli -Stage "restore-display-persistence-query" `
+                -Command "display-persistence" -Arguments @("--query")
+            $intensity = Invoke-LiveCli -Stage "restore-display-intensity-query" `
+                -Command "display-intensity" -Arguments @("--query")
+            $vectors = Invoke-LiveCli -Stage "restore-display-vectors-query" `
+                -Command "display-vectors" -Arguments @("--query")
+            if ([bool]$labels.result.display_label -ne [bool]$Snapshot.DisplayLabels -or
+                [int]$intensity.result.value -ne [int]$Snapshot.DisplayIntensity -or
+                [bool]$vectors.result.value -ne [bool]$Snapshot.DisplayVectors) {
+                throw "Restored display state does not match the snapshot."
+            }
+            if ($null -ne $Snapshot.DisplayPersistenceSeconds) {
+                Assert-NearlyEqual -Actual ([double]$persistence.result.seconds) `
+                    -Expected ([double]$Snapshot.DisplayPersistenceSeconds) `
+                    -Label "Restored display persistence"
+            } elseif ([string]$persistence.result.mode -ne [string]$Snapshot.DisplayPersistenceMode) {
+                throw "Restored display-persistence mode does not match the snapshot."
+            }
+
+            if ($Snapshot.AnnotationRestorable) {
+                $annotation = Invoke-LiveCli -Stage "restore-annotation-query" `
+                    -Command "annotation" -Arguments @("--slot", "1", "--query")
+                if ([bool]$annotation.result.enabled -ne [bool]$Snapshot.AnnotationEnabled -or
+                    [string]$annotation.result.text -ne [string]$Snapshot.AnnotationText -or
+                    [string]$annotation.result.color -ne [string]$Snapshot.AnnotationColor -or
+                    [string]$annotation.result.background -ne [string]$Snapshot.AnnotationBackground -or
+                    $annotation.result.x -ne $Snapshot.AnnotationX -or
+                    $annotation.result.y -ne $Snapshot.AnnotationY) {
+                    throw "Restored annotation state does not match the snapshot."
+                }
+            }
+            if ($Snapshot.SearchRestorable) {
+                $search = Invoke-LiveCli -Stage "restore-search-state-query" `
+                    -Command "search-state" -Arguments @("--query")
+                if ([bool]$search.result.enabled -ne [bool]$Snapshot.SearchEnabled) {
+                    throw "Restored Search state does not match the snapshot."
+                }
+                if ($Snapshot.SearchEnabled) {
+                    $mode = Invoke-LiveCli -Stage "restore-search-mode-query" `
+                        -Command "search-mode" -Arguments @("--query")
+                    if ([string]$mode.result.mode -ne [string]$Snapshot.SearchMode) {
+                        throw "Restored Search mode does not match the snapshot."
+                    }
+                }
+            }
+        } catch {
+            $restoreErrors.Add("restore readback: $($_.Exception.Message)")
+            Drain-AfterFailure -Stage "restore-readback-error-drain" -CaseName "cleanup"
         }
     }
 
@@ -736,10 +1018,9 @@ Write-Host "Required setup:"
 Write-Host "  - Connect the CH1 probe to the oscilloscope Probe Demo / Probe Comp output."
 Write-Host "  - Confirm a stable waveform is visible on CH1."
 Write-Host "  - Disconnect unknown DUT signals."
-Write-Host "  - This test temporarily changes CH1, acquisition, timebase, trigger,"
-Write-Host "    and waveform transfer settings."
-Write-Host "  - Acquisition, CH1, timebase, Edge source/slope, and CH1 Edge level"
-Write-Host "    will be restored where practical."
+Write-Host "  - This test temporarily changes CH1, acquisition, display, Search,"
+Write-Host "    annotation, timebase, trigger, and waveform transfer settings."
+Write-Host "  - Modified public settings will be restored where practical."
 Write-Host "  - The generic trigger mode cannot be restored and will remain Edge after"
 Write-Host "    the trigger case runs. Waveform transfer format may remain WORD."
 Write-Host ""
@@ -758,6 +1039,36 @@ try {
         -Command "channel-display" -Arguments @("--channel", "1", "--query")
     $channelCoupling = Invoke-LiveCli -Stage "snapshot-channel-coupling" `
         -Command "channel-coupling" -Arguments @("--channel", "1", "--query")
+    $channelLabel = Invoke-LiveCli -Stage "snapshot-channel-label" `
+        -Command "channel-label" -Arguments @("--channel", "1", "--query")
+    $channelScale = Invoke-LiveCli -Stage "snapshot-channel-scale" `
+        -Command "channel-scale" -Arguments @("--channel", "1", "--query")
+    $channelOffset = Invoke-LiveCli -Stage "snapshot-channel-offset" `
+        -Command "channel-offset" -Arguments @("--channel", "1", "--query")
+    $channelProbe = Invoke-LiveCli -Stage "snapshot-channel-probe" `
+        -Command "channel-probe" -Arguments @("--channel", "1", "--query")
+    $channelBandwidth = Invoke-LiveCli -Stage "snapshot-channel-bandwidth" `
+        -Command "channel-bandwidth-limit" -Arguments @("--channel", "1", "--query")
+    $channelImpedance = Invoke-LiveCli -Stage "snapshot-channel-impedance" `
+        -Command "channel-impedance" -Arguments @("--channel", "1", "--query")
+    $channelInvert = Invoke-LiveCli -Stage "snapshot-channel-invert" `
+        -Command "channel-invert" -Arguments @("--channel", "1", "--query")
+    $channelRange = Invoke-LiveCli -Stage "snapshot-channel-range" `
+        -Command "channel-range" -Arguments @("--channel", "1", "--query")
+    $channelUnits = Invoke-LiveCli -Stage "snapshot-channel-units" `
+        -Command "channel-units" -Arguments @("--channel", "1", "--query")
+    $channelVernier = Invoke-LiveCli -Stage "snapshot-channel-vernier" `
+        -Command "channel-vernier" -Arguments @("--channel", "1", "--query")
+    $channelProbeSkew = Invoke-LiveCli -Stage "snapshot-channel-probe-skew" `
+        -Command "channel-probe-skew" -Arguments @("--channel", "1", "--query")
+    $displayLabels = Invoke-LiveCli -Stage "snapshot-display-labels" `
+        -Command "display-label" -Arguments @("--query")
+    $displayPersistence = Invoke-LiveCli -Stage "snapshot-display-persistence" `
+        -Command "display-persistence" -Arguments @("--query")
+    $displayIntensity = Invoke-LiveCli -Stage "snapshot-display-intensity" `
+        -Command "display-intensity" -Arguments @("--query")
+    $displayVectors = Invoke-LiveCli -Stage "snapshot-display-vectors" `
+        -Command "display-vectors" -Arguments @("--query")
     $timebaseScale = Invoke-LiveCli -Stage "snapshot-timebase-scale" `
         -Command "timebase-scale" -Arguments @("--query")
     $timebasePosition = Invoke-LiveCli -Stage "snapshot-timebase-position" `
@@ -768,6 +1079,29 @@ try {
         -Command "trigger-edge-slope" -Arguments @("--query")
     $triggerLevel = Invoke-LiveCli -Stage "snapshot-trigger-level" `
         -Command "trigger-edge-level" -Arguments @("--source-channel", "1", "--query")
+
+    $annotationState = $null
+    $annotationRestorable = $false
+    if ([bool]$identity.capabilities.supports_annotation) {
+        $annotationState = Invoke-LiveCli -Stage "snapshot-annotation" `
+            -Command "annotation" -Arguments @("--slot", "1", "--query")
+        $annotationText = [string]$annotationState.result.text
+        $annotationRestorable = $annotationText -notmatch '["]|[^ -~]'
+    }
+
+    $searchState = $null
+    $searchMode = $null
+    $searchRestorable = $false
+    if ([bool]$identity.capabilities.supports_search_basic) {
+        $searchState = Invoke-LiveCli -Stage "snapshot-search-state" `
+            -Command "search-state" -Arguments @("--query")
+        $searchMode = Invoke-LiveCli -Stage "snapshot-search-mode" `
+            -Command "search-mode" -Arguments @("--query")
+        $searchRestorable = (
+            "edge" -in @($identity.capabilities.search_modes) -and
+            -not [string]::IsNullOrWhiteSpace([string]$searchMode.result.mode)
+        )
+    }
 
     if ($triggerSource.result.source -notin @("analog-channel", "external", "line")) {
         throw "Unsupported Edge source readback: $($triggerSource.result.source)"
@@ -785,6 +1119,37 @@ try {
         AcquisitionCount = [int]$acquisition.result.count
         ChannelDisplay = [bool]$channelDisplay.result.display
         ChannelCoupling = [string]$channelCoupling.result.coupling
+        ChannelLabel = [string]$channelLabel.result.text
+        ChannelScale = Assert-FiniteNumber -Value $channelScale.result.volts_per_division `
+            -Label "CH1 scale"
+        ChannelOffset = Assert-FiniteNumber -Value $channelOffset.result.volts `
+            -Label "CH1 offset"
+        ChannelProbeRatio = Assert-FiniteNumber -Value $channelProbe.result.probe_ratio `
+            -Label "CH1 probe ratio"
+        ChannelBandwidthLimit = [bool]$channelBandwidth.result.bandwidth_limit
+        ChannelImpedance = [string]$channelImpedance.result.impedance
+        ChannelInvert = [bool]$channelInvert.result.invert
+        ChannelRange = Assert-FiniteNumber -Value $channelRange.result.range_volts `
+            -Label "CH1 range"
+        ChannelUnits = [string]$channelUnits.result.units
+        ChannelVernier = [bool]$channelVernier.result.vernier
+        ChannelProbeSkew = Assert-FiniteNumber `
+            -Value $channelProbeSkew.result.probe_skew_seconds -Label "CH1 probe skew"
+        DisplayLabels = [bool]$displayLabels.result.display_label
+        DisplayPersistenceMode = $displayPersistence.result.mode
+        DisplayPersistenceSeconds = $displayPersistence.result.seconds
+        DisplayIntensity = [int]$displayIntensity.result.value
+        DisplayVectors = [bool]$displayVectors.result.value
+        AnnotationRestorable = $annotationRestorable
+        AnnotationEnabled = if ($null -ne $annotationState) { [bool]$annotationState.result.enabled } else { $false }
+        AnnotationText = if ($null -ne $annotationState) { [string]$annotationState.result.text } else { "" }
+        AnnotationColor = if ($null -ne $annotationState) { [string]$annotationState.result.color } else { "" }
+        AnnotationBackground = if ($null -ne $annotationState) { [string]$annotationState.result.background } else { "" }
+        AnnotationX = if ($null -ne $annotationState) { $annotationState.result.x } else { $null }
+        AnnotationY = if ($null -ne $annotationState) { $annotationState.result.y } else { $null }
+        SearchRestorable = $searchRestorable
+        SearchEnabled = if ($null -ne $searchState) { [bool]$searchState.result.enabled } else { $false }
+        SearchMode = if ($null -ne $searchMode) { [string]$searchMode.result.mode } else { "" }
         TimebaseScale = Assert-FiniteNumber `
             -Value $timebaseScale.result.seconds_per_division -Label "timebase scale"
         TimebasePosition = Assert-FiniteNumber `
@@ -1006,6 +1371,267 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "channel-vertical" -Action {
+            $labelSet = Invoke-LiveCli -Stage "channel-label-set" -Command "channel-label" `
+                -Arguments @("--channel", "1", "--text", [string]$snapshot.ChannelLabel)
+            Assert-ScpiSent -Payload $labelSet -Label "CH1 label configure" `
+                -ExpectedCommands @([string]$labelSet.result.command)
+            $label = Invoke-LiveCli -Stage "channel-label-query" -Command "channel-label" `
+                -Arguments @("--channel", "1", "--query")
+            Assert-ScpiSent -Payload $label -Label "CH1 label query" `
+                -ExpectedCommands @(":CHANnel1:LABel?")
+            if ([string]$label.result.text -ne [string]$snapshot.ChannelLabel) {
+                throw "CH1 label readback does not match the snapshot."
+            }
+
+            $scaleValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelScale)
+            $scaleSet = Invoke-LiveCli -Stage "channel-scale-set-p2" -Command "channel-scale" `
+                -Arguments @("--channel", "1", "--volts-per-division", $scaleValue)
+            Assert-ScpiSent -Payload $scaleSet -Label "CH1 scale configure" `
+                -ExpectedCommands @([string]$scaleSet.result.command)
+            $scale = Invoke-LiveCli -Stage "channel-scale-query-p2" -Command "channel-scale" `
+                -Arguments @("--channel", "1", "--query")
+            Assert-ScpiSent -Payload $scale -Label "CH1 scale query" `
+                -ExpectedCommands @(":CHANnel1:SCALe?")
+            Assert-NearlyEqual -Actual ([double]$scale.result.volts_per_division) `
+                -Expected ([double]$snapshot.ChannelScale) -Label "CH1 scale"
+
+            $rangeValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelRange)
+            $rangeSet = Invoke-LiveCli -Stage "channel-range-set" -Command "channel-range" `
+                -Arguments @("--channel", "1", "--volts-full-scale", $rangeValue)
+            Assert-ScpiSent -Payload $rangeSet -Label "CH1 range configure" `
+                -ExpectedCommands @([string]$rangeSet.result.command)
+            $range = Invoke-LiveCli -Stage "channel-range-query" -Command "channel-range" `
+                -Arguments @("--channel", "1", "--query")
+            Assert-ScpiSent -Payload $range -Label "CH1 range query" `
+                -ExpectedCommands @(":CHANnel1:RANGe?")
+            Assert-NearlyEqual -Actual ([double]$range.result.range_volts) `
+                -Expected ([double]$snapshot.ChannelRange) -Label "CH1 range"
+
+            $offsetValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelOffset)
+            $offsetSet = Invoke-LiveCli -Stage "channel-offset-set-p2" -Command "channel-offset" `
+                -Arguments @("--channel", "1", "--volts", $offsetValue)
+            Assert-ScpiSent -Payload $offsetSet -Label "CH1 offset configure" `
+                -ExpectedCommands @([string]$offsetSet.result.command)
+            $offset = Invoke-LiveCli -Stage "channel-offset-query-p2" -Command "channel-offset" `
+                -Arguments @("--channel", "1", "--query")
+            Assert-NearlyEqual -Actual ([double]$offset.result.volts) `
+                -Expected ([double]$snapshot.ChannelOffset) -Label "CH1 offset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "channel-probe" -Action {
+            $ratioValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelProbeRatio)
+            $ratioSet = Invoke-LiveCli -Stage "channel-probe-set" -Command "channel-probe" `
+                -Arguments @("--channel", "1", "--ratio", $ratioValue)
+            Assert-ScpiSent -Payload $ratioSet -Label "CH1 probe ratio configure" `
+                -ExpectedCommands @([string]$ratioSet.result.command)
+            $ratio = Invoke-LiveCli -Stage "channel-probe-query" -Command "channel-probe" `
+                -Arguments @("--channel", "1", "--query")
+            Assert-NearlyEqual -Actual ([double]$ratio.result.probe_ratio) `
+                -Expected ([double]$snapshot.ChannelProbeRatio) -Label "CH1 probe ratio"
+
+            $bandwidthAction = if ($snapshot.ChannelBandwidthLimit) { "--on" } else { "--off" }
+            $bandwidthSet = Invoke-LiveCli -Stage "channel-bandwidth-set" `
+                -Command "channel-bandwidth-limit" `
+                -Arguments @("--channel", "1", $bandwidthAction)
+            Assert-ScpiSent -Payload $bandwidthSet -Label "CH1 bandwidth configure" `
+                -ExpectedCommands @([string]$bandwidthSet.result.command)
+            $bandwidth = Invoke-LiveCli -Stage "channel-bandwidth-query" `
+                -Command "channel-bandwidth-limit" -Arguments @("--channel", "1", "--query")
+            if ([bool]$bandwidth.result.bandwidth_limit -ne $snapshot.ChannelBandwidthLimit) {
+                throw "CH1 bandwidth-limit readback does not match the snapshot."
+            }
+
+            $impedanceValue = if ($snapshot.ChannelImpedance -eq "one_meg") {
+                "one-meg"
+            } else {
+                "fifty"
+            }
+            $impedanceArguments = @("--channel", "1", "--impedance", $impedanceValue)
+            if ($impedanceValue -eq "fifty") {
+                $impedanceArguments += "--allow-50-ohm"
+            }
+            $impedanceSet = Invoke-LiveCli -Stage "channel-impedance-set" `
+                -Command "channel-impedance" -Arguments $impedanceArguments
+            Assert-ScpiSent -Payload $impedanceSet -Label "CH1 impedance configure" `
+                -ExpectedCommands @([string]$impedanceSet.result.command)
+            $impedance = Invoke-LiveCli -Stage "channel-impedance-query" `
+                -Command "channel-impedance" -Arguments @("--channel", "1", "--query")
+            if ([string]$impedance.result.impedance -ne [string]$snapshot.ChannelImpedance) {
+                throw "CH1 impedance readback does not match the snapshot."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "channel-advanced" -Action {
+            foreach ($item in @(
+                [pscustomobject]@{
+                    Name = "invert"
+                    Command = "channel-invert"
+                    Action = if ($snapshot.ChannelInvert) { "--on" } else { "--off" }
+                    Field = "invert"
+                    Expected = [bool]$snapshot.ChannelInvert
+                },
+                [pscustomobject]@{
+                    Name = "vernier"
+                    Command = "channel-vernier"
+                    Action = if ($snapshot.ChannelVernier) { "--on" } else { "--off" }
+                    Field = "vernier"
+                    Expected = [bool]$snapshot.ChannelVernier
+                }
+            )) {
+                $configured = Invoke-LiveCli -Stage "channel-$($item.Name)-set" `
+                    -Command $item.Command -Arguments @("--channel", "1", $item.Action)
+                Assert-ScpiSent -Payload $configured -Label "CH1 $($item.Name) configure" `
+                    -ExpectedCommands @([string]$configured.result.command)
+                $readback = Invoke-LiveCli -Stage "channel-$($item.Name)-query" `
+                    -Command $item.Command -Arguments @("--channel", "1", "--query")
+                if ([bool]$readback.result.($item.Field) -ne $item.Expected) {
+                    throw "CH1 $($item.Name) readback does not match the snapshot."
+                }
+            }
+
+            $skewValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelProbeSkew)
+            $skewSet = Invoke-LiveCli -Stage "channel-probe-skew-set" `
+                -Command "channel-probe-skew" `
+                -Arguments @("--channel", "1", "--seconds", $skewValue)
+            Assert-ScpiSent -Payload $skewSet -Label "CH1 probe skew configure" `
+                -ExpectedCommands @([string]$skewSet.result.command)
+            $skew = Invoke-LiveCli -Stage "channel-probe-skew-query" `
+                -Command "channel-probe-skew" -Arguments @("--channel", "1", "--query")
+            Assert-NearlyEqual -Actual ([double]$skew.result.probe_skew_seconds) `
+                -Expected ([double]$snapshot.ChannelProbeSkew) -Label "CH1 probe skew"
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "display-settings" -Action {
+            $labelAction = if ($snapshot.DisplayLabels) { "--on" } else { "--off" }
+            $labelSet = Invoke-LiveCli -Stage "display-label-set" -Command "display-label" `
+                -Arguments @($labelAction)
+            Assert-ScpiSent -Payload $labelSet -Label "Display labels configure" `
+                -ExpectedCommands @([string]$labelSet.result.command)
+            $labels = Invoke-LiveCli -Stage "display-label-query" -Command "display-label" `
+                -Arguments @("--query")
+            if ([bool]$labels.result.display_label -ne $snapshot.DisplayLabels) {
+                throw "Display-label readback does not match the snapshot."
+            }
+
+            $persistenceArguments = if ($null -ne $snapshot.DisplayPersistenceSeconds) {
+                @(
+                    "--seconds",
+                    (ConvertTo-InvariantString -Value ([double]$snapshot.DisplayPersistenceSeconds))
+                )
+            } else {
+                @("--mode", [string]$snapshot.DisplayPersistenceMode)
+            }
+            $persistenceSet = Invoke-LiveCli -Stage "display-persistence-set" `
+                -Command "display-persistence" -Arguments $persistenceArguments
+            Assert-ScpiSent -Payload $persistenceSet -Label "Display persistence configure" `
+                -ExpectedCommands @([string]$persistenceSet.result.command)
+            $persistence = Invoke-LiveCli -Stage "display-persistence-query" `
+                -Command "display-persistence" -Arguments @("--query")
+            if ($null -ne $snapshot.DisplayPersistenceSeconds) {
+                Assert-NearlyEqual -Actual ([double]$persistence.result.seconds) `
+                    -Expected ([double]$snapshot.DisplayPersistenceSeconds) `
+                    -Label "Display persistence"
+            } elseif ([string]$persistence.result.mode -ne [string]$snapshot.DisplayPersistenceMode) {
+                throw "Display-persistence mode does not match the snapshot."
+            }
+
+            $intensitySet = Invoke-LiveCli -Stage "display-intensity-set" `
+                -Command "display-intensity" -Arguments @("--value", [string]$snapshot.DisplayIntensity)
+            Assert-ScpiSent -Payload $intensitySet -Label "Display intensity configure" `
+                -ExpectedCommands @([string]$intensitySet.result.command)
+            $intensity = Invoke-LiveCli -Stage "display-intensity-query" `
+                -Command "display-intensity" -Arguments @("--query")
+            if ([int]$intensity.result.value -ne [int]$snapshot.DisplayIntensity) {
+                throw "Display-intensity readback does not match the snapshot."
+            }
+
+            if ($snapshot.DisplayVectors) {
+                $vectorsSet = Invoke-LiveCli -Stage "display-vectors-set" `
+                    -Command "display-vectors" -Arguments @("--on")
+                Assert-ScpiSent -Payload $vectorsSet -Label "Display vectors configure" `
+                    -ExpectedCommands @([string]$vectorsSet.result.command)
+            }
+            $vectors = Invoke-LiveCli -Stage "display-vectors-query" `
+                -Command "display-vectors" -Arguments @("--query")
+            Assert-ScpiSent -Payload $vectors -Label "Display vectors query" `
+                -ExpectedCommands @(":DISPlay:VECTors?")
+            if ([bool]$vectors.result.value -ne [bool]$snapshot.DisplayVectors) {
+                throw "Display-vectors readback does not match the snapshot."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.AnnotationRestorable) {
+        Invoke-BaselineCase -Name "display-annotation" -Action {
+            $annotation = Invoke-LiveCli -Stage "annotation-set" -Command "annotation" `
+                -Arguments @("--slot", "1", "--on", "--text", "P2 live")
+            Assert-ScpiSent -Payload $annotation -Label "Annotation configure" `
+                -ExpectedCommands @($annotation.result.commands)
+            $readback = Invoke-LiveCli -Stage "annotation-query" -Command "annotation" `
+                -Arguments @("--slot", "1", "--query")
+            Assert-ScpiSent -Payload $readback -Label "Annotation query" `
+                -ExpectedCommands @($readback.result.commands)
+            if (-not [bool]$readback.result.enabled -or
+                [string]$readback.result.text -ne "P2 live" -or
+                [int]$readback.result.slot -ne 1) {
+                throw "Annotation slot 1 readback does not match the representative state."
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Write-Host "SKIP  display-annotation (slot 1 cannot be safely restored)"
+    }
+
+    $supportsEdgeSearch = "edge" -in @($identity.capabilities.search_modes)
+    if (-not $script:FunctionalFailed -and $supportsEdgeSearch -and $snapshot.SearchRestorable) {
+        Invoke-BaselineCase -Name "search-basic" -Action {
+            $enabled = Invoke-LiveCli -Stage "search-state-enable" -Command "search-state" `
+                -Arguments @("--enabled", "true")
+            Assert-ScpiSent -Payload $enabled -Label "Search state configure" `
+                -ExpectedCommands @([string]$enabled.result.command)
+            $modeSet = Invoke-LiveCli -Stage "search-mode-edge-set" -Command "search-mode" `
+                -Arguments @("--mode", "edge")
+            Assert-ScpiSent -Payload $modeSet -Label "Search mode configure" `
+                -ExpectedCommands @($modeSet.result.commands)
+
+            $state = Invoke-LiveCli -Stage "search-state-query" -Command "search-state" `
+                -Arguments @("--query")
+            $mode = Invoke-LiveCli -Stage "search-mode-query" -Command "search-mode" `
+                -Arguments @("--query")
+            if (-not [bool]$state.result.enabled -or
+                -not [bool]$mode.result.enabled -or
+                [string]$mode.result.mode -ne "edge") {
+                throw "Search readback did not report enabled Edge mode."
+            }
+            $count = Invoke-LiveCli -Stage "search-count-query" -Command "search-count" `
+                -Arguments @("--query")
+            Assert-ScpiSent -Payload $count -Label "Search count query" `
+                -ExpectedCommands @(":SEARch:COUNt?")
+            if ([int64]$count.result.count -lt 0) {
+                throw "Search count must be zero or greater."
+            }
+
+            if ([bool]$identity.capabilities.supports_search_event_navigation) {
+                $event = Invoke-LiveCli -Stage "search-event-query" -Command "search-event" `
+                    -Arguments @("--query")
+                Assert-ScpiSent -Payload $event -Label "Search event query" `
+                    -ExpectedCommands @(":SEARch:EVENt?")
+                if ([int64]$event.result.event -lt 0) {
+                    throw "Search event must be zero or greater."
+                }
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Write-Host "SKIP  search-basic (non-Serial mode cannot be safely restored)"
+    }
+
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "timebase" -Action {
             Invoke-LiveCli -Stage "timebase-scale-set" -Command "timebase-scale" `
                 -Arguments @("--seconds-per-division", "0.001") | Out-Null
@@ -1106,6 +1732,75 @@ if ($snapshotComplete) {
             Assert-FileNonEmpty -Path $screenshotPath -Label "screenshot"
         }
     }
+
+    if (-not $script:FunctionalFailed -and
+        [bool]$identity.capabilities.supports_screenshot_format_pack) {
+        Invoke-BaselineCase -Name "screenshot-bmp" -Action {
+            $screenshotPath = Join-Path $liveArtifactRoot "screenshot.bmp"
+            $screenshot = Invoke-LiveCli -Stage "screenshot-bmp" -Command "screenshot" `
+                -Arguments @("--format", "bmp", "--output", $screenshotPath)
+            Assert-ScpiSent -Payload $screenshot -Label "BMP screenshot" `
+                -ExpectedCommands @(":HCOPY:SDUMp:DATA? BMP")
+            if ([string]$screenshot.result.format -ne "BMP" -or
+                [int]$screenshot.result.byte_count -le 0 -or
+                [string]$screenshot.result.image_path -ne $screenshotPath) {
+                throw "BMP screenshot result metadata is invalid."
+            }
+            Assert-FileNonEmpty -Path $screenshotPath -Label "BMP screenshot"
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Write-Host "SKIP  screenshot-bmp (format pack not supported)"
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "waveform-amp" -Action {
+            $originalUnits = [string]$snapshot.ChannelUnits
+            try {
+                $unitSet = Invoke-LiveCli -Stage "waveform-amp-unit-set" `
+                    -Command "channel-units" -Arguments @("--channel", "1", "--units", "amp")
+                Assert-ScpiSent -Payload $unitSet -Label "CH1 AMP unit configure" `
+                    -ExpectedCommands @(":CHANnel1:UNITs AMP")
+                $unit = Invoke-LiveCli -Stage "waveform-amp-unit-query" `
+                    -Command "channel-units" -Arguments @("--channel", "1", "--query")
+                Assert-ScpiSent -Payload $unit -Label "CH1 AMP unit query" `
+                    -ExpectedCommands @(":CHANnel1:UNITs?")
+                if ([string]$unit.result.units -ne "amp") {
+                    throw "CH1 unit readback did not report amp."
+                }
+
+                $csvPath = Join-Path $liveArtifactRoot "waveform-amp.csv"
+                $metadataPath = Join-Path $liveArtifactRoot "waveform-amp-meta.json"
+                $capture = Invoke-LiveCli -Stage "waveform-amp-capture" -Command "capture" `
+                    -Arguments @(
+                        "--channel", "1", "--points", "1000", "--format", "byte",
+                        "--csv", $csvPath, "--meta", $metadataPath
+                    )
+                Assert-ScpiSent -Payload $capture -Label "AMP waveform capture" `
+                    -ExpectedCommands @(
+                        ":CHANnel1:UNITs?",
+                        ":WAVeform:FORMat BYTE",
+                        ":WAVeform:DATA?"
+                    )
+                Assert-Capture -Payload $capture -ExpectedFormat "BYTE" `
+                    -CsvPath $csvPath -MetadataPath $metadataPath -ExpectedVerticalUnit "A"
+                $csvHeader = [string](Get-Content -LiteralPath $csvPath -TotalCount 1)
+                if ($csvHeader -ne "time_s,ch1_a") {
+                    throw "AMP waveform CSV header is ${csvHeader}; expected time_s,ch1_a."
+                }
+            } finally {
+                $restore = Invoke-LiveCli -Stage "waveform-amp-unit-restore" `
+                    -Command "channel-units" `
+                    -Arguments @("--channel", "1", "--units", $originalUnits)
+                Assert-ScpiSent -Payload $restore -Label "CH1 unit restore" `
+                    -ExpectedCommands @([string]$restore.result.command)
+                $restored = Invoke-LiveCli -Stage "waveform-amp-unit-restore-query" `
+                    -Command "channel-units" -Arguments @("--channel", "1", "--query")
+                if ([string]$restored.result.units -ne $originalUnits) {
+                    throw "CH1 unit restore readback does not match ${originalUnits}."
+                }
+            }
+        }
+    }
 }
 
 if ($snapshotComplete -and $stateChangeStarted) {
@@ -1143,6 +1838,8 @@ Write-Host "  - The original generic trigger mode is not queryable through the e
 Write-Host "    public CLI. If the trigger case ran, the mode remains Edge."
 Write-Host "  - Waveform source, format, and points are transfer-session settings without"
 Write-Host "    an existing public restore path. The transfer format may remain WORD."
+Write-Host "  - Cursor and trigger holdoff are not changed because their current public"
+Write-Host "    query surfaces do not expose all state required for safe restoration."
 Write-Host ""
 Write-Host "Summary"
 foreach ($entry in $script:CaseResults.GetEnumerator()) {
