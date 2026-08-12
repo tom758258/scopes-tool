@@ -17,6 +17,9 @@ $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:SerialUnavailable = $false
+$script:ListerAcquisitionTimeoutMilliseconds = 5000
+$script:ListerAcquisitionPollIntervalMilliseconds = 100
+$script:OperationConditionRunMask = 8
 
 function ConvertTo-InvariantString {
     param(
@@ -524,6 +527,14 @@ function Invoke-HardwareFreePreflight {
     Invoke-ModeCli -Stage "preflight-uart-query" -Command "serial-uart" `
         -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
 
+    Invoke-ModeCli -Stage "preflight-operation-status" `
+        -Command "system-operation-status" -ModeArguments $simulate `
+        -Arguments @("--query") | Out-Null
+    foreach ($command in @("single", "run", "stop-acquisition")) {
+        Invoke-ModeCli -Stage "preflight-${command}" -Command $command `
+            -ModeArguments $dryRun | Out-Null
+    }
+
     Invoke-ModeCli -Stage "preflight-lister-query" -Command "serial-lister-query" `
         -ModeArguments $simulate | Out-Null
     Invoke-ModeCli -Stage "preflight-lister-display" `
@@ -597,7 +608,10 @@ function Restore-SerialState {
         [bool] $RestoreLister,
 
         [Parameter(Mandatory = $true)]
-        [bool] $RestoreTrigger
+        [bool] $RestoreTrigger,
+
+        [Parameter(Mandatory = $true)]
+        [bool] $RestoreAcquisition
     )
 
     $restoreErrors = [System.Collections.Generic.List[string]]::new()
@@ -705,6 +719,33 @@ function Restore-SerialState {
         } catch {
             $restoreErrors.Add("Edge Trigger: $($_.Exception.Message)")
             Drain-AfterFailure -Stage "cleanup-trigger-error-drain" -CaseName "cleanup"
+        }
+    }
+
+    if ($RestoreAcquisition) {
+        try {
+            $restoreCommand = if ([bool]$Snapshot.WasRunning) {
+                "run"
+            } else {
+                "stop-acquisition"
+            }
+            Invoke-LiveCli -Stage "cleanup-acquisition-${restoreCommand}" `
+                -Command $restoreCommand | Out-Null
+            $operationStatus = Invoke-LiveCli `
+                -Stage "cleanup-acquisition-status" `
+                -Command "system-operation-status" -Arguments @("--query")
+            $operationValue = [int](Get-RequiredResultValue `
+                -Payload $operationStatus -Name "value" `
+                -Stage "Acquisition cleanup")
+            $isRunning = ($operationValue -band $script:OperationConditionRunMask) -ne 0
+            if ($isRunning -ne [bool]$Snapshot.WasRunning) {
+                $expected = if ([bool]$Snapshot.WasRunning) { "RUN" } else { "STOP" }
+                throw "Acquisition cleanup did not restore ${expected}."
+            }
+        } catch {
+            $restoreErrors.Add("Acquisition: $($_.Exception.Message)")
+            Drain-AfterFailure -Stage "cleanup-acquisition-error-drain" `
+                -CaseName "cleanup"
         }
     }
 
@@ -880,6 +921,8 @@ if ($searchPreconditionPassed -and -not $script:FunctionalFailed) {
             -Command "trigger-edge-source" -Arguments @("--query")
         $edgeSlope = Invoke-LiveCli -Stage "snapshot-edge-slope" `
             -Command "trigger-edge-slope" -Arguments @("--query")
+        $operationStatus = Invoke-LiveCli -Stage "snapshot-operation-status" `
+            -Command "system-operation-status" -Arguments @("--query")
 
         $source = [string](Get-RequiredResultValue -Payload $edgeSource `
             -Name "source" -Stage "Edge snapshot")
@@ -926,6 +969,12 @@ if ($searchPreconditionPassed -and -not $script:FunctionalFailed) {
             EdgeSlope = $slope
             EdgeLevelChannel = $levelChannel
             EdgeLevel = $level
+            OperationStatus = $operationStatus
+            WasRunning = (
+                [int](Get-RequiredResultValue -Payload $operationStatus -Name "value" `
+                    -Stage "Acquisition snapshot") -band
+                    $script:OperationConditionRunMask
+            ) -ne 0
         }
         Add-CaseResult -Name "state-snapshot" -Status "PASS"
     } catch {
@@ -941,6 +990,7 @@ $stateChangeStarted = $false
 $listerChangeStarted = $false
 $searchChangeStarted = $false
 $triggerChangeStarted = $false
+$script:ListerAcquisitionStarted = $false
 
 if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
     Write-Host ""
@@ -1007,16 +1057,82 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
                 throw "Lister readback did not report display bus1 and reference trigger."
             }
 
-            Start-Sleep -Milliseconds 1000
-            $operationStatus = Invoke-LiveCli -Stage "system-operation-status" `
-                -Command "system-operation-status" -Arguments @("--query")
+            $acquisitionEvidence = [ordered]@{
+                timeout_ms = $script:ListerAcquisitionTimeoutMilliseconds
+                poll_interval_ms = $script:ListerAcquisitionPollIntervalMilliseconds
+                run_mask = $script:OperationConditionRunMask
+                was_running = [bool]$snapshot.WasRunning
+                initial_state = $snapshot.OperationStatus
+                poll_samples = [System.Collections.Generic.List[object]]::new()
+                poll_count = 0
+                final_state = $null
+                outcome = "not-started"
+                error = $null
+            }
             $operationStatusPath = Join-Path `
                 $script:RunRoot "system-operation-status.json"
-            [System.IO.File]::WriteAllText(
-                $operationStatusPath,
-                ($operationStatus | ConvertTo-Json -Depth 8),
-                [System.Text.UTF8Encoding]::new($false)
-            )
+            $acquisitionStatusPath = Join-Path `
+                $script:RunRoot "lister-acquisition-status.json"
+            try {
+                Invoke-LiveCli -Stage "lister-acquisition-single" `
+                    -Command "single" | Out-Null
+                $script:ListerAcquisitionStarted = $true
+                $acquisitionEvidence.outcome = "pending"
+                $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+                while ($true) {
+                    try {
+                        $operationStatus = Invoke-LiveCli `
+                            -Stage "lister-acquisition-status" `
+                            -Command "system-operation-status" -Arguments @("--query")
+                    } catch {
+                        $acquisitionEvidence.outcome = "query-failed"
+                        $acquisitionEvidence.error = $_.Exception.Message
+                        throw
+                    }
+                    $acquisitionEvidence.poll_samples.Add($operationStatus)
+                    $acquisitionEvidence.poll_count = `
+                        $acquisitionEvidence.poll_samples.Count
+                    $acquisitionEvidence.final_state = $operationStatus
+                    [System.IO.File]::WriteAllText(
+                        $operationStatusPath,
+                        ($operationStatus | ConvertTo-Json -Depth 8),
+                        [System.Text.UTF8Encoding]::new($false)
+                    )
+
+                    $operationValue = [int](Get-RequiredResultValue `
+                        -Payload $operationStatus -Name "value" `
+                        -Stage "Lister acquisition status")
+                    if (($operationValue -band `
+                        $script:OperationConditionRunMask) -eq 0) {
+                        $acquisitionEvidence.outcome = "completed"
+                        break
+                    }
+                    if ($stopwatch.ElapsedMilliseconds -ge `
+                        $script:ListerAcquisitionTimeoutMilliseconds) {
+                        $acquisitionEvidence.outcome = "timeout"
+                        $acquisitionEvidence.error = (
+                            "Lister acquisition did not complete within " +
+                            "$($script:ListerAcquisitionTimeoutMilliseconds) ms."
+                        )
+                        throw $acquisitionEvidence.error
+                    }
+                    $remainingMilliseconds = `
+                        $script:ListerAcquisitionTimeoutMilliseconds - `
+                        $stopwatch.ElapsedMilliseconds
+                    $sleepMilliseconds = [Math]::Min(
+                        $script:ListerAcquisitionPollIntervalMilliseconds,
+                        [Math]::Max(1, $remainingMilliseconds)
+                    )
+                    Start-Sleep -Milliseconds $sleepMilliseconds
+                }
+            } finally {
+                [System.IO.File]::WriteAllText(
+                    $acquisitionStatusPath,
+                    ($acquisitionEvidence | ConvertTo-Json -Depth 10),
+                    [System.Text.UTF8Encoding]::new($false)
+                )
+            }
 
             $exportInvocation = Invoke-CliRaw -Stage "lister-export" -Arguments @(
                 "serial-lister-export", "--live", "--resource", $Resource, "--json",
@@ -1131,7 +1247,8 @@ if ($stateChangeStarted) {
         Restore-SerialState -Snapshot $snapshot `
             -DisableSearch $searchChangeStarted `
             -RestoreLister $listerChangeStarted `
-            -RestoreTrigger $triggerChangeStarted
+            -RestoreTrigger $triggerChangeStarted `
+            -RestoreAcquisition $script:ListerAcquisitionStarted
         Add-CaseResult -Name "cleanup" -Status "PASS"
     } catch {
         $script:FunctionalFailed = $true

@@ -1162,8 +1162,48 @@ if ($script:Diagnostics.Contains("segmented configuration roundtrip")) {
         assert result["diagnostics"] == ""
 
 
+def test_serial_lister_acquisition_safety_structure() -> None:
+    script = (REPO_ROOT / "scripts" / "live-serial-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "$script:ListerAcquisitionTimeoutMilliseconds = 5000" in script
+    assert "$script:ListerAcquisitionPollIntervalMilliseconds = 100" in script
+    assert "$script:OperationConditionRunMask = 8" in script
+    assert '-Command "system-operation-status" -ModeArguments $simulate' in script
+    assert 'foreach ($command in @("single", "run", "stop-acquisition"))' in script
+
+    snapshot = script.index('-Stage "snapshot-operation-status"')
+    was_running = script.index("WasRunning = (", snapshot)
+    assert snapshot < was_running
+
+    restore = script.index("function Restore-SerialState")
+    search = script.index("if ($DisableSearch)", restore)
+    lister = script.index("if ($RestoreLister)", search)
+    trigger = script.index("if ($RestoreTrigger)", lister)
+    acquisition = script.index("if ($RestoreAcquisition)", trigger)
+    final_drain = script.index('$finalDrain = Get-ErrorDrain -Stage "final-error-queue"')
+    assert restore < search < lister < trigger < acquisition < final_drain
+
+    lister_case_start = script.index(
+        'Invoke-SerialCase -Name "UART Lister export"'
+    )
+    search_case_start = script.index(
+        'Invoke-SerialCase -Name "UART Serial Search"', lister_case_start
+    )
+    lister_case = script[lister_case_start:search_case_start]
+    assert lister_case.count('"serial-lister-export"') == 1
+    assert '"serial-display"' not in lister_case
+    assert ":SAVE:LISTer" not in script
+    assert "DIGITIZE" not in lister_case.upper()
+    assert '"force-trigger"' not in lister_case
+
+
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_serial_lister_export_uses_top_level_files_artifact(tmp_path: Path) -> None:
+@pytest.mark.parametrize("scenario", ["completed", "timeout", "single-failure"])
+def test_serial_lister_export_waits_for_fresh_acquisition(
+    tmp_path: Path, scenario: str
+) -> None:
     script_path = REPO_ROOT / "scripts" / "live-serial-check.ps1"
     output_path = tmp_path / "uart-lister.csv"
     harness_path = tmp_path / "serial-lister-export-harness.ps1"
@@ -1174,7 +1214,11 @@ param(
     [string] $ScriptPath,
 
     [Parameter(Mandatory = $true)]
-    [string] $OutputPath
+    [string] $OutputPath,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("completed", "timeout", "single-failure")]
+    [string] $Scenario
 )
 
 Set-StrictMode -Version Latest
@@ -1218,9 +1262,28 @@ $script:CaseStatus = ""
 $script:CaseDetail = ""
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:Sleeps = New-Object System.Collections.Generic.List[int]
+$script:StatusIndex = 0
+$script:ListerAcquisitionStarted = $false
+$script:ListerAcquisitionTimeoutMilliseconds = 500
+$script:ListerAcquisitionPollIntervalMilliseconds = 1
+$script:OperationConditionRunMask = 8
 $Resource = "TEST::INSTR"
 $listerCsvPath = $OutputPath
 $script:RunRoot = Split-Path -Parent $OutputPath
+$snapshot = [pscustomobject]@{
+    WasRunning = $true
+    OperationStatus = [pscustomobject]@{
+        ok = $true
+        command = "system-operation-status"
+        result = [pscustomobject]@{
+            operation = "query"
+            command = ":OPERegister:CONDition?"
+            value = 56
+            raw = "+56"
+            set_bits = @(3, 4, 5)
+        }
+    }
+}
 
 function Invoke-SerialCase {
     param(
@@ -1252,6 +1315,7 @@ function Start-Sleep {
         command = "Start-Sleep"
         arguments = @([string]$Milliseconds)
     })
+    [System.Threading.Thread]::Sleep($Milliseconds)
 }
 
 function Invoke-LiveCli {
@@ -1270,6 +1334,9 @@ function Invoke-LiveCli {
         command = $Command
         arguments = @($Arguments)
     })
+    if ($Command -eq "single" -and $Scenario -eq "single-failure") {
+        throw "single rejected"
+    }
     if ($Command -eq "serial-lister-query") {
         return [pscustomobject]@{
             result = [pscustomobject]@{
@@ -1279,15 +1346,21 @@ function Invoke-LiveCli {
         }
     }
     if ($Command -eq "system-operation-status") {
+        $value = if ($Scenario -eq "completed" -and $script:StatusIndex -gt 0) {
+            48
+        } else {
+            56
+        }
+        $script:StatusIndex += 1
         return [pscustomobject]@{
             ok = $true
             command = "system-operation-status"
             result = [pscustomobject]@{
                 operation = "query"
                 command = ":OPERegister:CONDition?"
-                value = 8
-                raw = "8"
-                set_bits = @(3)
+                value = $value
+                raw = "+${value}"
+                set_bits = if ($value -eq 56) { @(3, 4, 5) } else { @(4, 5) }
             }
         }
     }
@@ -1339,9 +1412,21 @@ Invoke-Expression $listerCommands[0].Extent.Text
 $exportInvocations = @($script:Invocations | Where-Object {
     $_.command -eq "serial-lister-export"
 })
-$outputItem = Get-Item -LiteralPath $listerCsvPath
+$outputExists = Test-Path -LiteralPath $listerCsvPath -PathType Leaf
+$outputBytes = if ($outputExists) {
+    (Get-Item -LiteralPath $listerCsvPath).Length
+} else {
+    0
+}
 $operationStatusPath = Join-Path $script:RunRoot "system-operation-status.json"
-$operationStatusArtifact = Get-Content -LiteralPath $operationStatusPath -Raw |
+$operationStatusExists = Test-Path -LiteralPath $operationStatusPath -PathType Leaf
+$operationStatusArtifact = if ($operationStatusExists) {
+    Get-Content -LiteralPath $operationStatusPath -Raw | ConvertFrom-Json
+} else {
+    $null
+}
+$acquisitionStatusPath = Join-Path $script:RunRoot "lister-acquisition-status.json"
+$acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Raw |
     ConvertFrom-Json
 [ordered]@{
     status = $script:CaseStatus
@@ -1355,10 +1440,12 @@ $operationStatusArtifact = Get-Content -LiteralPath $operationStatusPath -Raw |
         }
     })
     sleep_values = @($script:Sleeps | ForEach-Object { $_ })
-    operation_status_exists = Test-Path -LiteralPath $operationStatusPath -PathType Leaf
+    acquisition_started = $script:ListerAcquisitionStarted
+    operation_status_exists = $operationStatusExists
     operation_status = $operationStatusArtifact
-    output_exists = Test-Path -LiteralPath $listerCsvPath -PathType Leaf
-    output_bytes = $outputItem.Length
+    acquisition_status = $acquisitionStatusArtifact
+    output_exists = $outputExists
+    output_bytes = $outputBytes
 } | ConvertTo-Json -Depth 8 -Compress
 """,
         encoding="utf-8",
@@ -1378,6 +1465,8 @@ $operationStatusArtifact = Get-Content -LiteralPath $operationStatusPath -Raw |
             str(script_path),
             "-OutputPath",
             str(output_path),
+            "-Scenario",
+            scenario,
         ],
         cwd=REPO_ROOT,
         text=True,
@@ -1387,46 +1476,324 @@ $operationStatusArtifact = Get-Content -LiteralPath $operationStatusPath -Raw |
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
-    assert result["status"] == "PASS", result["detail"]
-    assert result["detail"] == ""
-    assert result["export_count"] == 1
-    assert [entry["command"] for entry in result["invocations"]] == [
+    commands = [entry["command"] for entry in result["invocations"]]
+    expected_prefix = [
         "serial-lister-display",
         "serial-lister-reference",
         "serial-lister-query",
-        "Start-Sleep",
-        "system-operation-status",
-        "serial-lister-export",
+        "single",
     ]
+    assert commands[:4] == expected_prefix
     assert result["invocations"][0]["arguments"] == ["--selection", "bus1"]
-    assert result["invocations"][4]["arguments"] == ["--query"]
+    assert commands.count("single") == 1
     assert all(
         entry["command"]
         not in {
             "serial-display",
             "run",
             "stop-acquisition",
-            "single",
             "force-trigger",
             "digitize",
         }
         for entry in result["invocations"]
     )
-    assert result["sleep_values"] == [1000]
-    assert result["operation_status_exists"] is True
-    assert result["operation_status"] == {
-        "ok": True,
-        "command": "system-operation-status",
-        "result": {
+    assert result["acquisition_status"]["was_running"] is True
+    if scenario == "single-failure":
+        assert result["status"] == "FAIL"
+        assert "single rejected" in result["detail"]
+        assert result["acquisition_started"] is False
+        assert commands == expected_prefix
+        assert result["export_count"] == 0
+        assert result["operation_status_exists"] is False
+        assert result["acquisition_status"]["outcome"] == "not-started"
+        assert result["output_exists"] is False
+        assert result["output_bytes"] == 0
+    elif scenario == "completed":
+        assert result["acquisition_started"] is True
+        assert result["invocations"][4]["arguments"] == ["--query"]
+        assert result["sleep_values"]
+        assert result["operation_status_exists"] is True
+        assert result["acquisition_status"]["poll_samples"][0]["result"]["value"] == 56
+        assert result["status"] == "PASS", result["detail"]
+        assert result["detail"] == ""
+        assert result["export_count"] == 1
+        assert commands[-1] == "serial-lister-export"
+        assert result["operation_status"]["result"] == {
             "operation": "query",
             "command": ":OPERegister:CONDition?",
-            "value": 8,
-            "raw": "8",
-            "set_bits": [3],
-        },
+            "value": 48,
+            "raw": "+48",
+            "set_bits": [4, 5],
+        }
+        assert result["acquisition_status"]["outcome"] == "completed"
+        assert result["acquisition_status"]["poll_count"] == 2
+        assert result["output_exists"] is True
+        assert result["output_bytes"] > 0
+    else:
+        assert result["acquisition_started"] is True
+        assert result["invocations"][4]["arguments"] == ["--query"]
+        assert result["sleep_values"]
+        assert result["operation_status_exists"] is True
+        assert result["acquisition_status"]["poll_samples"][0]["result"]["value"] == 56
+        assert result["status"] == "FAIL"
+        assert "did not complete within 500 ms" in result["detail"]
+        assert result["export_count"] == 0
+        assert result["acquisition_status"]["outcome"] == "timeout"
+        assert result["output_exists"] is False
+        assert result["output_bytes"] == 0
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+@pytest.mark.parametrize(
+    "was_running", [True, False], ids=["original-run", "original-stop"]
+)
+@pytest.mark.parametrize("outcome", ["completed", "timeout", "not-started"])
+def test_serial_cleanup_deterministically_restores_acquisition_state(
+    tmp_path: Path, was_running: bool, outcome: str
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-serial-check.ps1"
+    harness_path = tmp_path / f"serial-cleanup-{was_running}-{outcome}.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateSet(0, 1)]
+    [int] $WasRunningValue,
+
+    [Parameter(Mandatory = $true)]
+    [string] $Outcome
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse Serial live script: $($parseErrors[0].Message)"
+}
+foreach ($name in @("Get-RequiredResultValue", "Restore-SerialState")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $name
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${name} was not found in ${ScriptPath}."
     }
-    assert result["output_exists"] is True
-    assert result["output_bytes"] > 0
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$script:OperationConditionRunMask = 8
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$Resource = "TEST::INSTR"
+$WasRunning = $WasRunningValue -eq 1
+$snapshot = [pscustomobject]@{ WasRunning = $WasRunning }
+
+function Invoke-LiveCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+        [string[]] $Arguments = @()
+    )
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($Command -eq "system-operation-status") {
+        $value = if ($WasRunning) { 56 } else { 48 }
+        return [pscustomobject]@{
+            result = [pscustomobject]@{
+                value = $value
+                raw = "+${value}"
+                set_bits = if ($WasRunning) { @(3, 4, 5) } else { @(4, 5) }
+            }
+        }
+    }
+    return [pscustomobject]@{ result = [pscustomobject]@{} }
+}
+
+function Drain-AfterFailure { throw "Unexpected cleanup failure drain." }
+
+$restoreAcquisition = $Outcome -ne "not-started"
+Restore-SerialState -Snapshot $snapshot -DisableSearch $false `
+    -RestoreLister $false -RestoreTrigger $false `
+    -RestoreAcquisition $restoreAcquisition
+
+[ordered]@{
+    outcome = $Outcome
+    commands = @($script:Invocations | ForEach-Object { $_.command })
+    stages = @($script:Invocations | ForEach-Object { $_.stage })
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-WasRunningValue",
+            "1" if was_running else "0",
+            "-Outcome",
+            outcome,
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    expected_command = "run" if was_running else "stop-acquisition"
+    assert result["outcome"] == outcome
+    if outcome == "not-started":
+        assert result["commands"] == []
+        assert result["stages"] == []
+    else:
+        assert result["commands"] == [expected_command, "system-operation-status"]
+        assert result["stages"] == [
+            f"cleanup-acquisition-{expected_command}",
+            "cleanup-acquisition-status",
+        ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_serial_search_and_trigger_cases_do_not_acquire(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-serial-check.ps1"
+    harness_path = tmp_path / "serial-search-trigger-no-acquire.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse Serial live script: $($parseErrors[0].Message)"
+}
+foreach ($name in @("Get-RequiredResultValue", "Assert-SerialCriteriaReadback")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $name
+        )
+    }, $true)
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$caseCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        ($node.Extent.Text.Contains('Invoke-SerialCase -Name "UART Serial Search"') -or
+         $node.Extent.Text.Contains('Invoke-SerialCase -Name "UART Serial Trigger"'))
+    )
+}, $true))
+if ($caseCommands.Count -ne 2) {
+    throw "Expected production Serial Search and Trigger cases."
+}
+
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+function Invoke-SerialCase {
+    param([string] $Name, [scriptblock] $Action)
+    & $Action
+}
+function Start-Sleep { param([int] $Milliseconds) }
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($Command -eq "serial-search-uart") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "uart"; bus = 1; selected = $true
+            mode = "rx-data"; data = 1; qualifier = "equal"
+        }}
+    }
+    if ($Command -eq "serial-trigger-uart") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "uart"; bus = 1; selected = $true
+            type = "rx-data"; data = 1; qualifier = "equal"
+        }}
+    }
+    throw "Unexpected live command: ${Command}"
+}
+
+foreach ($caseCommand in $caseCommands) {
+    Invoke-Expression $caseCommand.Extent.Text
+}
+@($script:Invocations | ForEach-Object { $_ }) |
+    ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    invocations = json.loads(completed.stdout)
+    commands = [entry["command"] for entry in invocations]
+    assert commands == [
+        "serial-search-uart",
+        "serial-search-uart",
+        "serial-trigger-uart",
+        "serial-trigger-uart",
+    ]
+    assert not {
+        "single",
+        "run",
+        "stop-acquisition",
+        "force-trigger",
+        "digitize",
+        "serial-lister-export",
+    }.intersection(commands)
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
