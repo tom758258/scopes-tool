@@ -2326,6 +2326,77 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
         assert f'Command = "{command}"' in restore
 
 
+def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    for case_name in (
+        "trigger-edge-settings",
+        "trigger-common",
+        "trigger-external",
+        "trigger-pulse-width",
+        "trigger-runt",
+        "trigger-transition",
+        "trigger-delay",
+        "trigger-setup-hold",
+        "trigger-edge-burst",
+        "trigger-tv",
+        "trigger-pattern",
+        "trigger-or",
+        "math-operator",
+        "math-transform",
+        "fft",
+        "wgen-basic",
+        "demo-basic",
+        "autoscale",
+        "setup-lifecycle",
+        "save-export",
+        "safe-cleanup",
+    ):
+        assert f'Invoke-BaselineCase -Name "{case_name}"' in script
+
+    preflight_start = script.index("function Invoke-HardwareFreePreflight {")
+    preflight_end = script.index("\nfunction Restore-InstrumentState {", preflight_start)
+    preflight = script[preflight_start:preflight_end]
+    for command in (
+        "trigger-pulse-width",
+        "trigger-runt",
+        "trigger-transition",
+        "trigger-delay",
+        "trigger-setup-hold",
+        "trigger-edge-burst",
+        "trigger-tv",
+        "trigger-pattern",
+        "trigger-or",
+        "math-operator",
+        "math-transform",
+        "fft",
+        "wgen-output",
+        "demo-output",
+        "autoscale",
+        "setup-save",
+        "setup-recall",
+        "save-image",
+        "save-waveform",
+        "cleanup",
+    ):
+        assert f'Command = "{command}"' in preflight
+
+    assert '$snapshot.P3Enabled' in script
+    assert 'Stage "wgen-output-off"' in script
+    assert 'Stage "demo-output-off"' in script
+    assert 'Command = "wgen-output"' in script
+    assert 'Command = "demo-output"' in script
+    assert 'Command = "math-display"' in script
+    assert '"disable_wgen"' in script
+    assert '"wgen_not_implemented"' in script
+    assert 'SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")' in script
+    assert '@("--format", "none")' not in script
+    assert '"\\usb\\scopes-tool-live-${timestamp}.scp"' in script
+    assert '"--slot"' not in script[script.index('Invoke-BaselineCase -Name "setup-lifecycle"'):]
+
+
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_p2_channel_vertical_rejects_payload_self_oracle(
     tmp_path: Path,
@@ -3023,6 +3094,15 @@ function Invoke-LiveCli {
         "restore-search-state-query" {
             return [pscustomobject]@{ result = [pscustomobject]@{ enabled = $false } }
         }
+        "restore-wgen-output-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ enabled = $false } }
+        }
+        "restore-demo-output-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ enabled = $false } }
+        }
+        "restore-math-display-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ enabled = $false } }
+        }
         default { return [pscustomobject]@{ result = [pscustomobject]@{} } }
     }
 }
@@ -3064,6 +3144,18 @@ $snapshot = [pscustomobject]@{
     SearchRestorable = $true
     SearchMode = "edge"
     SearchEnabled = $false
+    P3Enabled = $true
+    TriggerEdgeCoupling = "dc"
+    TriggerEdgeReject = "off"
+    TriggerSweep = "auto"
+    TriggerNoiseReject = $false
+    TriggerHfReject = $false
+    ExternalTriggerRange = 8.0
+    ExternalTriggerProbe = 1.0
+    ExternalTriggerUnits = "volts"
+    SaveImageFormat = "none"
+    SaveWaveformFormat = "csv"
+    SaveWaveformLength = 1000
 }
 
 Restore-InstrumentState -Snapshot $snapshot
@@ -3116,6 +3208,20 @@ Restore-InstrumentState -Snapshot $snapshot
         "annotation",
         "search-mode",
         "search-state",
+        "math-display",
+        "wgen-output",
+        "demo-output",
+        "trigger-sweep",
+        "trigger-noise-reject",
+        "trigger-hf-reject",
+        "trigger-edge-coupling",
+        "trigger-edge-reject",
+        "external-trigger-range",
+        "external-trigger-probe",
+        "external-trigger-units",
+        "trigger-edge",
+        "save-waveform-format",
+        "save-waveform-length",
     ):
         assert command in commands
     annotation_restore = next(
@@ -3126,6 +3232,16 @@ Restore-InstrumentState -Snapshot $snapshot
     assert "" not in annotation_restore["arguments"]
     assert any(
         entry["stage"] == "restore-annotation-query"
+        for entry in result["invocations"]
+    )
+    assert not any(
+        entry["command"] == "save-image-format"
+        and entry["arguments"] == ["--format", "none"]
+        for entry in result["invocations"]
+    )
+    assert any(
+        entry["command"] == "save-waveform-format"
+        and entry["arguments"] == ["--format", "csv"]
         for entry in result["invocations"]
     )
     assert result["drain_calls"] == 0

@@ -351,6 +351,25 @@ function Assert-ScpiSent {
     }
 }
 
+function Assert-ScpiSentPrefix {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Payload,
+
+        [Parameter(Mandatory = $true)]
+        [string] $ExpectedPrefix,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Label
+    )
+
+    $sent = @($Payload.scpi.sent)
+    if ($sent.Count -eq 0 -or
+        @($sent | Where-Object { [string]$_ -like "${ExpectedPrefix}*" }).Count -eq 0) {
+        throw "${Label} SCPI history does not contain prefix ${ExpectedPrefix}."
+    }
+}
+
 function Assert-NearlyEqual {
     param(
         [Parameter(Mandatory = $true)]
@@ -452,6 +471,35 @@ function Invoke-BaselineCase {
     }
 }
 
+function Restore-EdgeTriggerBaseline {
+    param(
+        [Parameter(Mandatory = $true)]
+        [double] $LevelVolts,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Stage
+    )
+
+    $configured = Invoke-LiveCli -Stage $Stage -Command "trigger-edge" -Arguments @(
+        "--source-channel", "1", "--level",
+        (ConvertTo-InvariantString -Value $LevelVolts), "--slope", "positive"
+    )
+    Assert-ScpiSent -Payload $configured -Label "Edge trigger reset" -ExpectedCommands @(
+        ":TRIGger:MODE EDGE",
+        ":TRIGger:EDGE:SOURce CHANnel1",
+        ":TRIGger:EDGE:SLOPe POSitive"
+    )
+    $source = Invoke-LiveCli -Stage "${Stage}-source-query" `
+        -Command "trigger-edge-source" -Arguments @("--query")
+    $slope = Invoke-LiveCli -Stage "${Stage}-slope-query" `
+        -Command "trigger-edge-slope" -Arguments @("--query")
+    if ([string]$source.result.source -ne "analog-channel" -or
+        [int]$source.result.source_channel -ne 1 -or
+        [string]$slope.result.slope -ne "positive") {
+        throw "Edge trigger reset readback is not CH1 positive slope."
+    }
+}
+
 function Invoke-HardwareFreePreflight {
     param(
         [Parameter(Mandatory = $true)]
@@ -503,6 +551,49 @@ function Invoke-HardwareFreePreflight {
         [pscustomobject]@{ Command = "search-mode"; Arguments = @("--mode", "edge") }
     )) {
         Invoke-ModeCli -Stage "preflight-$($item.Command)-set" -Command $item.Command `
+            -ModeArguments $dryRun -Arguments $item.Arguments | Out-Null
+    }
+
+    foreach ($item in @(
+        [pscustomobject]@{ Command = "trigger-edge-coupling"; Arguments = @("--coupling", "dc") },
+        [pscustomobject]@{ Command = "trigger-edge-reject"; Arguments = @("--reject", "off") },
+        [pscustomobject]@{ Command = "trigger-sweep"; Arguments = @("--mode", "auto") },
+        [pscustomobject]@{ Command = "trigger-noise-reject"; Arguments = @("--enabled", "false") },
+        [pscustomobject]@{ Command = "trigger-hf-reject"; Arguments = @("--enabled", "false") },
+        [pscustomobject]@{ Command = "external-trigger-range"; Arguments = @("--range-volts", "8") },
+        [pscustomobject]@{ Command = "external-trigger-probe"; Arguments = @("--attenuation", "1") },
+        [pscustomobject]@{ Command = "external-trigger-units"; Arguments = @("--units", "volts") },
+        [pscustomobject]@{ Command = "trigger-pulse-width"; Arguments = @("--channel", "1", "--polarity", "positive", "--qualifier", "greater-than", "--time-seconds", "0.000001", "--level-volts", "0") },
+        [pscustomobject]@{ Command = "trigger-runt"; Arguments = @("--channel", "1", "--polarity", "positive", "--qualifier", "none", "--low-level-volts", "-0.5", "--high-level-volts", "0.5") },
+        [pscustomobject]@{ Command = "trigger-transition"; Arguments = @("--channel", "1", "--slope", "positive", "--qualifier", "greater-than", "--time-seconds", "0.000001", "--low-level-volts", "-0.5", "--high-level-volts", "0.5") },
+        [pscustomobject]@{ Command = "trigger-delay"; Arguments = @("--arm-channel", "1", "--arm-slope", "positive", "--trigger-channel", "2", "--trigger-slope", "positive", "--time-seconds", "0.000001", "--count", "2") },
+        [pscustomobject]@{ Command = "trigger-setup-hold"; Arguments = @("--clock-channel", "1", "--data-channel", "2", "--slope", "positive", "--setup-time", "0.000000001", "--hold-time", "0.000000001") },
+        [pscustomobject]@{ Command = "trigger-edge-burst"; Arguments = @("--source-channel", "1", "--slope", "positive", "--count", "2", "--idle-time", "0.000001", "--level-volts", "0") },
+        [pscustomobject]@{ Command = "trigger-tv"; Arguments = @("--source-channel", "1", "--standard", "ntsc", "--mode", "all-lines", "--polarity", "positive") },
+        [pscustomobject]@{ Command = "trigger-pattern"; Arguments = @("--pattern", "XXXX") },
+        [pscustomobject]@{ Command = "trigger-or"; Arguments = @("--pattern", "EXXX") },
+        [pscustomobject]@{ Command = "math-operator"; Arguments = @("--function", "1", "--operation", "add", "--source1", "channel1", "--source2", "channel2") },
+        [pscustomobject]@{ Command = "math-transform"; Arguments = @("--function", "1", "--operation", "absolute", "--source", "channel1") },
+        [pscustomobject]@{ Command = "fft"; Arguments = @("--function", "1", "--source-channel", "1", "--units", "decibel", "--window", "hanning", "--display", "on") },
+        [pscustomobject]@{ Command = "wgen-function"; Arguments = @("--function", "sine") },
+        [pscustomobject]@{ Command = "wgen-frequency"; Arguments = @("--hz", "1000") },
+        [pscustomobject]@{ Command = "wgen-voltage"; Arguments = @("--amplitude", "0.5") },
+        [pscustomobject]@{ Command = "wgen-offset"; Arguments = @("--volts", "0") },
+        [pscustomobject]@{ Command = "wgen-load"; Arguments = @("--load", "one-meg") },
+        [pscustomobject]@{ Command = "wgen-output"; Arguments = @("--enabled", "true") },
+        [pscustomobject]@{ Command = "demo-function"; Arguments = @("--function", "sine") },
+        [pscustomobject]@{ Command = "demo-output"; Arguments = @("--enabled", "true") },
+        [pscustomobject]@{ Command = "autoscale"; Arguments = @("--source-channel", "1") },
+        [pscustomobject]@{ Command = "setup-save"; Arguments = @("--file", "\usb\scopes-tool-p3-preflight.scp") },
+        [pscustomobject]@{ Command = "setup-recall"; Arguments = @("--file", "\usb\scopes-tool-p3-preflight.scp") },
+        [pscustomobject]@{ Command = "save-image-format"; Arguments = @("--format", "png") },
+        [pscustomobject]@{ Command = "save-image"; Arguments = @("--filename", "\usb\scopes-tool-p3-preflight.png") },
+        [pscustomobject]@{ Command = "save-waveform-format"; Arguments = @("--format", "csv") },
+        [pscustomobject]@{ Command = "save-waveform-length"; Arguments = @("--points", "1000") },
+        [pscustomobject]@{ Command = "save-waveform"; Arguments = @("--filename", "\usb\scopes-tool-p3-preflight.csv") },
+        [pscustomobject]@{ Command = "cleanup"; Arguments = @("--profile", "safe") }
+    )) {
+        Invoke-ModeCli -Stage "preflight-p3-$($item.Command)" -Command $item.Command `
             -ModeArguments $dryRun -Arguments $item.Arguments | Out-Null
     }
 
@@ -847,6 +938,101 @@ function Restore-InstrumentState {
             Arguments = @("--enabled", ([string][bool]$Snapshot.SearchEnabled).ToLowerInvariant())
         }
     }
+    $p3Property = $Snapshot.PSObject.Properties["P3Enabled"]
+    if ($null -ne $p3Property -and [bool]$p3Property.Value) {
+        $restoreSteps += @(
+            [pscustomobject]@{
+                Name = "Math Function 1 display"
+                Command = "math-display"
+                Arguments = @("--function", "1", "--off")
+            },
+            [pscustomobject]@{
+                Name = "WGEN output"
+                Command = "wgen-output"
+                Arguments = @("--enabled", "false")
+            },
+            [pscustomobject]@{
+                Name = "DEMO output"
+                Command = "demo-output"
+                Arguments = @("--enabled", "false")
+            },
+            [pscustomobject]@{
+                Name = "trigger sweep"
+                Command = "trigger-sweep"
+                Arguments = @("--mode", [string]$Snapshot.TriggerSweep)
+            },
+            [pscustomobject]@{
+                Name = "trigger noise reject"
+                Command = "trigger-noise-reject"
+                Arguments = @("--enabled", ([string][bool]$Snapshot.TriggerNoiseReject).ToLowerInvariant())
+            },
+            [pscustomobject]@{
+                Name = "trigger HF reject"
+                Command = "trigger-hf-reject"
+                Arguments = @("--enabled", ([string][bool]$Snapshot.TriggerHfReject).ToLowerInvariant())
+            },
+            [pscustomobject]@{
+                Name = "Edge coupling"
+                Command = "trigger-edge-coupling"
+                Arguments = @("--coupling", [string]$Snapshot.TriggerEdgeCoupling)
+            },
+            [pscustomobject]@{
+                Name = "Edge reject"
+                Command = "trigger-edge-reject"
+                Arguments = @("--reject", [string]$Snapshot.TriggerEdgeReject)
+            },
+            [pscustomobject]@{
+                Name = "External trigger range"
+                Command = "external-trigger-range"
+                Arguments = @(
+                    "--range-volts",
+                    (ConvertTo-InvariantString -Value ([double]$Snapshot.ExternalTriggerRange))
+                )
+            },
+            [pscustomobject]@{
+                Name = "External trigger probe"
+                Command = "external-trigger-probe"
+                Arguments = @(
+                    "--attenuation",
+                    (ConvertTo-InvariantString -Value ([double]$Snapshot.ExternalTriggerProbe))
+                )
+            },
+            [pscustomobject]@{
+                Name = "External trigger units"
+                Command = "external-trigger-units"
+                Arguments = @("--units", [string]$Snapshot.ExternalTriggerUnits)
+            },
+            [pscustomobject]@{
+                Name = "Edge CH1 baseline"
+                Command = "trigger-edge"
+                Arguments = @(
+                    "--source-channel", "1", "--level",
+                    (ConvertTo-InvariantString -Value ([double]$Snapshot.TriggerLevel)),
+                    "--slope", "positive"
+                )
+            }
+        )
+        if ([string]$Snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+            $restoreSteps += [pscustomobject]@{
+                Name = "image save format"
+                Command = "save-image-format"
+                Arguments = @("--format", [string]$Snapshot.SaveImageFormat)
+            }
+        } elseif ([string]$Snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+            $restoreSteps += [pscustomobject]@{
+                Name = "waveform save format"
+                Command = "save-waveform-format"
+                Arguments = @("--format", [string]$Snapshot.SaveWaveformFormat)
+            }
+        }
+        if ([int]$Snapshot.SaveWaveformLength -gt 0) {
+            $restoreSteps += [pscustomobject]@{
+                Name = "waveform save length"
+                Command = "save-waveform-length"
+                Arguments = @("--points", [string]$Snapshot.SaveWaveformLength)
+            }
+        }
+    }
 
     foreach ($step in $restoreSteps) {
         try {
@@ -928,6 +1114,18 @@ function Restore-InstrumentState {
                     if ([string]$mode.result.mode -ne [string]$Snapshot.SearchMode) {
                         throw "Restored Search mode does not match the snapshot."
                     }
+                }
+            }
+            if ($null -ne $p3Property -and [bool]$p3Property.Value) {
+                $wgen = Invoke-LiveCli -Stage "restore-wgen-output-query" `
+                    -Command "wgen-output" -Arguments @("--query")
+                $demo = Invoke-LiveCli -Stage "restore-demo-output-query" `
+                    -Command "demo-output" -Arguments @("--query")
+                $math = Invoke-LiveCli -Stage "restore-math-display-query" `
+                    -Command "math-display" -Arguments @("--function", "1", "--query")
+                if ([bool]$wgen.result.enabled -or [bool]$demo.result.enabled -or
+                    [bool]$math.result.enabled) {
+                    throw "P3 output cleanup did not leave WGEN, DEMO, and Math OFF."
                 }
             }
         } catch {
@@ -1024,8 +1222,10 @@ Write-Host "Required setup:"
 Write-Host "  - Connect the CH1 probe to the oscilloscope Probe Demo / Probe Comp output."
 Write-Host "  - Confirm a stable waveform is visible on CH1."
 Write-Host "  - Disconnect unknown DUT signals."
+Write-Host "  - Leave the WGEN output disconnected from any unknown DUT."
+Write-Host "  - Insert writable USB storage for setup and Save/Export test files."
 Write-Host "  - This test temporarily changes CH1, acquisition, display, Search,"
-Write-Host "    annotation, timebase, trigger, and waveform transfer settings."
+Write-Host "    annotation, timebase, trigger, Math, WGEN, DEMO, and save settings."
 Write-Host "  - Modified public settings will be restored where practical."
 Write-Host "  - The generic trigger mode cannot be restored and will remain Edge after"
 Write-Host "    the trigger case runs. Waveform transfer format may remain WORD."
@@ -1085,6 +1285,37 @@ try {
         -Command "trigger-edge-slope" -Arguments @("--query")
     $triggerLevel = Invoke-LiveCli -Stage "snapshot-trigger-level" `
         -Command "trigger-edge-level" -Arguments @("--source-channel", "1", "--query")
+
+    $p3Enabled = [string]$identity.idn.series -eq "4000X"
+    $triggerEdgeCoupling = $null
+    $triggerEdgeReject = $null
+    $triggerSweep = $null
+    $triggerNoiseReject = $null
+    $triggerHfReject = $null
+    $externalTrigger = $null
+    $saveImageFormat = $null
+    $saveWaveformFormat = $null
+    $saveWaveformLength = $null
+    if ($p3Enabled) {
+        $triggerEdgeCoupling = Invoke-LiveCli -Stage "snapshot-trigger-edge-coupling" `
+            -Command "trigger-edge-coupling" -Arguments @("--query")
+        $triggerEdgeReject = Invoke-LiveCli -Stage "snapshot-trigger-edge-reject" `
+            -Command "trigger-edge-reject" -Arguments @("--query")
+        $triggerSweep = Invoke-LiveCli -Stage "snapshot-trigger-sweep" `
+            -Command "trigger-sweep" -Arguments @("--query")
+        $triggerNoiseReject = Invoke-LiveCli -Stage "snapshot-trigger-noise-reject" `
+            -Command "trigger-noise-reject" -Arguments @("--query")
+        $triggerHfReject = Invoke-LiveCli -Stage "snapshot-trigger-hf-reject" `
+            -Command "trigger-hf-reject" -Arguments @("--query")
+        $externalTrigger = Invoke-LiveCli -Stage "snapshot-external-trigger" `
+            -Command "external-trigger-settings" -Arguments @("--query")
+        $saveImageFormat = Invoke-LiveCli -Stage "snapshot-save-image-format" `
+            -Command "save-image-format" -Arguments @("--query")
+        $saveWaveformFormat = Invoke-LiveCli -Stage "snapshot-save-waveform-format" `
+            -Command "save-waveform-format" -Arguments @("--query")
+        $saveWaveformLength = Invoke-LiveCli -Stage "snapshot-save-waveform-length" `
+            -Command "save-waveform-length" -Arguments @("--query")
+    }
 
     $annotationState = $null
     $annotationRestorable = $false
@@ -1165,6 +1396,18 @@ try {
         TriggerSlope = [string]$triggerSlope.result.slope
         TriggerLevel = Assert-FiniteNumber `
             -Value $triggerLevel.result.level_volts -Label "CH1 Edge level"
+        P3Enabled = $p3Enabled
+        TriggerEdgeCoupling = if ($null -ne $triggerEdgeCoupling) { [string]$triggerEdgeCoupling.result.coupling } else { "" }
+        TriggerEdgeReject = if ($null -ne $triggerEdgeReject) { [string]$triggerEdgeReject.result.reject } else { "" }
+        TriggerSweep = if ($null -ne $triggerSweep) { [string]$triggerSweep.result.mode } else { "" }
+        TriggerNoiseReject = if ($null -ne $triggerNoiseReject) { [bool]$triggerNoiseReject.result.enabled } else { $false }
+        TriggerHfReject = if ($null -ne $triggerHfReject) { [bool]$triggerHfReject.result.enabled } else { $false }
+        ExternalTriggerRange = if ($null -ne $externalTrigger) { [double]$externalTrigger.result.range_value } else { 0.0 }
+        ExternalTriggerProbe = if ($null -ne $externalTrigger) { [double]$externalTrigger.result.probe_attenuation } else { 0.0 }
+        ExternalTriggerUnits = if ($null -ne $externalTrigger) { [string]$externalTrigger.result.units } else { "" }
+        SaveImageFormat = if ($null -ne $saveImageFormat) { [string]$saveImageFormat.result.format } else { "none" }
+        SaveWaveformFormat = if ($null -ne $saveWaveformFormat) { [string]$saveWaveformFormat.result.format } else { "none" }
+        SaveWaveformLength = if ($null -ne $saveWaveformLength) { [int]$saveWaveformLength.result.points } else { 0 }
     }
     $snapshotComplete = $true
 } catch {
@@ -1846,6 +2089,530 @@ if ($snapshotComplete) {
                 }
             }
         }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-edge-settings" -Action {
+            $couplingSet = Invoke-LiveCli -Stage "trigger-edge-coupling-set" `
+                -Command "trigger-edge-coupling" `
+                -Arguments @("--coupling", [string]$snapshot.TriggerEdgeCoupling)
+            Assert-ScpiSentPrefix -Payload $couplingSet `
+                -ExpectedPrefix ":TRIGger:EDGE:COUPling " -Label "Edge coupling"
+            $coupling = Invoke-LiveCli -Stage "trigger-edge-coupling-query" `
+                -Command "trigger-edge-coupling" -Arguments @("--query")
+            $rejectSet = Invoke-LiveCli -Stage "trigger-edge-reject-set" `
+                -Command "trigger-edge-reject" `
+                -Arguments @("--reject", [string]$snapshot.TriggerEdgeReject)
+            Assert-ScpiSentPrefix -Payload $rejectSet `
+                -ExpectedPrefix ":TRIGger:EDGE:REJect " -Label "Edge reject"
+            $reject = Invoke-LiveCli -Stage "trigger-edge-reject-query" `
+                -Command "trigger-edge-reject" -Arguments @("--query")
+            if ([string]$coupling.result.coupling -ne [string]$snapshot.TriggerEdgeCoupling -or
+                [string]$reject.result.reject -ne [string]$snapshot.TriggerEdgeReject) {
+                throw "Edge coupling/reject readback does not match the snapshot."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-common" -Action {
+            $sweepSet = Invoke-LiveCli -Stage "trigger-sweep-set" -Command "trigger-sweep" `
+                -Arguments @("--mode", [string]$snapshot.TriggerSweep)
+            Assert-ScpiSentPrefix -Payload $sweepSet -ExpectedPrefix ":TRIGger:SWEep " `
+                -Label "Trigger sweep"
+            $noiseSet = Invoke-LiveCli -Stage "trigger-noise-set" `
+                -Command "trigger-noise-reject" -Arguments @(
+                    "--enabled", ([string][bool]$snapshot.TriggerNoiseReject).ToLowerInvariant()
+                )
+            Assert-ScpiSentPrefix -Payload $noiseSet -ExpectedPrefix ":TRIGger:NREJect " `
+                -Label "Trigger noise reject"
+            $hfSet = Invoke-LiveCli -Stage "trigger-hf-set" -Command "trigger-hf-reject" `
+                -Arguments @(
+                    "--enabled", ([string][bool]$snapshot.TriggerHfReject).ToLowerInvariant()
+                )
+            Assert-ScpiSentPrefix -Payload $hfSet -ExpectedPrefix ":TRIGger:HFReject " `
+                -Label "Trigger HF reject"
+            $sweep = Invoke-LiveCli -Stage "trigger-sweep-query" `
+                -Command "trigger-sweep" -Arguments @("--query")
+            $noise = Invoke-LiveCli -Stage "trigger-noise-query" `
+                -Command "trigger-noise-reject" -Arguments @("--query")
+            $hf = Invoke-LiveCli -Stage "trigger-hf-query" `
+                -Command "trigger-hf-reject" -Arguments @("--query")
+            if ([string]$sweep.result.mode -ne [string]$snapshot.TriggerSweep -or
+                [bool]$noise.result.enabled -ne [bool]$snapshot.TriggerNoiseReject -or
+                [bool]$hf.result.enabled -ne [bool]$snapshot.TriggerHfReject) {
+                throw "Common trigger settings readback does not match the snapshot."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-external" -Action {
+            $rangeSet = Invoke-LiveCli -Stage "external-trigger-range-set" `
+                -Command "external-trigger-range" -Arguments @(
+                    "--range-volts",
+                    (ConvertTo-InvariantString -Value ([double]$snapshot.ExternalTriggerRange))
+                )
+            Assert-ScpiSentPrefix -Payload $rangeSet -ExpectedPrefix ":EXTernal:RANGe " `
+                -Label "External trigger range"
+            $probeSet = Invoke-LiveCli -Stage "external-trigger-probe-set" `
+                -Command "external-trigger-probe" -Arguments @(
+                    "--attenuation",
+                    (ConvertTo-InvariantString -Value ([double]$snapshot.ExternalTriggerProbe))
+                )
+            Assert-ScpiSentPrefix -Payload $probeSet -ExpectedPrefix ":EXTernal:PROBe " `
+                -Label "External trigger probe"
+            $unitsSet = Invoke-LiveCli -Stage "external-trigger-units-set" `
+                -Command "external-trigger-units" `
+                -Arguments @("--units", [string]$snapshot.ExternalTriggerUnits)
+            Assert-ScpiSentPrefix -Payload $unitsSet -ExpectedPrefix ":EXTernal:UNITs " `
+                -Label "External trigger units"
+            $readback = Invoke-LiveCli -Stage "external-trigger-query" `
+                -Command "external-trigger-settings" -Arguments @("--query")
+            Assert-NearlyEqual -Actual ([double]$readback.result.range_value) `
+                -Expected ([double]$snapshot.ExternalTriggerRange) `
+                -Label "External trigger range"
+            Assert-NearlyEqual -Actual ([double]$readback.result.probe_attenuation) `
+                -Expected ([double]$snapshot.ExternalTriggerProbe) `
+                -Label "External trigger probe"
+            if ([string]$readback.result.units -ne [string]$snapshot.ExternalTriggerUnits) {
+                throw "External trigger units readback does not match the snapshot."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-pulse-width" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-pulse-width-set" `
+                -Command "trigger-pulse-width" -Arguments @(
+                    "--channel", "1", "--polarity", "positive", "--qualifier", "greater-than",
+                    "--time-seconds", "0.000001", "--level-volts", "0"
+                )
+            Assert-ScpiSent -Payload $configured -Label "Pulse-width trigger mode" `
+                -ExpectedCommands @(":TRIGger:MODE GLITch")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:GLITch:" `
+                -Label "Pulse-width trigger subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-pulse-width-query" `
+                -Command "trigger-pulse-width" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "glitch" -or
+                [int]$readback.result.channel -ne 1 -or
+                [string]$readback.result.qualifier -ne "greater-than") {
+                throw "Pulse-width trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-pulse-width-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-runt" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-runt-set" -Command "trigger-runt" `
+                -Arguments @(
+                    "--channel", "1", "--polarity", "positive", "--qualifier", "none",
+                    "--low-level-volts", "-0.5", "--high-level-volts", "0.5"
+                )
+            Assert-ScpiSent -Payload $configured -Label "Runt trigger mode" `
+                -ExpectedCommands @(":TRIGger:MODE RUNT")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:RUNT:" `
+                -Label "Runt trigger subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-runt-query" `
+                -Command "trigger-runt" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "runt" -or
+                [int]$readback.result.channel -ne 1 -or
+                [string]$readback.result.polarity -ne "positive") {
+                throw "Runt trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-runt-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-transition" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-transition-set" `
+                -Command "trigger-transition" -Arguments @(
+                    "--channel", "1", "--slope", "positive", "--qualifier", "greater-than",
+                    "--time-seconds", "0.000001", "--low-level-volts", "-0.5",
+                    "--high-level-volts", "0.5"
+                )
+            Assert-ScpiSent -Payload $configured -Label "Transition trigger mode" `
+                -ExpectedCommands @(":TRIGger:MODE TRANsition")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:TRANsition:" `
+                -Label "Transition trigger subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-transition-query" `
+                -Command "trigger-transition" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "transition" -or
+                [int]$readback.result.channel -ne 1 -or
+                [string]$readback.result.slope -ne "positive") {
+                throw "Transition trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-transition-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-delay" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-delay-set" -Command "trigger-delay" `
+                -Arguments @(
+                    "--arm-channel", "1", "--arm-slope", "positive",
+                    "--trigger-channel", "2", "--trigger-slope", "positive",
+                    "--time-seconds", "0.000001", "--count", "2"
+                )
+            Assert-ScpiSent -Payload $configured -Label "Delay trigger mode" `
+                -ExpectedCommands @(":TRIGger:MODE DELay")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:DELay:" `
+                -Label "Delay trigger subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-delay-query" `
+                -Command "trigger-delay" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "delay" -or
+                [int]$readback.result.arm_channel -ne 1 -or
+                [int]$readback.result.trigger_channel -ne 2 -or
+                [int]$readback.result.count -ne 2) {
+                throw "Delay trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-delay-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-setup-hold" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-setup-hold-set" `
+                -Command "trigger-setup-hold" -Arguments @(
+                    "--clock-channel", "1", "--data-channel", "2", "--slope", "positive",
+                    "--setup-time", "0.000000001", "--hold-time", "0.000000001"
+                )
+            Assert-ScpiSent -Payload $configured -Label "Setup/hold trigger mode" `
+                -ExpectedCommands @(":TRIGger:MODE SHOLd")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:SHOLd:" `
+                -Label "Setup/hold trigger subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-setup-hold-query" `
+                -Command "trigger-setup-hold" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "setup-hold" -or
+                [int]$readback.result.clock_channel -ne 1 -or
+                [int]$readback.result.data_channel -ne 2) {
+                throw "Setup/hold trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-setup-hold-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-edge-burst" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-edge-burst-set" `
+                -Command "trigger-edge-burst" -Arguments @(
+                    "--source-channel", "1", "--slope", "positive", "--count", "2",
+                    "--idle-time", "0.000001", "--level-volts", "0"
+                )
+            Assert-ScpiSent -Payload $configured -Label "Nth Edge Burst mode" `
+                -ExpectedCommands @(":TRIGger:MODE EBURst")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:EBURst:" `
+                -Label "Nth Edge Burst subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-edge-burst-query" `
+                -Command "trigger-edge-burst" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "edge-burst" -or
+                [int]$readback.result.source_channel -ne 1 -or
+                [int]$readback.result.count -ne 2) {
+                throw "Nth Edge Burst trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-edge-burst-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-tv" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-tv-set" -Command "trigger-tv" `
+                -Arguments @(
+                    "--source-channel", "1", "--standard", "ntsc",
+                    "--mode", "all-lines", "--polarity", "positive"
+                )
+            Assert-ScpiSent -Payload $configured -Label "TV trigger mode" `
+                -ExpectedCommands @(":TRIGger:MODE TV")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:TV:" `
+                -Label "TV trigger subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-tv-query" `
+                -Command "trigger-tv" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "tv" -or
+                [int]$readback.result.source_channel -ne 1 -or
+                [string]$readback.result.standard -ne "ntsc" -or
+                [string]$readback.result.tv_mode -ne "all-lines") {
+                throw "TV trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-tv-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-pattern" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-pattern-set" `
+                -Command "trigger-pattern" -Arguments @("--pattern", "XXXX")
+            Assert-ScpiSent -Payload $configured -Label "Pattern trigger mode" `
+                -ExpectedCommands @(":TRIGger:MODE PATTern")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:PATTern" `
+                -Label "Pattern trigger subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-pattern-query" `
+                -Command "trigger-pattern" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "pattern" -or
+                [string]$readback.result.pattern -ne "XXXX") {
+                throw "Pattern trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-pattern-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "trigger-or" -Action {
+            $configured = Invoke-LiveCli -Stage "trigger-or-set" `
+                -Command "trigger-or" -Arguments @("--pattern", "EXXX")
+            Assert-ScpiSent -Payload $configured -Label "OR trigger mode" `
+                -ExpectedCommands @(":TRIGger:MODE OR")
+            Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:OR " `
+                -Label "OR trigger subtree"
+            $readback = Invoke-LiveCli -Stage "trigger-or-query" `
+                -Command "trigger-or" -Arguments @("--query")
+            if ([string]$readback.result.mode -ne "or" -or
+                [string]$readback.result.pattern -ne "EXXX") {
+                throw "OR trigger readback is invalid."
+            }
+            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+                -Stage "trigger-or-edge-reset"
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "math-operator" -Action {
+            $configured = Invoke-LiveCli -Stage "math-operator-set" `
+                -Command "math-operator" -Arguments @(
+                    "--function", "1", "--operation", "add",
+                    "--source1", "channel1", "--source2", "channel2"
+                )
+            Assert-ScpiSent -Payload $configured -Label "Math operator" `
+                -ExpectedCommands @(
+                    ":FUNCtion1:OPERation ADD",
+                    ":FUNCtion1:SOURce1 CHANnel1",
+                    ":FUNCtion1:SOURce2 CHANnel2"
+                )
+            $readback = Invoke-LiveCli -Stage "math-operator-query" `
+                -Command "math-operator" -Arguments @("--function", "1", "--query")
+            if ([string]$readback.result.math_operation -ne "add" -or
+                [string]$readback.result.source1 -ne "channel1" -or
+                [string]$readback.result.source2 -ne "channel2") {
+                throw "Math operator readback is invalid."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "math-transform" -Action {
+            $configured = Invoke-LiveCli -Stage "math-transform-set" `
+                -Command "math-transform" -Arguments @(
+                    "--function", "1", "--operation", "absolute", "--source", "channel1"
+                )
+            Assert-ScpiSent -Payload $configured -Label "Math transform" `
+                -ExpectedCommands @(
+                    ":FUNCtion1:OPERation ABSolute",
+                    ":FUNCtion1:SOURce1 CHANnel1"
+                )
+            $readback = Invoke-LiveCli -Stage "math-transform-query" `
+                -Command "math-transform" -Arguments @("--function", "1", "--query")
+            if ([string]$readback.result.math_operation -ne "absolute" -or
+                [string]$readback.result.source -ne "channel1") {
+                throw "Math transform readback is invalid."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "fft" -Action {
+            $configured = Invoke-LiveCli -Stage "fft-set" -Command "fft" -Arguments @(
+                "--function", "1", "--source-channel", "1", "--units", "decibel",
+                "--window", "hanning", "--display", "on"
+            )
+            Assert-ScpiSent -Payload $configured -Label "FFT configure" -ExpectedCommands @(
+                ":FUNCtion1:OPERation FFT",
+                ":FUNCtion1:SOURce1 CHANnel1",
+                ":FUNCtion1:FFT:WINDow HANNing"
+            )
+            $readback = Invoke-LiveCli -Stage "fft-query" `
+                -Command "fft" -Arguments @("--function", "1", "--query")
+            if ([string]$readback.result.fft_operation_canonical -ne "fft" -or
+                [int]$readback.result.source_channel -ne 1 -or
+                [string]$readback.result.window -ne "hanning") {
+                throw "FFT readback is invalid."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "wgen-basic" -Action {
+            try {
+                Invoke-LiveCli -Stage "wgen-function-set" -Command "wgen-function" `
+                    -Arguments @("--function", "sine") | Out-Null
+                Invoke-LiveCli -Stage "wgen-frequency-set" -Command "wgen-frequency" `
+                    -Arguments @("--hz", "1000") | Out-Null
+                Invoke-LiveCli -Stage "wgen-voltage-set" -Command "wgen-voltage" `
+                    -Arguments @("--amplitude", "0.5") | Out-Null
+                Invoke-LiveCli -Stage "wgen-offset-set" -Command "wgen-offset" `
+                    -Arguments @("--volts", "0") | Out-Null
+                Invoke-LiveCli -Stage "wgen-load-set" -Command "wgen-load" `
+                    -Arguments @("--load", "one-meg") | Out-Null
+                $enabled = Invoke-LiveCli -Stage "wgen-output-on" -Command "wgen-output" `
+                    -Arguments @("--enabled", "true")
+                Assert-ScpiSent -Payload $enabled -Label "WGEN output enable" `
+                    -ExpectedCommands @(":WGEN1:OUTPut ON")
+                $readback = Invoke-LiveCli -Stage "wgen-query" -Command "wgen-query"
+                if (-not [bool]$readback.result.enabled -or
+                    [string]$readback.result.function -ne "sine" -or
+                    [string]$readback.result.load -ne "one-meg") {
+                    throw "WGEN readback is invalid."
+                }
+                Assert-NearlyEqual -Actual ([double]$readback.result.frequency_hz) `
+                    -Expected 1000 -Label "WGEN frequency"
+                Assert-NearlyEqual -Actual ([double]$readback.result.amplitude_volts) `
+                    -Expected 0.5 -Label "WGEN amplitude"
+            } finally {
+                $off = Invoke-LiveCli -Stage "wgen-output-off" -Command "wgen-output" `
+                    -Arguments @("--enabled", "false")
+                Assert-ScpiSent -Payload $off -Label "WGEN output disable" `
+                    -ExpectedCommands @(":WGEN1:OUTPut OFF")
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "demo-basic" -Action {
+            try {
+                $function = Invoke-LiveCli -Stage "demo-function-set" `
+                    -Command "demo-function" -Arguments @("--function", "sine")
+                Assert-ScpiSent -Payload $function -Label "DEMO function" `
+                    -ExpectedCommands @(":DEMO:FUNCtion SIN")
+                Invoke-LiveCli -Stage "demo-output-on" -Command "demo-output" `
+                    -Arguments @("--enabled", "true") | Out-Null
+                $readback = Invoke-LiveCli -Stage "demo-query" -Command "demo-query"
+                if (-not [bool]$readback.result.enabled -or
+                    [string]$readback.result.function -ne "sine") {
+                    throw "DEMO readback is invalid."
+                }
+            } finally {
+                $off = Invoke-LiveCli -Stage "demo-output-off" -Command "demo-output" `
+                    -Arguments @("--enabled", "false")
+                Assert-ScpiSent -Payload $off -Label "DEMO output disable" `
+                    -ExpectedCommands @(":DEMO:OUTPut OFF")
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "autoscale" -Action {
+            $autoscale = Invoke-LiveCli -Stage "autoscale-ch1" -Command "autoscale" `
+                -Arguments @("--source-channel", "1")
+            Assert-ScpiSent -Payload $autoscale -Label "CH1 autoscale" `
+                -ExpectedCommands @(":AUToscale CHANnel1")
+            Restore-InstrumentState -Snapshot $snapshot
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "setup-lifecycle" -Action {
+            $setupFile = "\usb\scopes-tool-live-${timestamp}.scp"
+            $saved = Invoke-LiveCli -Stage "setup-save" -Command "setup-save" `
+                -Arguments @("--file", $setupFile)
+            Assert-ScpiSentPrefix -Payload $saved -ExpectedPrefix ':SAVE:SETup "\usb\scopes-tool-live-' `
+                -Label "Setup save"
+            Invoke-LiveCli -Stage "setup-label-change" -Command "channel-label" `
+                -Arguments @("--channel", "1", "--text", "P3 recall") | Out-Null
+            $changed = Invoke-LiveCli -Stage "setup-label-change-query" `
+                -Command "channel-label" -Arguments @("--channel", "1", "--query")
+            if ([string]$changed.result.text -ne "P3 recall") {
+                throw "Setup lifecycle change was not applied."
+            }
+            $recalled = Invoke-LiveCli -Stage "setup-recall" -Command "setup-recall" `
+                -Arguments @("--file", $setupFile)
+            Assert-ScpiSentPrefix -Payload $recalled -ExpectedPrefix ':RECall:SETup "\usb\scopes-tool-live-' `
+                -Label "Setup recall"
+            $restored = Invoke-LiveCli -Stage "setup-label-restore-query" `
+                -Command "channel-label" -Arguments @("--channel", "1", "--query")
+            if ([string]$restored.result.text -ne [string]$snapshot.ChannelLabel) {
+                throw "Setup recall did not restore the CH1 label."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "save-export" -Action {
+            try {
+                $imageFile = "\usb\scopes-tool-live-${timestamp}.png"
+                $waveformFile = "\usb\scopes-tool-live-${timestamp}.csv"
+                Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
+                    -Arguments @("--format", "png") | Out-Null
+                $image = Invoke-LiveCli -Stage "save-image" -Command "save-image" `
+                    -Arguments @("--filename", $imageFile)
+                Assert-ScpiSentPrefix -Payload $image -ExpectedPrefix ':SAVE:IMAGe "\usb\scopes-tool-live-' `
+                    -Label "Instrument image save"
+                if (-not [bool]$image.result.instrument_side -or
+                    -not [bool]$image.result.operation_complete -or
+                    [string]$image.result.filename -ne $imageFile) {
+                    throw "Instrument image save result is invalid."
+                }
+                Invoke-LiveCli -Stage "save-waveform-format-csv" `
+                    -Command "save-waveform-format" -Arguments @("--format", "csv") | Out-Null
+                Invoke-LiveCli -Stage "save-waveform-length-1000" `
+                    -Command "save-waveform-length" -Arguments @("--points", "1000") | Out-Null
+                $waveform = Invoke-LiveCli -Stage "save-waveform" -Command "save-waveform" `
+                    -Arguments @("--filename", $waveformFile)
+                Assert-ScpiSentPrefix -Payload $waveform `
+                    -ExpectedPrefix ':SAVE:WAVeform "\usb\scopes-tool-live-' `
+                    -Label "Instrument waveform save"
+                if (-not [bool]$waveform.result.instrument_side -or
+                    -not [bool]$waveform.result.operation_complete -or
+                    [string]$waveform.result.filename -ne $waveformFile) {
+                    throw "Instrument waveform save result is invalid."
+                }
+            } finally {
+                if ([string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                    Invoke-LiveCli -Stage "save-image-format-restore" `
+                        -Command "save-image-format" `
+                        -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
+                } elseif ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+                    Invoke-LiveCli -Stage "save-waveform-format-restore" `
+                        -Command "save-waveform-format" `
+                        -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
+                }
+                if ([int]$snapshot.SaveWaveformLength -gt 0) {
+                    Invoke-LiveCli -Stage "save-waveform-length-restore" `
+                        -Command "save-waveform-length" `
+                        -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
+                }
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+        Invoke-BaselineCase -Name "safe-cleanup" -Action {
+            $cleanup = Invoke-LiveCli -Stage "safe-cleanup" -Command "cleanup" `
+                -Arguments @("--profile", "safe")
+            if ([string]$cleanup.result.profile -ne "safe" -or
+                -not [bool]$cleanup.result.final_error_queue_clean -or
+                "final_error_check" -notin @($cleanup.result.actions)) {
+                throw "Safe cleanup result is invalid."
+            }
+            $wgenSkip = @($cleanup.result.skipped | Where-Object {
+                [string]$_.action -eq "disable_wgen" -and
+                [string]$_.reason -eq "wgen_not_implemented"
+            })
+            if ($wgenSkip.Count -ne 1) {
+                throw "Safe cleanup did not report the expected WGEN skip."
+            }
+            Assert-ScpiSent -Payload $cleanup -Label "Safe cleanup" `
+                -ExpectedCommands @("*CLS", ":DISPlay:CLEar", "*OPC?", ":SYSTem:ERRor?")
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Write-Host "SKIP  P3 coverage (representative cases require detected 4000X capabilities)"
     }
 }
 
