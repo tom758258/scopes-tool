@@ -288,7 +288,9 @@ function Drain-AfterFailure {
 
     try {
         $drain = Get-ErrorDrain -Stage $Stage
-        Write-DrainErrors -Errors $drain.Errors -CaseName $CaseName
+        if ($drain.Errors.Count -gt 0) {
+            Write-DrainErrors -Errors $drain.Errors -CaseName $CaseName
+        }
         if (-not $drain.Terminated) {
             $message = "error queue did not reach code 0 within 30 reads"
             Write-Host "      ${message}"
@@ -813,10 +815,14 @@ function Restore-InstrumentState {
         $annotationArguments = @(
             "--slot", "1",
             $(if ($Snapshot.AnnotationEnabled) { "--on" } else { "--off" }),
-            "--text", [string]$Snapshot.AnnotationText,
             "--color", [string]$Snapshot.AnnotationColor,
             "--background", [string]$Snapshot.AnnotationBackground
         )
+        if ([string]::IsNullOrEmpty([string]$Snapshot.AnnotationText)) {
+            $annotationArguments += "--clear"
+        } else {
+            $annotationArguments += @("--text", [string]$Snapshot.AnnotationText)
+        }
         if ($null -ne $Snapshot.AnnotationX -and $null -ne $Snapshot.AnnotationY) {
             $annotationArguments += @(
                 "--x", [string]$Snapshot.AnnotationX,

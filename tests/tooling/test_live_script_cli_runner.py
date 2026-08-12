@@ -3013,7 +3013,7 @@ function Invoke-LiveCli {
         "restore-annotation-query" {
             return [pscustomobject]@{ result = [pscustomobject]@{
                 enabled = $false
-                text = "Original annotation"
+                text = ""
                 color = "WHITE"
                 background = "OPAQ"
                 x = 20
@@ -3056,7 +3056,7 @@ $snapshot = [pscustomobject]@{
     DisplayVectors = $true
     AnnotationRestorable = $true
     AnnotationEnabled = $false
-    AnnotationText = "Original annotation"
+    AnnotationText = ""
     AnnotationColor = "WHITE"
     AnnotationBackground = "OPAQ"
     AnnotationX = 20
@@ -3118,4 +3118,98 @@ Restore-InstrumentState -Snapshot $snapshot
         "search-state",
     ):
         assert command in commands
+    annotation_restore = next(
+        entry for entry in result["invocations"] if entry["stage"] == "restore-annotation"
+    )
+    assert "--clear" in annotation_restore["arguments"]
+    assert "--text" not in annotation_restore["arguments"]
+    assert "" not in annotation_restore["arguments"]
+    assert any(
+        entry["stage"] == "restore-annotation-query"
+        for entry in result["invocations"]
+    )
     assert result["drain_calls"] == 0
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_diagnostic_drain_ignores_empty_error_collection(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-empty-diagnostic-drain-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @("Add-Diagnostic", "Drain-AfterFailure")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$script:Diagnostics = [ordered]@{}
+
+function Get-ErrorDrain {
+    param([string] $Stage)
+    return [pscustomobject]@{
+        Errors = @()
+        Terminated = $true
+    }
+}
+
+function Write-DrainErrors {
+    throw "Write-DrainErrors must not be called for an empty error collection."
+}
+
+Drain-AfterFailure -Stage "empty-error-drain" -CaseName "cleanup"
+
+[ordered]@{
+    diagnostic_count = $script:Diagnostics.Count
+    diagnostics = @(
+        $script:Diagnostics.Values |
+            ForEach-Object { $_ } |
+            ForEach-Object { [string]$_ }
+    )
+} | ConvertTo-Json -Depth 6 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["diagnostic_count"] == 0
+    assert result["diagnostics"] == []
