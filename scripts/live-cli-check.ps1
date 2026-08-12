@@ -561,6 +561,7 @@ function Invoke-HardwareFreePreflight {
         [pscustomobject]@{ Command = "trigger-noise-reject"; Arguments = @("--enabled", "false") },
         [pscustomobject]@{ Command = "trigger-hf-reject"; Arguments = @("--enabled", "false") },
         [pscustomobject]@{ Command = "external-trigger-range"; Arguments = @("--range-volts", "8") },
+        [pscustomobject]@{ Command = "trigger-edge-external-level"; Arguments = @("--level-volts", "0") },
         [pscustomobject]@{ Command = "external-trigger-probe"; Arguments = @("--attenuation", "1") },
         [pscustomobject]@{ Command = "external-trigger-units"; Arguments = @("--units", "volts") },
         [pscustomobject]@{ Command = "trigger-pulse-width"; Arguments = @("--channel", "1", "--polarity", "positive", "--qualifier", "greater-than", "--time-seconds", "0.000001", "--level-volts", "0") },
@@ -570,8 +571,8 @@ function Invoke-HardwareFreePreflight {
         [pscustomobject]@{ Command = "trigger-setup-hold"; Arguments = @("--clock-channel", "1", "--data-channel", "2", "--slope", "positive", "--setup-time", "0.000000001", "--hold-time", "0.000000001") },
         [pscustomobject]@{ Command = "trigger-edge-burst"; Arguments = @("--source-channel", "1", "--slope", "positive", "--count", "2", "--idle-time", "0.000001", "--level-volts", "0") },
         [pscustomobject]@{ Command = "trigger-tv"; Arguments = @("--source-channel", "1", "--standard", "ntsc", "--mode", "all-lines", "--polarity", "positive") },
-        [pscustomobject]@{ Command = "trigger-pattern"; Arguments = @("--pattern", "XXXX") },
-        [pscustomobject]@{ Command = "trigger-or"; Arguments = @("--pattern", "EXXX") },
+        [pscustomobject]@{ Command = "trigger-pattern"; Arguments = @("--pattern", "XXX1") },
+        [pscustomobject]@{ Command = "trigger-or"; Arguments = @("--pattern", "XXXR") },
         [pscustomobject]@{ Command = "math-operator"; Arguments = @("--function", "1", "--operation", "add", "--source1", "channel1", "--source2", "channel2") },
         [pscustomobject]@{ Command = "math-transform"; Arguments = @("--function", "1", "--operation", "absolute", "--source", "channel1") },
         [pscustomobject]@{ Command = "fft"; Arguments = @("--function", "1", "--source-channel", "1", "--units", "decibel", "--window", "hanning", "--display", "on") },
@@ -596,6 +597,9 @@ function Invoke-HardwareFreePreflight {
         Invoke-ModeCli -Stage "preflight-p3-$($item.Command)" -Command $item.Command `
             -ModeArguments $dryRun -Arguments $item.Arguments | Out-Null
     }
+    Invoke-ModeCli -Stage "preflight-p3-trigger-edge-external-level-query" `
+        -Command "trigger-edge-external-level" -ModeArguments $simulate `
+        -Arguments @("--query") | Out-Null
 
     Invoke-ModeCli -Stage "preflight-identify" -Command "identify" `
         -ModeArguments $simulate | Out-Null
@@ -1003,12 +1007,11 @@ function Restore-InstrumentState {
                 Arguments = @("--units", [string]$Snapshot.ExternalTriggerUnits)
             },
             [pscustomobject]@{
-                Name = "Edge CH1 baseline"
-                Command = "trigger-edge"
+                Name = "External Edge level"
+                Command = "trigger-edge-external-level"
                 Arguments = @(
-                    "--source-channel", "1", "--level",
-                    (ConvertTo-InvariantString -Value ([double]$Snapshot.TriggerLevel)),
-                    "--slope", "positive"
+                    "--level-volts",
+                    (ConvertTo-InvariantString -Value ([double]$Snapshot.ExternalTriggerLevel))
                 )
             }
         )
@@ -1222,11 +1225,16 @@ Write-Host "Required setup:"
 Write-Host "  - Connect the CH1 probe to the oscilloscope Probe Demo / Probe Comp output."
 Write-Host "  - Confirm a stable waveform is visible on CH1."
 Write-Host "  - Disconnect unknown DUT signals."
-Write-Host "  - Leave the WGEN output disconnected from any unknown DUT."
+Write-Host "  - Leave WGEN output OFF and disconnected from any unknown DUT."
+Write-Host "  - Leave DEMO output OFF."
+Write-Host "  - Do not connect the External trigger input to an unknown or sensitive DUT."
 Write-Host "  - Insert writable USB storage for setup and Save/Export test files."
 Write-Host "  - This test temporarily changes CH1, acquisition, display, Search,"
 Write-Host "    annotation, timebase, trigger, Math, WGEN, DEMO, and save settings."
 Write-Host "  - Modified public settings will be restored where practical."
+Write-Host "  - Math Function 1 is disposable acceptance state and will finish OFF."
+Write-Host "  - Safe Cleanup clears the display; DVM and DEMO may finish OFF rather"
+Write-Host "    than return to a pre-test ON state."
 Write-Host "  - The generic trigger mode cannot be restored and will remain Edge after"
 Write-Host "    the trigger case runs. Waveform transfer format may remain WORD."
 Write-Host ""
@@ -1293,6 +1301,7 @@ try {
     $triggerNoiseReject = $null
     $triggerHfReject = $null
     $externalTrigger = $null
+    $externalTriggerLevel = $null
     $saveImageFormat = $null
     $saveWaveformFormat = $null
     $saveWaveformLength = $null
@@ -1309,6 +1318,8 @@ try {
             -Command "trigger-hf-reject" -Arguments @("--query")
         $externalTrigger = Invoke-LiveCli -Stage "snapshot-external-trigger" `
             -Command "external-trigger-settings" -Arguments @("--query")
+        $externalTriggerLevel = Invoke-LiveCli -Stage "snapshot-external-trigger-level" `
+            -Command "trigger-edge-external-level" -Arguments @("--query")
         $saveImageFormat = Invoke-LiveCli -Stage "snapshot-save-image-format" `
             -Command "save-image-format" -Arguments @("--query")
         $saveWaveformFormat = Invoke-LiveCli -Stage "snapshot-save-waveform-format" `
@@ -1405,6 +1416,7 @@ try {
         ExternalTriggerRange = if ($null -ne $externalTrigger) { [double]$externalTrigger.result.range_value } else { 0.0 }
         ExternalTriggerProbe = if ($null -ne $externalTrigger) { [double]$externalTrigger.result.probe_attenuation } else { 0.0 }
         ExternalTriggerUnits = if ($null -ne $externalTrigger) { [string]$externalTrigger.result.units } else { "" }
+        ExternalTriggerLevel = if ($null -ne $externalTriggerLevel) { [double]$externalTriggerLevel.result.level_volts } else { 0.0 }
         SaveImageFormat = if ($null -ne $saveImageFormat) { [string]$saveImageFormat.result.format } else { "none" }
         SaveWaveformFormat = if ($null -ne $saveWaveformFormat) { [string]$saveWaveformFormat.result.format } else { "none" }
         SaveWaveformLength = if ($null -ne $saveWaveformLength) { [int]$saveWaveformLength.result.points } else { 0 }
@@ -2167,8 +2179,25 @@ if ($snapshotComplete) {
                 -Arguments @("--units", [string]$snapshot.ExternalTriggerUnits)
             Assert-ScpiSentPrefix -Payload $unitsSet -ExpectedPrefix ":EXTernal:UNITs " `
                 -Label "External trigger units"
+            $levelSet = Invoke-LiveCli -Stage "external-trigger-level-set" `
+                -Command "trigger-edge-external-level" -Arguments @(
+                    "--level-volts",
+                    (ConvertTo-InvariantString -Value ([double]$snapshot.ExternalTriggerLevel))
+                )
+            Assert-ScpiSentPrefix -Payload $levelSet `
+                -ExpectedPrefix ":TRIGger:EDGE:LEVel " `
+                -Label "External Edge level"
+            if (-not (@($levelSet.scpi.sent) | Where-Object {
+                [string]$_ -like ":TRIGger:EDGE:LEVel *,EXTernal"
+            })) {
+                throw "External Edge level setter did not use External-qualified SCPI."
+            }
             $readback = Invoke-LiveCli -Stage "external-trigger-query" `
                 -Command "external-trigger-settings" -Arguments @("--query")
+            $levelReadback = Invoke-LiveCli -Stage "external-trigger-level-query" `
+                -Command "trigger-edge-external-level" -Arguments @("--query")
+            Assert-ScpiSent -Payload $levelReadback -Label "External Edge level query" `
+                -ExpectedCommands @(":TRIGger:EDGE:LEVel? EXTernal")
             Assert-NearlyEqual -Actual ([double]$readback.result.range_value) `
                 -Expected ([double]$snapshot.ExternalTriggerRange) `
                 -Label "External trigger range"
@@ -2178,6 +2207,9 @@ if ($snapshotComplete) {
             if ([string]$readback.result.units -ne [string]$snapshot.ExternalTriggerUnits) {
                 throw "External trigger units readback does not match the snapshot."
             }
+            Assert-NearlyEqual -Actual ([double]$levelReadback.result.level_volts) `
+                -Expected ([double]$snapshot.ExternalTriggerLevel) `
+                -Label "External Edge level"
         }
     }
 
@@ -2349,7 +2381,7 @@ if ($snapshotComplete) {
     if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
         Invoke-BaselineCase -Name "trigger-pattern" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-pattern-set" `
-                -Command "trigger-pattern" -Arguments @("--pattern", "XXXX")
+                -Command "trigger-pattern" -Arguments @("--pattern", "XXX1")
             Assert-ScpiSent -Payload $configured -Label "Pattern trigger mode" `
                 -ExpectedCommands @(":TRIGger:MODE PATTern")
             Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:PATTern" `
@@ -2357,7 +2389,7 @@ if ($snapshotComplete) {
             $readback = Invoke-LiveCli -Stage "trigger-pattern-query" `
                 -Command "trigger-pattern" -Arguments @("--query")
             if ([string]$readback.result.mode -ne "pattern" -or
-                [string]$readback.result.pattern -ne "XXXX") {
+                [string]$readback.result.pattern -ne "XXX1") {
                 throw "Pattern trigger readback is invalid."
             }
             Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
@@ -2368,7 +2400,7 @@ if ($snapshotComplete) {
     if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
         Invoke-BaselineCase -Name "trigger-or" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-or-set" `
-                -Command "trigger-or" -Arguments @("--pattern", "EXXX")
+                -Command "trigger-or" -Arguments @("--pattern", "XXXR")
             Assert-ScpiSent -Payload $configured -Label "OR trigger mode" `
                 -ExpectedCommands @(":TRIGger:MODE OR")
             Assert-ScpiSentPrefix -Payload $configured -ExpectedPrefix ":TRIGger:OR " `
@@ -2376,7 +2408,7 @@ if ($snapshotComplete) {
             $readback = Invoke-LiveCli -Stage "trigger-or-query" `
                 -Command "trigger-or" -Arguments @("--query")
             if ([string]$readback.result.mode -ne "or" -or
-                [string]$readback.result.pattern -ne "EXXX") {
+                [string]$readback.result.pattern -ne "XXXR") {
                 throw "OR trigger readback is invalid."
             }
             Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
@@ -2440,9 +2472,15 @@ if ($snapshotComplete) {
             )
             $readback = Invoke-LiveCli -Stage "fft-query" `
                 -Command "fft" -Arguments @("--function", "1", "--query")
+            Assert-ScpiSent -Payload $readback -Label "FFT query" -ExpectedCommands @(
+                ":FUNCtion1:OPERation?",
+                ":FUNCtion1:SOURce1?",
+                ":FUNCtion1:FFT:WINDow?"
+            )
+            $window = ([string]$readback.result.window).Trim().ToUpperInvariant()
             if ([string]$readback.result.fft_operation_canonical -ne "fft" -or
                 [int]$readback.result.source_channel -ne 1 -or
-                [string]$readback.result.window -ne "hanning") {
+                $window -ne "HANN") {
                 throw "FFT readback is invalid."
             }
         }
@@ -2598,7 +2636,9 @@ if ($snapshotComplete) {
                 -Arguments @("--profile", "safe")
             if ([string]$cleanup.result.profile -ne "safe" -or
                 -not [bool]$cleanup.result.final_error_queue_clean -or
-                "final_error_check" -notin @($cleanup.result.actions)) {
+                "final_error_check" -notin @($cleanup.result.actions) -or
+                "disable_dvm" -notin @($cleanup.result.actions) -or
+                "disable_demo_output" -notin @($cleanup.result.actions)) {
                 throw "Safe cleanup result is invalid."
             }
             $wgenSkip = @($cleanup.result.skipped | Where-Object {
@@ -2609,7 +2649,10 @@ if ($snapshotComplete) {
                 throw "Safe cleanup did not report the expected WGEN skip."
             }
             Assert-ScpiSent -Payload $cleanup -Label "Safe cleanup" `
-                -ExpectedCommands @("*CLS", ":DISPlay:CLEar", "*OPC?", ":SYSTem:ERRor?")
+                -ExpectedCommands @(
+                    "*CLS", ":DISPlay:CLEar", ":DVM:ENABle 0",
+                    ":DEMO:OUTPut OFF", "*OPC?", ":SYSTem:ERRor?"
+                )
         }
     } elseif (-not $script:FunctionalFailed) {
         Write-Host "SKIP  P3 coverage (representative cases require detected 4000X capabilities)"

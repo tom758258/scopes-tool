@@ -2369,6 +2369,7 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         "trigger-tv",
         "trigger-pattern",
         "trigger-or",
+        "trigger-edge-external-level",
         "math-operator",
         "math-transform",
         "fft",
@@ -2389,12 +2390,158 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert 'Command = "wgen-output"' in script
     assert 'Command = "demo-output"' in script
     assert 'Command = "math-display"' in script
+    assert '"--pattern", "XXX1"' in script
+    assert '"--pattern", "XXXR"' in script
+    assert '"disable_dvm"' in script
+    assert '"disable_demo_output"' in script
+    assert '":DVM:ENABle 0"' in script
+    assert '":DEMO:OUTPut OFF"' in script
     assert '"disable_wgen"' in script
     assert '"wgen_not_implemented"' in script
     assert 'SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")' in script
     assert '@("--format", "none")' not in script
     assert '"\\usb\\scopes-tool-live-${timestamp}.scp"' in script
     assert '"--slot"' not in script[script.index('Invoke-BaselineCase -Name "setup-lifecycle"'):]
+    assert "Leave WGEN output OFF" in script
+    assert "Leave DEMO output OFF" in script
+    assert "External trigger input" in script
+    assert "Math Function 1 is disposable" in script
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_p3_fft_accepts_documented_hann_readback_and_rejects_other_window(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-p3-fft-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @("Assert-ScpiSent", "Invoke-BaselineCase")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"fft`"")
+    )
+}, $true))
+if ($matchingCommands.Count -ne 1) { throw "Expected one fft case." }
+$caseBlock = $matchingCommands[0].Extent.Text
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{ Passed = $Passed; Detail = $Detail }
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    if ($Stage -eq "fft-set") {
+        return [pscustomobject]@{
+            scpi = [pscustomobject]@{ sent = @(
+                ":FUNCtion1:OPERation FFT",
+                ":FUNCtion1:SOURce1 CHANnel1",
+                ":FUNCtion1:FFT:WINDow HANNing"
+            ) }
+            result = [pscustomobject]@{}
+        }
+    }
+    if ($Stage -eq "fft-query") {
+        return [pscustomobject]@{
+            scpi = [pscustomobject]@{ sent = @(
+                ":FUNCtion1:OPERation?",
+                ":FUNCtion1:SOURce1?",
+                ":FUNCtion1:FFT:WINDow?"
+            ) }
+            result = [pscustomobject]@{
+                fft_operation_canonical = "fft"
+                source_channel = 1
+                window = $script:FftWindow
+            }
+        }
+    }
+    throw "Unexpected stage: ${Stage}"
+}
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:FftWindow = "HANN"
+Invoke-Expression $caseBlock
+$pass = $script:CaseResults["fft"].Passed
+$passFailed = $script:FunctionalFailed
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:FftWindow = "FLAT"
+Invoke-Expression $caseBlock
+
+[ordered]@{
+    pass = $pass
+    pass_failed = $passFailed
+    failure_passed = $script:CaseResults["fft"].Passed
+    failure_detail = $script:CaseResults["fft"].Detail
+    failure_functional_failed = $script:FunctionalFailed
+    failure_drain_calls = $script:DrainCalls
+} | ConvertTo-Json -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["pass"] is True
+    assert result["pass_failed"] is False
+    assert result["failure_passed"] is False
+    assert "FFT readback is invalid" in result["failure_detail"]
+    assert result["failure_functional_failed"] is True
+    assert result["failure_drain_calls"] == 1
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
@@ -3124,9 +3271,9 @@ $snapshot = [pscustomobject]@{
     DisplayPersistenceMode = "minimum"
     DisplayLabels = $true
     TriggerLevel = 0.0
-    TriggerSlope = "positive"
+    TriggerSlope = "negative"
     TriggerSource = "analog-channel"
-    TriggerSourceChannel = 1
+    TriggerSourceChannel = 2
     TimebasePosition = 0.0
     TimebaseScale = 0.001
     ChannelCoupling = "dc"
@@ -3153,6 +3300,7 @@ $snapshot = [pscustomobject]@{
     ExternalTriggerRange = 8.0
     ExternalTriggerProbe = 1.0
     ExternalTriggerUnits = "volts"
+    ExternalTriggerLevel = -0.25
     SaveImageFormat = "none"
     SaveWaveformFormat = "csv"
     SaveWaveformLength = 1000
@@ -3219,7 +3367,7 @@ Restore-InstrumentState -Snapshot $snapshot
         "external-trigger-range",
         "external-trigger-probe",
         "external-trigger-units",
-        "trigger-edge",
+        "trigger-edge-external-level",
         "save-waveform-format",
         "save-waveform-length",
     ):
@@ -3242,6 +3390,27 @@ Restore-InstrumentState -Snapshot $snapshot
     assert any(
         entry["command"] == "save-waveform-format"
         and entry["arguments"] == ["--format", "csv"]
+        for entry in result["invocations"]
+    )
+    assert any(
+        entry["command"] == "trigger-edge-source"
+        and entry["arguments"] == ["--source-channel", "2"]
+        for entry in result["invocations"]
+    )
+    assert any(
+        entry["command"] == "trigger-edge-slope"
+        and entry["arguments"] == ["--slope", "negative"]
+        for entry in result["invocations"]
+    )
+    assert any(
+        entry["command"] == "trigger-edge-external-level"
+        and entry["arguments"] == ["--level-volts", "-0.25"]
+        for entry in result["invocations"]
+    )
+    assert not any(
+        entry["command"] == "trigger-edge"
+        and entry["arguments"][:2] == ["--source-channel", "1"]
+        and "positive" in entry["arguments"]
         for entry in result["invocations"]
     )
     assert result["drain_calls"] == 0
