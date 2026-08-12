@@ -1220,6 +1220,7 @@ $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:Sleeps = New-Object System.Collections.Generic.List[int]
 $Resource = "TEST::INSTR"
 $listerCsvPath = $OutputPath
+$script:RunRoot = Split-Path -Parent $OutputPath
 
 function Invoke-SerialCase {
     param(
@@ -1246,6 +1247,11 @@ function Start-Sleep {
     )
 
     $script:Sleeps.Add($Milliseconds)
+    $script:Invocations.Add([pscustomobject]@{
+        stage = "sleep"
+        command = "Start-Sleep"
+        arguments = @([string]$Milliseconds)
+    })
 }
 
 function Invoke-LiveCli {
@@ -1267,8 +1273,21 @@ function Invoke-LiveCli {
     if ($Command -eq "serial-lister-query") {
         return [pscustomobject]@{
             result = [pscustomobject]@{
-                display = "all"
+                display = "bus1"
                 reference = "trigger"
+            }
+        }
+    }
+    if ($Command -eq "system-operation-status") {
+        return [pscustomobject]@{
+            ok = $true
+            command = "system-operation-status"
+            result = [pscustomobject]@{
+                operation = "query"
+                command = ":OPERegister:CONDition?"
+                value = 8
+                raw = "8"
+                set_bits = @(3)
             }
         }
     }
@@ -1321,11 +1340,23 @@ $exportInvocations = @($script:Invocations | Where-Object {
     $_.command -eq "serial-lister-export"
 })
 $outputItem = Get-Item -LiteralPath $listerCsvPath
+$operationStatusPath = Join-Path $script:RunRoot "system-operation-status.json"
+$operationStatusArtifact = Get-Content -LiteralPath $operationStatusPath -Raw |
+    ConvertFrom-Json
 [ordered]@{
     status = $script:CaseStatus
     detail = $script:CaseDetail
     export_count = $exportInvocations.Count
+    invocations = @($script:Invocations | ForEach-Object {
+        [ordered]@{
+            stage = $_.stage
+            command = $_.command
+            arguments = @($_.arguments)
+        }
+    })
     sleep_values = @($script:Sleeps | ForEach-Object { $_ })
+    operation_status_exists = Test-Path -LiteralPath $operationStatusPath -PathType Leaf
+    operation_status = $operationStatusArtifact
     output_exists = Test-Path -LiteralPath $listerCsvPath -PathType Leaf
     output_bytes = $outputItem.Length
 } | ConvertTo-Json -Depth 8 -Compress
@@ -1359,7 +1390,41 @@ $outputItem = Get-Item -LiteralPath $listerCsvPath
     assert result["status"] == "PASS", result["detail"]
     assert result["detail"] == ""
     assert result["export_count"] == 1
+    assert [entry["command"] for entry in result["invocations"]] == [
+        "serial-lister-display",
+        "serial-lister-reference",
+        "serial-lister-query",
+        "Start-Sleep",
+        "system-operation-status",
+        "serial-lister-export",
+    ]
+    assert result["invocations"][0]["arguments"] == ["--selection", "bus1"]
+    assert result["invocations"][4]["arguments"] == ["--query"]
+    assert all(
+        entry["command"]
+        not in {
+            "serial-display",
+            "run",
+            "stop-acquisition",
+            "single",
+            "force-trigger",
+            "digitize",
+        }
+        for entry in result["invocations"]
+    )
     assert result["sleep_values"] == [1000]
+    assert result["operation_status_exists"] is True
+    assert result["operation_status"] == {
+        "ok": True,
+        "command": "system-operation-status",
+        "result": {
+            "operation": "query",
+            "command": ":OPERegister:CONDition?",
+            "value": 8,
+            "raw": "8",
+            "set_bits": [3],
+        },
+    }
     assert result["output_exists"] is True
     assert result["output_bytes"] > 0
 

@@ -517,7 +517,7 @@ function Invoke-HardwareFreePreflight {
         -ModeArguments $simulate -Arguments @("--bus", "1") | Out-Null
     Invoke-ModeCli -Stage "preflight-uart-configure" -Command "serial-uart" `
         -ModeArguments $dryRun -Arguments @(
-            "--bus", "1", "--rx-source", "channel1", "--tx-source", "channel2",
+            "--bus", "1",
             "--baud-rate", "115200", "--data-bits", "8", "--parity", "none",
             "--polarity", "high", "--bit-order", "lsb-first"
         ) | Out-Null
@@ -528,7 +528,7 @@ function Invoke-HardwareFreePreflight {
         -ModeArguments $simulate | Out-Null
     Invoke-ModeCli -Stage "preflight-lister-display" `
         -Command "serial-lister-display" -ModeArguments $dryRun `
-        -Arguments @("--selection", "all") | Out-Null
+        -Arguments @("--selection", "bus1") | Out-Null
     Invoke-ModeCli -Stage "preflight-lister-display-query" `
         -Command "serial-lister-display" -ModeArguments $simulate `
         -Arguments @("--query") | Out-Null
@@ -948,16 +948,18 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
     Write-Host ""
     Write-Host "Required setup:"
     Write-Host "  - Use Serial bus 1."
-    Write-Host "  - Connect an external UART TX signal to CH1."
-    Write-Host "  - UART traffic must be continuously active."
+    Write-Host "  - Before starting, configure Serial1 RX source = CH1 and TX source = CH2."
+    Write-Host "  - Connect the external UART TX test signal to CH1 (Serial1 RX source)."
+    Write-Host "  - Hold CH2 at a stable UART idle-high logic level (Serial1 TX source)."
+    Write-Host "  - Do not leave CH2 floating."
+    Write-Host "  - No TX frames are required on CH2 for this representative RX/Lister case."
+    Write-Host "  - CH1 UART traffic must be continuously active."
     Write-Host "  - Baud rate: 115200."
     Write-Host "  - 8 data bits."
     Write-Host "  - No parity."
     Write-Host "  - Idle high."
     Write-Host "  - LSB first."
     Write-Host "  - Repeated data value: 0x01."
-    Write-Host "  - CH2 will be selected as the UART TX decode source; live traffic on CH2 is not"
-    Write-Host "    required for the representative RX/Lister case."
     Write-Host "  - Ensure another Serial bus is not reserving CH1/CH2 or conflicting protocol"
     Write-Host "    resources."
     Write-Host "  - This validation will temporarily configure Serial1, Lister, Serial Search,"
@@ -971,14 +973,14 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
     Write-Host "  - Cleanup returns the global trigger mode to Edge; an arbitrary original"
     Write-Host "    trigger mode cannot be restored through the current public CLI."
     Write-Host ""
-    Write-Host "Press Enter when UART traffic is active."
+    Write-Host "Press Enter when CH1 UART traffic is active and CH2 is held stable idle-high."
     Write-Host "Ctrl+C to cancel."
     [void](Read-Host)
 
     $stateChangeStarted = $true
     Invoke-SerialCase -Name "UART configuration roundtrip" -Action {
         Invoke-LiveCli -Stage "uart-configure" -Command "serial-uart" -Arguments @(
-            "--bus", "1", "--rx-source", "channel1", "--tx-source", "channel2",
+            "--bus", "1",
             "--baud-rate", "115200", "--data-bits", "8", "--parity", "none",
             "--polarity", "high", "--bit-order", "lsb-first"
         ) | Out-Null
@@ -992,20 +994,30 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
         $listerChangeStarted = $true
         Invoke-SerialCase -Name "UART Lister export" -Action {
             Invoke-LiveCli -Stage "lister-display" -Command "serial-lister-display" `
-                -Arguments @("--selection", "all") | Out-Null
+                -Arguments @("--selection", "bus1") | Out-Null
             Invoke-LiveCli -Stage "lister-reference" `
                 -Command "serial-lister-reference" `
                 -Arguments @("--reference", "trigger") | Out-Null
             $lister = Invoke-LiveCli -Stage "lister-query" `
                 -Command "serial-lister-query"
             if ([string](Get-RequiredResultValue -Payload $lister -Name "display" `
-                -Stage "Lister readback") -ne "all" -or
+                -Stage "Lister readback") -ne "bus1" -or
                 [string](Get-RequiredResultValue -Payload $lister -Name "reference" `
                 -Stage "Lister readback") -ne "trigger") {
-                throw "Lister readback did not report display all and reference trigger."
+                throw "Lister readback did not report display bus1 and reference trigger."
             }
 
             Start-Sleep -Milliseconds 1000
+            $operationStatus = Invoke-LiveCli -Stage "system-operation-status" `
+                -Command "system-operation-status" -Arguments @("--query")
+            $operationStatusPath = Join-Path `
+                $script:RunRoot "system-operation-status.json"
+            [System.IO.File]::WriteAllText(
+                $operationStatusPath,
+                ($operationStatus | ConvertTo-Json -Depth 8),
+                [System.Text.UTF8Encoding]::new($false)
+            )
+
             $exportInvocation = Invoke-CliRaw -Stage "lister-export" -Arguments @(
                 "serial-lister-export", "--live", "--resource", $Resource, "--json",
                 "--output", $listerCsvPath
