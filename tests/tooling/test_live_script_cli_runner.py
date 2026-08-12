@@ -2286,6 +2286,21 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
     assert 'Stage "waveform-amp-unit-restore"' in script
     assert 'Stage "waveform-amp-unit-restore-query"' in script
 
+    for case_name in (
+        "channel-vertical",
+        "channel-probe",
+        "channel-advanced",
+        "display-settings",
+        "search-basic",
+    ):
+        case_start = script.index(f'Invoke-BaselineCase -Name "{case_name}"')
+        case_end = script.index(
+            "\n    if (-not $script:FunctionalFailed", case_start + 1
+        )
+        case_block = script[case_start:case_end]
+        assert ".result.command" not in case_block
+        assert ".result.commands" not in case_block
+
     restore_start = script.index("function Restore-InstrumentState {")
     restore_end = script.index("\nif ([string]::IsNullOrWhiteSpace", restore_start)
     restore = script[restore_start:restore_end]
@@ -2309,6 +2324,214 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
         "search-mode",
     ):
         assert f'Command = "{command}"' in restore
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_p2_channel_vertical_rejects_payload_self_oracle(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-p2-channel-vertical-harness.ps1"
+    harness_path.write_text(
+        r'''
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @(
+    "ConvertTo-InvariantString",
+    "Assert-ScpiSent",
+    "Assert-NearlyEqual",
+    "Invoke-BaselineCase"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"channel-vertical`"")
+    )
+}, $true))
+if ($matchingCommands.Count -ne 1) {
+    throw "Expected one channel-vertical case in ${ScriptPath}."
+}
+$caseBlock = $matchingCommands[0].Extent.Text
+
+$script:snapshot = [pscustomobject]@{
+    ChannelLabel = "Input a"
+    ChannelScale = 0.5
+    ChannelRange = 4.0
+    ChannelOffset = 0.0
+}
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:WrongScalePath = $false
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    switch ($Stage) {
+        "channel-label-set" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(':CHANnel1:LABel "Input a"') }
+                result = [pscustomobject]@{ command = ':CHANnel1:LABel "Input a"' }
+            }
+        }
+        "channel-label-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:LABel?") }
+                result = [pscustomobject]@{ text = "Input a" }
+            }
+        }
+        "channel-scale-set-p2" {
+            $commandText = if ($script:WrongScalePath) {
+                ":CHANnel1:OFFSet 0.5"
+            } else {
+                ":CHANnel1:SCALe 0.5"
+            }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @($commandText) }
+                result = [pscustomobject]@{ command = $commandText }
+            }
+        }
+        "channel-scale-query-p2" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:SCALe?") }
+                result = [pscustomobject]@{ volts_per_division = 0.5 }
+            }
+        }
+        "channel-range-set" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:RANGe 4") }
+                result = [pscustomobject]@{ command = ":CHANnel1:RANGe 4" }
+            }
+        }
+        "channel-range-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:RANGe?") }
+                result = [pscustomobject]@{ range_volts = 4.0 }
+            }
+        }
+        "channel-offset-set-p2" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:OFFSet 0") }
+                result = [pscustomobject]@{ command = ":CHANnel1:OFFSet 0" }
+            }
+        }
+        "channel-offset-query-p2" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:OFFSet?") }
+                result = [pscustomobject]@{ volts = 0.0 }
+            }
+        }
+        default {
+            throw "Unexpected stage: ${Stage}"
+        }
+    }
+}
+
+Invoke-Expression $caseBlock
+$passResult = $script:CaseResults["channel-vertical"].Passed
+$passFunctionalFailed = $script:FunctionalFailed
+$passDrainCalls = $script:DrainCalls
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:Invocations.Clear()
+$script:WrongScalePath = $true
+Invoke-Expression $caseBlock
+
+[ordered]@{
+    pass_result = $passResult
+    pass_functional_failed = $passFunctionalFailed
+    pass_drain_calls = $passDrainCalls
+    failure_passed = $script:CaseResults["channel-vertical"].Passed
+    failure_detail = $script:CaseResults["channel-vertical"].Detail
+    failure_functional_failed = $script:FunctionalFailed
+    failure_drain_calls = $script:DrainCalls
+    failure_stages = @($script:Invocations | ForEach-Object { $_.stage })
+} | ConvertTo-Json -Depth 10 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["pass_result"] is True
+    assert result["pass_functional_failed"] is False
+    assert result["pass_drain_calls"] == 0
+    assert result["failure_passed"] is False
+    assert "CH1 scale SCPI path" in result["failure_detail"]
+    assert result["failure_functional_failed"] is True
+    assert result["failure_drain_calls"] == 1
+    assert "channel-scale-query-p2" in result["failure_stages"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")

@@ -1374,8 +1374,11 @@ if ($snapshotComplete) {
         Invoke-BaselineCase -Name "channel-vertical" -Action {
             $labelSet = Invoke-LiveCli -Stage "channel-label-set" -Command "channel-label" `
                 -Arguments @("--channel", "1", "--text", [string]$snapshot.ChannelLabel)
-            Assert-ScpiSent -Payload $labelSet -Label "CH1 label configure" `
-                -ExpectedCommands @([string]$labelSet.result.command)
+            if (-not @($labelSet.scpi.sent | Where-Object {
+                ([string]$_).StartsWith(':CHANnel1:LABel "')
+            })) {
+                throw "CH1 label configure did not use the CH1 label SCPI path."
+            }
             $label = Invoke-LiveCli -Stage "channel-label-query" -Command "channel-label" `
                 -Arguments @("--channel", "1", "--query")
             Assert-ScpiSent -Payload $label -Label "CH1 label query" `
@@ -1387,36 +1390,45 @@ if ($snapshotComplete) {
             $scaleValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelScale)
             $scaleSet = Invoke-LiveCli -Stage "channel-scale-set-p2" -Command "channel-scale" `
                 -Arguments @("--channel", "1", "--volts-per-division", $scaleValue)
-            Assert-ScpiSent -Payload $scaleSet -Label "CH1 scale configure" `
-                -ExpectedCommands @([string]$scaleSet.result.command)
             $scale = Invoke-LiveCli -Stage "channel-scale-query-p2" -Command "channel-scale" `
                 -Arguments @("--channel", "1", "--query")
             Assert-ScpiSent -Payload $scale -Label "CH1 scale query" `
                 -ExpectedCommands @(":CHANnel1:SCALe?")
             Assert-NearlyEqual -Actual ([double]$scale.result.volts_per_division) `
                 -Expected ([double]$snapshot.ChannelScale) -Label "CH1 scale"
+            if (-not @($scaleSet.scpi.sent | Where-Object {
+                ([string]$_).StartsWith(":CHANnel1:SCALe ")
+            })) {
+                throw "CH1 scale configure did not use the CH1 scale SCPI path."
+            }
 
             $rangeValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelRange)
             $rangeSet = Invoke-LiveCli -Stage "channel-range-set" -Command "channel-range" `
                 -Arguments @("--channel", "1", "--volts-full-scale", $rangeValue)
-            Assert-ScpiSent -Payload $rangeSet -Label "CH1 range configure" `
-                -ExpectedCommands @([string]$rangeSet.result.command)
             $range = Invoke-LiveCli -Stage "channel-range-query" -Command "channel-range" `
                 -Arguments @("--channel", "1", "--query")
             Assert-ScpiSent -Payload $range -Label "CH1 range query" `
                 -ExpectedCommands @(":CHANnel1:RANGe?")
             Assert-NearlyEqual -Actual ([double]$range.result.range_volts) `
                 -Expected ([double]$snapshot.ChannelRange) -Label "CH1 range"
+            if (-not @($rangeSet.scpi.sent | Where-Object {
+                ([string]$_).StartsWith(":CHANnel1:RANGe ")
+            })) {
+                throw "CH1 range configure did not use the CH1 range SCPI path."
+            }
 
             $offsetValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelOffset)
             $offsetSet = Invoke-LiveCli -Stage "channel-offset-set-p2" -Command "channel-offset" `
                 -Arguments @("--channel", "1", "--volts", $offsetValue)
-            Assert-ScpiSent -Payload $offsetSet -Label "CH1 offset configure" `
-                -ExpectedCommands @([string]$offsetSet.result.command)
             $offset = Invoke-LiveCli -Stage "channel-offset-query-p2" -Command "channel-offset" `
                 -Arguments @("--channel", "1", "--query")
             Assert-NearlyEqual -Actual ([double]$offset.result.volts) `
                 -Expected ([double]$snapshot.ChannelOffset) -Label "CH1 offset"
+            if (-not @($offsetSet.scpi.sent | Where-Object {
+                ([string]$_).StartsWith(":CHANnel1:OFFSet ")
+            })) {
+                throw "CH1 offset configure did not use the CH1 offset SCPI path."
+            }
         }
     }
 
@@ -1425,19 +1437,24 @@ if ($snapshotComplete) {
             $ratioValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelProbeRatio)
             $ratioSet = Invoke-LiveCli -Stage "channel-probe-set" -Command "channel-probe" `
                 -Arguments @("--channel", "1", "--ratio", $ratioValue)
-            Assert-ScpiSent -Payload $ratioSet -Label "CH1 probe ratio configure" `
-                -ExpectedCommands @([string]$ratioSet.result.command)
             $ratio = Invoke-LiveCli -Stage "channel-probe-query" -Command "channel-probe" `
                 -Arguments @("--channel", "1", "--query")
             Assert-NearlyEqual -Actual ([double]$ratio.result.probe_ratio) `
                 -Expected ([double]$snapshot.ChannelProbeRatio) -Label "CH1 probe ratio"
+            if (-not @($ratioSet.scpi.sent | Where-Object {
+                ([string]$_).StartsWith(":CHANnel1:PROBe ")
+            })) {
+                throw "CH1 probe ratio configure did not use the CH1 probe SCPI path."
+            }
 
             $bandwidthAction = if ($snapshot.ChannelBandwidthLimit) { "--on" } else { "--off" }
             $bandwidthSet = Invoke-LiveCli -Stage "channel-bandwidth-set" `
                 -Command "channel-bandwidth-limit" `
                 -Arguments @("--channel", "1", $bandwidthAction)
             Assert-ScpiSent -Payload $bandwidthSet -Label "CH1 bandwidth configure" `
-                -ExpectedCommands @([string]$bandwidthSet.result.command)
+                -ExpectedCommands @(
+                    ":CHANnel1:BWLimit $(if ($snapshot.ChannelBandwidthLimit) { 'ON' } else { 'OFF' })"
+                )
             $bandwidth = Invoke-LiveCli -Stage "channel-bandwidth-query" `
                 -Command "channel-bandwidth-limit" -Arguments @("--channel", "1", "--query")
             if ([bool]$bandwidth.result.bandwidth_limit -ne $snapshot.ChannelBandwidthLimit) {
@@ -1455,8 +1472,9 @@ if ($snapshotComplete) {
             }
             $impedanceSet = Invoke-LiveCli -Stage "channel-impedance-set" `
                 -Command "channel-impedance" -Arguments $impedanceArguments
+            $impedanceScpiValue = if ($impedanceValue -eq "one-meg") { "ONEMeg" } else { "FIFTy" }
             Assert-ScpiSent -Payload $impedanceSet -Label "CH1 impedance configure" `
-                -ExpectedCommands @([string]$impedanceSet.result.command)
+                -ExpectedCommands @(":CHANnel1:IMPedance ${impedanceScpiValue}")
             $impedance = Invoke-LiveCli -Stage "channel-impedance-query" `
                 -Command "channel-impedance" -Arguments @("--channel", "1", "--query")
             if ([string]$impedance.result.impedance -ne [string]$snapshot.ChannelImpedance) {
@@ -1485,8 +1503,10 @@ if ($snapshotComplete) {
             )) {
                 $configured = Invoke-LiveCli -Stage "channel-$($item.Name)-set" `
                     -Command $item.Command -Arguments @("--channel", "1", $item.Action)
+                $state = if ($item.Expected) { "ON" } else { "OFF" }
+                $scpiPath = if ($item.Name -eq "invert") { "INVert" } else { "VERNier" }
                 Assert-ScpiSent -Payload $configured -Label "CH1 $($item.Name) configure" `
-                    -ExpectedCommands @([string]$configured.result.command)
+                    -ExpectedCommands @(":CHANnel1:${scpiPath} ${state}")
                 $readback = Invoke-LiveCli -Stage "channel-$($item.Name)-query" `
                     -Command $item.Command -Arguments @("--channel", "1", "--query")
                 if ([bool]$readback.result.($item.Field) -ne $item.Expected) {
@@ -1498,12 +1518,15 @@ if ($snapshotComplete) {
             $skewSet = Invoke-LiveCli -Stage "channel-probe-skew-set" `
                 -Command "channel-probe-skew" `
                 -Arguments @("--channel", "1", "--seconds", $skewValue)
-            Assert-ScpiSent -Payload $skewSet -Label "CH1 probe skew configure" `
-                -ExpectedCommands @([string]$skewSet.result.command)
             $skew = Invoke-LiveCli -Stage "channel-probe-skew-query" `
                 -Command "channel-probe-skew" -Arguments @("--channel", "1", "--query")
             Assert-NearlyEqual -Actual ([double]$skew.result.probe_skew_seconds) `
                 -Expected ([double]$snapshot.ChannelProbeSkew) -Label "CH1 probe skew"
+            if (-not @($skewSet.scpi.sent | Where-Object {
+                ([string]$_).StartsWith(":CHANnel1:PROBe:SKEW ")
+            })) {
+                throw "CH1 probe skew configure did not use the CH1 probe-skew SCPI path."
+            }
         }
     }
 
@@ -1513,7 +1536,9 @@ if ($snapshotComplete) {
             $labelSet = Invoke-LiveCli -Stage "display-label-set" -Command "display-label" `
                 -Arguments @($labelAction)
             Assert-ScpiSent -Payload $labelSet -Label "Display labels configure" `
-                -ExpectedCommands @([string]$labelSet.result.command)
+                -ExpectedCommands @(
+                    ":DISPlay:LABel $(if ($snapshot.DisplayLabels) { 'ON' } else { 'OFF' })"
+                )
             $labels = Invoke-LiveCli -Stage "display-label-query" -Command "display-label" `
                 -Arguments @("--query")
             if ([bool]$labels.result.display_label -ne $snapshot.DisplayLabels) {
@@ -1530,8 +1555,6 @@ if ($snapshotComplete) {
             }
             $persistenceSet = Invoke-LiveCli -Stage "display-persistence-set" `
                 -Command "display-persistence" -Arguments $persistenceArguments
-            Assert-ScpiSent -Payload $persistenceSet -Label "Display persistence configure" `
-                -ExpectedCommands @([string]$persistenceSet.result.command)
             $persistence = Invoke-LiveCli -Stage "display-persistence-query" `
                 -Command "display-persistence" -Arguments @("--query")
             if ($null -ne $snapshot.DisplayPersistenceSeconds) {
@@ -1541,11 +1564,28 @@ if ($snapshotComplete) {
             } elseif ([string]$persistence.result.mode -ne [string]$snapshot.DisplayPersistenceMode) {
                 throw "Display-persistence mode does not match the snapshot."
             }
+            if ($null -ne $snapshot.DisplayPersistenceSeconds) {
+                if (-not @($persistenceSet.scpi.sent | Where-Object {
+                    ([string]$_).StartsWith(":DISPlay:PERSistence ")
+                })) {
+                    throw "Display persistence configure did not use the persistence SCPI path."
+                }
+            } else {
+                $persistenceToken = if ($snapshot.DisplayPersistenceMode -eq "minimum") {
+                    "MINimum"
+                } else {
+                    "INFinite"
+                }
+                Assert-ScpiSent -Payload $persistenceSet -Label "Display persistence configure" `
+                    -ExpectedCommands @(":DISPlay:PERSistence ${persistenceToken}")
+            }
 
             $intensitySet = Invoke-LiveCli -Stage "display-intensity-set" `
                 -Command "display-intensity" -Arguments @("--value", [string]$snapshot.DisplayIntensity)
             Assert-ScpiSent -Payload $intensitySet -Label "Display intensity configure" `
-                -ExpectedCommands @([string]$intensitySet.result.command)
+                -ExpectedCommands @(
+                    ":DISPlay:INTensity:WAVeform $($snapshot.DisplayIntensity)"
+                )
             $intensity = Invoke-LiveCli -Stage "display-intensity-query" `
                 -Command "display-intensity" -Arguments @("--query")
             if ([int]$intensity.result.value -ne [int]$snapshot.DisplayIntensity) {
@@ -1556,7 +1596,7 @@ if ($snapshotComplete) {
                 $vectorsSet = Invoke-LiveCli -Stage "display-vectors-set" `
                     -Command "display-vectors" -Arguments @("--on")
                 Assert-ScpiSent -Payload $vectorsSet -Label "Display vectors configure" `
-                    -ExpectedCommands @([string]$vectorsSet.result.command)
+                    -ExpectedCommands @(":DISPlay:VECTors ON")
             }
             $vectors = Invoke-LiveCli -Stage "display-vectors-query" `
                 -Command "display-vectors" -Arguments @("--query")
@@ -1594,11 +1634,11 @@ if ($snapshotComplete) {
             $enabled = Invoke-LiveCli -Stage "search-state-enable" -Command "search-state" `
                 -Arguments @("--enabled", "true")
             Assert-ScpiSent -Payload $enabled -Label "Search state configure" `
-                -ExpectedCommands @([string]$enabled.result.command)
+                -ExpectedCommands @(":SEARch:STATe 1")
             $modeSet = Invoke-LiveCli -Stage "search-mode-edge-set" -Command "search-mode" `
                 -Arguments @("--mode", "edge")
             Assert-ScpiSent -Payload $modeSet -Label "Search mode configure" `
-                -ExpectedCommands @($modeSet.result.commands)
+                -ExpectedCommands @(":SEARch:STATe 1", ":SEARch:MODE EDGE")
 
             $state = Invoke-LiveCli -Stage "search-state-query" -Command "search-state" `
                 -Arguments @("--query")
