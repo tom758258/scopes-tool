@@ -317,6 +317,38 @@ function Assert-FiniteNumber {
     return $number
 }
 
+function Assert-ScpiSent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Payload,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $ExpectedCommands,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Label
+    )
+
+    $scpiProperty = $Payload.PSObject.Properties["scpi"]
+    if ($null -eq $scpiProperty -or $null -eq $scpiProperty.Value) {
+        throw "${Label} did not return SCPI history."
+    }
+    $sentProperty = $scpiProperty.Value.PSObject.Properties["sent"]
+    $sent = @(
+        if ($null -ne $sentProperty) {
+            $sentProperty.Value
+        }
+    )
+    if ($sent.Count -eq 0) {
+        throw "${Label} returned empty SCPI history."
+    }
+    foreach ($command in $ExpectedCommands) {
+        if ($command -notin $sent) {
+            throw "${Label} SCPI history does not contain ${command}."
+        }
+    }
+}
+
 function Assert-NearlyEqual {
     param(
         [Parameter(Mandatory = $true)]
@@ -446,6 +478,30 @@ function Invoke-HardwareFreePreflight {
     }
     Invoke-ModeCli -Stage "preflight-acquisition-query" -Command "acquisition" `
         -ModeArguments $simulate -Arguments @("--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-sample-rate-query" -Command "sample-rate" `
+        -ModeArguments $simulate -Arguments @("--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-acquisition-points-query" `
+        -Command "acquisition-points" -ModeArguments $simulate `
+        -Arguments @("--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-record-length-query" -Command "record-length" `
+        -ModeArguments $simulate -Arguments @("--query") | Out-Null
+    foreach ($command in @(
+        "system-opc",
+        "system-status-byte",
+        "system-operation-status",
+        "system-options"
+    )) {
+        Invoke-ModeCli -Stage "preflight-${command}" -Command $command `
+            -ModeArguments $simulate -Arguments @("--query") | Out-Null
+    }
+    Invoke-ModeCli -Stage "preflight-measure-results" -Command "measure-results" `
+        -ModeArguments $simulate | Out-Null
+    $channelSummary = Invoke-ModeCli -Stage "preflight-channel-summary" `
+        -Command "channel-summary" `
+        -ModeArguments @("--simulate", "--model", "keysight-dsox4034a")
+    if (@($channelSummary.result.channels).Count -ne 4) {
+        throw "4034A simulator channel summary did not return four analog channels."
+    }
     Invoke-ModeCli -Stage "preflight-channel-display-query" -Command "channel-display" `
         -ModeArguments $simulate -Arguments @("--channel", "1", "--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-channel-coupling-query" -Command "channel-coupling" `
@@ -756,6 +812,180 @@ if ($snapshotComplete) {
             -Arguments @("--query")
         if ($readback.result.type -ne "normal") {
             throw "Acquisition type readback is $($readback.result.type), expected normal."
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "acquisition-average" -Action {
+            $configured = Invoke-LiveCli -Stage "acquisition-average-set" `
+                -Command "acquisition" `
+                -Arguments @("--type", "average", "--count", "16")
+            Assert-ScpiSent -Payload $configured -Label "Average acquisition configure" `
+                -ExpectedCommands @(
+                    ":ACQuire:TYPE AVERage",
+                    ":ACQuire:COUNt 16"
+                )
+            $readback = Invoke-LiveCli -Stage "acquisition-average-query" `
+                -Command "acquisition" -Arguments @("--query")
+            Assert-ScpiSent -Payload $readback -Label "Average acquisition query" `
+                -ExpectedCommands @(
+                    ":ACQuire:TYPE?",
+                    ":ACQuire:COUNt?"
+                )
+            if ($readback.result.type -ne "average" -or
+                [int]$readback.result.count -ne 16) {
+                throw (
+                    "Average acquisition readback is type=$($readback.result.type), " +
+                    "count=$($readback.result.count); expected average, 16."
+                )
+            }
+            $normal = Invoke-LiveCli -Stage "acquisition-average-reset-normal" `
+                -Command "acquisition" -Arguments @("--type", "normal")
+            Assert-ScpiSent -Payload $normal -Label "Acquisition reset to normal" `
+                -ExpectedCommands @(
+                    ":ACQuire:TYPE NORMal"
+                )
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "acquisition-queries" -Action {
+            $sampleRate = Invoke-LiveCli -Stage "sample-rate-query" `
+                -Command "sample-rate" -Arguments @("--query")
+            Assert-ScpiSent -Payload $sampleRate -Label "Sample rate query" `
+                -ExpectedCommands @(
+                    ":ACQuire:SRATe?"
+                )
+            $sampleRateHz = Assert-FiniteNumber `
+                -Value $sampleRate.result.sample_rate_hz -Label "Sample rate"
+            if ($sampleRateHz -le 0) {
+                throw "Sample rate must be positive."
+            }
+
+            $acquisitionPoints = Invoke-LiveCli -Stage "acquisition-points-query" `
+                -Command "acquisition-points" -Arguments @("--query")
+            Assert-ScpiSent -Payload $acquisitionPoints -Label "Acquisition points query" `
+                -ExpectedCommands @(
+                    ":ACQuire:POINts?"
+                )
+            if ([int64]$acquisitionPoints.result.acquisition_points -le 0) {
+                throw "Acquisition points must be positive."
+            }
+
+            $recordLength = Invoke-LiveCli -Stage "record-length-query" `
+                -Command "record-length" -Arguments @("--query")
+            Assert-ScpiSent -Payload $recordLength -Label "Record length query" `
+                -ExpectedCommands @(
+                    ":ACQuire:RLENgth?"
+                )
+            if ([int64]$recordLength.result.record_length_points -le 0) {
+                throw "Record length must be positive."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "system-status" -Action {
+            $opc = Invoke-LiveCli -Stage "system-opc-query" `
+                -Command "system-opc" -Arguments @("--query")
+            Assert-ScpiSent -Payload $opc -Label "Operation Complete query" `
+                -ExpectedCommands @("*OPC?")
+            if (-not $opc.result.complete -or [string]$opc.result.raw -ne "1") {
+                throw "Operation Complete query did not report complete=true and raw=1."
+            }
+
+            $statusByte = Invoke-LiveCli -Stage "system-status-byte-query" `
+                -Command "system-status-byte" -Arguments @("--query")
+            Assert-ScpiSent -Payload $statusByte -Label "Status Byte query" `
+                -ExpectedCommands @("*STB?")
+            $statusByteValue = [int]$statusByte.result.value
+            if ($statusByteValue -lt 0 -or $statusByteValue -gt 255) {
+                throw "Status Byte is outside 0..255: ${statusByteValue}."
+            }
+            [void]@($statusByte.result.set_bits)
+
+            $operationStatus = Invoke-LiveCli -Stage "system-operation-status-query" `
+                -Command "system-operation-status" -Arguments @("--query")
+            Assert-ScpiSent -Payload $operationStatus `
+                -Label "Operation Status Condition query" `
+                -ExpectedCommands @(
+                    ":OPERegister:CONDition?"
+                )
+            $operationStatusValue = [int]$operationStatus.result.value
+            if ($operationStatusValue -lt 0 -or $operationStatusValue -gt 65535) {
+                throw (
+                    "Operation Status Condition is outside 0..65535: " +
+                    "${operationStatusValue}."
+                )
+            }
+            [void]@($operationStatus.result.set_bits)
+
+            $options = Invoke-LiveCli -Stage "system-options-query" `
+                -Command "system-options" -Arguments @("--query")
+            Assert-ScpiSent -Payload $options -Label "Installed Options query" `
+                -ExpectedCommands @("*OPT?")
+            if ([string]::IsNullOrWhiteSpace([string]$options.result.raw) -or
+                @($options.result.options).Count -eq 0) {
+                throw "Installed Options query returned no option data."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed -and
+        [bool]$identity.capabilities.supports_measure_results_dump) {
+        Invoke-BaselineCase -Name "measure-results" -Action {
+            $results = Invoke-LiveCli -Stage "measure-results" `
+                -Command "measure-results"
+            Assert-ScpiSent -Payload $results -Label "Measure Results query" `
+                -ExpectedCommands @(
+                    ":MEASure:RESults?"
+                )
+            if ($results.result.operation -ne "query" -or
+                $results.result.command -ne ":MEASure:RESults?") {
+                throw "Measure Results did not report the expected query operation."
+            }
+            [void][string]$results.result.raw
+            [void]@($results.result.items)
+            [void]@($results.result.statistics_items)
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Write-Host "SKIP  measure-results (not supported by the detected instrument)"
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "channel-summary" -Action {
+            $summary = Invoke-LiveCli -Stage "channel-summary" `
+                -Command "channel-summary"
+            $channelCount = [int]$identity.capabilities.analog_channels
+            $channels = @($summary.result.channels)
+            if ($channelCount -le 0 -or $channels.Count -ne $channelCount) {
+                throw (
+                    "Channel Summary returned $($channels.Count) analog channels; " +
+                    "expected ${channelCount}."
+                )
+            }
+            for ($index = 0; $index -lt $channels.Count; $index += 1) {
+                $channel = $channels[$index]
+                $expectedChannel = $index + 1
+                if ([int]$channel.channel -ne $expectedChannel) {
+                    throw (
+                        "Channel Summary entry $($index + 1) reports " +
+                        "channel $($channel.channel)."
+                    )
+                }
+                foreach ($field in @("display", "scale", "offset", "coupling")) {
+                    if ($null -eq $channel.PSObject.Properties[$field]) {
+                        throw "CH${expectedChannel} summary is missing ${field}."
+                    }
+                }
+            }
+            $expectedDisplayQueries = @(
+                foreach ($channel in 1..$channelCount) {
+                    ":CHANnel${channel}:DISPlay?"
+                }
+            )
+            Assert-ScpiSent -Payload $summary -Label "Channel Summary query" `
+                -ExpectedCommands $expectedDisplayQueries
         }
     }
 

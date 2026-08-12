@@ -2143,3 +2143,247 @@ sys.exit(9)
     ]
     assert invocations
     assert all("--live" not in arguments for arguments in invocations)
+
+
+def test_baseline_live_script_contains_p1_case_wiring() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    for case_name in (
+        "acquisition-average",
+        "acquisition-queries",
+        "system-status",
+        "measure-results",
+        "channel-summary",
+    ):
+        assert f'Invoke-BaselineCase -Name "{case_name}"' in script
+
+    for command in (
+        'Command "sample-rate"',
+        'Command "acquisition-points"',
+        'Command "record-length"',
+        'Command "system-opc"',
+        'Command "system-status-byte"',
+        'Command "system-operation-status"',
+        'Command "system-options"',
+        'Command "measure-results"',
+        'Command "channel-summary"',
+    ):
+        assert command in script
+
+    assert "$identity.capabilities.supports_measure_results_dump" in script
+    assert '@("--type", "average", "--count", "16")' in script
+    assert '@("--type", "normal")' in script
+
+    system_status_start = script.index(
+        'Invoke-BaselineCase -Name "system-status"'
+    )
+    system_status_end = script.index(
+        "\n    if (-not $script:FunctionalFailed -and", system_status_start
+    )
+    system_status_case = script[system_status_start:system_status_end]
+    assert '"system-standard-event"' not in system_status_case
+    assert "*ESR?" not in system_status_case
+
+    invoke_live_cli_start = script.index("function Invoke-LiveCli {")
+    invoke_live_cli_end = script.index(
+        "\nfunction Get-ErrorDrain {", invoke_live_cli_start
+    )
+    invoke_live_cli = script[invoke_live_cli_start:invoke_live_cli_end]
+    assert '"--log-scpi"' not in invoke_live_cli
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_p1_cases_validate_payloads_and_scpi_history(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-p1-harness.ps1"
+    harness_path.write_text(
+        r'''
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @("Assert-FiniteNumber", "Assert-ScpiSent", "Invoke-BaselineCase")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"acquisition-queries`"")
+    )
+}, $true))
+if ($matchingCommands.Count -ne 1) {
+    throw "Expected one acquisition-queries case in ${ScriptPath}."
+}
+$caseBlock = $matchingCommands[0].Extent.Text
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:EmptySampleRateHistory = $false
+
+function Add-CaseResult {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Name,
+
+        [Parameter(Mandatory = $true)]
+        [bool] $Passed,
+
+        [string] $Detail = ""
+    )
+
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Drain-AfterFailure {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $CaseName
+    )
+
+    $script:DrainCalls += 1
+}
+
+function Invoke-LiveCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [string[]] $Arguments = @()
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+
+    switch ($Stage) {
+        "sample-rate-query" {
+            if ($script:EmptySampleRateHistory) {
+                return [pscustomobject]@{
+                    scpi = [pscustomobject]@{ sent = @() }
+                    result = [pscustomobject]@{ sample_rate_hz = 5000000000.0 }
+                }
+            }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @("*IDN?", ":ACQuire:SRATe?") }
+                result = [pscustomobject]@{ sample_rate_hz = 5000000000.0 }
+            }
+        }
+        "acquisition-points-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @("*IDN?", ":ACQuire:POINts?") }
+                result = [pscustomobject]@{ acquisition_points = 1000000 }
+            }
+        }
+        "record-length-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @("*IDN?", ":ACQuire:RLENgth?") }
+                result = [pscustomobject]@{ record_length_points = 65536 }
+            }
+        }
+        default {
+            throw "Unexpected stage: ${Stage}"
+        }
+    }
+}
+
+Invoke-Expression $caseBlock
+$passResult = $script:CaseResults["acquisition-queries"].Passed
+$passInvocations = @($script:Invocations | ForEach-Object { $_ })
+$passFunctionalFailed = $script:FunctionalFailed
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:EmptySampleRateHistory = $true
+Invoke-Expression $caseBlock
+
+[ordered]@{
+    pass_result = $passResult
+    pass_functional_failed = $passFunctionalFailed
+    pass_invocations = $passInvocations
+    failure_passed = $script:CaseResults["acquisition-queries"].Passed
+    failure_detail = $script:CaseResults["acquisition-queries"].Detail
+    failure_functional_failed = $script:FunctionalFailed
+    failure_drain_calls = $script:DrainCalls
+} | ConvertTo-Json -Depth 12 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["pass_result"] is True
+    assert result["pass_functional_failed"] is False
+    invocations = result["pass_invocations"]
+    assert [entry["command"] for entry in invocations] == [
+        "sample-rate",
+        "acquisition-points",
+        "record-length",
+    ]
+    assert all(entry["arguments"] == ["--query"] for entry in invocations)
+    assert result["failure_passed"] is False
+    assert "empty SCPI history" in result["failure_detail"]
+    assert result["failure_functional_failed"] is True
+    assert result["failure_drain_calls"] == 1
