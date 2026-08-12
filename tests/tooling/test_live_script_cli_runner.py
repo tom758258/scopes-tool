@@ -2598,6 +2598,9 @@ function Invoke-Scenario {
             "save-waveform-format-csv",
             "save-waveform-length-1000",
             "save-waveform",
+            "save-image-format-restore",
+            "save-waveform-format-restore",
+            "save-waveform-length-restore",
         }
         for stage in max_enabled["invocations"]
     )

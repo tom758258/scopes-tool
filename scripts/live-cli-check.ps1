@@ -2593,6 +2593,7 @@ if ($snapshotComplete) {
         Invoke-BaselineCase -Name "save-export" -Action {
             $primaryException = $null
             $firstRestoreException = $null
+            $restoreNeeded = $false
             try {
                 if ([bool]$snapshot.SaveWaveformLengthMax) {
                     throw (
@@ -2603,6 +2604,7 @@ if ($snapshotComplete) {
                 }
                 $imageFile = "\usb\scopes-tool-live-${timestamp}.png"
                 $waveformFile = "\usb\scopes-tool-live-${timestamp}.csv"
+                $restoreNeeded = $true
                 Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
                     -Arguments @("--format", "png") | Out-Null
                 $image = Invoke-LiveCli -Stage "save-image" -Command "save-image" `
@@ -2631,7 +2633,8 @@ if ($snapshotComplete) {
             } catch {
                 $primaryException = $_.Exception
             } finally {
-                if ([string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                if ($restoreNeeded -and
+                    [string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
                     try {
                         Invoke-LiveCli -Stage "save-image-format-restore" `
                             -Command "save-image-format" `
@@ -2645,7 +2648,8 @@ if ($snapshotComplete) {
                         )
                     }
                 }
-                if ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+                if ($restoreNeeded -and
+                    [string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
                     try {
                         Invoke-LiveCli -Stage "save-waveform-format-restore" `
                             -Command "save-waveform-format" `
@@ -2659,7 +2663,7 @@ if ($snapshotComplete) {
                         )
                     }
                 }
-                if ([int]$snapshot.SaveWaveformLength -gt 0) {
+                if ($restoreNeeded -and [int]$snapshot.SaveWaveformLength -gt 0) {
                     try {
                         Invoke-LiveCli -Stage "save-waveform-length-restore" `
                             -Command "save-waveform-length" `
