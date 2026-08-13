@@ -254,8 +254,6 @@ def annotation_commands(
 ) -> list[str]:
     slot = validate_annotation_slot(slot, capabilities)
     commands: list[str] = []
-    if enabled is not None:
-        commands.append(annotation_state_command(enabled, slot=slot, capabilities=capabilities))
     if clear:
         commands.append(annotation_clear_command(slot=slot, capabilities=capabilities))
     if text is not None:
@@ -268,6 +266,8 @@ def annotation_commands(
         commands.append(annotation_x_command(x, slot=slot, capabilities=capabilities))
     if y is not None:
         commands.append(annotation_y_command(y, slot=slot, capabilities=capabilities))
+    if enabled is not None:
+        commands.append(annotation_state_command(enabled, slot=slot, capabilities=capabilities))
     return commands
 
 

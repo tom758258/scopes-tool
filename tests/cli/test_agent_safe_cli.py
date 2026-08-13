@@ -196,10 +196,10 @@ def test_label_and_annotation_dry_run_json_reports_planned_scpi_without_opening(
     )
     payload = _json_stdout(capsys)
     assert payload["scpi"]["planned"] == [
-        ":DISPlay:ANNotation2 ON",
         ':DISPlay:ANNotation2:TEXT "Note"',
         ":DISPlay:ANNotation2:X1Position 10",
         ":DISPlay:ANNotation2:Y1Position 20",
+        ":DISPlay:ANNotation2 ON",
         ":SYSTem:ERRor?",
     ]
 

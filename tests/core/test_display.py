@@ -140,10 +140,10 @@ def test_annotation_unindexed_commands_omit_position_for_3000x_query():
         color="red",
         background="opaque",
     ) == [
-        ":DISPlay:ANNotation ON",
         ':DISPlay:ANNotation:TEXT "lower ok"',
         ":DISPlay:ANNotation:COLor RED",
         ":DISPlay:ANNotation:BACKground OPAQ",
+        ":DISPlay:ANNotation ON",
     ]
 
 
@@ -166,10 +166,10 @@ def test_annotation_indexed_commands_include_position_for_4000x():
         x=10,
         y=20,
     ) == [
-        ":DISPlay:ANNotation2 OFF",
         ':DISPlay:ANNotation2:TEXT ""',
         ":DISPlay:ANNotation2:X1Position 10",
         ":DISPlay:ANNotation2:Y1Position 20",
+        ":DISPlay:ANNotation2 OFF",
     ]
 
 

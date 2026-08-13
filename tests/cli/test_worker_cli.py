@@ -1135,12 +1135,12 @@ def test_worker_parses_fifty_ohm_with_allow_without_opening_backend():
             },
             "keysight-dsox4024a",
             [
-                ":DISPlay:ANNotation2 ON",
                 ':DISPlay:ANNotation2:TEXT "Run note"',
                 ":DISPlay:ANNotation2:COLor WHITE",
                 ":DISPlay:ANNotation2:BACKground OPAQ",
                 ":DISPlay:ANNotation2:X1Position 10",
                 ":DISPlay:ANNotation2:Y1Position 20",
+                ":DISPlay:ANNotation2 ON",
                 ":SYSTem:ERRor?",
             ],
         ),
@@ -2448,12 +2448,12 @@ def test_worker_executes_annotation_set_in_simulator(tmp_path):
     assert result["files"] == []
     assert result["result"]["operation"] == "set"
     assert result["result"]["commands"] == [
-        ":DISPlay:ANNotation2 ON",
         ':DISPlay:ANNotation2:TEXT "Run note"',
         ":DISPlay:ANNotation2:COLor WHITE",
         ":DISPlay:ANNotation2:BACKground OPAQ",
         ":DISPlay:ANNotation2:X1Position 10",
         ":DISPlay:ANNotation2:Y1Position 20",
+        ":DISPlay:ANNotation2 ON",
     ]
     assert result["result"]["slot"] == 2
     assert result["result"]["enabled"] is True
