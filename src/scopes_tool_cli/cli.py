@@ -6486,6 +6486,8 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         planned = ["*IDN?", target]
         if waits_for_completion:
             planned.append(system_opc_query())
+        if command == "save-waveform" and capabilities.series == "4000X":
+            planned.append(operation_condition_query())
         planned.append(":SYSTem:ERRor?")
         return planned, [], result
     if command == "annotation":

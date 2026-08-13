@@ -890,6 +890,7 @@ class SimulatorBackend:
             self.last_save_waveform_filename = _parse_quoted_scpi_argument(
                 command, ":SAVE:WAVeform"
             )
+            self._last_operation_condition_value = OPERATION_CONDITION_RUI_ENAB_MASK
         elif upper.startswith(":TRIGGER:SWEEP "):
             value = command.rsplit(" ", 1)[1]
             if value.upper() not in {"AUTO", "NORMAL"}:

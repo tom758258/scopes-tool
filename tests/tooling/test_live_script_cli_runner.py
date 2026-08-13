@@ -2422,18 +2422,11 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     waveform_validation = save_export.index(
         "if (-not [bool]$waveform.result.instrument_side", waveform_stage
     )
-    handoff_delay = save_export.index("Start-Sleep -Milliseconds 500")
     first_restore = save_export.index(
         'Invoke-LiveCli -Stage "save-image-format-restore"'
     )
-    assert save_export.count("Start-Sleep -Milliseconds 500") == 1
-    assert waveform_stage < waveform_validation < handoff_delay < first_restore
-    assert (
-        'throw "Instrument waveform save result is invalid."\n'
-        "                }\n"
-        "                Start-Sleep -Milliseconds 500"
-        in save_export
-    )
+    assert "Start-Sleep -Milliseconds 500" not in save_export
+    assert waveform_stage < waveform_validation < first_restore
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")

@@ -1777,7 +1777,7 @@ class Oscilloscope:
         return StatusController(self.scpi)
 
     def _save_export_controller(self) -> SaveExportController:
-        return SaveExportController(self.scpi)
+        return SaveExportController(self.scpi, self.capabilities)
 
     def _timebase_controller(self) -> TimebaseController:
         if self.capabilities is None:

@@ -34,21 +34,32 @@ def test_save_export_dry_run_preview_never_opens_scope(monkeypatch, capsys, args
     assert payload["scpi"]["planned"] == ["*IDN?", target, ":SYSTem:ERRor?"]
 
 
-@pytest.mark.parametrize(
-    "args, target",
-    [
-        (["save-image", "--filename", "USB:/screen.png"], ':SAVE:IMAGe "USB:/screen.png"'),
-        (["save-waveform", "--filename", "USB:/wave.csv"], ':SAVE:WAVeform "USB:/wave.csv"'),
-    ],
-)
-def test_save_start_dry_run_includes_opc(monkeypatch, capsys, args, target):
+def test_save_image_dry_run_includes_opc(monkeypatch, capsys):
     monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
-    assert cli.main([*args, "--dry-run", "--json"]) == 0
+    assert cli.main(
+        ["save-image", "--filename", "USB:/screen.png", "--dry-run", "--json"]
+    ) == 0
     payload = _payload(capsys)
     assert payload["scpi"]["planned"] == [
         "*IDN?",
-        target,
+        ':SAVE:IMAGe "USB:/screen.png"',
         "*OPC?",
+        ":SYSTem:ERRor?",
+    ]
+    assert payload["result"]["instrument_side"] is True
+
+
+def test_4000x_save_waveform_dry_run_includes_rui_readiness(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    assert cli.main(
+        ["save-waveform", "--filename", "USB:/wave.csv", "--dry-run", "--json"]
+    ) == 0
+    payload = _payload(capsys)
+    assert payload["scpi"]["planned"] == [
+        "*IDN?",
+        ':SAVE:WAVeform "USB:/wave.csv"',
+        "*OPC?",
+        ":OPERegister:CONDition?",
         ":SYSTem:ERRor?",
     ]
     assert payload["result"]["instrument_side"] is True

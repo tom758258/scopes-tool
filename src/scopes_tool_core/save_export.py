@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
+from .capabilities import ScopeCapabilities
 from .errors import ParameterValidationError, SaveExportResponseError
 from .scpi import SCPIClient
 from .status import parse_operation_complete, system_opc_query
+from .trigger import (
+    OPERATION_CONDITION_RUI_ENAB_MASK,
+    operation_condition_query,
+    parse_operation_condition,
+)
 
 
 SAVE_IMAGE_FORMATS = ("png", "bmp", "bmp8", "bmp24")
@@ -14,6 +21,7 @@ SAVE_IMAGE_PALETTES = ("color", "grayscale")
 SAVE_WAVEFORM_FORMATS = ("ascii-xy", "csv", "binary")
 
 _SAVE_COMPLETION_TIMEOUT_MS = 15000
+_SAVE_READINESS_POLL_INTERVAL_SECONDS = 0.1
 
 _SAVE_IMAGE_FORMAT_COMMANDS = {
     "png": "PNG",
@@ -172,8 +180,13 @@ class SaveOperationResult:
 class SaveExportController:
     """Controller for common instrument-side SAVE commands."""
 
-    def __init__(self, scpi: SCPIClient) -> None:
+    def __init__(
+        self,
+        scpi: SCPIClient,
+        capabilities: ScopeCapabilities | None = None,
+    ) -> None:
         self.scpi = scpi
+        self.capabilities = capabilities
 
     def configure_pwd(self, path: str) -> None:
         self.scpi.write(save_pwd_command(path))
@@ -260,12 +273,43 @@ class SaveExportController:
             complete = parse_operation_complete(self.scpi.query(system_opc_query()))
         finally:
             self.scpi.set_timeout(original_timeout)
+        if self.capabilities is not None and self.capabilities.series == "4000X":
+            self._wait_for_remote_interface_readiness(original_timeout)
         return SaveOperationResult(
             operation="save-waveform",
             filename=filename,
             command=command,
             raw_operation_complete=complete.raw,
         )
+
+    def _wait_for_remote_interface_readiness(
+        self, original_timeout: int | None
+    ) -> None:
+        deadline = time.monotonic() + (_SAVE_COMPLETION_TIMEOUT_MS / 1000)
+        try:
+            while True:
+                remaining_seconds = deadline - time.monotonic()
+                if remaining_seconds <= 0:
+                    raise SaveExportResponseError(
+                        "4000X waveform save timed out waiting for "
+                        "remote-interface readiness."
+                    )
+                self.scpi.set_timeout(
+                    min(
+                        _SAVE_COMPLETION_TIMEOUT_MS,
+                        max(1, int(remaining_seconds * 1000)),
+                    )
+                )
+                condition = parse_operation_condition(
+                    self.scpi.query(operation_condition_query())
+                )
+                if condition & OPERATION_CONDITION_RUI_ENAB_MASK:
+                    return
+                time.sleep(
+                    min(_SAVE_READINESS_POLL_INTERVAL_SECONDS, remaining_seconds)
+                )
+        finally:
+            self.scpi.set_timeout(original_timeout)
 
 
 def validate_save_quoted_string(value: str, *, label: str) -> str:

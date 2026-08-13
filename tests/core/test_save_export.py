@@ -1,6 +1,8 @@
 import pytest
 
-from scopes_tool_core.errors import ParameterValidationError
+from scopes_tool_core import save_export
+from scopes_tool_core.capabilities import capabilities_for_model_id
+from scopes_tool_core.errors import ParameterValidationError, SaveExportResponseError
 from scopes_tool_core.fake_backend import FakeBackend, FakeBackendError
 from scopes_tool_core.save_export import (
     SaveExportController,
@@ -167,13 +169,74 @@ def test_save_waveform_temporarily_uses_bounded_opc_timeout_and_restores_origina
         return query(command)
 
     monkeypatch.setattr(backend, "query", record_query_timeout)
-    result = SaveExportController(SCPIClient(backend)).save_waveform("USB:/wave.csv")
+    result = SaveExportController(
+        SCPIClient(backend), capabilities_for_model_id("keysight-dsox3024a")
+    ).save_waveform("USB:/wave.csv")
 
     assert result.raw_operation_complete == "1"
     assert opc_query_timeouts == [15000]
     assert backend.timeout_history == [15000, 2000]
     assert backend.timeout == 2000
     assert backend.history == [':SAVE:WAVeform "USB:/wave.csv"', "*OPC?"]
+
+
+def test_4000x_save_waveform_waits_for_remote_interface_readiness(monkeypatch):
+    backend = FakeBackend(timeout=2000)
+    condition_responses = iter(("4136", "4136", "4152"))
+    query_timeouts = []
+
+    def query(command):
+        backend.history.append(command)
+        query_timeouts.append((command, backend.timeout))
+        if command == "*OPC?":
+            return "1"
+        return next(condition_responses)
+
+    monkeypatch.setattr(backend, "query", query)
+    monkeypatch.setattr(save_export.time, "sleep", lambda unused: None)
+
+    result = SaveExportController(
+        SCPIClient(backend), capabilities_for_model_id("keysight-dsox4034a")
+    ).save_waveform("USB:/wave.csv")
+
+    assert result.raw_operation_complete == "1"
+    assert backend.history == [
+        ':SAVE:WAVeform "USB:/wave.csv"',
+        "*OPC?",
+        ":OPERegister:CONDition?",
+        ":OPERegister:CONDition?",
+        ":OPERegister:CONDition?",
+    ]
+    assert query_timeouts[0] == ("*OPC?", 15000)
+    assert all(1 <= timeout <= 15000 for _, timeout in query_timeouts[1:])
+    assert backend.timeout == 2000
+    assert backend.timeout_history[-1] == 2000
+
+
+def test_4000x_save_waveform_times_out_waiting_for_remote_interface(monkeypatch):
+    backend = FakeBackend(
+        responses={"*OPC?": "1", ":OPERegister:CONDition?": "4136"},
+        timeout=2000,
+    )
+    monotonic_values = iter((0.0, 0.0, 15.0))
+    monkeypatch.setattr(save_export.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(save_export.time, "sleep", lambda unused: None)
+
+    with pytest.raises(
+        SaveExportResponseError,
+        match="4000X waveform save timed out waiting for remote-interface readiness",
+    ):
+        SaveExportController(
+            SCPIClient(backend), capabilities_for_model_id("keysight-dsox4034a")
+        ).save_waveform("USB:/wave.csv")
+
+    assert backend.history == [
+        ':SAVE:WAVeform "USB:/wave.csv"',
+        "*OPC?",
+        ":OPERegister:CONDition?",
+    ]
+    assert backend.timeout_history == [15000, 2000, 15000, 2000]
+    assert backend.timeout == 2000
 
 
 def test_save_waveform_restores_original_timeout_when_opc_query_raises():

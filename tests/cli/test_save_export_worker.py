@@ -95,5 +95,6 @@ def test_worker_save_waveform_simulator_execution_has_no_command_artifacts(tmp_p
         "*IDN?",
         ':SAVE:WAVeform "USB:/wave.csv"',
         "*OPC?",
+        ":OPERegister:CONDition?",
         ":SYSTem:ERRor?",
     ]
