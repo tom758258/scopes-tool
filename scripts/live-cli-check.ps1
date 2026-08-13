@@ -2630,6 +2630,7 @@ if ($snapshotComplete) {
                     [string]$waveform.result.filename -ne $waveformFile) {
                     throw "Instrument waveform save result is invalid."
                 }
+                Start-Sleep -Milliseconds 500
             } catch {
                 $primaryException = $_.Exception
             } finally {

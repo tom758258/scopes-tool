@@ -2413,6 +2413,28 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert "External trigger input" in script
     assert "Math Function 1 is disposable" in script
 
+    save_export_start = script.index('Invoke-BaselineCase -Name "save-export"')
+    save_export_end = script.index(
+        'Invoke-BaselineCase -Name "safe-cleanup"', save_export_start
+    )
+    save_export = script[save_export_start:save_export_end]
+    waveform_stage = save_export.index('$waveform = Invoke-LiveCli -Stage "save-waveform"')
+    waveform_validation = save_export.index(
+        "if (-not [bool]$waveform.result.instrument_side", waveform_stage
+    )
+    handoff_delay = save_export.index("Start-Sleep -Milliseconds 500")
+    first_restore = save_export.index(
+        'Invoke-LiveCli -Stage "save-image-format-restore"'
+    )
+    assert save_export.count("Start-Sleep -Milliseconds 500") == 1
+    assert waveform_stage < waveform_validation < handoff_delay < first_restore
+    assert (
+        'throw "Instrument waveform save result is invalid."\n'
+        "                }\n"
+        "                Start-Sleep -Milliseconds 500"
+        in save_export
+    )
+
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_save_export_preserves_primary_error_and_enforces_prerequisite(
