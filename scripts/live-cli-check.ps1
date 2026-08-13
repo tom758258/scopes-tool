@@ -1483,6 +1483,59 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "acquisition-high-resolution" -Action {
+            $configured = Invoke-LiveCli -Stage "acquisition-high-resolution-set" `
+                -Command "acquisition" -Arguments @("--type", "high_resolution")
+            Assert-ScpiSent -Payload $configured `
+                -Label "High-resolution acquisition configure" `
+                -ExpectedCommands @(
+                    ":ACQuire:TYPE HRESolution"
+                )
+            $readback = Invoke-LiveCli -Stage "acquisition-high-resolution-query" `
+                -Command "acquisition" -Arguments @("--query")
+            Assert-ScpiSent -Payload $readback `
+                -Label "High-resolution acquisition query" `
+                -ExpectedCommands @(
+                    ":ACQuire:TYPE?",
+                    ":ACQuire:COUNt?"
+                )
+            if ($readback.result.type -ne "high_resolution") {
+                throw (
+                    "High-resolution acquisition readback is " +
+                    "$($readback.result.type), expected high_resolution."
+                )
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "acquisition-peak" -Action {
+            $configured = Invoke-LiveCli -Stage "acquisition-peak-set" `
+                -Command "acquisition" -Arguments @("--type", "peak")
+            Assert-ScpiSent -Payload $configured -Label "Peak acquisition configure" `
+                -ExpectedCommands @(
+                    ":ACQuire:TYPE PEAK"
+                )
+            $readback = Invoke-LiveCli -Stage "acquisition-peak-query" `
+                -Command "acquisition" -Arguments @("--query")
+            Assert-ScpiSent -Payload $readback -Label "Peak acquisition query" `
+                -ExpectedCommands @(
+                    ":ACQuire:TYPE?",
+                    ":ACQuire:COUNt?"
+                )
+            if ($readback.result.type -ne "peak") {
+                throw "Peak acquisition readback is $($readback.result.type), expected peak."
+            }
+            $normal = Invoke-LiveCli -Stage "acquisition-peak-reset-normal" `
+                -Command "acquisition" -Arguments @("--type", "normal")
+            Assert-ScpiSent -Payload $normal -Label "Acquisition reset to normal" `
+                -ExpectedCommands @(
+                    ":ACQuire:TYPE NORMal"
+                )
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "acquisition-queries" -Action {
             $sampleRate = Invoke-LiveCli -Stage "sample-rate-query" `
                 -Command "sample-rate" -Arguments @("--query")

@@ -2152,6 +2152,8 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
 
     for case_name in (
         "acquisition-average",
+        "acquisition-high-resolution",
+        "acquisition-peak",
         "acquisition-queries",
         "system-status",
         "measure-results",
@@ -2174,6 +2176,8 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
 
     assert "$identity.capabilities.supports_measure_results_dump" in script
     assert '@("--type", "average", "--count", "16")' in script
+    assert '@("--type", "high_resolution")' in script
+    assert '@("--type", "peak")' in script
     assert '@("--type", "normal")' in script
 
     system_status_start = script.index(
