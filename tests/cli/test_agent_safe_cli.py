@@ -293,12 +293,12 @@ def test_annotation_simulate_json_roundtrip_4000x(capsys):
     payload = _json_stdout(capsys)
     assert payload["scpi"]["sent"] == [
         "*IDN?",
-        ":DISPlay:ANNotation2 ON",
         ':DISPlay:ANNotation2:TEXT "Note"',
         ":DISPlay:ANNotation2:COLor RED",
         ":DISPlay:ANNotation2:BACKground OPAQ",
         ":DISPlay:ANNotation2:X1Position 10",
         ":DISPlay:ANNotation2:Y1Position 20",
+        ":DISPlay:ANNotation2 ON",
         ":SYSTem:ERRor?",
     ]
 

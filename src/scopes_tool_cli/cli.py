@@ -9174,10 +9174,6 @@ def _cmd_annotation(args: argparse.Namespace) -> int:
                 print(f"Position: {state.x},{state.y}")
         else:
             print(f"Planned change: annotation slot {args.slot}")
-            if args.on:
-                scope.set_annotation_enabled(True, slot=args.slot)
-            if args.off:
-                scope.set_annotation_enabled(False, slot=args.slot)
             if args.clear:
                 scope.clear_annotation(slot=args.slot)
             if args.text is not None:
@@ -9188,6 +9184,10 @@ def _cmd_annotation(args: argparse.Namespace) -> int:
                 scope.set_annotation_background(args.background, slot=args.slot)
             if args.x is not None or args.y is not None:
                 scope.set_annotation_position(args.x, args.y, slot=args.slot)
+            if args.on:
+                scope.set_annotation_enabled(True, slot=args.slot)
+            if args.off:
+                scope.set_annotation_enabled(False, slot=args.slot)
             _json_update_result(operation="set", **result)
             for command in commands:
                 print(f"Command: {command}")

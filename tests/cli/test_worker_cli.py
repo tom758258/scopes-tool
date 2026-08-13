@@ -2447,7 +2447,7 @@ def test_worker_executes_annotation_set_in_simulator(tmp_path):
     assert result["exit_code"] == 0
     assert result["files"] == []
     assert result["result"]["operation"] == "set"
-    assert result["result"]["commands"] == [
+    expected_commands = [
         ':DISPlay:ANNotation2:TEXT "Run note"',
         ":DISPlay:ANNotation2:COLor WHITE",
         ":DISPlay:ANNotation2:BACKground OPAQ",
@@ -2455,6 +2455,7 @@ def test_worker_executes_annotation_set_in_simulator(tmp_path):
         ":DISPlay:ANNotation2:Y1Position 20",
         ":DISPlay:ANNotation2 ON",
     ]
+    assert result["result"]["commands"] == expected_commands
     assert result["result"]["slot"] == 2
     assert result["result"]["enabled"] is True
     assert result["result"]["text"] == "Run note"
@@ -2463,16 +2464,31 @@ def test_worker_executes_annotation_set_in_simulator(tmp_path):
     assert result["result"]["background"] == "OPAQ"
     assert result["result"]["x"] == 10
     assert result["result"]["y"] == 20
-    assert job.result["scpi"]["sent"] == [
-        "*IDN?",
-        ":DISPlay:ANNotation2 ON",
-        ':DISPlay:ANNotation2:TEXT "Run note"',
-        ":DISPlay:ANNotation2:COLor WHITE",
-        ":DISPlay:ANNotation2:BACKground OPAQ",
+    sent_commands = job.result["scpi"]["sent"]
+    assert sent_commands[0] == "*IDN?"
+    assert sent_commands[1:-1] == expected_commands
+    assert sent_commands[-1] == ":SYSTem:ERRor?"
+
+    off_runtime = _runtime(tmp_path)
+    off_job, off_result = _execute_worker_job(
+        off_runtime,
+        "annotation",
+        {"slot": 2, "off": True, "clear": True, "x": 10, "y": 20},
+        tmp_path / "annotation_off",
+    )
+    expected_off_commands = [
+        ':DISPlay:ANNotation2:TEXT ""',
         ":DISPlay:ANNotation2:X1Position 10",
         ":DISPlay:ANNotation2:Y1Position 20",
-        ":SYSTem:ERRor?",
+        ":DISPlay:ANNotation2 OFF",
     ]
+
+    assert off_result["state"] == "succeeded"
+    assert off_result["result"]["commands"] == expected_off_commands
+    off_sent_commands = off_job.result["scpi"]["sent"]
+    assert off_sent_commands[0] == "*IDN?"
+    assert off_sent_commands[1:-1] == expected_off_commands
+    assert off_sent_commands[-1] == ":SYSTem:ERRor?"
 
 
 class _FakeBackend:
