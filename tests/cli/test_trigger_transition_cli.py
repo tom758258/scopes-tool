@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
 
@@ -147,7 +147,7 @@ def test_trigger_transition_query_simulate_json_skips_levels_for_non_analog_sour
         transition_source_channel=None,
         transition_source_raw="EXTernal",
     )
-    monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
 
     assert cli.main(["trigger-transition", "--query", "--simulate", "--json"]) == 0
 

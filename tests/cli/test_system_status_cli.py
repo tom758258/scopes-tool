@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 COMMANDS = {
@@ -26,7 +26,7 @@ def _payload(capsys):
 def test_system_status_dry_run_json_does_not_open_scope(
     monkeypatch, capsys, command, scpi
 ):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     query = ["--query"] if command in QUERY_COMMANDS else []
 
     assert cli.main([command, *query, "--dry-run", "--json"]) == 0
@@ -62,7 +62,7 @@ def test_system_status_simulator_json_is_structured(capsys, command, expected):
 
 @pytest.mark.parametrize("command", QUERY_COMMANDS)
 def test_system_query_commands_require_query_before_open(monkeypatch, capsys, command):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
 
     with pytest.raises(SystemExit) as excinfo:
         cli.main([command, "--simulate", "--json"])

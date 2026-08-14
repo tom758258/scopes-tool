@@ -3,7 +3,7 @@ from contextlib import nullcontext
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
@@ -89,7 +89,7 @@ def test_serial_uart_trigger_rejects_non_data_qualifier_before_backend_open(
         opened = True
         raise AssertionError("backend must not open")
 
-    monkeypatch.setattr(cli, "_open_scope", fail_open)
+    monkeypatch.setattr(runtime, "_open_scope", fail_open)
     assert (
         cli.main(
             [
@@ -169,7 +169,7 @@ def test_serial_trigger_simulator_configure_query_roundtrip(
     backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
     backend.serial_modes[1] = mode
     scope = Oscilloscope(backend)
-    monkeypatch.setattr(cli, "_open_scope", lambda args, resource: nullcontext(scope))
+    monkeypatch.setattr(runtime, "_open_scope", lambda args, resource: nullcontext(scope))
 
     common = [command, "--bus", "1", "--simulate", "--json", "--model", "keysight-dsox2004a"]
     assert cli.main([*common, *configure_args]) == 0
@@ -487,7 +487,7 @@ def test_serial_settings_conflict_hint_preserves_system_error_json(
         }
     )
     scope = Oscilloscope(backend)
-    monkeypatch.setattr(cli.Oscilloscope, "open", lambda *unused, **kwargs: scope)
+    monkeypatch.setattr(runtime.Oscilloscope, "open", lambda *unused, **kwargs: scope)
 
     assert (
         cli.main(
@@ -527,7 +527,7 @@ def _patch_live_scope(monkeypatch, idn: str):
     )
     scope = Oscilloscope(backend)
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         lambda *unused, **kwargs: scope,
     )
@@ -609,7 +609,7 @@ def test_serial_live_uses_detected_2000x_capabilities_before_target_scpi(
 def test_serial_2000x_profile_rejection_happens_before_open(
     monkeypatch, capsys, args, run_flags
 ):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert (
         cli.main(
             [

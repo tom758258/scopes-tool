@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _payload(capsys):
@@ -27,7 +27,7 @@ def _payload(capsys):
     ],
 )
 def test_save_export_dry_run_preview_never_opens_scope(monkeypatch, capsys, args, target):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main([*args, "--dry-run", "--json"]) == 0
     payload = _payload(capsys)
     assert payload["result"]["instrument_side"] is True
@@ -35,7 +35,7 @@ def test_save_export_dry_run_preview_never_opens_scope(monkeypatch, capsys, args
 
 
 def test_save_image_dry_run_includes_opc(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main(
         ["save-image", "--filename", "USB:/screen.png", "--dry-run", "--json"]
     ) == 0
@@ -50,7 +50,7 @@ def test_save_image_dry_run_includes_opc(monkeypatch, capsys):
 
 
 def test_4000x_save_waveform_dry_run_includes_rui_readiness(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main(
         ["save-waveform", "--filename", "USB:/wave.csv", "--dry-run", "--json"]
     ) == 0
@@ -104,7 +104,7 @@ def test_save_format_simulate_query_returns_canonical_value_and_raw(capsys):
     ],
 )
 def test_save_export_invalid_values_fail_before_open(monkeypatch, capsys, args):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main([*args, "--simulate", "--json"]) == 1
     assert _payload(capsys)["ok"] is False
 

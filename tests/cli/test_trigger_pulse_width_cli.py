@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
 
@@ -156,7 +156,7 @@ def test_trigger_pulse_width_query_simulate_json_handles_digital_source_and_none
     monkeypatch, capsys
 ):
     backend = SimulatorBackend(glitch_source_channel=None, glitch_source_raw="DIGital7", glitch_level=None)
-    monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
 
     assert cli.main(["trigger-pulse-width", "--query", "--simulate", "--json"]) == 0
 

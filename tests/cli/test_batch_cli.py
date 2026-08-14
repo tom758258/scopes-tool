@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core import operations
 from scopes_tool_core import output_files
 from scopes_tool_core.capabilities import capabilities_for_model
@@ -123,7 +123,7 @@ class _BatchDummyScope:
 
 def _install_batch_scope(monkeypatch, scope):
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda resource, visa_library=None: scope),
     )
@@ -471,7 +471,7 @@ def test_capture_batch_cli_rejects_invalid_count_and_interval_before_open(
         del resource, visa_library
         raise AssertionError("scope should not be opened")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     with pytest.raises(SystemExit) as excinfo:
         cli.main(

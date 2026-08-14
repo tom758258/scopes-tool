@@ -1,6 +1,6 @@
 import json
 import pytest
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 def _json_stdout(capsys):
     captured = capsys.readouterr()
@@ -49,7 +49,7 @@ def test_trigger_edge_coupling_dry_run_json(capsys):
 
 def test_trigger_edge_coupling_dry_run_text_uses_result_command(capsys, monkeypatch):
     monkeypatch.setattr(
-        cli,
+        runtime,
         "_open_scope",
         lambda *_args, **_kwargs: pytest.fail("dry-run must not open a scope"),
     )
@@ -134,7 +134,7 @@ def test_trigger_edge_reject_dry_run_json(capsys):
 
 def test_trigger_edge_reject_query_dry_run_text_uses_result_command(capsys, monkeypatch):
     monkeypatch.setattr(
-        cli,
+        runtime,
         "_open_scope",
         lambda *_args, **_kwargs: pytest.fail("dry-run must not open a scope"),
     )

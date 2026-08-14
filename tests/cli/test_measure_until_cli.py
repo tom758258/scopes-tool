@@ -1,6 +1,6 @@
 import json
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core.operations import OperationResult
 
 
@@ -9,7 +9,7 @@ def test_measure_until_dry_run_plans_one_iteration_without_hardware_or_files(
 ):
     output_dir = tmp_path / "planned"
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(
             lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("opened"))

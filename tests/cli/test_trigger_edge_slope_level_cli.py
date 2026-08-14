@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _payload(capsys):
@@ -38,7 +38,7 @@ def test_trigger_edge_slope_dry_run_json(capsys, slope, command):
 
 
 def test_trigger_edge_slope_query_dry_run_and_text_does_not_open_scope(capsys, monkeypatch):
-    monkeypatch.setattr(cli, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
     assert cli.main([
         "trigger-edge-slope", "--dry-run", "--json", "--model", "keysight-dsox3024a", "--query",
     ]) == 0
@@ -91,7 +91,7 @@ def test_trigger_edge_slope_rejects_invalid_choice(capsys, value):
 
 
 def test_trigger_edge_level_dry_run_json_and_text(capsys, monkeypatch):
-    monkeypatch.setattr(cli, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
     assert cli.main([
         "trigger-edge-level", "--dry-run", "--json", "--model", "keysight-dsox2004a",
         "--source-channel", "1", "--level-volts", "-0.25",

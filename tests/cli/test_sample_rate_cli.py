@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core.acquisition import (
     parse_sample_rate,
     sample_rate_maximum_query,
@@ -56,7 +56,7 @@ class _SampleRateDummyScope:
 def _install_sample_rate_scope(monkeypatch):
     scope = _SampleRateDummyScope()
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda resource, visa_library=None: scope),
     )
@@ -78,7 +78,7 @@ def test_sample_rate_cli_dry_run_includes_planned_scpi_without_visa(monkeypatch,
     def fail_open(resource, visa_library=None):
         raise AssertionError("dry-run must not open VISA")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert cli.main([
         "sample-rate",
@@ -109,7 +109,7 @@ def test_sample_rate_cli_maximum_dry_run_includes_planned_scpi_without_visa(monk
     def fail_open(resource, visa_library=None):
         raise AssertionError("dry-run must not open VISA")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert cli.main([
         "sample-rate",

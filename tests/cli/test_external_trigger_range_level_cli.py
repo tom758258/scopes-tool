@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _payload(capsys):
@@ -34,7 +34,7 @@ def test_external_trigger_range_dry_run_json_for_all_target_models(capsys, model
 
 
 def test_external_trigger_range_query_dry_run_text_and_simulate_query(capsys, monkeypatch):
-    monkeypatch.setattr(cli, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
     assert cli.main([
         "external-trigger-range", "--dry-run", "--json", "--model", "keysight-dsox2004a", "--query",
     ]) == 0
@@ -82,7 +82,7 @@ def test_external_trigger_range_simulate_configure_has_no_unrelated_scpi(capsys)
     [[], ["--query", "--range-volts", "8"], ["--range-volts", "0"], ["--range-volts", "-1"], ["--range-volts", "nan"]],
 )
 def test_external_trigger_range_rejects_invalid_operations_before_open(capsys, monkeypatch, arguments):
-    monkeypatch.setattr(cli, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
     assert cli.main(["external-trigger-range", "--dry-run", "--json", *arguments]) == 1
     assert _payload(capsys)["ok"] is False
 
@@ -121,7 +121,7 @@ def test_external_edge_level_dry_run_json_for_all_target_models(capsys, model):
 
 
 def test_external_edge_level_dry_run_text_and_simulate_paths(capsys, monkeypatch):
-    monkeypatch.setattr(cli, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
     assert cli.main([
         "trigger-edge-external-level", "--dry-run", "--model", "keysight-dsox4034a", "--level-volts", "0.5",
     ]) == 0
@@ -167,7 +167,7 @@ def test_external_edge_level_dry_run_text_and_simulate_paths(capsys, monkeypatch
     [[], ["--query", "--level-volts", "0.5"], ["--level-volts", "nan"]],
 )
 def test_external_edge_level_rejects_invalid_operations_before_open(capsys, monkeypatch, arguments):
-    monkeypatch.setattr(cli, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
     assert cli.main(["trigger-edge-external-level", "--dry-run", "--json", *arguments]) == 1
     assert _payload(capsys)["ok"] is False
 

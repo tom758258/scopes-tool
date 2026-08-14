@@ -2,7 +2,7 @@
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.idn import parse_idn
@@ -54,7 +54,7 @@ class _AcquisitionDummyScope:
 def _install_acquisition_scope(monkeypatch, model="DSOX4024A"):
     scope = _AcquisitionDummyScope(model=model)
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda resource, visa_library=None: scope),
     )
@@ -205,7 +205,7 @@ def test_acquisition_cli_prints_session_info(monkeypatch, capsys):
 
 
 def test_acquisition_cli_invalid_count_fails_before_open_and_type_change(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_open_scope", lambda *args, **kwargs: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *args, **kwargs: pytest.fail("opened scope"))
 
     result = cli.main([
         "acquisition", "--resource", "USB0::FAKE::INSTR",

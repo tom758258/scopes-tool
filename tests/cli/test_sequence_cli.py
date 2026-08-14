@@ -1,6 +1,6 @@
 import json
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _write_sequence(path, *, loop_count=1, steps=None):
@@ -55,7 +55,7 @@ def test_sequence_dry_run_validates_without_opening_scope_or_writing_artifacts(
         ],
     )
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("opened"))),
     )
@@ -85,7 +85,7 @@ def test_sequence_invalid_document_fails_before_scope_open(monkeypatch, tmp_path
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("opened"))),
     )

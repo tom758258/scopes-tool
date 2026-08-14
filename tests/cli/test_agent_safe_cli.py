@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.simulator_backend import SimulatorBackend
@@ -74,7 +74,7 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         del resource, visa_library
         raise AssertionError("dry-run must not open a VISA scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert cli.main(["identify", "--dry-run", "--json", "--model", "keysight-dsox4024a"]) == 0
 
@@ -146,7 +146,7 @@ def test_label_and_annotation_dry_run_json_reports_planned_scpi_without_opening(
         del resource, visa_library
         raise AssertionError("dry-run must not open a VISA scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert (
         cli.main(
@@ -209,7 +209,7 @@ def test_annotation_validation_errors_do_not_open_backend(monkeypatch, capsys):
         del resource, visa_library
         raise AssertionError("validation failure must not open a scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert (
         cli.main(
@@ -338,7 +338,7 @@ def test_annotation_query_json_reports_canonical_readback_enums(monkeypatch, cap
             ":DISPlay:ANNotation1:BACKground?": "tran",
         },
     )
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert (
         cli.main(
@@ -372,7 +372,7 @@ def test_capture_dry_run_json_reports_files_without_writing(monkeypatch, capsys,
         del resource, visa_library
         raise AssertionError("dry-run must not open a VISA scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -407,7 +407,7 @@ def test_capture_dry_run_wait_trigger_reports_trigger_plan_without_opening(
         del resource, visa_library
         raise AssertionError("dry-run must not open a VISA scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -442,7 +442,7 @@ def test_capture_wait_trigger_invalid_combinations_reject_before_backend(monkeyp
         del resource, visa_library
         raise AssertionError("invalid wait-trigger arguments must not open a scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert (
         cli.main(
@@ -522,7 +522,7 @@ def test_acquisition_check_dry_run_json_reports_plan_for_target_models(monkeypat
         del resource, visa_library
         raise AssertionError("dry-run must not open a VISA scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     for model in (
         "keysight-dsox4024a",
@@ -585,7 +585,7 @@ def test_advanced_autoscale_dry_run_json_accepts_2000x_and_3000x(monkeypatch, ca
         del resource, visa_library
         raise AssertionError("dry-run must not open a VISA scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     for model in ("keysight-dsox2004a", "keysight-dsox3024a"):
         assert cli.main(["autoscale", "--dry-run", "--json", "--model", model]) == 0
@@ -776,7 +776,7 @@ def test_acquisition_check_stop_on_error_stops_after_first_error(monkeypatch, ca
     backend = SimulatorBackend(
         system_errors=['+0,"No error"', '-113,"Undefined header"']
     )
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert (
         cli.main(
@@ -809,7 +809,7 @@ def test_acquisition_check_restore_type_attempts_restore_and_records_result(
 ):
     output_dir = tmp_path / "restore-type"
     backend = SimulatorBackend()
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert (
         cli.main(
@@ -935,7 +935,7 @@ def test_simulate_json_backend_error_keeps_single_json_object(monkeypatch, capsy
             ":MEASure:VPP? CHANnel1": OscilloscopeError("configured measurement failure")
         }
     )
-    monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
 
     assert cli.main(["measure", "--simulate", "--json", "--channel", "1", "--item", "vpp"]) == 1
 
@@ -948,7 +948,7 @@ def test_simulate_json_backend_error_keeps_single_json_object(monkeypatch, capsy
 
 def test_check_error_simulate_json_can_report_injected_error_queue(monkeypatch, capsys):
     backend = SimulatorBackend(system_errors=['-113,"Undefined header"'])
-    monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
 
     assert cli.main(["check-error", "--simulate", "--json", "--all", "--max-reads", "3"]) == 1
 
@@ -1063,7 +1063,7 @@ def test_channel_advanced_dry_run_json_reports_planned_scpi_without_opening(
         del resource, visa_library
         raise AssertionError("dry-run must not open a VISA scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert (
         cli.main(
@@ -1116,7 +1116,7 @@ def test_channel_impedance_json_rejects_fifty_without_allow_before_open(monkeypa
         del resource, visa_library
         raise AssertionError("validation failure must not open a VISA scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert (
         cli.main(
@@ -1687,7 +1687,7 @@ def test_fft_4000x_advanced_dry_run_and_query_shape(capsys):
 def test_fft_invalid_or_unsupported_configuration_fails_before_open(
     monkeypatch, capsys, model, extra
 ):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
 
     assert (
         cli.main(
@@ -1781,7 +1781,7 @@ def test_math_vertical_simulate_4000x_uses_indexed_scpi(capsys):
 def test_math_vertical_query_with_setter_fails_before_open(
     monkeypatch, capsys
 ):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
 
     assert (
         cli.main(
@@ -1858,7 +1858,7 @@ def test_math_operator_dry_run_uses_model_function_dialect(
 
 
 def test_math_operator_missing_source2_fails_before_open(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
 
     assert (
         cli.main(
@@ -1932,7 +1932,7 @@ def test_math_transform_simulate_configure_query_round_trip(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
     common = [
         "--simulate",
         "--json",
@@ -1988,7 +1988,7 @@ def test_math_transform_simulate_configure_query_round_trip(
 
 
 def test_math_transform_invalid_option_fails_before_open(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
 
     assert (
         cli.main(
@@ -2020,7 +2020,7 @@ def test_math_composite_source_simulate_configure_query_round_trip(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
     common = [
         "--simulate",
         "--json",
@@ -2092,7 +2092,7 @@ def test_math_transform_4000x_cascade_dry_run(capsys):
 def test_math_transform_unsupported_composite_fails_before_open(
     monkeypatch, capsys
 ):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
 
     assert (
         cli.main(
@@ -2124,7 +2124,7 @@ def test_math_filter_common_simulate_configure_query_round_trip(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
     common = [
         "--simulate",
         "--json",
@@ -2177,7 +2177,7 @@ def test_math_filter_advanced_and_clear_simulate(monkeypatch, capsys):
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
     common = [
         "--simulate",
         "--json",
@@ -2235,7 +2235,7 @@ def test_math_filter_advanced_and_clear_simulate(monkeypatch, capsys):
 def test_math_filter_irrelevant_parameter_fails_before_open(
     monkeypatch, capsys
 ):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
 
     assert (
         cli.main(
@@ -2269,7 +2269,7 @@ def test_math_visualization_common_and_trend_simulate_round_trips(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
     common = [
         "--simulate",
         "--json",
@@ -2339,7 +2339,7 @@ def test_math_visualization_4000x_advanced_and_trend_slot_simulate(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(cli, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
     common = [
         "--simulate",
         "--json",
@@ -2403,7 +2403,7 @@ def test_math_visualization_4000x_advanced_and_trend_slot_simulate(
 def test_math_visualization_capability_rejection_fails_before_open(
     monkeypatch, capsys
 ):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
 
     assert (
         cli.main(
@@ -2428,7 +2428,7 @@ def test_math_visualization_capability_rejection_fails_before_open(
 
 def test_measure_simulate_json_reports_invalid_sentinel(monkeypatch, capsys):
     backend = SimulatorBackend(invalid_measurement_channels={1})
-    monkeypatch.setattr(cli, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
 
     assert cli.main(["measure", "--simulate", "--json", "--channel", "1", "--item", "vpp"]) == 1
 
@@ -2445,7 +2445,7 @@ def test_measure_pair_simulate_json_reports_reference_channel_invalid_sentinel(
     monkeypatch, capsys
 ):
     backend = SimulatorBackend(invalid_measurement_channels={2})
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert (
         cli.main(
@@ -2885,7 +2885,7 @@ def test_capture_simulate_json_binary_failure_reports_single_json_object(
     backend = SimulatorBackend(
         binary_failures={":WAVeform:DATA?": OscilloscopeError("configured binary failure")}
     )
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert (
         cli.main(
@@ -3152,7 +3152,7 @@ def test_screenshot_format_pack_rejects_invalid_values_before_backend(monkeypatc
         opened = True
         raise AssertionError("backend must not open")
 
-    monkeypatch.setattr(cli, "_open_scope", fail_open)
+    monkeypatch.setattr(runtime, "_open_scope", fail_open)
     with pytest.raises(SystemExit):
         cli.main(["screenshot", "--simulate", "--format", "jpeg"])
     assert opened is False
@@ -3162,7 +3162,7 @@ def test_screenshot_query_hardcopy_rejects_capture_options_before_backend(
     monkeypatch, capsys
 ):
     monkeypatch.setattr(
-        cli, "_open_scope", lambda *args, **kwargs: pytest.fail("backend must not open")
+        runtime, "_open_scope", lambda *args, **kwargs: pytest.fail("backend must not open")
     )
     assert (
         cli.main(
@@ -3216,7 +3216,7 @@ def test_capture_batch_simulate_json_stops_after_injected_system_error(
     backend = SimulatorBackend(
         system_errors=['+0,"No error"', '-113,"Undefined header"']
     )
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert (
         cli.main(
@@ -3279,7 +3279,7 @@ def test_acquisition_simulate_json_query_reports_readback_and_sent_scpi(capsys):
 
 def test_acquisition_simulate_json_bad_readback_reports_error(monkeypatch, capsys):
     backend = SimulatorBackend(query_overrides={":ACQuire:TYPE?": "bad-type"})
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert cli.main(["acquisition", "--simulate", "--json", "--query"]) == 1
 

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _payload(capsys):
@@ -75,13 +75,13 @@ def test_external_trigger_units_and_settings_simulate_paths(capsys, command, arg
     ],
 )
 def test_external_trigger_input_commands_reject_invalid_operations_before_open(capsys, monkeypatch, command, arguments):
-    monkeypatch.setattr(cli, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
     assert cli.main([command, "--dry-run", "--json", *arguments]) == 1
     assert _payload(capsys)["ok"] is False
 
 
 def test_external_trigger_settings_requires_query_at_argparse_level(capsys, monkeypatch):
-    monkeypatch.setattr(cli, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *_a, **_kw: pytest.fail("opened scope"))
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["external-trigger-settings", "--dry-run", "--json"])

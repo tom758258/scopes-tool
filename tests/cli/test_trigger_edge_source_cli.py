@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _json_stdout(capsys):
@@ -59,7 +59,7 @@ def test_trigger_edge_source_dry_run_json(capsys, arguments, expected):
 
 def test_trigger_edge_source_dry_run_text_does_not_open_scope(capsys, monkeypatch):
     monkeypatch.setattr(
-        cli,
+        runtime,
         "_open_scope",
         lambda *_args, **_kwargs: pytest.fail("dry-run must not open a scope"),
     )

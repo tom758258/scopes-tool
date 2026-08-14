@@ -13,7 +13,7 @@ from urllib import request as urlrequest
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime as cli_runtime
 from scopes_tool_cli import worker
 from scopes_tool_core.advanced import trigger_holdoff_commands, trigger_holdoff_query
 from scopes_tool_core.acquisition import (
@@ -2539,7 +2539,7 @@ class _FakeScope:
 
 def test_live_worker_identity_mismatch_fails_before_domain_scpi(monkeypatch, tmp_path):
     fake_scope = _FakeScope("KEYSIGHT,DSOX3024A,MY0000,1.0")
-    monkeypatch.setattr(cli.Oscilloscope, "open", lambda *args, **kwargs: fake_scope)
+    monkeypatch.setattr(cli_runtime.Oscilloscope, "open", lambda *args, **kwargs: fake_scope)
     parsed = worker.parse_domain_command(
         "capture",
         {"channel": [1]},
@@ -2557,7 +2557,7 @@ def test_live_worker_identity_mismatch_fails_before_domain_scpi(monkeypatch, tmp
     assert payload["error"]["expected_model"] == "keysight-dsox4024a"
     assert payload["error"]["actual_idn"] == "KEYSIGHT,DSOX3024A,MY0000,1.0"
     assert fake_scope.backend.history == ["*IDN?"]
-    assert fake_scope.backend.timeout == cli.WORKER_IDN_TIMEOUT_MS
+    assert fake_scope.backend.timeout == cli_runtime.WORKER_IDN_TIMEOUT_MS
     assert fake_scope.backend.closed is True
 
 
@@ -2575,7 +2575,7 @@ def test_live_worker_unknown_identity_fails_before_domain_scpi(
 ):
     fake_scope = _FakeScope(raw_idn)
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        cli_runtime.Oscilloscope,
         "open",
         lambda *args, **kwargs: fake_scope,
     )
@@ -2708,7 +2708,7 @@ def test_worker_triggered_capture_series_rejects_cli_paths_before_artifacts(
 ):
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        cli_runtime.Oscilloscope,
         "open",
         staticmethod(
             lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("opened"))
@@ -2821,7 +2821,7 @@ def test_worker_measure_until_rejects_invalid_public_contract_before_artifacts(
 ):
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        cli_runtime.Oscilloscope,
         "open",
         staticmethod(
             lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("opened"))

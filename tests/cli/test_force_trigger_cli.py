@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scpi import SCPIClient
 from scopes_tool_core.simulator_backend import SimulatorBackend, SimulatorBackendError
@@ -42,7 +42,7 @@ def test_force_trigger_cli_dry_run_includes_planned_scpi_without_visa(monkeypatc
     def fail_open(resource, visa_library=None):
         raise AssertionError("dry-run must not open VISA")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert cli.main(["force-trigger", "--dry-run", "--json"]) == 0
 
@@ -83,7 +83,7 @@ def test_force_trigger_cli_simulate_runs_expected_scpi_order(capsys):
 
 def test_force_trigger_cli_simulate_returns_failure_on_system_error(monkeypatch, capsys):
     backend = SimulatorBackend(system_errors=['-113,"Undefined header"'])
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert cli.main(["force-trigger", "--simulate", "--json"]) == 1
 
@@ -95,7 +95,7 @@ def test_force_trigger_cli_simulate_returns_failure_on_system_error(monkeypatch,
 
 def test_force_trigger_cli_does_not_send_unrelated_state_changing_commands(monkeypatch, capsys):
     backend = SimulatorBackend()
-    monkeypatch.setattr(cli, "_make_simulator_backend", lambda args, resource: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert cli.main(["force-trigger", "--simulate", "--json"]) == 0
     json.loads(capsys.readouterr().out)

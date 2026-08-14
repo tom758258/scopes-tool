@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _payload(capsys):
@@ -81,7 +81,7 @@ def test_demo_cli_rejects_missing_conflicting_or_invalid_actions(capsys, args):
 
 @pytest.mark.parametrize("degrees", ["-0.1", "360.1", "nan", "inf", "-inf"])
 def test_demo_phase_validation_fails_before_open(monkeypatch, capsys, degrees):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     degree_args = [f"--degrees={degrees}"] if degrees == "-inf" else ["--degrees", degrees]
     assert cli.main([
         "demo-phase", *degree_args, "--simulate", "--json", "--model", "keysight-dsox4024a"
@@ -90,7 +90,7 @@ def test_demo_phase_validation_fails_before_open(monkeypatch, capsys, degrees):
 
 
 def test_demo_function_profile_gating_fails_before_open(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main([
         "demo-function", "--function", "i2s", "--simulate", "--json", "--model", "keysight-dsox2004a"
     ]) == 1
@@ -98,6 +98,6 @@ def test_demo_function_profile_gating_fails_before_open(monkeypatch, capsys):
 
 
 def test_demo_dry_run_never_opens_scope(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main(["demo-query", "--dry-run", "--json"]) == 0
     _payload(capsys)

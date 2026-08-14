@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def test_triggered_measure_loop_dry_run_uses_one_representative_cycle(
@@ -10,7 +10,7 @@ def test_triggered_measure_loop_dry_run_uses_one_representative_cycle(
 ):
     output_dir = tmp_path / "planned"
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(
             lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("opened"))

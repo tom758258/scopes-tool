@@ -1,4 +1,4 @@
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 import scopes_tool_core.drivers as drivers_module
 import scopes_tool_core.identity as identity_module
 from scopes_tool_core.fake_backend import FakeBackend
@@ -55,7 +55,7 @@ def test_one_shot_live_command_uses_detected_driver_subclass(monkeypatch, capsys
         }
     )
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(
             lambda resource, visa_library=None: Oscilloscope(backend)
@@ -81,7 +81,7 @@ def test_one_shot_live_unknown_driver_blocks_state_change(monkeypatch, capsys):
         }
     )
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(
             lambda resource, visa_library=None: Oscilloscope(backend)
@@ -98,7 +98,7 @@ def test_one_shot_live_unknown_driver_blocks_state_change(monkeypatch, capsys):
 def test_one_shot_live_idn_parse_failure_closes_backend(monkeypatch, capsys):
     backend = FakeBackend(responses={"*IDN?": "malformed"})
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(
             lambda resource, visa_library=None: Oscilloscope(backend)

@@ -480,7 +480,6 @@ from scopes_tool_core.screenshot import (
     hardcopy_palette_command,
     hardcopy_palette_query,
     hardcopy_screen_dump_data_query,
-    normalize_screenshot_options,
     screenshot_data_query,
     write_screenshot,
     write_screenshot_png,
@@ -607,6 +606,8 @@ from scopes_tool_core.waveform import (
     waveform_unsigned_command,
 )
 
+from . import preflight, runtime
+
 _CONTROL_COMMANDS = {
     "run": ("run", ":RUN"),
     "stop-acquisition": ("stop", ":STOP"),
@@ -614,10 +615,7 @@ _CONTROL_COMMANDS = {
 }
 _CAPTURE_DEFAULT_TIMEZONE = timezone(timedelta(hours=8), name="UTC+8")
 AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS = 15000
-WORKER_IDN_TIMEOUT_MS = 2000
 CLI_SCHEMA_VERSION = 2
-_DRIVER_OPTIONAL_LIVE_COMMANDS = {"identify"}
-_JSON_RECORD: dict[str, object] | None = None
 _SERIAL_SOURCE_HELP = (
     "channelN or external; source availability may depend on the other "
     "configured Serial bus; query both buses after an instrument settings conflict"
@@ -631,7 +629,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        _validate_pre_open_args(args)
+        preflight.validate_pre_open_args(args)
     except OscilloscopeError as exc:
         if getattr(args, "json_output", False):
             payload = _json_envelope(args, ok=False, mode=_safe_mode(args))
@@ -665,7 +663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_json_command(args)
 
     try:
-        if _resolve_cli_mode(args) == "dry_run":
+        if runtime._resolve_cli_mode(args) == "dry_run":
             return _run_text_dry_run_command(args)
         return _dispatch_command(args)
     except OscilloscopeError as exc:
@@ -3847,176 +3845,6 @@ def _dispatch_command(
     raise OscilloscopeError("missing command")
 
 
-
-_LAST_BACKEND = None
-
-
-def _resolve_cli_mode(args: argparse.Namespace) -> str:
-    _validate_cursor_auto_args(args)
-    _validate_measure_log_args(args)
-    if hasattr(args, "model"):
-        physical_model_for_id(args.model)
-    return resolve_run_mode(_run_mode_options(args))
-
-
-def _validate_cursor_auto_args(args: argparse.Namespace) -> None:
-    if getattr(args, "command", None) != "cursor":
-        return
-    setting_cursor = not getattr(args, "cursor_query", False) and not getattr(args, "cursor_off", False)
-    if getattr(args, "auto_timebase", False) and not setting_cursor:
-        raise OscilloscopeError("--auto-timebase is only valid when setting cursor positions")
-    if not getattr(args, "auto_vertical", False):
-        return
-    if not setting_cursor:
-        raise OscilloscopeError("--auto-vertical is only valid when setting cursor positions")
-    if getattr(args, "source_channel", None) is None or getattr(args, "x2", None) is None:
-        raise OscilloscopeError(
-            "--auto-vertical requires --source-channel, --x1, and --x2"
-        )
-    if getattr(args, "y1", None) is None and getattr(args, "y2", None) is None:
-        raise OscilloscopeError("--auto-vertical requires --y1 or --y2")
-
-
-def _validate_measure_log_args(args: argparse.Namespace) -> None:
-    if getattr(args, "command", None) != "measure-log":
-        return
-    if args.count is None and args.duration_seconds is None:
-        raise OscilloscopeError(
-            "measure-log requires --count or --duration-seconds so the run is finite"
-        )
-    for value in args.pair:
-        parts = value.split(":")
-        if len(parts) != 2:
-            raise OscilloscopeError("--pair must use SRC:REF, for example 1:2")
-        try:
-            source = int(parts[0])
-            reference = int(parts[1])
-        except ValueError as exc:
-            raise OscilloscopeError("--pair channels must be integers") from exc
-        if source == reference:
-            raise OscilloscopeError("--pair source and reference channels must differ")
-
-
-def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope:
-    global _LAST_BACKEND
-    mode = _resolve_cli_mode(args)
-    if mode == "simulate":
-        backend = _make_simulator_backend(args, resource)
-        _LAST_BACKEND = backend
-        return Oscilloscope(backend)
-    opened_scope = Oscilloscope.open(
-        resource,
-        visa_library=args.visa_library,
-    )
-    _LAST_BACKEND = getattr(opened_scope, "backend", None)
-    try:
-        scope = opened_scope
-        if getattr(args, "_worker_live_validation", False):
-            scope = _validate_worker_live_identity(args, scope)
-        elif isinstance(scope, Oscilloscope):
-            if args.command != "segmented-capture":
-                scope = _select_one_shot_live_driver(args, scope)
-        if _JSON_RECORD is not None:
-            _JSON_RECORD["backend"] = getattr(scope.backend, "backend", None)
-        return scope
-    except Exception:
-        try:
-            opened_scope.close()
-        except Exception:
-            pass
-        raise
-
-
-def _select_one_shot_live_driver(
-    args: argparse.Namespace,
-    scope: Oscilloscope,
-) -> Oscilloscope:
-    try:
-        idn = scope.query_idn()
-        selected_scope = scope_for_physical_model(
-            idn.physical_model,
-            scope.backend,
-            existing_scope=scope,
-        )
-    except UnsupportedModelError:
-        if args.command not in _DRIVER_OPTIONAL_LIVE_COMMANDS:
-            raise
-        selected_scope = scope
-        idn = scope.idn
-
-    if idn is not None:
-        selected_scope.idn = idn
-        selected_scope.capabilities = scope.capabilities
-        selected_scope._preloaded_idn = idn
-    return selected_scope
-
-
-def _validate_worker_live_identity(
-    args: argparse.Namespace,
-    scope: Oscilloscope,
-) -> Oscilloscope:
-    expected = physical_model_for_id(args.model)
-    scope.scpi.set_timeout(WORKER_IDN_TIMEOUT_MS)
-    idn = scope.query_idn()
-    selected_scope = scope_for_physical_model(
-        idn.physical_model,
-        scope.backend,
-        existing_scope=scope,
-    )
-    selected_scope.idn = idn
-    selected_scope._preloaded_idn = idn
-    _json_record_scope(selected_scope, idn)
-    if idn.model_id != expected.model_id:
-        raise OscilloscopeError(
-            "identity_mismatch: "
-            f"expected_model={expected.model_id}; actual_idn={idn.raw}"
-        )
-    return selected_scope
-
-
-def _make_simulator_backend(args: argparse.Namespace, resource: str) -> SimulatorBackend:
-    kwargs = simulator_backend_kwargs(
-        _run_mode_options(args),
-        resource,
-        capabilities_for_model_id(args.model),
-    )
-    return SimulatorBackend(**kwargs)
-
-
-def _run_mode_options(args: argparse.Namespace) -> RunModeOptions:
-    planning_model_id = (
-        getattr(args, "model", "keysight-dsox4024a")
-        if bool(getattr(args, "simulate", False))
-        or bool(getattr(args, "dry_run", False))
-        else None
-    )
-    expected_model_id = (
-        getattr(args, "model", "keysight-dsox4024a")
-        if bool(getattr(args, "_worker_live_validation", False))
-        else None
-    )
-    return RunModeOptions(
-        simulate=bool(getattr(args, "simulate", False)),
-        dry_run=bool(getattr(args, "dry_run", False)),
-        live=bool(getattr(args, "live", False)),
-        planning_physical_model_id=planning_model_id,
-        expected_physical_model_id=expected_model_id,
-        simulate_signals=tuple(getattr(args, "simulate_signals", ()) or ()),
-        simulate_preset=getattr(args, "simulate_preset", None),
-        simulate_scenario=getattr(args, "simulate_scenario", None),
-        simulate_system_errors=tuple(getattr(args, "simulate_system_errors", ()) or ()),
-        simulate_binary_transfer_failure=bool(
-            getattr(args, "simulate_binary_transfer_failure", False)
-        ),
-        simulate_invalid_measurement_channels=tuple(
-            getattr(args, "simulate_invalid_measurement_channels", ()) or ()
-        ),
-        simulate_display_off_channels=tuple(
-            getattr(args, "simulate_display_off_channels", ()) or ()
-        ),
-    )
-
-
 def _measure_plan_request(args: argparse.Namespace) -> MeasurePlanRequest:
     return MeasurePlanRequest(
         item=args.item,
@@ -4086,14 +3914,13 @@ def _execute_json_command(
     *,
     stop_requested: StopRequested | None = None,
 ) -> tuple[dict[str, object], int]:
-    global _JSON_RECORD
     try:
-        mode = _resolve_cli_mode(args)
+        mode = runtime._resolve_cli_mode(args)
         if mode == "dry_run":
             payload = _dry_run_payload(args)
             return payload, 0
 
-        _JSON_RECORD = {"result": {}, "files": [], "system_error": None}
+        runtime._JSON_RECORD = {"result": {}, "files": [], "system_error": None}
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             code = _dispatch_command(args, stop_requested=stop_requested)
@@ -4102,16 +3929,16 @@ def _execute_json_command(
         result = payload.setdefault("result", {})
         if isinstance(result, dict):
             result["human_output"] = buffer.getvalue().splitlines()
-        payload["scpi"]["sent"] = _backend_history()
+        payload["scpi"]["sent"] = runtime._backend_history()
         return payload, code
     except OscilloscopeError as exc:
         payload = _json_envelope(args, ok=False, mode=_safe_mode(args))
         _apply_json_record(payload)
         payload["error"] = _json_error(exc)
-        payload["scpi"]["sent"] = _backend_history()
+        payload["scpi"]["sent"] = runtime._backend_history()
         return payload, 3 if payload["error"].get("type") == "identity_mismatch" else 1
     finally:
-        _JSON_RECORD = None
+        runtime._JSON_RECORD = None
 
 
 def _run_text_dry_run_command(args: argparse.Namespace) -> int:
@@ -4222,1534 +4049,9 @@ def _print_text_dry_run_summary(command: str, result: dict[str, object]) -> None
 
 def _safe_mode(args: argparse.Namespace) -> str:
     try:
-        return _resolve_cli_mode(args)
+        return runtime._resolve_cli_mode(args)
     except OscilloscopeError:
         return "dry_run" if getattr(args, "dry_run", False) else "simulate" if getattr(args, "simulate", False) else "live"
-
-
-def _screenshot_options(args: argparse.Namespace) -> ScreenshotOptions:
-    return normalize_screenshot_options(
-        ScreenshotOptions(
-            format=getattr(args, "format", None),
-            ink_saver=getattr(args, "ink_saver", None),
-            palette=getattr(args, "palette", None),
-            layout=getattr(args, "layout", None),
-        )
-    )
-
-
-def _uses_screenshot_format_pack(args: argparse.Namespace) -> bool:
-    options = _screenshot_options(args)
-    return bool(
-        getattr(args, "query_hardcopy", False)
-        or options.format is not None
-        or options.ink_saver is not None
-        or options.palette is not None
-        or options.layout is not None
-    )
-
-
-def _validate_screenshot_args(args: argparse.Namespace) -> None:
-    options = _screenshot_options(args)
-    if getattr(args, "query_hardcopy", False):
-        conflicting = (
-            getattr(args, "output_path", None) is not None
-            or getattr(args, "background", None) is not None
-            or any(
-                value is not None
-                for value in (
-                    options.format,
-                    options.ink_saver,
-                    options.palette,
-                    options.layout,
-                )
-            )
-        )
-        if conflicting:
-            raise ParameterValidationError(
-                "--query-hardcopy cannot be combined with screenshot capture or setting options."
-            )
-    if getattr(args, "background", None) is not None and options.ink_saver is not None:
-        raise ParameterValidationError("--background cannot be combined with --ink-saver.")
-    if options.format is not None and getattr(args, "output_path", None) is not None:
-        expected = ".png" if options.format == "png" else ".bmp"
-        if Path(args.output_path).suffix.lower() != expected:
-            raise ParameterValidationError(
-                f"--format {options.format} requires an output path ending in {expected}."
-            )
-    if _uses_screenshot_format_pack(args):
-        capabilities = _pre_open_capabilities(args)
-        if (
-            capabilities is not None
-            and not capabilities.supports_screenshot_format_pack
-        ):
-            raise ParameterValidationError(
-                "Screenshot Format Pack v1 requires a 4000X model profile."
-            )
-
-
-def _validate_fft_args(args: argparse.Namespace) -> None:
-    capabilities = _pre_open_capabilities(args)
-    configure_values = (
-        args.source_channel,
-        args.units,
-        args.window,
-        args.center_hz,
-        args.span_hz,
-        args.fft_operation,
-        args.start_hz,
-        args.stop_hz,
-        args.gate,
-        args.phase_reference,
-        args.detection_type,
-        args.detection_points,
-        args.display,
-    )
-    if args.fft_query:
-        if any(value is not None for value in configure_values):
-            raise ParameterValidationError(
-                "--query cannot be combined with FFT configuration options."
-            )
-        fft_query_commands(args.function, capabilities=capabilities)
-        if capabilities is not None and capabilities.supports_advanced_fft:
-            fft_advanced_query_commands(
-                args.function, capabilities=capabilities
-            )
-        return
-    if args.source_channel is None:
-        raise ParameterValidationError(
-            "fft configure requires --source-channel unless --query is used."
-        )
-    fft_configure_commands(
-        args.function,
-        args.source_channel,
-        units=args.units,
-        window=args.window,
-        center_hz=args.center_hz,
-        span_hz=args.span_hz,
-        display=None if args.display is None else args.display == "on",
-        fft_operation=args.fft_operation or "fft",
-        start_hz=args.start_hz,
-        stop_hz=args.stop_hz,
-        gate=args.gate,
-        phase_reference=args.phase_reference,
-        detection_type=args.detection_type,
-        detection_points=args.detection_points,
-        capabilities=capabilities,
-    )
-
-
-def _segmented_capture_request(args: argparse.Namespace) -> SegmentedCaptureRequest:
-    return SegmentedCaptureRequest(
-        channel=args.channel,
-        segments=args.segments,
-        points=args.points,
-        waveform_format=args.waveform_format,
-        timeout_ms=args.timeout_ms,
-        poll_interval_ms=args.poll_interval_ms,
-        output_dir=args.output_dir,
-        log_scpi=bool(getattr(args, "log_scpi", False)),
-    )
-
-
-def _validate_pre_open_args(args: argparse.Namespace) -> None:
-    if getattr(args, "command", None) == "acquisition":
-        if (
-            getattr(args, "acq_count", None) is not None
-            and not getattr(args, "acq_query", False)
-        ):
-            if (
-                getattr(args, "acq_type", None) is None
-                or normalize_acquisition_type(args.acq_type) != "AVERage"
-            ):
-                raise OscilloscopeError("--count can only be used with --type average")
-            validate_acquisition_count(args.acq_count)
-    if getattr(args, "command", None) == "segmented-memory":
-        if getattr(args, "enable", False) and args.segments is None:
-            raise ParameterValidationError("segmented-memory --enable requires --segments")
-        if not getattr(args, "enable", False) and args.segments is not None:
-            raise ParameterValidationError(
-                "--segments is only valid with segmented-memory --enable"
-            )
-        if (
-            args.segments is not None
-            and (getattr(args, "simulate", False) or getattr(args, "dry_run", False))
-        ):
-            validate_segmented_count(
-                args.segments, capabilities_for_model_id(args.model)
-            )
-    if getattr(args, "command", None) == "segmented-capture":
-        request = _segmented_capture_request(args)
-        validate_segmented_capture_request(request)
-        validate_segmented_capture_output_path(request.output_dir)
-        capabilities = _pre_open_capabilities(args)
-        if capabilities is not None:
-            validate_segmented_capture_request(request, capabilities)
-    if getattr(args, "command", None) == "fft":
-        _validate_fft_args(args)
-    if getattr(args, "command", None) == "screenshot":
-        _validate_screenshot_args(args)
-    if getattr(args, "command", None) == "channel-impedance":
-        if (
-            getattr(args, "impedance_value", None) == "fifty"
-            and not getattr(args, "allow_50_ohm", False)
-        ):
-            raise ParameterValidationError(
-                "setting 50 ohm input impedance requires --allow-50-ohm."
-            )
-    if getattr(args, "command", None) == "display-persistence":
-        actions = [
-            bool(getattr(args, "query", False)),
-            getattr(args, "mode", None) is not None,
-            getattr(args, "seconds", None) is not None,
-        ]
-        if sum(actions) != 1:
-            raise ParameterValidationError(
-                "display-persistence requires exactly one of --query, --mode, or --seconds."
-            )
-        if getattr(args, "mode", None) is not None:
-            validate_display_persistence(args.mode)
-        if getattr(args, "seconds", None) is not None:
-            validate_display_persistence(args.seconds)
-    if getattr(args, "command", None) == "display-intensity":
-        actions = [
-            bool(getattr(args, "query", False)),
-            getattr(args, "value", None) is not None,
-        ]
-        if sum(actions) != 1:
-            raise ParameterValidationError(
-                "display-intensity requires exactly one of --query or --value."
-            )
-        if getattr(args, "value", None) is not None:
-            validate_display_intensity(args.value)
-    if getattr(args, "command", None) == "display-vectors":
-        actions = [
-            bool(getattr(args, "query", False)),
-            bool(getattr(args, "on", False)),
-            bool(getattr(args, "off", False)),
-        ]
-        if sum(actions) != 1:
-            raise ParameterValidationError(
-                "display-vectors requires exactly one of --query or --on."
-            )
-        if getattr(args, "off", False):
-            raise ParameterValidationError("display-vectors set OFF is not supported.")
-    if getattr(args, "command", None) in {
-        "measure-show",
-        "measure-source",
-        "measure-window",
-        "reference-save",
-        "reference-display",
-        "reference-label",
-        "reference-clear",
-        "reference-query",
-    }:
-        _validate_measurement_reference_args(args)
-    if getattr(args, "command", None) in {
-        "dvm-enable",
-        "dvm-source",
-        "dvm-mode",
-        "dvm-auto-range",
-    }:
-        _validate_dvm_args(args)
-    if getattr(args, "command", None) in {
-        "demo-query",
-        "demo-output",
-        "demo-function",
-        "demo-phase",
-    }:
-        _validate_demo_args(args)
-    if getattr(args, "command", None) in {
-        "wgen-query",
-        "wgen-output",
-        "wgen-function",
-        "wgen-frequency",
-        "wgen-voltage",
-        "wgen-offset",
-        "wgen-load",
-    }:
-        _validate_wgen_args(args)
-    if getattr(args, "command", None) in {
-        "serial-query",
-        "serial-mode",
-        "serial-display",
-        "serial-uart",
-        "serial-trigger-uart",
-        "serial-i2c",
-        "serial-spi",
-        "serial-can",
-        "serial-lister-query",
-        "serial-lister-display",
-        "serial-lister-reference",
-        "serial-lister-export",
-    }:
-        _validate_serial_args(args)
-    if getattr(args, "command", None) in {
-        "search-state",
-        "search-mode",
-        "search-count",
-        "search-event",
-    }:
-        _validate_search_args(args)
-    if getattr(args, "command", None) in {
-        "serial-search-uart",
-        "serial-search-i2c",
-        "serial-search-spi",
-        "serial-search-can",
-    }:
-        _validate_serial_search_args(args)
-    if getattr(args, "command", None) in {
-        "save-pwd",
-        "save-filename",
-        "save-image-format",
-        "save-image-palette",
-        "save-image-ink-saver",
-        "save-image-factors",
-        "save-image",
-        "save-waveform-format",
-        "save-waveform-length",
-        "save-waveform-length-max",
-        "save-waveform",
-    }:
-        _validate_save_export_args(args)
-    if getattr(args, "command", None) == "trigger-edge":
-        _validate_trigger_edge_args(args)
-    if getattr(args, "command", None) == "trigger-edge-source":
-        _validate_trigger_edge_source_args(args)
-    if getattr(args, "command", None) == "trigger-edge-slope":
-        _validate_trigger_edge_slope_args(args)
-    if getattr(args, "command", None) == "trigger-edge-level":
-        _validate_trigger_edge_level_args(args)
-    if getattr(args, "command", None) == "external-trigger-range":
-        _validate_external_trigger_range_args(args)
-    if getattr(args, "command", None) == "trigger-edge-external-level":
-        _validate_trigger_edge_external_level_args(args)
-    if getattr(args, "command", None) == "external-trigger-probe":
-        _validate_external_trigger_probe_args(args)
-    if getattr(args, "command", None) == "external-trigger-units":
-        _validate_external_trigger_units_args(args)
-    if getattr(args, "command", None) == "external-trigger-settings":
-        _validate_external_trigger_settings_args(args)
-    if getattr(args, "command", None) == "trigger-sweep":
-        _validate_trigger_sweep_args(args)
-    if getattr(args, "command", None) == "trigger-noise-reject":
-        _validate_trigger_reject_args(args, "trigger-noise-reject")
-    if getattr(args, "command", None) == "trigger-hf-reject":
-        _validate_trigger_reject_args(args, "trigger-hf-reject")
-    if getattr(args, "command", None) == "trigger-edge-coupling":
-        _validate_edge_coupling_args(args)
-    if getattr(args, "command", None) == "trigger-edge-reject":
-        _validate_edge_reject_args(args)
-    if getattr(args, "command", None) == "trigger-pulse-width":
-        _validate_trigger_glitch_args(args)
-    if getattr(args, "command", None) == "trigger-runt":
-        _validate_trigger_runt_args(args)
-    if getattr(args, "command", None) == "trigger-transition":
-        _validate_trigger_transition_args(args)
-    if getattr(args, "command", None) == "trigger-delay":
-        _validate_trigger_delay_args(args)
-    if getattr(args, "command", None) == "trigger-setup-hold":
-        _validate_trigger_setup_hold_args(args)
-    if getattr(args, "command", None) == "trigger-edge-burst":
-        _validate_trigger_edge_burst_args(args)
-    if getattr(args, "command", None) == "trigger-tv":
-        _validate_trigger_tv_args(args)
-    if getattr(args, "command", None) == "trigger-pattern":
-        _validate_trigger_pattern_args(args)
-    if getattr(args, "command", None) == "trigger-or":
-        _validate_trigger_or_args(args)
-    if getattr(args, "command", None) in {
-        "math-display",
-        "math-vertical",
-        "math-operator",
-        "math-composite-source",
-        "math-transform",
-        "math-filter",
-        "math-visualization",
-        "math-clear",
-    }:
-        _validate_math_args(args)
-
-
-def _validate_math_args(args: argparse.Namespace) -> None:
-    capabilities = _pre_open_capabilities(args)
-    if args.command == "math-composite-source":
-        configure_values = (
-            args.math_composite_operation,
-            args.source1,
-            args.source2,
-        )
-        if args.math_composite_query:
-            if any(value is not None for value in configure_values):
-                raise ParameterValidationError(
-                    "math-composite-source --query cannot be combined with "
-                    "configure options."
-                )
-            math_composite_source_query_commands(capabilities=capabilities)
-            return
-        if any(value is None for value in configure_values):
-            raise ParameterValidationError(
-                "math-composite-source configure requires --operation, "
-                "--source1, and --source2."
-            )
-        math_composite_source_commands(
-            args.math_composite_operation,
-            args.source1,
-            args.source2,
-            capabilities=capabilities,
-        )
-        return
-
-    if args.command == "math-display":
-        if args.math_display_action == "query":
-            math_display_query(args.function, capabilities=capabilities)
-        else:
-            math_display_command(
-                args.function,
-                args.math_display_action == "on",
-                capabilities=capabilities,
-            )
-        return
-
-    if args.command == "math-vertical":
-        if args.math_vertical_query:
-            if any(
-                value is not None
-                for value in (args.scale, args.range_value, args.offset)
-            ):
-                raise ParameterValidationError(
-                    "math-vertical --query cannot be combined with configure options."
-                )
-            math_vertical_query_commands(args.function, capabilities=capabilities)
-            return
-        math_vertical_commands(
-            args.function,
-            scale=args.scale,
-            range_value=args.range_value,
-            offset=args.offset,
-            capabilities=capabilities,
-        )
-        return
-
-    if args.command == "math-transform":
-        configure_values = (
-            args.math_transform_operation,
-            args.source,
-            args.input_offset,
-            args.gain,
-            args.linear_offset,
-        )
-        if args.math_transform_query:
-            if any(value is not None for value in configure_values):
-                raise ParameterValidationError(
-                    "math-transform --query cannot be combined with configure options."
-                )
-            math_transform_query_commands(
-                args.function, capabilities=capabilities
-            )
-            return
-        if args.math_transform_operation is None or args.source is None:
-            raise ParameterValidationError(
-                "math-transform configure requires --operation and --source."
-            )
-        math_transform_commands(
-            args.function,
-            args.math_transform_operation,
-            args.source,
-            input_offset=args.input_offset,
-            gain=args.gain,
-            linear_offset=args.linear_offset,
-            capabilities=capabilities,
-        )
-        return
-
-    if args.command == "math-filter":
-        configure_values = (
-            args.math_filter_operation,
-            args.source,
-            args.cutoff_hz,
-            args.average_count,
-            args.smooth_points,
-        )
-        if args.math_filter_query:
-            if any(value is not None for value in configure_values):
-                raise ParameterValidationError(
-                    "math-filter --query cannot be combined with configure options."
-                )
-            math_filter_query_commands(args.function, capabilities=capabilities)
-            return
-        if args.math_filter_operation is None or args.source is None:
-            raise ParameterValidationError(
-                "math-filter configure requires --operation and --source."
-            )
-        math_filter_commands(
-            args.function,
-            args.math_filter_operation,
-            args.source,
-            cutoff_hz=args.cutoff_hz,
-            average_count=args.average_count,
-            smooth_points=args.smooth_points,
-            capabilities=capabilities,
-        )
-        return
-
-    if args.command == "math-visualization":
-        configure_values = (
-            args.math_visualization_operation,
-            args.source,
-            args.source2,
-            args.measurement,
-            args.measurement_slot,
-        )
-        if args.math_visualization_query:
-            if any(value is not None for value in configure_values):
-                raise ParameterValidationError(
-                    "math-visualization --query cannot be combined with "
-                    "configure options."
-                )
-            math_visualization_query_commands(
-                args.function, capabilities=capabilities
-            )
-            return
-        if args.math_visualization_operation is None:
-            raise ParameterValidationError(
-                "math-visualization configure requires --operation."
-            )
-        math_visualization_commands(
-            args.function,
-            args.math_visualization_operation,
-            source=args.source,
-            source2=args.source2,
-            measurement=args.measurement,
-            measurement_slot=args.measurement_slot,
-            capabilities=capabilities,
-        )
-        return
-
-    if args.command == "math-clear":
-        math_clear_command(args.function, capabilities=capabilities)
-        return
-
-    configure_values = (args.math_operation, args.source1, args.source2)
-    if args.math_operator_query:
-        if any(value is not None for value in configure_values):
-            raise ParameterValidationError(
-                "math-operator --query cannot be combined with configure options."
-            )
-        math_operator_query_commands(args.function, capabilities=capabilities)
-        return
-    if any(value is None for value in configure_values):
-        raise ParameterValidationError(
-            "math-operator configure requires --operation, --source1, and --source2."
-        )
-    math_operator_commands(
-        args.function,
-        args.math_operation,
-        args.source1,
-        args.source2,
-        capabilities=capabilities,
-    )
-
-
-def _pre_open_capabilities(
-    args: argparse.Namespace,
-) -> ScopeCapabilities | None:
-    if (
-        bool(getattr(args, "simulate", False))
-        or bool(getattr(args, "dry_run", False))
-        or bool(getattr(args, "_worker_live_validation", False))
-    ):
-        return capabilities_for_model_id(args.model)
-    return None
-
-
-def _validate_dvm_args(args: argparse.Namespace) -> None:
-    command = args.command
-    query = bool(getattr(args, "query", False))
-    configure_key = {
-        "dvm-enable": "enabled",
-        "dvm-source": "channel",
-        "dvm-mode": "mode",
-        "dvm-auto-range": "enabled",
-    }[command]
-    value = getattr(args, configure_key, None)
-    if query:
-        if value is not None:
-            raise ParameterValidationError(
-                f"{command} --query cannot be combined with configure options."
-            )
-        return
-    if value is None:
-        raise ParameterValidationError(
-            f"{command} configure requires --{configure_key.replace('_', '-')}."
-        )
-    if command == "dvm-source":
-        capabilities = _pre_open_capabilities(args)
-        if capabilities is not None:
-            validate_analog_channel(value, capabilities)
-
-
-def _validate_demo_args(args: argparse.Namespace) -> None:
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None and not capabilities.supports_demo:
-        raise ParameterValidationError(
-            "Demo Output Pack v1 is not supported by the selected model profile."
-        )
-    if (
-        capabilities is not None
-        and args.command == "demo-function"
-        and not args.query
-    ):
-        validate_demo_function(args.function, capabilities)
-    if args.command == "demo-phase" and not args.query:
-        validate_demo_phase(args.degrees)
-
-
-def _validate_wgen_args(args: argparse.Namespace) -> None:
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None and not capabilities.supports_wgen:
-        raise ParameterValidationError(
-            "WGEN Basic P1 is not supported by the selected model profile."
-        )
-    if args.command == "wgen-query" or args.query:
-        return
-    if args.command == "wgen-function":
-        validate_wgen_function(args.function)
-    elif args.command == "wgen-frequency":
-        validate_wgen_frequency(args.hz)
-    elif args.command == "wgen-voltage":
-        validate_wgen_amplitude(args.amplitude)
-    elif args.command == "wgen-offset":
-        validate_wgen_offset(args.volts)
-
-
-def _validate_serial_args(args: argparse.Namespace) -> None:
-    if args.command in {
-        "serial-lister-query",
-        "serial-lister-display",
-        "serial-lister-reference",
-        "serial-lister-export",
-    }:
-        _validate_serial_lister_args(args)
-        return
-    capabilities = _pre_open_capabilities(args)
-    if args.command == "serial-trigger-uart":
-        validate_serial_uart_trigger_request(
-            args.bus,
-            query=args.query,
-            type=args.type,
-            data=args.data,
-            qualifier=args.qualifier,
-            capabilities=capabilities,
-        )
-        return
-    trigger_validators = {
-        "serial-trigger-i2c": validate_serial_i2c_trigger_request,
-        "serial-trigger-spi": validate_serial_spi_trigger_request,
-        "serial-trigger-can": validate_serial_can_trigger_request,
-    }
-    if args.command in trigger_validators:
-        trigger_validators[args.command](
-            args.bus,
-            query=args.query,
-            **{
-                key: getattr(args, key)
-                for key in {
-                    "serial-trigger-i2c": {"type", "address", "data", "data2", "qualifier"},
-                    "serial-trigger-spi": {"type", "width", "data"},
-                    "serial-trigger-can": {"type", "id", "id_mode", "data", "data_length"},
-                }[args.command]
-            },
-            capabilities=capabilities,
-        )
-        return
-    if capabilities is not None:
-        validate_serial_bus(args.bus, capabilities)
-        if args.command == "serial-mode" and not args.query:
-            validate_serial_mode(args.mode, capabilities)
-    if args.command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
-        _validate_serial_protocol_args(args, capabilities)
-
-
-def _validate_serial_lister_args(args: argparse.Namespace) -> None:
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is None:
-        return
-    require_serial_decode(capabilities)
-    if args.command == "serial-lister-display" and not args.query:
-        validate_serial_lister_display(args.selection, capabilities)
-    elif args.command == "serial-lister-reference" and not args.query:
-        validate_serial_lister_reference(args.reference, capabilities)
-
-
-def _validate_serial_protocol_args(
-    args: argparse.Namespace, capabilities: ScopeCapabilities | None
-) -> None:
-    fields_by_command = {
-        "serial-uart": ("rx_source", "tx_source", "baud_rate", "data_bits", "parity", "polarity", "bit_order"),
-        "serial-i2c": ("clock_source", "data_source", "address_size"),
-        "serial-spi": ("clock_source", "mosi_source", "miso_source", "frame_source", "clock_slope", "bit_order", "word_width", "framing", "clock_timeout"),
-        "serial-can": ("source", "baud_rate", "signal_definition", "sample_point"),
-    }
-    fields = fields_by_command[args.command]
-    supplied = {field: getattr(args, field) for field in fields if getattr(args, field) is not None}
-    if args.query:
-        if supplied:
-            raise ParameterValidationError(
-                f"{args.command} --query cannot be combined with configure arguments."
-            )
-        return
-    if not supplied:
-        raise ParameterValidationError(
-            f"{args.command} configure requires at least one setting."
-        )
-    if capabilities is None:
-        return
-    protocol_mode = {
-        "serial-uart": "uart",
-        "serial-i2c": "i2c",
-        "serial-spi": "spi",
-        "serial-can": "can",
-    }[args.command]
-    validate_serial_mode(protocol_mode, capabilities)
-    if args.command == "serial-uart":
-        serial_uart_configure_commands(
-            args.bus,
-            _serial_cli_values(
-                capabilities,
-                protocol=args.command,
-                rx_source=args.rx_source,
-                tx_source=args.tx_source,
-                baud_rate=args.baud_rate,
-                data_bits=args.data_bits,
-                parity=args.parity,
-                polarity=args.polarity,
-                bit_order=args.bit_order,
-            ),
-        )
-    elif args.command == "serial-i2c":
-        serial_i2c_configure_commands(
-            args.bus,
-            _serial_cli_values(
-                capabilities,
-                protocol=args.command,
-                clock_source=args.clock_source,
-                data_source=args.data_source,
-                address_size=args.address_size,
-            ),
-        )
-    elif args.command == "serial-spi":
-        serial_spi_configure_commands(
-            args.bus,
-            _serial_cli_values(
-                capabilities,
-                protocol=args.command,
-                clock_source=args.clock_source,
-                mosi_source=args.mosi_source,
-                miso_source=args.miso_source,
-                frame_source=args.frame_source,
-                clock_slope=args.clock_slope,
-                bit_order=args.bit_order,
-                word_width=args.word_width,
-                framing=args.framing,
-                clock_timeout=args.clock_timeout,
-            ),
-        )
-    else:
-        serial_can_configure_commands(
-            args.bus,
-            _serial_cli_values(
-                capabilities,
-                protocol=args.command,
-                source=args.source,
-                baud_rate=args.baud_rate,
-                signal_definition=args.signal_definition,
-                sample_point=args.sample_point,
-            ),
-        )
-
-
-def _serial_cli_values(
-    capabilities: ScopeCapabilities, *, protocol: str | None = None, **values: object
-) -> dict[str, object]:
-    normalized = dict(values)
-    source_fields = {
-        "rx_source", "tx_source", "clock_source", "data_source", "mosi_source",
-        "miso_source", "frame_source", "source",
-    }
-    for field in source_fields:
-        if normalized.get(field) is not None:
-            normalized[field] = normalize_serial_source(normalized[field], capabilities)
-    if normalized.get("parity") is not None:
-        normalized["parity"] = normalize_uart_parity(normalized["parity"])
-    if normalized.get("polarity") is not None:
-        normalized["polarity"] = normalize_uart_polarity(normalized["polarity"])
-    if normalized.get("bit_order") is not None:
-        normalized["bit_order"] = normalize_serial_bit_order(normalized["bit_order"])
-    if normalized.get("address_size") is not None:
-        normalized["address_size"] = normalize_i2c_address_size(normalized["address_size"])
-    if normalized.get("clock_slope") is not None:
-        normalized["clock_slope"] = normalize_spi_clock_slope(normalized["clock_slope"])
-    if normalized.get("framing") is not None:
-        normalized["framing"] = normalize_spi_framing(normalized["framing"])
-    if normalized.get("signal_definition") is not None:
-        normalized["signal_definition"] = normalize_can_signal_definition(normalized["signal_definition"])
-    if normalized.get("baud_rate") is not None:
-        if protocol == "serial-can":
-            normalized["baud_rate"] = validate_can_baud_rate(normalized["baud_rate"])
-        else:
-            normalized["baud_rate"] = validate_uart_baud_rate(normalized["baud_rate"], capabilities)
-    if normalized.get("data_bits") is not None:
-        if isinstance(normalized["data_bits"], bool) or not isinstance(normalized["data_bits"], int) or not 5 <= normalized["data_bits"] <= 9:
-            raise ParameterValidationError("UART data bits must be an integer in range 5-9.")
-    if normalized.get("word_width") is not None:
-        if isinstance(normalized["word_width"], bool) or not isinstance(normalized["word_width"], int) or not 4 <= normalized["word_width"] <= 16:
-            raise ParameterValidationError("SPI word width must be an integer in range 4-16.")
-    if normalized.get("clock_timeout") is not None:
-        value = normalized["clock_timeout"]
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 1e-7 <= float(value) <= 10.0 or not math.isfinite(float(value)):
-            raise ParameterValidationError("SPI clock timeout must be a number in range 1e-07-10.0.")
-    if protocol == "serial-spi":
-        validate_spi_framing_clock_timeout(
-            normalized.get("framing"), normalized.get("clock_timeout")
-        )
-    if normalized.get("sample_point") is not None:
-        normalized["sample_point"] = validate_can_sample_point(normalized["sample_point"], capabilities)
-    return normalized
-
-
-def _validate_search_args(args: argparse.Namespace) -> None:
-    command = args.command
-    capabilities = _pre_open_capabilities(args)
-    if command == "search-event":
-        if capabilities is not None and not capabilities.supports_search_event_navigation:
-            raise ParameterValidationError(
-                "Search event navigation is not supported by the selected model profile."
-            )
-        if args.query and args.event is not None:
-            raise ParameterValidationError(
-                "search-event --query cannot be combined with configure options."
-            )
-        if not args.query and args.event is None:
-            raise ParameterValidationError(
-                "search-event configure requires --event."
-            )
-        if not args.query and args.event is not None:
-            validate_search_event(args.event)
-        return
-
-    if capabilities is not None and not capabilities.supports_search_basic:
-        raise ParameterValidationError(
-            "Search Basic Pack v1 is not supported by the selected model profile."
-        )
-    if command == "search-count":
-        return
-    query = bool(getattr(args, "query", False))
-    configure_key = "enabled" if command == "search-state" else "mode"
-    value = getattr(args, configure_key, None)
-    if query:
-        if value is not None:
-            raise ParameterValidationError(
-                f"{command} --query cannot be combined with configure options."
-            )
-        return
-    if value is None:
-        raise ParameterValidationError(
-            f"{command} configure requires --{configure_key}."
-        )
-    if command == "search-mode" and capabilities is not None:
-        validate_search_mode(value, capabilities)
-
-
-def _extract_serial_search_settings(args: argparse.Namespace) -> dict[str, object]:
-    if args.command == "serial-search-can":
-        settings = {}
-        if getattr(args, "mode", None) is not None:
-            settings["mode"] = args.mode
-        if getattr(args, "data", None) is not None:
-            settings["data"] = args.data
-        if getattr(args, "data_length", None) is not None:
-            settings["data_length"] = args.data_length
-        if getattr(args, "id", None) is not None:
-            settings["id_val"] = args.id
-        if getattr(args, "id_mode", None) is not None:
-            settings["id_mode"] = args.id_mode
-        return settings
-    fields = {
-        "serial-search-uart": ("mode", "data", "qualifier"),
-        "serial-search-i2c": ("mode", "address", "data", "data2", "qualifier"),
-        "serial-search-spi": ("mode", "data", "width"),
-    }[args.command]
-    return {f: getattr(args, f) for f in fields if getattr(args, f) is not None}
-
-
-def _canonical_serial_search_settings(
-    args: argparse.Namespace,
-) -> dict[str, object]:
-    settings = _extract_serial_search_settings(args)
-    if "mode" not in settings or settings["mode"] is None:
-        raise ParameterValidationError(f"{args.command} configure requires --mode.")
-
-    protocol = args.command.removeprefix("serial-search-")
-    canonical_settings = dict(settings)
-    if protocol == "uart":
-        canonical_settings["mode"] = validate_uart_search_mode(settings["mode"])
-        if "data" in settings:
-            canonical_settings["data"] = validate_uart_data(settings["data"])
-        if "qualifier" in settings:
-            canonical_settings["qualifier"] = validate_search_qualifier(settings["qualifier"])
-    elif protocol == "i2c":
-        canonical_settings["mode"] = validate_i2c_search_mode(settings["mode"])
-        if "address" in settings:
-            canonical_settings["address"] = validate_i2c_pattern_value(settings["address"], "address")
-        if "data" in settings:
-            canonical_settings["data"] = validate_i2c_pattern_value(settings["data"], "data")
-        if "data2" in settings:
-            canonical_settings["data2"] = validate_i2c_pattern_value(settings["data2"], "data2")
-        if "qualifier" in settings:
-            canonical_settings["qualifier"] = validate_search_qualifier(settings["qualifier"])
-    elif protocol == "spi":
-        canonical_settings["mode"] = validate_spi_search_mode(settings["mode"])
-        if "data" in settings:
-            canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
-        if "width" in settings:
-            canonical_settings["width"] = validate_spi_width(settings["width"])
-        validate_spi_search_pattern_width(
-            canonical_settings.get("data"), canonical_settings.get("width")
-        )
-    elif protocol == "can":
-        canonical_settings["mode"] = validate_can_search_mode(settings["mode"])
-        if "data" in settings:
-            canonical_settings["data"] = validate_pattern_hex_x(settings["data"], "data")
-        if "data_length" in settings:
-            canonical_settings["data_length"] = validate_can_data_length(settings["data_length"])
-        if "id_val" in settings:
-            canonical_settings["id_val"] = validate_pattern_hex_x(settings["id_val"], "id")
-        if "id_mode" in settings:
-            canonical_settings["id_mode"] = validate_can_id_mode(settings["id_mode"])
-        validate_can_search_criteria(
-            canonical_settings["mode"],
-            data=canonical_settings.get("data"),
-            data_length=canonical_settings.get("data_length"),
-            id_val=canonical_settings.get("id_val"),
-            id_mode=canonical_settings.get("id_mode"),
-        )
-    return canonical_settings
-
-
-def _validate_serial_search_args(args: argparse.Namespace) -> None:
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None:
-        require_search_basic(capabilities)
-        validate_serial_search_bus(args.bus, capabilities)
-        protocol = args.command.removeprefix("serial-search-")
-        validate_serial_mode(protocol, capabilities)
-
-    query = bool(getattr(args, "query", False))
-    settings = _extract_serial_search_settings(args)
-    if query:
-        if settings:
-            raise ParameterValidationError(
-                f"{args.command} --query cannot be combined with configure options."
-            )
-        return
-
-    if "mode" not in settings:
-        raise ParameterValidationError(f"{args.command} configure requires --mode.")
-
-    protocol = args.command.removeprefix("serial-search-")
-    if protocol == "uart":
-        validate_uart_search_mode(settings["mode"])
-        if "data" in settings:
-            validate_uart_data(settings["data"])
-        if "qualifier" in settings:
-            validate_search_qualifier(settings["qualifier"])
-    elif protocol == "i2c":
-        validate_i2c_search_mode(settings["mode"])
-        if "address" in settings:
-            validate_i2c_pattern_value(settings["address"], "address")
-        if "data" in settings:
-            validate_i2c_pattern_value(settings["data"], "data")
-        if "data2" in settings:
-            validate_i2c_pattern_value(settings["data2"], "data2")
-        if "qualifier" in settings:
-            validate_search_qualifier(settings["qualifier"])
-    elif protocol == "spi":
-        validate_spi_search_mode(settings["mode"])
-        canonical_data = None
-        canonical_width = None
-        if "data" in settings:
-            canonical_data = validate_pattern_hex_x(settings["data"], "data")
-        if "width" in settings:
-            canonical_width = validate_spi_width(settings["width"])
-        validate_spi_search_pattern_width(canonical_data, canonical_width)
-    elif protocol == "can":
-        canonical_mode = validate_can_search_mode(settings["mode"])
-        canonical_data = None
-        canonical_data_length = None
-        canonical_id = None
-        canonical_id_mode = None
-        if "data" in settings:
-            canonical_data = validate_pattern_hex_x(settings["data"], "data")
-        if "data_length" in settings:
-            canonical_data_length = validate_can_data_length(settings["data_length"])
-        if "id_val" in settings:
-            canonical_id = validate_pattern_hex_x(settings["id_val"], "id")
-        if "id_mode" in settings:
-            canonical_id_mode = validate_can_id_mode(settings["id_mode"])
-        validate_can_search_criteria(
-            canonical_mode,
-            data=canonical_data,
-            data_length=canonical_data_length,
-            id_val=canonical_id,
-            id_mode=canonical_id_mode,
-        )
-
-
-def _validate_save_export_args(args: argparse.Namespace) -> None:
-    if args.command == "save-pwd" and not args.query:
-        validate_save_quoted_string(args.path, label="Save path")
-    elif args.command == "save-filename" and not args.query:
-        validate_save_filename_base(args.name)
-    elif args.command == "save-image":
-        validate_save_quoted_string(args.filename, label="Save image filename")
-    elif args.command == "save-waveform-length" and not args.query:
-        validate_save_waveform_length(args.points)
-    elif args.command == "save-waveform":
-        validate_save_quoted_string(args.filename, label="Save waveform filename")
-
-
-def _validate_measurement_reference_args(args: argparse.Namespace) -> None:
-    command = args.command
-    if command == "measure-show" and getattr(args, "off", False):
-        raise ParameterValidationError(
-            "measure-show OFF is not supported in v1; use --on or --query."
-        )
-    if command == "measure-source":
-        query = bool(getattr(args, "query", False))
-        source1 = getattr(args, "source_channel", None)
-        source2 = getattr(args, "source2_channel", None)
-        if query and (source1 is not None or source2 is not None):
-            raise ParameterValidationError(
-                "measure-source --query cannot be combined with source arguments."
-            )
-        if not query and source1 is None:
-            raise ParameterValidationError(
-                "measure-source configure requires --source-channel."
-            )
-    if command.startswith("reference-"):
-        capabilities = _pre_open_capabilities(args)
-        if capabilities is not None:
-            validate_reference_slot(args.slot, capabilities)
-            if command == "reference-save":
-                validate_analog_channel(args.source_channel, capabilities)
-        if command == "reference-label" and not args.query:
-            validate_reference_label(args.text)
-
-
-def _validate_trigger_edge_args(args: argparse.Namespace) -> None:
-    configure_values = (
-        getattr(args, "source_channel", None),
-        getattr(args, "level", None),
-        getattr(args, "slope", None),
-    )
-    if getattr(args, "edge_query", False):
-        if any(value is not None for value in configure_values):
-            raise ParameterValidationError(
-                "trigger-edge --query cannot be combined with configure options."
-            )
-        return
-    if not all(value is not None for value in configure_values):
-        raise ParameterValidationError(
-            "trigger-edge configure requires --source-channel, --level, and --slope."
-        )
-
-
-def _validate_trigger_edge_source_args(args: argparse.Namespace) -> None:
-    source_channel = getattr(args, "source_channel", None)
-    source = getattr(args, "source", None)
-    if getattr(args, "trigger_edge_source_query", False):
-        if source_channel is not None or source is not None:
-            raise ParameterValidationError(
-                "trigger-edge-source --query cannot be combined with configure options."
-            )
-        return
-    if source_channel is not None and source is not None:
-        raise ParameterValidationError(
-            "trigger-edge-source --source-channel cannot be combined with --source."
-        )
-    if source_channel is None and source is None:
-        raise ParameterValidationError(
-            "trigger-edge-source requires --query, --source-channel, or --source."
-        )
-
-
-def _validate_trigger_edge_slope_args(args: argparse.Namespace) -> None:
-    query = getattr(args, "trigger_edge_slope_query", False)
-    slope = getattr(args, "slope", None)
-    if query:
-        if slope is not None:
-            raise ParameterValidationError(
-                "trigger-edge-slope --query cannot be combined with --slope."
-            )
-        return
-    if slope is None:
-        raise ParameterValidationError("trigger-edge-slope requires --query or --slope.")
-
-
-def _validate_trigger_edge_level_args(args: argparse.Namespace) -> None:
-    source_channel = getattr(args, "source_channel", None)
-    query = getattr(args, "trigger_edge_level_query", False)
-    level_volts = getattr(args, "level_volts", None)
-    if source_channel is None:
-        raise ParameterValidationError("trigger-edge-level requires --source-channel.")
-    if query:
-        if level_volts is not None:
-            raise ParameterValidationError(
-                "trigger-edge-level --query cannot be combined with --level-volts."
-            )
-        return
-    if level_volts is None:
-        raise ParameterValidationError(
-            "trigger-edge-level requires --query or --level-volts."
-        )
-    validate_trigger_level(level_volts)
-
-
-def _validate_external_trigger_range_args(args: argparse.Namespace) -> None:
-    query = getattr(args, "external_trigger_range_query", False)
-    range_volts = getattr(args, "range_volts", None)
-    if query:
-        if range_volts is not None:
-            raise ParameterValidationError(
-                "external-trigger-range --query cannot be combined with --range-volts."
-            )
-        return
-    if range_volts is None:
-        raise ParameterValidationError(
-            "external-trigger-range requires --query or --range-volts."
-        )
-    validate_external_trigger_range(range_volts)
-
-
-def _validate_trigger_edge_external_level_args(args: argparse.Namespace) -> None:
-    query = getattr(args, "trigger_edge_external_level_query", False)
-    level_volts = getattr(args, "level_volts", None)
-    if query:
-        if level_volts is not None:
-            raise ParameterValidationError(
-                "trigger-edge-external-level --query cannot be combined with --level-volts."
-            )
-        return
-    if level_volts is None:
-        raise ParameterValidationError(
-            "trigger-edge-external-level requires --query or --level-volts."
-        )
-    validate_trigger_level(level_volts)
-
-
-def _validate_external_trigger_probe_args(args: argparse.Namespace) -> None:
-    query = getattr(args, "external_trigger_probe_query", False)
-    attenuation = getattr(args, "attenuation", None)
-    if query:
-        if attenuation is not None:
-            raise ParameterValidationError(
-                "external-trigger-probe --query cannot be combined with --attenuation."
-            )
-        return
-    if attenuation is None:
-        raise ParameterValidationError(
-            "external-trigger-probe requires --query or --attenuation."
-        )
-    validate_external_trigger_probe_attenuation(attenuation)
-
-
-def _validate_external_trigger_units_args(args: argparse.Namespace) -> None:
-    query = getattr(args, "external_trigger_units_query", False)
-    units = getattr(args, "units", None)
-    if query:
-        if units is not None:
-            raise ParameterValidationError(
-                "external-trigger-units --query cannot be combined with --units."
-            )
-        return
-    if units is None:
-        raise ParameterValidationError("external-trigger-units requires --query or --units.")
-    validate_external_trigger_units(units)
-
-
-def _validate_external_trigger_settings_args(args: argparse.Namespace) -> None:
-    if not getattr(args, "query", False):
-        raise ParameterValidationError("external-trigger-settings requires --query.")
-
-
-def _validate_trigger_sweep_args(args: argparse.Namespace) -> None:
-    if getattr(args, "trigger_sweep_query", False):
-        if getattr(args, "mode", None) is not None:
-            raise ParameterValidationError(
-                "trigger-sweep --query cannot be combined with configure options."
-            )
-        return
-    if getattr(args, "mode", None) is None:
-        raise ParameterValidationError("trigger-sweep configure requires --mode.")
-    normalize_trigger_sweep(args.mode)
-
-
-def _validate_trigger_reject_args(args: argparse.Namespace, command: str) -> None:
-    query_attr = (
-        "trigger_noise_reject_query"
-        if command == "trigger-noise-reject"
-        else "trigger_hf_reject_query"
-    )
-    if getattr(args, query_attr, False):
-        if getattr(args, "enabled", None) is not None:
-            raise ParameterValidationError(
-                f"{command} --query cannot be combined with configure options."
-            )
-        return
-    if getattr(args, "enabled", None) is None:
-        raise ParameterValidationError(f"{command} configure requires --enabled.")
-    if not isinstance(args.enabled, bool):
-        raise ParameterValidationError(f"{command} --enabled must be true or false.")
-
-
-def _validate_edge_coupling_args(args: argparse.Namespace) -> None:
-    if getattr(args, "trigger_edge_coupling_query", False):
-        if getattr(args, "coupling", None) is not None:
-            raise ParameterValidationError(
-                "trigger-edge-coupling --query cannot be combined with configure options."
-            )
-        return
-    if getattr(args, "coupling", None) is None:
-        raise ParameterValidationError(
-            "trigger-edge-coupling configure requires --coupling."
-        )
-
-
-def _validate_edge_reject_args(args: argparse.Namespace) -> None:
-    if getattr(args, "trigger_edge_reject_query", False):
-        if getattr(args, "reject", None) is not None:
-            raise ParameterValidationError(
-                "trigger-edge-reject --query cannot be combined with configure options."
-            )
-        return
-    if getattr(args, "reject", None) is None:
-        raise ParameterValidationError(
-            "trigger-edge-reject configure requires --reject."
-        )
-
-
-def _validate_trigger_glitch_args(args: argparse.Namespace) -> None:
-    set_values = (
-        getattr(args, "channel", None),
-        getattr(args, "polarity", None),
-        getattr(args, "qualifier", None),
-        getattr(args, "time_seconds", None),
-        getattr(args, "min_time_seconds", None),
-        getattr(args, "max_time_seconds", None),
-        getattr(args, "level_volts", None),
-    )
-    if getattr(args, "glitch_query", False):
-        if any(value is not None for value in set_values):
-            raise ParameterValidationError(
-                "trigger-pulse-width --query cannot be combined with configure options."
-            )
-        return
-
-    if args.channel is None or args.polarity is None or args.qualifier is None:
-        raise ParameterValidationError(
-            "trigger-pulse-width configure requires --channel, --polarity, and --qualifier."
-        )
-
-    qualifier = normalize_glitch_qualifier(args.qualifier)
-    if qualifier in {"GREaterthan", "LESSthan"}:
-        if args.time_seconds is None:
-            raise ParameterValidationError(
-                "trigger-pulse-width greater-than and less-than require --time-seconds."
-            )
-        if args.min_time_seconds is not None or args.max_time_seconds is not None:
-            raise ParameterValidationError(
-                "trigger-pulse-width greater-than and less-than reject range timing options."
-            )
-        validate_trigger_time(args.time_seconds)
-        return
-
-    if args.time_seconds is not None:
-        raise ParameterValidationError("trigger-pulse-width range rejects --time-seconds.")
-    if args.min_time_seconds is None or args.max_time_seconds is None:
-        raise ParameterValidationError(
-            "trigger-pulse-width range requires --min-time-seconds and --max-time-seconds."
-        )
-    min_time = validate_trigger_time(args.min_time_seconds)
-    max_time = validate_trigger_time(args.max_time_seconds)
-    if min_time >= max_time:
-        raise ParameterValidationError(
-            "trigger-pulse-width --min-time-seconds must be less than --max-time-seconds."
-        )
-
-
-def _validate_trigger_runt_args(args: argparse.Namespace) -> None:
-    set_values = (
-        getattr(args, "channel", None),
-        getattr(args, "polarity", None),
-        getattr(args, "qualifier", None),
-        getattr(args, "time_seconds", None),
-        getattr(args, "low_level_volts", None),
-        getattr(args, "high_level_volts", None),
-    )
-    if getattr(args, "runt_query", False):
-        if any(value is not None for value in set_values):
-            raise ParameterValidationError(
-                "trigger-runt --query cannot be combined with configure options."
-            )
-        return
-
-    if (
-        args.channel is None
-        or args.polarity is None
-        or args.qualifier is None
-        or args.low_level_volts is None
-        or args.high_level_volts is None
-    ):
-        raise ParameterValidationError(
-            "trigger-runt configure requires --channel, --polarity, --qualifier, "
-            "--low-level-volts, and --high-level-volts."
-        )
-
-    qualifier = normalize_runt_qualifier(args.qualifier)
-    low_level = validate_trigger_level(args.low_level_volts)
-    high_level = validate_trigger_level(args.high_level_volts)
-    if low_level >= high_level:
-        raise ParameterValidationError(
-            "trigger-runt --low-level-volts must be less than --high-level-volts."
-        )
-
-    if qualifier in {"GREaterthan", "LESSthan"}:
-        if args.time_seconds is None:
-            raise ParameterValidationError(
-                "trigger-runt greater-than and less-than require --time-seconds."
-            )
-        validate_trigger_time(args.time_seconds)
-        return
-
-    if args.time_seconds is not None:
-        raise ParameterValidationError("trigger-runt qualifier none rejects --time-seconds.")
-
-
-def _validate_trigger_transition_args(args: argparse.Namespace) -> None:
-    set_values = (
-        getattr(args, "channel", None),
-        getattr(args, "slope", None),
-        getattr(args, "qualifier", None),
-        getattr(args, "time_seconds", None),
-        getattr(args, "low_level_volts", None),
-        getattr(args, "high_level_volts", None),
-    )
-    if getattr(args, "transition_query", False):
-        if any(value is not None for value in set_values):
-            raise ParameterValidationError(
-                "trigger-transition --query cannot be combined with configure options."
-            )
-        return
-
-    if (
-        args.channel is None
-        or args.slope is None
-        or args.qualifier is None
-        or args.time_seconds is None
-        or args.low_level_volts is None
-        or args.high_level_volts is None
-    ):
-        raise ParameterValidationError(
-            "trigger-transition configure requires --channel, --slope, --qualifier, "
-            "--time-seconds, --low-level-volts, and --high-level-volts."
-        )
-
-    normalize_transition_slope(args.slope)
-    normalize_transition_qualifier(args.qualifier)
-    validate_trigger_time(args.time_seconds)
-    low_level = validate_trigger_level(args.low_level_volts)
-    high_level = validate_trigger_level(args.high_level_volts)
-    if low_level >= high_level:
-        raise ParameterValidationError(
-            "trigger-transition --low-level-volts must be less than --high-level-volts."
-        )
-
-
-def _validate_trigger_delay_args(args: argparse.Namespace) -> None:
-    set_values = (
-        getattr(args, "arm_channel", None),
-        getattr(args, "arm_slope", None),
-        getattr(args, "trigger_channel", None),
-        getattr(args, "trigger_slope", None),
-        getattr(args, "time_seconds", None),
-        getattr(args, "count", None),
-    )
-    if getattr(args, "delay_query", False):
-        if any(value is not None for value in set_values):
-            raise ParameterValidationError(
-                "trigger-delay --query cannot be combined with configure options."
-            )
-        return
-
-    if (
-        args.arm_channel is None
-        or args.arm_slope is None
-        or args.trigger_channel is None
-        or args.trigger_slope is None
-        or args.time_seconds is None
-        or args.count is None
-    ):
-        raise ParameterValidationError(
-            "trigger-delay configure requires --arm-channel, --arm-slope, "
-            "--trigger-channel, --trigger-slope, --time-seconds, and --count."
-        )
-
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None:
-        validate_analog_channel(args.arm_channel, capabilities)
-        validate_analog_channel(args.trigger_channel, capabilities)
-    normalize_delay_slope(args.arm_slope)
-    normalize_delay_slope(args.trigger_slope)
-    validate_delay_trigger_time(args.time_seconds)
-    validate_delay_trigger_count(args.count)
-
-
-def _validate_trigger_setup_hold_args(args: argparse.Namespace) -> None:
-    set_values = (
-        getattr(args, "clock_channel", None),
-        getattr(args, "data_channel", None),
-        getattr(args, "slope", None),
-        getattr(args, "setup_time", None),
-        getattr(args, "hold_time", None),
-    )
-    if getattr(args, "setup_hold_query", False):
-        if any(value is not None for value in set_values):
-            raise ParameterValidationError(
-                "trigger-setup-hold --query cannot be combined with configure options."
-            )
-        return
-
-    if (
-        args.clock_channel is None
-        or args.data_channel is None
-        or args.slope is None
-        or args.setup_time is None
-        or args.hold_time is None
-    ):
-        raise ParameterValidationError(
-            "trigger-setup-hold configure requires --clock-channel, --data-channel, "
-            "--slope, --setup-time, and --hold-time."
-        )
-
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None:
-        validate_analog_channel(args.clock_channel, capabilities)
-        validate_analog_channel(args.data_channel, capabilities)
-    normalize_setup_hold_slope(args.slope)
-    validate_setup_hold_trigger_time(args.setup_time, "setup")
-    validate_setup_hold_trigger_time(args.hold_time, "hold")
-
-
-def _validate_trigger_edge_burst_args(args: argparse.Namespace) -> None:
-    set_values = (
-        getattr(args, "source_channel", None),
-        getattr(args, "slope", None),
-        getattr(args, "count", None),
-        getattr(args, "idle_time", None),
-        getattr(args, "level_volts", None),
-    )
-    if getattr(args, "edge_burst_query", False):
-        if any(value is not None for value in set_values):
-            raise ParameterValidationError(
-                "trigger-edge-burst --query cannot be combined with configure options."
-            )
-        return
-
-    if (
-        args.source_channel is None
-        or args.slope is None
-        or args.count is None
-        or args.idle_time is None
-    ):
-        raise ParameterValidationError(
-            "trigger-edge-burst configure requires --source-channel, --slope, "
-            "--count, and --idle-time."
-        )
-
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None:
-        validate_analog_channel(args.source_channel, capabilities)
-    normalize_edge_burst_slope(args.slope)
-    validate_edge_burst_count(args.count)
-    validate_edge_burst_idle_time(args.idle_time)
-    if args.level_volts is not None:
-        validate_trigger_level(args.level_volts)
-
-
-def _validate_trigger_tv_args(args: argparse.Namespace) -> None:
-    set_values = (
-        getattr(args, "source_channel", None),
-        getattr(args, "standard", None),
-        getattr(args, "mode", None),
-        getattr(args, "polarity", None),
-        getattr(args, "line", None),
-    )
-    if getattr(args, "tv_query", False):
-        if any(value is not None for value in set_values):
-            raise ParameterValidationError(
-                "trigger-tv --query cannot be combined with configure options."
-            )
-        return
-
-    if (
-        args.source_channel is None
-        or args.standard is None
-        or args.mode is None
-        or args.polarity is None
-    ):
-        raise ParameterValidationError(
-            "trigger-tv configure requires --source-channel, --standard, --mode, and --polarity."
-        )
-
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None:
-        tv_trigger_configure_commands(
-            source_channel=args.source_channel,
-            standard=args.standard,
-            mode=args.mode,
-            polarity=args.polarity,
-            capabilities=capabilities,
-            line=args.line,
-        )
-
-
-def _validate_trigger_pattern_args(args: argparse.Namespace) -> None:
-    if getattr(args, "pattern_query", False):
-        if args.pattern is not None:
-            raise ParameterValidationError(
-                "trigger-pattern --query cannot be combined with --pattern."
-            )
-        return
-    if args.pattern is None:
-        raise ParameterValidationError("trigger-pattern configure requires --pattern.")
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None:
-        validate_pattern_trigger_pattern(args.pattern, capabilities)
-
-
-def _validate_trigger_or_args(args: argparse.Namespace) -> None:
-    if getattr(args, "or_query", False):
-        if args.pattern is not None:
-            raise ParameterValidationError(
-                "trigger-or --query cannot be combined with --pattern."
-            )
-        return
-    if args.pattern is None:
-        raise ParameterValidationError("trigger-or configure requires --pattern.")
-    capabilities = _pre_open_capabilities(args)
-    if capabilities is not None:
-        validate_or_trigger_pattern(args.pattern, capabilities)
 
 
 def _json_error(exc: OscilloscopeError) -> dict[str, object]:
@@ -5775,7 +4077,7 @@ def _json_envelope(args: argparse.Namespace, *, ok: bool, mode: str) -> dict[str
     if mode in {"simulate", "dry_run"} and hasattr(args, "model"):
         try:
             idn = _idn_json(simulator_idn(args.model))
-            capabilities = _capabilities_json(capabilities_for_model_id(args.model))
+            capabilities = runtime._capabilities_json(capabilities_for_model_id(args.model))
         except OscilloscopeError:
             idn = None
             capabilities = None
@@ -5959,7 +4261,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
     if command == "identify":
         return ["*IDN?"], [], {
             "idn": _idn_json(simulator_idn(args.model)),
-            "capabilities": _capabilities_json(capabilities),
+            "capabilities": runtime._capabilities_json(capabilities),
             "backend": None,
             "timeout_ms": None,
         }
@@ -6418,7 +4720,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         }
         if not args.query:
             result.update(
-                _serial_cli_values(
+                preflight._serial_cli_values(
                     capabilities,
                     protocol=command,
                     **_serial_protocol_settings(args),
@@ -7075,14 +5377,14 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 ":SYSTem:ERRor?",
             ]
             return planned, [], {"operation": "query", "hardcopy": None}
-        options = _screenshot_options(args)
+        options = preflight._screenshot_options(args)
         background = args.background or DEFAULT_SCREENSHOT_BACKGROUND
         format_name = options.format or "png"
         output_path = _screenshot_output_path(args, format_name)
         file_kind = "png" if format_name == "png" else "bmp"
         files = [{"kind": file_kind, "path": str(output_path)}]
         ink_saver_plan = None
-        if _uses_screenshot_format_pack(args):
+        if preflight._uses_screenshot_format_pack(args):
             planned = []
             if options.ink_saver is not None:
                 planned.append(hardcopy_inksaver_command(options.ink_saver))
@@ -7258,7 +5560,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "configured_segments": None,
         }
     if command == "segmented-capture":
-        return plan_segmented_capture(_segmented_capture_request(args), capabilities)
+        return plan_segmented_capture(preflight._segmented_capture_request(args), capabilities)
     if command == "acquisition-points":
         planned = ["*IDN?", acquisition_points_query(), ":SYSTem:ERRor?"]
         return planned, [], {
@@ -7980,49 +6282,6 @@ def _measure_log_planned_scpi(
     return planned
 
 
-def _backend_history() -> list[str]:
-    if _LAST_BACKEND is None:
-        return []
-    return list(getattr(_LAST_BACKEND, "history", []))
-
-
-def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, object] | None:
-    if capabilities is None:
-        return None
-    return {
-        "series": capabilities.series,
-        "analog_channels": capabilities.analog_channels,
-        "default_waveform_points": capabilities.default_waveform_points,
-        "safe_max_waveform_points": capabilities.safe_max_waveform_points,
-        "supports_word_format": capabilities.supports_word_format,
-        "supports_raw_points_mode": capabilities.supports_raw_points_mode,
-        "supports_measurements": capabilities.supports_measurements,
-        "supports_delay_measurement": capabilities.supports_delay_measurement,
-        "supports_measure_results_dump": capabilities.supports_measure_results_dump,
-        "supports_screenshot": capabilities.supports_screenshot,
-        "supports_screenshot_format_pack": capabilities.supports_screenshot_format_pack,
-        "supports_segmented_memory": capabilities.supports_segmented_memory,
-        "segmented_max_segments": capabilities.segmented_max_segments,
-        "supports_serial_decode": capabilities.supports_serial_decode,
-        "serial_bus_count": capabilities.serial_bus_count,
-        "serial_modes": [
-            mode for mode in SERIAL_MODES if mode in capabilities.serial_modes
-        ],
-        "reference_waveforms": capabilities.reference_waveforms,
-        "supports_channel_label": capabilities.supports_channel_label,
-        "channel_label_max_length": capabilities.channel_label_max_length,
-        "supports_display_label": capabilities.supports_display_label,
-        "supports_annotation": capabilities.supports_annotation,
-        "supports_annotation_position": capabilities.supports_annotation_position,
-        "annotation_slots": capabilities.annotation_slots,
-        "supports_indexed_annotation": capabilities.supports_indexed_annotation,
-        "supports_50_ohm_impedance": capabilities.supports_50_ohm_impedance,
-        "supports_search_basic": capabilities.supports_search_basic,
-        "supports_search_event_navigation": capabilities.supports_search_event_navigation,
-        "search_modes": [mode for mode in SEARCH_MODES if mode in capabilities.search_modes],
-    }
-
-
 def _idn_json(raw: str) -> dict[str, str | None]:
     idn = parse_idn(raw)
     return {"raw": idn.raw, "vendor": idn.vendor, "model": idn.model, "serial": idn.serial, "firmware": idn.firmware, "series": idn.series}
@@ -8033,56 +6292,48 @@ def _write_json(payload: dict[str, object]) -> None:
 
 
 def _apply_json_record(payload: dict[str, object]) -> None:
-    if _JSON_RECORD is None:
+    if runtime._JSON_RECORD is None:
         return
-    result = _JSON_RECORD.get("result")
+    result = runtime._JSON_RECORD.get("result")
     if isinstance(result, dict):
         payload_result = payload.setdefault("result", {})
         if isinstance(payload_result, dict):
             payload_result.update(result)
     for key in ("idn", "capabilities", "backend", "system_error"):
-        if key in _JSON_RECORD:
-            payload[key] = _JSON_RECORD[key]
-    files = _JSON_RECORD.get("files")
+        if key in runtime._JSON_RECORD:
+            payload[key] = runtime._JSON_RECORD[key]
+    files = runtime._JSON_RECORD.get("files")
     if isinstance(files, list):
         payload["files"] = files
 
 
 def _json_update_result(**values: object) -> None:
-    if _JSON_RECORD is None:
+    if runtime._JSON_RECORD is None:
         return
-    result = _JSON_RECORD.setdefault("result", {})
+    result = runtime._JSON_RECORD.setdefault("result", {})
     if isinstance(result, dict):
         result.update(values)
 
 
 def _json_set_files(files: list[dict[str, object]]) -> None:
-    if _JSON_RECORD is not None:
-        _JSON_RECORD["files"] = files
-
-
-def _json_record_scope(scope: Oscilloscope, idn) -> None:
-    if _JSON_RECORD is None:
-        return
-    _JSON_RECORD["idn"] = _idn_object_json(idn)
-    _JSON_RECORD["capabilities"] = _capabilities_json(scope.capabilities)
-    _JSON_RECORD["backend"] = getattr(scope.backend, "backend", None)
+    if runtime._JSON_RECORD is not None:
+        runtime._JSON_RECORD["files"] = files
 
 
 def _json_record_system_error(entry) -> None:
     data = _system_error_json(entry)
-    if _JSON_RECORD is not None:
-        _JSON_RECORD["system_error"] = data
+    if runtime._JSON_RECORD is not None:
+        runtime._JSON_RECORD["system_error"] = data
 
 
 def _apply_operation_result(result) -> None:
-    if _JSON_RECORD is None:
+    if runtime._JSON_RECORD is None:
         return
-    _JSON_RECORD["result"] = result.result
-    _JSON_RECORD["files"] = result.files
-    _JSON_RECORD["system_error"] = result.system_error
+    runtime._JSON_RECORD["result"] = result.result
+    runtime._JSON_RECORD["files"] = result.files
+    runtime._JSON_RECORD["system_error"] = result.system_error
     if result.backend is not None:
-        _JSON_RECORD["backend"] = result.backend
+        runtime._JSON_RECORD["backend"] = result.backend
 
 
 def _system_error_json(entry) -> dict[str, object]:
@@ -8091,17 +6342,6 @@ def _system_error_json(entry) -> dict[str, object]:
         "message": entry.message,
         "raw": entry.raw,
         "is_error": entry.is_error,
-    }
-
-
-def _idn_object_json(idn) -> dict[str, str | None]:
-    return {
-        "raw": idn.raw,
-        "vendor": idn.vendor,
-        "model": idn.model,
-        "serial": idn.serial,
-        "firmware": idn.firmware,
-        "series": idn.series,
     }
 
 
@@ -8195,10 +6435,10 @@ def _cmd_list_resources(args: argparse.Namespace) -> int:
         live_only=bool(args.live_only),
         live_resources=[],
     )
-    if _JSON_RECORD is not None:
-        _JSON_RECORD["backend"] = listing.backend
+    if runtime._JSON_RECORD is not None:
+        runtime._JSON_RECORD["backend"] = listing.backend
     if args.live_only:
-        _configure_scpi_logging(args)
+        runtime._configure_scpi_logging(args)
         return _print_live_resources(
             listing.resources,
             visa_library=args.visa_library,
@@ -8253,7 +6493,7 @@ def _print_live_resources(
                 continue
 
         live_count += 1
-        live_resources.append({"resource": resource, "idn": _idn_object_json(idn)})
+        live_resources.append({"resource": resource, "idn": runtime._idn_object_json(idn)})
         print(f"  {resource}")
         print(f"    IDN: {idn.raw}")
 
@@ -8280,16 +6520,16 @@ def _visa_verification_json(
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
-        _json_update_result(idn=_idn_object_json(idn), capabilities=_capabilities_json(scope.capabilities), **_scope_backend_json(scope))
+        runtime._json_record_scope(scope, idn)
+        _json_update_result(idn=runtime._idn_object_json(idn), capabilities=runtime._capabilities_json(scope.capabilities), **_scope_backend_json(scope))
         _print_session_header(scope, resource)
         print(f"Raw IDN: {idn.raw}")
         print(f"Vendor: {idn.vendor}")
@@ -8302,13 +6542,13 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
 
 def _cmd_check_error(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         _print_session_header(scope, resource)
         if args.drain:
             entries = scope.drain_system_errors(max_reads=args.max_reads)
@@ -8328,14 +6568,14 @@ def _cmd_check_error(args: argparse.Namespace) -> int:
 
 
 def _cmd_control(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
     method_name, command = _CONTROL_COMMANDS[args.command]
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         _print_session_header(scope, resource)
         getattr(scope, method_name)()
         _json_update_result(action=method_name, command=command)
@@ -8347,14 +6587,14 @@ def _cmd_control(args: argparse.Namespace) -> int:
 
 
 def _cmd_serial_search(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8378,7 +6618,7 @@ def _cmd_serial_search(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         else:
-            settings = _canonical_serial_search_settings(args)
+            settings = preflight._canonical_serial_search_settings(args)
             config_fn = getattr(scope, f"configure_serial_search_{protocol}")
             state = config_fn(args.bus, **settings)
             cmds_fn = getattr(scopes_tool_core.search, f"serial_search_{protocol}_configure_commands")
@@ -8428,7 +6668,7 @@ def _dry_run_serial_search_plan(
         }
         return [*cmds, ":SYSTem:ERRor?"], [], result
 
-    canonical_settings = _canonical_serial_search_settings(args)
+    canonical_settings = preflight._canonical_serial_search_settings(args)
 
     configure_builders = {
         "uart": serial_search_uart_configure_commands,
@@ -8452,15 +6692,15 @@ def _dry_run_serial_search_plan(
 
 
 def _cmd_channel_display(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8491,15 +6731,15 @@ def _cmd_channel_display(args: argparse.Namespace) -> int:
 
 
 def _cmd_channel_summary(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8526,14 +6766,14 @@ def _cmd_channel_summary(args: argparse.Namespace) -> int:
 
 
 def _cmd_cleanup(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
@@ -8565,15 +6805,15 @@ def _format_summary_value(value: object) -> str:
 
 
 def _cmd_channel_label(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8604,15 +6844,15 @@ def _cmd_channel_label(args: argparse.Namespace) -> int:
 
 
 def _cmd_channel_scale(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8643,15 +6883,15 @@ def _cmd_channel_scale(args: argparse.Namespace) -> int:
 
 
 def _cmd_channel_offset(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8682,15 +6922,15 @@ def _cmd_channel_offset(args: argparse.Namespace) -> int:
 
 
 def _cmd_channel_coupling(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8721,15 +6961,15 @@ def _cmd_channel_coupling(args: argparse.Namespace) -> int:
 
 
 def _cmd_channel_probe(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8760,15 +7000,15 @@ def _cmd_channel_probe(args: argparse.Namespace) -> int:
 
 
 def _cmd_channel_bandwidth_limit(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8800,15 +7040,15 @@ def _cmd_channel_bandwidth_limit(args: argparse.Namespace) -> int:
 
 
 def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8924,15 +7164,15 @@ def _format_channel_impedance(impedance: str) -> str:
 
 
 def _cmd_display_label(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -8962,15 +7202,15 @@ def _cmd_display_label(args: argparse.Namespace) -> int:
 
 
 def _cmd_display_common(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9052,13 +7292,13 @@ def _format_display_persistence(mode: str | None, seconds: float | None) -> str:
 
 
 def _cmd_measurement_control(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
@@ -9100,13 +7340,13 @@ def _cmd_measurement_control(args: argparse.Namespace) -> int:
 
 
 def _cmd_reference_waveform(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
@@ -9146,15 +7386,15 @@ def _cmd_reference_waveform(args: argparse.Namespace) -> int:
 
 
 def _cmd_annotation(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9212,15 +7452,15 @@ def _cmd_annotation(args: argparse.Namespace) -> int:
 
 
 def _cmd_timebase_scale(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9250,15 +7490,15 @@ def _cmd_timebase_scale(args: argparse.Namespace) -> int:
 
 
 def _cmd_timebase_position(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9288,15 +7528,15 @@ def _cmd_timebase_position(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_edge(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9356,15 +7596,15 @@ def _cmd_trigger_edge(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9415,15 +7655,15 @@ def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_edge_slope(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9450,15 +7690,15 @@ def _cmd_trigger_edge_slope(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9497,15 +7737,15 @@ def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
 
 
 def _cmd_external_trigger_range(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9537,15 +7777,15 @@ def _cmd_external_trigger_range(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_edge_external_level(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9577,15 +7817,15 @@ def _cmd_trigger_edge_external_level(args: argparse.Namespace) -> int:
 
 
 def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9642,14 +7882,14 @@ def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
 
 
 def _cmd_dvm(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -9844,14 +8084,14 @@ def _save_export_plan(
 
 
 def _cmd_save_export(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         target, result, waits_for_completion = _save_export_plan(args)
@@ -9944,14 +8184,14 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
 
 
 def _cmd_demo(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -10029,14 +8269,14 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 
 
 def _cmd_wgen(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
@@ -10170,12 +8410,12 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
 
 
 def _cmd_system_status(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         _print_session_header(scope, resource)
         if args.command == "system-clear-status":
             command = system_clear_status_command()
@@ -10228,7 +8468,7 @@ def _serial_protocol_settings(args: argparse.Namespace) -> dict[str, object]:
 def _serial_protocol_commands(
     args: argparse.Namespace, capabilities: ScopeCapabilities
 ) -> list[str]:
-    settings = _serial_cli_values(
+    settings = preflight._serial_cli_values(
         capabilities,
         protocol=args.command,
         **_serial_protocol_settings(args),
@@ -10391,14 +8631,14 @@ def _cmd_serial(args: argparse.Namespace) -> int:
         "serial-lister-export",
     }:
         return _cmd_serial_lister(args)
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -10561,14 +8801,14 @@ def _cmd_serial(args: argparse.Namespace) -> int:
 
 
 def _cmd_serial_lister(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -10651,14 +8891,14 @@ def _cmd_search(args: argparse.Namespace) -> int:
         "serial-search-can",
     }:
         return _cmd_serial_search(args)
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -10733,15 +8973,15 @@ def _cmd_search(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_common(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -10852,15 +9092,15 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -10937,15 +9177,15 @@ def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_runt(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -11026,15 +9266,15 @@ def _cmd_trigger_runt(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_transition(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -11114,15 +9354,15 @@ def _cmd_trigger_transition(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_delay(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -11203,15 +9443,15 @@ def _cmd_trigger_delay(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_setup_hold(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -11292,15 +9532,15 @@ def _cmd_trigger_setup_hold(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_edge_burst(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -11369,15 +9609,15 @@ def _cmd_trigger_edge_burst(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_tv(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -11439,15 +9679,15 @@ def _cmd_trigger_tv(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_pattern(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -11496,15 +9736,15 @@ def _cmd_trigger_pattern(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_or(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -11546,16 +9786,16 @@ def _cmd_trigger_or(args: argparse.Namespace) -> int:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         result = run_doctor(scope, resource)
         if result.idn is not None:
-            _json_record_scope(scope, result.idn)
+            runtime._json_record_scope(scope, result.idn)
         _apply_operation_result(result)
         for line in result.human_lines:
             print(line)
@@ -11563,13 +9803,13 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def _cmd_measure_sweep(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         result = run_measure_sweep(
             scope,
             resource,
@@ -11581,7 +9821,7 @@ def _cmd_measure_sweep(args: argparse.Namespace) -> int:
             ),
         )
         if result.idn is not None:
-            _json_record_scope(scope, result.idn)
+            runtime._json_record_scope(scope, result.idn)
         _apply_operation_result(result)
         for line in result.human_lines:
             print(line)
@@ -11589,16 +9829,16 @@ def _cmd_measure_sweep(args: argparse.Namespace) -> int:
 
 
 def _cmd_measure(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         operation_result = run_measure(scope, resource, _measure_operation_request(args))
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -11606,15 +9846,15 @@ def _cmd_measure(args: argparse.Namespace) -> int:
 
 
 def _cmd_measure_results(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         result = scope.query_measurement_results()
@@ -11653,15 +9893,15 @@ def _cmd_measure_results(args: argparse.Namespace) -> int:
 
 
 def _cmd_measure_stats(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
@@ -11708,11 +9948,11 @@ def _cmd_measure_stats(args: argparse.Namespace) -> int:
 
 def _cmd_capture(args: argparse.Namespace) -> int:
     trigger_wait = _capture_trigger_wait_config(args)
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
     csv_path = Path(args.csv_path) if args.csv_path is not None else _default_capture_csv_path()
     meta_path = Path(args.meta_path) if args.meta_path is not None else csv_path.with_name(
@@ -11720,7 +9960,7 @@ def _cmd_capture(args: argparse.Namespace) -> int:
     )
     plot_path = Path(args.plot_path) if args.plot_path is not None else None
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         operation_result = run_capture(
             scope,
             resource,
@@ -11736,7 +9976,7 @@ def _cmd_capture(args: argparse.Namespace) -> int:
             ),
         )
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -11772,11 +10012,11 @@ def _cmd_capture_batch(
     *,
     stop_requested: StopRequested | None = None,
 ) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         try:
             operation_result = run_capture_batch(
                 scope,
@@ -11795,14 +10035,14 @@ def _cmd_capture_batch(
         except _OperationError as exc:
             operation_result = exc.result
             if operation_result.idn is not None:
-                _json_record_scope(scope, operation_result.idn)
+                runtime._json_record_scope(scope, operation_result.idn)
             _apply_operation_result(operation_result)
             for line in operation_result.human_lines:
                 print(line)
             raise OscilloscopeError(str(exc)) from exc
 
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -11816,11 +10056,11 @@ def _cmd_measure_log(
     *,
     stop_requested: StopRequested | None = None,
 ) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         try:
             operation_result = run_measure_log(
                 scope,
@@ -11842,13 +10082,13 @@ def _cmd_measure_log(
         except _OperationError as exc:
             operation_result = exc.result
             if operation_result.idn is not None:
-                _json_record_scope(scope, operation_result.idn)
+                runtime._json_record_scope(scope, operation_result.idn)
             _apply_operation_result(operation_result)
             for line in operation_result.human_lines:
                 print(line)
             raise OscilloscopeError(str(exc)) from exc
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -11860,11 +10100,11 @@ def _cmd_measure_until(
     *,
     stop_requested: StopRequested | None = None,
 ) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         operation_result = run_measure_until(
             scope,
             resource,
@@ -11881,7 +10121,7 @@ def _cmd_measure_until(
             stop_requested=stop_requested,
         )
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -11895,11 +10135,11 @@ def _cmd_triggered_measure_loop(
     *,
     stop_requested: StopRequested | None = None,
 ) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         operation_result = run_triggered_measure_loop(
             scope,
             resource,
@@ -11917,7 +10157,7 @@ def _cmd_triggered_measure_loop(
             stop_requested=stop_requested,
         )
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -11931,11 +10171,11 @@ def _cmd_triggered_capture_series(
     *,
     stop_requested: StopRequested | None = None,
 ) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         operation_result = run_triggered_capture_series(
             scope,
             resource,
@@ -11952,7 +10192,7 @@ def _cmd_triggered_capture_series(
             stop_requested=stop_requested,
         )
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -11967,11 +10207,11 @@ def _cmd_sequence(
     stop_requested: StopRequested | None = None,
 ) -> int:
     document = load_sequence_document(args.sequence_file)
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         operation_result = run_sequence(
             scope,
             resource,
@@ -11983,7 +10223,7 @@ def _cmd_sequence(
             stop_requested=stop_requested,
         )
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -11993,15 +10233,15 @@ def _cmd_sequence(
 
 
 def _cmd_screenshot(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -12034,7 +10274,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             print(f"System error: {entry.format()}")
             return 1 if entry.is_error else 0
 
-        options = _screenshot_options(args)
+        options = preflight._screenshot_options(args)
         format_name = options.format or "png"
         output_path = _screenshot_output_path(args, format_name)
         background = args.background or DEFAULT_SCREENSHOT_BACKGROUND
@@ -12045,7 +10285,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             f"Planned capture: current screen {display_format} image with {background} background"
         )
         print(f"Screenshot timeout ms: {SCREENSHOT_TIMEOUT_MS} (temporary)")
-        if _uses_screenshot_format_pack(args):
+        if preflight._uses_screenshot_format_pack(args):
             capture = scope.capture_screenshot(options=options, background=background)
             if options.ink_saver is not None:
                 print(f"Command: {hardcopy_inksaver_command(options.ink_saver)}")
@@ -12074,7 +10314,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         _json_set_files(files)
         result = dict(
             format=capture.format_name,
-            palette=(options.palette if _uses_screenshot_format_pack(args) else capture.palette),
+            palette=(options.palette if preflight._uses_screenshot_format_pack(args) else capture.palette),
             background=capture.background,
             ink_saver=options.ink_saver,
             layout=options.layout,
@@ -12108,11 +10348,11 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
 
 
 def _cmd_smoke(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         try:
             operation_result = run_smoke(
                 scope,
@@ -12122,13 +10362,13 @@ def _cmd_smoke(args: argparse.Namespace) -> int:
         except _OperationError as exc:
             operation_result = exc.result
             if operation_result.idn is not None:
-                _json_record_scope(scope, operation_result.idn)
+                runtime._json_record_scope(scope, operation_result.idn)
             _apply_operation_result(operation_result)
             for line in operation_result.human_lines:
                 print(line)
             raise OscilloscopeError(str(exc)) from exc
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -12136,15 +10376,15 @@ def _cmd_smoke(args: argparse.Namespace) -> int:
 
 
 def _cmd_force_trigger(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
@@ -12173,15 +10413,15 @@ def _sample_rate_query_command(args: argparse.Namespace) -> str:
 
 
 def _cmd_sample_rate(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
@@ -12221,15 +10461,15 @@ def _cmd_sample_rate(args: argparse.Namespace) -> int:
 
 
 def _cmd_segmented_memory(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
@@ -12267,15 +10507,15 @@ def _cmd_segmented_memory(args: argparse.Namespace) -> int:
 
 
 def _cmd_segmented_capture(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    request = _segmented_capture_request(args)
-    with _open_scope(args, resource) as scope:
+    request = preflight._segmented_capture_request(args)
+    with runtime._open_scope(args, resource) as scope:
         operation_result = run_segmented_capture(scope, resource, request)
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -12283,15 +10523,15 @@ def _cmd_segmented_capture(args: argparse.Namespace) -> int:
 
 
 def _cmd_acquisition_points(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
@@ -12319,15 +10559,15 @@ def _cmd_acquisition_points(args: argparse.Namespace) -> int:
 
 
 def _cmd_record_length(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
@@ -12355,11 +10595,11 @@ def _cmd_record_length(args: argparse.Namespace) -> int:
 
 
 def _cmd_acquisition(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    _configure_scpi_logging(args)
+    runtime._configure_scpi_logging(args)
     if args.acq_query and (args.acq_type is not None or args.acq_count is not None):
         raise OscilloscopeError("--query cannot be combined with --type or --count")
 
@@ -12369,9 +10609,9 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
         if normalize_acquisition_type(args.acq_type) != "AVERage":
             raise OscilloscopeError("--count can only be used with --type average")
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -12409,13 +10649,13 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
 
 
 def _cmd_cursor(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
@@ -12527,13 +10767,13 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
 
 
 def _cmd_trigger_holdoff(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.holdoff_query:
@@ -12567,13 +10807,13 @@ def _cmd_setup_recall(args: argparse.Namespace) -> int:
 
 
 def _cmd_fft(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
@@ -12681,13 +10921,13 @@ def _cmd_fft(args: argparse.Namespace) -> int:
 
 
 def _cmd_math_display(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_display_action == "query":
@@ -12722,13 +10962,13 @@ def _cmd_math_display(args: argparse.Namespace) -> int:
 
 
 def _cmd_math_vertical(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_vertical_query:
@@ -12779,13 +11019,13 @@ def _cmd_math_vertical(args: argparse.Namespace) -> int:
 
 
 def _cmd_math_operator(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_operator_query:
@@ -12839,13 +11079,13 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
 
 
 def _cmd_math_composite_source(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_composite_query:
@@ -12895,13 +11135,13 @@ def _cmd_math_composite_source(args: argparse.Namespace) -> int:
 
 
 def _cmd_math_transform(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_transform_query:
@@ -12967,13 +11207,13 @@ def _cmd_math_transform(args: argparse.Namespace) -> int:
 
 
 def _cmd_math_filter(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_filter_query:
@@ -13039,13 +11279,13 @@ def _cmd_math_filter(args: argparse.Namespace) -> int:
 
 
 def _cmd_math_visualization(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_visualization_query:
@@ -13109,13 +11349,13 @@ def _cmd_math_visualization(args: argparse.Namespace) -> int:
 
 
 def _cmd_math_clear(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         scope.clear_math(args.function)
@@ -13136,13 +11376,13 @@ def _cmd_math_clear(args: argparse.Namespace) -> int:
 
 
 def _cmd_simple_advanced(args: argparse.Namespace, command_name: str) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    _configure_scpi_logging(args)
-    with _open_scope(args, resource) as scope:
+    runtime._configure_scpi_logging(args)
+    with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        _json_record_scope(scope, idn)
+        runtime._json_record_scope(scope, idn)
         _print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
@@ -13203,11 +11443,11 @@ def _query_system_error_with_temporary_timeout(scope: Oscilloscope, timeout_ms: 
 
 
 def _cmd_acquisition_check(args: argparse.Namespace) -> int:
-    resource = _require_resource(args)
+    resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
-    with _open_scope(args, resource) as scope:
+    with runtime._open_scope(args, resource) as scope:
         try:
             operation_result = run_acquisition_check(
                 scope,
@@ -13224,13 +11464,13 @@ def _cmd_acquisition_check(args: argparse.Namespace) -> int:
         except _OperationError as exc:
             operation_result = exc.result
             if operation_result.idn is not None:
-                _json_record_scope(scope, operation_result.idn)
+                runtime._json_record_scope(scope, operation_result.idn)
             _apply_operation_result(operation_result)
             for line in operation_result.human_lines:
                 print(line)
             raise OscilloscopeError(str(exc)) from exc
         if operation_result.idn is not None:
-            _json_record_scope(scope, operation_result.idn)
+            runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)
         for line in operation_result.human_lines:
             print(line)
@@ -13788,24 +12028,6 @@ def _print_capabilities(capabilities: ScopeCapabilities | None) -> None:
     print(f"Analog channels: {capabilities.analog_channels}")
     print(f"Default waveform points: {capabilities.default_waveform_points}")
     print(f"Safe max waveform points: {capabilities.safe_max_waveform_points}")
-
-
-def _require_resource(args: argparse.Namespace) -> str | None:
-    mode = _resolve_cli_mode(args)
-    resource = resolve_resource(mode, args.resource, args.model, os.environ)
-    if resource:
-        return resource
-
-    print(
-        "error: --resource is required unless SCOPES_TOOL_RESOURCE is set",
-        file=sys.stderr,
-    )
-    return None
-
-
-def _configure_scpi_logging(args: argparse.Namespace) -> None:
-    if args.log_scpi:
-        logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")
 
 
 def _positive_int(value: str) -> int:

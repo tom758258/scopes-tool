@@ -91,6 +91,7 @@ from scopes_tool_core.serial import (
 )
 
 from . import cli as scope_cli
+from . import preflight, runtime as cli_runtime
 
 
 WORKER_SCHEMA_VERSION = 2
@@ -653,8 +654,8 @@ def parse_domain_command(
         raise OscilloscopeError(f"invalid arguments for {command}") from exc
     if runtime.mode == "live":
         setattr(parsed, "_worker_live_validation", True)
-    scope_cli._resolve_cli_mode(parsed)
-    scope_cli._validate_pre_open_args(parsed)
+    cli_runtime._resolve_cli_mode(parsed)
+    preflight.validate_pre_open_args(parsed)
     if job_dir is not None:
         _apply_worker_job_paths(parsed, job_dir)
     dry_args = argparse.Namespace(

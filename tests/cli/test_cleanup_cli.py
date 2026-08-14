@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _payload(capsys):
@@ -16,7 +16,7 @@ def test_cleanup_dry_run_json_plans_without_hardware(
     monkeypatch, capsys, profile
 ):
     monkeypatch.setattr(
-        cli,
+        runtime,
         "_open_scope",
         lambda *unused: pytest.fail("dry-run opened a scope"),
     )

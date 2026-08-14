@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 @pytest.mark.parametrize(
@@ -38,7 +38,7 @@ def test_measurement_control_json_modes(argv, target, mode, capsys):
     ],
 )
 def test_measurement_control_validation_before_open(argv, monkeypatch, capsys):
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda *args, **kwargs: pytest.fail("opened VISA")))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda *args, **kwargs: pytest.fail("opened VISA")))
     assert cli.main(argv) == 1
     assert json.loads(capsys.readouterr().out)["ok"] is False
 

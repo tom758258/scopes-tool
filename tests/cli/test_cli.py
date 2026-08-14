@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 import scopes_tool_core.output_files as core_output_files
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.errors import OscilloscopeError, VisaBackendError
@@ -175,7 +175,7 @@ class _ChannelParameterDummyScope:
 def _install_channel_parameter_scope(monkeypatch, model="DSOX4024A"):
     scope = _ChannelParameterDummyScope(model=model)
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda resource, visa_library=None: scope),
     )
@@ -261,7 +261,7 @@ def _install_measurement_scope(
         result_value, raw_value, unit, valid=valid, reason=reason, model=model
     )
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda resource, visa_library=None: scope),
     )
@@ -319,7 +319,7 @@ def test_list_resources_cli_is_passive_and_lists_all_resource_types(monkeypatch,
         raise AssertionError("plain list-resources must not verify ASRL resources")
 
     monkeypatch.setattr(cli, "list_visa_resources", fake_list_visa_resources)
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
     monkeypatch.setattr(cli, "verify_asrl_resource_live", fail_verify)
 
     assert cli.main(["list-resources"]) == 0
@@ -390,7 +390,7 @@ def test_list_resources_live_only_prints_only_idn_responsive_resources(monkeypat
         return DummyScope(resource)
 
     monkeypatch.setattr(cli, "list_visa_resources", fake_list_visa_resources)
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fake_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fake_open))
 
     assert cli.main(["list-resources", "--live-only", "--visa-library", "@sim"]) == 0
 
@@ -412,7 +412,7 @@ def test_list_resources_live_only_prints_none_when_no_resources_respond(monkeypa
         ),
     )
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(
             lambda resource, visa_library=None: (_ for _ in ()).throw(
@@ -470,7 +470,7 @@ def test_list_resources_live_only_continues_after_stale_asrl(monkeypatch, capsys
 
     monkeypatch.setattr(cli, "list_visa_resources", fake_list_visa_resources)
     monkeypatch.setattr(cli, "verify_asrl_resource_live", fake_verify)
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fake_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fake_open))
 
     assert cli.main(["list-resources", "--live-only"]) == 0
 
@@ -515,7 +515,7 @@ def test_list_resources_live_only_json_reports_asrl_verification_failures(
         ),
     )
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda resource, visa_library=None: DummyScope()),
     )
@@ -590,7 +590,7 @@ def test_list_resources_serial_termination_options_are_asrl_only(monkeypatch, ca
         ),
     )
     monkeypatch.setattr(cli, "verify_asrl_resource_live", fake_verify)
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fake_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fake_open))
 
     assert (
         cli.main(
@@ -656,7 +656,7 @@ def test_verify_cli_queries_scope(monkeypatch, capsys):
         assert visa_library is None
         return DummyScope()
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fake_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fake_open))
 
     assert cli.main(["identify", "--resource", "USB0::FAKE::INSTR"]) == 0
 
@@ -685,7 +685,7 @@ def test_verify_cli_uses_environment_resource(monkeypatch, capsys):
             return parse_idn("ACME,MODEL1,SN1,FW1")
 
     monkeypatch.setenv("SCOPES_TOOL_RESOURCE", "USB0::ENV::INSTR")
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: DummyScope()))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: DummyScope()))
 
     assert cli.main(["identify"]) == 0
 
@@ -707,7 +707,7 @@ def test_verify_cli_reports_backend_open_failure_without_traceback(monkeypatch, 
     def fail_open(resource, visa_library=None):
         raise VisaBackendError(f"Failed to open VISA resource {resource}: device busy")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert cli.main(["identify", "--resource", "USB0::FAKE::INSTR"]) == 1
 
@@ -755,7 +755,7 @@ def test_check_error_cli_reads_one_entry(monkeypatch, capsys):
         def query_system_error(self):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: DummyScope()))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: DummyScope()))
 
     assert cli.main(["check-error", "--resource", "USB0::FAKE::INSTR"]) == 0
 
@@ -783,7 +783,7 @@ def test_check_error_cli_drain_returns_failure_when_errors_found(monkeypatch, ca
                 SystemErrorEntry(code=0, message="No error", raw='+0,"No error"'),
             )
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: DummyScope()))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: DummyScope()))
 
     assert cli.main(["check-error", "--resource", "USB0::FAKE::INSTR", "--all", "--max-reads", "5"]) == 1
 
@@ -825,7 +825,7 @@ def test_control_cli_sends_command_then_error_post_check(monkeypatch, capsys):
         scopes.append(scope)
         return scope
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fake_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fake_open))
 
     assert cli.main(["stop-acquisition", "--resource", "USB0::FAKE::INSTR"]) == 0
 
@@ -855,7 +855,7 @@ def test_control_cli_returns_failure_when_post_check_reports_error(monkeypatch, 
         def query_system_error(self):
             return SystemErrorEntry(code=-113, message="Undefined header", raw='-113,"Undefined header"')
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: DummyScope()))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: DummyScope()))
 
     assert cli.main(["run", "--resource", "USB0::FAKE::INSTR"]) == 1
 
@@ -901,7 +901,7 @@ def test_channel_display_cli_turns_channel_on_then_checks_error(monkeypatch, cap
         scopes.append(scope)
         return scope
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fake_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fake_open))
 
     assert (
         cli.main(
@@ -962,7 +962,7 @@ def test_channel_display_cli_queries_display_then_checks_error(monkeypatch, caps
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1012,7 +1012,7 @@ def test_channel_display_cli_rejects_channel_above_detected_capabilities(monkeyp
             self.calls.append(("set_channel_display", channel, enabled))
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1064,7 +1064,7 @@ def test_channel_scale_cli_sets_scale_then_checks_error(monkeypatch, capsys):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1120,7 +1120,7 @@ def test_channel_scale_cli_queries_scale_then_checks_error(monkeypatch, capsys):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1174,7 +1174,7 @@ def test_channel_offset_cli_sets_offset_then_checks_error(monkeypatch, capsys):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1230,7 +1230,7 @@ def test_channel_offset_cli_queries_offset_then_checks_error(monkeypatch, capsys
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1280,7 +1280,7 @@ def test_channel_scale_cli_rejects_channel_above_detected_capabilities(monkeypat
             self.calls.append(("set_channel_scale", channel, volts_per_division))
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1509,7 +1509,7 @@ def test_channel_impedance_cli_rejects_fifty_without_allow_before_open(monkeypat
         del resource, visa_library
         raise AssertionError("validation failure must not open a scope")
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(fail_open))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert (
         cli.main(
@@ -1704,7 +1704,7 @@ def test_timebase_scale_cli_sets_scale_then_checks_error(monkeypatch, capsys):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1758,7 +1758,7 @@ def test_timebase_scale_cli_queries_scale_then_checks_error(monkeypatch, capsys)
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1810,7 +1810,7 @@ def test_timebase_position_cli_sets_position_then_checks_error(monkeypatch, caps
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1864,7 +1864,7 @@ def test_timebase_position_cli_queries_position_then_checks_error(monkeypatch, c
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1916,7 +1916,7 @@ def test_trigger_edge_cli_configures_edge_trigger_then_checks_error(monkeypatch,
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -1986,7 +1986,7 @@ def test_trigger_edge_cli_queries_edge_trigger_then_checks_error(monkeypatch, ca
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert cli.main(["trigger-edge", "--resource", "USB0::FAKE::INSTR", "--query"]) == 0
 
@@ -2025,7 +2025,7 @@ def test_trigger_edge_cli_rejects_missing_configuration_args(monkeypatch, capsys
             return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert cli.main(["trigger-edge", "--resource", "USB0::FAKE::INSTR", "--source-channel", "1"]) == 1
 
@@ -2088,7 +2088,7 @@ def test_capture_cli_writes_csv_and_metadata_then_checks_error(monkeypatch, caps
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -2178,7 +2178,7 @@ def test_capture_cli_supports_word_format(monkeypatch, capsys, tmp_path):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -2255,7 +2255,7 @@ def test_capture_cli_writes_multi_channel_csv_and_metadata(monkeypatch, capsys, 
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -2336,7 +2336,7 @@ def test_capture_cli_allows_opt_in_time_axis_tolerance(monkeypatch, capsys, tmp_
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -2412,7 +2412,7 @@ def test_capture_cli_channel_all_expands_to_detected_model_channels(
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -2479,7 +2479,7 @@ def test_capture_cli_channel_all_is_case_insensitive_and_supports_word(
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -2546,7 +2546,7 @@ def test_capture_cli_multi_channel_word_uses_plural_api(monkeypatch, capsys, tmp
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     csv_path = tmp_path / "capture.csv"
 
     assert (
@@ -2627,7 +2627,7 @@ def test_capture_cli_reports_multi_channel_metadata_permission_error_without_tra
         del capture, idn, resource
         raise PermissionError(13, "Permission denied", str(path))
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     monkeypatch.setattr(
         core_output_files,
         "write_waveforms_metadata",
@@ -2689,7 +2689,7 @@ def test_capture_cli_rejects_duplicate_multi_channel_before_capture(monkeypatch,
             raise AssertionError("capture should not be called")
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -2743,7 +2743,7 @@ def test_capture_cli_rejects_channel_all_combined_with_explicit_channel(
             raise AssertionError("capture should not be called")
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -2802,7 +2802,7 @@ def test_capture_cli_rejects_invalid_multi_channel_before_capture(monkeypatch, c
             raise AssertionError("capture should not be called")
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -2881,7 +2881,7 @@ def test_capture_cli_uses_timestamped_default_csv_when_omitted(monkeypatch, caps
 
     scope = DummyScope()
     default_csv_path = tmp_path / "data" / "2026-05-12-14-30-05.csv"
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     monkeypatch.setattr(cli, "_default_capture_csv_path", lambda: default_csv_path)
 
     assert cli.main(["capture", "--resource", "USB0::FAKE::INSTR", "--channel", "1"]) == 0
@@ -2952,7 +2952,7 @@ def test_capture_cli_reports_csv_permission_error_without_traceback(monkeypatch,
         del capture
         raise PermissionError(13, "Permission denied", str(path))
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     monkeypatch.setattr(core_output_files, "write_waveform_csv", fake_write_waveform_csv)
 
     assert (
@@ -3004,7 +3004,7 @@ def test_capture_cli_rejects_channel_above_detected_capabilities(monkeypatch, ca
             return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -3064,7 +3064,7 @@ def test_screenshot_cli_writes_png_then_checks_error(monkeypatch, capsys, tmp_pa
 
     scope = DummyScope()
     output_path = tmp_path / "screen.png"
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -3134,7 +3134,7 @@ def test_screenshot_cli_uses_timestamped_default_output_when_omitted(monkeypatch
 
     scope = DummyScope()
     default_output_path = tmp_path / "data" / "2026-05-13-10-20-30.png"
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     monkeypatch.setattr(cli, "_default_screenshot_path", lambda: default_output_path)
 
     assert cli.main(["screenshot", "--resource", "USB0::FAKE::INSTR"]) == 0
@@ -3183,7 +3183,7 @@ def test_screenshot_cli_supports_white_background(monkeypatch, capsys, tmp_path)
 
     scope = DummyScope()
     output_path = tmp_path / "screen.png"
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -3252,7 +3252,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
         del capture
         raise PermissionError(13, "Permission denied", str(path))
 
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
     monkeypatch.setattr(cli, "write_screenshot_png", fake_write_screenshot_png)
 
     assert (
@@ -3447,7 +3447,7 @@ def test_measure_results_cli_json_includes_statistics_items(monkeypatch, capsys)
 
     scope = DummyScope()
     monkeypatch.setattr(
-        cli.Oscilloscope,
+        runtime.Oscilloscope,
         "open",
         staticmethod(lambda resource, visa_library=None: scope),
     )
@@ -3914,7 +3914,7 @@ def test_measure_cli_queries_vpp_then_checks_error(monkeypatch, capsys):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -3982,7 +3982,7 @@ def test_measure_cli_queries_vrms_then_checks_error(monkeypatch, capsys):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -4048,7 +4048,7 @@ def test_measure_cli_accepts_risetime_alias_then_checks_error(monkeypatch, capsy
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -4118,7 +4118,7 @@ def test_measure_cli_accepts_freq_alias(monkeypatch, capsys):
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -4186,7 +4186,7 @@ def test_measure_cli_reports_invalid_sentinel_without_losing_raw(monkeypatch, ca
             return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(
@@ -4246,7 +4246,7 @@ def test_measure_cli_rejects_channel_above_detected_capabilities(monkeypatch, ca
             raise AssertionError("measurement query should not be sent")
 
     scope = DummyScope()
-    monkeypatch.setattr(cli.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
 
     assert (
         cli.main(

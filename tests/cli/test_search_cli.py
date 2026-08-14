@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, runtime
 
 
 def _payload(capsys):
@@ -76,7 +76,7 @@ def test_search_simulator_queries_are_deterministic_and_preserve_raw(capsys):
     ],
 )
 def test_search_action_validation_fails_before_open(monkeypatch, capsys, args):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main([*args, "--simulate", "--json", "--model", "keysight-dsox4034a"]) == 1
     assert _payload(capsys)["ok"] is False
 
@@ -98,7 +98,7 @@ def test_search_mode_rejects_aliases(mode, capsys):
     ],
 )
 def test_search_mode_profile_rejection_happens_before_open(monkeypatch, capsys, model, mode):
-    monkeypatch.setattr(cli, "_open_scope", lambda *unused: pytest.fail("opened scope"))
+    monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main(
         ["search-mode", "--mode", mode, "--simulate", "--json", "--model", model]
     ) == 1
