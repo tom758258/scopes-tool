@@ -205,7 +205,7 @@ def test_acquisition_cli_prints_session_info(monkeypatch, capsys):
 
 
 def test_acquisition_cli_invalid_count_fails_before_open_and_type_change(monkeypatch, capsys):
-    scope = _install_acquisition_scope(monkeypatch)
+    monkeypatch.setattr(cli, "_open_scope", lambda *args, **kwargs: pytest.fail("opened scope"))
 
     result = cli.main([
         "acquisition", "--resource", "USB0::FAKE::INSTR",
@@ -213,7 +213,6 @@ def test_acquisition_cli_invalid_count_fails_before_open_and_type_change(monkeyp
     ])
 
     assert result != 0
-    assert ("set_acquisition_type", "average") not in scope.calls
     err = capsys.readouterr().err
     assert "acquisition count must be between 2 and 65536" in err
 

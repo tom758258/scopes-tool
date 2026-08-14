@@ -4353,6 +4353,17 @@ def _segmented_capture_request(args: argparse.Namespace) -> SegmentedCaptureRequ
 
 
 def _validate_pre_open_args(args: argparse.Namespace) -> None:
+    if getattr(args, "command", None) == "acquisition":
+        if (
+            getattr(args, "acq_count", None) is not None
+            and not getattr(args, "acq_query", False)
+        ):
+            if (
+                getattr(args, "acq_type", None) is None
+                or normalize_acquisition_type(args.acq_type) != "AVERage"
+            ):
+                raise OscilloscopeError("--count can only be used with --type average")
+            validate_acquisition_count(args.acq_count)
     if getattr(args, "command", None) == "segmented-memory":
         if getattr(args, "enable", False) and args.segments is None:
             raise ParameterValidationError("segmented-memory --enable requires --segments")
@@ -12357,13 +12368,6 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
             raise OscilloscopeError("--count can only be used with --type average")
         if normalize_acquisition_type(args.acq_type) != "AVERage":
             raise OscilloscopeError("--count can only be used with --type average")
-        validate_acquisition_count(args.acq_count)
-
-    resource = _require_resource(args)
-    if resource is None:
-        return 2
-
-    _configure_scpi_logging(args)
 
     with _open_scope(args, resource) as scope:
         idn = scope.query_idn()
@@ -12385,20 +12389,16 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
             print(f"Command: {acquisition_count_query()}")
         elif args.acq_type is not None:
             normalized_type = normalize_acquisition_type(args.acq_type)
+            print(f"Planned change: acquisition type {args.acq_type}")
+            print(f"Command: {acquisition_type_command(normalized_type)}")
+            scope.set_acquisition_type(args.acq_type)
+            _json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=None, commands=[acquisition_type_command(normalized_type)])
             if args.acq_count is not None:
                 validated_count = validate_acquisition_count(args.acq_count)
-                print(f"Planned change: acquisition type {args.acq_type}")
-                print(f"Command: {acquisition_type_command(normalized_type)}")
                 print(f"Planned change: acquisition average count {validated_count}")
                 print(f"Command: {acquisition_count_command(validated_count)}")
-                scope.set_acquisition_type(args.acq_type)
                 scope.set_acquisition_count(validated_count)
                 _json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=validated_count, commands=[acquisition_type_command(normalized_type), acquisition_count_command(validated_count)])
-            else:
-                print(f"Planned change: acquisition type {args.acq_type}")
-                print(f"Command: {acquisition_type_command(normalized_type)}")
-                scope.set_acquisition_type(args.acq_type)
-                _json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=None, commands=[acquisition_type_command(normalized_type)])
         else:
             raise OscilloscopeError("acquisition command requires --query or --type")
 

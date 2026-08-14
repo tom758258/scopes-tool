@@ -17,9 +17,9 @@ Core owns runtime behavior:
 - Channel, display label, display annotation, common display one-shot,
   timebase, trigger, acquisition, measurement, waveform, screenshot, and
   operation helpers.
-- Pre-write validation hardening for acquisition count, manual cursor requests
-  (including auto-timebase and auto-vertical adjustments), and display annotation
-  positions to validate parameters fully before initiating state-changing SCPI writes.
+- Pre-write validation hardening for manual cursor requests (including
+  auto-timebase and auto-vertical adjustments) and display annotation positions
+  to validate parameters fully before initiating state-changing SCPI writes.
 - Analog channel advanced setting helpers for impedance, invert, full-scale
   range, units, vernier, and probe skew.
 - Read-only analog channel summaries that aggregate common channel and probe

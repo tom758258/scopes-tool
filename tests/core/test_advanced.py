@@ -1492,5 +1492,4 @@ def test_configure_cursor_invalid_x_fails_before_auto_timebase_or_vertical_write
     with pytest.raises(ParameterValidationError, match="--x1 must be a finite number"):
         scope.configure_cursor(1, float("nan"), 0.01, auto_timebase=True, auto_vertical=True, y1_volts=1.0)
 
-    assert not any(":TIMebase:SCALe" in cmd for cmd in backend.history)
-    assert not any(":CHANnel1:SCALe" in cmd for cmd in backend.history)
+    assert backend.history == ["*IDN?"]
