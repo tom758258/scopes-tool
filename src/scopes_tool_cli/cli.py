@@ -152,12 +152,6 @@ from scopes_tool_core.planning import (
     plan_measure_sweep,
     plan_smoke,
 )
-from scopes_tool_core.run_config import (
-    RunModeOptions,
-    make_simulator_backend,
-    resolve_resource,
-    resolve_run_mode,
-)
 from scopes_tool_core.save_export import (
     SAVE_IMAGE_FORMATS,
     SAVE_IMAGE_PALETTES,
@@ -264,11 +258,8 @@ from scopes_tool_core.dvm import (
 from scopes_tool_core.errors import (
     OscilloscopeError,
     ParameterValidationError,
-    UnsupportedModelError,
 )
-from scopes_tool_core.drivers import scope_for_physical_model
 from scopes_tool_core.idn import parse_idn
-from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.measurements import (
     MEASUREMENT_ITEM_CHOICES,
     MEASUREMENT_WINDOW_CHOICES,
@@ -485,11 +476,10 @@ from scopes_tool_core.screenshot import (
     write_screenshot_png,
 )
 from scopes_tool_core.scope import Oscilloscope
-from scopes_tool_core.simulator_backend import SimulatedSignal, SimulatorBackend, simulator_idn
+from scopes_tool_core.simulator_backend import SimulatedSignal, simulator_idn
 from scopes_tool_core.simulator_config import (
     PRESET_NAMES,
     parse_simulate_signal_spec,
-    simulator_backend_kwargs,
     validate_simulator_args,
 )
 from scopes_tool_core.timebase import (
