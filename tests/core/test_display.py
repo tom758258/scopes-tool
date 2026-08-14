@@ -310,3 +310,13 @@ def test_display_controller_sets_and_queries_common_display_commands():
         ":DISPlay:VECTors ON",
         ":DISPlay:VECTors?",
     ]
+
+
+def test_set_annotation_position_valid_x_invalid_y_does_no_write():
+    backend = FakeBackend()
+    controller = DisplayController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
+
+    with pytest.raises(ParameterValidationError, match="annotation y must be in range"):
+        controller.set_annotation_position(10, -5)
+
+    assert backend.history == []

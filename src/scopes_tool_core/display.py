@@ -97,10 +97,12 @@ class DisplayController:
         slot = validate_annotation_slot(slot, self.capabilities)
         if not self.capabilities.supports_annotation_position:
             raise ParameterValidationError("annotation position is supported only on indexed annotation models.")
-        if x is not None:
-            self.scpi.write(annotation_x_command(validate_annotation_x(x), slot=slot, capabilities=self.capabilities))
-        if y is not None:
-            self.scpi.write(annotation_y_command(validate_annotation_y(y), slot=slot, capabilities=self.capabilities))
+        valid_x = validate_annotation_x(x) if x is not None else None
+        valid_y = validate_annotation_y(y) if y is not None else None
+        if valid_x is not None:
+            self.scpi.write(annotation_x_command(valid_x, slot=slot, capabilities=self.capabilities))
+        if valid_y is not None:
+            self.scpi.write(annotation_y_command(valid_y, slot=slot, capabilities=self.capabilities))
 
     def query_annotation(self, *, slot: int = 1) -> AnnotationState:
         slot = validate_annotation_slot(slot, self.capabilities)

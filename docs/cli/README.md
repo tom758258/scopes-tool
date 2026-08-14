@@ -496,7 +496,9 @@ The `acquisition` command first queries `*IDN?`, then sends only the requested
 `:ACQuire:TYPE` and optional `:ACQuire:COUNt` commands before one
 `:SYSTem:ERRor?` post-check. `--query` reads back both acquisition type and
 average count. `--count` is only valid with average acquisition mode and must be
-between 2 and 65536. Type aliases include `norm`, `aver`, `avg`,
+between 2 and 65536; it is validated before opening connections or performing
+state-changing SCPI writes so an invalid count fails fast without modifying the
+acquisition type. Type aliases include `norm`, `aver`, `avg`,
 `high-resolution`, `hresolution`, `hres`, `peak_detect`, and `peak-detect`.
 This command does not change timeout defaults, trigger wait strategy,
 acquisition mode, run/stop state, or return-to-local behavior.
@@ -828,9 +830,10 @@ commands require at least one setter/action. `--clear` sends an empty annotation
 text string and cannot be combined with `--text`. 2000X/3000X annotation uses
 the unindexed `:DISPlay:ANNotation` commands and does not send or query X/Y
 position; JSON query results still include `x: null` and `y: null`. 4000X uses
-indexed `:DISPlay:ANNotation<n>` slots from 1 through 10 and validates `--x`
-as 0 through 800 and `--y` as 0 through 480 before sending
-`:X1Position`/`:Y1Position` SCPI. Annotation background values are `opaque`,
+indexed `:DISPlay:ANNotation<n>` slots from 1 through 10 and validates both `--x`
+(0 through 800) and `--y` (0 through 480) before sending any `:X1Position`/`:Y1Position`
+SCPI, ensuring an invalid y parameter fails fast without writing x. Annotation
+background values are `opaque`,
 `inverted`, and `transparent`; annotation color values are `ch1`, `ch2`,
 `ch3`, `ch4`, `dig`, `math`, `ref`, `marker`, `white`, and `red`.
 Annotation text accepts printable ASCII text up to 254 characters and must not

@@ -202,3 +202,35 @@ def test_acquisition_cli_prints_session_info(monkeypatch, capsys):
     assert "Resource: USB0::FAKE::INSTR" in out
     assert "Model: DSOX4024A" in out
     assert "Series: 4000X" in out
+
+
+def test_acquisition_cli_invalid_count_fails_before_open_and_type_change(monkeypatch, capsys):
+    scope = _install_acquisition_scope(monkeypatch)
+
+    result = cli.main([
+        "acquisition", "--resource", "USB0::FAKE::INSTR",
+        "--type", "average", "--count", "1"
+    ])
+
+    assert result != 0
+    assert ("set_acquisition_type", "average") not in scope.calls
+    err = capsys.readouterr().err
+    assert "acquisition count must be between 2 and 65536" in err
+
+
+def test_acquisition_cli_system_error_returns_failure(monkeypatch, capsys):
+    scope = _install_acquisition_scope(monkeypatch)
+    monkeypatch.setattr(
+        scope,
+        "query_system_error",
+        lambda: SystemErrorEntry(code=-100, message="Command error", raw='-100,"Command error"'),
+    )
+
+    result = cli.main([
+        "acquisition", "--resource", "USB0::FAKE::INSTR",
+        "--type", "normal"
+    ])
+
+    assert result == 1
+    out = capsys.readouterr().out
+    assert 'System error: -100, "Command error"' in out

@@ -420,6 +420,14 @@ class CursorController:
         auto_vertical: bool = False,
     ) -> None:
         source_channel = validate_analog_channel(source_channel, self.capabilities)
+        pending_commands = cursor_configure_commands(
+            source_channel,
+            x1_seconds,
+            x2_seconds,
+            y1_volts=y1_volts,
+            y2_volts=y2_volts,
+            capabilities=self.capabilities,
+        )
         if auto_timebase:
             scale = self.scpi.query_float(":TIMebase:SCALe?")
             position = self.scpi.query_float(":TIMebase:POSition?")
@@ -460,14 +468,7 @@ class CursorController:
                             auto_vertical_result.target_offset_volts,
                         )
                     )
-        for command in cursor_configure_commands(
-            source_channel,
-            x1_seconds,
-            x2_seconds,
-            y1_volts=y1_volts,
-            y2_volts=y2_volts,
-            capabilities=self.capabilities,
-        ):
+        for command in pending_commands:
             self.scpi.write(command)
 
     def off(self) -> None:

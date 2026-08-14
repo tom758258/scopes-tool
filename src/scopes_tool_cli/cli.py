@@ -12349,7 +12349,6 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
         return 2
 
     _configure_scpi_logging(args)
-
     if args.acq_query and (args.acq_type is not None or args.acq_count is not None):
         raise OscilloscopeError("--query cannot be combined with --type or --count")
 
@@ -12358,6 +12357,13 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
             raise OscilloscopeError("--count can only be used with --type average")
         if normalize_acquisition_type(args.acq_type) != "AVERage":
             raise OscilloscopeError("--count can only be used with --type average")
+        validate_acquisition_count(args.acq_count)
+
+    resource = _require_resource(args)
+    if resource is None:
+        return 2
+
+    _configure_scpi_logging(args)
 
     with _open_scope(args, resource) as scope:
         idn = scope.query_idn()
@@ -12379,16 +12385,20 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
             print(f"Command: {acquisition_count_query()}")
         elif args.acq_type is not None:
             normalized_type = normalize_acquisition_type(args.acq_type)
-            print(f"Planned change: acquisition type {args.acq_type}")
-            print(f"Command: {acquisition_type_command(normalized_type)}")
-            scope.set_acquisition_type(args.acq_type)
-            _json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=None, commands=[acquisition_type_command(normalized_type)])
             if args.acq_count is not None:
                 validated_count = validate_acquisition_count(args.acq_count)
+                print(f"Planned change: acquisition type {args.acq_type}")
+                print(f"Command: {acquisition_type_command(normalized_type)}")
                 print(f"Planned change: acquisition average count {validated_count}")
                 print(f"Command: {acquisition_count_command(validated_count)}")
+                scope.set_acquisition_type(args.acq_type)
                 scope.set_acquisition_count(validated_count)
                 _json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=validated_count, commands=[acquisition_type_command(normalized_type), acquisition_count_command(validated_count)])
+            else:
+                print(f"Planned change: acquisition type {args.acq_type}")
+                print(f"Command: {acquisition_type_command(normalized_type)}")
+                scope.set_acquisition_type(args.acq_type)
+                _json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=None, commands=[acquisition_type_command(normalized_type)])
         else:
             raise OscilloscopeError("acquisition command requires --query or --type")
 
@@ -12427,6 +12437,16 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             if args.source_channel is None or args.x2 is None:
                 raise OscilloscopeError("cursor configure requires --source-channel, --x1, and --x2")
             channel = validate_analog_channel(args.source_channel, scope.capabilities)
+            if getattr(args, "auto_vertical", False) and args.y1 is None and args.y2 is None:
+                raise ParameterValidationError("--auto-vertical requires --y1 or --y2.")
+            cursor_configure_commands(
+                channel,
+                args.x1,
+                args.x2,
+                y1_volts=args.y1,
+                y2_volts=args.y2,
+                capabilities=scope.capabilities,
+            )
             auto_timebase = None
             if getattr(args, "auto_timebase", False):
                 scale = scope.query_timebase_scale()

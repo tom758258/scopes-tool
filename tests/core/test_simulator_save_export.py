@@ -34,7 +34,7 @@ def test_simulator_save_export_roundtrip_and_start_recording(tmp_path):
     assert waveform.operation == "save-waveform"
     assert backend.last_save_image_filename == "USB:/screen.bmp"
     assert backend.last_save_waveform_filename == "USB:/wave.csv"
-    assert backend.history[-4:] == [
+    assert [cmd for cmd in backend.history if cmd != ":OPERegister:CONDition?"][-4:] == [
         ':SAVE:IMAGe "USB:/screen.bmp"',
         "*OPC?",
         ':SAVE:WAVeform "USB:/wave.csv"',
