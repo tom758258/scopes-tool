@@ -91,6 +91,7 @@ from scopes_tool_core.serial import (
 )
 
 from . import cli as scope_cli
+from . import parser as cli_parser
 from . import preflight, runtime as cli_runtime
 
 
@@ -647,7 +648,7 @@ def parse_domain_command(
     else:
         argv += ["--live", "--resource", runtime.resource or "", "--model", runtime.model]
     argv.append("--json")
-    parser = scope_cli._build_parser()
+    parser = cli_parser._build_parser()
     try:
         parsed = parser.parse_args(argv)
     except SystemExit as exc:

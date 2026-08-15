@@ -3,6 +3,7 @@ import argparse
 import pytest
 
 from scopes_tool_cli import cli
+from scopes_tool_cli import parser as cli_parser
 from scopes_tool_cli import worker
 from scopes_tool_core.advanced import (
     FFT_OPERATIONS,
@@ -80,7 +81,7 @@ _EXPECTED_MATH_WORKER_COMMANDS = frozenset(
 
 
 def _subcommand_parsers() -> dict[str, argparse.ArgumentParser]:
-    parser = cli._build_parser()
+    parser = cli_parser._build_parser()
     subparsers = next(
         action
         for action in parser._actions
@@ -196,7 +197,7 @@ def test_math_profile_operation_and_dialect_consistency_gate():
 def test_math_cli_worker_schema_and_p8_absence_consistency_gate():
     command_parsers = _subcommand_parsers()
     connection_parser = argparse.ArgumentParser(add_help=False)
-    cli._add_scope_connection_args(connection_parser)
+    cli_parser._add_scope_connection_args(connection_parser)
     connection_arguments = _long_option_names(connection_parser)
 
     assert worker._MATH_DOMAIN_COMMANDS == _EXPECTED_MATH_WORKER_COMMANDS

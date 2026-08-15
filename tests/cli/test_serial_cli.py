@@ -3,7 +3,8 @@ from contextlib import nullcontext
 
 import pytest
 
-from scopes_tool_cli import cli, runtime
+from scopes_tool_cli import cli
+from scopes_tool_cli import parser as cli_parser, runtime
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
@@ -360,7 +361,7 @@ def test_serial_protocol_simulator_configure_json(command, options, field, expec
 
 
 def test_serial_protocol_query_parser_and_json(capsys):
-    parser = cli._build_parser()
+    parser = cli_parser._build_parser()
     parsed = parser.parse_args(["serial-can", "--bus", "1", "--query"])
     assert parsed.command == "serial-can"
     assert (
