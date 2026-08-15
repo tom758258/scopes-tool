@@ -243,6 +243,41 @@ def _idn_object_json(idn) -> dict[str, str | None]:
         "series": idn.series,
     }
 
+def _json_update_result(**values: object) -> None:
+    if _JSON_RECORD is None:
+        return
+    result = _JSON_RECORD.setdefault("result", {})
+    if isinstance(result, dict):
+        result.update(values)
+
+def _json_record_system_error(entry) -> None:
+    data = _system_error_json(entry)
+    if _JSON_RECORD is not None:
+        _JSON_RECORD["system_error"] = data
+
+def _system_error_json(entry) -> dict[str, object]:
+    return {
+        "code": entry.code,
+        "message": entry.message,
+        "raw": entry.raw,
+        "is_error": entry.is_error,
+    }
+
+def _scope_backend_json(scope: Oscilloscope) -> dict[str, object]:
+    return {
+        "backend": getattr(scope.backend, "backend", None),
+        "timeout_ms": getattr(scope.backend, "timeout", None),
+    }
+
+def _print_session_header(scope: Oscilloscope, resource: str) -> None:
+    print(f"Resource: {resource}")
+    backend = getattr(scope.backend, "backend", None)
+    if backend is not None:
+        print(f"PyVISA backend: {backend}")
+    timeout = getattr(scope.backend, "timeout", None)
+    if timeout is not None:
+        print(f"Timeout ms: {timeout}")
+
 def _require_resource(args: argparse.Namespace) -> str | None:
     mode = _resolve_cli_mode(args)
     resource = resolve_resource(mode, args.resource, args.model, os.environ)

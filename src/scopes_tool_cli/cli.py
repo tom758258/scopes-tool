@@ -597,12 +597,7 @@ from scopes_tool_core.waveform import (
 )
 
 from . import preflight, runtime
-
-_CONTROL_COMMANDS = {
-    "run": ("run", ":RUN"),
-    "stop-acquisition": ("stop", ":STOP"),
-    "single": ("single", ":SINGle"),
-}
+from .commands import system
 _CAPTURE_DEFAULT_TIMEZONE = timezone(timedelta(hours=8), name="UTC+8")
 AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS = 15000
 CLI_SCHEMA_VERSION = 2
@@ -3573,9 +3568,9 @@ def _dispatch_command(
     if args.command == "hardware-report":
         return _cmd_hardware_report(args)
     if args.command == "identify":
-        return _cmd_verify(args)
+        return system._cmd_verify(args)
     if args.command == "check-error":
-        return _cmd_check_error(args)
+        return system._cmd_check_error(args)
     if args.command in {
         "system-clear-status",
         "system-opc",
@@ -3584,13 +3579,13 @@ def _dispatch_command(
         "system-operation-status",
         "system-options",
     }:
-        return _cmd_system_status(args)
+        return system._cmd_system_status(args)
     if args.command == "cleanup":
-        return _cmd_cleanup(args)
-    if args.command in _CONTROL_COMMANDS:
-        return _cmd_control(args)
+        return system._cmd_cleanup(args)
+    if args.command in system._CONTROL_COMMANDS:
+        return system._cmd_control(args)
     if args.command == "force-trigger":
-        return _cmd_force_trigger(args)
+        return system._cmd_force_trigger(args)
     if args.command == "channel-summary":
         return _cmd_channel_summary(args)
     if args.command == "channel-display":
@@ -4278,8 +4273,8 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "operation": "query",
             "command": target,
         }
-    if command in _CONTROL_COMMANDS:
-        action, scpi = _CONTROL_COMMANDS[command]
+    if command in system._CONTROL_COMMANDS:
+        action, scpi = system._CONTROL_COMMANDS[command]
         return [scpi, ":SYSTem:ERRor?"], [], {"action": action, "command": scpi}
     if command == "channel-display":
         channel = validate_analog_channel(args.channel, capabilities)
@@ -6297,23 +6292,9 @@ def _apply_json_record(payload: dict[str, object]) -> None:
         payload["files"] = files
 
 
-def _json_update_result(**values: object) -> None:
-    if runtime._JSON_RECORD is None:
-        return
-    result = runtime._JSON_RECORD.setdefault("result", {})
-    if isinstance(result, dict):
-        result.update(values)
-
-
 def _json_set_files(files: list[dict[str, object]]) -> None:
     if runtime._JSON_RECORD is not None:
         runtime._JSON_RECORD["files"] = files
-
-
-def _json_record_system_error(entry) -> None:
-    data = _system_error_json(entry)
-    if runtime._JSON_RECORD is not None:
-        runtime._JSON_RECORD["system_error"] = data
 
 
 def _apply_operation_result(result) -> None:
@@ -6324,22 +6305,6 @@ def _apply_operation_result(result) -> None:
     runtime._JSON_RECORD["system_error"] = result.system_error
     if result.backend is not None:
         runtime._JSON_RECORD["backend"] = result.backend
-
-
-def _system_error_json(entry) -> dict[str, object]:
-    return {
-        "code": entry.code,
-        "message": entry.message,
-        "raw": entry.raw,
-        "is_error": entry.is_error,
-    }
-
-
-def _scope_backend_json(scope: Oscilloscope) -> dict[str, object]:
-    return {
-        "backend": getattr(scope.backend, "backend", None),
-        "timeout_ms": getattr(scope.backend, "timeout", None),
-    }
 
 
 def _measurement_result_json(result, *, parameters: dict[str, object]) -> dict[str, object]:
@@ -6419,7 +6384,7 @@ def _single_waveform_capture_summary(capture: WaveformCapture) -> dict[str, obje
 def _cmd_list_resources(args: argparse.Namespace) -> int:
     listing = list_visa_resources(visa_library=args.visa_library)
     print(f"PyVISA backend: {listing.backend}")
-    _json_update_result(
+    runtime._json_update_result(
         backend=listing.backend,
         resources=list(listing.resources),
         live_only=bool(args.live_only),
@@ -6492,7 +6457,7 @@ def _print_live_resources(
     result_update = {"live_resources": live_resources}
     if verification_failures:
         result_update["verification_failures"] = verification_failures
-    _json_update_result(**result_update)
+    runtime._json_update_result(**result_update)
     return 0
 
 
@@ -6509,73 +6474,6 @@ def _visa_verification_json(
     }
 
 
-def _cmd_verify(args: argparse.Namespace) -> int:
-    resource = runtime._require_resource(args)
-    if resource is None:
-        return 2
-
-    runtime._configure_scpi_logging(args)
-
-    with runtime._open_scope(args, resource) as scope:
-        idn = scope.query_idn()
-        runtime._json_record_scope(scope, idn)
-        _json_update_result(idn=runtime._idn_object_json(idn), capabilities=runtime._capabilities_json(scope.capabilities), **_scope_backend_json(scope))
-        _print_session_header(scope, resource)
-        print(f"Raw IDN: {idn.raw}")
-        print(f"Vendor: {idn.vendor}")
-        print(f"Model: {idn.model}")
-        print(f"Serial: {idn.serial}")
-        print(f"Firmware: {idn.firmware}")
-        print(f"Series: {idn.series or 'unknown'}")
-        _print_capabilities(scope.capabilities)
-    return 0
-
-
-def _cmd_check_error(args: argparse.Namespace) -> int:
-    resource = runtime._require_resource(args)
-    if resource is None:
-        return 2
-
-    runtime._configure_scpi_logging(args)
-
-    with runtime._open_scope(args, resource) as scope:
-        _print_session_header(scope, resource)
-        if args.drain:
-            entries = scope.drain_system_errors(max_reads=args.max_reads)
-            entry_json = [_system_error_json(entry) for entry in entries]
-            _json_update_result(drain=True, max_reads=args.max_reads, entries=entry_json)
-            if entries:
-                _json_record_system_error(entries[-1])
-            for index, entry in enumerate(entries, start=1):
-                print(f"System error {index}: {entry.format()}")
-            return 1 if any(entry.is_error for entry in entries) else 0
-
-        entry = scope.query_system_error()
-        _json_update_result(drain=False, max_reads=1, entries=[_system_error_json(entry)])
-        _json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
-        return 1 if entry.is_error else 0
-
-
-def _cmd_control(args: argparse.Namespace) -> int:
-    resource = runtime._require_resource(args)
-    if resource is None:
-        return 2
-
-    runtime._configure_scpi_logging(args)
-    method_name, command = _CONTROL_COMMANDS[args.command]
-
-    with runtime._open_scope(args, resource) as scope:
-        _print_session_header(scope, resource)
-        getattr(scope, method_name)()
-        _json_update_result(action=method_name, command=command)
-        print(f"Command: {command}")
-        entry = scope.query_system_error()
-        _json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
-        return 1 if entry.is_error else 0
-
-
 def _cmd_serial_search(args: argparse.Namespace) -> int:
     resource = runtime._require_resource(args)
     if resource is None:
@@ -6585,7 +6483,7 @@ def _cmd_serial_search(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -6598,7 +6496,7 @@ def _cmd_serial_search(args: argparse.Namespace) -> int:
             state = query_fn(args.bus)
             cmds_fn = getattr(scopes_tool_core.search, f"serial_search_{protocol}_query_commands")
             commands = cmds_fn(args.bus)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 protocol=protocol,
                 commands=commands,
@@ -6613,7 +6511,7 @@ def _cmd_serial_search(args: argparse.Namespace) -> int:
             state = config_fn(args.bus, **settings)
             cmds_fn = getattr(scopes_tool_core.search, f"serial_search_{protocol}_configure_commands")
             scpi_cmds = cmds_fn(args.bus, **settings)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="configure",
                 protocol=protocol,
                 commands=scpi_cmds,
@@ -6625,7 +6523,7 @@ def _cmd_serial_search(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -6691,7 +6589,7 @@ def _cmd_channel_display(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -6703,7 +6601,7 @@ def _cmd_channel_display(args: argparse.Namespace) -> int:
             command = channel_display_query(channel)
             print(f"Planned query: CH{channel} display state")
             enabled = scope.query_channel_display(channel)
-            _json_update_result(channel=channel, operation="query", command=command, display=enabled)
+            runtime._json_update_result(channel=channel, operation="query", command=command, display=enabled)
             print(f"Command: {command}")
             print(f"Display: {'ON' if enabled else 'OFF'}")
         else:
@@ -6711,11 +6609,11 @@ def _cmd_channel_display(args: argparse.Namespace) -> int:
             command = channel_display_command(channel, enabled)
             print(f"Planned change: CH{channel} display {'ON' if enabled else 'OFF'}")
             scope.set_channel_display(channel, enabled)
-            _json_update_result(channel=channel, operation="set", command=command, display=enabled)
+            runtime._json_update_result(channel=channel, operation="set", command=command, display=enabled)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -6730,7 +6628,7 @@ def _cmd_channel_summary(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -6738,7 +6636,7 @@ def _cmd_channel_summary(args: argparse.Namespace) -> int:
             return 1
 
         channels = [entry.to_json() for entry in scope.query_channel_summary()]
-        _json_update_result(channels=channels)
+        runtime._json_update_result(channels=channels)
         for channel in channels:
             print(
                 f"CH{channel['channel']}: "
@@ -6753,31 +6651,6 @@ def _cmd_channel_summary(args: argparse.Namespace) -> int:
                 f"probe_skew={_format_summary_value(channel['probe_skew'])}"
             )
         return 0
-
-
-def _cmd_cleanup(args: argparse.Namespace) -> int:
-    resource = runtime._require_resource(args)
-    if resource is None:
-        return 2
-
-    runtime._configure_scpi_logging(args)
-    with runtime._open_scope(args, resource) as scope:
-        idn = scope.query_idn()
-        runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
-        if scope.capabilities is None:
-            print("Capabilities: unavailable for this model")
-            return 1
-
-        result = scope.cleanup(args.profile)
-        _json_update_result(**result.to_json())
-        _json_record_system_error(result.final_error)
-        print(
-            f"Cleanup {result.profile}: {len(result.actions)} actions, "
-            f"{len(result.skipped)} skipped; "
-            f"final error queue clean: {result.final_error_queue_clean}"
-        )
-        return 0 if result.final_error_queue_clean else 1
 
 
 def _format_summary_bool(value: object) -> str:
@@ -6804,7 +6677,7 @@ def _cmd_channel_label(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -6816,7 +6689,7 @@ def _cmd_channel_label(args: argparse.Namespace) -> int:
             command = channel_label_query(channel)
             print(f"Planned query: CH{channel} label")
             text = scope.query_channel_label(channel)
-            _json_update_result(channel=channel, operation="query", command=command, text=text)
+            runtime._json_update_result(channel=channel, operation="query", command=command, text=text)
             print(f"Command: {command}")
             print(f"Label: {text}")
         else:
@@ -6824,11 +6697,11 @@ def _cmd_channel_label(args: argparse.Namespace) -> int:
             command = channel_label_command(channel, text, scope.capabilities)
             print(f"Planned change: CH{channel} label")
             scope.set_channel_label(channel, text)
-            _json_update_result(channel=channel, operation="set", command=command, text=text)
+            runtime._json_update_result(channel=channel, operation="set", command=command, text=text)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -6843,7 +6716,7 @@ def _cmd_channel_scale(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -6855,7 +6728,7 @@ def _cmd_channel_scale(args: argparse.Namespace) -> int:
             command = channel_scale_query(channel)
             print(f"Planned query: CH{channel} scale")
             scale = scope.query_channel_scale(channel)
-            _json_update_result(channel=channel, operation="query", command=command, volts_per_division=scale)
+            runtime._json_update_result(channel=channel, operation="query", command=command, volts_per_division=scale)
             print(f"Command: {command}")
             print(f"Scale V/div: {scale:.12g}")
         else:
@@ -6863,11 +6736,11 @@ def _cmd_channel_scale(args: argparse.Namespace) -> int:
             command = channel_scale_command(channel, scale)
             print(f"Planned change: CH{channel} scale {scale:.12g} V/div")
             scope.set_channel_scale(channel, scale)
-            _json_update_result(channel=channel, operation="set", command=command, volts_per_division=scale)
+            runtime._json_update_result(channel=channel, operation="set", command=command, volts_per_division=scale)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -6882,7 +6755,7 @@ def _cmd_channel_offset(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -6894,7 +6767,7 @@ def _cmd_channel_offset(args: argparse.Namespace) -> int:
             command = channel_offset_query(channel)
             print(f"Planned query: CH{channel} offset")
             offset = scope.query_channel_offset(channel)
-            _json_update_result(channel=channel, operation="query", command=command, volts=offset)
+            runtime._json_update_result(channel=channel, operation="query", command=command, volts=offset)
             print(f"Command: {command}")
             print(f"Offset V: {offset:.12g}")
         else:
@@ -6902,11 +6775,11 @@ def _cmd_channel_offset(args: argparse.Namespace) -> int:
             command = channel_offset_command(channel, offset)
             print(f"Planned change: CH{channel} offset {offset:.12g} V")
             scope.set_channel_offset(channel, offset)
-            _json_update_result(channel=channel, operation="set", command=command, volts=offset)
+            runtime._json_update_result(channel=channel, operation="set", command=command, volts=offset)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -6921,7 +6794,7 @@ def _cmd_channel_coupling(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -6933,7 +6806,7 @@ def _cmd_channel_coupling(args: argparse.Namespace) -> int:
             command = channel_coupling_query(channel)
             print(f"Planned query: CH{channel} coupling")
             coupling = scope.query_channel_coupling(channel)
-            _json_update_result(channel=channel, operation="query", command=command, coupling=coupling)
+            runtime._json_update_result(channel=channel, operation="query", command=command, coupling=coupling)
             print(f"Command: {command}")
             print(f"Coupling: {coupling.upper()}")
         else:
@@ -6941,11 +6814,11 @@ def _cmd_channel_coupling(args: argparse.Namespace) -> int:
             command = channel_coupling_command(channel, coupling)
             print(f"Planned change: CH{channel} coupling {coupling.upper()}")
             scope.set_channel_coupling(channel, coupling)
-            _json_update_result(channel=channel, operation="set", command=command, coupling=coupling)
+            runtime._json_update_result(channel=channel, operation="set", command=command, coupling=coupling)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -6960,7 +6833,7 @@ def _cmd_channel_probe(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -6972,7 +6845,7 @@ def _cmd_channel_probe(args: argparse.Namespace) -> int:
             command = channel_probe_ratio_query(channel)
             print(f"Planned query: CH{channel} probe ratio")
             ratio = scope.query_channel_probe_ratio(channel)
-            _json_update_result(channel=channel, operation="query", command=command, probe_ratio=ratio)
+            runtime._json_update_result(channel=channel, operation="query", command=command, probe_ratio=ratio)
             print(f"Command: {command}")
             print(f"Probe ratio: {ratio:.12g}")
         else:
@@ -6980,11 +6853,11 @@ def _cmd_channel_probe(args: argparse.Namespace) -> int:
             command = channel_probe_ratio_command(channel, ratio)
             print(f"Planned change: CH{channel} probe ratio {ratio:.12g}")
             scope.set_channel_probe_ratio(channel, ratio)
-            _json_update_result(channel=channel, operation="set", command=command, probe_ratio=ratio)
+            runtime._json_update_result(channel=channel, operation="set", command=command, probe_ratio=ratio)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -6999,7 +6872,7 @@ def _cmd_channel_bandwidth_limit(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7011,7 +6884,7 @@ def _cmd_channel_bandwidth_limit(args: argparse.Namespace) -> int:
             command = channel_bandwidth_limit_query(channel)
             print(f"Planned query: CH{channel} bandwidth limit")
             enabled = scope.query_channel_bandwidth_limit(channel)
-            _json_update_result(channel=channel, operation="query", command=command, bandwidth_limit=enabled)
+            runtime._json_update_result(channel=channel, operation="query", command=command, bandwidth_limit=enabled)
             print(f"Command: {command}")
             print(f"Bandwidth limit: {'ON' if enabled else 'OFF'}")
         else:
@@ -7020,11 +6893,11 @@ def _cmd_channel_bandwidth_limit(args: argparse.Namespace) -> int:
             state = "ON" if enabled else "OFF"
             print(f"Planned change: CH{channel} bandwidth limit {state}")
             scope.set_channel_bandwidth_limit(channel, enabled)
-            _json_update_result(channel=channel, operation="set", command=command, bandwidth_limit=enabled)
+            runtime._json_update_result(channel=channel, operation="set", command=command, bandwidth_limit=enabled)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7039,7 +6912,7 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7054,7 +6927,7 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_impedance_query(channel)
                 print(f"Planned query: CH{channel} impedance")
                 impedance = scope.query_channel_impedance(channel)
-                _json_update_result(channel=channel, operation="query", command=scpi, impedance=impedance)
+                runtime._json_update_result(channel=channel, operation="query", command=scpi, impedance=impedance)
                 print(f"Command: {scpi}")
                 print(f"Impedance: {_format_channel_impedance(impedance)}")
             else:
@@ -7063,14 +6936,14 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_impedance_command(channel, impedance)
                 print(f"Planned change: CH{channel} impedance {_format_channel_impedance(impedance)}")
                 scope.set_channel_impedance(channel, impedance)
-                _json_update_result(channel=channel, operation="set", command=scpi, impedance=impedance)
+                runtime._json_update_result(channel=channel, operation="set", command=scpi, impedance=impedance)
                 print(f"Command: {scpi}")
         elif command == "channel-invert":
             if args.invert_action == "query":
                 scpi = channel_invert_query(channel)
                 print(f"Planned query: CH{channel} invert")
                 enabled = scope.query_channel_invert(channel)
-                _json_update_result(channel=channel, operation="query", command=scpi, invert=enabled)
+                runtime._json_update_result(channel=channel, operation="query", command=scpi, invert=enabled)
                 print(f"Command: {scpi}")
                 print(f"Invert: {'ON' if enabled else 'OFF'}")
             else:
@@ -7078,14 +6951,14 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_invert_command(channel, enabled)
                 print(f"Planned change: CH{channel} invert {'ON' if enabled else 'OFF'}")
                 scope.set_channel_invert(channel, enabled)
-                _json_update_result(channel=channel, operation="set", command=scpi, invert=enabled)
+                runtime._json_update_result(channel=channel, operation="set", command=scpi, invert=enabled)
                 print(f"Command: {scpi}")
         elif command == "channel-range":
             if args.range_query:
                 scpi = channel_range_query(channel)
                 print(f"Planned query: CH{channel} range")
                 range_volts = scope.query_channel_range(channel)
-                _json_update_result(channel=channel, operation="query", command=scpi, range_volts=range_volts)
+                runtime._json_update_result(channel=channel, operation="query", command=scpi, range_volts=range_volts)
                 print(f"Command: {scpi}")
                 print(f"Range V: {range_volts:.12g}")
             else:
@@ -7093,14 +6966,14 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_range_command(channel, range_volts)
                 print(f"Planned change: CH{channel} range {range_volts:.12g} V")
                 scope.set_channel_range(channel, range_volts)
-                _json_update_result(channel=channel, operation="set", command=scpi, range_volts=range_volts)
+                runtime._json_update_result(channel=channel, operation="set", command=scpi, range_volts=range_volts)
                 print(f"Command: {scpi}")
         elif command == "channel-units":
             if args.units_query:
                 scpi = channel_units_query(channel)
                 print(f"Planned query: CH{channel} units")
                 units = scope.query_channel_units(channel)
-                _json_update_result(channel=channel, operation="query", command=scpi, units=units)
+                runtime._json_update_result(channel=channel, operation="query", command=scpi, units=units)
                 print(f"Command: {scpi}")
                 print(f"Units: {units}")
             else:
@@ -7108,14 +6981,14 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_units_command(channel, units)
                 print(f"Planned change: CH{channel} units {units}")
                 scope.set_channel_units(channel, units)
-                _json_update_result(channel=channel, operation="set", command=scpi, units=units)
+                runtime._json_update_result(channel=channel, operation="set", command=scpi, units=units)
                 print(f"Command: {scpi}")
         elif command == "channel-vernier":
             if args.vernier_action == "query":
                 scpi = channel_vernier_query(channel)
                 print(f"Planned query: CH{channel} vernier")
                 enabled = scope.query_channel_vernier(channel)
-                _json_update_result(channel=channel, operation="query", command=scpi, vernier=enabled)
+                runtime._json_update_result(channel=channel, operation="query", command=scpi, vernier=enabled)
                 print(f"Command: {scpi}")
                 print(f"Vernier: {'ON' if enabled else 'OFF'}")
             else:
@@ -7123,14 +6996,14 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_vernier_command(channel, enabled)
                 print(f"Planned change: CH{channel} vernier {'ON' if enabled else 'OFF'}")
                 scope.set_channel_vernier(channel, enabled)
-                _json_update_result(channel=channel, operation="set", command=scpi, vernier=enabled)
+                runtime._json_update_result(channel=channel, operation="set", command=scpi, vernier=enabled)
                 print(f"Command: {scpi}")
         elif command == "channel-probe-skew":
             if args.probe_skew_query:
                 scpi = channel_probe_skew_query(channel)
                 print(f"Planned query: CH{channel} probe skew")
                 skew = scope.query_channel_probe_skew(channel)
-                _json_update_result(channel=channel, operation="query", command=scpi, probe_skew_seconds=skew)
+                runtime._json_update_result(channel=channel, operation="query", command=scpi, probe_skew_seconds=skew)
                 print(f"Command: {scpi}")
                 print(f"Probe skew s: {skew:.12g}")
             else:
@@ -7138,13 +7011,13 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_probe_skew_command(channel, skew)
                 print(f"Planned change: CH{channel} probe skew {skew:.12g} s")
                 scope.set_channel_probe_skew(channel, skew)
-                _json_update_result(channel=channel, operation="set", command=scpi, probe_skew_seconds=skew)
+                runtime._json_update_result(channel=channel, operation="set", command=scpi, probe_skew_seconds=skew)
                 print(f"Command: {scpi}")
         else:
             raise ParameterValidationError(f"unsupported channel command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7163,7 +7036,7 @@ def _cmd_display_label(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7174,7 +7047,7 @@ def _cmd_display_label(args: argparse.Namespace) -> int:
             command = display_label_query()
             print("Planned query: display labels")
             enabled = scope.query_display_label()
-            _json_update_result(operation="query", command=command, display_label=enabled)
+            runtime._json_update_result(operation="query", command=command, display_label=enabled)
             print(f"Command: {command}")
             print(f"Display labels: {'ON' if enabled else 'OFF'}")
         else:
@@ -7182,11 +7055,11 @@ def _cmd_display_label(args: argparse.Namespace) -> int:
             command = display_label_command(enabled)
             print(f"Planned change: display labels {'ON' if enabled else 'OFF'}")
             scope.set_display_label(enabled)
-            _json_update_result(operation="set", command=command, display_label=enabled)
+            runtime._json_update_result(operation="set", command=command, display_label=enabled)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7201,7 +7074,7 @@ def _cmd_display_common(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7212,14 +7085,14 @@ def _cmd_display_common(args: argparse.Namespace) -> int:
         if args.command == "display-clear":
             print("Planned change: clear display")
             scope.clear_display()
-            _json_update_result(**result)
+            runtime._json_update_result(**result)
             print(f"Command: {target}")
             print("Display cleared")
         elif args.command == "display-persistence":
             if args.query:
                 print("Planned query: display persistence")
                 state = scope.query_display_persistence()
-                _json_update_result(
+                runtime._json_update_result(
                     operation=args.command,
                     command=target,
                     mode=state.mode,
@@ -7232,13 +7105,13 @@ def _cmd_display_common(args: argparse.Namespace) -> int:
                 print("Planned change: display persistence")
                 value = args.mode if args.mode is not None else args.seconds
                 scope.set_display_persistence(value)
-                _json_update_result(**result)
+                runtime._json_update_result(**result)
                 print(f"Command: {target}")
         elif args.command == "display-intensity":
             if args.query:
                 print("Planned query: display intensity")
                 value, raw = scope.query_display_intensity()
-                _json_update_result(
+                runtime._json_update_result(
                     operation=args.command,
                     command=target,
                     value=value,
@@ -7249,13 +7122,13 @@ def _cmd_display_common(args: argparse.Namespace) -> int:
             else:
                 print(f"Planned change: display intensity {args.value}")
                 scope.set_display_intensity(args.value)
-                _json_update_result(**result)
+                runtime._json_update_result(**result)
                 print(f"Command: {target}")
         elif args.command == "display-vectors":
             if args.query:
                 print("Planned query: display vectors")
                 value, raw = scope.query_display_vectors()
-                _json_update_result(
+                runtime._json_update_result(
                     operation=args.command,
                     command=target,
                     value=value,
@@ -7266,11 +7139,11 @@ def _cmd_display_common(args: argparse.Namespace) -> int:
             else:
                 print("Planned change: display vectors ON")
                 scope.set_display_vectors_on()
-                _json_update_result(**result)
+                runtime._json_update_result(**result)
                 print(f"Command: {target}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7289,7 +7162,7 @@ def _cmd_measurement_control(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
             return 1
@@ -7320,11 +7193,11 @@ def _cmd_measurement_control(args: argparse.Namespace) -> int:
                 result.update(window=state.window, raw_window=state.raw_window)
             else:
                 scope.configure_measurement_window(args.window)
-        _json_update_result(**result)
+        runtime._json_update_result(**result)
         for command in commands:
             print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7337,7 +7210,7 @@ def _cmd_reference_waveform(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
             return 1
@@ -7366,11 +7239,11 @@ def _cmd_reference_waveform(args: argparse.Namespace) -> int:
                 label=state.label,
                 raw_label=state.raw_label,
             )
-        _json_update_result(**result)
+        runtime._json_update_result(**result)
         for command in commands:
             print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7385,7 +7258,7 @@ def _cmd_annotation(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7396,7 +7269,7 @@ def _cmd_annotation(args: argparse.Namespace) -> int:
         if operation == "query":
             print(f"Planned query: annotation slot {args.slot}")
             state = scope.query_annotation(slot=args.slot)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 commands=commands,
                 slot=state.slot,
@@ -7431,12 +7304,12 @@ def _cmd_annotation(args: argparse.Namespace) -> int:
                 scope.set_annotation_enabled(True, slot=args.slot)
             if args.off:
                 scope.set_annotation_enabled(False, slot=args.slot)
-            _json_update_result(operation="set", **result)
+            runtime._json_update_result(operation="set", **result)
             for command in commands:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7451,7 +7324,7 @@ def _cmd_timebase_scale(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7462,7 +7335,7 @@ def _cmd_timebase_scale(args: argparse.Namespace) -> int:
             command = timebase_scale_query()
             print("Planned query: timebase scale")
             scale = scope.query_timebase_scale()
-            _json_update_result(operation="query", command=command, seconds_per_division=scale)
+            runtime._json_update_result(operation="query", command=command, seconds_per_division=scale)
             print(f"Command: {command}")
             print(f"Timebase scale s/div: {scale:.12g}")
         else:
@@ -7470,11 +7343,11 @@ def _cmd_timebase_scale(args: argparse.Namespace) -> int:
             command = timebase_scale_command(scale)
             print(f"Planned change: timebase scale {scale:.12g} s/div")
             scope.set_timebase_scale(scale)
-            _json_update_result(operation="set", command=command, seconds_per_division=scale)
+            runtime._json_update_result(operation="set", command=command, seconds_per_division=scale)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7489,7 +7362,7 @@ def _cmd_timebase_position(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7500,7 +7373,7 @@ def _cmd_timebase_position(args: argparse.Namespace) -> int:
             command = timebase_position_query()
             print("Planned query: timebase position")
             position = scope.query_timebase_position()
-            _json_update_result(operation="query", command=command, position_seconds=position)
+            runtime._json_update_result(operation="query", command=command, position_seconds=position)
             print(f"Command: {command}")
             print(f"Timebase position s: {position:.12g}")
         else:
@@ -7508,11 +7381,11 @@ def _cmd_timebase_position(args: argparse.Namespace) -> int:
             command = timebase_position_command(position)
             print(f"Planned change: timebase position {position:.12g} s")
             scope.set_timebase_position(position)
-            _json_update_result(operation="set", command=command, position_seconds=position)
+            runtime._json_update_result(operation="set", command=command, position_seconds=position)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7527,7 +7400,7 @@ def _cmd_trigger_edge(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7541,7 +7414,7 @@ def _cmd_trigger_edge(args: argparse.Namespace) -> int:
                 )
             print("Planned query: edge trigger source, level, and slope")
             state = scope.query_trigger_edge()
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 commands=[edge_trigger_source_query(), edge_trigger_level_query(), edge_trigger_slope_query()],
                 source_channel=state.source_channel,
@@ -7567,7 +7440,7 @@ def _cmd_trigger_edge(args: argparse.Namespace) -> int:
                 f"slope {args.slope}"
             )
             scope.configure_trigger_edge(channel, level, slope)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 commands=[trigger_mode_edge_command(), edge_trigger_source_command(channel), edge_trigger_level_command(level), edge_trigger_slope_command(slope)],
                 source_channel=channel,
@@ -7580,7 +7453,7 @@ def _cmd_trigger_edge(args: argparse.Namespace) -> int:
             print(f"Command: {edge_trigger_slope_command(slope)}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7595,7 +7468,7 @@ def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7606,7 +7479,7 @@ def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
             command = trigger_edge_source_query()
             print("Planned query: Edge Trigger source")
             state = scope.query_trigger_edge_source()
-            _json_update_result(operation="query", command=command, **state.to_json())
+            runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"Source: {state.source or state.raw_source}")
             if state.source_channel is not None:
@@ -7630,7 +7503,7 @@ def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
                 source=source,
                 source_channel=source_channel,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 command=command,
                 source=source,
@@ -7639,7 +7512,7 @@ def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7654,7 +7527,7 @@ def _cmd_trigger_edge_slope(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
 
@@ -7662,7 +7535,7 @@ def _cmd_trigger_edge_slope(args: argparse.Namespace) -> int:
             command = edge_trigger_slope_query()
             print("Planned query: Edge Trigger slope")
             state = scope.query_trigger_edge_slope()
-            _json_update_result(operation="query", command=command, **state.to_json())
+            runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"Slope: {state.slope or state.raw_slope}")
         else:
@@ -7670,11 +7543,11 @@ def _cmd_trigger_edge_slope(args: argparse.Namespace) -> int:
             command = edge_trigger_slope_command(normalize_edge_slope(slope))
             print(f"Planned change: Edge Trigger slope {slope}")
             scope.configure_trigger_edge_slope(slope=slope)
-            _json_update_result(operation="set", command=command, slope=slope)
+            runtime._json_update_result(operation="set", command=command, slope=slope)
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7689,7 +7562,7 @@ def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7701,7 +7574,7 @@ def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
             command = edge_trigger_level_channel_query(channel)
             print(f"Planned query: Edge Trigger level for CH{channel}")
             state = scope.query_trigger_edge_level(source_channel=channel)
-            _json_update_result(operation="query", command=command, **state.to_json())
+            runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"Level: {state.level_volts} V")
         else:
@@ -7712,7 +7585,7 @@ def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
                 source_channel=channel,
                 level_volts=level_volts,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 command=command,
                 source_channel=channel,
@@ -7721,7 +7594,7 @@ def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7736,7 +7609,7 @@ def _cmd_external_trigger_range(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
 
@@ -7744,7 +7617,7 @@ def _cmd_external_trigger_range(args: argparse.Namespace) -> int:
             command = external_trigger_range_query()
             print("Planned query: External trigger range")
             state = scope.query_external_trigger_range()
-            _json_update_result(operation="query", command=command, **state.to_json())
+            runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"External trigger range V: {state.range_volts}")
         else:
@@ -7752,7 +7625,7 @@ def _cmd_external_trigger_range(args: argparse.Namespace) -> int:
             command = external_trigger_range_command(range_volts)
             print("Planned change: External trigger range")
             scope.configure_external_trigger_range(range_volts)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 command=command,
                 range_volts=range_volts,
@@ -7761,7 +7634,7 @@ def _cmd_external_trigger_range(args: argparse.Namespace) -> int:
             print(f"External trigger range V: {range_volts}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7776,7 +7649,7 @@ def _cmd_trigger_edge_external_level(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
 
@@ -7784,7 +7657,7 @@ def _cmd_trigger_edge_external_level(args: argparse.Namespace) -> int:
             command = edge_trigger_external_level_query()
             print("Planned query: External Edge Trigger level")
             state = scope.query_trigger_edge_external_level()
-            _json_update_result(operation="query", command=command, **state.to_json())
+            runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"External Edge level V: {state.level_volts}")
         else:
@@ -7792,7 +7665,7 @@ def _cmd_trigger_edge_external_level(args: argparse.Namespace) -> int:
             command = edge_trigger_external_level_command(level_volts)
             print("Planned change: External Edge Trigger level")
             scope.configure_trigger_edge_external_level(level_volts=level_volts)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 command=command,
                 level_volts=level_volts,
@@ -7801,7 +7674,7 @@ def _cmd_trigger_edge_external_level(args: argparse.Namespace) -> int:
             print(f"External Edge level V: {level_volts}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7816,7 +7689,7 @@ def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
 
@@ -7825,7 +7698,7 @@ def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
                 command = external_trigger_probe_query()
                 print("Planned query: External trigger probe attenuation")
                 state = scope.query_external_trigger_probe()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"External trigger probe attenuation: {state.attenuation}")
             else:
@@ -7833,7 +7706,7 @@ def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
                 command = external_trigger_probe_command(attenuation)
                 print("Planned change: External trigger probe attenuation")
                 scope.configure_external_trigger_probe(attenuation)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="set", command=command, attenuation=attenuation
                 )
                 print(f"Command: {command}")
@@ -7843,7 +7716,7 @@ def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
                 command = external_trigger_units_query()
                 print("Planned query: External trigger input units")
                 state = scope.query_external_trigger_units()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"External trigger units: {state.units}")
             else:
@@ -7851,14 +7724,14 @@ def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
                 command = external_trigger_units_command(units)
                 print("Planned change: External trigger input units")
                 scope.configure_external_trigger_units(units)
-                _json_update_result(operation="set", command=command, units=units)
+                runtime._json_update_result(operation="set", command=command, units=units)
                 print(f"Command: {command}")
                 print(f"External trigger units: {units}")
         else:
             command = external_trigger_settings_query()
             print("Planned query: External trigger input settings")
             state = scope.query_external_trigger_settings()
-            _json_update_result(operation="query", command=command, **state.to_json())
+            runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"External trigger probe attenuation: {state.probe_attenuation}")
             print(f"External trigger range: {state.range_value}")
@@ -7866,7 +7739,7 @@ def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
             print(f"External trigger bandwidth limit enabled: {state.bandwidth_limit_enabled}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -7880,7 +7753,7 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -7891,12 +7764,12 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
             if args.query:
                 command = dvm_enable_query()
                 state = scope.query_dvm_enable()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"DVM enabled: {state.enabled}")
             else:
                 command = dvm_enable_command(args.enabled)
                 scope.configure_dvm_enable(args.enabled)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     enabled=args.enabled,
@@ -7908,13 +7781,13 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
             if args.query:
                 command = dvm_source_query()
                 state = scope.query_dvm_source()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"DVM source channel: {state.source_channel}")
             else:
                 channel = validate_analog_channel(args.channel, scope.capabilities)
                 command = dvm_source_command(channel, capabilities=scope.capabilities)
                 scope.configure_dvm_source(channel)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     source_channel=channel,
@@ -7926,12 +7799,12 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
             if args.query:
                 command = dvm_mode_query()
                 state = scope.query_dvm_mode()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"DVM mode: {state.mode}")
             else:
                 command = dvm_mode_command(args.mode)
                 scope.configure_dvm_mode(args.mode)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     mode=args.mode,
@@ -7943,12 +7816,12 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
             if args.query:
                 command = dvm_auto_range_query()
                 state = scope.query_dvm_auto_range()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"DVM auto range enabled: {state.auto_range_enabled}")
             else:
                 command = dvm_auto_range_command(args.enabled)
                 scope.configure_dvm_auto_range(args.enabled)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     auto_range_enabled=args.enabled,
@@ -7959,13 +7832,13 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
         elif args.command == "dvm-current":
             command = dvm_current_query()
             reading = scope.query_dvm_current()
-            _json_update_result(operation="query", command=command, **reading.to_json())
+            runtime._json_update_result(operation="query", command=command, **reading.to_json())
             print(f"Command: {command}")
             print(f"DVM current value: {reading.value}")
         else:
             commands = dvm_query_commands()
             state = scope.query_dvm()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"DVM enabled: {state.enabled}")
@@ -7975,7 +7848,7 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
             print(f"DVM current value: {state.value}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -8082,7 +7955,7 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         target, result, waits_for_completion = _save_export_plan(args)
 
@@ -8163,12 +8036,12 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
             result.update(operation.to_json(), state_changing=True)
             print(f"Instrument-side waveform saved as: {args.filename}")
 
-        _json_update_result(**result)
+        runtime._json_update_result(**result)
         print(f"Command: {target}")
         if waits_for_completion:
             print(f"Operation complete query: {system_opc_query()}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -8182,7 +8055,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -8192,7 +8065,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         if args.command == "demo-query":
             commands = demo_query_commands()
             state = scope.query_demo()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"DEMO function: {state.function or 'unknown'}")
@@ -8202,12 +8075,12 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             if args.query:
                 command = demo_output_query()
                 state = scope.query_demo_output()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"DEMO output enabled: {state.enabled}")
             else:
                 command = demo_output_command(args.enabled)
                 scope.configure_demo_output(args.enabled)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     enabled=args.enabled,
@@ -8219,13 +8092,13 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             if args.query:
                 command = demo_function_query()
                 state = scope.query_demo_function()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"DEMO function: {state.function or 'unknown'}")
             else:
                 function = args.function
                 command = demo_function_command(function, capabilities=scope.capabilities)
                 scope.configure_demo_function(function)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     function=function,
@@ -8237,13 +8110,13 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             if args.query:
                 command = demo_phase_query()
                 state = scope.query_demo_phase()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"DEMO phase degrees: {state.phase_degrees}")
             else:
                 degrees = validate_demo_phase(args.degrees)
                 command = demo_phase_command(degrees)
                 scope.configure_demo_phase(degrees)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     degrees=degrees,
@@ -8253,7 +8126,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -8267,7 +8140,7 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
@@ -8277,7 +8150,7 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
         if args.command == "wgen-query":
             commands = wgen_query_commands(capabilities)
             state = scope.query_wgen()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"WGEN output enabled: {state.enabled}")
@@ -8290,12 +8163,12 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
             if args.query:
                 command = wgen_output_query(capabilities)
                 state = scope.query_wgen_output()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN output enabled: {state.enabled}")
             else:
                 command = wgen_output_command(args.enabled, capabilities)
                 scope.configure_wgen_output(args.enabled)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     enabled=args.enabled,
@@ -8307,13 +8180,13 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
             if args.query:
                 command = wgen_function_query(capabilities)
                 state = scope.query_wgen_function()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN function: {state.function or 'unknown'}")
             else:
                 function = validate_wgen_function(args.function)
                 command = wgen_function_command(function, capabilities)
                 scope.configure_wgen_function(function)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     function=function,
@@ -8325,13 +8198,13 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
             if args.query:
                 command = wgen_frequency_query(capabilities)
                 state = scope.query_wgen_frequency()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN frequency Hz: {state.frequency_hz}")
             else:
                 value = validate_wgen_frequency(args.hz)
                 command = wgen_frequency_command(value, capabilities)
                 scope.configure_wgen_frequency(value)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     frequency_hz=value,
@@ -8343,13 +8216,13 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
             if args.query:
                 command = wgen_voltage_query(capabilities)
                 state = scope.query_wgen_voltage()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN amplitude volts: {state.amplitude_volts}")
             else:
                 value = validate_wgen_amplitude(args.amplitude)
                 command = wgen_voltage_command(value, capabilities)
                 scope.configure_wgen_voltage(value)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     amplitude_volts=value,
@@ -8361,13 +8234,13 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
             if args.query:
                 command = wgen_offset_query(capabilities)
                 state = scope.query_wgen_offset()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN offset volts: {state.offset_volts}")
             else:
                 value = validate_wgen_offset(args.volts)
                 command = wgen_offset_command(value, capabilities)
                 scope.configure_wgen_offset(value)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     offset_volts=value,
@@ -8379,12 +8252,12 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
             if args.query:
                 command = wgen_load_query(capabilities)
                 state = scope.query_wgen_load()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN load: {state.load}")
             else:
                 command = wgen_load_command(args.load, capabilities)
                 scope.configure_wgen_load(args.load)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     load=args.load,
@@ -8394,53 +8267,7 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
-        return 1 if entry.is_error else 0
-
-
-def _cmd_system_status(args: argparse.Namespace) -> int:
-    resource = runtime._require_resource(args)
-    if resource is None:
-        return 2
-
-    runtime._configure_scpi_logging(args)
-    with runtime._open_scope(args, resource) as scope:
-        _print_session_header(scope, resource)
-        if args.command == "system-clear-status":
-            command = system_clear_status_command()
-            scope.clear_status()
-            _json_update_result(operation="clear", command=command, cleared=True)
-            print("Status cleared: true")
-        elif args.command == "system-opc":
-            command = system_opc_query()
-            state = scope.query_operation_complete()
-            _json_update_result(operation="query", command=command, **state.to_json())
-            print(f"Operation complete: {state.complete}")
-        elif args.command == "system-status-byte":
-            command = system_status_byte_query()
-            state = scope.query_status_byte()
-            _json_update_result(operation="query", command=command, **state.to_json())
-            print(f"Status byte: {state.value}")
-        elif args.command == "system-standard-event":
-            command = system_standard_event_query()
-            state = scope.query_standard_event_status()
-            _json_update_result(operation="query", command=command, **state.to_json())
-            print(f"Standard event status: {state.value}")
-        elif args.command == "system-operation-status":
-            command = system_operation_status_query()
-            state = scope.query_operation_status()
-            _json_update_result(operation="query", command=command, **state.to_json())
-            print(f"Operation condition status: {state.value}")
-        else:
-            command = system_options_query()
-            state = scope.query_system_options()
-            _json_update_result(operation="query", command=command, **state.to_json())
-            print(f"System options: {', '.join(state.options)}")
-        print(f"Command: {command}")
-
-        entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -8629,7 +8456,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -8639,7 +8466,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
         if args.command == "serial-query":
             command = serial_bus_query(args.bus)
             state = scope.query_serial(args.bus)
-            _json_update_result(operation="query", command=command, **state.to_json())
+            runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Serial bus {state.bus} raw setup: {state.raw}")
         elif args.command == "serial-mode":
             if args.query:
@@ -8650,7 +8477,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 command = serial_mode_command(args.bus, args.mode)
                 state = scope.configure_serial_mode(args.bus, args.mode)
                 operation = "configure"
-            _json_update_result(
+            runtime._json_update_result(
                 operation=operation,
                 command=command,
                 **state.to_json(),
@@ -8666,7 +8493,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 command = serial_display_command(args.bus, args.enabled)
                 state = scope.configure_serial_display(args.bus, args.enabled)
                 operation = "configure"
-            _json_update_result(
+            runtime._json_update_result(
                 operation=operation,
                 command=command,
                 **state.to_json(),
@@ -8695,7 +8522,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                     mode=state.mode,
                     trigger_type=state.type,
                 )
-            _json_update_result(
+            runtime._json_update_result(
                 operation=operation,
                 commands=commands,
                 **state.to_json(),
@@ -8734,7 +8561,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 commands = _serial_can_trigger_commands(
                     args, mode=state.mode, trigger_type=state.type
                 )
-            _json_update_result(
+            runtime._json_update_result(
                 operation=operation,
                 commands=commands,
                 **state.to_json(),
@@ -8757,7 +8584,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                     args.bus, **settings
                 )
                 operation = "configure"
-            _json_update_result(
+            runtime._json_update_result(
                 operation=operation,
                 commands=commands,
                 **state.to_json(),
@@ -8773,7 +8600,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
         else:
             print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         if (
             args.command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}
@@ -8799,7 +8626,7 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -8809,7 +8636,7 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
         if args.command == "serial-lister-query":
             commands = list(serial_lister_query_commands().values())
             state = scope.query_serial_lister()
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 commands=commands,
                 **state.to_json(),
@@ -8827,7 +8654,7 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
                 command = serial_lister_display_command(args.selection)
                 state = scope.configure_serial_lister_display(args.selection)
                 operation = "configure"
-            _json_update_result(
+            runtime._json_update_result(
                 operation=operation,
                 command=command,
                 **state.to_json(),
@@ -8844,7 +8671,7 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
                 command = serial_lister_reference_command(args.reference)
                 state = scope.configure_serial_lister_reference(args.reference)
                 operation = "configure"
-            _json_update_result(
+            runtime._json_update_result(
                 operation=operation,
                 command=command,
                 **state.to_json(),
@@ -8857,7 +8684,7 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
             payload = scope.query_serial_lister_data()
             output_path = Path(args.output_path)
             written_path = write_serial_lister_csv(payload, output_path)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="export",
                 command=command,
                 output_path=str(written_path),
@@ -8868,7 +8695,7 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
             print(f"Lister CSV: {written_path} ({len(payload)} bytes)")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -8889,7 +8716,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -8900,11 +8727,11 @@ def _cmd_search(args: argparse.Namespace) -> int:
             if args.query:
                 command = search_state_query()
                 state = scope.query_search_state()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
             else:
                 command = search_state_command(args.enabled)
                 state = scope.configure_search_state(args.enabled)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     **state.to_json(),
@@ -8916,12 +8743,12 @@ def _cmd_search(args: argparse.Namespace) -> int:
             if args.query:
                 command = search_mode_query()
                 state = scope.query_search_mode()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
             else:
                 state = scope.configure_search_mode(args.mode)
                 commands = [search_state_command(True), search_mode_command(args.mode)]
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     commands=commands,
                     **state.to_json(),
@@ -8935,13 +8762,13 @@ def _cmd_search(args: argparse.Namespace) -> int:
             if args.query:
                 command = search_event_query()
                 state = scope.query_search_event()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"Search event: {state.event}")
             else:
                 command = search_event_command(args.event)
                 state = scope.configure_search_event(args.event)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     **state.to_json(),
@@ -8952,12 +8779,12 @@ def _cmd_search(args: argparse.Namespace) -> int:
         else:
             command = search_count_query()
             state = scope.query_search_count()
-            _json_update_result(operation="query", command=command, **state.to_json())
+            runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"Search count: {state.count}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -8972,7 +8799,7 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -8984,14 +8811,14 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_sweep_query()
                 print("Planned query: trigger sweep mode")
                 state = scope.query_trigger_sweep()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"Mode: {state.mode}")
             else:
                 command = trigger_sweep_command(args.mode)
                 print(f"Planned change: trigger sweep {args.mode}")
                 scope.configure_trigger_sweep(args.mode)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     mode=args.mode,
@@ -9003,14 +8830,14 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_noise_reject_query()
                 print("Planned query: trigger noise reject")
                 state = scope.query_trigger_noise_reject()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"Enabled: {state.enabled}")
             else:
                 command = trigger_noise_reject_command(args.enabled)
                 print(f"Planned change: trigger noise reject {args.enabled}")
                 scope.configure_trigger_noise_reject(args.enabled)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     enabled=args.enabled,
@@ -9022,14 +8849,14 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_hf_reject_query()
                 print("Planned query: trigger high-frequency reject")
                 state = scope.query_trigger_hf_reject()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"Enabled: {state.enabled}")
             else:
                 command = trigger_hf_reject_command(args.enabled)
                 print(f"Planned change: trigger high-frequency reject {args.enabled}")
                 scope.configure_trigger_hf_reject(args.enabled)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="configure",
                     command=command,
                     enabled=args.enabled,
@@ -9042,14 +8869,14 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_edge_coupling_query()
                 print("Planned query: Edge Trigger coupling")
                 state = scope.query_trigger_edge_coupling()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"Coupling: {state.coupling}")
             else:
                 command = trigger_edge_coupling_command(args.coupling)
                 print(f"Planned change: Edge Trigger coupling {args.coupling}")
                 scope.configure_trigger_edge_coupling(args.coupling)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="set",
                     command=command,
                     coupling=args.coupling,
@@ -9061,14 +8888,14 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_edge_reject_query()
                 print("Planned query: Edge Trigger reject")
                 state = scope.query_trigger_edge_reject()
-                _json_update_result(operation="query", command=command, **state.to_json())
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"Reject: {state.reject}")
             else:
                 command = trigger_edge_reject_command(args.reject)
                 print(f"Planned change: Edge Trigger reject {args.reject}")
                 scope.configure_trigger_edge_reject(args.reject)
-                _json_update_result(
+                runtime._json_update_result(
                     operation="set",
                     command=command,
                     reject=args.reject,
@@ -9076,7 +8903,7 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9091,7 +8918,7 @@ def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9102,7 +8929,7 @@ def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
             commands = glitch_trigger_query_commands()
             print("Planned query: pulse-width trigger state")
             state = scope.query_glitch_trigger()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode or state.raw['mode']}")
@@ -9156,12 +8983,12 @@ def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
             else:
                 result["min_time_seconds"] = args.min_time_seconds
                 result["max_time_seconds"] = args.max_time_seconds
-            _json_update_result(**result)
+            runtime._json_update_result(**result)
             for command in commands:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9176,7 +9003,7 @@ def _cmd_trigger_runt(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9195,7 +9022,7 @@ def _cmd_trigger_runt(args: argparse.Namespace) -> int:
                         runt_trigger_high_level_query(state.channel),
                     ]
                 )
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode or state.raw['mode']}")
@@ -9234,7 +9061,7 @@ def _cmd_trigger_runt(args: argparse.Namespace) -> int:
                 low_level_volts=args.low_level_volts,
                 high_level_volts=args.high_level_volts,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 commands=commands,
                 channel=args.channel,
@@ -9250,7 +9077,7 @@ def _cmd_trigger_runt(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9265,7 +9092,7 @@ def _cmd_trigger_transition(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9283,7 +9110,7 @@ def _cmd_trigger_transition(args: argparse.Namespace) -> int:
                         trigger_high_level_query(state.channel),
                     ]
                 )
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode or state.raw['mode']}")
@@ -9322,7 +9149,7 @@ def _cmd_trigger_transition(args: argparse.Namespace) -> int:
                 low_level_volts=args.low_level_volts,
                 high_level_volts=args.high_level_volts,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 commands=commands,
                 channel=args.channel,
@@ -9338,7 +9165,7 @@ def _cmd_trigger_transition(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9353,7 +9180,7 @@ def _cmd_trigger_delay(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9364,7 +9191,7 @@ def _cmd_trigger_delay(args: argparse.Namespace) -> int:
             commands = delay_trigger_query_commands()
             print("Planned query: delay trigger state")
             state = scope.query_delay_trigger()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode or state.raw['mode']}")
@@ -9410,7 +9237,7 @@ def _cmd_trigger_delay(args: argparse.Namespace) -> int:
                 time_seconds=args.time_seconds,
                 count=args.count,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 commands=commands,
                 arm_channel=args.arm_channel,
@@ -9427,7 +9254,7 @@ def _cmd_trigger_delay(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9442,7 +9269,7 @@ def _cmd_trigger_setup_hold(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9453,7 +9280,7 @@ def _cmd_trigger_setup_hold(args: argparse.Namespace) -> int:
             commands = setup_hold_trigger_query_commands()
             print("Planned query: setup-hold trigger state")
             state = scope.query_setup_hold_trigger()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode or state.raw_mode}")
@@ -9496,7 +9323,7 @@ def _cmd_trigger_setup_hold(args: argparse.Namespace) -> int:
                 setup_time_seconds=args.setup_time,
                 hold_time_seconds=args.hold_time,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="configure",
                 commands=commands,
                 mode=state.mode,
@@ -9516,7 +9343,7 @@ def _cmd_trigger_setup_hold(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9531,7 +9358,7 @@ def _cmd_trigger_edge_burst(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9542,7 +9369,7 @@ def _cmd_trigger_edge_burst(args: argparse.Namespace) -> int:
             commands = edge_burst_trigger_query_commands()
             print("Planned query: Nth Edge Burst trigger state")
             state = scope.query_edge_burst_trigger()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             if state.raw_level is not None:
@@ -9588,12 +9415,12 @@ def _cmd_trigger_edge_burst(args: argparse.Namespace) -> int:
                     "state_changing": True,
                 }
             )
-            _json_update_result(**result)
+            runtime._json_update_result(**result)
             for command in commands:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9608,7 +9435,7 @@ def _cmd_trigger_tv(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9619,7 +9446,7 @@ def _cmd_trigger_tv(args: argparse.Namespace) -> int:
             commands = tv_trigger_query_commands()
             print("Planned query: TV trigger state")
             state = scope.query_tv_trigger()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode or 'unknown'}")
@@ -9658,12 +9485,12 @@ def _cmd_trigger_tv(args: argparse.Namespace) -> int:
                     "state_changing": True,
                 }
             )
-            _json_update_result(**result)
+            runtime._json_update_result(**result)
             for command in commands:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9678,7 +9505,7 @@ def _cmd_trigger_pattern(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9689,7 +9516,7 @@ def _cmd_trigger_pattern(args: argparse.Namespace) -> int:
             commands = pattern_trigger_query_commands()
             print("Planned query: pattern trigger state")
             state = scope.query_pattern_trigger()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode or state.raw['mode']}")
@@ -9707,7 +9534,7 @@ def _cmd_trigger_pattern(args: argparse.Namespace) -> int:
             )
             print(f"Planned change: pattern trigger {args.pattern.upper()}")
             state = scope.configure_pattern_trigger(args.pattern)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 commands=commands,
                 mode=state.mode,
@@ -9720,7 +9547,7 @@ def _cmd_trigger_pattern(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9735,7 +9562,7 @@ def _cmd_trigger_or(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -9746,7 +9573,7 @@ def _cmd_trigger_or(args: argparse.Namespace) -> int:
             commands = or_trigger_query_commands()
             print("Planned query: OR trigger state")
             state = scope.query_or_trigger()
-            _json_update_result(operation="query", commands=commands, **state.to_json())
+            runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode or state.raw_mode}")
@@ -9758,7 +9585,7 @@ def _cmd_trigger_or(args: argparse.Namespace) -> int:
             )
             state = scope.configure_or_trigger(args.pattern)
             print(f"Planned change: OR trigger {state.pattern}")
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 commands=commands,
                 mode=state.mode,
@@ -9770,7 +9597,7 @@ def _cmd_trigger_or(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -9845,7 +9672,7 @@ def _cmd_measure_results(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         result = scope.query_measurement_results()
         items = [
@@ -9864,7 +9691,7 @@ def _cmd_measure_results(args: argparse.Namespace) -> int:
             }
             for item in result.statistics_items
         ]
-        _json_update_result(
+        runtime._json_update_result(
             operation="query",
             command=measurement_results_query(),
             raw=result.raw,
@@ -9892,7 +9719,7 @@ def _cmd_measure_stats(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
@@ -9912,7 +9739,7 @@ def _cmd_measure_stats(args: argparse.Namespace) -> int:
             max_count=args.max_count,
             settle_seconds=args.settle_seconds,
         )
-        _json_update_result(**_measurement_statistics_json(result))
+        runtime._json_update_result(**_measurement_statistics_json(result))
         for command in _measure_stats_planned_scpi(
             channel,
             items,
@@ -9931,7 +9758,7 @@ def _cmd_measure_stats(args: argparse.Namespace) -> int:
                 f"count={record.count}"
             )
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -10232,7 +10059,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -10253,14 +10080,14 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
                 "raw_layout": state.raw_layout,
                 "raw_format": state.raw_format,
             }
-            _json_update_result(operation="query", hardcopy=hardcopy)
+            runtime._json_update_result(operation="query", hardcopy=hardcopy)
             print(f"Area: {state.area} (raw: {state.raw_area})")
             print(f"Ink saver: {state.ink_saver} (raw: {state.raw_ink_saver})")
             print(f"Palette: {state.palette} (raw: {state.raw_palette})")
             print(f"Layout: {state.layout} (raw: {state.raw_layout})")
             print(f"Format: {state.format} (raw: {state.raw_format})")
             entry = scope.query_system_error()
-            _json_record_system_error(entry)
+            runtime._json_record_system_error(entry)
             print(f"System error: {entry.format()}")
             return 1 if entry.is_error else 0
 
@@ -10321,7 +10148,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         )
         if format_name == "png":
             result["png_path"] = str(written_image)
-        _json_update_result(**result)
+        runtime._json_update_result(**result)
         print(f"Format: {capture.format_name}")
         if capture.palette is not None:
             print(f"Palette: {capture.palette}")
@@ -10332,7 +10159,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         else:
             print(f"BMP: {written_image}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -10365,37 +10192,6 @@ def _cmd_smoke(args: argparse.Namespace) -> int:
         return operation_result.exit_code
 
 
-def _cmd_force_trigger(args: argparse.Namespace) -> int:
-    resource = runtime._require_resource(args)
-    if resource is None:
-        return 2
-
-    runtime._configure_scpi_logging(args)
-
-    with runtime._open_scope(args, resource) as scope:
-        idn = scope.query_idn()
-        runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
-        print(f"Model: {idn.model}")
-        print("Series: " + (idn.series or "unknown"))
-        if scope.capabilities is None:
-            print("Capabilities: unavailable for this model")
-            return 1
-
-        print("Planned change: force one trigger event")
-        scope.scpi.write(force_trigger_command())
-        _json_update_result(
-            operation="force-trigger",
-            forced=True,
-            scpi_command=force_trigger_command(),
-        )
-        print("Command: " + force_trigger_command())
-        entry = scope.query_system_error()
-        _json_record_system_error(entry)
-        print("System error: " + entry.format())
-        return 1 if entry.is_error else 0
-
-
 def _sample_rate_query_command(args: argparse.Namespace) -> str:
     if getattr(args, "sample_rate_maximum", False):
         return sample_rate_maximum_query()
@@ -10412,7 +10208,7 @@ def _cmd_sample_rate(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
         if scope.capabilities is None:
@@ -10443,9 +10239,9 @@ def _cmd_sample_rate(args: argparse.Namespace) -> int:
             result["maximum_sample_rate_hz"] = sample_rate_hz
         else:
             result["sample_rate_hz"] = sample_rate_hz
-        _json_update_result(**result)
+        runtime._json_update_result(**result)
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
 
@@ -10460,14 +10256,14 @@ def _cmd_segmented_memory(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
         if args.query:
             query_result = scope.query_segmented_memory()
             result = query_result.to_json()
             result["operation"] = "query"
-            _json_update_result(**result)
+            runtime._json_update_result(**result)
             print("Planned query: segmented memory state")
             print("Mode: " + query_result.mode)
             print("Configured segments: " + str(query_result.configured_segments))
@@ -10476,7 +10272,7 @@ def _cmd_segmented_memory(args: argparse.Namespace) -> int:
             print("Time tag (s): " + str(query_result.time_tag_s))
         elif args.enable:
             scope.enable_segmented_memory(args.segments)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="enable",
                 mode="segmented",
                 configured_segments=args.segments,
@@ -10484,14 +10280,14 @@ def _cmd_segmented_memory(args: argparse.Namespace) -> int:
             print(f"Configured segmented memory with {args.segments} segments")
         else:
             scope.disable_segmented_memory()
-            _json_update_result(
+            runtime._json_update_result(
                 operation="disable",
                 mode="realtime",
                 configured_segments=None,
             )
             print("Disabled segmented memory")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
 
@@ -10522,7 +10318,7 @@ def _cmd_acquisition_points(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
         if scope.capabilities is None:
@@ -10535,7 +10331,7 @@ def _cmd_acquisition_points(args: argparse.Namespace) -> int:
         print("Command: " + acquisition_points_query())
         print("Acquisition points: " + str(acquisition_points) + " points")
         print("Raw value: " + raw.strip())
-        _json_update_result(
+        runtime._json_update_result(
             operation="query",
             acquisition_points=acquisition_points,
             raw_value=raw.strip(),
@@ -10543,7 +10339,7 @@ def _cmd_acquisition_points(args: argparse.Namespace) -> int:
             scpi_command=acquisition_points_query(),
         )
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
 
@@ -10558,7 +10354,7 @@ def _cmd_record_length(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print("Series: " + (idn.series or "unknown"))
         if scope.capabilities is None:
@@ -10571,7 +10367,7 @@ def _cmd_record_length(args: argparse.Namespace) -> int:
         print("Command: " + record_length_query())
         print("Record length: " + str(record_length_points) + " points")
         print("Raw value: " + raw.strip())
-        _json_update_result(
+        runtime._json_update_result(
             operation="query",
             record_length_points=record_length_points,
             raw_value=raw.strip(),
@@ -10579,7 +10375,7 @@ def _cmd_record_length(args: argparse.Namespace) -> int:
             scpi_command=record_length_query(),
         )
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
 
@@ -10602,7 +10398,7 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
         if scope.capabilities is None:
@@ -10612,7 +10408,7 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
         if args.acq_query:
             print("Planned query: acquisition type and average count")
             config = scope.query_acquisition_config()
-            _json_update_result(operation="query", type=config.type, count=config.count, commands=[acquisition_type_query(), acquisition_count_query()])
+            runtime._json_update_result(operation="query", type=config.type, count=config.count, commands=[acquisition_type_query(), acquisition_count_query()])
             print(f"Acquisition type: {config.type}")
             print(f"Average count: {config.count}")
             print(f"Command: {acquisition_type_query()}")
@@ -10622,18 +10418,18 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
             print(f"Planned change: acquisition type {args.acq_type}")
             print(f"Command: {acquisition_type_command(normalized_type)}")
             scope.set_acquisition_type(args.acq_type)
-            _json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=None, commands=[acquisition_type_command(normalized_type)])
+            runtime._json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=None, commands=[acquisition_type_command(normalized_type)])
             if args.acq_count is not None:
                 validated_count = validate_acquisition_count(args.acq_count)
                 print(f"Planned change: acquisition average count {validated_count}")
                 print(f"Command: {acquisition_count_command(validated_count)}")
                 scope.set_acquisition_count(validated_count)
-                _json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=validated_count, commands=[acquisition_type_command(normalized_type), acquisition_count_command(validated_count)])
+                runtime._json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=validated_count, commands=[acquisition_type_command(normalized_type), acquisition_count_command(validated_count)])
         else:
             raise OscilloscopeError("acquisition command requires --query or --type")
 
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -10646,14 +10442,14 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
             return 1
         if args.cursor_query:
             state = scope.query_cursor()
-            _json_update_result(operation="query", **state.__dict__)
+            runtime._json_update_result(operation="query", **state.__dict__)
             for command in _cursor_query_commands():
                 print(f"Command: {command}")
             print(f"Mode: {state.mode}")
@@ -10661,7 +10457,7 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             print(f"Y delta V: {state.y_delta_volts:.12g}")
         elif args.cursor_off:
             scope.cursor_off()
-            _json_update_result(operation="off", command=":MARKer:MODE OFF")
+            runtime._json_update_result(operation="off", command=":MARKer:MODE OFF")
             print("Command: :MARKer:MODE OFF")
         else:
             if args.source_channel is None or args.x2 is None:
@@ -10743,15 +10539,15 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
                 result["auto_timebase"] = cursor_auto_timebase_json(auto_timebase)
             if auto_vertical is not None:
                 result["auto_vertical"] = cursor_auto_vertical_json(auto_vertical)
-            _json_update_result(**result)
+            runtime._json_update_result(**result)
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         diagnostic = _cursor_range_diagnostic(args, entry)
         if diagnostic is not None:
-            _json_update_result(diagnostic=diagnostic)
+            runtime._json_update_result(diagnostic=diagnostic)
             print(f"Diagnostic: {diagnostic}")
         return 1 if entry.is_error else 0
 
@@ -10764,22 +10560,22 @@ def _cmd_trigger_holdoff(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.holdoff_query:
             seconds = scope.query_trigger_holdoff()
-            _json_update_result(operation="query", command=trigger_holdoff_query(), seconds=seconds)
+            runtime._json_update_result(operation="query", command=trigger_holdoff_query(), seconds=seconds)
             print(f"Command: {trigger_holdoff_query()}")
             print(f"Holdoff seconds: {seconds:.12g}")
         else:
             seconds = validate_trigger_holdoff(args.holdoff_seconds)
             scope.set_trigger_holdoff(seconds)
             commands = trigger_holdoff_commands(seconds)
-            _json_update_result(operation="set", command=commands[-1], commands=commands, seconds=seconds)
+            runtime._json_update_result(operation="set", command=commands[-1], commands=commands, seconds=seconds)
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -10804,14 +10600,14 @@ def _cmd_fft(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
             return 1
         if args.fft_query:
             state = scope.query_fft(args.function)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 function=state.function,
                 fft_operation=state.operation,
@@ -10884,7 +10680,7 @@ def _cmd_fft(args: argparse.Namespace) -> int:
                 detection_points=args.detection_points,
                 capabilities=scope.capabilities,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 commands=commands,
                 function=args.function,
@@ -10905,7 +10701,7 @@ def _cmd_fft(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -10918,11 +10714,11 @@ def _cmd_math_display(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_display_action == "query":
             state = scope.query_math_display(args.function)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 function=state.function,
                 enabled=state.enabled,
@@ -10938,7 +10734,7 @@ def _cmd_math_display(args: argparse.Namespace) -> int:
             command = math_display_command(
                 args.function, enabled, capabilities=scope.capabilities
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 function=args.function,
                 enabled=enabled,
@@ -10946,7 +10742,7 @@ def _cmd_math_display(args: argparse.Namespace) -> int:
             )
             print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -10959,11 +10755,11 @@ def _cmd_math_vertical(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_vertical_query:
             state = scope.query_math_vertical(args.function)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 function=state.function,
                 scale=state.scale,
@@ -10992,7 +10788,7 @@ def _cmd_math_vertical(args: argparse.Namespace) -> int:
                 offset=args.offset,
                 capabilities=scope.capabilities,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 function=args.function,
                 scale=args.scale,
@@ -11003,7 +10799,7 @@ def _cmd_math_vertical(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -11016,11 +10812,11 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_operator_query:
             state = scope.query_math_operator(args.function)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 function=state.function,
                 math_operation=state.operation,
@@ -11052,7 +10848,7 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
                 args.source2,
                 capabilities=scope.capabilities,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 function=args.function,
                 math_operation=args.math_operation,
@@ -11063,7 +10859,7 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -11076,11 +10872,11 @@ def _cmd_math_composite_source(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_composite_query:
             state = scope.query_math_composite_source()
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 math_operation=state.operation,
                 operation_raw=state.operation_raw,
@@ -11109,7 +10905,7 @@ def _cmd_math_composite_source(args: argparse.Namespace) -> int:
                 args.source2,
                 capabilities=scope.capabilities,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 math_operation=args.math_composite_operation,
                 source1=args.source1,
@@ -11119,7 +10915,7 @@ def _cmd_math_composite_source(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -11132,11 +10928,11 @@ def _cmd_math_transform(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_transform_query:
             state = scope.query_math_transform(args.function)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 function=state.function,
                 math_operation=state.operation,
@@ -11178,7 +10974,7 @@ def _cmd_math_transform(args: argparse.Namespace) -> int:
                 linear_offset=args.linear_offset,
                 capabilities=scope.capabilities,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 function=args.function,
                 math_operation=args.math_transform_operation,
@@ -11191,7 +10987,7 @@ def _cmd_math_transform(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -11204,11 +11000,11 @@ def _cmd_math_filter(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_filter_query:
             state = scope.query_math_filter(args.function)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 function=state.function,
                 math_operation=state.operation,
@@ -11250,7 +11046,7 @@ def _cmd_math_filter(args: argparse.Namespace) -> int:
                 smooth_points=args.smooth_points,
                 capabilities=scope.capabilities,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 function=args.function,
                 math_operation=args.math_filter_operation,
@@ -11263,7 +11059,7 @@ def _cmd_math_filter(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -11276,11 +11072,11 @@ def _cmd_math_visualization(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if args.math_visualization_query:
             state = scope.query_math_visualization(args.function)
-            _json_update_result(
+            runtime._json_update_result(
                 operation="query",
                 function=state.function,
                 math_operation=state.operation,
@@ -11320,7 +11116,7 @@ def _cmd_math_visualization(args: argparse.Namespace) -> int:
                 measurement_slot=args.measurement_slot,
                 capabilities=scope.capabilities,
             )
-            _json_update_result(
+            runtime._json_update_result(
                 operation="set",
                 function=args.function,
                 math_operation=args.math_visualization_operation,
@@ -11333,7 +11129,7 @@ def _cmd_math_visualization(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -11346,13 +11142,13 @@ def _cmd_math_clear(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         scope.clear_math(args.function)
         command = math_clear_command(
             args.function, capabilities=scope.capabilities
         )
-        _json_update_result(
+        runtime._json_update_result(
             operation="clear",
             function=args.function,
             cleared=True,
@@ -11360,7 +11156,7 @@ def _cmd_math_clear(args: argparse.Namespace) -> int:
         )
         print(f"Command: {command}")
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -11373,7 +11169,7 @@ def _cmd_simple_advanced(args: argparse.Namespace, command_name: str) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        _print_session_header(scope, resource)
+        runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
@@ -11382,15 +11178,15 @@ def _cmd_simple_advanced(args: argparse.Namespace, command_name: str) -> int:
             channels = None if not args.source_channel else tuple(validate_analog_channel(channel, scope.capabilities) for channel in args.source_channel)
             scope.autoscale(channels, acquire_mode=args.acquire_mode, channels_mode=args.channels)
             commands = autoscale_commands(channels, acquire_mode=args.acquire_mode, channels_mode=args.channels, capabilities=scope.capabilities)
-            _json_update_result(operation="run", commands=commands, source_channels=None if channels is None else list(channels))
+            runtime._json_update_result(operation="run", commands=commands, source_channels=None if channels is None else list(channels))
         elif command_name == "setup-save":
             scope.save_setup(slot=args.slot, file_spec=args.setup_file)
             commands = [setup_save_command(slot=args.slot, file_spec=args.setup_file)]
-            _json_update_result(operation="save", command=commands[0], slot=args.slot, file=args.setup_file)
+            runtime._json_update_result(operation="save", command=commands[0], slot=args.slot, file=args.setup_file)
         else:
             scope.recall_setup(slot=args.slot, file_spec=args.setup_file)
             commands = [setup_recall_command(slot=args.slot, file_spec=args.setup_file)]
-            _json_update_result(operation="recall", command=commands[0], slot=args.slot, file=args.setup_file)
+            runtime._json_update_result(operation="recall", command=commands[0], slot=args.slot, file=args.setup_file)
         for command in commands:
             print(f"Command: {command}")
         if command_name == "autoscale" and not getattr(args, "simulate", False):
@@ -11409,7 +11205,7 @@ def _cmd_simple_advanced(args: argparse.Namespace, command_name: str) -> int:
                 )
                 scope.scpi.write(fallback_command)
                 commands.append(fallback_command)
-                _json_update_result(
+                runtime._json_update_result(
                     commands=commands,
                     fallback="bare_autoscale_after_source_undefined_header",
                 )
@@ -11418,7 +11214,7 @@ def _cmd_simple_advanced(args: argparse.Namespace, command_name: str) -> int:
                 )
         else:
             entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
@@ -11829,7 +11625,7 @@ def _doctor_snapshot(scope: Oscilloscope) -> dict[str, object]:
     }
     trigger = scope.query_trigger_edge()
     return {
-        **_scope_backend_json(scope),
+        **runtime._scope_backend_json(scope),
         "acquisition": {
             "type": acquisition.type,
             "count": acquisition.count,
@@ -11853,11 +11649,11 @@ def _run_sweep_measurement(
     try:
         result = scope.query_measurement(channel, item)
         system_error = scope.query_system_error()
-        _json_record_system_error(system_error)
+        runtime._json_record_system_error(system_error)
         return {
             "command": command,
             **_measurement_result_json(result, parameters={}),
-            "system_error": _system_error_json(system_error),
+            "system_error": runtime._system_error_json(system_error),
         }
     except OscilloscopeError as exc:
         system_error = _query_system_error_best_effort(scope)
@@ -11881,11 +11677,11 @@ def _run_sweep_pair_measurement(
     try:
         result = scope.query_pair_measurement(source_channel, reference_channel, item)
         system_error = scope.query_system_error()
-        _json_record_system_error(system_error)
+        runtime._json_record_system_error(system_error)
         return {
             "command": command,
             **_measurement_result_json(result, parameters={}),
-            "system_error": _system_error_json(system_error),
+            "system_error": runtime._system_error_json(system_error),
         }
     except OscilloscopeError as exc:
         system_error = _query_system_error_best_effort(scope)
@@ -11902,7 +11698,7 @@ def _run_sweep_pair_measurement(
 def _query_system_error_best_effort(scope: Oscilloscope):
     try:
         entry = scope.query_system_error()
-        _json_record_system_error(entry)
+        runtime._json_record_system_error(entry)
         return entry
     except OscilloscopeError:
         return None
@@ -11927,7 +11723,7 @@ def _sweep_error_record(
         "raw_value": None,
         "reason": str(exc),
         "command": command,
-        "system_error": None if system_error is None else _system_error_json(system_error),
+        "system_error": None if system_error is None else runtime._system_error_json(system_error),
         "error": {"type": type(exc).__name__, "message": str(exc)},
     }
 
@@ -12008,16 +11804,6 @@ def _format_plain_output_file_error(file_kind: str, path: Path, exc: OSError) ->
     if isinstance(exc, PermissionError):
         message += ". The file may be open in another program, or the folder may not be writable."
     return message
-
-
-def _print_capabilities(capabilities: ScopeCapabilities | None) -> None:
-    if capabilities is None:
-        print("Capabilities: unavailable for this model")
-        return
-
-    print(f"Analog channels: {capabilities.analog_channels}")
-    print(f"Default waveform points: {capabilities.default_waveform_points}")
-    print(f"Safe max waveform points: {capabilities.safe_max_waveform_points}")
 
 
 def _positive_int(value: str) -> int:
@@ -12309,16 +12095,6 @@ def _waveform_points_arg(value: str) -> int:
             f"waveform capture supports only these point counts: {supported}"
         )
     return parsed
-
-
-def _print_session_header(scope: Oscilloscope, resource: str) -> None:
-    print(f"Resource: {resource}")
-    backend = getattr(scope.backend, "backend", None)
-    if backend is not None:
-        print(f"PyVISA backend: {backend}")
-    timeout = getattr(scope.backend, "timeout", None)
-    if timeout is not None:
-        print(f"Timeout ms: {timeout}")
 
 
 if __name__ == "__main__":
