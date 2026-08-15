@@ -250,6 +250,10 @@ def _json_update_result(**values: object) -> None:
     if isinstance(result, dict):
         result.update(values)
 
+def _json_set_files(files: list[dict[str, object]]) -> None:
+    if _JSON_RECORD is not None:
+        _JSON_RECORD["files"] = files
+
 def _json_record_system_error(entry) -> None:
     data = _system_error_json(entry)
     if _JSON_RECORD is not None:
