@@ -3,6 +3,7 @@ import json
 import pytest
 
 from scopes_tool_cli import cli, runtime
+from scopes_tool_cli.commands import workflows
 from scopes_tool_core import operations
 from scopes_tool_core import output_files
 from scopes_tool_core.capabilities import capabilities_for_model
@@ -212,7 +213,7 @@ def test_capture_batch_cli_maps_arguments_to_core_request(monkeypatch, tmp_path)
             },
         )
 
-    monkeypatch.setattr(cli, "run_capture_batch", fake_run_capture_batch)
+    monkeypatch.setattr(workflows, "run_capture_batch", fake_run_capture_batch)
     assert (
         cli.main(
             [

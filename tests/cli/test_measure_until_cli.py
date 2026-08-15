@@ -1,6 +1,7 @@
 import json
 
 from scopes_tool_cli import cli, runtime
+from scopes_tool_cli.commands import workflows
 from scopes_tool_core.operations import OperationResult
 
 
@@ -110,7 +111,7 @@ def test_measure_until_cli_preserves_timeout_exit_and_result(monkeypatch, tmp_pa
         "error": {"type": "condition_timeout", "message": "timed out"},
     }
     monkeypatch.setattr(
-        cli,
+        workflows,
         "run_measure_until",
         lambda *args, **kwargs: OperationResult(1, timeout_result),
     )

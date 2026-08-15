@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from scopes_tool_cli import cli, runtime
+from scopes_tool_cli.commands import workflows
 import scopes_tool_core.output_files as core_output_files
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.errors import OscilloscopeError, VisaBackendError
@@ -2882,7 +2883,7 @@ def test_capture_cli_uses_timestamped_default_csv_when_omitted(monkeypatch, caps
     scope = DummyScope()
     default_csv_path = tmp_path / "data" / "2026-05-12-14-30-05.csv"
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
-    monkeypatch.setattr(cli, "_default_capture_csv_path", lambda: default_csv_path)
+    monkeypatch.setattr(workflows, "_default_capture_csv_path", lambda: default_csv_path)
 
     assert cli.main(["capture", "--resource", "USB0::FAKE::INSTR", "--channel", "1"]) == 0
 
@@ -3135,7 +3136,7 @@ def test_screenshot_cli_uses_timestamped_default_output_when_omitted(monkeypatch
     scope = DummyScope()
     default_output_path = tmp_path / "data" / "2026-05-13-10-20-30.png"
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
-    monkeypatch.setattr(cli, "_default_screenshot_path", lambda: default_output_path)
+    monkeypatch.setattr(workflows, "_default_screenshot_path", lambda: default_output_path)
 
     assert cli.main(["screenshot", "--resource", "USB0::FAKE::INSTR"]) == 0
 
@@ -3208,7 +3209,7 @@ def test_screenshot_cli_supports_white_background(monkeypatch, capsys, tmp_path)
 
 
 def test_default_screenshot_path_matches_capture_timestamp_format():
-    assert cli._default_screenshot_path(datetime(2026, 5, 13, 10, 20, 30)) == (
+    assert workflows._default_screenshot_path(datetime(2026, 5, 13, 10, 20, 30)) == (
         Path("data") / "2026-05-13-10-20-30.png"
     )
 
@@ -3253,7 +3254,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
         raise PermissionError(13, "Permission denied", str(path))
 
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
-    monkeypatch.setattr(cli, "write_screenshot_png", fake_write_screenshot_png)
+    monkeypatch.setattr(workflows, "write_screenshot_png", fake_write_screenshot_png)
 
     assert (
         cli.main(
