@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from scopes_tool_core.advanced import (
+from scopes_tool_core.trigger_holdoff import (
     trigger_holdoff_commands,
     trigger_holdoff_query,
     validate_trigger_holdoff,

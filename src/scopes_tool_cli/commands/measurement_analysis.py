@@ -3,15 +3,19 @@ from __future__ import annotations
 import argparse
 from typing import Sequence
 
-from scopes_tool_core.advanced import (
+from scopes_tool_core.cursor import (
     cursor_auto_timebase_json,
     cursor_auto_timebase_plan,
     cursor_auto_vertical_json,
     cursor_auto_vertical_plan,
     cursor_configure_commands,
+)
+from scopes_tool_core.fft import (
     fft_advanced_query_commands,
     fft_configure_commands,
     fft_query_commands,
+)
+from scopes_tool_core.math import (
     math_clear_command,
     math_composite_source_commands,
     math_composite_source_query_commands,

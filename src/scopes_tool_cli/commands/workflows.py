@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 from .. import preflight, runtime
-from scopes_tool_core.advanced import (
+from scopes_tool_core.setup import (
     autoscale_commands,
     setup_recall_command,
     setup_save_command,

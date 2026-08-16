@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 
-from scopes_tool_core.advanced import (
+from scopes_tool_core.fft import (
     FFT_DETECTION_TYPES,
     FFT_GATES,
     FFT_OPERATIONS,
     FFT_PHASE_REFERENCES,
+)
+from scopes_tool_core.math import (
     MATH_COMPOSITE_OPERATIONS,
     MATH_FILTER_OPERATIONS,
     MATH_OPERATIONS,
@@ -15,6 +17,8 @@ from scopes_tool_core.advanced import (
     MATH_TRANSFORMS,
     MATH_TREND_MEASUREMENTS,
     MATH_VISUALIZATION_OPERATIONS,
+)
+from scopes_tool_core.trigger_holdoff import (
     validate_trigger_holdoff,
 )
 from scopes_tool_core.channel import (

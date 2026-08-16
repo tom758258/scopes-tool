@@ -32,16 +32,19 @@ from scopes_tool_core.segmented import (
 from scopes_tool_core.segmented_capture import (
     plan_segmented_capture,
 )
-from scopes_tool_core.advanced import (
-    autoscale_commands,
+from scopes_tool_core.cursor import (
     cursor_auto_vertical_dry_run_plan,
     cursor_auto_vertical_json,
     cursor_auto_timebase_dry_run_plan,
     cursor_auto_timebase_json,
     cursor_configure_commands,
+)
+from scopes_tool_core.fft import (
     fft_configure_commands,
     fft_advanced_query_commands,
     fft_query_commands,
+)
+from scopes_tool_core.math import (
     math_display_command,
     math_display_query,
     math_clear_command,
@@ -57,8 +60,13 @@ from scopes_tool_core.advanced import (
     math_visualization_query_commands,
     math_vertical_commands,
     math_vertical_query_commands,
+)
+from scopes_tool_core.setup import (
+    autoscale_commands,
     setup_recall_command,
     setup_save_command,
+)
+from scopes_tool_core.trigger_holdoff import (
     trigger_holdoff_commands,
     trigger_holdoff_query,
     validate_trigger_holdoff,

@@ -24,7 +24,7 @@ from scopes_tool_core.search import (
     validate_uart_data,
     validate_uart_search_mode,
 )
-from scopes_tool_core.advanced import (
+from scopes_tool_core.fft import (
     FFT_DETECTION_TYPES,
     FFT_GATES,
     FFT_OPERATIONS,
@@ -32,6 +32,8 @@ from scopes_tool_core.advanced import (
     fft_advanced_query_commands,
     fft_configure_commands,
     fft_query_commands,
+)
+from scopes_tool_core.math import (
     math_clear_command,
     math_composite_source_commands,
     math_composite_source_query_commands,

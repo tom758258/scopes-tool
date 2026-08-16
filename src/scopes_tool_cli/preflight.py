@@ -16,10 +16,12 @@ from scopes_tool_core.segmented_capture import (
     validate_segmented_capture_output_path,
     validate_segmented_capture_request,
 )
-from scopes_tool_core.advanced import (
+from scopes_tool_core.fft import (
     fft_configure_commands,
     fft_advanced_query_commands,
     fft_query_commands,
+)
+from scopes_tool_core.math import (
     math_display_command,
     math_display_query,
     math_clear_command,
