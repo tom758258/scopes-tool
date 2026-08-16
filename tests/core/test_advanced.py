@@ -1,6 +1,14 @@
+import ast
+from pathlib import Path
+
 import pytest
 
 from scopes_tool_core.advanced import (
+    CursorController as AdvancedCursorController,
+    FFTController as AdvancedFFTController,
+    MathController as AdvancedMathController,
+    SetupController as AdvancedSetupController,
+    TriggerHoldoffController as AdvancedTriggerHoldoffController,
     autoscale_commands,
     cursor_configure_commands,
     setup_recall_command,
@@ -8,6 +16,12 @@ from scopes_tool_core.advanced import (
     trigger_holdoff_command,
     trigger_holdoff_commands,
 )
+
+from scopes_tool_core.cursor import CursorController
+from scopes_tool_core.fft import FFTController
+from scopes_tool_core.math import MathController
+from scopes_tool_core.setup import SetupController
+from scopes_tool_core.trigger_holdoff import TriggerHoldoffController
 
 from scopes_tool_core.capabilities import capabilities_for_model
 
@@ -17,6 +31,47 @@ from scopes_tool_core.simulator_backend import (
     SimulatorBackend,
     SimulatorBackendError,
 )
+
+
+def test_advanced_facade_reexports_canonical_domain_symbols():
+    assert AdvancedCursorController is CursorController
+    assert AdvancedFFTController is FFTController
+    assert AdvancedMathController is MathController
+    assert AdvancedSetupController is SetupController
+    assert AdvancedTriggerHoldoffController is TriggerHoldoffController
+
+
+def test_core_and_cli_do_not_import_advanced_facade():
+    repo_root = Path(__file__).resolve().parents[2]
+    scan_roots = (
+        (repo_root / "src" / "scopes_tool_core", True),
+        (repo_root / "src" / "scopes_tool_cli", False),
+    )
+    violations = []
+
+    for package_root, exclude_facade in scan_roots:
+        for path in sorted(package_root.rglob("*.py")):
+            if exclude_facade and path.name == "advanced.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            relative_path = path.relative_to(repo_root).as_posix()
+            for node in ast.walk(tree):
+                imported_advanced = False
+                if isinstance(node, ast.Import):
+                    imported_advanced = any(
+                        alias.name == "scopes_tool_core.advanced"
+                        for alias in node.names
+                    )
+                elif isinstance(node, ast.ImportFrom):
+                    imported_advanced = (
+                        node.module == "advanced" and node.level >= 1
+                    ) or (
+                        node.module == "scopes_tool_core.advanced" and node.level == 0
+                    )
+                if imported_advanced:
+                    violations.append(f"{relative_path}:{node.lineno}")
+
+    assert violations == [], "Unexpected advanced facade imports: " + ", ".join(violations)
 
 def test_advanced_command_formatting():
     capabilities = capabilities_for_model("DSOX4024A")
