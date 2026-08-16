@@ -41,3 +41,11 @@ directory may contain private historical snapshots, but those files are not
 current instructions or public documentation. Documentation ownership tests
 must not depend on `Local/` existing or require historical/private filenames
 to be absent. Do not move a document into an ignored path to satisfy a test.
+
+Within `src/scopes_tool_cli/`, Worker ownership is split by responsibility:
+`worker.py` owns the Worker server, runtime, queue, job, lifecycle, and artifact
+execution path; `worker_commands.py` owns the Worker command inventory,
+request validation, argument normalization, and CLI namespace adaptation; and
+`worker_client.py` owns the Worker HTTP client requests, response handling,
+output, and client exit-code mapping. The command and client modules remain
+CLI adapters and do not introduce new Core or Worker protocol abstractions.

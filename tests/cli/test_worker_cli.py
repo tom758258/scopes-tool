@@ -14,7 +14,7 @@ from urllib import request as urlrequest
 import pytest
 
 from scopes_tool_cli import cli, runtime as cli_runtime
-from scopes_tool_cli import worker
+from scopes_tool_cli import worker, worker_client
 from scopes_tool_core.advanced import trigger_holdoff_commands, trigger_holdoff_query
 from scopes_tool_core.acquisition import (
     acquisition_points_query,
@@ -1492,7 +1492,7 @@ def test_send_command_sends_v2_request(monkeypatch, capsys):
         sent.update(body or {})
         return {"schema_version": worker.WORKER_SCHEMA_VERSION, "status": "accepted"}, 202
 
-    monkeypatch.setattr(worker, "_http_request", fake_http_request)
+    monkeypatch.setattr(worker_client, "_http_request", fake_http_request)
 
     assert worker.client_send_command(args) == 0
     json.loads(capsys.readouterr().out)
@@ -1528,7 +1528,7 @@ def test_lifecycle_client_fails_closed_on_invalid_worker_response(
     )
 
     monkeypatch.setattr(
-        worker,
+        worker_client,
         "_http_request",
         lambda *_args, **_kwargs: ({"schema_version": 1, "status": "ready"}, 200),
     )

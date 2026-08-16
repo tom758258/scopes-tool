@@ -4,6 +4,22 @@ The CLI package adapts `argparse.Namespace` inputs into Core run-mode,
 planning, and operation calls. Keep parser-only naming and compatibility fields
 in this package.
 
+## Worker adapter ownership
+
+Worker command adaptation is owned by `scopes_tool_cli.worker_commands`. It
+contains the Worker command inventory, Worker request validation, argument
+normalization, Serial trigger namespace adaptation, and conversion into the
+existing CLI namespace. `scopes_tool_cli.worker` remains the compatibility
+entry point for existing Worker callers while owning Worker server/runtime and
+lifecycle behavior.
+
+Worker HTTP client behavior is owned by `scopes_tool_cli.worker_client`. It
+contains the lifecycle client requests, HTTP transport, response validation,
+JSON/text output handling, client errors, and status-to-exit-code mapping.
+These modules preserve the existing Worker protocol and CLI/Core adapter
+semantics; they do not define a new shared command registry or validation
+framework.
+
 CLI-only fields include:
 
 - `measurement_cli_name`
