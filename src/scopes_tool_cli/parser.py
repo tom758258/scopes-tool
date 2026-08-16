@@ -275,12 +275,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="enable, disable, or query one analog channel display",
     )
     _add_scope_connection_args(channel_display_parser)
-    channel_display_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_display_parser)
     display_action = channel_display_parser.add_mutually_exclusive_group(required=True)
     display_action.add_argument(
         "--on",
@@ -309,12 +304,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel label",
     )
     _add_scope_connection_args(channel_label_parser)
-    channel_label_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_label_parser)
     label_action = channel_label_parser.add_mutually_exclusive_group(required=True)
     label_action.add_argument(
         "--text",
@@ -333,12 +323,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel vertical scale",
     )
     _add_scope_connection_args(channel_scale_parser)
-    channel_scale_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_scale_parser)
     scale_action = channel_scale_parser.add_mutually_exclusive_group(required=True)
     scale_action.add_argument(
         "--volts-per-division",
@@ -358,12 +343,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel vertical offset",
     )
     _add_scope_connection_args(channel_offset_parser)
-    channel_offset_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_offset_parser)
     offset_action = channel_offset_parser.add_mutually_exclusive_group(required=True)
     offset_action.add_argument(
         "--volts",
@@ -383,12 +363,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel input coupling",
     )
     _add_scope_connection_args(channel_coupling_parser)
-    channel_coupling_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_coupling_parser)
     coupling_action = channel_coupling_parser.add_mutually_exclusive_group(required=True)
     coupling_action.add_argument(
         "--coupling",
@@ -408,12 +383,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel probe ratio",
     )
     _add_scope_connection_args(channel_probe_parser)
-    channel_probe_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_probe_parser)
     probe_action = channel_probe_parser.add_mutually_exclusive_group(required=True)
     probe_action.add_argument(
         "--ratio",
@@ -433,12 +403,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="enable, disable, or query one analog channel bandwidth limit",
     )
     _add_scope_connection_args(channel_bandwidth_limit_parser)
-    channel_bandwidth_limit_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_bandwidth_limit_parser)
     bandwidth_action = channel_bandwidth_limit_parser.add_mutually_exclusive_group(
         required=True
     )
@@ -469,12 +434,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel input impedance",
     )
     _add_scope_connection_args(channel_impedance_parser)
-    channel_impedance_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_impedance_parser)
     impedance_action = channel_impedance_parser.add_mutually_exclusive_group(required=True)
     impedance_action.add_argument(
         "--impedance",
@@ -499,12 +459,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="enable, disable, or query one analog channel inversion",
     )
     _add_scope_connection_args(channel_invert_parser)
-    channel_invert_parser.add_argument(
-        "--channel",
-        type=_positive_int,
-        required=True,
-        help="analog channel number, validated against the detected scope model",
-    )
+    _add_channel_arg(channel_invert_parser)
     invert_action = channel_invert_parser.add_mutually_exclusive_group(required=True)
     invert_action.add_argument("--on", dest="invert_action", action="store_const", const="on", help="turn channel inversion on")
     invert_action.add_argument("--off", dest="invert_action", action="store_const", const="off", help="turn channel inversion off")
@@ -516,7 +471,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel full-scale range",
     )
     _add_scope_connection_args(channel_range_parser)
-    channel_range_parser.add_argument("--channel", type=_positive_int, required=True, help="analog channel number, validated against the detected scope model")
+    _add_channel_arg(channel_range_parser)
     range_action = channel_range_parser.add_mutually_exclusive_group(required=True)
     range_action.add_argument("--volts-full-scale", dest="range_value", type=_positive_float, help="full-scale range in volts")
     range_action.add_argument("--query", dest="range_query", action="store_true", help="query the channel full-scale range")
@@ -526,7 +481,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel units",
     )
     _add_scope_connection_args(channel_units_parser)
-    channel_units_parser.add_argument("--channel", type=_positive_int, required=True, help="analog channel number, validated against the detected scope model")
+    _add_channel_arg(channel_units_parser)
     units_action = channel_units_parser.add_mutually_exclusive_group(required=True)
     units_action.add_argument("--units", dest="units_value", choices=("volt", "amp"), help="channel units")
     units_action.add_argument("--query", dest="units_query", action="store_true", help="query channel units")
@@ -536,7 +491,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="enable, disable, or query one analog channel vernier scaling",
     )
     _add_scope_connection_args(channel_vernier_parser)
-    channel_vernier_parser.add_argument("--channel", type=_positive_int, required=True, help="analog channel number, validated against the detected scope model")
+    _add_channel_arg(channel_vernier_parser)
     vernier_action = channel_vernier_parser.add_mutually_exclusive_group(required=True)
     vernier_action.add_argument("--on", dest="vernier_action", action="store_const", const="on", help="turn channel vernier on")
     vernier_action.add_argument("--off", dest="vernier_action", action="store_const", const="off", help="turn channel vernier off")
@@ -547,7 +502,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="set or query one analog channel probe skew",
     )
     _add_scope_connection_args(channel_probe_skew_parser)
-    channel_probe_skew_parser.add_argument("--channel", type=_positive_int, required=True, help="analog channel number, validated against the detected scope model")
+    _add_channel_arg(channel_probe_skew_parser)
     probe_skew_action = channel_probe_skew_parser.add_mutually_exclusive_group(required=True)
     probe_skew_action.add_argument("--seconds", dest="probe_skew_seconds", type=_probe_skew_float, help="probe skew in seconds")
     probe_skew_action.add_argument("--query", dest="probe_skew_query", action="store_true", help="query probe skew")
@@ -784,7 +739,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="query raw aggregate serial decode bus setup",
     )
     _add_scope_connection_args(serial_query_parser)
-    serial_query_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_query_parser)
 
     serial_mode_parser = subparsers.add_parser(
         "serial-mode",
@@ -792,7 +747,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query serial decode bus mode",
     )
     _add_scope_connection_args(serial_mode_parser)
-    serial_mode_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_mode_parser)
     serial_mode_action = serial_mode_parser.add_mutually_exclusive_group(required=True)
     serial_mode_action.add_argument("--query", action="store_true")
     serial_mode_action.add_argument("--mode", choices=SERIAL_MODES)
@@ -803,7 +758,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query serial decode bus display state",
     )
     _add_scope_connection_args(serial_display_parser)
-    serial_display_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_display_parser)
     serial_display_action = serial_display_parser.add_mutually_exclusive_group(
         required=True
     )
@@ -864,7 +819,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "serial-uart", allow_abbrev=False, help="configure or query basic UART decode settings"
     )
     _add_scope_connection_args(serial_uart_parser)
-    serial_uart_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_uart_parser)
     serial_uart_parser.add_argument("--query", action="store_true")
     serial_uart_parser.add_argument("--rx-source", help=_SERIAL_SOURCE_HELP)
     serial_uart_parser.add_argument("--tx-source", help=_SERIAL_SOURCE_HELP)
@@ -880,7 +835,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query basic UART trigger criteria",
     )
     _add_scope_connection_args(serial_uart_trigger_parser)
-    serial_uart_trigger_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_uart_trigger_parser)
     serial_uart_trigger_parser.add_argument("--query", action="store_true")
     serial_uart_trigger_parser.add_argument("--type", choices=UART_TRIGGER_TYPES)
     serial_uart_trigger_parser.add_argument("--data", type=int)
@@ -894,7 +849,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query basic I2C trigger criteria",
     )
     _add_scope_connection_args(serial_i2c_trigger_parser)
-    serial_i2c_trigger_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_i2c_trigger_parser)
     serial_i2c_trigger_parser.add_argument("--query", action="store_true")
     serial_i2c_trigger_parser.add_argument("--type", choices=I2C_TRIGGER_TYPES)
     serial_i2c_trigger_parser.add_argument("--address", type=_integer_value)
@@ -910,7 +865,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query basic SPI trigger criteria",
     )
     _add_scope_connection_args(serial_spi_trigger_parser)
-    serial_spi_trigger_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_spi_trigger_parser)
     serial_spi_trigger_parser.add_argument("--query", action="store_true")
     serial_spi_trigger_parser.add_argument("--type", choices=SPI_TRIGGER_TYPES)
     serial_spi_trigger_parser.add_argument("--width", type=int)
@@ -922,7 +877,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query basic CAN trigger criteria",
     )
     _add_scope_connection_args(serial_can_trigger_parser)
-    serial_can_trigger_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_can_trigger_parser)
     serial_can_trigger_parser.add_argument("--query", action="store_true")
     serial_can_trigger_parser.add_argument("--type", choices=CAN_TRIGGER_TYPES)
     serial_can_trigger_parser.add_argument("--id")
@@ -934,7 +889,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "serial-i2c", allow_abbrev=False, help="configure or query basic I2C decode settings"
     )
     _add_scope_connection_args(serial_i2c_parser)
-    serial_i2c_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_i2c_parser)
     serial_i2c_parser.add_argument("--query", action="store_true")
     serial_i2c_parser.add_argument("--clock-source", help=_SERIAL_SOURCE_HELP)
     serial_i2c_parser.add_argument("--data-source", help=_SERIAL_SOURCE_HELP)
@@ -944,7 +899,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "serial-spi", allow_abbrev=False, help="configure or query basic SPI decode settings"
     )
     _add_scope_connection_args(serial_spi_parser)
-    serial_spi_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_spi_parser)
     serial_spi_parser.add_argument("--query", action="store_true")
     serial_spi_parser.add_argument("--clock-source", help=_SERIAL_SOURCE_HELP)
     serial_spi_parser.add_argument("--mosi-source", help=_SERIAL_SOURCE_HELP)
@@ -971,7 +926,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "serial-can", allow_abbrev=False, help="configure or query basic CAN decode settings"
     )
     _add_scope_connection_args(serial_can_parser)
-    serial_can_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_can_parser)
     serial_can_parser.add_argument("--query", action="store_true")
     serial_can_parser.add_argument("--source", help=_SERIAL_SOURCE_HELP)
     serial_can_parser.add_argument("--baud-rate", type=int)
@@ -1012,7 +967,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query UART search criteria",
     )
     _add_scope_connection_args(serial_search_uart_parser)
-    serial_search_uart_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_search_uart_parser)
     serial_search_uart_parser.add_argument("--query", action="store_true")
     serial_search_uart_parser.add_argument("--mode", choices=UART_SEARCH_MODES)
     serial_search_uart_parser.add_argument("--data", type=int)
@@ -1024,7 +979,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query I2C search criteria",
     )
     _add_scope_connection_args(serial_search_i2c_parser)
-    serial_search_i2c_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_search_i2c_parser)
     serial_search_i2c_parser.add_argument("--query", action="store_true")
     serial_search_i2c_parser.add_argument("--mode", choices=I2C_SEARCH_MODES)
     serial_search_i2c_parser.add_argument("--address", type=int)
@@ -1038,7 +993,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query SPI search criteria",
     )
     _add_scope_connection_args(serial_search_spi_parser)
-    serial_search_spi_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_search_spi_parser)
     serial_search_spi_parser.add_argument("--query", action="store_true")
     serial_search_spi_parser.add_argument("--mode", choices=SPI_SEARCH_MODES)
     serial_search_spi_parser.add_argument("--data")
@@ -1050,7 +1005,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query CAN search criteria",
     )
     _add_scope_connection_args(serial_search_can_parser)
-    serial_search_can_parser.add_argument("--bus", type=_positive_int, required=True)
+    _add_bus_arg(serial_search_can_parser)
     serial_search_can_parser.add_argument("--query", action="store_true")
     serial_search_can_parser.add_argument("--mode", choices=CAN_SEARCH_MODES)
     serial_search_can_parser.add_argument("--data")
@@ -1156,14 +1111,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "reference-save", help="copy an analog channel into a reference waveform slot"
     )
     _add_scope_connection_args(reference_save_parser)
-    reference_save_parser.add_argument("--slot", type=_positive_int, required=True)
+    _add_slot_arg(reference_save_parser)
     reference_save_parser.add_argument("--source-channel", type=_positive_int, required=True)
 
     reference_display_parser = subparsers.add_parser(
         "reference-display", help="set or query reference waveform display state"
     )
     _add_scope_connection_args(reference_display_parser)
-    reference_display_parser.add_argument("--slot", type=_positive_int, required=True)
+    _add_slot_arg(reference_display_parser)
     reference_display_action = reference_display_parser.add_mutually_exclusive_group(required=True)
     reference_display_action.add_argument("--query", action="store_true")
     reference_display_action.add_argument("--state", choices=("on", "off"))
@@ -1172,7 +1127,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "reference-label", help="set or query a reference waveform label"
     )
     _add_scope_connection_args(reference_label_parser)
-    reference_label_parser.add_argument("--slot", type=_positive_int, required=True)
+    _add_slot_arg(reference_label_parser)
     reference_label_action = reference_label_parser.add_mutually_exclusive_group(required=True)
     reference_label_action.add_argument("--query", action="store_true")
     reference_label_action.add_argument("--text")
@@ -1181,13 +1136,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "reference-clear", help="clear a reference waveform slot"
     )
     _add_scope_connection_args(reference_clear_parser)
-    reference_clear_parser.add_argument("--slot", type=_positive_int, required=True)
+    _add_slot_arg(reference_clear_parser)
 
     reference_query_parser = subparsers.add_parser(
         "reference-query", help="query reference waveform display and label state"
     )
     _add_scope_connection_args(reference_query_parser)
-    reference_query_parser.add_argument("--slot", type=_positive_int, required=True)
+    _add_slot_arg(reference_query_parser)
 
     annotation_parser = subparsers.add_parser(
         "annotation",
@@ -2656,7 +2611,7 @@ def _build_parser() -> argparse.ArgumentParser:
     fft_parser = subparsers.add_parser("fft", help="configure or query FFT math function")
     _add_scope_connection_args(fft_parser)
     fft_parser.add_argument("--query", dest="fft_query", action="store_true")
-    fft_parser.add_argument("--function", type=_positive_int, required=True)
+    _add_function_arg(fft_parser)
     fft_parser.add_argument("--source-channel", type=_positive_int, default=None)
     fft_parser.add_argument("--units", choices=("decibel", "vrms"), default=None)
     fft_parser.add_argument(
@@ -2685,7 +2640,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="enable, disable, or query one instrument-side Math waveform display",
     )
     _add_scope_connection_args(math_display_parser)
-    math_display_parser.add_argument("--function", type=_positive_int, required=True)
+    _add_function_arg(math_display_parser)
     math_display_action = math_display_parser.add_mutually_exclusive_group(
         required=True
     )
@@ -2705,7 +2660,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query instrument-side Math waveform vertical controls",
     )
     _add_scope_connection_args(math_vertical_parser)
-    math_vertical_parser.add_argument("--function", type=_positive_int, required=True)
+    _add_function_arg(math_vertical_parser)
     math_vertical_parser.add_argument(
         "--query", dest="math_vertical_query", action="store_true"
     )
@@ -2726,7 +2681,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query an instrument-side dual-source Math operator",
     )
     _add_scope_connection_args(math_operator_parser)
-    math_operator_parser.add_argument("--function", type=_positive_int, required=True)
+    _add_function_arg(math_operator_parser)
     math_operator_parser.add_argument(
         "--query", dest="math_operator_query", action="store_true"
     )
@@ -2760,7 +2715,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query an instrument-side single-source Math transform",
     )
     _add_scope_connection_args(math_transform_parser)
-    math_transform_parser.add_argument("--function", type=_positive_int, required=True)
+    _add_function_arg(math_transform_parser)
     math_transform_parser.add_argument(
         "--query", dest="math_transform_query", action="store_true"
     )
@@ -2789,7 +2744,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query an instrument-side single-source Math filter",
     )
     _add_scope_connection_args(math_filter_parser)
-    math_filter_parser.add_argument("--function", type=_positive_int, required=True)
+    _add_function_arg(math_filter_parser)
     math_filter_parser.add_argument(
         "--query", dest="math_filter_query", action="store_true"
     )
@@ -2814,9 +2769,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="configure or query an instrument-side Math visualization",
     )
     _add_scope_connection_args(math_visualization_parser)
-    math_visualization_parser.add_argument(
-        "--function", type=_positive_int, required=True
-    )
+    _add_function_arg(math_visualization_parser)
     math_visualization_parser.add_argument(
         "--query", dest="math_visualization_query", action="store_true"
     )
@@ -2845,7 +2798,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="clear one supported instrument-side Math accumulation",
     )
     _add_scope_connection_args(math_clear_parser)
-    math_clear_parser.add_argument("--function", type=_positive_int, required=True)
+    _add_function_arg(math_clear_parser)
 
     acquisition_check_parser = subparsers.add_parser(
         "acquisition-check",
@@ -2882,6 +2835,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="restore the initial acquisition type after the workflow completes",
     )
     return parser
+
+
+def _add_channel_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--channel",
+        type=_positive_int,
+        required=True,
+        help="analog channel number, validated against the detected scope model",
+    )
+
+
+def _add_bus_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--bus", type=_positive_int, required=True)
+
+
+def _add_function_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--function", type=_positive_int, required=True)
+
+
+def _add_slot_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--slot", type=_positive_int, required=True)
 
 
 def _add_scope_connection_args(parser: argparse.ArgumentParser) -> None:
