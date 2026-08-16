@@ -2771,4 +2771,3 @@ def _worker_path(job_dir: Path, value: Any, default_name: str | None) -> Path:
         return job_dir if default_name == "." else job_dir / default_name
     path = Path(str(value))
     return path if path.is_absolute() else job_dir / path
-
