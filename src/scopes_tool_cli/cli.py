@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import argparse
 from contextlib import redirect_stdout
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import io
 import json
-import logging
-import math
 import os
 from pathlib import Path
 import sys
@@ -35,18 +33,6 @@ from scopes_tool_core.segmented_capture import (
     plan_segmented_capture,
 )
 from scopes_tool_core.advanced import (
-    FFT_DETECTION_TYPES,
-    FFT_GATES,
-    FFT_OPERATIONS,
-    FFT_PHASE_REFERENCES,
-    MATH_COMPOSITE_OPERATIONS,
-    MATH_FILTER_OPERATIONS,
-    MATH_OPERATIONS,
-    MATH_SOURCES,
-    MATH_TREND_MEASUREMENTS,
-    MATH_TRANSFORM_SOURCES,
-    MATH_TRANSFORMS,
-    MATH_VISUALIZATION_OPERATIONS,
     autoscale_commands,
     cursor_auto_vertical_dry_run_plan,
     cursor_auto_vertical_json,
@@ -116,33 +102,6 @@ from scopes_tool_core.planning import (
     plan_measure_sweep,
     plan_smoke,
 )
-from scopes_tool_core.save_export import (
-    SAVE_IMAGE_FORMATS,
-    SAVE_IMAGE_PALETTES,
-    SAVE_WAVEFORM_FORMATS,
-    save_filename_command,
-    save_filename_query,
-    save_image_command,
-    save_image_factors_command,
-    save_image_factors_query,
-    save_image_format_command,
-    save_image_format_query,
-    save_image_ink_saver_command,
-    save_image_ink_saver_query,
-    save_image_palette_command,
-    save_image_palette_query,
-    save_pwd_command,
-    save_pwd_query,
-    save_waveform_command,
-    save_waveform_format_command,
-    save_waveform_format_query,
-    save_waveform_length_command,
-    save_waveform_length_max_query,
-    save_waveform_length_query,
-    validate_save_filename_base,
-    validate_save_quoted_string,
-    validate_save_waveform_length,
-)
 from scopes_tool_core.capabilities import (
     ScopeCapabilities,
     capabilities_for_model_id,
@@ -187,13 +146,12 @@ from scopes_tool_core.channel import (
     validate_probe_skew,
     validate_probe_ratio,
 )
-from scopes_tool_core.cleanup import CLEANUP_PROFILES, plan_cleanup
+from scopes_tool_core.cleanup import plan_cleanup
 from scopes_tool_core.display import (
     display_label_command,
     display_label_query,
 )
 from scopes_tool_core.dvm import (
-    DVM_MODES,
     dvm_auto_range_command,
     dvm_auto_range_query,
     dvm_current_query,
@@ -211,18 +169,14 @@ from scopes_tool_core.errors import (
 )
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.measurements import (
-    MEASUREMENT_ITEM_CHOICES,
-    MEASUREMENT_WINDOW_CHOICES,
     is_pair_measurement_item,
     measurement_query,
     measurement_results_query,
     normalize_measurement_item,
-    parse_statistics_results,
     pair_measurement_query,
     validate_measure_results_dump_supported,
 )
 from scopes_tool_core.demo import (
-    DEMO_FUNCTIONS,
     demo_function_command,
     demo_function_query,
     demo_output_command,
@@ -230,12 +184,9 @@ from scopes_tool_core.demo import (
     demo_phase_command,
     demo_phase_query,
     demo_query_commands,
-    validate_demo_function,
     validate_demo_phase,
 )
 from scopes_tool_core.wgen import (
-    WGEN_FUNCTIONS,
-    WGEN_LOADS,
     wgen_frequency_command,
     wgen_frequency_query,
     wgen_function_command,
@@ -251,13 +202,6 @@ from scopes_tool_core.wgen import (
     wgen_voltage_query,
 )
 from scopes_tool_core.search import (
-    CAN_SEARCH_ID_MODES,
-    CAN_SEARCH_MODES,
-    I2C_SEARCH_MODES,
-    SEARCH_MODES,
-    SEARCH_QUALIFIERS,
-    SPI_SEARCH_MODES,
-    UART_SEARCH_MODES,
     search_count_query,
     search_event_command,
     search_event_query,
@@ -265,40 +209,10 @@ from scopes_tool_core.search import (
     search_mode_query,
     search_state_command,
     search_state_query,
-    validate_can_data_length,
-    validate_can_id_mode,
-    validate_can_search_criteria,
-    validate_can_search_mode,
-    validate_i2c_pattern_value,
-    validate_i2c_search_mode,
-    validate_pattern_hex_x,
     validate_search_event,
     validate_search_mode,
-    validate_search_qualifier,
-    validate_spi_search_pattern_width,
-    validate_spi_search_mode,
-    validate_spi_width,
-    validate_uart_data,
-    validate_uart_search_mode,
 )
 from scopes_tool_core.serial import (
-    CAN_TRIGGER_ID_MODES,
-    CAN_TRIGGER_TYPES,
-    CAN_SIGNAL_DEFINITIONS,
-    I2C_ADDRESS_SIZES,
-    I2C_TRIGGER_QUALIFIERS,
-    I2C_TRIGGER_TYPES,
-    SERIAL_BIT_ORDERS,
-    SERIAL_MODES,
-    SERIAL_LISTER_DISPLAYS,
-    SERIAL_LISTER_REFERENCES,
-    SPI_CLOCK_SLOPES,
-    SPI_FRAMINGS,
-    SPI_TRIGGER_TYPES,
-    UART_PARITIES,
-    UART_POLARITIES,
-    UART_TRIGGER_QUALIFIERS,
-    UART_TRIGGER_TYPES,
     serial_bus_query,
     serial_display_command,
     serial_display_query,
@@ -314,23 +228,9 @@ from scopes_tool_core.serial import (
     validate_serial_i2c_trigger_request,
     validate_serial_spi_trigger_request,
     validate_serial_can_trigger_request,
-    normalize_can_signal_definition,
-    normalize_i2c_address_size,
-    normalize_serial_bit_order,
-    normalize_serial_source,
-    normalize_spi_clock_slope,
-    normalize_spi_framing,
-    normalize_uart_parity,
-    normalize_uart_polarity,
-    validate_can_baud_rate,
-    validate_can_sample_point,
-    validate_uart_baud_rate,
-    validate_serial_bus,
     validate_serial_mode,
     validate_serial_lister_display,
     validate_serial_lister_reference,
-    validate_spi_framing_clock_timeout,
-    require_serial_decode,
 )
 from scopes_tool_core.status import (
     system_clear_status_command,
@@ -357,11 +257,7 @@ from scopes_tool_core.screenshot import (
 )
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatedSignal, simulator_idn
-from scopes_tool_core.simulator_config import (
-    PRESET_NAMES,
-    parse_simulate_signal_spec,
-    validate_simulator_args,
-)
+from scopes_tool_core.simulator_config import parse_simulate_signal_spec
 from scopes_tool_core.timebase import (
     timebase_position_command,
     timebase_position_query,
@@ -371,7 +267,6 @@ from scopes_tool_core.timebase import (
     validate_timebase_scale,
 )
 from scopes_tool_core.trigger import (
-    TriggerWaitConfig,
     delay_trigger_configure_commands,
     delay_trigger_query_commands,
     edge_burst_trigger_configure_commands,
@@ -397,19 +292,11 @@ from scopes_tool_core.trigger import (
     glitch_trigger_configure_commands,
     glitch_trigger_query_commands,
     normalize_edge_slope,
-    normalize_edge_burst_slope,
-    normalize_delay_slope,
-    normalize_glitch_qualifier,
-    normalize_runt_qualifier,
-    normalize_setup_hold_slope,
-    normalize_transition_qualifier,
-    normalize_transition_slope,
     operation_condition_query,
     or_trigger_configure_commands,
     or_trigger_query_commands,
     pattern_trigger_configure_commands,
     pattern_trigger_query_commands,
-    normalize_trigger_sweep,
     runt_trigger_configure_commands,
     runt_trigger_query_commands,
     setup_hold_trigger_configure_commands,
@@ -433,18 +320,12 @@ from scopes_tool_core.trigger import (
     trigger_sweep_query,
     tv_trigger_configure_commands,
     tv_trigger_query_commands,
-    validate_delay_trigger_count,
-    validate_delay_trigger_time,
-    validate_edge_burst_count,
-    validate_edge_burst_idle_time,
     validate_external_trigger_range,
     validate_external_trigger_probe_attenuation,
     validate_external_trigger_units,
     validate_or_trigger_pattern,
     validate_pattern_trigger_pattern,
-    validate_setup_hold_trigger_time,
     validate_trigger_level,
-    validate_trigger_time,
 )
 from scopes_tool_core.visa_backend import (
     is_asrl_resource,
@@ -453,7 +334,6 @@ from scopes_tool_core.visa_backend import (
 )
 from scopes_tool_core.waveform import (
     MultiChannelWaveformCapture,
-    SUPPORTED_WAVEFORM_POINTS,
     WORD_BYTE_ORDER,
     WORD_UNSIGNED,
     WaveformCapture,
@@ -461,7 +341,6 @@ from scopes_tool_core.waveform import (
     validate_word_format_supported,
     validate_waveform_channels,
     validate_waveform_points,
-    waveform_time_axis_tolerance_summary,
     waveform_data_query,
     waveform_format_byte_command,
     waveform_format_word_command,

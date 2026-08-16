@@ -52,8 +52,8 @@ from scopes_tool_core.save_export import (
     save_waveform_length_command,
     save_waveform_length_max_query,
     save_waveform_length_query,
-    system_opc_query,
 )
+from scopes_tool_core.status import system_opc_query
 from scopes_tool_core.screenshot import (
     DEFAULT_SCREENSHOT_BACKGROUND,
     SCREENSHOT_TIMEOUT_MS,
