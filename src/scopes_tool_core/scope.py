@@ -5,11 +5,15 @@ from __future__ import annotations
 from typing import Sequence
 
 from .acquisition import AcquisitionConfig, AcquisitionController
-from .advanced import (
+from .cursor import (
     CursorController,
     CursorState,
+)
+from .fft import (
     FFTController,
     FFTState,
+)
+from .math import (
     MathController,
     MathCompositeSourceState,
     MathDisplayState,
@@ -18,7 +22,11 @@ from .advanced import (
     MathTransformState,
     MathVisualizationState,
     MathVerticalState,
+)
+from .setup import (
     SetupController,
+)
+from .trigger_holdoff import (
     TriggerHoldoffController,
 )
 from .capabilities import ScopeCapabilities, capabilities_for_model_id
