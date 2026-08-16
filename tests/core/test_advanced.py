@@ -67,6 +67,15 @@ def test_core_and_cli_do_not_import_advanced_facade():
                         node.module == "advanced" and node.level >= 1
                     ) or (
                         node.module == "scopes_tool_core.advanced" and node.level == 0
+                    ) or (
+                        node.module == "scopes_tool_core"
+                        and node.level == 0
+                        and any(alias.name == "advanced" for alias in node.names)
+                    ) or (
+                        exclude_facade
+                        and node.module is None
+                        and node.level == 1
+                        and any(alias.name == "advanced" for alias in node.names)
                     )
                 if imported_advanced:
                     violations.append(f"{relative_path}:{node.lineno}")
