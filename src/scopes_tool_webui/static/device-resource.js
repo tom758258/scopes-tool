@@ -3,12 +3,14 @@ import { getExecutionContext } from "/static/execution-context.js";
 import { translate } from "/static/i18n.js";
 
 export class DeviceResource {
-  constructor(elements, onContextChange) {
+  constructor(elements, onContextChange, onCommandStateChange = () => {}) {
     this.elements = elements;
     this.onContextChange = onContextChange;
+    this.onCommandStateChange = onCommandStateChange;
     this.resourceCount = null;
     this.statusKey = "device.ready";
     this.statusError = null;
+    this.identity = null;
     elements.settings.addEventListener("click", (event) => {
       event.stopPropagation();
       this.setSettingsExpanded(elements.settingsPanel.hidden);
@@ -44,7 +46,6 @@ export class DeviceResource {
     const context = this.context();
     const live = context.mode === "live";
     this.elements.model.disabled = live;
-    this.elements.hint.textContent = live ? translate("device.liveHint") : "";
     this.renderMode(context);
     this.renderStatus(context);
     this.onContextChange(context);
@@ -69,7 +70,8 @@ export class DeviceResource {
     const labels = { live: "device.live", simulate: "device.simulate", "dry-run": "device.dryRun" };
     const mode = translate(labels[context.mode] || context.mode);
     const resource = context.resource || translate("device.noResource");
-    this.elements.summary.textContent = translate("device.summary", { mode, resource });
+    const identity = this.identity || translate("device.identityNotDetected");
+    this.elements.summary.textContent = translate("device.summary", { mode, resource, identity });
   }
 
   renderStatus(context = this.context()) {
@@ -83,6 +85,11 @@ export class DeviceResource {
       this.elements.status.textContent = this.statusError ? `${message}: ${this.statusError}` : message;
     }
     this.renderSummary(context);
+  }
+
+  setIdentity(identity) {
+    this.identity = identity || null;
+    this.renderSummary(this.context());
   }
 
   toggleBody() {
@@ -101,13 +108,16 @@ export class DeviceResource {
     this.statusKey = "status.waiting";
     this.statusError = null;
     this.renderStatus();
+    this.onCommandStateChange({ status: "queued" });
     try {
       const context = this.context();
       const submitted = await submitJob({ command: "list-resources", ...context });
       let job = await getJob(submitted.job_id);
+      this.onCommandStateChange({ status: job.status });
       while (["queued", "running"].includes(job.status)) {
         await new Promise((resolve) => setTimeout(resolve, 200));
         job = await getJob(submitted.job_id);
+        this.onCommandStateChange({ status: job.status });
       }
       if (job.status !== "completed") throw new Error(job.error || translate("status.scanFailed"));
       const resources = job.result?.result?.resources || [];
@@ -118,6 +128,7 @@ export class DeviceResource {
       this.statusKey = "device.ready";
       this.changed();
     } catch (error) {
+      this.onCommandStateChange({ status: "failed" });
       this.resourceCount = null;
       this.statusKey = "status.scanFailed";
       this.statusError = error.message;

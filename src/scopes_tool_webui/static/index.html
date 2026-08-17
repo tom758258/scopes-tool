@@ -26,6 +26,7 @@
               <span id="device-mode-badge" class="execution-mode-badge" aria-live="polite">Live</span>
             </div>
             <p id="device-summary" class="device-resource-summary">Live · No resource</p>
+            <p id="device-status" class="visually-hidden" aria-live="polite" data-i18n="device.ready">Ready</p>
           </div>
           <div class="device-resource-actions">
             <div class="device-options">
@@ -60,11 +61,6 @@
               <select id="resource-list" data-i18n-aria-label="device.scannedResources" aria-label="Scanned resources"></select>
             </label>
             <button id="scan-button" class="secondary command-pill-button" type="button" data-i18n="device.scan">Scan resources</button>
-          </div>
-          <div class="device-status-row">
-            <p id="device-hint" class="hint" data-i18n="device.liveHint">Live mode requires an explicit VISA resource.</p>
-            <p id="device-status" class="panel-status" data-i18n="device.ready">Ready</p>
-            <div class="identity-line"><span data-i18n="device.identity">Detected identity</span><strong id="identity-value">—</strong></div>
           </div>
         </div>
       </section>
@@ -153,18 +149,18 @@
           <strong id="results-heading" data-i18n="results.title">Result</strong>
           <div class="button-row">
             <button id="job-result-clear" class="secondary" type="button" data-i18n="results.clear">Clear</button>
-            <button id="job-result-toggle" class="secondary icon-button" type="button" data-i18n-title="results.collapse" data-i18n-aria-label="results.collapse" title="Collapse result" aria-label="Collapse result" aria-controls="results" aria-expanded="true">-</button>
+            <button id="job-result-toggle" class="secondary icon-button utility-icon-button" type="button" data-i18n-title="results.collapse" data-i18n-aria-label="results.collapse" title="Collapse result" aria-label="Collapse result" aria-controls="results" aria-expanded="true">-</button>
           </div>
         </div>
         <div id="results" class="results-content"><p class="muted" data-i18n="results.empty">No command has been run yet.</p></div>
       </section>
 
-      <section id="result-panel" class="result-detail-section" aria-labelledby="result-detail-heading">
+      <section id="result-panel" class="result-detail-section collapsed" aria-labelledby="result-detail-heading">
         <div class="section-head">
           <strong id="result-detail-heading" data-i18n="results.detail">Result Detail</strong>
-          <button id="result-toggle" class="secondary icon-button" type="button" data-i18n-title="results.collapse" data-i18n-aria-label="results.collapse" title="Collapse result detail" aria-label="Collapse result detail" aria-controls="result-detail-content" aria-expanded="true">-</button>
+          <button id="result-toggle" class="secondary icon-button utility-icon-button" type="button" data-i18n-title="results.expand" data-i18n-aria-label="results.expand" title="Expand result detail" aria-label="Expand result detail" aria-controls="result-detail-content" aria-expanded="false">+</button>
         </div>
-        <div id="result-detail-content" class="result-detail-content"><p class="muted" data-i18n="results.empty">No command has been run yet.</p></div>
+        <div id="result-detail-content" class="result-detail-content" hidden><p class="muted" data-i18n="results.empty">No command has been run yet.</p></div>
       </section>
     </main>
     <script type="module" src="/static/app.js"></script>

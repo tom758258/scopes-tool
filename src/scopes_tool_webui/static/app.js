@@ -25,9 +25,7 @@ const elements = {
   deviceCollapse: document.querySelector("#device-collapse"),
   modeBadge: document.querySelector("#device-mode-badge"),
   summary: document.querySelector("#device-summary"),
-  hint: document.querySelector("#device-hint"),
   deviceStatus: document.querySelector("#device-status"),
-  identity: document.querySelector("#identity-value"),
   filter: document.querySelector("#command-filter"),
   categories: document.querySelector("#command-categories"),
   commandList: document.querySelector("#command-list"),
@@ -99,13 +97,14 @@ async function initialize() {
     deviceCollapse: elements.deviceCollapse,
     modeBadge: elements.modeBadge,
     summary: elements.summary,
-    hint: elements.hint,
     status: elements.deviceStatus,
   }, (nextContext) => {
     context = nextContext;
     if (catalog) catalog.updateMode(context.mode);
     syncCommandSelection();
     renderLiveData();
+  }, (scanState) => {
+    setCommandState(scanState);
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   updateAvailability();
@@ -220,7 +219,7 @@ async function executeCommand(command, parameters) {
 
 function updateIdentity(job) {
   const idn = job.result?.result?.idn || job.result?.idn;
-  if (idn) elements.identity.textContent = `${idn.vendor} ${idn.model} (${idn.serial})`;
+  if (idn && deviceResource) deviceResource.setIdentity(`${idn.vendor} ${idn.model} (${idn.serial})`);
 }
 
 async function updateHealth() {
@@ -285,6 +284,11 @@ function updateAvailability() {
 function setExecutionStatus(state) {
   executionState = state;
   renderExecutionStatus();
+  renderLiveData();
+}
+
+function setCommandState(state) {
+  executionState = state;
   renderLiveData();
 }
 
