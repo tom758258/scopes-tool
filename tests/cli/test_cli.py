@@ -18,67 +18,16 @@ from scopes_tool_core.measurements import (
 from scopes_tool_core.screenshot import ScreenshotCapture
 from scopes_tool_core.status import SystemErrorEntry
 from scopes_tool_core.visa_backend import VisaLiveVerification, VisaResourceListing
+from tests.cli.support import (
+    byte_waveform_capture,
+    install_scope,
+    word_waveform_capture,
+)
 from scopes_tool_core.waveform import (
     MultiChannelWaveformCapture,
     WaveformCapture,
     WaveformPreamble,
 )
-
-
-def _byte_waveform_capture(
-    channel, points=1000, raw_samples=(128, 129), vertical_values=(-2.56, -2.54)
-):
-    preamble = WaveformPreamble(
-        raw="0,0,2,1,1.0E-6,0,0,2.0E-2,-2.56,128",
-        format_code=0,
-        type_code=0,
-        points=2,
-        count=1,
-        x_increment=1e-6,
-        x_origin=0.0,
-        x_reference=0,
-        y_increment=0.02,
-        y_origin=-2.56,
-        y_reference=128,
-    )
-    return WaveformCapture(
-        channel=channel,
-        requested_points=points,
-        format_name="BYTE",
-        preamble=preamble,
-        raw_samples=raw_samples,
-        time_s=(0.0, 1e-6),
-        vertical_values=vertical_values,
-        vertical_unit="V",
-    )
-
-
-def _word_waveform_capture(channel, points=1000):
-    preamble = WaveformPreamble(
-        raw="1,0,2,1,1.0E-6,0,0,1.0E-4,0,32768",
-        format_code=1,
-        type_code=0,
-        points=2,
-        count=1,
-        x_increment=1e-6,
-        x_origin=0.0,
-        x_reference=0,
-        y_increment=0.0001,
-        y_origin=0.0,
-        y_reference=32768,
-    )
-    return WaveformCapture(
-        channel=channel,
-        requested_points=points,
-        format_name="WORD",
-        preamble=preamble,
-        raw_samples=(32768, 32769),
-        time_s=(0.0, 1e-6),
-        vertical_values=(0.0, 0.0001),
-        vertical_unit="V",
-        byte_order="MSBFirst",
-        unsigned=True,
-    )
 
 
 class _ChannelParameterDummyBackend:
@@ -2246,8 +2195,8 @@ def test_capture_cli_writes_multi_channel_csv_and_metadata(monkeypatch, capsys, 
             self.calls.append(("capture_waveforms_byte", channels, points))
             return MultiChannelWaveformCapture(
                 (
-                    _byte_waveform_capture(1, points=points),
-                    _byte_waveform_capture(2, points=points, vertical_values=(-2.52, -2.58)),
+                    byte_waveform_capture(1, points=points),
+                    byte_waveform_capture(2, points=points, vertical_values=(-2.52, -2.58)),
                 )
             )
 
@@ -2320,9 +2269,9 @@ def test_capture_cli_allows_opt_in_time_axis_tolerance(monkeypatch, capsys, tmp_
             self.calls.append(("capture_waveforms_byte", channels, points))
             return MultiChannelWaveformCapture(
                 (
-                    _byte_waveform_capture(1, points=points),
+                    byte_waveform_capture(1, points=points),
                     replace(
-                        _byte_waveform_capture(
+                        byte_waveform_capture(
                             2,
                             points=points,
                             vertical_values=(-2.52, -2.58),
@@ -2405,7 +2354,7 @@ def test_capture_cli_channel_all_expands_to_detected_model_channels(
         def capture_waveforms_byte(self, channels, points=1000):
             self.calls.append(("capture_waveforms_byte", channels, points))
             return MultiChannelWaveformCapture(
-                tuple(_byte_waveform_capture(channel, points=points) for channel in channels)
+                tuple(byte_waveform_capture(channel, points=points) for channel in channels)
             )
 
         def query_system_error(self):
@@ -2472,7 +2421,7 @@ def test_capture_cli_channel_all_is_case_insensitive_and_supports_word(
         def capture_waveforms_word(self, channels, points=1000):
             self.calls.append(("capture_waveforms_word", channels, points))
             return MultiChannelWaveformCapture(
-                tuple(_word_waveform_capture(channel, points=points) for channel in channels)
+                tuple(word_waveform_capture(channel, points=points) for channel in channels)
             )
 
         def query_system_error(self):
@@ -2537,8 +2486,8 @@ def test_capture_cli_multi_channel_word_uses_plural_api(monkeypatch, capsys, tmp
             self.calls.append(("capture_waveforms_word", channels, points))
             return MultiChannelWaveformCapture(
                 (
-                    _word_waveform_capture(2, points=points),
-                    _word_waveform_capture(1, points=points),
+                    word_waveform_capture(2, points=points),
+                    word_waveform_capture(1, points=points),
                 )
             )
 
@@ -2615,8 +2564,8 @@ def test_capture_cli_reports_multi_channel_metadata_permission_error_without_tra
             self.calls.append(("capture_waveforms_byte", channels, points))
             return MultiChannelWaveformCapture(
                 (
-                    _byte_waveform_capture(1, points=points),
-                    _byte_waveform_capture(2, points=points),
+                    byte_waveform_capture(1, points=points),
+                    byte_waveform_capture(2, points=points),
                 )
             )
 

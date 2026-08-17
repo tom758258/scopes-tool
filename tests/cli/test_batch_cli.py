@@ -9,65 +9,14 @@ from scopes_tool_core import output_files
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.status import SystemErrorEntry
+from tests.cli.support import (
+    byte_waveform_capture,
+    install_scope,
+    word_waveform_capture,
+)
 from scopes_tool_core.waveform import (
     MultiChannelWaveformCapture,
-    WaveformCapture,
-    WaveformPreamble,
 )
-
-
-def _byte_waveform_capture(channel, points=1000):
-    preamble = WaveformPreamble(
-        raw="0,0,2,1,1.0E-6,0,0,2.0E-2,-2.56,128",
-        format_code=0,
-        type_code=0,
-        points=2,
-        count=1,
-        x_increment=1e-6,
-        x_origin=0.0,
-        x_reference=0,
-        y_increment=0.02,
-        y_origin=-2.56,
-        y_reference=128,
-    )
-    return WaveformCapture(
-        channel=channel,
-        requested_points=points,
-        format_name="BYTE",
-        preamble=preamble,
-        raw_samples=(128, 129),
-        time_s=(0.0, 1e-6),
-        vertical_values=(-2.56, -2.54),
-        vertical_unit="V",
-    )
-
-
-def _word_waveform_capture(channel, points=1000):
-    preamble = WaveformPreamble(
-        raw="1,0,2,1,1.0E-6,0,0,1.0E-4,0,32768",
-        format_code=1,
-        type_code=0,
-        points=2,
-        count=1,
-        x_increment=1e-6,
-        x_origin=0.0,
-        x_reference=0,
-        y_increment=0.0001,
-        y_origin=0.0,
-        y_reference=32768,
-    )
-    return WaveformCapture(
-        channel=channel,
-        requested_points=points,
-        format_name="WORD",
-        preamble=preamble,
-        raw_samples=(32768, 32769),
-        time_s=(0.0, 1e-6),
-        vertical_values=(0.0, 0.0001),
-        vertical_unit="V",
-        byte_order="MSBFirst",
-        unsigned=True,
-    )
 
 
 class _BatchDummyBackend:
@@ -97,22 +46,22 @@ class _BatchDummyScope:
 
     def capture_waveform_byte(self, channel, points=1000):
         self.calls.append(("capture_waveform_byte", channel, points))
-        return _byte_waveform_capture(channel, points=points)
+        return byte_waveform_capture(channel, points=points)
 
     def capture_waveform_word(self, channel, points=1000):
         self.calls.append(("capture_waveform_word", channel, points))
-        return _word_waveform_capture(channel, points=points)
+        return word_waveform_capture(channel, points=points)
 
     def capture_waveforms_byte(self, channels, points=1000):
         self.calls.append(("capture_waveforms_byte", channels, points))
         return MultiChannelWaveformCapture(
-            tuple(_byte_waveform_capture(channel, points=points) for channel in channels)
+            tuple(byte_waveform_capture(channel, points=points) for channel in channels)
         )
 
     def capture_waveforms_word(self, channels, points=1000):
         self.calls.append(("capture_waveforms_word", channels, points))
         return MultiChannelWaveformCapture(
-            tuple(_word_waveform_capture(channel, points=points) for channel in channels)
+            tuple(word_waveform_capture(channel, points=points) for channel in channels)
         )
 
     def query_system_error(self):
@@ -122,19 +71,10 @@ class _BatchDummyScope:
         return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
 
 
-def _install_batch_scope(monkeypatch, scope):
-    monkeypatch.setattr(
-        runtime.Oscilloscope,
-        "open",
-        staticmethod(lambda resource, visa_library=None: scope),
-    )
-    return scope
-
-
 def test_capture_batch_cli_runs_two_captures_and_writes_outputs(
     monkeypatch, capsys, tmp_path
 ):
-    scope = _install_batch_scope(monkeypatch, _BatchDummyScope())
+    scope = install_scope(monkeypatch, _BatchDummyScope())
     output_dir = tmp_path / "batch"
 
     assert (
@@ -189,7 +129,7 @@ def test_capture_batch_cli_runs_two_captures_and_writes_outputs(
 
 
 def test_capture_batch_cli_maps_arguments_to_core_request(monkeypatch, tmp_path):
-    scope = _install_batch_scope(monkeypatch, _BatchDummyScope())
+    scope = install_scope(monkeypatch, _BatchDummyScope())
     observed = {}
 
     def fake_run_capture_batch(
@@ -255,7 +195,7 @@ def test_capture_batch_cli_maps_arguments_to_core_request(monkeypatch, tmp_path)
 def test_capture_batch_cli_channel_all_expands_to_detected_model_channels(
     monkeypatch, capsys, tmp_path
 ):
-    scope = _install_batch_scope(monkeypatch, _BatchDummyScope(model="DSOX4024A"))
+    scope = install_scope(monkeypatch, _BatchDummyScope(model="DSOX4024A"))
 
     assert (
         cli.main(
@@ -285,7 +225,7 @@ def test_capture_batch_cli_channel_all_expands_to_detected_model_channels(
 def test_capture_batch_cli_word_single_channel_uses_single_word_api_each_time(
     monkeypatch, tmp_path
 ):
-    scope = _install_batch_scope(monkeypatch, _BatchDummyScope())
+    scope = install_scope(monkeypatch, _BatchDummyScope())
 
     assert (
         cli.main(
@@ -318,7 +258,7 @@ def test_capture_batch_cli_word_single_channel_uses_single_word_api_each_time(
 def test_capture_batch_cli_word_multi_channel_uses_plural_word_api(
     monkeypatch, tmp_path
 ):
-    scope = _install_batch_scope(monkeypatch, _BatchDummyScope())
+    scope = install_scope(monkeypatch, _BatchDummyScope())
 
     assert (
         cli.main(
@@ -349,7 +289,7 @@ def test_capture_batch_cli_word_multi_channel_uses_plural_word_api(
 
 
 def test_capture_batch_cli_uses_interruptible_wait_between_captures(monkeypatch, tmp_path):
-    _install_batch_scope(monkeypatch, _BatchDummyScope())
+    install_scope(monkeypatch, _BatchDummyScope())
     waits = []
     monkeypatch.setattr(
         operations,
@@ -384,7 +324,7 @@ def test_capture_batch_cli_stops_after_instrument_error(monkeypatch, tmp_path):
         SystemErrorEntry(code=0, message="No error", raw='+0,"No error"'),
         SystemErrorEntry(code=-113, message="Undefined header", raw='-113,"Undefined header"'),
     ]
-    scope = _install_batch_scope(monkeypatch, _BatchDummyScope(system_errors=errors))
+    scope = install_scope(monkeypatch, _BatchDummyScope(system_errors=errors))
     output_dir = tmp_path / "batch"
 
     assert (
@@ -421,7 +361,7 @@ def test_capture_batch_cli_stops_after_instrument_error(monkeypatch, tmp_path):
 def test_capture_batch_cli_reports_output_write_error_without_traceback(
     monkeypatch, capsys, tmp_path
 ):
-    scope = _install_batch_scope(monkeypatch, _BatchDummyScope())
+    scope = install_scope(monkeypatch, _BatchDummyScope())
     output_dir = tmp_path / "batch"
 
     def fail_write_waveform_csv(capture, path):
@@ -494,7 +434,7 @@ def test_capture_batch_cli_rejects_invalid_count_and_interval_before_open(
 def test_capture_batch_cli_rejects_invalid_channel_before_capture(
     monkeypatch, capsys, tmp_path
 ):
-    scope = _install_batch_scope(monkeypatch, _BatchDummyScope(model="DSOX4024A"))
+    scope = install_scope(monkeypatch, _BatchDummyScope(model="DSOX4024A"))
 
     assert (
         cli.main(
@@ -523,7 +463,7 @@ def test_capture_batch_cli_writes_interrupted_manifest(monkeypatch, capsys, tmp_
             self.calls.append(("capture_waveform_byte", channel, points))
             raise KeyboardInterrupt
 
-    scope = _install_batch_scope(monkeypatch, InterruptingScope())
+    scope = install_scope(monkeypatch, InterruptingScope())
     output_dir = tmp_path / "batch"
 
     assert (

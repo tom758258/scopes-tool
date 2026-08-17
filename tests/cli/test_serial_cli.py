@@ -5,6 +5,7 @@ import pytest
 
 from scopes_tool_cli import cli
 from scopes_tool_cli import parser as cli_parser, runtime
+from tests.cli.support import install_scope
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
@@ -528,7 +529,7 @@ def _patch_live_scope(monkeypatch, idn: str):
     )
     scope = Oscilloscope(backend)
     monkeypatch.setattr(
-        runtime.Oscilloscope,
+        cli.Oscilloscope,
         "open",
         lambda *unused, **kwargs: scope,
     )
