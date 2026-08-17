@@ -366,7 +366,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4},
             {"name": "source2_channel", "type": "integer", "minimum": 1, "maximum": 4},
         ),
     },
@@ -466,7 +466,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4},
         ),
     },
     {

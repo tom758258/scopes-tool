@@ -156,7 +156,7 @@ export const zhTW = {
   "command.channel-invert": "通道反相",
   "command.channel-range": "通道範圍",
   "command.channel-units": "通道單位",
-  "command.channel-vernier": "通道游標微調",
+  "command.channel-vernier": "通道刻度微調",
   "command.channel-probe-skew": "通道探棒偏斜",
   "command.display-label": "顯示標籤",
   "command.display-clear": "清除顯示",

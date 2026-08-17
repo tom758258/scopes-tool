@@ -139,6 +139,27 @@ def test_commands_expose_the_p3a_flat_subset() -> None:
     )
 
 
+def test_query_only_commands_do_not_default_set_only_channels() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/commands")
+
+    assert response.status_code == 200
+    commands = {entry["id"]: entry for entry in response.json()}
+    measure_source = next(field for field in commands["measure-source"]["fields"] if field["name"] == "source_channel")
+    dvm_source = next(field for field in commands["dvm-source"]["fields"] if field["name"] == "channel")
+    assert "default" not in measure_source
+    assert "default" not in dvm_source
+
+
+def test_measure_and_dvm_query_requests_complete_without_set_only_channels() -> None:
+    client = TestClient(app)
+
+    for command in ("measure-source", "dvm-source"):
+        job = submit(client, command, "simulate", {"action": "query"})
+        assert job["status"] == "completed", (command, job)
+
+
 def test_representative_p3a_simulated_commands_complete() -> None:
     client = TestClient(app)
 
