@@ -1,4 +1,9 @@
-import { translate } from "/static/i18n.js";
+import { hasTranslation, translate } from "/static/i18n.js";
+
+function translateEnum(value) {
+  const key = `enum.${String(value)}`;
+  return hasTranslation(key) ? translate(key) : String(value);
+}
 
 export class CommandForm {
   constructor(container, catalog) {
@@ -50,7 +55,7 @@ export class CommandForm {
       input = document.createElement("select");
       if (field.default === undefined) input.append(new Option(translate("form.emptyOption"), ""));
       this.catalog.optionsFor(field).forEach((option) => {
-        input.append(new Option(translate(`enum.${String(option)}`), String(option)));
+        input.append(new Option(translateEnum(option), String(option)));
       });
     } else if (field.type === "boolean") {
       input = document.createElement("select");

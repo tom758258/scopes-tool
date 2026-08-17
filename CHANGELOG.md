@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix WebUI enum presentation fallback, expose only canonical measurement
+  selector items, and add Launcher shutdown regression coverage.
 - Fixes WebUI job shutdown so the Launcher waits for queued cancellation and
   natural completion of running jobs before stopping Uvicorn, reports shutdown
   timeouts or session-close failures without destroying the Launcher, and

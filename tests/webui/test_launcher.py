@@ -17,6 +17,9 @@ class FakeVar:
     def set(self, value):
         self.value = value
 
+    def trace_add(self, *_args):
+        pass
+
 
 class FakeWidget:
     def __init__(self):
@@ -32,6 +35,12 @@ class FakeWidget:
 
     def grid_remove(self):
         self.visible = False
+
+    def columnconfigure(self, *_args, **_kwargs):
+        pass
+
+    def rowconfigure(self, *_args, **_kwargs):
+        pass
 
 
 class FakeRoot:
@@ -52,6 +61,18 @@ class FakeRoot:
         pass
 
     def after(self, _delay, _callback):
+        pass
+
+    def title(self, _value):
+        pass
+
+    def protocol(self, _name, _callback):
+        pass
+
+    def columnconfigure(self, *_args, **_kwargs):
+        pass
+
+    def rowconfigure(self, *_args, **_kwargs):
         pass
 
 
@@ -177,6 +198,33 @@ def make_app(
 
 def drain_ui(app) -> None:
     app._process_ui_queue()
+
+
+def test_launcher_constructor_initializes_shutdown_state(monkeypatch):
+    for widget_name in ("Frame", "Checkbutton", "Label", "Entry", "Button"):
+        monkeypatch.setattr(
+            launcher.tk,
+            widget_name,
+            lambda *_args, **_kwargs: FakeWidget(),
+        )
+    monkeypatch.setattr(
+        launcher.tk,
+        "BooleanVar",
+        lambda *_args, **kwargs: FakeVar(kwargs.get("value")),
+    )
+    monkeypatch.setattr(
+        launcher.tk,
+        "StringVar",
+        lambda *_args, **kwargs: FakeVar(kwargs.get("value")),
+    )
+
+    job_manager = FakeJobManager()
+    app = launcher.LauncherApp(FakeRoot(), job_manager_instance=job_manager)
+
+    assert app._job_manager is job_manager
+    assert app._shutdown_thread is None
+    assert app._shutdown_in_progress is False
+    assert app._jobs_shutdown_complete is False
 
 
 def test_default_port_and_auto_fallback(monkeypatch):
@@ -376,3 +424,42 @@ def test_shutdown_failure_keeps_launcher_operable(monkeypatch):
     assert app._shutdown_in_progress is False
     assert app._quit_button.state == "normal"
     assert errors[0][0] == "Shutdown incomplete"
+
+
+def test_shutdown_timeout_can_be_retried_successfully(monkeypatch):
+    errors = []
+    events = []
+    job_manager = FakeJobManager(events, TimeoutError("job timeout"))
+    app = make_app(job_manager_instance=job_manager)
+    app._server = OrderedServer(events)
+    app._server_thread = LiveThread()
+    monkeypatch.setattr(
+        launcher.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    app.quit()
+    app._shutdown_thread.join(timeout=1)
+    drain_ui(app)
+
+    assert events == [("jobs", launcher.JOB_SHUTDOWN_TIMEOUT_S)]
+    assert app._server.should_exit is False
+    assert app._root.destroyed is False
+    assert app._shutdown_in_progress is False
+    assert app._jobs_shutdown_complete is False
+    assert app._quit_button.state == "normal"
+    assert errors[0][0] == "Shutdown incomplete"
+
+    job_manager.error = None
+    app.quit()
+    app._shutdown_thread.join(timeout=1)
+    drain_ui(app)
+
+    assert events == [
+        ("jobs", launcher.JOB_SHUTDOWN_TIMEOUT_S),
+        ("jobs", launcher.JOB_SHUTDOWN_TIMEOUT_S),
+        "server",
+    ]
+    assert app._server.should_exit is True
+    assert app._root.destroyed is True

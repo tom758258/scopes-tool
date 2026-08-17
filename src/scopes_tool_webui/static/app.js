@@ -186,6 +186,8 @@ function setExecutionStatus(state) {
 }
 
 function renderExecutionStatus() {
+  const statusClass = executionState.status ? `badge-${executionState.status}` : "badge-idle";
+  elements.executionStatus.className = `badge ${statusClass}`;
   elements.executionStatus.textContent = executionState.status
     ? translateJobStatus(executionState.status)
     : translate(executionState.key);

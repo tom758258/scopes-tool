@@ -45,6 +45,10 @@ export function translate(key, values = {}) {
   return text;
 }
 
+export function hasTranslation(key) {
+  return Boolean(LOCALES[currentLocale][key] || LOCALES.en[key]);
+}
+
 export function translateJobStatus(status) {
   return translate(JOB_STATUS_KEYS[status] || status);
 }

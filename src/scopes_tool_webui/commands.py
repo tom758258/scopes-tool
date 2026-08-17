@@ -27,7 +27,7 @@ from scopes_tool_core.acquisition import (
 )
 from scopes_tool_core.channel import validate_analog_channel, validate_channel_scale
 from scopes_tool_core.identity import PHYSICAL_MODEL_REGISTRY, physical_model_for_id
-from scopes_tool_core.measurements import MEASUREMENT_ITEM_CHOICES, normalize_measurement_item
+from scopes_tool_core.measurements import SUPPORTED_MEASUREMENT_ITEMS, normalize_measurement_item
 from scopes_tool_core.output_files import write_screenshot_png_file
 from scopes_tool_core.planning import (
     AcquisitionCheckPlanRequest,
@@ -123,7 +123,7 @@ COMMANDS = (
         "label": "Measure",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
-            {"name": "item", "type": "enum", "options": MEASUREMENT_ITEM_CHOICES, "default": "vpp"},
+            {"name": "item", "type": "enum", "options": SUPPORTED_MEASUREMENT_ITEMS, "default": "vpp"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
             {"name": "reference_channel", "type": "integer", "minimum": 1, "maximum": 4},
             {"name": "time_s", "type": "number"},

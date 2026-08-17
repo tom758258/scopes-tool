@@ -6,6 +6,7 @@ import threading
 import pytest
 from fastapi.testclient import TestClient
 
+from scopes_tool_core.measurements import SUPPORTED_MEASUREMENT_ITEMS
 import scopes_tool_webui.app as app_module
 from scopes_tool_webui.app import app
 from scopes_tool_webui.commands import ScopeSessionCloseError
@@ -63,6 +64,9 @@ def test_commands_expose_the_p2_subset() -> None:
     acquisition = next(entry for entry in response.json() if entry["id"] == "acquisition")
     action = next(field for field in acquisition["fields"] if field["name"] == "action")
     assert action["mode_options"]["dry-run"] == ["query"]
+    measure = next(entry for entry in response.json() if entry["id"] == "measure")
+    item = next(field for field in measure["fields"] if field["name"] == "item")
+    assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)
 
 
 def test_simulated_measure_and_dry_run_capture_complete() -> None:
