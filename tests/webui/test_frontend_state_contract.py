@@ -60,11 +60,43 @@ def test_empty_scan_has_a_distinct_compact_detection_presentation() -> None:
     empty_branch = 'this.scanStatus === "empty"'
     assert empty_branch in detection_summary
     assert 'translate("device.detection.noResources")' in detection_summary
-    assert detection_summary.index(empty_branch) < detection_summary.index("hasCurrentIdentity")
+    assert detection_summary.index("hasCurrentIdentity") < detection_summary.index(empty_branch)
     assert 'this.scanStatus = resources.length ? "scanned" : "empty";' in source
     assert '"device.detection.noResources": "Detection status: no resources found"' in english
     assert '"device.detection.noResources": "偵測狀態：未找到資源"' in chinese
     assert '"device.detection.notIdentified"' in detection_summary
+
+
+def test_resource_controls_match_the_powers_initial_presentation() -> None:
+    html = read_static("index.html")
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+
+    assert 'data-i18n="device.resource">VISA Resource</span>' in html
+    assert 'data-i18n-placeholder="device.resourcePlaceholder" placeholder="Waiting Scan"' in html
+    assert 'data-i18n="device.liveResourcePlaceholder">Scan to load live resources</option>' in html
+    assert 'data-i18n="device.liveResource">Live Resource</span>' in html
+    assert 'data-i18n="device.scan">Scan Device</button>' in html
+    assert '"device.resourcePlaceholder": "Waiting Scan"' in english
+    assert '"device.resource": "VISA Resource"' in english
+    assert '"device.liveResource": "Live Resource"' in english
+    assert '"device.liveResourcePlaceholder": "Scan to load live resources"' in english
+    assert '"device.scan": "Scan Device"' in english
+    assert '"device.resourcePlaceholder": "等待掃描"' in chinese
+    assert '"device.liveResource": "即時資源"' in chinese
+    assert '"device.liveResourcePlaceholder": "掃描後載入即時資源"' in chinese
+    assert '"device.scan": "掃描裝置"' in chinese
+
+
+def test_empty_scan_keeps_a_localized_non_resource_option() -> None:
+    source = read_static("device-resource.js")
+    render_resource_list = extract_function(source, "  renderResourceList(resources) {")
+
+    assert "this.elements.resourceList.replaceChildren();" in render_resource_list
+    assert 'if (!resources.length)' in render_resource_list
+    assert 'new Option(translate("device.liveResourcePlaceholder"), "")' in render_resource_list
+    assert 'option.dataset.i18n = "device.liveResourcePlaceholder";' in render_resource_list
+    assert 'resources.forEach((resource) => this.elements.resourceList.append(new Option(resource, resource)));' in render_resource_list
 
 
 def test_scan_failure_is_included_in_the_compact_device_presentation() -> None:

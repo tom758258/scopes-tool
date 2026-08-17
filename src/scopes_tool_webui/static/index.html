@@ -52,15 +52,17 @@
         </div>
         <div id="device-resource-body" class="device-resource-body">
           <label class="field">
-            <span data-i18n="device.resource">VISA resource</span>
-            <input id="resource-input" data-i18n-placeholder="device.resourcePlaceholder" placeholder="USB0::...::INSTR" autocomplete="off">
+            <span data-i18n="device.resource">VISA Resource</span>
+            <input id="resource-input" data-i18n-placeholder="device.resourcePlaceholder" placeholder="Waiting Scan" autocomplete="off">
           </label>
           <div class="live-resource-field">
             <label class="field">
-              <span data-i18n="device.scannedResources">Scanned / Live resource</span>
-              <select id="resource-list" data-i18n-aria-label="device.scannedResources" aria-label="Scanned resources"></select>
+              <span data-i18n="device.liveResource">Live Resource</span>
+              <select id="resource-list" data-i18n-aria-label="device.liveResource" aria-label="Live Resource">
+                <option value="" data-i18n="device.liveResourcePlaceholder">Scan to load live resources</option>
+              </select>
             </label>
-            <button id="scan-button" class="secondary command-pill-button" type="button" data-i18n="device.scan">Scan resources</button>
+            <button id="scan-button" class="secondary command-pill-button" type="button" data-i18n="device.scan">Scan Device</button>
           </div>
         </div>
       </section>

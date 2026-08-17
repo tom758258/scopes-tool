@@ -123,10 +123,10 @@ export class DeviceResource {
   }
 
   detectionSummary(context) {
-    if (this.scanStatus === "empty") return translate("device.detection.noResources");
     if (this.hasCurrentIdentity(context)) {
       return translate("device.detection.detectedModel", { model: identityLabel(this.identity) });
     }
+    if (this.scanStatus === "empty") return translate("device.detection.noResources");
     if (this.scanStatus === "failed") {
       return translate("device.detection.scanFailed", {
         error: this.statusError || translate("status.scanFailed"),
@@ -205,8 +205,7 @@ export class DeviceResource {
       }
       if (job.status !== "completed") throw new Error(job.error || translate("status.scanFailed"));
       const resources = job.result?.result?.resources || [];
-      this.elements.resourceList.replaceChildren();
-      resources.forEach((resource) => this.elements.resourceList.append(new Option(resource, resource)));
+      this.renderResourceList(resources);
       if (resources.length) this.elements.resource.value = resources[0];
       this.resourceCount = resources.length;
       this.scanStatus = resources.length ? "scanned" : "empty";
@@ -223,5 +222,16 @@ export class DeviceResource {
       this.scanInProgress = false;
       this.elements.scan.disabled = false;
     }
+  }
+
+  renderResourceList(resources) {
+    this.elements.resourceList.replaceChildren();
+    if (!resources.length) {
+      const option = new Option(translate("device.liveResourcePlaceholder"), "");
+      option.dataset.i18n = "device.liveResourcePlaceholder";
+      this.elements.resourceList.append(option);
+      return;
+    }
+    resources.forEach((resource) => this.elements.resourceList.append(new Option(resource, resource)));
   }
 }
