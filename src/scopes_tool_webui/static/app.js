@@ -5,7 +5,7 @@ import { CommandForm } from "/static/command-form.js";
 import { DeviceResource } from "/static/device-resource.js";
 import { initializeI18n, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
-import { renderJob } from "/static/results.js";
+import { renderEmpty, renderError, renderJob } from "/static/results.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
 const elements = {
@@ -17,16 +17,31 @@ const elements = {
   scan: document.querySelector("#scan-button"),
   settings: document.querySelector("#settings-button"),
   settingsPanel: document.querySelector("#settings-panel"),
+  deviceBody: document.querySelector("#device-resource-body"),
+  deviceCollapse: document.querySelector("#device-collapse"),
+  modeBadge: document.querySelector("#device-mode-badge"),
+  summary: document.querySelector("#device-summary"),
   hint: document.querySelector("#device-hint"),
   deviceStatus: document.querySelector("#device-status"),
   identity: document.querySelector("#identity-value"),
-  category: document.querySelector("#category-select"),
-  command: document.querySelector("#command-select"),
+  filter: document.querySelector("#command-filter"),
+  categories: document.querySelector("#command-categories"),
+  commandList: document.querySelector("#command-list"),
+  selectedCommand: document.querySelector("#selected-command"),
+  commandDescription: document.querySelector("#command-description"),
+  advanced: document.querySelector("#advanced-commands"),
+  advancedToggle: document.querySelector("#advanced-command-toggle"),
   form: document.querySelector("#command-form"),
   execute: document.querySelector("#execute-button"),
   cancel: document.querySelector("#cancel-button"),
   executionStatus: document.querySelector("#execution-status"),
+  resultsPanel: document.querySelector("#job-result-panel"),
   results: document.querySelector("#results"),
+  resultClear: document.querySelector("#job-result-clear"),
+  resultToggle: document.querySelector("#job-result-toggle"),
+  resultDetailPanel: document.querySelector("#result-panel"),
+  resultDetail: document.querySelector("#result-detail-content"),
+  resultDetailToggle: document.querySelector("#result-toggle"),
   basic: document.querySelector("#basic-controls"),
 };
 
@@ -38,6 +53,8 @@ let commandForm;
 let deviceResource;
 let latestJob;
 let executing = false;
+let advancedVisible = false;
+let resultsVisible = false;
 let healthState = { key: "status.checking" };
 let executionState = { key: "device.ready" };
 let updateBasicAvailability = () => {};
@@ -48,18 +65,26 @@ document.querySelectorAll(".locale-button").forEach((button) => {
 });
 
 async function initialize() {
+  renderAdvancedToggle();
+  renderCollapseLabels();
+  bindPresentationControls();
   await updateHealth();
-  const [loadedCommands, models] = await Promise.all([getCommands(), fetch("/api/models").then((response) => response.json())]);
+  const [loadedCommands, models] = await Promise.all([
+    getCommands(),
+    fetch("/api/models").then((response) => response.json()),
+  ]);
   commands = loadedCommands;
   models.forEach((model) => elements.model.append(new Option(model.label, model.id)));
   elements.model.value = "keysight-dsox4024a";
-  catalog = new CommandCatalog(commands, elements.category, elements.command);
+
+  catalog = new CommandCatalog(commands, {
+    filter: elements.filter,
+    categories: elements.categories,
+    list: elements.commandList,
+  }, syncCommandSelection);
   commandForm = new CommandForm(elements.form, catalog);
-  catalog.renderCategories();
-  catalog.updateMode(context.mode);
-  syncCommandSelection();
-  elements.category.addEventListener("change", syncCommandSelection);
-  elements.command.addEventListener("change", syncCommandSelection);
+  catalog.render();
+
   deviceResource = new DeviceResource({
     mode: elements.mode,
     model: elements.model,
@@ -68,6 +93,10 @@ async function initialize() {
     scan: elements.scan,
     settings: elements.settings,
     settingsPanel: elements.settingsPanel,
+    body: elements.deviceBody,
+    deviceCollapse: elements.deviceCollapse,
+    modeBadge: elements.modeBadge,
+    summary: elements.summary,
     hint: elements.hint,
     status: elements.deviceStatus,
   }, (nextContext) => {
@@ -79,7 +108,8 @@ async function initialize() {
   updateAvailability();
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
-    executeCommand(elements.command.value, commandForm.values());
+    const selected = catalog.selected();
+    if (selected) executeCommand(selected.id, commandForm.values());
   });
   elements.cancel.addEventListener("click", async () => {
     if (!currentJobId) return;
@@ -89,6 +119,57 @@ async function initialize() {
       elements.deviceStatus.textContent = error.message;
     }
   });
+}
+
+function bindPresentationControls() {
+  elements.advancedToggle.addEventListener("click", () => {
+    advancedVisible = !advancedVisible;
+    elements.advanced.hidden = !advancedVisible;
+    elements.advanced.classList.toggle("collapsed", !advancedVisible);
+    elements.advancedToggle.setAttribute("aria-expanded", String(advancedVisible));
+    renderAdvancedToggle();
+  });
+  elements.resultToggle.addEventListener("click", () => {
+    togglePanel(elements.resultsPanel, elements.results, elements.resultToggle, "results");
+  });
+  elements.resultDetailToggle.addEventListener("click", () => {
+    togglePanel(elements.resultDetailPanel, elements.resultDetail, elements.resultDetailToggle, "results");
+  });
+  elements.resultClear.addEventListener("click", () => {
+    resultsVisible = false;
+    renderEmpty(elements.results, elements.resultDetail);
+  });
+}
+
+function togglePanel(panel, content, button, labelKey) {
+  const expanded = panel.classList.toggle("collapsed") === false;
+  content.hidden = !expanded;
+  button.setAttribute("aria-expanded", String(expanded));
+  const key = expanded ? "results.collapse" : "results.expand";
+  button.title = translate(key);
+  button.setAttribute("aria-label", translate(key));
+  button.textContent = expanded ? "-" : "+";
+  if (labelKey) button.dataset.labelKey = labelKey;
+}
+
+function renderAdvancedToggle() {
+  elements.advancedToggle.textContent = translate(
+    advancedVisible ? "commands.showLess" : "commands.showMore",
+  );
+}
+
+function renderCollapseLabels() {
+  const resultExpanded = !elements.resultsPanel.classList.contains("collapsed");
+  const detailExpanded = !elements.resultDetailPanel.classList.contains("collapsed");
+  const resultKey = resultExpanded ? "results.collapse" : "results.expand";
+  const detailKey = detailExpanded ? "results.collapse" : "results.expand";
+  elements.resultToggle.title = translate(resultKey);
+  elements.resultToggle.setAttribute("aria-label", translate(resultKey));
+  elements.resultToggle.textContent = resultExpanded ? "-" : "+";
+  elements.resultDetailToggle.title = translate(detailKey);
+  elements.resultDetailToggle.setAttribute("aria-label", translate(detailKey));
+  elements.resultDetailToggle.textContent = detailExpanded ? "-" : "+";
+  renderAdvancedToggle();
 }
 
 async function executeCommand(command, parameters) {
@@ -114,23 +195,31 @@ async function executeCommand(command, parameters) {
     const job = await runJob(command, parameters, context, (updated) => {
       currentJobId = updated.job_id;
       latestJob = updated;
+      resultsVisible = true;
       setExecutionStatus({ status: updated.status });
-      renderJob(elements.results, updated);
-      const idn = updated.result?.result?.idn || updated.result?.idn;
-      if (idn) elements.identity.textContent = `${idn.vendor} ${idn.model} (${idn.serial})`;
+      renderJob(elements.results, updated, elements.resultDetail);
+      updateIdentity(updated);
     });
     latestJob = job;
+    resultsVisible = true;
     setExecutionStatus({ status: job.status });
-    renderJob(elements.results, job);
+    renderJob(elements.results, job, elements.resultDetail);
+    updateIdentity(job);
   } catch (error) {
     setExecutionStatus({ status: "failed" });
-    elements.results.textContent = error.message;
+    resultsVisible = true;
+    renderError(elements.results, elements.resultDetail, error.message);
   } finally {
     executing = false;
     currentJobId = null;
     elements.cancel.classList.add("hidden");
     updateAvailability();
   }
+}
+
+function updateIdentity(job) {
+  const idn = job.result?.result?.idn || job.result?.idn;
+  if (idn) elements.identity.textContent = `${idn.vendor} ${idn.model} (${idn.serial})`;
 }
 
 async function updateHealth() {
@@ -149,17 +238,26 @@ async function updateHealth() {
 document.addEventListener("localechange", () => {
   renderHealth();
   renderExecutionStatus();
+  renderCollapseLabels();
   if (deviceResource) deviceResource.refresh();
   if (catalog) {
-    catalog.renderCategories();
+    catalog.render();
     syncCommandSelection();
   }
-  if (latestJob) renderJob(elements.results, latestJob);
+  if (resultsVisible && latestJob) renderJob(elements.results, latestJob, elements.resultDetail);
+  if (!resultsVisible) renderEmpty(elements.results, elements.resultDetail);
 });
 
 function syncCommandSelection() {
   if (!catalog || !commandForm) return;
-  commandForm.render(catalog.selected());
+  const selected = catalog.selected();
+  commandForm.render(selected);
+  elements.selectedCommand.textContent = selected
+    ? catalog.commandLabel(selected)
+    : translate("commands.selectCommand");
+  elements.commandDescription.textContent = selected
+    ? catalog.description(selected)
+    : translate("commands.noDescription");
   updateAvailability();
 }
 
@@ -176,7 +274,8 @@ function basicAvailable(command) {
 
 function updateAvailability() {
   if (!catalog) return;
-  elements.execute.disabled = executing || !commandAvailable(elements.command.value);
+  const selected = catalog.selected();
+  elements.execute.disabled = executing || !selected || !commandAvailable(selected.id);
   updateBasicAvailability();
 }
 

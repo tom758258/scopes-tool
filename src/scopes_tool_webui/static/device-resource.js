@@ -10,6 +10,7 @@ export class DeviceResource {
     this.statusKey = "device.ready";
     this.statusError = null;
     elements.settings.addEventListener("click", () => elements.settingsPanel.classList.toggle("hidden"));
+    elements.deviceCollapse.addEventListener("click", () => this.toggleBody());
     elements.mode.forEach((input) => input.addEventListener("change", () => this.changed()));
     elements.model.addEventListener("change", () => this.changed());
     elements.resource.addEventListener("input", () => this.changed());
@@ -34,7 +35,8 @@ export class DeviceResource {
     const live = context.mode === "live";
     this.elements.model.disabled = live;
     this.elements.hint.textContent = live ? translate("device.liveHint") : "";
-    this.renderStatus();
+    this.renderMode(context);
+    this.renderStatus(context);
     this.onContextChange(context);
   }
 
@@ -42,16 +44,40 @@ export class DeviceResource {
     this.changed();
   }
 
-  renderStatus() {
+  renderMode(context) {
+    const labels = { live: "device.live", simulate: "device.simulate", "dry-run": "device.dryRun" };
+    this.elements.modeBadge.className = `execution-mode-badge mode-${context.mode}`;
+    this.elements.modeBadge.textContent = translate(labels[context.mode] || context.mode);
+  }
+
+  renderSummary(context) {
+    const labels = { live: "device.live", simulate: "device.simulate", "dry-run": "device.dryRun" };
+    const mode = translate(labels[context.mode] || context.mode);
+    const resource = context.resource || translate("device.noResource");
+    this.elements.summary.textContent = translate("device.summary", { mode, resource });
+  }
+
+  renderStatus(context = this.context()) {
     if (this.resourceCount !== null) {
       this.elements.status.textContent = translate(
         this.resourceCount === 1 ? "device.resourceCount.one" : "device.resourceCount.many",
         { count: this.resourceCount },
       );
-      return;
+    } else {
+      const message = translate(this.statusKey);
+      this.elements.status.textContent = this.statusError ? `${message}: ${this.statusError}` : message;
     }
-    const message = translate(this.statusKey);
-    this.elements.status.textContent = this.statusError ? `${message}: ${this.statusError}` : message;
+    this.renderSummary(context);
+  }
+
+  toggleBody() {
+    const expanded = !this.elements.body.hidden;
+    this.elements.body.hidden = expanded;
+    this.elements.deviceCollapse.setAttribute("aria-expanded", String(!expanded));
+    const key = expanded ? "device.expand" : "device.collapse";
+    this.elements.deviceCollapse.title = translate(key);
+    this.elements.deviceCollapse.setAttribute("aria-label", translate(key));
+    this.elements.deviceCollapse.textContent = expanded ? "+" : "-";
   }
 
   async scan() {

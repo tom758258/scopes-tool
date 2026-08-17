@@ -7,98 +7,134 @@
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark">S</span>
-        <div>
-          <strong>Scopes Tool</strong>
-          <span data-i18n="brand.subtitle">Oscilloscope control</span>
+    <header class="page-head">
+      <div class="page-head-top">
+        <div class="brand">
+          <h1 data-i18n="page.brand">Scopes Tool</h1>
+          <p class="brand-subtitle"><span data-i18n="brand.subtitle">Oscilloscope control</span></p>
+        </div>
+        <div class="page-head-actions">
+          <span id="health-status" class="service-status" role="status">Checking service health...</span>
+          <button class="secondary locale-button" data-locale="en" type="button">EN</button>
+          <button class="secondary locale-button" data-locale="zh-TW" type="button">繁中</button>
         </div>
       </div>
-      <div class="topbar-actions">
-        <span id="health-status" class="service-status" role="status">Checking service health...</span>
-        <button class="locale-button" data-locale="en">EN</button>
-        <button class="locale-button" data-locale="zh-TW">繁中</button>
-      </div>
-    </header>
-    <main class="workspace">
-      <section class="panel device-panel" aria-labelledby="device-heading">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow" data-i18n="section.device">DEVICE</p>
-            <h1 id="device-heading" data-i18n="device.title">Device / Resource</h1>
-          </div>
-          <button id="settings-button" class="icon-button" data-i18n-title="device.settings" data-i18n-aria-label="device.settings" title="Settings" aria-label="Settings">⚙</button>
-        </div>
-        <div id="settings-panel" class="settings-panel hidden">
-          <span class="field-label" data-i18n="device.mode">Execution mode</span>
-          <div class="mode-options">
-            <label><input type="radio" name="mode" value="live" checked><span data-i18n="device.live">Live</span></label>
-            <label><input type="radio" name="mode" value="simulate"><span data-i18n="device.simulate">Simulate</span></label>
-            <label><input type="radio" name="mode" value="dry-run"><span data-i18n="device.dryRun">Dry-run</span></label>
-          </div>
-          <label class="field">
-            <span data-i18n="device.model">Planning model</span>
-            <select id="model-select"></select>
-          </label>
-        </div>
-        <div class="resource-row">
-          <label class="field resource-field">
-            <span data-i18n="device.resource">VISA resource</span>
-            <input id="resource-input" data-i18n-placeholder="device.resourcePlaceholder" placeholder="USB0::...::INSTR" autocomplete="off">
-          </label>
-          <button id="scan-button" class="secondary-button" data-i18n="device.scan">Scan resources</button>
-        </div>
-        <select id="resource-list" class="resource-list" data-i18n-aria-label="device.scannedResources" aria-label="Scanned resources"></select>
-        <p id="device-hint" class="hint" data-i18n="device.liveHint">Live mode requires an explicit VISA resource.</p>
-        <p id="device-status" class="panel-status" data-i18n="device.ready">Ready</p>
-        <div class="identity-line"><span data-i18n="device.identity">Detected identity</span><strong id="identity-value">—</strong></div>
-      </section>
 
-      <section class="panel basic-panel" aria-labelledby="basic-heading">
-        <div class="panel-heading compact-heading">
-          <div>
-            <p class="eyebrow" data-i18n="section.shortcuts">SHORTCUTS</p>
-            <h2 id="basic-heading" data-i18n="basic.title">Basic Controls</h2>
+      <section class="device-resource-section" aria-labelledby="device-heading">
+        <div class="device-resource-header">
+          <div class="device-resource-heading">
+            <div class="device-resource-title-row">
+              <strong id="device-heading" class="device-resource-title" data-i18n="device.title">Device / Resource</strong>
+              <span id="device-mode-badge" class="execution-mode-badge" aria-live="polite">Live</span>
+            </div>
+            <p id="device-summary" class="device-resource-summary">Live · No resource</p>
           </div>
+          <div class="device-resource-actions">
+            <button id="settings-button" class="secondary icon-button utility-icon-button" type="button" data-i18n-title="device.settings" data-i18n-aria-label="device.settings" title="Settings" aria-label="Settings">&#9881;</button>
+            <button id="device-collapse" class="secondary icon-button utility-icon-button" type="button" data-i18n-title="device.collapse" data-i18n-aria-label="device.collapse" title="Collapse Device / Resource" aria-label="Collapse Device / Resource" aria-controls="device-resource-body" aria-expanded="true">-</button>
+          </div>
+        </div>
+        <div id="device-resource-body" class="device-resource-body">
+          <div class="resource-grid">
+            <label class="field">
+              <span data-i18n="device.resource">VISA resource</span>
+              <input id="resource-input" data-i18n-placeholder="device.resourcePlaceholder" placeholder="USB0::...::INSTR" autocomplete="off">
+            </label>
+            <div class="live-resource-field">
+              <label class="field">
+                <span data-i18n="device.scannedResources">Scanned / Live resource</span>
+                <select id="resource-list" data-i18n-aria-label="device.scannedResources" aria-label="Scanned resources"></select>
+              </label>
+              <button id="scan-button" class="secondary command-pill-button" type="button" data-i18n="device.scan">Scan resources</button>
+            </div>
+          </div>
+          <div id="settings-panel" class="settings-panel hidden">
+            <span class="field-label" data-i18n="device.mode">Execution mode</span>
+            <div class="mode-options">
+              <label><input type="radio" name="mode" value="live" checked><span data-i18n="device.live">Live</span></label>
+              <label><input type="radio" name="mode" value="simulate"><span data-i18n="device.simulate">Simulate</span></label>
+              <label><input type="radio" name="mode" value="dry-run"><span data-i18n="device.dryRun">Dry-run</span></label>
+            </div>
+            <label class="field">
+              <span data-i18n="device.model">Planning model</span>
+              <select id="model-select"></select>
+            </label>
+          </div>
+          <div class="device-status-row">
+            <p id="device-hint" class="hint" data-i18n="device.liveHint">Live mode requires an explicit VISA resource.</p>
+            <p id="device-status" class="panel-status" data-i18n="device.ready">Ready</p>
+            <div class="identity-line"><span data-i18n="device.identity">Detected identity</span><strong id="identity-value">—</strong></div>
+          </div>
+        </div>
+      </section>
+    </header>
+
+    <main class="shell">
+      <section class="basic-command-section" aria-labelledby="basic-heading">
+        <div class="section-head">
+          <strong id="basic-heading" data-i18n="basic.title">Basic Controls</strong>
+          <button id="advanced-command-toggle" class="secondary advanced-command-button" type="button" aria-controls="advanced-commands" aria-expanded="false">Show more commands</button>
         </div>
         <div id="basic-controls" class="basic-controls">
-          <button data-command="identify" class="control-button" data-i18n="basic.identify">Identify</button>
-          <button data-command="run" class="control-button" data-i18n="basic.run">Run</button>
-          <button data-command="stop-acquisition" class="control-button" data-i18n="basic.stop">Stop</button>
-          <button data-command="single" class="control-button" data-i18n="basic.single">Single</button>
-          <button data-command="screenshot" class="control-button" data-i18n="basic.screenshot">Screenshot</button>
+          <button data-command="identify" class="command-pill-button" type="button" data-i18n="basic.identify">Identify</button>
+          <button data-command="run" class="command-pill-button" type="button" data-i18n="basic.run">Run</button>
+          <button data-command="stop-acquisition" class="command-pill-button" type="button" data-i18n="basic.stop">Stop</button>
+          <button data-command="single" class="command-pill-button" type="button" data-i18n="basic.single">Single</button>
+          <button data-command="screenshot" class="command-pill-button" type="button" data-i18n="basic.screenshot">Screenshot</button>
         </div>
       </section>
 
-      <section class="panel command-panel" aria-labelledby="commands-heading">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow" data-i18n="section.workbench">WORKBENCH</p>
-            <h2 id="commands-heading" data-i18n="commands.title">Commands</h2>
+      <div id="advanced-commands" class="command-workbench collapsed" hidden>
+        <aside class="rail" aria-labelledby="commands-heading">
+          <div class="rail-head">
+            <strong id="commands-heading" data-i18n="commands.title">Commands</strong>
+            <label class="filter-field">
+              <span class="visually-hidden" data-i18n="commands.filter">Filter commands</span>
+              <input id="command-filter" type="search" data-i18n-placeholder="commands.filter" data-i18n-aria-label="commands.filter" placeholder="Filter commands" aria-label="Filter commands" autocomplete="off">
+            </label>
           </div>
-          <span id="execution-status" class="badge badge-idle" data-i18n="device.ready">Ready</span>
-        </div>
-        <div class="command-selectors">
-          <label class="field"><span data-i18n="commands.category">Category</span><select id="category-select"></select></label>
-          <label class="field"><span data-i18n="commands.command">Command</span><select id="command-select"></select></label>
-        </div>
-        <div class="form-heading"><h3 data-i18n="commands.parameters">Parameters</h3></div>
-        <form id="command-form" class="command-form"></form>
-        <div class="command-actions">
-          <button id="execute-button" class="primary-button" data-i18n="commands.execute">Execute</button>
-          <button id="cancel-button" class="secondary-button hidden" data-i18n="commands.cancel">Cancel job</button>
-        </div>
-      </section>
+          <div class="command-browser">
+            <nav id="command-categories" class="command-categories" data-i18n-aria-label="commands.categories" aria-label="Command categories"></nav>
+            <div id="command-list" class="command-list" role="list"></div>
+          </div>
+        </aside>
 
-      <section class="panel results-panel" aria-labelledby="results-heading">
-        <div class="panel-heading compact-heading">
-          <div>
-          <p class="eyebrow" data-i18n="section.output">OUTPUT</p>
-            <h2 id="results-heading" data-i18n="results.title">Result</h2>
+        <section class="workspace-panel" aria-labelledby="selected-command">
+          <div class="panel-title">
+            <div class="command-title-group">
+              <h2 id="selected-command" data-i18n="commands.selectCommand">Select a command</h2>
+              <p id="command-description" class="command-description"></p>
+            </div>
+            <span id="execution-status" class="badge badge-idle" data-i18n="device.ready">Ready</span>
+          </div>
+          <div class="workspace-content">
+            <div class="form-heading"><h3 data-i18n="commands.parameters">Parameters</h3></div>
+            <form id="command-form" class="command-form"></form>
+            <div class="command-actions">
+              <button id="execute-button" class="primary" type="button" data-i18n="commands.execute">Execute</button>
+              <button id="cancel-button" class="secondary hidden" type="button" data-i18n="commands.cancel">Cancel job</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section id="job-result-panel" class="result-section" aria-labelledby="results-heading">
+        <div class="section-head">
+          <strong id="results-heading" data-i18n="results.title">Result</strong>
+          <div class="button-row">
+            <button id="job-result-clear" class="secondary" type="button" data-i18n="results.clear">Clear</button>
+            <button id="job-result-toggle" class="secondary icon-button" type="button" data-i18n-title="results.collapse" data-i18n-aria-label="results.collapse" title="Collapse result" aria-label="Collapse result" aria-controls="results" aria-expanded="true">-</button>
           </div>
         </div>
         <div id="results" class="results-content"><p class="muted" data-i18n="results.empty">No command has been run yet.</p></div>
+      </section>
+
+      <section id="result-panel" class="result-detail-section" aria-labelledby="result-detail-heading">
+        <div class="section-head">
+          <strong id="result-detail-heading" data-i18n="results.detail">Result Detail</strong>
+          <button id="result-toggle" class="secondary icon-button" type="button" data-i18n-title="results.collapse" data-i18n-aria-label="results.collapse" title="Collapse result detail" aria-label="Collapse result detail" aria-controls="result-detail-content" aria-expanded="true">-</button>
+        </div>
+        <div id="result-detail-content" class="result-detail-content"><p class="muted" data-i18n="results.empty">No command has been run yet.</p></div>
       </section>
     </main>
     <script type="module" src="/static/app.js"></script>
