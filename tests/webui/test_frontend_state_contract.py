@@ -94,9 +94,35 @@ def test_empty_scan_keeps_a_localized_non_resource_option() -> None:
 
     assert "this.elements.resourceList.replaceChildren();" in render_resource_list
     assert 'if (!resources.length)' in render_resource_list
-    assert 'new Option(translate("device.liveResourcePlaceholder"), "")' in render_resource_list
-    assert 'option.dataset.i18n = "device.liveResourcePlaceholder";' in render_resource_list
-    assert 'resources.forEach((resource) => this.elements.resourceList.append(new Option(resource, resource)));' in render_resource_list
+    assert 'new Option(translate("device.liveResourceNoResources"), "")' in render_resource_list
+    assert 'option.dataset.i18n = "device.liveResourceNoResources";' in render_resource_list
+    assert "function resourceName(resource)" in source
+    assert "function resourceLabel(resource)" in source
+    assert "new Option(resourceLabel(resource), name)" in render_resource_list
+
+
+def test_scan_requests_live_only_and_preserves_structured_resource_identity() -> None:
+    source = read_static("device-resource.js")
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+
+    scan = extract_function(source, "async scan()")
+    assert 'command: "list-resources"' in scan
+    assert "parameters: { live_only: true }" in scan
+    assert "resourceName(resources[0])" in scan
+    assert '"device.liveResourceNoResources": "No live resources found"' in english
+    assert '"device.liveResourceNoResources": "未找到即時資源"' in chinese
+
+
+def test_list_resources_command_exposes_a_boolean_live_only_parameter() -> None:
+    source = (REPO_ROOT / "src" / "scopes_tool_webui" / "commands.py").read_text(encoding="utf-8")
+
+    assert '"id": "list-resources"' in source
+    assert '{"name": "live_only", "type": "boolean", "default": False}' in source
+    assert 'parameters.setdefault("live_only", False)' in source
+    assert '_require_boolean(parameters["live_only"], "live_only")' in source
+    assert "discover_visa_resources(live_only=live_only)" in source
+    assert '"backend": listing.backend' in source
 
 
 def test_scan_failure_is_included_in_the_compact_device_presentation() -> None:

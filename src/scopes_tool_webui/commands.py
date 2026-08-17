@@ -52,6 +52,7 @@ from scopes_tool_core.channel import (
     validate_probe_skew,
 )
 from scopes_tool_core.display import validate_display_intensity, validate_display_persistence
+from scopes_tool_core.discovery import discover_visa_resources
 from scopes_tool_core.dvm import DVM_MODES, normalize_dvm_mode
 from scopes_tool_core.fft import normalize_fft_units, normalize_fft_window
 from scopes_tool_core.identity import PHYSICAL_MODEL_REGISTRY, physical_model_for_id
@@ -190,7 +191,6 @@ from scopes_tool_core.save_export import (
     validate_save_quoted_string,
     validate_save_waveform_length,
 )
-from scopes_tool_core.visa_backend import list_visa_resources
 
 
 DEFAULT_MODEL_ID = "keysight-dsox4024a"
@@ -200,7 +200,9 @@ COMMANDS = (
         "category": "Device",
         "label": "List resources",
         "modes": ("live", "simulate", "dry-run"),
-        "fields": (),
+        "fields": (
+            {"name": "live_only", "type": "boolean", "default": False},
+        ),
     },
     {
         "id": "identify",
@@ -1190,10 +1192,16 @@ def execute_command(
     """Execute one validated request through the public Core APIs."""
 
     if command == "list-resources":
-        listing = list_visa_resources()
+        live_only = parameters.get("live_only", False)
+        listing = discover_visa_resources(live_only=live_only)
+        resources = (
+            [resource.to_payload() for resource in listing.resources]
+            if live_only
+            else list(listing.resources)
+        )
         return {
             "exit_code": 0,
-            "result": {"resources": listing.resources, "backend": listing.backend},
+            "result": {"resources": resources, "backend": listing.backend},
             "artifacts": [],
         }
 
@@ -2496,6 +2504,10 @@ def _validate_parameters(
     model_id: str,
 ) -> None:
     capabilities = capabilities_for_model_id(model_id)
+    if command == "list-resources":
+        parameters.setdefault("live_only", False)
+        _require_boolean(parameters["live_only"], "live_only")
+        return
     if command in _P3C_COMMAND_IDS:
         _validate_p3c_parameters(command, parameters, mode, model_id)
         return

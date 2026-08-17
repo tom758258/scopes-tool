@@ -1,4 +1,6 @@
 export const zhTW = {
+  "device.liveResourceNoResources": "未找到即時資源",
+  "field.live_only": "僅顯示即時資源",
   "device.detection.noResources": "偵測狀態：未找到資源",
   "page.brand": "Scopes Tool",
   "page.unofficial_tool": "非官方工具",

@@ -91,6 +91,43 @@ def verify_asrl_resource_live(
 ) -> VisaLiveVerification:
     """Bounded best-effort ASRL `*IDN?` verification for discovery only."""
 
+    return _verify_resource_live(
+        resource,
+        visa_library=visa_library,
+        serial_read_termination=serial_read_termination,
+        serial_write_termination=serial_write_termination,
+        failure_label="ASRL",
+    )
+
+
+def verify_visa_resource_live(
+    resource: str,
+    *,
+    visa_library: str | None = None,
+    serial_read_termination: str | None = None,
+    serial_write_termination: str | None = None,
+) -> VisaLiveVerification:
+    """Bounded best-effort VISA `*IDN?` verification for discovery."""
+
+    return _verify_resource_live(
+        resource,
+        visa_library=visa_library,
+        serial_read_termination=serial_read_termination,
+        serial_write_termination=serial_write_termination,
+        failure_label="VISA",
+    )
+
+
+def _verify_resource_live(
+    resource: str,
+    *,
+    visa_library: str | None,
+    serial_read_termination: str | None,
+    serial_write_termination: str | None,
+    failure_label: str,
+) -> VisaLiveVerification:
+    """Run one bounded read-only `*IDN?` probe and contain its failures."""
+
     resource_manager = None
     session = None
     try:
@@ -123,7 +160,7 @@ def verify_asrl_resource_live(
             resource=resource,
             live=False,
             raw_idn=None,
-            detail=f"ASRL verification failed: {exc}",
+            detail=f"{failure_label} verification failed: {exc}",
         )
     finally:
         if session is not None:

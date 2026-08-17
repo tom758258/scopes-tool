@@ -16,6 +16,7 @@ from scopes_tool_core.visa_backend import (
     normalize_backend,
     normalize_serial_termination,
     verify_asrl_resource_live,
+    verify_visa_resource_live,
 )
 
 
@@ -351,6 +352,20 @@ def test_asrl_live_verification_omits_unspecified_serial_settings(monkeypatch):
     assert verification.live is True
     assert not hasattr(resource, "read_termination")
     assert not hasattr(resource, "write_termination")
+
+
+def test_generic_live_verification_uses_bounded_timeout(monkeypatch):
+    resource = _FakeResource()
+    manager = _FakeResourceManager(opened_resource=resource)
+    _install_fake_pyvisa(monkeypatch, lambda: manager)
+
+    verification = verify_visa_resource_live("USB0::INSTR")
+
+    assert verification.live is True
+    assert verification.raw_idn == "response"
+    assert manager.opened_kwargs == [{"open_timeout": ASRL_VERIFY_TIMEOUT_MS}]
+    assert resource.timeout == ASRL_VERIFY_TIMEOUT_MS
+    assert resource.history == [("query", "*IDN?")]
 
 
 def test_asrl_live_verification_returns_stale_detail_and_closes(monkeypatch):

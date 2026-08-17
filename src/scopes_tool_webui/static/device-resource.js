@@ -19,7 +19,19 @@ function sameContext(left, right) {
 function identityLabel(identity) {
   if (!identity) return "";
   if (typeof identity === "string") return identity;
-  return [identity.vendor, identity.model].filter(Boolean).join(" ") || identity.model || "";
+  return [identity.vendor || identity.manufacturer, identity.model].filter(Boolean).join(" ") || identity.model || "";
+}
+
+function resourceName(resource) {
+  return typeof resource === "string" ? resource : resource?.name || "";
+}
+
+function resourceLabel(resource) {
+  if (typeof resource === "string") return resource;
+  const idn = resource?.idn || {};
+  return [resourceName(resource), idn.manufacturer || idn.vendor, idn.model]
+    .filter(Boolean)
+    .join(" - ");
 }
 
 export class DeviceResource {
@@ -195,7 +207,11 @@ export class DeviceResource {
     this.onCommandStateChange({ status: "queued" });
     try {
       const context = this.context();
-      const submitted = await submitJob({ command: "list-resources", ...context });
+      const submitted = await submitJob({
+        command: "list-resources",
+        parameters: { live_only: true },
+        ...context,
+      });
       let job = await getJob(submitted.job_id);
       this.onCommandStateChange({ status: job.status });
       while (["queued", "running"].includes(job.status)) {
@@ -206,7 +222,7 @@ export class DeviceResource {
       if (job.status !== "completed") throw new Error(job.error || translate("status.scanFailed"));
       const resources = job.result?.result?.resources || [];
       this.renderResourceList(resources);
-      if (resources.length) this.elements.resource.value = resources[0];
+      if (resources.length) this.elements.resource.value = resourceName(resources[0]);
       this.resourceCount = resources.length;
       this.scanStatus = resources.length ? "scanned" : "empty";
       this.statusKey = "device.ready";
@@ -227,11 +243,15 @@ export class DeviceResource {
   renderResourceList(resources) {
     this.elements.resourceList.replaceChildren();
     if (!resources.length) {
-      const option = new Option(translate("device.liveResourcePlaceholder"), "");
-      option.dataset.i18n = "device.liveResourcePlaceholder";
+      const option = new Option(translate("device.liveResourceNoResources"), "");
+      option.dataset.i18n = "device.liveResourceNoResources";
       this.elements.resourceList.append(option);
       return;
     }
-    resources.forEach((resource) => this.elements.resourceList.append(new Option(resource, resource)));
+    resources.forEach((resource) => {
+      const name = resourceName(resource);
+      if (!name) return;
+      this.elements.resourceList.append(new Option(resourceLabel(resource), name));
+    });
   }
 }
