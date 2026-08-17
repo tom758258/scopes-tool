@@ -72,6 +72,22 @@ class FakeServer:
         self.served_sockets = list(sockets)
 
 
+class OrderedServer(FakeServer):
+    def __init__(self, events):
+        super().__init__()
+        self.events = events
+
+    @property
+    def should_exit(self):
+        return self._should_exit
+
+    @should_exit.setter
+    def should_exit(self, value):
+        self._should_exit = value
+        if value:
+            self.events.append("server")
+
+
 class ImmediateThread:
     def __init__(self, *, target, name, daemon, args=()):
         self.target = target
@@ -105,6 +121,17 @@ class LiveThread:
         self.alive = False
 
 
+class FakeJobManager:
+    def __init__(self, events=None, error=None):
+        self.events = events if events is not None else []
+        self.error = error
+
+    def shutdown(self, *, timeout_s):
+        self.events.append(("jobs", timeout_s))
+        if self.error is not None:
+            raise self.error
+
+
 def make_app(
     *,
     initial_port=launcher.DEFAULT_PORT,
@@ -112,6 +139,7 @@ def make_app(
     server_factory=None,
     readiness_checker=None,
     browser_open=None,
+    job_manager_instance=None,
 ):
     app = launcher.LauncherApp.__new__(launcher.LauncherApp)
     app._root = FakeRoot()
@@ -119,6 +147,7 @@ def make_app(
     app._socket_binder = socket_binder or (lambda _port: FakeSocket())
     app._browser_open = browser_open or (lambda _url: True)
     app._readiness_checker = readiness_checker or (lambda _url: True)
+    app._job_manager = job_manager_instance or FakeJobManager()
     app._server = None
     app._server_socket = None
     app._server_thread = None
@@ -126,6 +155,7 @@ def make_app(
     app._startup_thread = None
     app._shutdown_thread = None
     app._shutdown_in_progress = False
+    app._jobs_shutdown_complete = False
     app._ui_queue = launcher.Queue()
     app._startup_success = threading.Event()
     app._server_error = None
@@ -302,14 +332,47 @@ def test_auto_port_exhaustion_exposes_manual_fallback(monkeypatch):
 
 
 def test_clean_shutdown_runs_off_the_ui_thread():
+    events = []
+    job_manager = FakeJobManager(events)
     app = make_app()
-    app._server = FakeServer()
+    app._job_manager = job_manager
+    app._server = OrderedServer(events)
     app._server_thread = LiveThread()
+    original_server_thread = app._server_thread
+
+    app._server.should_exit = False
 
     app.quit()
     app._shutdown_thread.join(timeout=1)
     drain_ui(app)
 
     assert app._server.should_exit is True
-    assert app._server_thread.joined is True
+    assert original_server_thread.joined is True
+    assert events == [("jobs", launcher.JOB_SHUTDOWN_TIMEOUT_S), "server"]
     assert app._root.destroyed is True
+
+
+def test_shutdown_failure_keeps_launcher_operable(monkeypatch):
+    errors = []
+    events = []
+    app = make_app(
+        job_manager_instance=FakeJobManager(events, TimeoutError("job timeout")),
+    )
+    app._server = FakeServer()
+    app._server_thread = LiveThread()
+    monkeypatch.setattr(
+        launcher.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    app.quit()
+    app._shutdown_thread.join(timeout=1)
+    drain_ui(app)
+
+    assert events == [("jobs", launcher.JOB_SHUTDOWN_TIMEOUT_S)]
+    assert app._server.should_exit is False
+    assert app._root.destroyed is False
+    assert app._shutdown_in_progress is False
+    assert app._quit_button.state == "normal"
+    assert errors[0][0] == "Shutdown incomplete"

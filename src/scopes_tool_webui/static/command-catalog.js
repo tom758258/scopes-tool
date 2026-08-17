@@ -5,6 +5,7 @@ export class CommandCatalog {
     this.commands = commands;
     this.categoryElement = categoryElement;
     this.commandElement = commandElement;
+    this.activeMode = "live";
     this.categoryElement.addEventListener("change", () => this.renderCommands());
   }
 
@@ -22,11 +23,11 @@ export class CommandCatalog {
     this.renderCommands();
   }
 
-  renderCommands(mode) {
+  renderCommands() {
     const category = this.categoryElement.value;
     const current = this.commandElement.value;
     const available = this.commands.filter(
-      (command) => command.category === category && (!mode || command.modes.includes(mode)),
+      (command) => command.category === category && command.modes.includes(this.activeMode),
     );
     this.commandElement.replaceChildren();
     available.forEach((command) => {
@@ -38,11 +39,12 @@ export class CommandCatalog {
   }
 
   updateMode(mode) {
-    const selected = this.selected();
-    this.renderCommands(mode);
-    if (selected && selected.modes.includes(mode)) {
-      this.commandElement.value = selected.id;
-    }
+    this.activeMode = mode;
+    this.renderCommands();
+  }
+
+  optionsFor(field) {
+    return field.mode_options?.[this.activeMode] || field.options || [];
   }
 
   selected() {

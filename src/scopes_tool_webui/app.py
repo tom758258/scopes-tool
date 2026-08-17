@@ -11,14 +11,13 @@ from starlette.staticfiles import StaticFiles
 
 from . import __version__
 from .commands import command_catalog, model_catalog, validate_job_request
-from .jobs import JobManager
+from .jobs import JobManagerShuttingDown, job_manager
 
 
 PACKAGE_NAME = "scopes-tool-webui"
 STATIC_DIR = Path(__file__).with_name("static")
 
 app = FastAPI(title="Scopes Tool WebUI")
-job_manager = JobManager()
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -52,7 +51,10 @@ async def submit_job(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         request = validate_job_request(payload)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    job = job_manager.submit(request)
+    try:
+        job = job_manager.submit(request)
+    except JobManagerShuttingDown as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"ok": True, "job_id": job.job_id, "status": job.status}
 
 

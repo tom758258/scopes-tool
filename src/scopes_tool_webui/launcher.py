@@ -18,12 +18,14 @@ from urllib.request import urlopen
 import webbrowser
 
 from . import __version__ as WEBUI_VERSION
+from .jobs import job_manager
 
 
 PACKAGE_NAME = "scopes-tool-webui"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8025
 AUTO_PORT_ATTEMPTS = 100
+JOB_SHUTDOWN_TIMEOUT_S = 10.0
 SERVER_JOIN_TIMEOUT_S = 3.0
 
 
@@ -85,6 +87,7 @@ class LauncherApp:
         socket_binder: Callable[[int], Any] | None = None,
         browser_open: Callable[[str], object] | None = None,
         readiness_checker: Callable[[str], bool] | None = None,
+        job_manager_instance: Any = job_manager,
         initial_port: int = DEFAULT_PORT,
     ) -> None:
         self._root = root
@@ -92,6 +95,7 @@ class LauncherApp:
         self._socket_binder = socket_binder or bind_local_socket
         self._browser_open = browser_open or webbrowser.open
         self._readiness_checker = readiness_checker or _server_is_ready
+        self._job_manager = job_manager_instance
         self._server: Any | None = None
         self._server_socket: Any | None = None
         self._server_thread: threading.Thread | None = None
@@ -99,6 +103,7 @@ class LauncherApp:
         self._startup_thread: threading.Thread | None = None
         self._shutdown_thread: threading.Thread | None = None
         self._shutdown_in_progress = False
+        self._jobs_shutdown_complete = False
         self._ui_queue: Queue[Callable[[], None]] = Queue()
         self._startup_success = threading.Event()
         self._server_error: BaseException | None = None
@@ -312,7 +317,7 @@ class LauncherApp:
         self._startup_result_handled = True
         self._lock_started_controls()
         self._quit_button.configure(state="disabled")
-        self._status_value.set("Stopping WebUI server...")
+        self._status_value.set("Stopping WebUI jobs...")
         self._shutdown_thread = threading.Thread(
             target=self._shutdown_owned_server,
             name="scopes-tool-webui-launcher-shutdown",
@@ -322,6 +327,9 @@ class LauncherApp:
 
     def _shutdown_owned_server(self) -> None:
         try:
+            if not self._jobs_shutdown_complete:
+                self._job_manager.shutdown(timeout_s=JOB_SHUTDOWN_TIMEOUT_S)
+                self._jobs_shutdown_complete = True
             server = self._server
             if server is not None:
                 server.should_exit = True

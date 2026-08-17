@@ -75,9 +75,10 @@ enums, numbers, and booleans. Complex conditional editors for Trigger,
 Search, Serial, Segmented Memory, and Workflow commands are not included.
 
 Dry-run is intentionally limited to host VISA discovery plus Core-planned
-acquisition query, measurement, and waveform capture operations. It does not
-open an instrument backend. Simulate uses Core's deterministic simulator; Live
-opens the explicit resource through Core.
+acquisition **query**, measurement, and waveform capture operations. Dry-run
+acquisition `set` is rejected before a job is queued. Dry-run does not open an
+instrument backend. Simulate uses Core's deterministic simulator; Live opens
+the explicit resource through Core.
 
 ## Jobs, results, and artifacts
 
@@ -86,15 +87,21 @@ WebUI API. Jobs report `queued`, `running`, `completed`, `failed`, or
 `cancelled` and expose structured Core results, errors, and diagnostic lines.
 
 Only queued jobs can be cancelled. Running VISA I/O is not forcibly
-interrupted. Screenshot and waveform capture jobs register their generated
-artifacts, which can be downloaded through the job result. Artifact downloads
-are limited to files registered by that job.
+interrupted. When the Launcher is closed, it first stops accepting jobs,
+cancels queued jobs, and waits for running jobs to finish and close their own
+sessions before stopping Uvicorn. This shutdown has a timeout; if jobs do not
+finish or a session close fails, the Launcher displays **Shutdown incomplete**
+and remains available so Quit can be retried. No implicit Safe Cleanup is run.
+Screenshot and waveform capture jobs register their generated artifacts, which
+can be downloaded through the job result. Artifact downloads are limited to
+files registered by that job.
 
 ## Language and current limitations
 
 The browser UI supports English and Traditional Chinese (`zh-TW`). The
-selected locale is remembered locally. Command IDs, model IDs, VISA resources,
-SCPI, JSON keys, and raw diagnostics remain unchanged.
+selected locale is remembered locally. The Launcher itself is English-only.
+Command IDs, model IDs, VISA resources, SCPI, JSON keys, and raw diagnostics
+remain unchanged.
 
 P2 does not include remote access, authentication, multi-instrument sessions,
 WebSockets/SSE, live waveform streaming, Live Data monitoring, dark mode,

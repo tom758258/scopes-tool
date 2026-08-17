@@ -1,10 +1,10 @@
 import { artifactUrl } from "/static/api.js";
-import { translate } from "/static/i18n.js";
+import { translate, translateJobStatus } from "/static/i18n.js";
 
 export function renderJob(container, job) {
   container.replaceChildren();
   const status = document.createElement("p");
-  status.innerHTML = `<span class="badge badge-${job.status}">${escapeHtml(job.status)}</span>`;
+  status.innerHTML = `<span class="badge badge-${job.status}">${escapeHtml(translateJobStatus(job.status))}</span>`;
   container.append(status);
   if (job.error) {
     const error = document.createElement("pre");
@@ -27,7 +27,10 @@ export function renderJob(container, job) {
       const item = document.createElement("li");
       const link = document.createElement("a");
       link.href = artifactUrl(job.job_id, artifact.name);
-      link.textContent = `${artifact.name} (${artifact.size} bytes)`;
+      link.textContent = translate("results.artifactSize", {
+        name: artifact.name,
+        size: artifact.size,
+      });
       link.download = artifact.name;
       item.append(link);
       list.append(item);

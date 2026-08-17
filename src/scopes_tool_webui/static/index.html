@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Scopes Tool WebUI</title>
+    <title data-i18n="page.title">Scopes Tool WebUI</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
@@ -25,10 +25,10 @@
       <section class="panel device-panel" aria-labelledby="device-heading">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">DEVICE</p>
+            <p class="eyebrow" data-i18n="section.device">DEVICE</p>
             <h1 id="device-heading" data-i18n="device.title">Device / Resource</h1>
           </div>
-          <button id="settings-button" class="icon-button" title="Settings" aria-label="Settings">⚙</button>
+          <button id="settings-button" class="icon-button" data-i18n-title="device.settings" data-i18n-aria-label="device.settings" title="Settings" aria-label="Settings">⚙</button>
         </div>
         <div id="settings-panel" class="settings-panel hidden">
           <span class="field-label" data-i18n="device.mode">Execution mode</span>
@@ -49,7 +49,7 @@
           </label>
           <button id="scan-button" class="secondary-button" data-i18n="device.scan">Scan resources</button>
         </div>
-        <select id="resource-list" class="resource-list" aria-label="Scanned resources"></select>
+        <select id="resource-list" class="resource-list" data-i18n-aria-label="device.scannedResources" aria-label="Scanned resources"></select>
         <p id="device-hint" class="hint" data-i18n="device.liveHint">Live mode requires an explicit VISA resource.</p>
         <p id="device-status" class="panel-status" data-i18n="device.ready">Ready</p>
         <div class="identity-line"><span data-i18n="device.identity">Detected identity</span><strong id="identity-value">—</strong></div>
@@ -58,7 +58,7 @@
       <section class="panel basic-panel" aria-labelledby="basic-heading">
         <div class="panel-heading compact-heading">
           <div>
-            <p class="eyebrow">SHORTCUTS</p>
+            <p class="eyebrow" data-i18n="section.shortcuts">SHORTCUTS</p>
             <h2 id="basic-heading" data-i18n="basic.title">Basic Controls</h2>
           </div>
         </div>
@@ -74,10 +74,10 @@
       <section class="panel command-panel" aria-labelledby="commands-heading">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">WORKBENCH</p>
+            <p class="eyebrow" data-i18n="section.workbench">WORKBENCH</p>
             <h2 id="commands-heading" data-i18n="commands.title">Commands</h2>
           </div>
-          <span id="execution-status" class="badge badge-idle">Ready</span>
+          <span id="execution-status" class="badge badge-idle" data-i18n="device.ready">Ready</span>
         </div>
         <div class="command-selectors">
           <label class="field"><span data-i18n="commands.category">Category</span><select id="category-select"></select></label>
@@ -94,7 +94,7 @@
       <section class="panel results-panel" aria-labelledby="results-heading">
         <div class="panel-heading compact-heading">
           <div>
-            <p class="eyebrow">OUTPUT</p>
+          <p class="eyebrow" data-i18n="section.output">OUTPUT</p>
             <h2 id="results-heading" data-i18n="results.title">Result</h2>
           </div>
         </div>

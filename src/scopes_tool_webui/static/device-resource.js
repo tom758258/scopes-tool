@@ -6,6 +6,9 @@ export class DeviceResource {
   constructor(elements, onContextChange) {
     this.elements = elements;
     this.onContextChange = onContextChange;
+    this.resourceCount = null;
+    this.statusKey = "device.ready";
+    this.statusError = null;
     elements.settings.addEventListener("click", () => elements.settingsPanel.classList.toggle("hidden"));
     elements.mode.forEach((input) => input.addEventListener("change", () => this.changed()));
     elements.model.addEventListener("change", () => this.changed());
@@ -31,12 +34,32 @@ export class DeviceResource {
     const live = context.mode === "live";
     this.elements.model.disabled = live;
     this.elements.hint.textContent = live ? translate("device.liveHint") : "";
+    this.renderStatus();
     this.onContextChange(context);
+  }
+
+  refresh() {
+    this.changed();
+  }
+
+  renderStatus() {
+    if (this.resourceCount !== null) {
+      this.elements.status.textContent = translate(
+        this.resourceCount === 1 ? "device.resourceCount.one" : "device.resourceCount.many",
+        { count: this.resourceCount },
+      );
+      return;
+    }
+    const message = translate(this.statusKey);
+    this.elements.status.textContent = this.statusError ? `${message}: ${this.statusError}` : message;
   }
 
   async scan() {
     this.elements.scan.disabled = true;
-    this.elements.status.textContent = translate("status.waiting");
+    this.resourceCount = null;
+    this.statusKey = "status.waiting";
+    this.statusError = null;
+    this.renderStatus();
     try {
       const context = this.context();
       const submitted = await submitJob({ command: "list-resources", ...context });
@@ -50,10 +73,14 @@ export class DeviceResource {
       this.elements.resourceList.replaceChildren();
       resources.forEach((resource) => this.elements.resourceList.append(new Option(resource, resource)));
       if (resources.length) this.elements.resource.value = resources[0];
-      this.elements.status.textContent = `${resources.length} resource(s)`;
+      this.resourceCount = resources.length;
+      this.statusKey = "device.ready";
       this.changed();
     } catch (error) {
-      this.elements.status.textContent = `${translate("status.scanFailed")}: ${error.message}`;
+      this.resourceCount = null;
+      this.statusKey = "status.scanFailed";
+      this.statusError = error.message;
+      this.renderStatus();
     } finally {
       this.elements.scan.disabled = false;
     }

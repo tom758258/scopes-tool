@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixes WebUI job shutdown so the Launcher waits for queued cancellation and
+  natural completion of running jobs before stopping Uvicorn, reports shutdown
+  timeouts or session-close failures without destroying the Launcher, and
+  restricts dry-run acquisition to query operations.
 - Adds the localhost-only WebUI server and English Launcher with a Core-backed
   command workbench, Basic Controls, simulated and dry-run jobs, result and
   artifact retrieval, English/Traditional Chinese UI text, health endpoint,

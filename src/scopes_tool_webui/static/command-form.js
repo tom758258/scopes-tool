@@ -8,10 +8,17 @@ export class CommandForm {
 
   render(command) {
     this.container.replaceChildren();
-    if (!command || !command.fields.length) {
+    if (!command) {
       const empty = document.createElement("p");
       empty.className = "muted compact-note";
-      empty.textContent = "This command has no parameters.";
+      empty.textContent = translate("status.noCommands");
+      this.container.append(empty);
+      return;
+    }
+    if (!command.fields.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted compact-note";
+      empty.textContent = translate("form.noParameters");
       this.container.append(empty);
       return;
     }
@@ -41,12 +48,17 @@ export class CommandForm {
     let input;
     if (field.type === "enum") {
       input = document.createElement("select");
-      if (field.default === undefined) input.append(new Option("—", ""));
-      field.options.forEach((option) => input.append(new Option(String(option), String(option))));
+      if (field.default === undefined) input.append(new Option(translate("form.emptyOption"), ""));
+      this.catalog.optionsFor(field).forEach((option) => {
+        input.append(new Option(translate(`enum.${String(option)}`), String(option)));
+      });
     } else if (field.type === "boolean") {
       input = document.createElement("select");
-      input.append(new Option("—", ""));
-      input.append(new Option("true", "true"), new Option("false", "false"));
+      input.append(new Option(translate("form.emptyOption"), ""));
+      input.append(
+        new Option(translate("enum.true"), "true"),
+        new Option(translate("enum.false"), "false"),
+      );
     } else {
       input = document.createElement("input");
       input.type = field.type === "integer" ? "number" : "text";

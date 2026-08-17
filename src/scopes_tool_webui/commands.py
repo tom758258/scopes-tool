@@ -80,7 +80,17 @@ COMMANDS = (
         "label": "Acquisition",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
-            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {
+                "name": "action",
+                "type": "enum",
+                "options": ("query", "set"),
+                "mode_options": {
+                    "live": ("query", "set"),
+                    "simulate": ("query", "set"),
+                    "dry-run": ("query",),
+                },
+                "default": "query",
+            },
             {"name": "type", "type": "enum", "options": ("normal", "average", "high_resolution", "peak")},
             {"name": "count", "type": "integer", "minimum": 2, "maximum": 65536},
         ),
@@ -176,6 +186,10 @@ class WebUIRequestError(ValueError):
     """Raised when a WebUI command request is invalid before queueing."""
 
 
+class ScopeSessionCloseError(RuntimeError):
+    """Raised when a job-owned scope session cannot be closed."""
+
+
 def command_catalog() -> list[dict[str, Any]]:
     return [_jsonable(entry) for entry in COMMANDS]
 
@@ -266,7 +280,10 @@ def execute_command(
             artifact_dir,
         )
     finally:
-        scope.close()
+        try:
+            scope.close()
+        except Exception as exc:
+            raise ScopeSessionCloseError(f"scope session close failed: {exc}") from exc
 
 
 def _execute_dry_run(
