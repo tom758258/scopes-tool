@@ -139,6 +139,81 @@ def test_commands_expose_the_p3a_flat_subset() -> None:
     )
 
 
+def test_commands_expose_the_p3b_reference_and_save_subset() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/commands")
+
+    assert response.status_code == 200
+    commands = {entry["id"]: entry for entry in response.json()}
+    expected = {
+        "reference-save",
+        "reference-display",
+        "reference-label",
+        "reference-clear",
+        "reference-query",
+        "save-pwd",
+        "save-filename",
+        "save-image-format",
+        "save-image-palette",
+        "save-image-ink-saver",
+        "save-image-factors",
+        "save-image",
+        "save-waveform-format",
+        "save-waveform-length",
+        "save-waveform-length-max",
+        "save-waveform",
+    }
+
+    assert expected <= commands.keys()
+    for command in expected:
+        assert commands[command]["modes"] == ["live", "simulate"]
+
+
+def test_representative_p3b_simulated_commands_complete_without_artifacts() -> None:
+    client = TestClient(app)
+
+    reference = submit(
+        client,
+        "reference-label",
+        "simulate",
+        {"action": "set", "slot": 1, "label": "BASELINE"},
+    )
+    assert reference["status"] == "completed"
+    assert reference["result"]["result"]["label"]["label"] == "BASELINE"
+
+    save_setting = submit(
+        client,
+        "save-image-format",
+        "simulate",
+        {"action": "set", "format": "bmp24"},
+    )
+    assert save_setting["status"] == "completed"
+    assert save_setting["result"]["result"]["state"]["format"] == "bmp24"
+
+    save = submit(client, "save-image", "simulate", {"filename": "screen.png"})
+    assert save["status"] == "completed"
+    assert save["artifacts"] == []
+    assert save["result"]["result"]["save"]["instrument_side"] is True
+
+
+def test_p3b_save_filename_validation_is_preserved() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/jobs",
+        json={
+            "command": "save-image",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"filename": "screen;bad.png"},
+        },
+    )
+
+    assert response.status_code == 400
+    assert "filename" in response.json()["detail"].lower()
+
+
 def test_query_only_commands_do_not_default_set_only_channels() -> None:
     client = TestClient(app)
 

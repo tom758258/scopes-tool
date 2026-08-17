@@ -73,6 +73,12 @@ The Command workbench exposes:
 - Measurement: `measure`, `measure-results`, `measure-clear`, `measure-show`,
   `measure-source`, `measure-window`
 - Capture: `screenshot`, `capture`
+- Reference: `reference-save`, `reference-display`, `reference-label`,
+  `reference-clear`, `reference-query`
+- Save / Export: `save-pwd`, `save-filename`, `save-image-format`,
+  `save-image-palette`, `save-image-ink-saver`, `save-image-factors`,
+  `save-image`, `save-waveform-format`, `save-waveform-length`,
+  `save-waveform-length-max`, `save-waveform`
 - System: `check-error`, `system-status-byte`, `system-operation-status`,
   `system-clear-status`, `system-opc`, `system-standard-event`,
   `system-options`
@@ -112,8 +118,10 @@ sessions before stopping Uvicorn. This shutdown has a timeout; if jobs do not
 finish or a session close fails, the Launcher displays **Shutdown incomplete**
 and remains available so Quit can be retried. No implicit Safe Cleanup is run.
 Screenshot and waveform capture jobs register their generated artifacts, which
-can be downloaded through the job result. Artifact downloads are limited to
-files registered by that job.
+can be downloaded through the job result. Instrument-side `save-image` and
+`save-waveform` commands return the Core save result but do not create host
+WebUI artifacts. Artifact downloads are limited to files registered by that
+job.
 
 ## Language and current limitations
 

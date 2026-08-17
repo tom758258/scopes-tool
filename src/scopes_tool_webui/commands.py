@@ -64,6 +64,15 @@ from scopes_tool_core.planning import (
     CapturePlanRequest,
     MeasurePlanRequest,
 )
+from scopes_tool_core.reference import validate_reference_label, validate_reference_slot
+from scopes_tool_core.save_export import (
+    SAVE_IMAGE_FORMATS,
+    SAVE_IMAGE_PALETTES,
+    SAVE_WAVEFORM_FORMATS,
+    validate_save_filename_base,
+    validate_save_quoted_string,
+    validate_save_waveform_length,
+)
 from scopes_tool_core.visa_backend import list_visa_resources
 
 
@@ -387,6 +396,161 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "background", "type": "enum", "options": ("black", "white"), "default": "black"},
+        ),
+    },
+    {
+        "id": "reference-save",
+        "category": "Reference",
+        "label": "Save reference waveform",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2},
+            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4},
+        ),
+    },
+    {
+        "id": "reference-display",
+        "category": "Reference",
+        "label": "Reference waveform display",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+            {"name": "enabled", "type": "boolean"},
+        ),
+    },
+    {
+        "id": "reference-label",
+        "category": "Reference",
+        "label": "Reference waveform label",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+            {"name": "label", "type": "string"},
+        ),
+    },
+    {
+        "id": "reference-clear",
+        "category": "Reference",
+        "label": "Clear reference waveform",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+        ),
+    },
+    {
+        "id": "reference-query",
+        "category": "Reference",
+        "label": "Reference waveform state",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+        ),
+    },
+    {
+        "id": "save-pwd",
+        "category": "Save / Export",
+        "label": "Save path",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "path", "type": "string"},
+        ),
+    },
+    {
+        "id": "save-filename",
+        "category": "Save / Export",
+        "label": "Save filename",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "name", "type": "string"},
+        ),
+    },
+    {
+        "id": "save-image-format",
+        "category": "Save / Export",
+        "label": "Image save format",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "format", "type": "enum", "options": SAVE_IMAGE_FORMATS},
+        ),
+    },
+    {
+        "id": "save-image-palette",
+        "category": "Save / Export",
+        "label": "Image save palette",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "palette", "type": "enum", "options": SAVE_IMAGE_PALETTES},
+        ),
+    },
+    {
+        "id": "save-image-ink-saver",
+        "category": "Save / Export",
+        "label": "Image ink saver",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "enabled", "type": "boolean"},
+        ),
+    },
+    {
+        "id": "save-image-factors",
+        "category": "Save / Export",
+        "label": "Image measurement factors",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "enabled", "type": "boolean"},
+        ),
+    },
+    {
+        "id": "save-image",
+        "category": "Save / Export",
+        "label": "Save image",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "filename", "type": "string"},
+        ),
+    },
+    {
+        "id": "save-waveform-format",
+        "category": "Save / Export",
+        "label": "Waveform save format",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "format", "type": "enum", "options": SAVE_WAVEFORM_FORMATS},
+        ),
+    },
+    {
+        "id": "save-waveform-length",
+        "category": "Save / Export",
+        "label": "Waveform save length",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "points", "type": "integer", "minimum": 100},
+        ),
+    },
+    {
+        "id": "save-waveform-length-max",
+        "category": "Save / Export",
+        "label": "Maximum waveform save length",
+        "modes": ("live", "simulate"),
+        "fields": (),
+    },
+    {
+        "id": "save-waveform",
+        "category": "Save / Export",
+        "label": "Save waveform",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "filename", "type": "string"},
         ),
     },
     {
@@ -951,6 +1115,88 @@ def _execute_scope_command(
             },
             "artifacts": [{"kind": "screenshot", "path": str(path)}],
         }
+    if command == "reference-save":
+        scope.save_reference_waveform(parameters["slot"], parameters["source_channel"])
+        return _simple_scope_result("reference-save")
+    if command == "reference-display":
+        if parameters["action"] == "set":
+            scope.configure_reference_display(parameters["slot"], parameters["enabled"])
+        enabled, raw = scope.query_reference_display(parameters["slot"])
+        return _state_scope_result(
+            "display",
+            {"slot": parameters["slot"], "enabled": enabled, "raw": raw},
+        )
+    if command == "reference-label":
+        if parameters["action"] == "set":
+            scope.configure_reference_label(parameters["slot"], parameters["label"])
+        label, raw = scope.query_reference_label(parameters["slot"])
+        return _state_scope_result(
+            "label",
+            {"slot": parameters["slot"], "label": label, "raw": raw},
+        )
+    if command == "reference-clear":
+        scope.clear_reference_waveform(parameters["slot"])
+        return _simple_scope_result("reference-clear")
+    if command == "reference-query":
+        return _state_scope_result(
+            "reference", scope.query_reference_waveform(parameters["slot"])
+        )
+    if command == "save-pwd":
+        return _execute_state_setting(
+            parameters, scope.configure_save_pwd, scope.query_save_pwd, "path"
+        )
+    if command == "save-filename":
+        return _execute_state_setting(
+            parameters, scope.configure_save_filename, scope.query_save_filename, "name"
+        )
+    if command == "save-image-format":
+        return _execute_state_setting(
+            parameters,
+            scope.configure_save_image_format,
+            scope.query_save_image_format,
+            "format",
+        )
+    if command == "save-image-palette":
+        return _execute_state_setting(
+            parameters,
+            scope.configure_save_image_palette,
+            scope.query_save_image_palette,
+            "palette",
+        )
+    if command == "save-image-ink-saver":
+        return _execute_state_setting(
+            parameters,
+            scope.configure_save_image_ink_saver,
+            scope.query_save_image_ink_saver,
+        )
+    if command == "save-image-factors":
+        return _execute_state_setting(
+            parameters,
+            scope.configure_save_image_factors,
+            scope.query_save_image_factors,
+        )
+    if command == "save-image":
+        return _state_scope_result("save", scope.save_image(parameters["filename"]).to_json())
+    if command == "save-waveform-format":
+        return _execute_state_setting(
+            parameters,
+            scope.configure_save_waveform_format,
+            scope.query_save_waveform_format,
+            "format",
+        )
+    if command == "save-waveform-length":
+        return _execute_state_setting(
+            parameters,
+            scope.configure_save_waveform_length,
+            scope.query_save_waveform_length,
+            "points",
+        )
+    if command == "save-waveform-length-max":
+        return _state_scope_result("state", scope.query_save_waveform_length_max())
+    if command == "save-waveform":
+        return _state_scope_result(
+            "save", scope.save_waveform(parameters["filename"]).to_json()
+        )
     if command == "check-error":
         entry = scope.query_system_error()
         return {
@@ -1360,6 +1606,109 @@ def _validate_parameters(
                     raise WebUIRequestError(str(exc)) from exc
             else:
                 _reject_query_parameters(parameters, ("window",), command)
+    elif command == "reference-save":
+        _require_parameter(parameters, "slot", command)
+        _require_parameter(parameters, "source_channel", command)
+        try:
+            parameters["slot"] = validate_reference_slot(
+                _integer(parameters["slot"], "slot"), capabilities
+            )
+            parameters["source_channel"] = validate_analog_channel(
+                _integer(parameters["source_channel"], "source_channel"), capabilities
+            )
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
+    elif command in {"reference-display", "reference-label"}:
+        action = _action(parameters, command)
+        try:
+            parameters["slot"] = validate_reference_slot(
+                _integer(parameters.get("slot", 1), "slot"), capabilities
+            )
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
+        value_name = "enabled" if command == "reference-display" else "label"
+        if action == "set":
+            _require_parameter(parameters, value_name, command)
+            try:
+                if command == "reference-display":
+                    _require_boolean(parameters[value_name], value_name)
+                else:
+                    parameters[value_name] = validate_reference_label(parameters[value_name])
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            _reject_query_parameters(parameters, (value_name,), command)
+    elif command in {"reference-clear", "reference-query"}:
+        try:
+            parameters["slot"] = validate_reference_slot(
+                _integer(parameters.get("slot", 1), "slot"), capabilities
+            )
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
+    elif command in {
+        "save-pwd",
+        "save-filename",
+        "save-image-format",
+        "save-image-palette",
+        "save-image-ink-saver",
+        "save-image-factors",
+        "save-waveform-format",
+        "save-waveform-length",
+    }:
+        action = _action(parameters, command)
+        value_name = {
+            "save-pwd": "path",
+            "save-filename": "name",
+            "save-image-format": "format",
+            "save-image-palette": "palette",
+            "save-image-ink-saver": "enabled",
+            "save-image-factors": "enabled",
+            "save-waveform-format": "format",
+            "save-waveform-length": "points",
+        }[command]
+        if action == "set":
+            _require_parameter(parameters, value_name, command)
+            try:
+                if command == "save-pwd":
+                    parameters[value_name] = validate_save_quoted_string(
+                        parameters[value_name], label="Save path"
+                    )
+                elif command == "save-filename":
+                    parameters[value_name] = validate_save_filename_base(parameters[value_name])
+                elif command == "save-image-format":
+                    if parameters[value_name] not in SAVE_IMAGE_FORMATS:
+                        raise ValueError(
+                            f"image format must be one of: {', '.join(SAVE_IMAGE_FORMATS)}"
+                        )
+                elif command == "save-image-palette":
+                    if parameters[value_name] not in SAVE_IMAGE_PALETTES:
+                        raise ValueError(
+                            f"image palette must be one of: {', '.join(SAVE_IMAGE_PALETTES)}"
+                        )
+                elif command in {"save-image-ink-saver", "save-image-factors"}:
+                    _require_boolean(parameters[value_name], value_name)
+                elif command == "save-waveform-format":
+                    if parameters[value_name] not in SAVE_WAVEFORM_FORMATS:
+                        raise ValueError(
+                            f"waveform format must be one of: {', '.join(SAVE_WAVEFORM_FORMATS)}"
+                        )
+                else:
+                    parameters[value_name] = validate_save_waveform_length(
+                        _integer(parameters[value_name], value_name)
+                    )
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            _reject_query_parameters(parameters, (value_name,), command)
+    elif command in {"save-image", "save-waveform"}:
+        _require_parameter(parameters, "filename", command)
+        try:
+            parameters["filename"] = validate_save_quoted_string(
+                parameters["filename"],
+                label="Save image filename" if command == "save-image" else "Save waveform filename",
+            )
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
     elif command in {"dvm-enable", "dvm-source", "dvm-mode", "dvm-auto-range"}:
         action = _action(parameters, command)
         value_name = {

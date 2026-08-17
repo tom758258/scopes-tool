@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Fix WebUI query defaults that submitted set-only measurement and DVM channel fields.
+- Expands the WebUI workbench with Core-backed Reference and instrument-side
+  Save/Export commands without registering host artifacts for instrument saves.
 - Expands the WebUI command workbench with Core-backed flat coverage for
   channel/display, measurement, system/status, DVM, and basic FFT/Math
   operations while leaving conditional command editors out of scope.
