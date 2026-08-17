@@ -1,3 +1,10 @@
 """Scopes Tool WebUI package."""
 
-__version__ = "0.1.0"
+from importlib import metadata
+
+__all__ = ["__version__"]
+
+try:
+    __version__ = metadata.version("scopes-tool")
+except metadata.PackageNotFoundError:
+    __version__ = "0+unknown"
