@@ -28,11 +28,16 @@ export class CommandForm {
       return;
     }
     command.fields.forEach((field) => this.container.append(this.field(field)));
+    this.container.querySelectorAll("[data-field]").forEach((input) => {
+      input.addEventListener("change", () => this.refreshVisibility());
+    });
+    this.refreshVisibility();
   }
 
   values() {
     const values = {};
     this.container.querySelectorAll("[data-field]").forEach((element) => {
+      if (element.closest("[data-visible-if-hidden=\"true\"]")) return;
       if (!element.value && element.type !== "checkbox") return;
       const name = element.dataset.field;
       if (element.type === "checkbox") values[name] = element.checked;
@@ -47,6 +52,7 @@ export class CommandForm {
   field(field) {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
+    if (field.visible_if) wrapper.dataset.visibleIf = JSON.stringify(field.visible_if);
     const label = document.createElement("span");
     label.textContent = translate(`field.${field.name}`);
     wrapper.append(label);
@@ -78,5 +84,31 @@ export class CommandForm {
     if (field.default !== undefined) input.value = String(field.default);
     wrapper.append(input);
     return wrapper;
+  }
+
+  refreshVisibility() {
+    this.container.querySelectorAll("[data-visible-if]").forEach((wrapper) => {
+      let predicates;
+      try {
+        predicates = JSON.parse(wrapper.dataset.visibleIf);
+      } catch (_error) {
+        predicates = [];
+      }
+      const conditions = Array.isArray(predicates) ? predicates : [predicates];
+      const visible = conditions.every((predicate) => {
+        const controlling = this.container.querySelector(`[data-field="${predicate.field}"]`);
+        if (!controlling) return false;
+        const value = controlling.type === "checkbox" ? controlling.checked : controlling.value;
+        if (Object.prototype.hasOwnProperty.call(predicate, "equals")) {
+          return String(value) === String(predicate.equals);
+        }
+        if (Array.isArray(predicate.in)) {
+          return predicate.in.map(String).includes(String(value));
+        }
+        return false;
+      });
+      wrapper.hidden = !visible;
+      wrapper.dataset.visibleIfHidden = String(!visible);
+    });
   }
 }

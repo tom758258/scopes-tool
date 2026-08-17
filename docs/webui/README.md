@@ -86,11 +86,22 @@ The Command workbench exposes:
   `dvm-current`, `dvm-query`
 - FFT / MATH: basic `fft`, `math-display`, `math-vertical`, `math-operator`,
   `math-composite-source`, `math-clear`
+- Trigger: Edge, external, glitch/pulse-width, runt, transition, delay,
+  setup/hold, edge-burst, TV, pattern, OR, sweep, reject, coupling, and
+  holdoff commands
+- Search: basic Search state/mode/event/count and UART/I2C/SPI/CAN serial
+  Search commands
+- Serial: query/mode/display, UART/I2C/SPI/CAN configuration and triggers,
+  and Serial Lister query/display/reference/export
+- Segmented Memory: `segmented-memory` and `segmented-capture`
+- Workflow: `capture-batch`, `measure-log`, `measure-until`,
+  `triggered-measure-loop`, and `triggered-capture-series`
 - Device: `list-resources`
 
 The command form uses simple metadata-driven controls for ordinary values,
-enums, numbers, and booleans. Complex conditional editors for Trigger,
-Search, Serial, Segmented Memory, and Workflow commands are not included.
+enums, numbers, booleans, and small conditional field groups. Trigger,
+Search, Serial, Segmented Memory, and Workflow commands use only the
+conditional visibility needed by their existing Core parameter semantics.
 
 The added instrument-setting commands use Live or Simulate mode and the
 existing Core capability and validation boundaries. They do not add new
@@ -132,6 +143,8 @@ remain unchanged.
 
 The WebUI does not include remote access, authentication, multi-instrument
 sessions, WebSockets/SSE, live waveform streaming, Live Data monitoring, dark
-mode, Electron/onedir packaging, or complex conditional command editors for
-Trigger, Search, Serial, Segmented Memory, Workflow, Math transform, Math
-filter, or Math visualization.
+mode, Electron/onedir packaging, Generic Sequence editing, advanced FFT/Math
+transform/filter/visualization editors, or conditional editors for features
+not exposed by the current Core APIs. Dry-run remains limited to commands with
+existing Core planners; `capture-batch` and `measure-log` are Live/Simulate
+only.

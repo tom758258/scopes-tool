@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Expands the WebUI with Core-backed conditional command coverage for Trigger,
+  Search, Serial, Segmented Memory, and finite Workflow operations while
+  keeping Generic Sequence and advanced FFT/Math editors deferred.
 - Fix WebUI query defaults that submitted set-only measurement and DVM channel fields.
 - Expands the WebUI workbench with Core-backed Reference and instrument-side
   Save/Export commands without registering host artifacts for instrument saves.

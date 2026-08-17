@@ -614,3 +614,84 @@ def _wait_for_manager_job(manager, job_id):
             return job
         time.sleep(0.02)
     raise AssertionError("manager job did not reach a terminal state")
+
+
+def test_commands_expose_p3c_families_and_conditional_fields() -> None:
+    client = TestClient(app)
+    response = client.get("/api/commands")
+    assert response.status_code == 200
+    commands = {entry["id"]: entry for entry in response.json()}
+    expected = {
+        "trigger-edge",
+        "trigger-pulse-width",
+        "trigger-delay",
+        "trigger-tv",
+        "search-mode",
+        "serial-search-uart",
+        "serial-uart",
+        "serial-trigger-can",
+        "serial-lister-export",
+        "segmented-memory",
+        "segmented-capture",
+        "capture-batch",
+        "measure-log",
+        "measure-until",
+        "triggered-measure-loop",
+        "triggered-capture-series",
+    }
+    assert expected <= commands.keys()
+    assert commands["segmented-capture"]["modes"] == ["live", "simulate", "dry-run"]
+    assert commands["capture-batch"]["modes"] == ["live", "simulate"]
+    pulse_fields = {field["name"]: field for field in commands["trigger-pulse-width"]["fields"]}
+    assert pulse_fields["time_seconds"]["visible_if"] == [
+        {"field": "action", "equals": "set"},
+        {"field": "qualifier", "in": ["greater-than", "less-than"]},
+    ]
+
+
+def test_representative_p3c_simulated_commands_complete() -> None:
+    client = TestClient(app)
+    for command, parameters in (
+        ("trigger-edge", {"action": "set", "source_channel": 1, "level": 0.1, "slope": "positive"}),
+        ("search-mode", {"action": "set", "mode": "edge"}),
+        ("serial-mode", {"action": "set", "bus": 1, "mode": "uart"}),
+        ("serial-uart", {"action": "set", "bus": 1, "baud_rate": 9600, "data_bits": 8, "parity": "none"}),
+        ("segmented-memory", {"action": "enable", "segments": 2}),
+        ("capture-batch", {"channels": "1", "points": 1000, "format": "byte", "count": 1, "interval_seconds": 0}),
+    ):
+        job = submit(client, command, "simulate", parameters)
+        assert job["status"] == "completed", (command, job)
+
+
+def test_p3c_dry_run_planners_and_conditional_validation() -> None:
+    client = TestClient(app)
+    job = submit(
+        client,
+        "measure-until",
+        "dry-run",
+        {"channel": 1, "item": "vpp", "operator": "gt", "threshold": 0.1, "timeout_seconds": 1, "interval_seconds": 0},
+    )
+    assert job["status"] == "completed"
+    assert job["result"]["result"]["status"] == "planned"
+
+    rejected = client.post(
+        "/api/jobs",
+        json={
+            "command": "trigger-pulse-width",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"action": "query", "time_seconds": 1},
+        },
+    )
+    assert rejected.status_code == 400
+    assert "query" in rejected.json()["detail"].lower()
+
+
+def test_p3c_serial_lister_export_registers_only_its_host_artifact() -> None:
+    client = TestClient(app)
+    job = submit(client, "serial-lister-export", "simulate", {"output": "lister.csv"})
+    assert job["status"] == "completed"
+    assert [artifact["name"] for artifact in job["artifacts"]] == ["lister.csv"]
+    artifact = client.get(job["artifacts"][0]["url"])
+    assert artifact.status_code == 200
+    assert artifact.content
