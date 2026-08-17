@@ -10,16 +10,37 @@ requires-python = ">=3.10"
 dependencies = ["pyvisa>=1.14"]
 
 [project.optional-dependencies]
-dev = ["build>=1.2", "pytest>=8"]
-webui = []
-all = []
+dev = [
+  "build>=1.2",
+  "fastapi>=0.100.0",
+  "httpx2>=2.0",
+  "pytest>=8",
+  "uvicorn>=0.23.0",
+]
+webui = [
+  "fastapi>=0.100.0",
+  "uvicorn>=0.23.0",
+]
+all = [
+  "fastapi>=0.100.0",
+  "uvicorn>=0.23.0",
+]
 
 [project.scripts]
 scopes-tool = "scopes_tool_cli.cli:main"
+scopes-tool-webui = "scopes_tool_webui.server:main"
+scopes-tool-webui-launcher = "scopes_tool_webui.launcher:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["scopes_tool_*"]
+
+[tool.setuptools.package-data]
+scopes_tool_webui = [
+  "static/*.html",
+  "static/*.css",
+  "static/*.js",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

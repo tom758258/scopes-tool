@@ -12,7 +12,7 @@ package behavior, and shared machine contracts.
 | --- | --- | --- | --- |
 | Core | `scopes-tool` | `scopes_tool_core` | `docs/core/README.md`, `docs/core/integration.md`, `docs/core/measure-until.md`, `docs/core/measure-until.zh-TW.md`, `docs/core/periodic-capture.md`, `docs/core/periodic-capture.zh-TW.md`, `docs/core/triggered-measure-loop.md`, `docs/core/triggered-measure-loop.zh-TW.md`, `docs/core/triggered-capture-series.md`, `docs/core/triggered-capture-series.zh-TW.md`, `docs/core/sequence.md`, `docs/core/sequence.zh-TW.md`, `docs/core/supported-models.md` |
 | CLI | `scopes-tool` | `scopes-tool`, `python -m scopes_tool_cli.cli` | `docs/cli/README.md`, `docs/cli/cli-integration.md` |
-| WebUI | `scopes-tool` | `scopes_tool_webui` skeleton | `docs/webui/README.md` |
+| WebUI | `scopes-tool` | `scopes-tool-webui`, `scopes-tool-webui-launcher` | `docs/webui/README.md` |
 
 Runtime APIs, console scripts, package metadata, SCPI behavior, and JSON
 contracts are owned by the root package metadata, area docs, and root contracts.
@@ -25,6 +25,13 @@ From PowerShell:
 uv venv .venv
 uv pip install -e ".[all,dev]"
 .\scripts\run-tests.ps1
+```
+
+Install the WebUI dependencies separately when only the local browser
+interface is needed:
+
+```powershell
+uv pip install -e ".[webui]"
 ```
 
 The repository uses one editable package install for local development. It is not
@@ -92,7 +99,7 @@ Area docs:
   `docs/core/measure-until.md`, `docs/core/measure-until.zh-TW.md`
 - CLI command usage, JSON mode, and automation safety:
   `docs/cli/README.md`
-- WebUI package skeleton and future ownership notes:
+- Local WebUI server, Launcher, and current browser-shell scope:
   `docs/webui/README.md`
 
 Shared contracts under `docs/contracts/` remain the source of truth for

@@ -1,1 +1,3 @@
-"""Scopes Tool WebUI (skeleton)."""
+"""Scopes Tool WebUI package."""
+
+__version__ = "0.1.0"
