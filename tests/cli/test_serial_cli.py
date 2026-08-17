@@ -528,11 +528,7 @@ def _patch_live_scope(monkeypatch, idn: str):
         }
     )
     scope = Oscilloscope(backend)
-    monkeypatch.setattr(
-        cli.Oscilloscope,
-        "open",
-        lambda *unused, **kwargs: scope,
-    )
+    install_scope(monkeypatch, scope)
     return backend
 
 

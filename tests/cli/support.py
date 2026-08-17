@@ -54,8 +54,10 @@ def word_waveform_capture(channel, points=1000):
         preamble=preamble,
         raw_samples=(32768, 32769),
         time_s=(0.0, 1e-6),
-        vertical_values=(0.0, 0.1),
+        vertical_values=(0.0, 0.0001),
         vertical_unit="V",
+        byte_order="MSBFirst",
+        unsigned=True,
     )
 
 
