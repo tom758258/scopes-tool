@@ -2,6 +2,26 @@ import { getJob, submitJob } from "/static/api.js";
 import { getExecutionContext } from "/static/execution-context.js";
 import { translate } from "/static/i18n.js";
 
+function contextSnapshot(context) {
+  return {
+    mode: context?.mode || null,
+    resource: context?.resource || null,
+    model_id: context?.model_id || null,
+  };
+}
+
+function sameContext(left, right) {
+  const a = contextSnapshot(left);
+  const b = contextSnapshot(right);
+  return a.mode === b.mode && a.resource === b.resource && a.model_id === b.model_id;
+}
+
+function identityLabel(identity) {
+  if (!identity) return "";
+  if (typeof identity === "string") return identity;
+  return [identity.vendor, identity.model].filter(Boolean).join(" ") || identity.model || "";
+}
+
 export class DeviceResource {
   constructor(elements, onContextChange, onCommandStateChange = () => {}) {
     this.elements = elements;
@@ -11,6 +31,10 @@ export class DeviceResource {
     this.statusKey = "device.ready";
     this.statusError = null;
     this.identity = null;
+    this.identityContext = null;
+    this.lastContext = null;
+    this.scanStatus = "not-scanned";
+    this.scanInProgress = false;
     elements.settings.addEventListener("click", (event) => {
       event.stopPropagation();
       this.setSettingsExpanded(elements.settingsPanel.hidden);
@@ -28,7 +52,7 @@ export class DeviceResource {
     elements.resource.addEventListener("input", () => this.changed());
     elements.resourceList.addEventListener("change", () => {
       elements.resource.value = elements.resourceList.value;
-      this.changed();
+      this.changed(true);
     });
     elements.scan.addEventListener("click", () => this.scan());
     this.changed();
@@ -42,12 +66,21 @@ export class DeviceResource {
     });
   }
 
-  changed() {
+  changed(forceIdentityClear = false) {
     const context = this.context();
     const live = context.mode === "live";
+    const contextChanged = !sameContext(this.lastContext, context);
+    if (forceIdentityClear || contextChanged) {
+      this.clearIdentity();
+      if (contextChanged && !this.scanInProgress) {
+        this.scanStatus = "not-scanned";
+        this.statusError = null;
+      }
+    }
     this.elements.model.disabled = live;
     this.renderMode(context);
     this.renderStatus(context);
+    this.lastContext = contextSnapshot(context);
     this.onContextChange(context);
   }
 
@@ -67,11 +100,42 @@ export class DeviceResource {
   }
 
   renderSummary(context) {
-    const labels = { live: "device.live", simulate: "device.simulate", "dry-run": "device.dryRun" };
+    const labels = {
+      live: "device.liveMode",
+      simulate: "device.simulateMode",
+      "dry-run": "device.dryRunMode",
+    };
     const mode = translate(labels[context.mode] || context.mode);
-    const resource = context.resource || translate("device.noResource");
-    const identity = this.identity || translate("device.identityNotDetected");
-    this.elements.summary.textContent = translate("device.summary", { mode, resource, identity });
+    let summary;
+    if (context.mode === "live") {
+      const resource = context.resource || translate("device.resourceNotSelected");
+      summary = translate("device.summary.live", {
+        mode,
+        resource,
+        detection: this.detectionSummary(context),
+      });
+    } else {
+      const model = this.elements.model.selectedOptions?.[0]?.textContent || context.model_id;
+      summary = translate("device.summary.planning", { mode, model });
+    }
+    this.elements.summary.textContent = summary;
+    this.elements.summary.title = summary;
+  }
+
+  detectionSummary(context) {
+    if (this.hasCurrentIdentity(context)) {
+      return translate("device.detection.detectedModel", { model: identityLabel(this.identity) });
+    }
+    if (this.scanStatus === "failed") {
+      return translate("device.detection.scanFailed", {
+        error: this.statusError || translate("status.scanFailed"),
+      });
+    }
+    if (this.scanStatus === "scanning") return translate("device.detection.scanning");
+    if (context.resource || this.resourceCount !== null) {
+      return translate("device.detection.notIdentified");
+    }
+    return translate("device.detection.notScanned");
   }
 
   renderStatus(context = this.context()) {
@@ -87,9 +151,25 @@ export class DeviceResource {
     this.renderSummary(context);
   }
 
-  setIdentity(identity) {
+  setIdentity(identity, associatedContext = this.context()) {
+    if (!sameContext(this.context(), associatedContext)) {
+      this.clearIdentity();
+      this.renderSummary(this.context());
+      return false;
+    }
     this.identity = identity || null;
-    this.renderSummary(this.context());
+    this.identityContext = contextSnapshot(associatedContext);
+    this.renderStatus(this.context());
+    return Boolean(this.identity);
+  }
+
+  clearIdentity() {
+    this.identity = null;
+    this.identityContext = null;
+  }
+
+  hasCurrentIdentity(context = this.context()) {
+    return Boolean(this.identity && this.identityContext && sameContext(context, this.identityContext));
   }
 
   toggleBody() {
@@ -104,7 +184,9 @@ export class DeviceResource {
 
   async scan() {
     this.elements.scan.disabled = true;
+    this.scanInProgress = true;
     this.resourceCount = null;
+    this.scanStatus = "scanning";
     this.statusKey = "status.waiting";
     this.statusError = null;
     this.renderStatus();
@@ -125,15 +207,18 @@ export class DeviceResource {
       resources.forEach((resource) => this.elements.resourceList.append(new Option(resource, resource)));
       if (resources.length) this.elements.resource.value = resources[0];
       this.resourceCount = resources.length;
+      this.scanStatus = "scanned";
       this.statusKey = "device.ready";
       this.changed();
     } catch (error) {
       this.onCommandStateChange({ status: "failed" });
       this.resourceCount = null;
+      this.scanStatus = "failed";
       this.statusKey = "status.scanFailed";
       this.statusError = error.message;
       this.renderStatus();
     } finally {
+      this.scanInProgress = false;
       this.elements.scan.disabled = false;
     }
   }

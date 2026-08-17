@@ -57,7 +57,8 @@ let executing = false;
 let advancedVisible = false;
 let resultPresentation = { kind: "empty", job: null, message: null };
 let healthState = { status: "checking", version: null, error: null };
-let executionState = { key: "device.ready" };
+let workspaceExecutionState = { key: "device.ready" };
+let liveCommandState = { key: "device.ready" };
 let updateBasicAvailability = () => {};
 
 initializeI18n();
@@ -189,22 +190,23 @@ async function executeCommand(command, parameters) {
     return;
   }
   executing = true;
+  const commandContext = { ...context };
   updateAvailability();
   elements.execute.disabled = true;
   elements.cancel.classList.remove("hidden");
   setExecutionStatus({ status: "queued" });
   try {
-    const job = await runJob(command, parameters, context, (updated) => {
+    const job = await runJob(command, parameters, commandContext, (updated) => {
       currentJobId = updated.job_id;
       setExecutionStatus({ status: updated.status });
       resultPresentation = { kind: "job", job: updated, message: null };
       renderCurrentResult();
-      updateIdentity(updated);
+      updateIdentity(updated, commandContext);
     });
     setExecutionStatus({ status: job.status });
     resultPresentation = { kind: "job", job, message: null };
     renderCurrentResult();
-    updateIdentity(job);
+    updateIdentity(job, commandContext);
   } catch (error) {
     setExecutionStatus({ status: "failed" });
     resultPresentation = { kind: "error", job: null, message: error.message };
@@ -217,9 +219,12 @@ async function executeCommand(command, parameters) {
   }
 }
 
-function updateIdentity(job) {
+function updateIdentity(job, commandContext) {
   const idn = job.result?.result?.idn || job.result?.idn;
-  if (idn && deviceResource) deviceResource.setIdentity(`${idn.vendor} ${idn.model} (${idn.serial})`);
+  if (idn && deviceResource) {
+    deviceResource.setIdentity(idn, commandContext);
+    renderLiveData();
+  }
 }
 
 async function updateHealth() {
@@ -282,22 +287,23 @@ function updateAvailability() {
 }
 
 function setExecutionStatus(state) {
-  executionState = state;
+  workspaceExecutionState = { ...state };
+  liveCommandState = { ...state };
   renderExecutionStatus();
   renderLiveData();
 }
 
 function setCommandState(state) {
-  executionState = state;
+  liveCommandState = { ...state };
   renderLiveData();
 }
 
 function renderExecutionStatus() {
-  const statusClass = executionState.status ? `badge-${executionState.status}` : "badge-idle";
+  const statusClass = workspaceExecutionState.status ? `badge-${workspaceExecutionState.status}` : "badge-idle";
   elements.executionStatus.className = `badge ${statusClass}`;
-  elements.executionStatus.textContent = executionState.status
-    ? translateJobStatus(executionState.status)
-    : translate(executionState.key);
+  elements.executionStatus.textContent = workspaceExecutionState.status
+    ? translateJobStatus(workspaceExecutionState.status)
+    : translate(workspaceExecutionState.key);
 }
 
 function renderCurrentResult() {
@@ -331,7 +337,7 @@ function renderLiveData() {
     healthState.error || "",
   );
 
-  const commandStatus = executionState.status;
+  const commandStatus = liveCommandState.status;
   const commandText = commandStatus
     ? translateJobStatus(commandStatus)
     : translate("live_data.ready");
@@ -347,12 +353,16 @@ function renderLiveData() {
     : context.mode === "dry-run"
       ? "live_data.dryRun"
       : context.resource
-        ? "live_data.ready"
+        ? deviceResource?.hasCurrentIdentity()
+          ? "live_data.ready"
+          : "live_data.notIdentified"
         : "live_data.noResource";
   setStateIndicator(
     elements.liveState,
     translate(liveKey),
-    context.mode === "live" && !context.resource ? "state-warning" : "state-ok",
+    context.mode === "live" && (!context.resource || !deviceResource?.hasCurrentIdentity())
+      ? "state-warning"
+      : "state-ok",
   );
 }
 
