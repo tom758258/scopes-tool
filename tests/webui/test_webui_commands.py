@@ -6,7 +6,9 @@ import threading
 import pytest
 from fastapi.testclient import TestClient
 
-from scopes_tool_core.measurements import SUPPORTED_MEASUREMENT_ITEMS
+from scopes_tool_core.dvm import DVM_MODES
+from scopes_tool_core.math import MATH_COMPOSITE_OPERATIONS, MATH_OPERATIONS, MATH_SOURCES
+from scopes_tool_core.measurements import MEASUREMENT_WINDOW_CHOICES, SUPPORTED_MEASUREMENT_ITEMS
 import scopes_tool_webui.app as app_module
 from scopes_tool_webui.app import app
 from scopes_tool_webui.commands import ScopeSessionCloseError
@@ -67,6 +69,160 @@ def test_commands_expose_the_p2_subset() -> None:
     measure = next(entry for entry in response.json() if entry["id"] == "measure")
     item = next(field for field in measure["fields"] if field["name"] == "item")
     assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)
+
+
+def test_commands_expose_the_p3a_flat_subset() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/commands")
+
+    assert response.status_code == 200
+    command_ids = {entry["id"] for entry in response.json()}
+    assert {
+        "channel-summary",
+        "channel-label",
+        "channel-offset",
+        "channel-coupling",
+        "channel-probe",
+        "channel-bandwidth-limit",
+        "channel-impedance",
+        "channel-invert",
+        "channel-range",
+        "channel-units",
+        "channel-vernier",
+        "channel-probe-skew",
+        "display-label",
+        "display-clear",
+        "display-persistence",
+        "display-intensity",
+        "display-vectors",
+        "measure-results",
+        "measure-clear",
+        "measure-show",
+        "measure-source",
+        "measure-window",
+        "system-clear-status",
+        "system-opc",
+        "system-standard-event",
+        "system-options",
+        "dvm-enable",
+        "dvm-source",
+        "dvm-mode",
+        "dvm-auto-range",
+        "dvm-current",
+        "dvm-query",
+        "fft",
+        "math-display",
+        "math-vertical",
+        "math-operator",
+        "math-composite-source",
+        "math-clear",
+    } <= command_ids
+    assert {"trigger", "math-transform", "math-filter", "math-visualization"}.isdisjoint(command_ids)
+
+    dvm_mode = next(entry for entry in response.json() if entry["id"] == "dvm-mode")
+    assert next(field for field in dvm_mode["fields"] if field["name"] == "mode")["options"] == list(DVM_MODES)
+    measure_window = next(entry for entry in response.json() if entry["id"] == "measure-window")
+    assert next(field for field in measure_window["fields"] if field["name"] == "window")["options"] == list(
+        MEASUREMENT_WINDOW_CHOICES
+    )
+    math_operator = next(entry for entry in response.json() if entry["id"] == "math-operator")
+    assert next(field for field in math_operator["fields"] if field["name"] == "operation")["options"] == list(
+        MATH_OPERATIONS
+    )
+    assert next(field for field in math_operator["fields"] if field["name"] == "source1")["options"] == list(
+        MATH_SOURCES
+    )
+    math_composite = next(entry for entry in response.json() if entry["id"] == "math-composite-source")
+    assert next(field for field in math_composite["fields"] if field["name"] == "operation")["options"] == list(
+        MATH_COMPOSITE_OPERATIONS
+    )
+
+
+def test_representative_p3a_simulated_commands_complete() -> None:
+    client = TestClient(app)
+
+    for command, parameters in (
+        ("channel-offset", {"action": "set", "channel": 1, "volts": 0.25}),
+        ("display-intensity", {"action": "set", "value": 75}),
+        ("measure-window", {"action": "set", "window": "zoom"}),
+        ("dvm-mode", {"action": "set", "mode": "dc-rms"}),
+        (
+            "fft",
+            {
+                "action": "set",
+                "function": 1,
+                "source_channel": 1,
+                "units": "vrms",
+                "window": "hanning",
+                "display": True,
+            },
+        ),
+        (
+            "math-operator",
+            {
+                "action": "set",
+                "function": 1,
+                "operation": "add",
+                "source1": "channel1",
+                "source2": "channel2",
+            },
+        ),
+    ):
+        job = submit(client, command, "simulate", parameters)
+        assert job["status"] == "completed", (command, job)
+
+
+def test_p3a_invalid_and_unsupported_requests_are_rejected() -> None:
+    client = TestClient(app)
+
+    invalid = client.post(
+        "/api/jobs",
+        json={
+            "command": "channel-coupling",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"action": "set", "channel": 1, "coupling": "invalid"},
+        },
+    )
+    assert invalid.status_code == 400
+
+    fft_query = client.post(
+        "/api/jobs",
+        json={
+            "command": "fft",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"action": "query", "function": 1, "source_channel": 1},
+        },
+    )
+    assert fft_query.status_code == 400
+    assert "cannot include" in fft_query.json()["detail"]
+
+    deferred = client.post(
+        "/api/jobs",
+        json={
+            "command": "math-transform",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"function": 1},
+        },
+    )
+    assert deferred.status_code == 400
+
+
+def test_p3a_capability_rejection_remains_core_owned() -> None:
+    client = TestClient(app)
+
+    job = submit(
+        client,
+        "math-composite-source",
+        "simulate",
+        {"action": "set", "operation": "add", "source1": "channel1", "source2": "channel2"},
+    )
+
+    assert job["status"] == "failed"
+    assert "not supported by this capability profile" in job["error"]
 
 
 def test_simulated_measure_and_dry_run_capture_complete() -> None:

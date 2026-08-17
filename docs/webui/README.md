@@ -60,25 +60,44 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 Basic Controls provides Identify, Run, Stop, Single, and Screenshot. These are
 shortcuts that submit the same command jobs used by the Command workbench.
 
-The P2 Command workbench exposes:
+The Command workbench exposes:
 
 - Identity: `identify`
 - Acquisition: `run`, `single`, `stop-acquisition`, `acquisition`
-- Channel: `channel-display`, `channel-scale`
-- Measurement: `measure`
+- Channel: `channel-display`, `channel-scale`, `channel-summary`,
+  `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,
+  `channel-bandwidth-limit`, `channel-impedance`, `channel-invert`,
+  `channel-range`, `channel-units`, `channel-vernier`, `channel-probe-skew`
+- Display: `display-label`, `display-clear`, `display-persistence`,
+  `display-intensity`, `display-vectors`
+- Measurement: `measure`, `measure-results`, `measure-clear`, `measure-show`,
+  `measure-source`, `measure-window`
 - Capture: `screenshot`, `capture`
-- System: `check-error`, `system-status-byte`, `system-operation-status`
+- System: `check-error`, `system-status-byte`, `system-operation-status`,
+  `system-clear-status`, `system-opc`, `system-standard-event`,
+  `system-options`
+- DVM: `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`,
+  `dvm-current`, `dvm-query`
+- FFT / MATH: basic `fft`, `math-display`, `math-vertical`, `math-operator`,
+  `math-composite-source`, `math-clear`
 - Device: `list-resources`
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, and booleans. Complex conditional editors for Trigger,
 Search, Serial, Segmented Memory, and Workflow commands are not included.
 
+The added instrument-setting commands use Live or Simulate mode and the
+existing Core capability and validation boundaries. They do not add new
+WebUI-specific SCPI behavior. The basic FFT and Math commands use flat forms;
+operation-dependent Math transform, filter, and visualization controls remain
+outside the current command workbench.
+
 Dry-run is intentionally limited to host VISA discovery plus Core-planned
 acquisition **query**, measurement, and waveform capture operations. Dry-run
-acquisition `set` is rejected before a job is queued. Dry-run does not open an
-instrument backend. Simulate uses Core's deterministic simulator; Live opens
-the explicit resource through Core.
+acquisition `set` is rejected before a job is queued. The additional instrument
+commands are not advertised in Dry-run because no corresponding Core planner
+exists. Dry-run does not open an instrument backend. Simulate uses Core's
+deterministic simulator; Live opens the explicit resource through Core.
 
 ## Jobs, results, and artifacts
 
@@ -103,6 +122,8 @@ selected locale is remembered locally. The Launcher itself is English-only.
 Command IDs, model IDs, VISA resources, SCPI, JSON keys, and raw diagnostics
 remain unchanged.
 
-P2 does not include remote access, authentication, multi-instrument sessions,
-WebSockets/SSE, live waveform streaming, Live Data monitoring, dark mode,
-Electron/onedir packaging, or the later complex command editors.
+The WebUI does not include remote access, authentication, multi-instrument
+sessions, WebSockets/SSE, live waveform streaming, Live Data monitoring, dark
+mode, Electron/onedir packaging, or complex conditional command editors for
+Trigger, Search, Serial, Segmented Memory, Workflow, Math transform, Math
+filter, or Math visualization.

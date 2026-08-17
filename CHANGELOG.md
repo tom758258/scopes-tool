@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Expands the WebUI command workbench with Core-backed flat coverage for
+  channel/display, measurement, system/status, DVM, and basic FFT/Math
+  operations while leaving conditional command editors out of scope.
 - Fix WebUI enum presentation fallback, expose only canonical measurement
   selector items, and add Launcher shutdown regression coverage.
 - Fixes WebUI job shutdown so the Launcher waits for queued cancellation and
