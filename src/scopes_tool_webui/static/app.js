@@ -123,7 +123,7 @@ async function executeCommand(command, parameters) {
     setExecutionStatus({ status: job.status });
     renderJob(elements.results, job);
   } catch (error) {
-    setExecutionStatus({ key: "status.failedJob" });
+    setExecutionStatus({ status: "failed" });
     elements.results.textContent = error.message;
   } finally {
     executing = false;
