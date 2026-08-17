@@ -7,13 +7,98 @@
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
-    <main class="shell">
-      <p class="eyebrow">Scopes Tool</p>
-      <h1>WebUI foundation</h1>
-      <p class="lede">The local browser interface is running.</p>
-      <section class="status-card" aria-labelledby="status-heading">
-        <h2 id="status-heading">Service status</h2>
-        <p id="health-status" role="status">Checking service health...</p>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">S</span>
+        <div>
+          <strong>Scopes Tool</strong>
+          <span data-i18n="brand.subtitle">Oscilloscope control</span>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="health-status" class="service-status" role="status">Checking service health...</span>
+        <button class="locale-button" data-locale="en">EN</button>
+        <button class="locale-button" data-locale="zh-TW">繁中</button>
+      </div>
+    </header>
+    <main class="workspace">
+      <section class="panel device-panel" aria-labelledby="device-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">DEVICE</p>
+            <h1 id="device-heading" data-i18n="device.title">Device / Resource</h1>
+          </div>
+          <button id="settings-button" class="icon-button" title="Settings" aria-label="Settings">⚙</button>
+        </div>
+        <div id="settings-panel" class="settings-panel hidden">
+          <span class="field-label" data-i18n="device.mode">Execution mode</span>
+          <div class="mode-options">
+            <label><input type="radio" name="mode" value="live" checked><span data-i18n="device.live">Live</span></label>
+            <label><input type="radio" name="mode" value="simulate"><span data-i18n="device.simulate">Simulate</span></label>
+            <label><input type="radio" name="mode" value="dry-run"><span data-i18n="device.dryRun">Dry-run</span></label>
+          </div>
+          <label class="field">
+            <span data-i18n="device.model">Planning model</span>
+            <select id="model-select"></select>
+          </label>
+        </div>
+        <div class="resource-row">
+          <label class="field resource-field">
+            <span data-i18n="device.resource">VISA resource</span>
+            <input id="resource-input" data-i18n-placeholder="device.resourcePlaceholder" placeholder="USB0::...::INSTR" autocomplete="off">
+          </label>
+          <button id="scan-button" class="secondary-button" data-i18n="device.scan">Scan resources</button>
+        </div>
+        <select id="resource-list" class="resource-list" aria-label="Scanned resources"></select>
+        <p id="device-hint" class="hint" data-i18n="device.liveHint">Live mode requires an explicit VISA resource.</p>
+        <p id="device-status" class="panel-status" data-i18n="device.ready">Ready</p>
+        <div class="identity-line"><span data-i18n="device.identity">Detected identity</span><strong id="identity-value">—</strong></div>
+      </section>
+
+      <section class="panel basic-panel" aria-labelledby="basic-heading">
+        <div class="panel-heading compact-heading">
+          <div>
+            <p class="eyebrow">SHORTCUTS</p>
+            <h2 id="basic-heading" data-i18n="basic.title">Basic Controls</h2>
+          </div>
+        </div>
+        <div id="basic-controls" class="basic-controls">
+          <button data-command="identify" class="control-button" data-i18n="basic.identify">Identify</button>
+          <button data-command="run" class="control-button" data-i18n="basic.run">Run</button>
+          <button data-command="stop-acquisition" class="control-button" data-i18n="basic.stop">Stop</button>
+          <button data-command="single" class="control-button" data-i18n="basic.single">Single</button>
+          <button data-command="screenshot" class="control-button" data-i18n="basic.screenshot">Screenshot</button>
+        </div>
+      </section>
+
+      <section class="panel command-panel" aria-labelledby="commands-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">WORKBENCH</p>
+            <h2 id="commands-heading" data-i18n="commands.title">Commands</h2>
+          </div>
+          <span id="execution-status" class="badge badge-idle">Ready</span>
+        </div>
+        <div class="command-selectors">
+          <label class="field"><span data-i18n="commands.category">Category</span><select id="category-select"></select></label>
+          <label class="field"><span data-i18n="commands.command">Command</span><select id="command-select"></select></label>
+        </div>
+        <div class="form-heading"><h3 data-i18n="commands.parameters">Parameters</h3></div>
+        <form id="command-form" class="command-form"></form>
+        <div class="command-actions">
+          <button id="execute-button" class="primary-button" data-i18n="commands.execute">Execute</button>
+          <button id="cancel-button" class="secondary-button hidden" data-i18n="commands.cancel">Cancel job</button>
+        </div>
+      </section>
+
+      <section class="panel results-panel" aria-labelledby="results-heading">
+        <div class="panel-heading compact-heading">
+          <div>
+            <p class="eyebrow">OUTPUT</p>
+            <h2 id="results-heading" data-i18n="results.title">Result</h2>
+          </div>
+        </div>
+        <div id="results" class="results-content"><p class="muted" data-i18n="results.empty">No command has been run yet.</p></div>
       </section>
     </main>
     <script type="module" src="/static/app.js"></script>

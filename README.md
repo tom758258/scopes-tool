@@ -34,6 +34,11 @@ interface is needed:
 uv pip install -e ".[webui]"
 ```
 
+The WebUI server and Launcher bind only to `127.0.0.1`. The server defaults to
+port 8025; the Launcher automatically searches up to 100 ports from 8025 when
+no explicit port is supplied. See [docs/webui/README.md](docs/webui/README.md)
+for Device / Resource, command, language, and job behavior.
+
 The repository uses one editable package install for local development. It is not
 configured as a committed `uv` workspace.
 
@@ -99,7 +104,7 @@ Area docs:
   `docs/core/measure-until.md`, `docs/core/measure-until.zh-TW.md`
 - CLI command usage, JSON mode, and automation safety:
   `docs/cli/README.md`
-- Local WebUI server, Launcher, and current browser-shell scope:
+- Local WebUI server, Launcher, command jobs, and current browser scope:
   `docs/webui/README.md`
 
 Shared contracts under `docs/contracts/` remain the source of truth for

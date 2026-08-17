@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Adds the localhost-only WebUI server and English Launcher with a minimal
-  browser shell, health endpoint, default port 8025, and automatic fallback
-  across up to 100 available local ports.
+- Adds the localhost-only WebUI server and English Launcher with a Core-backed
+  command workbench, Basic Controls, simulated and dry-run jobs, result and
+  artifact retrieval, English/Traditional Chinese UI text, health endpoint,
+  default port 8025, and automatic fallback across up to 100 available local
+  ports.
 - Adds the finite `measure-until` Core workflow with CLI and Common v2 Worker
   adapters, condition and timeout terminal semantics, measurement artifacts,
   cooperative cancellation, and representative-iteration dry-run planning.

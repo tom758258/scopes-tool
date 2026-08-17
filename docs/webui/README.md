@@ -1,8 +1,8 @@
 # Scopes Tool WebUI
 
-The Scopes Tool WebUI is a small local browser shell served by the single
-`scopes-tool` distribution. The WebUI is a parallel adapter over Core and does
-not import or own the CLI adapter.
+The Scopes Tool WebUI is a localhost-only browser adapter over
+`scopes_tool_core`. It does not import or depend on the CLI adapter, and it
+does not own VISA, SCPI, instrument identity, capability, or safety behavior.
 
 Import package: `scopes_tool_webui`
 
@@ -14,24 +14,20 @@ Install the optional WebUI dependencies from a source checkout:
 uv pip install -e ".[webui]"
 ```
 
-## Start the server
+The extra provides FastAPI and Uvicorn. The WebUI remains part of the single
+`scopes-tool` distribution.
 
-The server entry point serves the browser shell on `127.0.0.1:8025` by
-default:
+## Start the WebUI
+
+The server entry point binds directly to `127.0.0.1:8025` by default. A fixed
+server port fails if it is unavailable:
 
 ```powershell
 scopes-tool-webui
 scopes-tool-webui --port 8030
 ```
 
-The standalone server uses the selected port directly and fails if that port
-is unavailable. It binds only to loopback; remote binding is not supported.
-
-## Start the Launcher
-
-The English-only Tk Launcher starts the local server, waits for
-`GET /api/health` to report the `scopes-tool-webui` service identity, and then
-opens the browser:
+The English Tk Launcher is the recommended local browser entry point:
 
 ```powershell
 scopes-tool-webui-launcher
@@ -39,18 +35,67 @@ scopes-tool-webui-launcher --port 8030
 ```
 
 Without an explicit port, the Launcher tries up to 100 ports beginning at
-8025. Automatic fallback is used only for port-in-use conflicts. An explicit
-`--port` is fixed unless `--auto-port` is supplied. If all automatic
-candidates are unavailable, the Launcher presents a manual-port fallback.
+8025. It automatically falls back only for port-in-use conflicts, waits for
+`GET /api/health` to verify the `scopes-tool-webui` service identity, and opens
+the browser only after readiness succeeds. If all automatic candidates are
+unavailable, it provides a manual-port fallback. An explicit `--port` is
+fixed unless `--auto-port` is also supplied.
 
-## Current WebUI
+Remote binding is not supported.
 
-The current WebUI provides the browser shell, static assets, and the health
-endpoint:
+## Device and Resource
 
-- `GET /` serves the shell.
-- `GET /api/health` returns the service status, package identity, and version.
-- `/static/` serves the shell assets.
+The default execution mode is **Live**. Open the settings gear in the
+Device / Resource panel to select Live, Simulate, or Dry-run.
 
-Instrument Commands, Basic Controls, dynamic forms, localization, and hardware
-execution are not part of this runtime.
+- Live requires an explicit VISA resource. A model selection never overrides
+  live physical identity; Core obtains identity from the instrument `*IDN?`.
+- Simulate and Dry-run use an explicitly registered Core model profile. The
+  default planning model is `keysight-dsox4024a`.
+- Resource scanning uses Core VISA discovery and is a host discovery job; it
+  does not require a selected Live resource or instrument lock.
+
+## Basic Controls and Commands
+
+Basic Controls provides Identify, Run, Stop, Single, and Screenshot. These are
+shortcuts that submit the same command jobs used by the Command workbench.
+
+The P2 Command workbench exposes:
+
+- Identity: `identify`
+- Acquisition: `run`, `single`, `stop-acquisition`, `acquisition`
+- Channel: `channel-display`, `channel-scale`
+- Measurement: `measure`
+- Capture: `screenshot`, `capture`
+- System: `check-error`, `system-status-byte`, `system-operation-status`
+- Device: `list-resources`
+
+The command form uses simple metadata-driven controls for ordinary values,
+enums, numbers, and booleans. Complex conditional editors for Trigger,
+Search, Serial, Segmented Memory, and Workflow commands are not included.
+
+Dry-run is intentionally limited to host VISA discovery plus Core-planned
+acquisition query, measurement, and waveform capture operations. It does not
+open an instrument backend. Simulate uses Core's deterministic simulator; Live
+opens the explicit resource through Core.
+
+## Jobs, results, and artifacts
+
+Command submission returns a job ID. The browser polls job status through the
+WebUI API. Jobs report `queued`, `running`, `completed`, `failed`, or
+`cancelled` and expose structured Core results, errors, and diagnostic lines.
+
+Only queued jobs can be cancelled. Running VISA I/O is not forcibly
+interrupted. Screenshot and waveform capture jobs register their generated
+artifacts, which can be downloaded through the job result. Artifact downloads
+are limited to files registered by that job.
+
+## Language and current limitations
+
+The browser UI supports English and Traditional Chinese (`zh-TW`). The
+selected locale is remembered locally. Command IDs, model IDs, VISA resources,
+SCPI, JSON keys, and raw diagnostics remain unchanged.
+
+P2 does not include remote access, authentication, multi-instrument sessions,
+WebSockets/SSE, live waveform streaming, Live Data monitoring, dark mode,
+Electron/onedir packaging, or the later complex command editors.

@@ -1,0 +1,65 @@
+import { translate } from "/static/i18n.js";
+
+export class CommandForm {
+  constructor(container, catalog) {
+    this.container = container;
+    this.catalog = catalog;
+  }
+
+  render(command) {
+    this.container.replaceChildren();
+    if (!command || !command.fields.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted compact-note";
+      empty.textContent = "This command has no parameters.";
+      this.container.append(empty);
+      return;
+    }
+    command.fields.forEach((field) => this.container.append(this.field(field)));
+  }
+
+  values() {
+    const values = {};
+    this.container.querySelectorAll("[data-field]").forEach((element) => {
+      if (!element.value && element.type !== "checkbox") return;
+      const name = element.dataset.field;
+      if (element.type === "checkbox") values[name] = element.checked;
+      else if (element.dataset.type === "integer") values[name] = Number.parseInt(element.value, 10);
+      else if (element.dataset.type === "number") values[name] = Number.parseFloat(element.value);
+      else if (element.dataset.type === "boolean") values[name] = element.value === "true";
+      else values[name] = element.value;
+    });
+    return values;
+  }
+
+  field(field) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "field";
+    const label = document.createElement("span");
+    label.textContent = translate(`field.${field.name}`);
+    wrapper.append(label);
+    let input;
+    if (field.type === "enum") {
+      input = document.createElement("select");
+      if (field.default === undefined) input.append(new Option("—", ""));
+      field.options.forEach((option) => input.append(new Option(String(option), String(option))));
+    } else if (field.type === "boolean") {
+      input = document.createElement("select");
+      input.append(new Option("—", ""));
+      input.append(new Option("true", "true"), new Option("false", "false"));
+    } else {
+      input = document.createElement("input");
+      input.type = field.type === "integer" ? "number" : "text";
+      if (field.type === "integer") input.step = "1";
+      if (field.type === "number") input.inputMode = "decimal";
+      if (field.minimum !== undefined) input.min = field.minimum;
+      if (field.maximum !== undefined) input.max = field.maximum;
+    }
+    input.dataset.field = field.name;
+    input.dataset.type = field.type;
+    input.required = false;
+    if (field.default !== undefined) input.value = String(field.default);
+    wrapper.append(input);
+    return wrapper;
+  }
+}
