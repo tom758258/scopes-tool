@@ -8,9 +8,11 @@ Import package: `scopes_tool_webui`
 
 ## Installation
 
-Install the optional WebUI dependencies from a source checkout:
+From the repository root, create or reuse the local virtual environment and
+install the optional WebUI dependencies:
 
 ```powershell
+uv venv .venv
 uv pip install -e ".[webui]"
 ```
 
@@ -23,15 +25,15 @@ The server entry point binds directly to `127.0.0.1:8025` by default. A fixed
 server port fails if it is unavailable:
 
 ```powershell
-scopes-tool-webui
-scopes-tool-webui --port 8030
+.\.venv\Scripts\scopes-tool-webui.exe
+.\.venv\Scripts\scopes-tool-webui.exe --port 8030
 ```
 
-The English Tk Launcher is the recommended local browser entry point:
+The Launcher is the recommended local browser entry point:
 
 ```powershell
-scopes-tool-webui-launcher
-scopes-tool-webui-launcher --port 8030
+.\.venv\Scripts\scopes-tool-webui-launcher.exe
+.\.venv\Scripts\scopes-tool-webui-launcher.exe --port 8030
 ```
 
 Without an explicit port, the Launcher tries up to 100 ports beginning at

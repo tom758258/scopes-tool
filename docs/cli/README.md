@@ -1666,17 +1666,17 @@ Serial UART Trigger configures trigger criteria on a UART bus that the user
 has already configured through the matching Serial protocol command:
 
 ```powershell
-scopes-tool serial-trigger-uart `
+.\.venv\Scripts\scopes-tool.exe serial-trigger-uart `
     --bus 1 `
     --type rx-data `
     --data 85 `
     --qualifier equal
 
-scopes-tool serial-trigger-uart `
+.\.venv\Scripts\scopes-tool.exe serial-trigger-uart `
     --bus 1 `
     --type rx-start
 
-scopes-tool serial-trigger-uart --bus 1 --query
+.\.venv\Scripts\scopes-tool.exe serial-trigger-uart --bus 1 --query
 ```
 
 The canonical types are `rx-start`, `rx-stop`, `rx-data`, `tx-start`,
@@ -1698,9 +1698,9 @@ run, single, wait, or capture. The surface excludes 4000X-only I2C additions, CA
 and other extended protocol conditions.
 
 ```powershell
-scopes-tool serial-trigger-i2c --bus 1 --type read-eeprom --address 0x50 --data 0x10 --qualifier equal
-scopes-tool serial-trigger-spi --bus 1 --type mosi --width 8 --data 1010XX01
-scopes-tool serial-trigger-can --bus 1 --type id-and-data --id 0x1 --id-mode standard --data 1010XX01 --data-length 1
+.\.venv\Scripts\scopes-tool.exe serial-trigger-i2c --bus 1 --type read-eeprom --address 0x50 --data 0x10 --qualifier equal
+.\.venv\Scripts\scopes-tool.exe serial-trigger-spi --bus 1 --type mosi --width 8 --data 1010XX01
+.\.venv\Scripts\scopes-tool.exe serial-trigger-can --bus 1 --type id-and-data --id 0x1 --id-mode standard --data 1010XX01 --data-length 1
 ```
 
 I2C trigger address/data values are unsigned integer or hexadecimal values.
@@ -1716,14 +1716,14 @@ with `--clock-timeout`; timeout framing requires `--framing timeout` in the same
 configure request:
 
 ```powershell
-scopes-tool serial-spi `
+.\.venv\Scripts\scopes-tool.exe serial-spi `
     --bus 2 `
     --framing chip-select `
     --word-width 8
 ```
 
 ```powershell
-scopes-tool serial-spi `
+.\.venv\Scripts\scopes-tool.exe serial-spi `
     --bus 2 `
     --framing timeout `
     --clock-timeout 1e-6 `
@@ -1735,8 +1735,8 @@ instrument reports a settings conflict, query both buses before changing
 resources:
 
 ```powershell
-scopes-tool serial-query --bus 1 --json
-scopes-tool serial-query --bus 2 --json
+.\.venv\Scripts\scopes-tool.exe serial-query --bus 1 --json
+.\.venv\Scripts\scopes-tool.exe serial-query --bus 2 --json
 ```
 
 Serial Lister provides global display/reference queries and a host-side CSV
@@ -1749,11 +1749,11 @@ instrument must contain decoded Lister data. `serial-lister-export` queries
 and 4000X support it.
 
 ```powershell
-scopes-tool serial-lister-query --simulate --json
-scopes-tool serial-lister-display --selection bus1 --simulate --json
-scopes-tool serial-lister-display --query --simulate --json
-scopes-tool serial-lister-reference --reference previous --simulate --json
-scopes-tool serial-lister-export --output data\lister.csv --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-lister-query --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-lister-display --selection bus1 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-lister-display --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-lister-reference --reference previous --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-lister-export --output data\lister.csv --simulate --json
 ```
 
 The export preserves the CSV payload bytes and line endings without
@@ -1761,8 +1761,8 @@ protocol-specific parsing. Query both Serial buses when diagnosing a source or
 resource conflict:
 
 ```powershell
-scopes-tool serial-query --bus 1 --json
-scopes-tool serial-query --bus 2 --json
+.\.venv\Scripts\scopes-tool.exe serial-query --bus 1 --json
+.\.venv\Scripts\scopes-tool.exe serial-query --bus 2 --json
 ```
 
 Control reference waveform slots:
