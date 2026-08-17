@@ -53,7 +53,7 @@ export class CommandCatalog {
     this.renderCategories();
   }
 
-  renderCategories() {
+  renderCategories(notify = true) {
     const categories = this.categories();
     if (!categories.includes(this.activeCategory)) this.activeCategory = categories[0] || "";
     this.elements.categories.replaceChildren();
@@ -67,10 +67,10 @@ export class CommandCatalog {
       if (category === this.activeCategory) button.classList.add("active");
       this.elements.categories.append(button);
     });
-    this.renderCommands();
+    this.renderCommands(notify);
   }
 
-  renderCommands() {
+  renderCommands(notify = true) {
     const previous = this.selectedId;
     const query = this.filterText;
     const available = this.availableCommands().filter((command) => command.category === this.activeCategory);
@@ -102,15 +102,17 @@ export class CommandCatalog {
       });
     }
 
-    if (previous !== this.selectedId) this.onSelectionChange(this.selected());
+    if (notify && previous !== this.selectedId) this.onSelectionChange(this.selected());
   }
 
   select(commandId) {
     if (!this.availableCommands().some((command) => command.id === commandId)) return;
     const command = this.commands.find((item) => item.id === commandId);
+    const previous = this.selectedId;
     if (command?.category !== this.activeCategory) this.activeCategory = command.category;
     this.selectedId = commandId;
-    this.renderCategories();
+    this.renderCategories(false);
+    if (previous !== this.selectedId) this.onSelectionChange(this.selected());
   }
 
   updateMode(mode) {

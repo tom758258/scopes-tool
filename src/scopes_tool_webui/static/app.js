@@ -3,13 +3,17 @@ import { bindBasicControls } from "/static/basic-controls.js";
 import { CommandCatalog } from "/static/command-catalog.js";
 import { CommandForm } from "/static/command-form.js";
 import { DeviceResource } from "/static/device-resource.js";
-import { initializeI18n, setLocale, translate, translateJobStatus } from "/static/i18n.js";
+import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { renderEmpty, renderError, renderJob } from "/static/results.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
 const elements = {
-  health: document.querySelector("#health-status"),
+  localeToggle: document.querySelector("#locale-toggle"),
+  version: document.querySelector("#webui-version"),
+  webuiState: document.querySelector("#webui-state"),
+  commandState: document.querySelector("#command-state"),
+  liveState: document.querySelector("#live-state"),
   mode: [...document.querySelectorAll("input[name=mode]")],
   model: document.querySelector("#model-select"),
   resource: document.querySelector("#resource-input"),
@@ -51,18 +55,16 @@ let context = { mode: "live", resource: null, model_id: "keysight-dsox4024a" };
 let catalog;
 let commandForm;
 let deviceResource;
-let latestJob;
 let executing = false;
 let advancedVisible = false;
-let resultsVisible = false;
-let healthState = { key: "status.checking" };
+let resultPresentation = { kind: "empty", job: null, message: null };
+let healthState = { status: "checking", version: null, error: null };
 let executionState = { key: "device.ready" };
 let updateBasicAvailability = () => {};
 
 initializeI18n();
-document.querySelectorAll(".locale-button").forEach((button) => {
-  button.addEventListener("click", () => setLocale(button.dataset.locale));
-});
+renderLocaleToggle();
+elements.localeToggle.addEventListener("click", () => setLocale(locale() === "en" ? "zh-TW" : "en"));
 
 async function initialize() {
   renderAdvancedToggle();
@@ -103,6 +105,7 @@ async function initialize() {
     context = nextContext;
     if (catalog) catalog.updateMode(context.mode);
     syncCommandSelection();
+    renderLiveData();
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   updateAvailability();
@@ -136,8 +139,8 @@ function bindPresentationControls() {
     togglePanel(elements.resultDetailPanel, elements.resultDetail, elements.resultDetailToggle, "results");
   });
   elements.resultClear.addEventListener("click", () => {
-    resultsVisible = false;
-    renderEmpty(elements.results, elements.resultDetail);
+    resultPresentation = { kind: "empty", job: null, message: null };
+    renderCurrentResult();
   });
 }
 
@@ -190,25 +193,23 @@ async function executeCommand(command, parameters) {
   updateAvailability();
   elements.execute.disabled = true;
   elements.cancel.classList.remove("hidden");
-  setExecutionStatus({ key: "status.submitting" });
+  setExecutionStatus({ status: "queued" });
   try {
     const job = await runJob(command, parameters, context, (updated) => {
       currentJobId = updated.job_id;
-      latestJob = updated;
-      resultsVisible = true;
       setExecutionStatus({ status: updated.status });
-      renderJob(elements.results, updated, elements.resultDetail);
+      resultPresentation = { kind: "job", job: updated, message: null };
+      renderCurrentResult();
       updateIdentity(updated);
     });
-    latestJob = job;
-    resultsVisible = true;
     setExecutionStatus({ status: job.status });
-    renderJob(elements.results, job, elements.resultDetail);
+    resultPresentation = { kind: "job", job, message: null };
+    renderCurrentResult();
     updateIdentity(job);
   } catch (error) {
     setExecutionStatus({ status: "failed" });
-    resultsVisible = true;
-    renderError(elements.results, elements.resultDetail, error.message);
+    resultPresentation = { kind: "error", job: null, message: error.message };
+    renderCurrentResult();
   } finally {
     executing = false;
     currentJobId = null;
@@ -223,20 +224,23 @@ function updateIdentity(job) {
 }
 
 async function updateHealth() {
+  healthState = { status: "checking", version: null, error: null };
+  renderLiveData();
   try {
     const health = await getHealth();
     if (health.status !== "ok" || health.package !== SERVICE_NAME) throw new Error(translate("status.unexpected"));
-    healthState = { key: "status.healthy" };
-    elements.health.classList.add("healthy");
+    healthState = { status: "ready", version: health.version || null, error: null };
   } catch (error) {
-    healthState = { key: "status.failed", error: error.message };
-    elements.health.classList.add("error");
+    healthState = { status: "error", version: null, error: error.message };
   }
-  renderHealth();
+  renderVersion();
+  renderLiveData();
 }
 
 document.addEventListener("localechange", () => {
-  renderHealth();
+  renderLocaleToggle();
+  renderVersion();
+  renderLiveData();
   renderExecutionStatus();
   renderCollapseLabels();
   if (deviceResource) deviceResource.refresh();
@@ -244,8 +248,7 @@ document.addEventListener("localechange", () => {
     catalog.render();
     syncCommandSelection();
   }
-  if (resultsVisible && latestJob) renderJob(elements.results, latestJob, elements.resultDetail);
-  if (!resultsVisible) renderEmpty(elements.results, elements.resultDetail);
+  renderCurrentResult();
 });
 
 function syncCommandSelection() {
@@ -282,6 +285,7 @@ function updateAvailability() {
 function setExecutionStatus(state) {
   executionState = state;
   renderExecutionStatus();
+  renderLiveData();
 }
 
 function renderExecutionStatus() {
@@ -292,11 +296,74 @@ function renderExecutionStatus() {
     : translate(executionState.key);
 }
 
-function renderHealth() {
-  const message = translate(healthState.key);
-  elements.health.textContent = healthState.error ? `${message}: ${healthState.error}` : message;
+function renderCurrentResult() {
+  if (resultPresentation.kind === "job") {
+    renderJob(elements.results, resultPresentation.job, elements.resultDetail);
+  } else if (resultPresentation.kind === "error") {
+    renderError(elements.results, elements.resultDetail, resultPresentation.message);
+  } else {
+    renderEmpty(elements.results, elements.resultDetail);
+  }
+}
+
+function renderLocaleToggle() {
+  const nextLocale = locale() === "en" ? "zh-TW" : "en";
+  const label = nextLocale === "zh-TW" ? "locale.toChinese" : "locale.toEnglish";
+  elements.localeToggle.textContent = translate(label);
+  elements.localeToggle.lang = nextLocale === "zh-TW" ? "zh-TW" : "en";
+  elements.localeToggle.setAttribute("aria-label", translate(label));
+}
+
+function renderVersion() {
+  elements.version.textContent = `v${healthState.version || "—"}`;
+}
+
+function renderLiveData() {
+  const webuiReady = healthState.status === "ready";
+  setStateIndicator(
+    elements.webuiState,
+    translate(webuiReady ? "live_data.ready" : healthState.status === "error" ? "live_data.error" : "live_data.checking"),
+    webuiReady ? "state-ok" : healthState.status === "error" ? "state-error" : "state-warning",
+    healthState.error || "",
+  );
+
+  const commandStatus = executionState.status;
+  const commandText = commandStatus
+    ? translateJobStatus(commandStatus)
+    : translate("live_data.ready");
+  const commandClass = commandStatus === "failed"
+    ? "state-error"
+    : ["queued", "running"].includes(commandStatus)
+      ? "state-warning"
+      : "state-ok";
+  setStateIndicator(elements.commandState, commandText, commandClass);
+
+  const liveKey = context.mode === "simulate"
+    ? "live_data.simulate"
+    : context.mode === "dry-run"
+      ? "live_data.dryRun"
+      : context.resource
+        ? "live_data.ready"
+        : "live_data.noResource";
+  setStateIndicator(
+    elements.liveState,
+    translate(liveKey),
+    context.mode === "live" && !context.resource ? "state-warning" : "state-ok",
+  );
+}
+
+function setStateIndicator(indicator, text, stateClass, title = "") {
+  if (!indicator) return;
+  ["state-ok", "state-warning", "state-error", "state-idle"].forEach((name) => {
+    indicator.classList.toggle(name, name === stateClass);
+  });
+  const textNode = indicator.querySelector(".state-text");
+  if (textNode) textNode.textContent = text;
+  indicator.title = title || text;
 }
 
 initialize().catch((error) => {
-  elements.health.textContent = `${translate("status.failed")}: ${error.message}`;
+  healthState = { status: "error", version: null, error: error.message };
+  renderVersion();
+  renderLiveData();
 });

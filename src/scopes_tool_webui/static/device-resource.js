@@ -9,7 +9,17 @@ export class DeviceResource {
     this.resourceCount = null;
     this.statusKey = "device.ready";
     this.statusError = null;
-    elements.settings.addEventListener("click", () => elements.settingsPanel.classList.toggle("hidden"));
+    elements.settings.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.setSettingsExpanded(elements.settingsPanel.hidden);
+    });
+    elements.settingsPanel.addEventListener("click", (event) => event.stopPropagation());
+    document.addEventListener("click", () => this.setSettingsExpanded(false));
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || elements.settingsPanel.hidden) return;
+      this.setSettingsExpanded(false);
+      elements.settings.focus();
+    });
     elements.deviceCollapse.addEventListener("click", () => this.toggleBody());
     elements.mode.forEach((input) => input.addEventListener("change", () => this.changed()));
     elements.model.addEventListener("change", () => this.changed());
@@ -42,6 +52,11 @@ export class DeviceResource {
 
   refresh() {
     this.changed();
+  }
+
+  setSettingsExpanded(expanded) {
+    this.elements.settingsPanel.hidden = !expanded;
+    this.elements.settings.setAttribute("aria-expanded", String(expanded));
   }
 
   renderMode(context) {

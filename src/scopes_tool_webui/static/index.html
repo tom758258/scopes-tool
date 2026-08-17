@@ -11,12 +11,10 @@
       <div class="page-head-top">
         <div class="brand">
           <h1 data-i18n="page.brand">Scopes Tool</h1>
-          <p class="brand-subtitle"><span data-i18n="brand.subtitle">Oscilloscope control</span></p>
+          <p class="brand-subtitle"><span data-i18n="page.unofficial_tool">Unofficial Tool</span> <span id="webui-version">v—</span></p>
         </div>
         <div class="page-head-actions">
-          <span id="health-status" class="service-status" role="status">Checking service health...</span>
-          <button class="secondary locale-button" data-locale="en" type="button">EN</button>
-          <button class="secondary locale-button" data-locale="zh-TW" type="button">繁中</button>
+          <button id="locale-toggle" class="secondary locale-toggle" type="button" lang="zh-TW" aria-label="Switch language to Traditional Chinese">繁體中文</button>
         </div>
       </div>
 
@@ -30,35 +28,38 @@
             <p id="device-summary" class="device-resource-summary">Live · No resource</p>
           </div>
           <div class="device-resource-actions">
-            <button id="settings-button" class="secondary icon-button utility-icon-button" type="button" data-i18n-title="device.settings" data-i18n-aria-label="device.settings" title="Settings" aria-label="Settings">&#9881;</button>
+            <div class="device-options">
+              <button id="settings-button" class="secondary icon-button utility-icon-button device-options-button" type="button" data-i18n-title="device.settings" data-i18n-aria-label="device.settings" title="Settings" aria-label="Settings" aria-controls="settings-panel" aria-expanded="false">&#9881;</button>
+              <div id="settings-panel" class="device-options-panel" role="dialog" data-i18n-aria-label="device.settings" aria-label="Settings" aria-labelledby="settings-heading" hidden>
+                <h2 id="settings-heading" class="visually-hidden" data-i18n="device.settings">Settings</h2>
+                <fieldset class="execution-mode-control">
+                  <legend data-i18n="device.mode">Execution mode</legend>
+                  <div class="mode-options">
+                    <label><input type="radio" name="mode" value="live" checked><span data-i18n="device.live">Live</span></label>
+                    <label><input type="radio" name="mode" value="simulate"><span data-i18n="device.simulate">Simulate</span></label>
+                    <label><input type="radio" name="mode" value="dry-run"><span data-i18n="device.dryRun">Dry-run</span></label>
+                  </div>
+                </fieldset>
+                <label class="field">
+                  <span data-i18n="device.model">Planning model</span>
+                  <select id="model-select"></select>
+                </label>
+              </div>
+            </div>
             <button id="device-collapse" class="secondary icon-button utility-icon-button" type="button" data-i18n-title="device.collapse" data-i18n-aria-label="device.collapse" title="Collapse Device / Resource" aria-label="Collapse Device / Resource" aria-controls="device-resource-body" aria-expanded="true">-</button>
           </div>
         </div>
         <div id="device-resource-body" class="device-resource-body">
-          <div class="resource-grid">
+          <label class="field">
+            <span data-i18n="device.resource">VISA resource</span>
+            <input id="resource-input" data-i18n-placeholder="device.resourcePlaceholder" placeholder="USB0::...::INSTR" autocomplete="off">
+          </label>
+          <div class="live-resource-field">
             <label class="field">
-              <span data-i18n="device.resource">VISA resource</span>
-              <input id="resource-input" data-i18n-placeholder="device.resourcePlaceholder" placeholder="USB0::...::INSTR" autocomplete="off">
+              <span data-i18n="device.scannedResources">Scanned / Live resource</span>
+              <select id="resource-list" data-i18n-aria-label="device.scannedResources" aria-label="Scanned resources"></select>
             </label>
-            <div class="live-resource-field">
-              <label class="field">
-                <span data-i18n="device.scannedResources">Scanned / Live resource</span>
-                <select id="resource-list" data-i18n-aria-label="device.scannedResources" aria-label="Scanned resources"></select>
-              </label>
-              <button id="scan-button" class="secondary command-pill-button" type="button" data-i18n="device.scan">Scan resources</button>
-            </div>
-          </div>
-          <div id="settings-panel" class="settings-panel hidden">
-            <span class="field-label" data-i18n="device.mode">Execution mode</span>
-            <div class="mode-options">
-              <label><input type="radio" name="mode" value="live" checked><span data-i18n="device.live">Live</span></label>
-              <label><input type="radio" name="mode" value="simulate"><span data-i18n="device.simulate">Simulate</span></label>
-              <label><input type="radio" name="mode" value="dry-run"><span data-i18n="device.dryRun">Dry-run</span></label>
-            </div>
-            <label class="field">
-              <span data-i18n="device.model">Planning model</span>
-              <select id="model-select"></select>
-            </label>
+            <button id="scan-button" class="secondary command-pill-button" type="button" data-i18n="device.scan">Scan resources</button>
           </div>
           <div class="device-status-row">
             <p id="device-hint" class="hint" data-i18n="device.liveHint">Live mode requires an explicit VISA resource.</p>
@@ -70,6 +71,35 @@
     </header>
 
     <main class="shell">
+      <section class="live-data-section" aria-labelledby="live-data-heading">
+        <div class="section-head">
+          <strong id="live-data-heading" data-i18n="live_data.heading">Live Data</strong>
+        </div>
+        <div class="live-state-row" aria-live="polite">
+          <div class="live-state-field">
+            <span data-i18n="live_data.webui_state">WebUI State</span>
+            <strong id="webui-state" class="state-indicator state-warning">
+              <span class="state-dot" aria-hidden="true"></span>
+              <span class="state-text" data-i18n="live_data.checking">Checking</span>
+            </strong>
+          </div>
+          <div class="live-state-field">
+            <span data-i18n="live_data.command_state">Command State</span>
+            <strong id="command-state" class="state-indicator state-ok">
+              <span class="state-dot" aria-hidden="true"></span>
+              <span class="state-text" data-i18n="live_data.ready">Ready</span>
+            </strong>
+          </div>
+          <div class="live-state-field">
+            <span data-i18n="live_data.live_state">Live State</span>
+            <strong id="live-state" class="state-indicator state-warning">
+              <span class="state-dot" aria-hidden="true"></span>
+              <span class="state-text" data-i18n="live_data.noResource">No resource</span>
+            </strong>
+          </div>
+        </div>
+      </section>
+
       <section class="basic-command-section" aria-labelledby="basic-heading">
         <div class="section-head">
           <strong id="basic-heading" data-i18n="basic.title">Basic Controls</strong>
