@@ -1,4 +1,5 @@
 export const zhTW = {
+  "device.detection.noResources": "偵測狀態：未找到資源",
   "page.brand": "Scopes Tool",
   "page.unofficial_tool": "非官方工具",
   "brand.subtitle": "示波器控制",

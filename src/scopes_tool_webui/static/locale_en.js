@@ -1,4 +1,5 @@
 export const en = {
+  "device.detection.noResources": "Detection status: no resources found",
   "page.brand": "Scopes Tool",
   "page.unofficial_tool": "Unofficial Tool",
   "brand.subtitle": "Oscilloscope control",

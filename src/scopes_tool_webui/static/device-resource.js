@@ -123,6 +123,7 @@ export class DeviceResource {
   }
 
   detectionSummary(context) {
+    if (this.scanStatus === "empty") return translate("device.detection.noResources");
     if (this.hasCurrentIdentity(context)) {
       return translate("device.detection.detectedModel", { model: identityLabel(this.identity) });
     }
@@ -185,6 +186,7 @@ export class DeviceResource {
   async scan() {
     this.elements.scan.disabled = true;
     this.scanInProgress = true;
+    this.clearIdentity();
     this.resourceCount = null;
     this.scanStatus = "scanning";
     this.statusKey = "status.waiting";
@@ -207,7 +209,7 @@ export class DeviceResource {
       resources.forEach((resource) => this.elements.resourceList.append(new Option(resource, resource)));
       if (resources.length) this.elements.resource.value = resources[0];
       this.resourceCount = resources.length;
-      this.scanStatus = "scanned";
+      this.scanStatus = resources.length ? "scanned" : "empty";
       this.statusKey = "device.ready";
       this.changed();
     } catch (error) {
