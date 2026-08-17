@@ -11,7 +11,7 @@ from scopes_tool_core.math import MATH_COMPOSITE_OPERATIONS, MATH_OPERATIONS, MA
 from scopes_tool_core.measurements import MEASUREMENT_WINDOW_CHOICES, SUPPORTED_MEASUREMENT_ITEMS
 import scopes_tool_webui.app as app_module
 from scopes_tool_webui.app import app
-from scopes_tool_webui.commands import ScopeSessionCloseError
+from scopes_tool_webui.commands import ScopeSessionCloseError, validate_job_request
 from scopes_tool_webui.jobs import JobManager, JobManagerShuttingDown
 
 
@@ -647,6 +647,72 @@ def test_commands_expose_p3c_families_and_conditional_fields() -> None:
         {"field": "action", "equals": "set"},
         {"field": "qualifier", "in": ["greater-than", "less-than"]},
     ]
+
+
+def test_p3c_request_validation_regressions() -> None:
+    client = TestClient(app)
+    commands = {entry["id"]: entry for entry in client.get("/api/commands").json()}
+    assert [field["name"] for field in commands["serial-query"]["fields"]] == ["bus"]
+
+    serial_query = client.post(
+        "/api/jobs",
+        json={
+            "command": "serial-query",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"bus": 1, "action": "query"},
+        },
+    )
+    assert serial_query.status_code == 400
+    assert "unknown parameter" in serial_query.json()["detail"]
+
+    for parameters in (
+        {"action": "query", "bus": 1, "mode": "async"},
+        {"action": "query", "bus": 1, "data": 1},
+    ):
+        serial_search = client.post(
+            "/api/jobs",
+            json={
+                "command": "serial-search-uart",
+                "mode": "simulate",
+                "model_id": MODEL_ID,
+                "parameters": parameters,
+            },
+        )
+        assert serial_search.status_code == 400
+        assert "query cannot include" in serial_search.json()["detail"]
+
+    invalid_measure_log = client.post(
+        "/api/jobs",
+        json={
+            "command": "measure-log",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"count": 1, "stop_on_error": "false"},
+        },
+    )
+    assert invalid_measure_log.status_code == 400
+    assert "stop_on_error must be a boolean" in invalid_measure_log.json()["detail"]
+
+    accepted = validate_job_request(
+        {
+            "command": "measure-log",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"count": 1, "stop_on_error": True},
+        }
+    )
+    assert accepted["parameters"]["stop_on_error"] is True
+
+    defaulted = validate_job_request(
+        {
+            "command": "measure-log",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"count": 1},
+        }
+    )
+    assert defaulted["parameters"]["stop_on_error"] is False
 
 
 def test_representative_p3c_simulated_commands_complete() -> None:

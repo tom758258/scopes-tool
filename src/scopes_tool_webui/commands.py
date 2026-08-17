@@ -1046,7 +1046,10 @@ P3C_COMMANDS = (
         ),
     ),
 
-    _p3c_action_command("serial-query", "Serial", "Serial query", (_p3c_field("bus", "integer", minimum=1),)),
+    {
+        "id": "serial-query", "category": "Serial", "label": "Serial query",
+        "modes": ("live", "simulate"), "fields": (_p3c_field("bus", "integer", minimum=1),),
+    },
     _p3c_action_command("serial-mode", "Serial", "Serial mode", (_p3c_field("bus", "integer", minimum=1), _p3c_field("mode", "enum", options=SERIAL_MODES, visible_if=_p3c_set_visibility()))),
     _p3c_action_command("serial-display", "Serial", "Serial display", (_p3c_field("bus", "integer", minimum=1), _p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility()))),
     _p3c_action_command(
@@ -2185,7 +2188,10 @@ def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str
             if "duration_seconds" in parameters:
                 parameters["duration_seconds"] = _finite_number(parameters["duration_seconds"], "duration_seconds")
             parameters["interval_seconds"] = _finite_number(parameters.get("interval_seconds", 1), "interval_seconds")
-            parameters["stop_on_error"] = bool(parameters.get("stop_on_error", False))
+            if "stop_on_error" in parameters:
+                _require_boolean(parameters["stop_on_error"], "stop_on_error")
+            else:
+                parameters["stop_on_error"] = False
         elif command == "measure-until":
             parameters["channel"] = validate_analog_channel(_integer(parameters.get("channel", 1), "channel"), capabilities)
             parameters["item"] = normalize_measurement_item(parameters.get("item", "vpp"))
@@ -2221,7 +2227,7 @@ def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str
         return
     if command.startswith("serial-search-"):
         protocol = command.removeprefix("serial-search-")
-        action = _validate_action_fields(parameters, command, tuple(key for key in parameters if key not in {"action", "bus", "mode"}))
+        action = _validate_action_fields(parameters, command, tuple(key for key in parameters if key not in {"action", "bus"}))
         parameters["bus"] = validate_serial_search_bus(_integer(parameters.get("bus", 1), "bus"), capabilities)
         if action == "set":
             if protocol == "uart":
