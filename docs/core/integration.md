@@ -342,7 +342,10 @@ The request contains `count`, `trigger_timeout_seconds`, optional `channels`,
 `items`, `pairs`, and `pair_items`, plus `interval_seconds`, `output_dir`, and
 `log_scpi`. Count must be at least one, trigger timeout must be positive and
 finite, and interval must be finite and non-negative. Measurement defaults and
-selection rules match `measure-log`.
+selection rules match `measure-log`: omitted channels use the existing default
+channel selection, `items` defaults to `vpp,frequency`, `pairs` defaults to
+none, and `pair_items` defaults to `phase,delay`. `interval_seconds` defaults
+to zero.
 
 Each cycle starts `Single`, waits through the existing Operation Status
 Condition Run-bit path, queries the selected measurements, persists the
@@ -355,6 +358,8 @@ trigger timeout does not force a trigger, retry, or start another cycle;
 completed cycles and their artifacts remain valid.
 
 Runtime artifacts contain `measurements.csv`, `manifest.json`, and `scpi.log`.
+The measurement CSV contains `index`, `timestamp_iso`, `elapsed_seconds`,
+`trigger_elapsed_seconds`, and the selected measurement columns.
 Planning validates the request and one representative cycle without opening
 VISA or writing artifacts. The representative plan contains `:SINGle`, one
 Operation Status Condition query, selected measurement queries, and one
@@ -375,7 +380,9 @@ The request contains required `channels`, `count`, and
 `trigger_timeout_seconds`, plus `points`, `waveform_format`,
 `interval_seconds`, `output_dir`, and `log_scpi`. Count must be positive,
 trigger timeout must be positive and finite, and interval must be finite and
-non-negative.
+non-negative. `points` defaults to `1000`, `waveform_format` defaults to the
+canonical `byte` value, and `interval_seconds` defaults to zero. The trigger
+timeout applies independently to every cycle.
 
 Each cycle performs:
 
@@ -425,14 +432,21 @@ non-negative. No unit conversion is performed.
 Each iteration checks cancellation and timeout, queries the measurement,
 queries `:SYSTem:ERRor?`, evaluates the condition, persists a CSV row and
 manifest update, reports sample and progress, and waits the relative interval
-when another sample is allowed. A blocking read that started before the
-deadline is not forcibly interrupted. A committed matching sample completes
-successfully; an unmet finite timeout returns `condition_timeout`. Invalid
-measurement sentinels are persisted as `NaN` and evaluate as non-matching.
+when another sample is allowed. The timeout controls whether another
+measurement query may start; a blocking read that started before the deadline
+is not forcibly interrupted. After that read returns, Core completes the
+system-error check, condition evaluation, and persistence, so a committed
+matching sample can still complete successfully. Interval waits are capped by
+the remaining timeout. A matching result has Core status `completed` and
+termination reason `condition_met`; an unmet finite timeout has Core status
+`error` and termination reason `condition_timeout`. Invalid measurement
+sentinels are persisted as `NaN` and evaluate as non-matching.
 
 Artifacts contain `measurements.csv`, `manifest.json`, and `scpi.log`; the
 manifest stores the request, runtime identity, compact matching summary,
 terminal state, paths, and error while measurement values remain in CSV.
+The CSV columns are `index`, `timestamp_iso`, `elapsed_seconds`, `value`, and
+`matched`.
 Planning validates one representative query and system-error iteration without
 opening VISA or writing artifacts. Simulator mode executes the finite workflow.
 
@@ -451,9 +465,22 @@ optional `output_dir`, and `log_scpi`.
 Sequence documents are strict JSON. `version` is the integer `1`,
 `loop_count` defaults to one and must be positive, `steps` must be non-empty,
 and unknown document, step, parameter, action, or non-standard numeric fields
-fail closed. The supported actions are `wait`, `single`, `wait-trigger`,
-`measure`, `capture`, `screenshot`, and `cleanup`. `wait-trigger` waits for an
-acquisition already started by `single`; it does not arm or force a trigger.
+fail closed. Boolean values are not accepted as integers. The supported action
+contract is:
+
+- `wait` requires non-negative finite `seconds`.
+- `single` accepts no parameters.
+- `wait-trigger` requires positive finite `timeout_seconds` and waits for an
+  acquisition already started by `single`; it does not arm or force a trigger.
+- `measure` requires `item` and accepts the existing `MeasureRequest` fields
+  `channel`, `source_channel`, `reference_channel`, `time_s`, `level`, `slope`,
+  and `occurrence`.
+- `capture` requires `channels`; `points` defaults to `1000`,
+  `waveform_format` to `byte`, and `allow_time_axis_tolerance` to `false`.
+- `screenshot` accepts optional `background`, whose current default is `black`
+  and whose supported values are `black` and `white`.
+- `cleanup` accepts optional `profile`, defaulting to `minimal`; supported
+  profiles are `minimal` and `safe`.
 
 Planning validates the complete document against one capability profile without
 opening hardware or writing artifacts. Runtime validation uses the detected
@@ -466,8 +493,10 @@ deterministic loop and step paths. The manifest uses independent
 `schema_version: 1`, stores normalized input and completed execution records,
 and preserves partial artifacts without counting incomplete steps as complete.
 Cooperative cancellation is checked at workflow and step boundaries and during
-host or trigger waits. Reporters run after the completed step record is
-persisted; `WorkflowProgress.total_count` is
+host or trigger waits. Pre-start cancellation occurs before hardware I/O and
+run-directory creation, creates no runtime artifacts, and keeps `output_dir`,
+`manifest_path`, and `scpi_log_path` null. Reporters run after the completed
+step record is persisted; `WorkflowProgress.total_count` is
 `loop_count * step_count`.
 
 Planning writes no runtime artifacts and reports normalized steps, loop and
