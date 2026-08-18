@@ -82,6 +82,8 @@ export const zhTW = {
   "results.detailAvailable": "詳細資料如下",
   "results.summary.completed": "指令已成功完成",
   "results.summary.failed": "指令失敗",
+  "results.summary.queued": "等待執行",
+  "results.summary.running": "正在執行指令",
   "results.summary.identificationRead": "已讀取識別資訊",
   "results.summary.serial": "序號 {{serial}}",
   "results.summary.firmware": "韌體 {{firmware}}",

@@ -109,6 +109,14 @@ async function initialize() {
   }, (scanJob) => {
     resultPresentation = { kind: "job", job: scanJob, message: null };
     renderCurrentResult();
+  }, (scanError) => {
+    resultPresentation = {
+      kind: "error",
+      job: null,
+      command: "list-resources",
+      message: scanError,
+    };
+    renderCurrentResult();
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   updateAvailability();
@@ -313,7 +321,12 @@ function renderCurrentResult() {
   if (resultPresentation.kind === "job") {
     renderJob(elements.results, resultPresentation.job, elements.resultDetail);
   } else if (resultPresentation.kind === "error") {
-    renderError(elements.results, elements.resultDetail, resultPresentation.message);
+    renderError(
+      elements.results,
+      elements.resultDetail,
+      resultPresentation.message,
+      resultPresentation.command,
+    );
   } else {
     renderEmpty(elements.results, elements.resultDetail);
   }

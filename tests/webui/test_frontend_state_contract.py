@@ -130,6 +130,8 @@ def test_scan_uses_the_common_job_history_flow_before_resource_updates() -> None
     assert '"list-resources",' in scan
     assert "this.onCommandStateChange({ status: updated.status });" in scan
     assert "this.onJobUpdate(updated);" in scan
+    assert "let backendJobReceived = false;" in scan
+    assert "if (!backendJobReceived) this.onScanError(error.message || String(error));" in scan
     assert "submitJob(" not in scan
     assert "getJob(" not in scan
     assert "const resources = job.result?.result?.resources || [];" in scan
@@ -140,6 +142,8 @@ def test_scan_uses_the_common_job_history_flow_before_resource_updates() -> None
     assert 'status: submitted.status || "queued"' in jobs_source
     assert '}, (scanJob) => {' in app_source
     assert 'resultPresentation = { kind: "job", job: scanJob, message: null };' in app_source
+    assert '}, (scanError) => {' in app_source
+    assert 'command: "list-resources"' in app_source
     assert "renderCurrentResult();" in app_source
 
 
@@ -196,6 +200,90 @@ def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
     )
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(jobs_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_scan_submit_failure_reports_raw_error_and_preserves_scan_failure_state() -> None:
+    device_path = STATIC_ROOT / "device-resource.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor() {
+            this.children = [];
+            this.hidden = false;
+            this.disabled = false;
+            this.value = "";
+            this.checked = true;
+            this.selectedOptions = [{ textContent: "" }];
+          }
+          addEventListener() {}
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          setAttribute() {}
+        }
+
+        const rawError = "HTTP 503 raw submit failure";
+        const runJob = async () => { throw new Error(rawError); };
+        const getExecutionContext = () => ({ mode: "live", resource: null, model_id: "keysight-dsox4024a" });
+        const translate = (key) => key;
+        globalThis.testRunJob = runJob;
+        globalThis.testGetExecutionContext = getExecutionContext;
+        globalThis.testTranslate = translate;
+        globalThis.document = { addEventListener() {} };
+
+        const source = [
+          "const runJob = globalThis.testRunJob;",
+          "const getExecutionContext = globalThis.testGetExecutionContext;",
+          "const translate = globalThis.testTranslate;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.deviceApi = { DeviceResource };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const node = () => new FakeNode();
+        const elements = {
+          mode: [node()],
+          model: node(),
+          resource: node(),
+          resourceList: node(),
+          scan: node(),
+          settings: node(),
+          settingsPanel: node(),
+          body: node(),
+          deviceCollapse: node(),
+          modeBadge: node(),
+          summary: node(),
+          status: node(),
+        };
+        elements.settingsPanel.hidden = true;
+        const states = [];
+        const errors = [];
+        const device = new globalThis.deviceApi.DeviceResource(
+          elements,
+          () => {},
+          (state) => states.push(state),
+          () => {},
+          (error) => errors.push(error),
+        );
+        await device.scan();
+
+        assert.deepEqual(errors, [rawError]);
+        assert.equal(device.scanStatus, "failed");
+        assert.equal(device.statusError, rawError);
+        assert.equal(elements.scan.disabled, false);
+        assert(states.some((state) => state.status === "failed"));
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(device_path)],
         capture_output=True,
         text=True,
         check=False,

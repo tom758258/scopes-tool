@@ -81,6 +81,8 @@ export const en = {
   "results.detailAvailable": "Details available below",
   "results.summary.completed": "Command completed successfully",
   "results.summary.failed": "Command failed",
+  "results.summary.queued": "Waiting to run...",
+  "results.summary.running": "Executing command...",
   "results.summary.identificationRead": "Identification read",
   "results.summary.serial": "serial {{serial}}",
   "results.summary.firmware": "firmware {{firmware}}",

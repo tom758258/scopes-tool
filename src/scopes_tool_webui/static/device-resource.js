@@ -35,11 +35,18 @@ function resourceLabel(resource) {
 }
 
 export class DeviceResource {
-  constructor(elements, onContextChange, onCommandStateChange = () => {}, onJobUpdate = () => {}) {
+  constructor(
+    elements,
+    onContextChange,
+    onCommandStateChange = () => {},
+    onJobUpdate = () => {},
+    onScanError = () => {},
+  ) {
     this.elements = elements;
     this.onContextChange = onContextChange;
     this.onCommandStateChange = onCommandStateChange;
     this.onJobUpdate = onJobUpdate;
+    this.onScanError = onScanError;
     this.resourceCount = null;
     this.statusKey = "device.ready";
     this.statusError = null;
@@ -206,6 +213,7 @@ export class DeviceResource {
     this.statusError = null;
     this.renderStatus();
     this.onCommandStateChange({ status: "queued" });
+    let backendJobReceived = false;
     try {
       const context = this.context();
       const job = await runJob(
@@ -213,6 +221,7 @@ export class DeviceResource {
         { live_only: true },
         context,
         (updated) => {
+          backendJobReceived = Boolean(updated.job_id);
           this.onCommandStateChange({ status: updated.status });
           this.onJobUpdate(updated);
         },
@@ -232,6 +241,7 @@ export class DeviceResource {
       this.statusKey = "status.scanFailed";
       this.statusError = error.message;
       this.renderStatus();
+      if (!backendJobReceived) this.onScanError(error.message || String(error));
     } finally {
       this.scanInProgress = false;
       this.elements.scan.disabled = false;

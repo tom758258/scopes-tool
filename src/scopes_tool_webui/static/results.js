@@ -10,9 +10,10 @@ export function renderEmpty(summaryContainer, detailContainer) {
   if (detailContainer) detailContainer.replaceChildren(emptyMessage());
 }
 
-export function renderError(summaryContainer, detailContainer, message) {
-  if (!(resultHistory[0]?.kind === "error" && resultHistory[0].message === message)) {
-    resultHistory.unshift({ kind: "error", message });
+export function renderError(summaryContainer, detailContainer, message, command = null) {
+  const current = resultHistory[0];
+  if (!(current?.kind === "error" && current.message === message && current.command === command)) {
+    resultHistory.unshift({ kind: "error", message, command });
     resultHistory = resultHistory.slice(0, RESULT_HISTORY_LIMIT);
   }
   renderHistory(summaryContainer);
@@ -26,9 +27,12 @@ export function renderJob(summaryContainer, job, detailContainer) {
   const existingIndex = resultHistory.findIndex(
     (entry) => entry.kind === "job" && entry.job.job_id === job.job_id,
   );
-  if (existingIndex >= 0) resultHistory.splice(existingIndex, 1);
-  resultHistory.unshift({ kind: "job", job });
-  resultHistory = resultHistory.slice(0, RESULT_HISTORY_LIMIT);
+  if (existingIndex >= 0) {
+    resultHistory[existingIndex].job = job;
+  } else {
+    resultHistory.unshift({ kind: "job", job });
+    resultHistory = resultHistory.slice(0, RESULT_HISTORY_LIMIT);
+  }
   renderHistory(summaryContainer);
 
   if (!detailContainer) return;
@@ -75,6 +79,8 @@ function renderHistory(summaryContainer) {
     const label = document.createElement("strong");
     if (entry.kind === "job") {
       label.textContent = commandLabel(entry.job.command);
+    } else if (entry.command) {
+      label.textContent = commandLabel(entry.command);
     } else {
       label.textContent = translate("results.error");
     }
@@ -103,6 +109,8 @@ function commandLabel(command) {
 function jobSummary(job) {
   if (job.status === "failed") return jobErrorSummary(job);
   if (job.status === "cancelled") return translate("status.cancelled");
+  if (job.status === "queued") return translate("results.summary.queued");
+  if (job.status === "running") return translate("results.summary.running");
   if (job.status !== "completed") return translateJobStatus(job.status);
   return successfulJobSummary(job);
 }

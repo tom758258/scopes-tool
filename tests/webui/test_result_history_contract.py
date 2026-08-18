@@ -21,12 +21,15 @@ def test_result_panel_preserves_powers_style_bounded_job_history() -> None:
     assert "let resultHistory = [];" in source
     assert "resultHistory.findIndex(" in source
     assert 'entry.job.job_id === job.job_id' in source
-    assert "resultHistory.splice(existingIndex, 1);" in source
+    assert "resultHistory[existingIndex].job = job;" in source
     assert 'resultHistory.unshift({ kind: "job", job });' in source
     assert "resultHistory = resultHistory.slice(0, RESULT_HISTORY_LIMIT);" in source
     assert "resultHistory.forEach((entry) =>" in source
     assert "commandLabel(entry.job.command)" in source
+    assert "commandLabel(entry.command)" in source
     assert "translateJobStatus(statusValue)" in source
+    assert 'translate("results.summary.queued")' in source
+    assert 'translate("results.summary.running")' in source
     assert "successfulJobSummary(job)" in source
     assert "results.detailAvailable" not in source
 
@@ -77,35 +80,40 @@ def test_result_history_runtime_behaviour() -> None:
         globalThis.testLocale = "en";
         const labels = {
           en: {
-            identify: "Identify", completed: "Completed", queued: "Queued", running: "Running",
-            completedSummary: "Command completed successfully", resourceNone: "No resources found", resourceMany: "4 resources found",
+            identify: "Identify", run: "Run", listResources: "List resources", completed: "Completed", failed: "Failed", queued: "Queued", running: "Running",
+            queuedSummary: "Waiting to run...", runningSummary: "Executing command...", completedSummary: "Command completed successfully", resourceNone: "No resources found", resourceMany: "4 resources found",
             serial: "serial {{serial}}", firmware: "firmware {{firmware}}", empty: "No command has been run yet.",
           },
           "zh-TW": {
-            identify: "\u8b58\u5225", completed: "\u5b8c\u6210", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d",
-            completedSummary: "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210", resourceNone: "\u627e\u4e0d\u5230\u8cc7\u6e90", resourceMany: "\u627e\u5230 4 \u500b\u8cc7\u6e90",
+            identify: "\u8b58\u5225", run: "\u57f7\u884c", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d",
+            queuedSummary: "\u7b49\u5f85\u57f7\u884c", runningSummary: "\u6b63\u5728\u57f7\u884c\u6307\u4ee4", completedSummary: "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210", resourceNone: "\u627e\u4e0d\u5230\u8cc7\u6e90", resourceMany: "\u627e\u5230 4 \u500b\u8cc7\u6e90",
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
           },
         };
         const translate = (key, values = {}) => {
           const locale = labels[globalThis.testLocale];
           const text = key === "command.identify" ? locale.identify
-            : key === "status.completed" ? locale.completed
-              : key === "status.queued" ? locale.queued
-                : key === "status.running" ? locale.running
-                  : key === "results.summary.completed" ? locale.completedSummary
-                    : key === "results.summary.resource_none" ? locale.resourceNone
-                      : key === "results.summary.resource_many" ? locale.resourceMany
-                      : key === "results.summary.serial" ? locale.serial
-                        : key === "results.summary.firmware" ? locale.firmware
-                          : key === "results.empty" ? locale.empty
-                            : key;
+            : key === "command.run" ? locale.run
+              : key === "command.list-resources" ? locale.listResources
+                : key === "status.completed" ? locale.completed
+                  : key === "status.failed" ? locale.failed
+                    : key === "status.queued" ? locale.queued
+                      : key === "status.running" ? locale.running
+                        : key === "results.summary.queued" ? locale.queuedSummary
+                          : key === "results.summary.running" ? locale.runningSummary
+                            : key === "results.summary.completed" ? locale.completedSummary
+                              : key === "results.summary.resource_none" ? locale.resourceNone
+                                : key === "results.summary.resource_many" ? locale.resourceMany
+                                  : key === "results.summary.serial" ? locale.serial
+                                    : key === "results.summary.firmware" ? locale.firmware
+                                      : key === "results.empty" ? locale.empty
+                                        : key;
           return Object.entries(values).reduce(
             (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
             text,
           );
         };
-        const hasTranslation = (key) => key === "command.identify";
+        const hasTranslation = (key) => ["command.identify", "command.run", "command.list-resources"].includes(key);
         const translateJobStatus = (status) => translate(`status.${status}`);
         globalThis.testArtifactUrl = () => "";
         globalThis.testTranslate = translate;
@@ -119,7 +127,7 @@ def test_result_history_runtime_behaviour() -> None:
           "const translateJobStatus = globalThis.testTranslateJobStatus;",
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
-          + "\nglobalThis.resultApi = { renderEmpty, renderJob };";
+          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderJob };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
         const summary = new FakeNode("div");
@@ -135,6 +143,21 @@ def test_result_history_runtime_behaviour() -> None:
         assert.equal(rowTexts()[0][0], "command-21");
         assert.equal(rowTexts().at(-1)[0], "command-2");
         assert.equal(rowTexts().some((row) => row[0] === "command-1"), false);
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("order-a", "identify", "running"), detail);
+        api.renderJob(summary, makeJob("order-b", "run", "queued"), detail);
+        api.renderJob(summary, makeJob("order-a", "identify", "completed", {
+          result: { result: { idn: { model: "DSO-X 4024A" } } },
+        }), detail);
+        assert.deepEqual(rowTexts().map((row) => row[0]), ["Run", "Identify"]);
+        assert.equal(rowTexts()[1][1], "Completed");
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("status-job", "identify", "queued"), detail);
+        assert.deepEqual(rowTexts()[0], ["Identify", "Queued", "Waiting to run..."]);
+        api.renderJob(summary, makeJob("status-job", "identify", "running"), detail);
+        assert.deepEqual(rowTexts()[0], ["Identify", "Running", "Executing command..."]);
 
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("state-job", "identify", "queued"), detail);
@@ -163,11 +186,19 @@ def test_result_history_runtime_behaviour() -> None:
         assert(rowTexts().some((row) => row[2] === "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210"));
         assert(rowTexts().some((row) => row[2] === "DSO-X 4034A - \u5e8f\u865f MY55440270 - \u97cc\u9ad4 07.20"));
 
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("zh-status-job", "identify", "queued"), detail);
+        assert.deepEqual(rowTexts()[0], ["\u8b58\u5225", "\u6392\u968a\u4e2d", "\u7b49\u5f85\u57f7\u884c"]);
+        api.renderJob(summary, makeJob("zh-status-job", "identify", "running"), detail);
+        assert.deepEqual(rowTexts()[0], ["\u8b58\u5225", "\u57f7\u884c\u4e2d", "\u6b63\u5728\u57f7\u884c\u6307\u4ee4"]);
+
         const rawError = "VISA <raw> detail";
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("failed-job", "identify", "failed", { error: rawError }), detail);
         assert.equal(rowTexts()[0][2], rawError);
         assert.equal(detail.children[0].textContent, rawError);
+        api.renderError(summary, detail, rawError, "list-resources");
+        assert.deepEqual(rowTexts()[0], ["\u5217\u51fa\u8cc7\u6e90", "\u5931\u6557", rawError]);
         api.renderEmpty(summary, detail);
         assert.equal(summary.children.length, 1);
         assert.equal(summary.children[0].className, "muted");
