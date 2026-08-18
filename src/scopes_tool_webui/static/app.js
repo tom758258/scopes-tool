@@ -288,6 +288,8 @@ async function evaluateResourceLiveSupport(commandContext) {
   } catch (error) {
     if (sameExecutionContext(context, commandContext)) {
       setCommandState({ status: "failed" });
+    }
+    if (pending.jobId === null) {
       resultPresentation = {
         kind: "error",
         job: null,

@@ -205,12 +205,14 @@ def test_selected_resource_identify_serializes_latest_requested_context() -> Non
         const states = [];
         const history = new Set();
         const currentResults = [];
+        const clientErrors = [];
         const identities = [];
         const renderLiveData = () => {};
         const setCommandState = (state) => states.push({ resource: context.resource, ...state });
         const renderCurrentResult = () => {
           const job = resultPresentation.job;
           if (job) history.add(job.job_id);
+          if (resultPresentation.kind === "error") clientErrors.push(resultPresentation);
           currentResults.push({
             resource: context.resource,
             jobId: job?.job_id || null,
@@ -291,6 +293,123 @@ def test_selected_resource_identify_serializes_latest_requested_context() -> Non
         assert.equal(currentResults.at(-1).jobId, "identify-RESOURCE-B");
         assert.equal(states.at(-1).status, "completed");
         assert.equal(submissions.includes("RESOURCE-C"), false);
+        assert.deepEqual(clientErrors, []);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_stale_identify_submission_failure_is_kept_before_requested_identify_runs() -> None:
+    app_source = read_static("app.js")
+    declarations = "\n".join(
+        extract_function_declaration(app_source, signature)
+        for signature in (
+            "async function refreshSelectedResourceContext(selectedContext)",
+            "async function evaluateResourceLiveSupport(commandContext)",
+            "async function finishResourceLiveSupportEvaluation(jobId)",
+            "async function refreshRequestedResourceLiveSupport(completed)",
+            "function updateIdentity(job, commandContext)",
+            "function presentSelectedResourceJob(job, commandContext)",
+            "function sameExecutionContext(left, right)",
+        )
+    )
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+
+        const contextFor = (resource) => ({
+          mode: "live",
+          resource,
+          model_id: "keysight-dsox4024a",
+        });
+        let context = contextFor("RESOURCE-A");
+        let pendingResourceLiveSupport = null;
+        let resultPresentation = { kind: "empty", job: null, message: null };
+        const elements = { results: {} };
+        const events = [];
+        const submissions = [];
+        const states = [];
+        const clientErrors = [];
+        const backendJobs = new Set();
+        const identities = [];
+        let rejectA;
+        const renderLiveData = () => {};
+        const setCommandState = (state) => states.push({ resource: context.resource, ...state });
+        const renderCurrentResult = () => {
+          if (resultPresentation.kind === "error") {
+            events.push("client-error-A");
+            clientErrors.push({ ...resultPresentation });
+          } else if (resultPresentation.job) {
+            backendJobs.add(resultPresentation.job.job_id);
+          }
+        };
+        const renderJob = (_target, job) => backendJobs.add(job.job_id);
+        const deviceResource = {
+          setIdentity(idn, associatedContext) {
+            identities.push({ resource: associatedContext.resource, model: idn.model });
+          },
+        };
+        const runJob = (command, parameters, commandContext, onUpdate) => {
+          assert.equal(command, "identify");
+          assert.deepEqual(parameters, {});
+          submissions.push(commandContext.resource);
+          events.push(`submit-${commandContext.resource}`);
+          if (commandContext.resource === "RESOURCE-A") {
+            return new Promise((_resolve, reject) => { rejectA = reject; });
+          }
+          const completed = {
+            job_id: "identify-RESOURCE-B",
+            command,
+            status: "completed",
+            result: { result: { idn: { model: "DSO-X 4034A" } } },
+          };
+          onUpdate({ job_id: completed.job_id, command, status: "queued" });
+          onUpdate(completed);
+          return Promise.resolve(completed);
+        };
+        '''
+    ) + declarations + textwrap.dedent(
+        r'''
+
+        const identifyA = refreshSelectedResourceContext(contextFor("RESOURCE-A"));
+        await Promise.resolve();
+        assert.deepEqual(submissions, ["RESOURCE-A"]);
+
+        context = contextFor("RESOURCE-B");
+        await refreshSelectedResourceContext(context);
+        assert.deepEqual(submissions, ["RESOURCE-A"]);
+        assert.equal(states.at(-1).resource, "RESOURCE-B");
+        assert.equal(states.at(-1).status, "queued");
+
+        rejectA(new Error("HTTP 503: temporary failure"));
+        await identifyA;
+
+        assert.deepEqual(events.slice(0, 3), ["submit-RESOURCE-A", "client-error-A", "submit-RESOURCE-B"]);
+        assert.deepEqual(submissions, ["RESOURCE-A", "RESOURCE-B"]);
+        assert.equal(clientErrors.length, 1);
+        assert.equal(clientErrors[0].kind, "error");
+        assert.equal(clientErrors[0].command, "identify");
+        assert.equal(clientErrors[0].message, "HTTP 503: temporary failure");
+        assert.equal(clientErrors[0].job, null);
+        assert.equal("job_id" in clientErrors[0], false);
+        assert.equal(
+          states.some((state) => state.resource === "RESOURCE-B" && state.status === "failed"),
+          false,
+        );
+        assert.deepEqual([...backendJobs], ["identify-RESOURCE-B"]);
+        assert.equal(identities.length > 0, true);
+        assert.equal(
+          identities.every((item) => item.resource === "RESOURCE-B" && item.model === "DSO-X 4034A"),
+          true,
+        );
+        assert.equal(states.at(-1).status, "completed");
         '''
     )
     completed = subprocess.run(
