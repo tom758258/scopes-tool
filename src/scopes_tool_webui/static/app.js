@@ -121,8 +121,7 @@ async function initialize() {
     context = nextContext;
     state.executionContext = nextContext;
     if (catalog) catalog.updateMode(context.mode);
-    updateCommandSupport();
-    syncCommandSelection();
+    if (!updateCommandSupport()) syncCommandSelection();
     renderLiveData();
   }, (scanState) => {
     setCommandState(scanState);
@@ -229,6 +228,9 @@ async function executeCommand(command, parameters, options = {}) {
   const commandContext = { ...context };
   const submittedWorkspaceContext = currentWorkspaceContext(command);
   const editorKey = options.editorKey || currentEditorKey();
+  const lockEditor = options.intent === "apply"
+    && isCurrentEditorJob(command, submittedWorkspaceContext);
+  if (lockEditor) commandForm.setDisabled(true);
   if (command === "identify") deviceResource?.setIdentityPending?.(commandContext);
   updateAvailability();
   elements.execute.disabled = true;
@@ -260,6 +262,9 @@ async function executeCommand(command, parameters, options = {}) {
     renderCurrentResult();
     return null;
   } finally {
+    if (lockEditor && isCurrentEditorJob(command, submittedWorkspaceContext)) {
+      commandForm.setDisabled(false);
+    }
     executing = false;
     currentJobId = null;
     elements.cancel.classList.add("hidden");
@@ -513,8 +518,14 @@ function currentModelLabel() {
   return models.find((model) => model.id === modelId)?.label || modelId || "";
 }
 
-function updateCommandSupport() {
-  catalog?.updateModel(currentModelId(), currentModelLabel());
+function updateCommandSupport(rerender = true) {
+  if (!catalog) return false;
+  const modelId = currentModelId();
+  const changed = catalog.activeModelId !== modelId;
+  const draft = changed && rerender && commandForm ? commandForm.draft() : null;
+  catalog.updateModel(modelId, currentModelLabel());
+  if (changed && rerender && commandForm) syncCommandSelection(draft);
+  return changed && rerender && Boolean(commandForm);
 }
 
 function currentWorkspaceContext(command = catalog?.selected()?.id) {

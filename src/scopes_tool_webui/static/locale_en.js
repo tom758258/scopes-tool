@@ -82,6 +82,8 @@ export const en = {
   "actions.save": "Save",
   "actions.export": "Export",
   "actions.clear": "Clear",
+  "actions.enable": "Enable",
+  "actions.show": "Show",
   "commands.cancel": "Cancel job",
   "commands.parameters": "Parameters",
   "workspace.latestSuccessfulResult": "Latest successful result",

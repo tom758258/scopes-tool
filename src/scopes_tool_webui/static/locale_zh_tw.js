@@ -83,6 +83,8 @@ export const zhTW = {
   "actions.save": "儲存",
   "actions.export": "匯出",
   "actions.clear": "清除",
+  "actions.enable": "啟用",
+  "actions.show": "顯示",
   "commands.cancel": "取消工作",
   "commands.parameters": "參數",
   "workspace.latestSuccessfulResult": "最新成功結果",

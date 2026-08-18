@@ -1090,6 +1090,7 @@ def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
         const field = (name, type, value, queryField = false) => ({
           value,
           type: name === "action" ? "hidden" : "number",
+          disabled: false,
           required: false,
           dataset: { field: name, type, queryField: String(queryField) },
           validity: { badInput: false },
@@ -1136,6 +1137,42 @@ def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
         assert.equal(scale.value, "1");
         assert.equal(form.isDirty(), false);
         assert.deepEqual(form.values(), { action: "set", channel: 1, volts_per_division: 1 });
+
+        form.setDisabled(true);
+        assert.equal(channel.disabled, true);
+        assert.equal(scale.disabled, true);
+        assert.equal(action.disabled, false);
+        form.setDisabled(false);
+        assert.equal(channel.disabled, false);
+        assert.equal(scale.disabled, false);
+
+        const source1 = field("source_channel", "integer", "");
+        const source2 = field("source2_channel", "integer", "");
+        const aliasFields = [source1, source2];
+        const aliasContainer = {
+          querySelectorAll(selector) { return selector === "[data-field]" ? aliasFields : []; },
+          querySelector(selector) {
+            const match = selector.match(/^\[data-field="(.+)"\]$/);
+            return aliasFields.find((item) => item.dataset.field === match?.[1]) || null;
+          },
+        };
+        const aliasForm = new globalThis.CommandForm(aliasContainer, null);
+        aliasForm.presentation = { readback_fields: { source_channel: "source1_channel" } };
+        aliasForm.syncResult({ result: { result: {
+          source: { source1_channel: 2, source2_channel: 3 },
+        } } });
+        assert.equal(source1.value, "2");
+        assert.equal(source2.value, "3");
+
+        const rangeValue = field("range_value", "number", "");
+        const mathContainer = {
+          querySelectorAll(selector) { return selector === "[data-field]" ? [rangeValue] : []; },
+          querySelector() { return rangeValue; },
+        };
+        const mathForm = new globalThis.CommandForm(mathContainer, null);
+        mathForm.presentation = { readback_fields: { range_value: "range" } };
+        mathForm.syncResult({ result: { result: { math_vertical: { range: 4 } } } });
+        assert.equal(rangeValue.value, "4");
         '''
     )
     completed = subprocess.run(
@@ -1200,6 +1237,10 @@ def test_p1_command_editor_and_result_presentation_contract() -> None:
     assert "commandForm.queryValues()" in app_source
     assert 'intent: "readback"' in app_source
     assert 'if (options.intent === "apply") commandForm.clearDirty();' in app_source
+    assert 'const draft = changed && rerender && commandForm ? commandForm.draft() : null;' in app_source
+    assert 'if (changed && rerender && commandForm) syncCommandSelection(draft);' in app_source
+    assert 'if (lockEditor) commandForm.setDisabled(true);' in app_source
+    assert 'commandForm.setDisabled(false);' in app_source
     assert "}, () => syncCommandSelection());" in app_source
     assert "renderWorkspaceResult" in results_source
     assert 'job.command === "identify"' in results_source

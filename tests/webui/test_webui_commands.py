@@ -90,10 +90,31 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     math_display = commands["math-display"]["presentation"]["models"][model_2000x]
     assert math_display["fields"]["function"]["maximum"] == 1
     assert commands["measure-results"]["presentation"]["models"][model_2000x]["supported"] is False
+    serial_mode = commands["serial-mode"]["presentation"]["models"][model_2000x]
+    assert serial_mode["fields"]["mode"]["options"] == ["can", "i2c", "lin", "spi", "uart"]
+    search_mode = commands["search-mode"]["presentation"]["models"][model_2000x]
+    assert search_mode["fields"]["mode"]["options"] == ["serial1"]
+    assert commands["segmented-capture"]["presentation"]["models"][model_2000x]["fields"]["segments"]["maximum"] == 250
+    assert "delay" not in commands["measure"]["presentation"]["models"][model_2000x]["fields"]["item"]["options"]
     segmented = commands["segmented-memory"]["presentation"]
     assert segmented["kind"] == "setting"
     assert segmented["query_value"] == "query"
     assert segmented["action_choices"] == ["enable", "disable"]
+    assert commands["measure-source"]["presentation"]["readback_fields"] == {
+        "source_channel": "source1_channel"
+    }
+    assert commands["math-vertical"]["presentation"]["readback_fields"] == {
+        "range_value": "range"
+    }
+    vectors = commands["display-vectors"]["presentation"]
+    assert {key: value for key, value in vectors.items() if key != "models"} == {
+        "kind": "one-way",
+        "action": "enable",
+        "action_field": "action",
+        "apply_value": "set",
+    }
+    assert commands["measure-show"]["presentation"]["kind"] == "one-way"
+    assert commands["measure-show"]["presentation"]["action"] == "show"
 
 
 def test_commands_expose_the_p3a_flat_subset() -> None:

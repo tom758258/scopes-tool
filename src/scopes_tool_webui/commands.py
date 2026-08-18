@@ -1191,6 +1191,29 @@ _SETTING_QUERY_FIELDS = {
     },
 }
 
+_SETTING_READBACK_FIELDS = {
+    "measure-source": {"source_channel": "source1_channel"},
+    "math-vertical": {"range_value": "range"},
+    "dvm-auto-range": {"enabled": "auto_range_enabled"},
+    "trigger-edge": {"level": "level_volts"},
+    "trigger-edge-level": {"level": "level_volts"},
+    "trigger-edge-external-level": {"level": "level_volts"},
+    "trigger-runt": {
+        "low_level": "low_level_volts",
+        "high_level": "high_level_volts",
+    },
+    "trigger-transition": {
+        "low_level": "low_level_volts",
+        "high_level": "high_level_volts",
+    },
+    "trigger-edge-burst": {"level": "level_volts"},
+}
+
+_ONE_WAY_ACTIONS = {
+    "display-vectors": "enable",
+    "measure-show": "show",
+}
+
 _READ_COMMANDS = frozenset(
     {
         "identify",
@@ -1231,8 +1254,15 @@ def _command_presentation(entry: Mapping[str, Any]) -> dict[str, Any]:
         None,
     )
     action_options = set(action_field.get("options", ())) if action_field else set()
-    if action_options == {"query", "set"}:
+    if entry["id"] in _ONE_WAY_ACTIONS:
         return {
+            "kind": "one-way",
+            "action": _ONE_WAY_ACTIONS[entry["id"]],
+            "action_field": "action",
+            "apply_value": "set",
+        }
+    if action_options == {"query", "set"}:
+        presentation = {
             "kind": "setting",
             "action": "apply",
             "action_field": "action",
@@ -1240,6 +1270,10 @@ def _command_presentation(entry: Mapping[str, Any]) -> dict[str, Any]:
             "apply_value": "set",
             "query_fields": _SETTING_QUERY_FIELDS.get(entry["id"], ()),
         }
+        readback_fields = _SETTING_READBACK_FIELDS.get(entry["id"])
+        if readback_fields:
+            presentation["readback_fields"] = readback_fields
+        return presentation
     if action_options == {"query", "enable", "disable"}:
         return {
             "kind": "setting",
@@ -1297,6 +1331,22 @@ def _model_command_presentation(
                 ("one_meg", "fifty")
                 if capabilities.supports_50_ohm_impedance
                 else ("one_meg",)
+            )
+        if entry["id"] == "serial-mode" and name == "mode":
+            override["options"] = tuple(
+                option for option in field.get("options", ())
+                if option in capabilities.serial_modes
+            )
+        if entry["id"] == "search-mode" and name == "mode":
+            override["options"] = tuple(
+                option for option in field.get("options", ())
+                if option in capabilities.search_modes
+            )
+        if name == "segments" and entry["id"] in {"segmented-memory", "segmented-capture"}:
+            override["maximum"] = capabilities.segmented_max_segments
+        if entry["id"] == "measure" and name == "item" and not capabilities.supports_delay_measurement:
+            override["options"] = tuple(
+                option for option in field.get("options", ()) if option != "delay"
             )
         if override:
             fields[name] = override

@@ -142,7 +142,7 @@ def test_result_history_runtime_behaviour() -> None:
           "const translateJobStatus = globalThis.testTranslateJobStatus;",
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
-          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob };";
+          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob, renderWorkspaceResult };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
         const summary = new FakeNode("div");
@@ -203,6 +203,18 @@ def test_result_history_runtime_behaviour() -> None:
           ],
         );
 
+        const filteredWorkspace = new FakeNode("div");
+        const diagnosticJob = makeJob("diagnostic", "search-mode", "completed", {
+          result: { result: { mode: "serial1", raw_mode: "SBUS1", raw_value: "1", operation_raw: "1" } },
+        });
+        api.renderWorkspaceResult(filteredWorkspace, diagnosticJob);
+        assert.equal(filteredWorkspace.children.length, 1);
+        assert.equal(filteredWorkspace.children[0].children[0].textContent, "serial1");
+        api.renderJob(summary, diagnosticJob, detail);
+        assert.match(detail.children[0].textContent, /raw_mode/);
+        assert.match(detail.children[0].textContent, /raw_value/);
+        assert.match(detail.children[0].textContent, /operation_raw/);
+
         api.renderJob(summary, makeJob("run-job", "run", "completed", { result: { result: { action: "run" } } }), detail);
         assert.equal(rowTexts()[0][2], "Command completed successfully");
         api.renderJob(summary, makeJob("empty-resource-job", "list-resources", "completed", {
@@ -217,7 +229,7 @@ def test_result_history_runtime_behaviour() -> None:
         api.renderJob(summary, makeJob("resource-job", "list-resources", "completed", {
           result: { result: { resources: ["USB0::1", "USB0::2", "USB0::3", "USB0::4"] } },
         }), detail);
-        assert.equal(summary.children.length, 4);
+        assert.equal(summary.children.length, 5);
         assert.equal(rowTexts()[0][2], "\u627e\u5230 4 \u500b\u8cc7\u6e90");
         assert(rowTexts().some((row) => row[2] === "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210"));
         assert(rowTexts().some((row) => row[2] === "DSO-X 4034A - \u5e8f\u865f MY55440270 - \u97cc\u9ad4 07.20"));

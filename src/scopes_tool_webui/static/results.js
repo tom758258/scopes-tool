@@ -198,7 +198,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
   const result = jobResultPayload(job);
   if (result && typeof result === "object") {
     const display = unwrapStructuredResult(result);
-    const fields = Object.entries(display).filter(([name]) => name !== "raw");
+    const fields = Object.entries(display).filter(([name]) => !isRawDiagnosticField(name));
     if (fields.length) {
       appendWorkspaceFields(container, fields);
       appendWorkspaceArtifacts(container, job);
@@ -266,11 +266,15 @@ function formatWorkspaceValue(value) {
   }
   if (value && typeof value === "object") {
     return Object.entries(value)
-      .filter(([name]) => name !== "raw")
+      .filter(([name]) => !isRawDiagnosticField(name))
       .map(([name, item]) => `${resultFieldLabel(name)}: ${formatWorkspaceValue(item)}`)
       .join("; ");
   }
   return String(value);
+}
+
+function isRawDiagnosticField(name) {
+  return name === "raw" || name.startsWith("raw_") || name.endsWith("_raw");
 }
 
 function identityFields(job) {

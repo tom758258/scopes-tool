@@ -68,9 +68,15 @@ export class CommandForm {
   }
 
   isManagedActionField(field) {
-    return this.presentation?.kind === "setting"
-      && !this.presentation.action_choices?.length
+    return ["setting", "one-way"].includes(this.presentation?.kind)
+      && !this.presentation?.action_choices?.length
       && field.name === this.presentation.action_field;
+  }
+
+  setDisabled(disabled) {
+    this.container.querySelectorAll("[data-field]").forEach((input) => {
+      if (input.type !== "hidden") input.disabled = disabled;
+    });
   }
 
   values() {
@@ -123,7 +129,9 @@ export class CommandForm {
     fields.forEach((input) => {
       if (preserveDirty && input.dataset.dirty === "true") return;
       const onlyWritableField = input.dataset.queryField !== "true" && writableCount === 1;
-      const value = findResultValue(payload, input.dataset.field, onlyWritableField);
+      const readbackField = this.presentation?.readback_fields?.[input.dataset.field]
+        || input.dataset.field;
+      const value = findResultValue(payload, readbackField, onlyWritableField);
       if (value === undefined || value === null || typeof value === "object") return;
       input.value = input.dataset.type === "boolean" ? String(Boolean(value)) : String(value);
       delete input.dataset.dirty;
@@ -164,7 +172,7 @@ export class CommandForm {
       input.type = "hidden";
       input.dataset.field = field.name;
       input.dataset.type = field.type;
-      input.value = this.isSettingEditor()
+      input.value = this.presentation.kind === "one-way" || this.isSettingEditor()
         ? this.presentation.apply_value
         : this.presentation.query_value;
       return input;
