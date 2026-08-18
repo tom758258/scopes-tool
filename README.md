@@ -215,10 +215,13 @@ user-supplied VISA resource.
 ## Documentation
 
 - [Core README](docs/core/README.md)
+- [Core Integration](docs/core/integration.md)
 - [Supported Models](docs/core/supported-models.md)
 - [CLI README](docs/cli/README.md)
+- [CLI Integration](docs/cli/cli-integration.md)
 - [WebUI README](docs/webui/README.md)
 - [Repository / Monorepo Layout](docs/architecture/monorepo-layout.md)
+- [Agent Instructions](AGENTS.md)
 - [Testing Guidelines](docs/testing-guidelines.md)
 - [Public Contracts](docs/contracts/)
 - [Scopes CLI JSONL Contract](docs/contracts/scopes-cli-jsonl-contract.md)
