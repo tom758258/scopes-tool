@@ -30,6 +30,12 @@ def extract_function(source: str, signature: str) -> str:
     raise AssertionError(f"Unclosed function: {signature}")
 
 
+def extract_function_declaration(source: str, signature: str) -> str:
+    start = source.index(signature)
+    body = extract_function(source, signature)
+    return source[start : source.index(body, start) + len(body)]
+
+
 def extract_css_rule(source: str, selector: str) -> str:
     start = source.index(selector)
     body_start = source.index("{", start)
@@ -150,12 +156,13 @@ def test_scan_uses_the_common_job_history_flow_before_resource_updates() -> None
 def test_selected_resource_refresh_uses_a_formal_identify_job_flow() -> None:
     device_source = read_static("device-resource.js")
     app_source = read_static("app.js")
-    refresh = extract_function(app_source, "async function refreshSelectedResourceContext(selectedContext)")
+    refresh = extract_function(app_source, "async function evaluateResourceLiveSupport(commandContext)")
     present = extract_function(app_source, "function presentSelectedResourceJob(job, commandContext)")
 
     assert "onSelectedResourceChange = () => {}," in device_source
     assert "this.onSelectedResourceChange(this.context());" in device_source
     assert "refreshSelectedResourceContext(selectedContext);" in app_source
+    assert "let pendingResourceLiveSupport = null;" in app_source
     assert 'runJob("identify", {}, commandContext' in refresh
     assert "sameExecutionContext(context, commandContext)" in app_source
     assert "presentSelectedResourceJob(updated, commandContext);" in refresh
@@ -163,6 +170,136 @@ def test_selected_resource_refresh_uses_a_formal_identify_job_flow() -> None:
     assert "renderCurrentResult();" in present
     assert "renderJob(elements.results, job, null);" in present
     assert "resources[1]" not in extract_function(device_source, "async scan()")
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_selected_resource_identify_serializes_latest_requested_context() -> None:
+    app_source = read_static("app.js")
+    declarations = "\n".join(
+        extract_function_declaration(app_source, signature)
+        for signature in (
+            "async function refreshSelectedResourceContext(selectedContext)",
+            "async function evaluateResourceLiveSupport(commandContext)",
+            "async function finishResourceLiveSupportEvaluation(jobId)",
+            "async function refreshRequestedResourceLiveSupport(completed)",
+            "function updateIdentity(job, commandContext)",
+            "function presentSelectedResourceJob(job, commandContext)",
+            "function sameExecutionContext(left, right)",
+        )
+    )
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+
+        const contextFor = (resource) => ({
+          mode: "live",
+          resource,
+          model_id: "keysight-dsox4024a",
+        });
+        let context = contextFor("RESOURCE-A");
+        let pendingResourceLiveSupport = null;
+        let resultPresentation = { kind: "empty", job: null, message: null };
+        const elements = { results: {} };
+        const submissions = [];
+        const controllers = [];
+        const states = [];
+        const history = new Set();
+        const currentResults = [];
+        const identities = [];
+        const renderLiveData = () => {};
+        const setCommandState = (state) => states.push({ resource: context.resource, ...state });
+        const renderCurrentResult = () => {
+          const job = resultPresentation.job;
+          if (job) history.add(job.job_id);
+          currentResults.push({
+            resource: context.resource,
+            jobId: job?.job_id || null,
+            status: job?.status || null,
+          });
+        };
+        const renderJob = (_target, job) => history.add(job.job_id);
+        const deviceResource = {
+          setIdentity(idn, associatedContext) {
+            identities.push({ resource: associatedContext.resource, model: idn.model });
+          },
+        };
+        const runJob = (command, parameters, commandContext, onUpdate) => {
+          assert.equal(command, "identify");
+          assert.deepEqual(parameters, {});
+          submissions.push(commandContext.resource);
+          const jobId = `identify-${commandContext.resource}`;
+          onUpdate({ job_id: jobId, command, status: "queued" });
+          onUpdate({ job_id: jobId, command, status: "running" });
+          return new Promise((resolve) => controllers.push({ jobId, onUpdate, resolve }));
+        };
+        const settle = async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        };
+        '''
+    ) + declarations + textwrap.dedent(
+        r'''
+
+        const identifyA = refreshSelectedResourceContext(contextFor("RESOURCE-A"));
+        await settle();
+        assert.deepEqual(submissions, ["RESOURCE-A"]);
+
+        context = contextFor("RESOURCE-B");
+        await refreshSelectedResourceContext(context);
+        assert.deepEqual(submissions, ["RESOURCE-A"]);
+        assert.equal(states.at(-1).resource, "RESOURCE-B");
+        assert.equal(states.at(-1).status, "queued");
+
+        const failedA = {
+          job_id: "identify-RESOURCE-A",
+          command: "identify",
+          status: "failed",
+          error: { type: "UnsupportedModelError", message: "Unsupported physical oscilloscope model: E3646A" },
+        };
+        controllers[0].onUpdate(failedA);
+        controllers[0].resolve(failedA);
+        await settle();
+        assert.deepEqual(submissions, ["RESOURCE-A", "RESOURCE-B"]);
+        assert.notEqual(states.at(-1).status, "failed");
+        assert.equal(states.at(-1).resource, "RESOURCE-B");
+        assert.equal(history.has("identify-RESOURCE-A"), true);
+        assert.deepEqual(identities, []);
+
+        const completedB = {
+          job_id: "identify-RESOURCE-B",
+          command: "identify",
+          status: "completed",
+          result: { result: { idn: { model: "DSO-X 4034A" } } },
+        };
+        controllers[1].onUpdate(completedB);
+        controllers[1].resolve(completedB);
+        await identifyA;
+
+        assert.deepEqual(submissions, ["RESOURCE-A", "RESOURCE-B"]);
+        assert.equal(history.has("identify-RESOURCE-B"), true);
+        assert.equal(identities.length > 0, true);
+        assert.equal(
+          identities.every((item) => item.resource === "RESOURCE-B" && item.model === "DSO-X 4034A"),
+          true,
+        );
+        assert.equal(
+          currentResults.some((item) => item.resource === "RESOURCE-B"
+            && item.jobId === "identify-RESOURCE-A"
+            && item.status === "failed"),
+          false,
+        );
+        assert.equal(currentResults.at(-1).jobId, "identify-RESOURCE-B");
+        assert.equal(states.at(-1).status, "completed");
+        assert.equal(submissions.includes("RESOURCE-C"), false);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
@@ -343,7 +480,23 @@ def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection(
             job_id: "scan-job",
             command: "list-resources",
             status: "completed",
-            result: { result: { resources: [{ name: "RESOURCE-A" }, { name: "RESOURCE-B" }] } },
+            result: { result: { resources: [
+              {
+                name: "ASRL7::INSTR",
+                interface: "ASRL",
+                idn: { manufacturer: "Agilent Technologies", model: "E3646A" },
+              },
+              {
+                name: "USB0::A::INSTR",
+                interface: "USB",
+                idn: { manufacturer: "AGILENT TECHNOLOGIES", model: "DSO-X 4034A" },
+              },
+              {
+                name: "USB0::B::INSTR",
+                interface: "USB",
+                idn: { manufacturer: "Agilent Technologies", model: "33512B" },
+              },
+            ] } },
           };
           onUpdate({ job_id: completed.job_id, command: completed.command, status: "queued" });
           onUpdate(completed);
@@ -401,13 +554,31 @@ def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection(
         );
 
         await device.scan();
-        assert.equal(elements.resource.value, "RESOURCE-A");
-        assert.deepEqual(selectedResources, ["RESOURCE-A"]);
+        assert.equal(elements.resource.value, "ASRL7::INSTR");
+        assert.deepEqual(selectedResources, ["ASRL7::INSTR"]);
+        assert.deepEqual(
+          elements.resourceList.children.map(({ value, textContent }) => ({ value, textContent })),
+          [
+            {
+              value: "ASRL7::INSTR",
+              textContent: "ASRL7::INSTR - Agilent Technologies - E3646A",
+            },
+            {
+              value: "USB0::A::INSTR",
+              textContent: "USB0::A::INSTR - AGILENT TECHNOLOGIES - DSO-X 4034A",
+            },
+            {
+              value: "USB0::B::INSTR",
+              textContent: "USB0::B::INSTR - Agilent Technologies - 33512B",
+            },
+          ],
+        );
 
-        elements.resourceList.value = "RESOURCE-B";
+        elements.resourceList.value = "USB0::A::INSTR";
         elements.resourceList.dispatch("change");
-        assert.equal(elements.resource.value, "RESOURCE-B");
-        assert.deepEqual(selectedResources, ["RESOURCE-A", "RESOURCE-B"]);
+        assert.equal(elements.resource.value, "USB0::A::INSTR");
+        assert.deepEqual(selectedResources, ["ASRL7::INSTR", "USB0::A::INSTR"]);
+        assert.equal(selectedResources.includes("USB0::B::INSTR"), false);
         '''
     )
     completed = subprocess.run(

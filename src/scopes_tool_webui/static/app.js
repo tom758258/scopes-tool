@@ -59,6 +59,7 @@ let resultPresentation = { kind: "empty", job: null, message: null };
 let healthState = { status: "checking", version: null, error: null };
 let workspaceExecutionState = { key: "device.ready" };
 let liveCommandState = { key: "device.ready" };
+let pendingResourceLiveSupport = null;
 let updateBasicAvailability = () => {};
 
 initializeI18n();
@@ -243,17 +244,50 @@ function updateIdentity(job, commandContext) {
 async function refreshSelectedResourceContext(selectedContext) {
   if (selectedContext?.mode !== "live" || !selectedContext.resource) return;
   const commandContext = { ...selectedContext };
-  setCommandState({ status: "queued" });
+  if (pendingResourceLiveSupport) {
+    pendingResourceLiveSupport.requestedContext = sameExecutionContext(
+      commandContext,
+      pendingResourceLiveSupport.context,
+    )
+      ? null
+      : commandContext;
+    setCommandState({
+      status: sameExecutionContext(commandContext, pendingResourceLiveSupport.context)
+        ? pendingResourceLiveSupport.status
+        : "queued",
+    });
+    return;
+  }
+  await evaluateResourceLiveSupport(commandContext);
+}
+
+async function evaluateResourceLiveSupport(commandContext) {
+  const pending = {
+    context: commandContext,
+    jobId: null,
+    status: "queued",
+    requestedContext: null,
+  };
+  pendingResourceLiveSupport = pending;
+  setCommandState({ status: pending.status });
   try {
     const job = await runJob("identify", {}, commandContext, (updated) => {
-      setCommandState({ status: updated.status });
+      pending.jobId = updated.job_id;
+      pending.status = updated.status;
+      if (sameExecutionContext(context, commandContext)) {
+        setCommandState({ status: updated.status });
+      }
       presentSelectedResourceJob(updated, commandContext);
     });
-    setCommandState({ status: job.status });
+    pending.jobId = job.job_id;
+    pending.status = job.status;
+    if (sameExecutionContext(context, commandContext)) {
+      setCommandState({ status: job.status });
+    }
     presentSelectedResourceJob(job, commandContext);
   } catch (error) {
-    setCommandState({ status: "failed" });
     if (sameExecutionContext(context, commandContext)) {
+      setCommandState({ status: "failed" });
       resultPresentation = {
         kind: "error",
         job: null,
@@ -262,7 +296,23 @@ async function refreshSelectedResourceContext(selectedContext) {
       };
       renderCurrentResult();
     }
+  } finally {
+    await finishResourceLiveSupportEvaluation(pending.jobId);
   }
+}
+
+async function finishResourceLiveSupportEvaluation(jobId) {
+  if (pendingResourceLiveSupport?.jobId !== jobId) return false;
+  const completed = pendingResourceLiveSupport;
+  pendingResourceLiveSupport = null;
+  await refreshRequestedResourceLiveSupport(completed);
+  return true;
+}
+
+async function refreshRequestedResourceLiveSupport(completed) {
+  const requested = completed?.requestedContext;
+  if (!requested || !sameExecutionContext(context, requested)) return;
+  await refreshSelectedResourceContext(requested);
 }
 
 function presentSelectedResourceJob(job, commandContext) {
