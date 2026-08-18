@@ -13,8 +13,10 @@ fail closed; selecting a planning model does not override the detected identity.
 **Live hardware prerequisite:** Live operation requires a separately installed
 VISA implementation or runtime that PyVISA can load. Scopes Tool installs
 PyVISA as its Python API layer, but does not bundle Keysight IO Libraries,
-NI-VISA, or another system or vendor VISA runtime. Simulation and dry-run do
-not require a physical instrument or vendor VISA runtime.
+NI-VISA, or another system or vendor VISA runtime. Simulation and
+Core-planned dry-run operations do not require a physical instrument or
+instrument session. VISA resource discovery still requires a usable PyVISA
+backend.
 
 ## Features
 
@@ -188,7 +190,7 @@ dist\
 
 ## Test
 
-Run the no-hardware test suite through the repository wrapper:
+Run the repository test suite through the repository wrapper:
 
 ```powershell
 .\scripts\run-tests.ps1
