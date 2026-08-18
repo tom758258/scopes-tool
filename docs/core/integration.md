@@ -426,8 +426,8 @@ for a trigger.
 The request contains required `channel`, `item`, `operator`, `threshold`, and
 `timeout_seconds`, plus `interval_seconds`, `output_dir`, and `log_scpi`.
 The operator is one of `gt`, `gte`, `lt`, or `lte`; the threshold is finite;
-the timeout is positive and finite; and the interval is finite and
-non-negative. No unit conversion is performed.
+the timeout is positive and finite; and `interval_seconds` defaults to `1.0`
+and must be finite and non-negative. No unit conversion is performed.
 
 Each iteration checks cancellation and timeout, queries the measurement,
 queries `:SYSTem:ERRor?`, evaluates the condition, persists a CSV row and
@@ -462,11 +462,11 @@ Generic Sequence uses `load_sequence_document()`, `plan_sequence()`, and
 Core request is `SequenceRequest`, containing a normalized `SequenceDocument`,
 optional `output_dir`, and `log_scpi`.
 
-Sequence documents are strict JSON. `version` is the integer `1`,
-`loop_count` defaults to one and must be positive, `steps` must be non-empty,
-and unknown document, step, parameter, action, or non-standard numeric fields
-fail closed. Boolean values are not accepted as integers. The supported action
-contract is:
+Sequence documents are strict JSON. `version` must be the JSON integer `1`,
+`loop_count` defaults to `1` and must be a positive JSON integer, and `steps`
+must be non-empty. Unknown document, step, parameter, and action fields fail
+closed. Boolean values are not accepted as integers. Non-standard JSON numbers
+such as `NaN` and `Infinity` are rejected. The supported action contract is:
 
 - `wait` requires non-negative finite `seconds`.
 - `single` accepts no parameters.
