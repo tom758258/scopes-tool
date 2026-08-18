@@ -54,6 +54,7 @@ from scopes_tool_core.channel import (
 from scopes_tool_core.display import validate_display_intensity, validate_display_persistence
 from scopes_tool_core.discovery import discover_visa_resources
 from scopes_tool_core.dvm import DVM_MODES, normalize_dvm_mode
+from scopes_tool_core.errors import ParameterValidationError
 from scopes_tool_core.fft import normalize_fft_units, normalize_fft_window
 from scopes_tool_core.identity import PHYSICAL_MODEL_REGISTRY, physical_model_for_id
 from scopes_tool_core.math import (
@@ -68,10 +69,10 @@ from scopes_tool_core.math import (
 )
 from scopes_tool_core.measurements import (
     MEASUREMENT_WINDOW_CHOICES,
-    SINGLE_CHANNEL_MEASUREMENT_ITEMS,
     SUPPORTED_MEASUREMENT_ITEMS,
     normalize_measurement_item,
     normalize_measurement_window,
+    validate_statistics_items,
 )
 from scopes_tool_core.output_files import write_serial_lister_csv, write_screenshot_png_file
 from scopes_tool_core.planning import (
@@ -199,6 +200,21 @@ from scopes_tool_core.timebase import (
 
 
 DEFAULT_MODEL_ID = "keysight-dsox4024a"
+
+
+def _direct_measurement_items() -> tuple[str, ...]:
+    """Project Core's statistics validation contract for simple workflows."""
+
+    choices: list[str] = []
+    for item in SUPPORTED_MEASUREMENT_ITEMS:
+        try:
+            choices.extend(validate_statistics_items((item,)))
+        except ParameterValidationError:
+            continue
+    return tuple(dict.fromkeys(choices))
+
+
+_DIRECT_MEASUREMENT_ITEMS = _direct_measurement_items()
 COMMANDS = (
     {
         "id": "list-resources",
@@ -1117,15 +1133,15 @@ P3C_COMMANDS = (
     },
     {
         "id": "measure-log", "category": "Workflow", "label": "Measurement log", "modes": ("live", "simulate"),
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=SINGLE_CHANNEL_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("interval_seconds", "number", minimum=0, default=1), _p3c_field("count", "integer", minimum=1), _p3c_field("duration_seconds", "number", minimum=0), _p3c_field("stop_on_error", "boolean")),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("interval_seconds", "number", minimum=0, default=1), _p3c_field("count", "integer", minimum=1), _p3c_field("duration_seconds", "number", minimum=0), _p3c_field("stop_on_error", "boolean")),
     },
     {
         "id": "measure-until", "category": "Workflow", "label": "Measure until", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_p3c_field("channel", "integer", minimum=1, maximum=4, default=1), _p3c_field("item", "enum", options=SUPPORTED_MEASUREMENT_ITEMS, default="vpp"), _p3c_field("operator", "enum", options=("gt", "gte", "lt", "lte"), required=True), _p3c_field("threshold", "number", required=True), _p3c_field("timeout_seconds", "number", minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=1)),
+        "fields": (_p3c_field("channel", "integer", minimum=1, maximum=4, default=1), _p3c_field("item", "enum", options=_DIRECT_MEASUREMENT_ITEMS, default="vpp"), _p3c_field("operator", "enum", options=("gt", "gte", "lt", "lte"), required=True), _p3c_field("threshold", "number", required=True), _p3c_field("timeout_seconds", "number", minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=1)),
     },
     {
         "id": "triggered-measure-loop", "category": "Workflow", "label": "Triggered measurement loop", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=SINGLE_CHANNEL_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
         "id": "triggered-capture-series", "category": "Workflow", "label": "Triggered capture series", "modes": ("live", "simulate", "dry-run"),
@@ -2397,6 +2413,11 @@ def _csv_values(value: Any) -> list[str]:
     raise WebUIRequestError("workflow list fields must be comma-separated strings")
 
 
+def _validated_direct_measurement_items(value: str) -> str:
+    items = parse_measurement_item_list(value, allow_pair=False)
+    return ",".join(validate_statistics_items(items))
+
+
 def _workflow_channels(value: Any, capabilities: Any, *, required: bool) -> list[int] | None:
     if value is None or (isinstance(value, str) and not value.strip()):
         if required:
@@ -2521,7 +2542,7 @@ def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str
             parameters["pairs"] = _workflow_pairs(parameters.get("pairs"), capabilities)
             parameters["pair_items"] = str(parameters.get("pair_items", "phase,delay"))
             try:
-                parse_measurement_item_list(parameters["items"], allow_pair=False)
+                parameters["items"] = _validated_direct_measurement_items(parameters["items"])
                 parse_measurement_item_list(parameters["pair_items"], allow_pair=True)
             except Exception as exc:
                 raise WebUIRequestError(str(exc)) from exc
@@ -2538,7 +2559,12 @@ def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str
                 parameters["stop_on_error"] = False
         elif command == "measure-until":
             parameters["channel"] = validate_analog_channel(_integer(parameters.get("channel", 1), "channel"), capabilities)
-            parameters["item"] = normalize_measurement_item(parameters.get("item", "vpp"))
+            try:
+                parameters["item"] = validate_statistics_items(
+                    (normalize_measurement_item(parameters.get("item", "vpp")),)
+                )[0]
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
             if parameters.get("operator") not in {"gt", "gte", "lt", "lte"}:
                 raise WebUIRequestError("operator must be gt, gte, lt, or lte")
             parameters["threshold"] = _finite_number(parameters.get("threshold"), "threshold")
@@ -2553,7 +2579,7 @@ def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str
             parameters["trigger_timeout_seconds"] = _finite_number(parameters.get("trigger_timeout_seconds"), "trigger_timeout_seconds")
             parameters["interval_seconds"] = _finite_number(parameters.get("interval_seconds", 0), "interval_seconds")
             try:
-                parse_measurement_item_list(parameters["items"], allow_pair=False)
+                parameters["items"] = _validated_direct_measurement_items(parameters["items"])
                 parse_measurement_item_list(parameters["pair_items"], allow_pair=True)
             except Exception as exc:
                 raise WebUIRequestError(str(exc)) from exc
@@ -2862,6 +2888,15 @@ def _validate_parameter_shapes(
             if value not in options:
                 raise WebUIRequestError(f"{name} must be one of: {', '.join(map(str, options))}")
             continue
+        elif field_type == "multi-enum":
+            if isinstance(value, str):
+                continue
+            if isinstance(value, (list, tuple)) and all(
+                isinstance(item, (str, int, float)) and not isinstance(item, bool)
+                for item in value
+            ):
+                continue
+            raise WebUIRequestError(f"{name} must be a comma-separated string or list")
         else:
             continue
         if "minimum" in field and parsed < field["minimum"]:

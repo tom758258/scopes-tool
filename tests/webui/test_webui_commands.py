@@ -11,13 +11,17 @@ from scopes_tool_core.dvm import DVM_MODES
 from scopes_tool_core.math import MATH_COMPOSITE_OPERATIONS, MATH_OPERATIONS, MATH_SOURCES
 from scopes_tool_core.measurements import (
     MEASUREMENT_WINDOW_CHOICES,
-    SINGLE_CHANNEL_MEASUREMENT_ITEMS,
     SUPPORTED_MEASUREMENT_ITEMS,
+    validate_statistics_items,
 )
 import scopes_tool_webui.app as app_module
 import scopes_tool_webui.commands as commands_module
 from scopes_tool_webui.app import app
-from scopes_tool_webui.commands import ScopeSessionCloseError, validate_job_request
+from scopes_tool_webui.commands import (
+    ScopeSessionCloseError,
+    WebUIRequestError,
+    validate_job_request,
+)
 from scopes_tool_webui.jobs import JobManager, JobManagerShuttingDown
 
 
@@ -160,10 +164,23 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     }
     assert workflow_fields["channels"]["type"] == "multi-enum"
     assert workflow_fields["channels"]["serialize"] == "csv"
-    assert workflow_fields["items"]["options"] == list(SINGLE_CHANNEL_MEASUREMENT_ITEMS)
+    assert all(
+        validate_statistics_items((item,)) == (item,)
+        for item in workflow_fields["items"]["options"]
+    )
+    assert not {"y_at_x", "time_at_edge", "time_at_value", "phase", "delay"}.intersection(
+        workflow_fields["items"]["options"]
+    )
     assert workflow_fields["pairs"]["help"]
     workflow_model = commands["measure-log"]["presentation"]["models"][MODEL_ID]
     assert workflow_model["fields"]["channels"]["options"] == [1, 2, 3, 4]
+
+    for command_id, field_name in (("triggered-measure-loop", "items"), ("measure-until", "item")):
+        field = next(field for field in commands[command_id]["fields"] if field["name"] == field_name)
+        assert all(validate_statistics_items((item,)) == (item,) for item in field["options"])
+        assert not {"y_at_x", "time_at_edge", "time_at_value", "phase", "delay"}.intersection(
+            field["options"]
+        )
 
 
 def test_simulated_timebase_and_display_persistence_use_setting_readback() -> None:
@@ -954,6 +971,40 @@ def test_p3c_request_validation_regressions() -> None:
         }
     )
     assert defaulted["parameters"]["stop_on_error"] is False
+
+
+def test_live_multi_enum_shape_is_checked_before_scope_open() -> None:
+    base = {
+        "command": "capture-batch",
+        "mode": "live",
+        "resource": "USB::TEST::INSTR",
+    }
+
+    with pytest.raises(WebUIRequestError, match="comma-separated string or list"):
+        validate_job_request({**base, "parameters": {"channels": {"value": "1"}}})
+
+    accepted = validate_job_request(
+        {**base, "parameters": {"channels": "1,2"}}
+    )
+    assert accepted["parameters"]["channels"] == "1,2"
+
+
+def test_workflow_measurement_validation_matches_catalog_choices() -> None:
+    invalid_requests = (
+        ("measure-log", {"items": "y_at_x", "count": 1}),
+        ("triggered-measure-loop", {"items": "delay", "count": 1, "trigger_timeout_seconds": 1}),
+        ("measure-until", {"item": "time_at_value", "operator": "gt", "threshold": 0, "timeout_seconds": 1}),
+    )
+    for command, parameters in invalid_requests:
+        with pytest.raises(WebUIRequestError, match="single-channel|non-parameterized"):
+            validate_job_request(
+                {
+                    "command": command,
+                    "mode": "simulate",
+                    "model_id": MODEL_ID,
+                    "parameters": parameters,
+                }
+            )
 
 
 def test_representative_p3c_simulated_commands_complete() -> None:
