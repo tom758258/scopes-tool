@@ -1173,6 +1173,74 @@ def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
         mathForm.presentation = { readback_fields: { range_value: "range" } };
         mathForm.syncResult({ result: { result: { math_vertical: { range: 4 } } } });
         assert.equal(rangeValue.value, "4");
+
+        const pulseField = (name) => field(name, "number", "");
+        const pulseQualifier = field("qualifier", "enum", "");
+        pulseQualifier.type = "select-one";
+        const pulseTime = pulseField("time_seconds");
+        const pulseMin = pulseField("min_time_seconds");
+        const pulseMax = pulseField("max_time_seconds");
+        const pulseLevel = pulseField("level");
+        const pulseFields = [pulseQualifier, pulseTime, pulseMin, pulseMax, pulseLevel];
+        const pulseContainer = {
+          querySelectorAll(selector) { return selector === "[data-field]" ? pulseFields : []; },
+          querySelector(selector) {
+            const match = selector.match(/^\[data-field="(.+)"\]$/);
+            return pulseFields.find((item) => item.dataset.field === match?.[1]) || null;
+          },
+        };
+        const pulseForm = new globalThis.CommandForm(pulseContainer, null);
+        pulseForm.presentation = { readback_fields: {
+          time_seconds: {
+            selector_field: "qualifier",
+            fields: {
+              "greater-than": "greater_than_seconds",
+              "less-than": "less_than_seconds",
+            },
+          },
+          min_time_seconds: "range_min_seconds",
+          max_time_seconds: "range_max_seconds",
+          level: "level_volts",
+        } };
+        pulseForm.syncResult({ result: { result: {
+          qualifier: "greater-than", greater_than_seconds: 0.001,
+          range_min_seconds: null, range_max_seconds: null, level_volts: 1.5,
+        } } });
+        assert.equal(pulseTime.value, "0.001");
+        assert.equal(pulseLevel.value, "1.5");
+        assert.equal(pulseMin.value, "");
+        assert.equal(pulseMax.value, "");
+
+        pulseForm.syncResult({ result: { result: {
+          qualifier: "range", greater_than_seconds: null,
+          range_min_seconds: 0.002, range_max_seconds: 0.003,
+        } } });
+        assert.equal(pulseMin.value, "0.002");
+        assert.equal(pulseMax.value, "0.003");
+
+        const tvMode = field("mode", "enum", "");
+        const tvContainer = {
+          querySelectorAll(selector) { return selector === "[data-field]" ? [tvMode] : []; },
+          querySelector() { return tvMode; },
+        };
+        const tvForm = new globalThis.CommandForm(tvContainer, null);
+        tvForm.presentation = { readback_fields: { mode: "tv_mode" } };
+        tvForm.syncResult({ result: { result: { mode: "tv", tv_mode: "field2" } } });
+        assert.equal(tvMode.value, "field2");
+
+        const bus = field("bus", "integer", "2", true);
+        bus.checkValidity = () => Number(bus.value) <= 1;
+        const busContainer = {
+          querySelectorAll(selector) { return selector === "[data-field]" ? [bus] : []; },
+          querySelector() { return bus; },
+        };
+        const busForm = new globalThis.CommandForm(busContainer, null);
+        busForm.presentation = {
+          kind: "setting", action_field: "action", query_value: "query", query_fields: ["bus"],
+        };
+        assert.equal(busForm.queryValues(), null);
+        bus.value = "1";
+        assert.deepEqual(busForm.queryValues(), { action: "query", bus: 1 });
         '''
     )
     completed = subprocess.run(

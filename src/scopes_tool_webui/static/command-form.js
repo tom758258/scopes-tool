@@ -109,6 +109,9 @@ export class CommandForm {
     for (const name of this.presentation.query_fields || []) {
       const element = this.container.querySelector(`[data-field="${name}"]`);
       if (!element || element.value === "") continue;
+      if (element.validity?.badInput || (element.checkValidity && !element.checkValidity())) {
+        return null;
+      }
       const value = this.parseElement(element, false);
       if (value === null) return null;
       values[name] = value;
@@ -129,8 +132,11 @@ export class CommandForm {
     fields.forEach((input) => {
       if (preserveDirty && input.dataset.dirty === "true") return;
       const onlyWritableField = input.dataset.queryField !== "true" && writableCount === 1;
-      const readbackField = this.presentation?.readback_fields?.[input.dataset.field]
-        || input.dataset.field;
+      const readbackAlias = this.presentation?.readback_fields?.[input.dataset.field];
+      const readbackField = readbackAlias === undefined
+        ? input.dataset.field
+        : resolveReadbackField(payload, readbackAlias);
+      if (!readbackField) return;
       const value = findResultValue(payload, readbackField, onlyWritableField);
       if (value === undefined || value === null || typeof value === "object") return;
       input.value = input.dataset.type === "boolean" ? String(Boolean(value)) : String(value);
@@ -303,6 +309,12 @@ export class CommandForm {
       input.required = !hidden && (input.dataset.required === "true" || conditionallyRequired);
     });
   }
+}
+
+function resolveReadbackField(payload, alias) {
+  if (!alias || typeof alias === "string") return alias;
+  const selector = findResultValue(payload, alias.selector_field, false);
+  return alias.fields?.[selector];
 }
 
 function findResultValue(result, fieldName, onlyWritableField, depth = 0) {

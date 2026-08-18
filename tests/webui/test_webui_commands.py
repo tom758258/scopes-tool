@@ -106,6 +106,21 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     assert commands["math-vertical"]["presentation"]["readback_fields"] == {
         "range_value": "range"
     }
+    assert commands["trigger-pulse-width"]["presentation"]["readback_fields"] == {
+        "time_seconds": {
+            "selector_field": "qualifier",
+            "fields": {
+                "greater-than": "greater_than_seconds",
+                "less-than": "less_than_seconds",
+            },
+        },
+        "min_time_seconds": "range_min_seconds",
+        "max_time_seconds": "range_max_seconds",
+        "level": "level_volts",
+    }
+    assert commands["trigger-tv"]["presentation"]["readback_fields"] == {
+        "mode": "tv_mode"
+    }
     vectors = commands["display-vectors"]["presentation"]
     assert {key: value for key, value in vectors.items() if key != "models"} == {
         "kind": "one-way",

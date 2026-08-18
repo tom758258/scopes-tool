@@ -1198,6 +1198,18 @@ _SETTING_READBACK_FIELDS = {
     "trigger-edge": {"level": "level_volts"},
     "trigger-edge-level": {"level": "level_volts"},
     "trigger-edge-external-level": {"level": "level_volts"},
+    "trigger-pulse-width": {
+        "time_seconds": {
+            "selector_field": "qualifier",
+            "fields": {
+                "greater-than": "greater_than_seconds",
+                "less-than": "less_than_seconds",
+            },
+        },
+        "min_time_seconds": "range_min_seconds",
+        "max_time_seconds": "range_max_seconds",
+        "level": "level_volts",
+    },
     "trigger-runt": {
         "low_level": "low_level_volts",
         "high_level": "high_level_volts",
@@ -1207,6 +1219,7 @@ _SETTING_READBACK_FIELDS = {
         "high_level": "high_level_volts",
     },
     "trigger-edge-burst": {"level": "level_volts"},
+    "trigger-tv": {"mode": "tv_mode"},
 }
 
 _ONE_WAY_ACTIONS = {
