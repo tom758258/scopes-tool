@@ -10,7 +10,7 @@ package behavior, and shared machine contracts.
 
 | Area | Distribution | Import / entry point | Public docs |
 | --- | --- | --- | --- |
-| Core | `scopes-tool` | `scopes_tool_core` | `docs/core/README.md`, `docs/core/integration.md`, `docs/core/measure-until.md`, `docs/core/measure-until.zh-TW.md`, `docs/core/periodic-capture.md`, `docs/core/periodic-capture.zh-TW.md`, `docs/core/triggered-measure-loop.md`, `docs/core/triggered-measure-loop.zh-TW.md`, `docs/core/triggered-capture-series.md`, `docs/core/triggered-capture-series.zh-TW.md`, `docs/core/sequence.md`, `docs/core/sequence.zh-TW.md`, `docs/core/supported-models.md` |
+| Core | `scopes-tool` | `scopes_tool_core` | `docs/core/README.md`, `docs/core/integration.md`, `docs/core/supported-models.md` |
 | CLI | `scopes-tool` | `scopes-tool`, `python -m scopes_tool_cli.cli` | `docs/cli/README.md`, `docs/cli/cli-integration.md` |
 | WebUI | `scopes-tool` | `scopes-tool-webui`, `scopes-tool-webui-launcher` | `docs/webui/README.md` |
 
@@ -96,20 +96,9 @@ Project-level docs:
 
 Area docs:
 
-- Core runtime, public import API, VISA/SCPI safety, and capability profiles:
-  `docs/core/README.md`, `docs/core/supported-models.md`
-- Periodic Capture v1 behavior in English and Traditional Chinese:
-  `docs/core/periodic-capture.md`, `docs/core/periodic-capture.zh-TW.md`
-- Generic Sequence v1 behavior in English and Traditional Chinese:
-  `docs/core/sequence.md`, `docs/core/sequence.zh-TW.md`
-- Triggered Measurement Loop v1 behavior in English and Traditional Chinese:
-  `docs/core/triggered-measure-loop.md`,
-  `docs/core/triggered-measure-loop.zh-TW.md`
-- Triggered Capture Series v1 behavior in English and Traditional Chinese:
-  `docs/core/triggered-capture-series.md`,
-  `docs/core/triggered-capture-series.zh-TW.md`
-- Measure Until Condition v1 behavior in English and Traditional Chinese:
-  `docs/core/measure-until.md`, `docs/core/measure-until.zh-TW.md`
+- Core runtime, public import API, workflow integration, VISA/SCPI safety, and
+  capability profiles: `docs/core/README.md`, `docs/core/integration.md`,
+  `docs/core/supported-models.md`
 - CLI command usage, JSON mode, and automation safety:
   `docs/cli/README.md`
 - Local WebUI server, Launcher, command jobs, and current browser scope:

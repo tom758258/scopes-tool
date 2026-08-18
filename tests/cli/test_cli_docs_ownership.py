@@ -67,7 +67,7 @@ def test_cli_command_guide_links_root_contracts_and_safe_modes():
     assert "scopes-cli-jsonl-contract.md" in text
     assert "common-cli-jsonl-contract.md" in text
     assert "scopes-tool.exe sequence" in text
-    assert "sequence.md" in text
+    assert "integration.md" in text
 
 
 def test_common_contracts_stay_instrument_neutral():

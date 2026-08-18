@@ -18,8 +18,6 @@ def test_core_docs_are_root_level():
     assert (DOC_ROOT / "README.md").exists()
     assert (REPO_ROOT / "CHANGELOG.md").exists()
     assert (DOC_ROOT / "integration.md").exists()
-    assert (DOC_ROOT / "sequence.md").exists()
-    assert (DOC_ROOT / "sequence.zh-TW.md").exists()
     assert (DOC_ROOT / "supported-models.md").exists()
     assert (REPO_ROOT / "AGENTS.md").exists()
     assert (REPO_ROOT / "README.md").exists()
@@ -55,8 +53,6 @@ def test_root_readme_discovers_core_and_agent_docs():
     assert "docs/core/README.md" in text
     assert "docs/core/integration.md" in text
     assert "docs/core/supported-models.md" in text
-    assert "docs/core/sequence.md" in text
-    assert "docs/core/sequence.zh-TW.md" in text
 
 
 def test_supported_models_doc_names_public_scope_without_local_evidence():

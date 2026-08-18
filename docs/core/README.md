@@ -381,6 +381,8 @@ Workflow Foundation v1 is a small synchronous Core layer used by
 `measure-log`, Periodic Capture v1 through `capture-batch`, Triggered
 Measurement Loop v1, Triggered Capture Series v1, Measure Until Condition v1,
 and Generic Sequence v1.
+The Core-owned workflow integration contracts are documented in
+[Core Integration](integration.md).
 `StopRequested`, `WorkflowProgress`,
 `ProgressReporter`, and `interruptible_wait()` provide optional cooperative
 cancellation and progress without an async runtime, scheduler, persistence
@@ -398,35 +400,31 @@ remain the caller's responsibility.
 Periodic Capture v1 is the product-facing name for the existing
 `capture-batch` command, `CaptureBatchRequest`, and `run_capture_batch()` Core
 operation. It keeps the existing finite, completion-relative interval model
-and artifacts. See [Periodic Capture v1](periodic-capture.md) and
-[繁體中文](periodic-capture.zh-TW.md).
+and artifacts. See [Core Integration](integration.md#periodic-capture-v1).
 
 Triggered Measurement Loop v1 owns a finite `Single` -> trigger wait ->
 measurement loop. It preserves completed cycles, stores invalid measurement
 sentinels as `NaN`, and fails immediately on trigger timeout or genuine query,
-transport, parsing, or system errors. See [Triggered Measurement Loop
-v1](triggered-measure-loop.md) and [繁體中文](triggered-measure-loop.zh-TW.md).
+transport, parsing, or system errors. See [Core Integration](integration.md#triggered-measurement-loop-v1).
 
 Triggered Capture Series v1 owns a finite `Single` -> trigger wait -> waveform
 capture loop. It uses the oscilloscope's existing trigger configuration,
 commits a cycle only after waveform artifacts, the system-error check, and the
-manifest update succeed, and preserves earlier committed cycles. See
-[Triggered Capture Series v1](triggered-capture-series.md) and
-[繁體中文](triggered-capture-series.zh-TW.md).
+manifest update succeed, and preserves earlier committed cycles. See [Core
+Integration](integration.md#triggered-capture-series-v1).
 
 Measure Until Condition v1 repeatedly queries one existing non-parameterized
 single-channel measurement until one of four numeric comparisons matches. It
 persists every completed sample, treats invalid measurement sentinels as
-non-matching `NaN`, and treats an unmet finite timeout as failure. See
-[Measure Until Condition v1](measure-until.md) and
-[繁體中文](measure-until.zh-TW.md).
+non-matching `NaN`, and treats an unmet finite timeout as failure. See [Core
+Integration](integration.md#measure-until-condition-v1).
 
 Generic Sequence v1 validates a strict JSON document, then runs existing Core
 operations in finite loop/step order. It supports `wait`, `single`,
 `wait-trigger`, `measure`, `capture`, `screenshot`, and `cleanup`. Trigger wait
 does not arm an acquisition; documents use `single` followed by
-`wait-trigger` when that flow is required. See [Generic Sequence Workflow
-v1](sequence.md) and [繁體中文](sequence.zh-TW.md).
+`wait-trigger` when that flow is required. See [Core
+Integration](integration.md#generic-sequence-v1).
 
 Finite termination precedence is `instrument_error > completed > cancelled`.
 Cooperative cancellation returns Core status `cancelled`, a null error, and
@@ -449,16 +447,9 @@ script documentation, Worker persistence, or WebUI presentation.
 
 ## Docs
 
-- Public import and API integration: `docs/integration.md`
-- Periodic Capture v1: `periodic-capture.md`, `periodic-capture.zh-TW.md`
-- Triggered Measurement Loop v1: `triggered-measure-loop.md`,
-  `triggered-measure-loop.zh-TW.md`
-- Triggered Capture Series v1: `triggered-capture-series.md`,
-  `triggered-capture-series.zh-TW.md`
-- Measure Until Condition v1: `measure-until.md`, `measure-until.zh-TW.md`
-- Generic Sequence v1: `sequence.md`, `sequence.zh-TW.md`
+- Core API, runtime, and workflow integration: `integration.md`
 - Supported model profiles: `supported-models.md`
-- Shared CLI, worker, and orchestrator contracts: `../contracts/`
+- Shared CLI, Worker, and orchestrator contracts: `../contracts/`
 
 
 

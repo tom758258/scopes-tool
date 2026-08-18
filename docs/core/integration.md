@@ -281,38 +281,206 @@ selection, or other preflight before the operation is not guaranteed to be
 present. Consumers must not treat this artifact as a complete process or
 session trace or add a parallel adapter logging lifecycle.
 
-Generic Sequence v1 uses `load_sequence_document()`, `plan_sequence()`, and
-`run_sequence()`. Planning validates all steps against one capability profile
-without opening hardware or writing artifacts. Runtime validation uses the
-detected model before creating the run directory. `run_sequence()` accepts the
-same optional stop and progress callbacks as the Workflow Foundation; it does
-not define a sequence-specific progress or sample type. Public document,
-action, result, and artifact behavior is documented in `sequence.md` and
-`sequence.zh-TW.md`.
+## Periodic Capture v1
 
-Triggered Measurement Loop v1 uses `TriggeredMeasureLoopRequest`,
-`plan_triggered_measure_loop()`, and `run_triggered_measure_loop()`. Planning
-validates measurement selection and one representative cycle without opening
-hardware or writing artifacts. Runtime owns the finite acquisition loop and
-accepts the Workflow Foundation stop, progress, and operation-specific sample
-callbacks. Public behavior is documented in `triggered-measure-loop.md` and
-`triggered-measure-loop.zh-TW.md`.
+Periodic Capture is the product-facing name for the existing finite,
+time-driven waveform capture operation. It does not introduce a second Core
+runtime surface, command, request type, or capture loop:
 
-Triggered Capture Series v1 uses `TriggeredCaptureSeriesRequest`,
-`plan_triggered_capture_series()`, and `run_triggered_capture_series()`.
-Planning validates one representative trigger-and-waveform cycle without
-opening hardware or writing artifacts. Runtime uses the existing trigger wait,
-waveform capture, artifact, cancellation, progress, and sample-reporting
-primitives. Public behavior is documented in `triggered-capture-series.md` and
-`triggered-capture-series.zh-TW.md`.
+```text
+Periodic Capture
+  -> CaptureBatchRequest
+  -> run_capture_batch()
+```
 
-Measure Until Condition v1 uses `MeasureUntilRequest`,
-`plan_measure_until()`, and `run_measure_until()`. Planning validates one
-representative measurement and system-error iteration without opening hardware
-or writing artifacts. Runtime uses the existing measurement, cancellation,
-relative interval, persistence, progress, and sample-reporting primitives.
-Public behavior is documented in `measure-until.md` and
-`measure-until.zh-TW.md`.
+`CaptureBatchRequest` contains `channels`, `points`, `waveform_format`,
+`requested_count`, `interval_seconds`, optional `output_dir`, and `log_scpi`.
+`requested_count` must be positive. `interval_seconds` defaults to zero and
+must be finite and non-negative. Existing channel, point-count, and BYTE or
+WORD validation remains capability-profile dependent.
+
+Each iteration captures the selected waveform data, writes its CSV and
+metadata artifacts, records the post-capture system-error result in the
+manifest, and then invokes optional sample and progress reporters. The next
+relative interval begins only after this persistence and reporting boundary.
+Cancellation is cooperative before captures, after persisted captures, and
+during interval waits; a blocking VISA or device read is not forcibly
+interrupted. A post-capture instrument error stops remaining work, and no
+retry is performed. Finite termination precedence is
+`instrument_error > completed > cancelled`.
+
+The normal Core artifact set is:
+
+```text
+waveform_0001.csv
+waveform_0001_meta.json
+waveform_0002.csv
+waveform_0002_meta.json
+...
+manifest.json
+scpi.log
+```
+
+Planning validates the selected model and request without opening VISA or
+writing artifacts. It reports one representative capture transaction and the
+finite artifact paths. Simulator execution runs the complete finite operation
+with the normal hardware-free artifacts.
+
+Periodic Capture does not add duration-based or infinite execution, trigger
+waiting, screenshots, measurements, retries, conditions, cleanup, state
+restore, absolute scheduling, plots, nested workflows, or Generic Sequence
+actions.
+
+## Triggered Measurement Loop v1
+
+Triggered Measurement Loop uses `TriggeredMeasureLoopRequest`,
+`plan_triggered_measure_loop()`, and `run_triggered_measure_loop()` for a
+finite `Single` -> trigger wait -> measurement loop. It uses the trigger
+configuration already present on the oscilloscope.
+
+The request contains `count`, `trigger_timeout_seconds`, optional `channels`,
+`items`, `pairs`, and `pair_items`, plus `interval_seconds`, `output_dir`, and
+`log_scpi`. Count must be at least one, trigger timeout must be positive and
+finite, and interval must be finite and non-negative. Measurement defaults and
+selection rules match `measure-log`.
+
+Each cycle starts `Single`, waits through the existing Operation Status
+Condition Run-bit path, queries the selected measurements, persists the
+completed cycle, and then reports progress and the operation-specific sample.
+The interval starts after that persistence and reporting boundary. Invalid
+measurement sentinels are stored as `NaN` and do not fail the cycle. Query,
+transport, parsing, instrument system, and trigger-timeout errors fail fast.
+Cancellation is cooperative and does not interrupt a blocking VISA read. A
+trigger timeout does not force a trigger, retry, or start another cycle;
+completed cycles and their artifacts remain valid.
+
+Runtime artifacts contain `measurements.csv`, `manifest.json`, and `scpi.log`.
+Planning validates the request and one representative cycle without opening
+VISA or writing artifacts. The representative plan contains `:SINGle`, one
+Operation Status Condition query, selected measurement queries, and one
+`:SYSTem:ERRor?`. Simulator mode executes the complete finite workflow.
+
+The workflow does not configure triggers, capture waveforms or screenshots,
+run cleanup, force triggers, retry, or expand Generic Sequence v1.
+
+## Triggered Capture Series v1
+
+Triggered Capture Series uses `TriggeredCaptureSeriesRequest`,
+`plan_triggered_capture_series()`, and `run_triggered_capture_series()` for a
+finite waveform capture series after natural trigger completion. It uses the
+existing trigger configuration and does not configure, restore, or force
+trigger settings.
+
+The request contains required `channels`, `count`, and
+`trigger_timeout_seconds`, plus `points`, `waveform_format`,
+`interval_seconds`, `output_dir`, and `log_scpi`. Count must be positive,
+trigger timeout must be positive and finite, and interval must be finite and
+non-negative.
+
+Each cycle performs:
+
+```text
+check cancellation
+-> :SINGle
+-> wait for current trigger/acquisition completion
+-> capture waveform channels
+-> write waveform CSV and metadata
+-> query :SYSTem:ERRor?
+-> commit cycle to manifest.json
+-> report sample and progress
+-> optionally wait interval_seconds
+```
+
+A cycle increments the completed count only after natural trigger completion,
+successful waveform and metadata writes, a successful system-error check, and
+a successful manifest update. Cancellation during trigger polling does not
+capture the cycle. A trigger timeout stops without retry or force trigger, and
+previously committed cycles remain valid after later failures.
+
+The normal artifact set contains per-cycle waveform CSV and metadata files,
+`manifest.json`, and `scpi.log`. Planning validates one representative cycle
+without opening VISA or writing artifacts; simulator mode executes the finite
+workflow and writes normal artifacts.
+
+The workflow does not add trigger configuration, force trigger, retry,
+duration or infinite execution, absolute scheduling, measurements, conditions,
+cleanup, screenshots, segmented capture, instrument-side Save/Export, Generic
+Sequence actions, or new hardware support.
+
+## Measure Until Condition v1
+
+Measure Until Condition uses `MeasureUntilRequest`,
+`plan_measure_until()`, and `run_measure_until()` for a finite, read-only
+workflow. It repeatedly queries one existing single-channel measurement until
+a numeric condition matches or the workflow timeout expires. It observes the
+current acquisition state and does not configure, start, stop, force, or wait
+for a trigger.
+
+The request contains required `channel`, `item`, `operator`, `threshold`, and
+`timeout_seconds`, plus `interval_seconds`, `output_dir`, and `log_scpi`.
+The operator is one of `gt`, `gte`, `lt`, or `lte`; the threshold is finite;
+the timeout is positive and finite; and the interval is finite and
+non-negative. No unit conversion is performed.
+
+Each iteration checks cancellation and timeout, queries the measurement,
+queries `:SYSTem:ERRor?`, evaluates the condition, persists a CSV row and
+manifest update, reports sample and progress, and waits the relative interval
+when another sample is allowed. A blocking read that started before the
+deadline is not forcibly interrupted. A committed matching sample completes
+successfully; an unmet finite timeout returns `condition_timeout`. Invalid
+measurement sentinels are persisted as `NaN` and evaluate as non-matching.
+
+Artifacts contain `measurements.csv`, `manifest.json`, and `scpi.log`; the
+manifest stores the request, runtime identity, compact matching summary,
+terminal state, paths, and error while measurement values remain in CSV.
+Planning validates one representative query and system-error iteration without
+opening VISA or writing artifacts. Simulator mode executes the finite workflow.
+
+The workflow does not provide multiple conditions, aggregation, parameterized
+measurements, equality/tolerance/debounce, retry, trigger or acquisition
+control, waveform capture, screenshots, Generic Sequence integration, or
+infinite execution.
+
+## Generic Sequence v1
+
+Generic Sequence uses `load_sequence_document()`, `plan_sequence()`, and
+`run_sequence()` to run existing Core operations in strict finite order. The
+Core request is `SequenceRequest`, containing a normalized `SequenceDocument`,
+optional `output_dir`, and `log_scpi`.
+
+Sequence documents are strict JSON. `version` is the integer `1`,
+`loop_count` defaults to one and must be positive, `steps` must be non-empty,
+and unknown document, step, parameter, action, or non-standard numeric fields
+fail closed. The supported actions are `wait`, `single`, `wait-trigger`,
+`measure`, `capture`, `screenshot`, and `cleanup`. `wait-trigger` waits for an
+acquisition already started by `single`; it does not arm or force a trigger.
+
+Planning validates the complete document against one capability profile without
+opening hardware or writing artifacts. Runtime validation uses the detected
+model before creating the run directory. Execution is single-threaded and
+fail-fast, with no conditions, variables, retries, parallel or nested steps,
+arbitrary SCPI, shell execution, or automatic cleanup.
+
+Runtime writes `manifest.json` and `scpi.log`. Capture and screenshot files use
+deterministic loop and step paths. The manifest uses independent
+`schema_version: 1`, stores normalized input and completed execution records,
+and preserves partial artifacts without counting incomplete steps as complete.
+Cooperative cancellation is checked at workflow and step boundaries and during
+host or trigger waits. Reporters run after the completed step record is
+persisted; `WorkflowProgress.total_count` is
+`loop_count * step_count`.
+
+Planning writes no runtime artifacts and reports normalized steps, loop and
+execution counts, artifact templates, and a bounded one-pass SCPI plan.
+Simulator mode executes the complete finite document with normal artifacts.
+
+## Adapter Boundary For Core Workflows
+
+CLI, Worker, and WebUI are adapters around these Core workflow requests and
+runners. Core does not own adapter parser fields, queue or HTTP lifecycle,
+adapter artifact directories, output serialization, or presentation. The
+cross-package Worker, orchestrator, and CLI JSONL contracts remain under
+`docs/contracts/`.
 
 For 4000X Screenshot capture and hardcopy state queries:
 

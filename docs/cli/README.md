@@ -2039,7 +2039,7 @@ A matching committed sample exits successfully; an unmet timeout returns exit
 code `1` with `condition_timeout`. Direct CLI artifacts default to
 `data/measure_until/<timestamp>`. Dry-run shows one representative measurement
 query and one `:SYSTem:ERRor?` without opening VISA or writing files. See
-`docs/core/measure-until.md` and `docs/core/measure-until.zh-TW.md`.
+[`Core Integration`](../core/integration.md#measure-until-condition-v1).
 
 Run a finite triggered measurement loop:
 
@@ -2055,8 +2055,8 @@ parsing, system-error, and trigger-timeout failures are fail-fast. The command
 writes `measurements.csv`, `manifest.json`, and `scpi.log` under
 `data/triggered_measure_loops/<timestamp>` unless direct CLI supplies
 `--output-dir`. `--dry-run` shows one representative cycle and never opens VISA
-or writes runtime artifacts. See `docs/core/triggered-measure-loop.md` and
-`docs/core/triggered-measure-loop.zh-TW.md`.
+or writes runtime artifacts. See
+[`Core Integration`](../core/integration.md#triggered-measurement-loop-v1).
 
 Run a finite triggered waveform capture series:
 
@@ -2071,8 +2071,7 @@ manifest, and then reports progress. It uses the trigger configuration already
 present on the oscilloscope and never configures or forces a trigger. Direct
 CLI defaults to `data/triggered_capture_series/<timestamp>`; dry-run shows one
 representative cycle without opening VISA or writing artifacts. See
-`docs/core/triggered-capture-series.md` and
-`docs/core/triggered-capture-series.zh-TW.md`.
+[`Core Integration`](../core/integration.md#triggered-capture-series-v1).
 
 Run a Generic Sequence v1 document:
 
@@ -2090,8 +2089,9 @@ Run a Generic Sequence v1 document:
 fail-fast, and cancellation never runs cleanup automatically. Every runtime
 run writes `manifest.json` and `scpi.log`; capture and screenshot files use
 deterministic loop/step paths. Dry-run validates the whole document without
-opening VISA or writing runtime artifacts. See `docs/core/sequence.md` and
-`docs/core/sequence.zh-TW.md` for the complete public schema and semantics.
+opening VISA or writing runtime artifacts. See
+[`Core Integration`](../core/integration.md#generic-sequence-v1) for the
+complete public schema and semantics.
 
 Run a capture-safe smoke check:
 
@@ -2194,8 +2194,9 @@ Capture a finite waveform batch:
 ```
 
 Periodic Capture is the product-facing workflow name; its CLI machine-facing
-command remains `capture-batch`. See `docs/core/periodic-capture.md` and
-`docs/core/periodic-capture.zh-TW.md` for the complete v1 semantics.
+command remains `capture-batch`. See
+[`Core Integration`](../core/integration.md#periodic-capture-v1) for the
+complete v1 semantics.
 
 `capture-batch` is a conservative finite batch capture command. `--count` is
 required and must be a positive integer. `--interval-seconds` defaults to `0`
