@@ -990,3 +990,87 @@ def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_generic_form_applies_conditional_required_fields() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.CommandForm = CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const input = (name, type, value, requiredIf = null) => ({
+          value,
+          required: false,
+          type: type === "integer" || type === "number" ? "number" : "select-one",
+          dataset: {
+            field: name,
+            type,
+            required: "false",
+            ...(requiredIf ? { requiredIf: JSON.stringify(requiredIf) } : {}),
+          },
+          validity: { badInput: false },
+          closest: () => null,
+          setCustomValidity() {},
+          checkValidity() { return true; },
+          reportValidity() { this.reported = true; return false; },
+        });
+        const action = input("action", "enum", "query");
+        const value = input("volts_per_division", "number", "", [
+          { field: "action", equals: "set" },
+        ]);
+        const hiddenValue = input("hidden_value", "number", "", [
+          { field: "action", equals: "set" },
+        ]);
+        hiddenValue.closest = (selector) => (
+          selector === "[data-visible-if-hidden=\"true\"]" ? {} : null
+        );
+        const fields = [action, value, hiddenValue];
+        const container = {
+          querySelectorAll(selector) {
+            if (selector === "[data-visible-if]") return [];
+            if (selector === "[data-field]") return fields;
+            return [];
+          },
+          querySelector(selector) {
+            const match = selector.match(/^\[data-field="(.+)"\]$/);
+            return fields.find((field) => field.dataset.field === match?.[1]) ?? null;
+          },
+        };
+        const form = new globalThis.CommandForm(container, null);
+
+        form.refreshVisibility();
+        assert.equal(value.required, false);
+        assert.equal(hiddenValue.required, false);
+        assert.deepEqual(form.values(), { action: "query" });
+
+        action.value = "set";
+        form.refreshVisibility();
+        assert.equal(value.required, true);
+        assert.equal(hiddenValue.required, false);
+        assert.equal(form.values(), null);
+        assert.equal(value.reported, true);
+
+        value.value = "2.5";
+        assert.deepEqual(form.values(), { action: "set", volts_per_division: 2.5 });
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

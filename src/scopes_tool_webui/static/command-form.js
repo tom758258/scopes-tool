@@ -102,6 +102,8 @@ export class CommandForm {
     }
     input.dataset.field = field.name;
     input.dataset.type = field.type;
+    if (field.required_if) input.dataset.requiredIf = JSON.stringify(field.required_if);
+    input.dataset.required = String(field.required === true);
     input.required = field.required === true;
     if (field.default !== undefined) input.value = String(field.default);
     wrapper.append(input);
@@ -131,6 +133,31 @@ export class CommandForm {
       });
       wrapper.hidden = !visible;
       wrapper.dataset.visibleIfHidden = String(!visible);
+    });
+    this.container.querySelectorAll("[data-field]").forEach((input) => {
+      const hidden = Boolean(input.closest("[data-visible-if-hidden=\"true\"]"));
+      let conditionallyRequired = false;
+      if (input.dataset.requiredIf) {
+        try {
+          const predicates = JSON.parse(input.dataset.requiredIf);
+          const conditions = Array.isArray(predicates) ? predicates : [predicates];
+          conditionallyRequired = conditions.every((predicate) => {
+            const controlling = this.container.querySelector(`[data-field="${predicate.field}"]`);
+            if (!controlling) return false;
+            const value = controlling.type === "checkbox" ? controlling.checked : controlling.value;
+            if (Object.prototype.hasOwnProperty.call(predicate, "equals")) {
+              return String(value) === String(predicate.equals);
+            }
+            if (Array.isArray(predicate.in)) {
+              return predicate.in.map(String).includes(String(value));
+            }
+            return false;
+          });
+        } catch (_error) {
+          conditionallyRequired = false;
+        }
+      }
+      input.required = !hidden && (input.dataset.required === "true" || conditionallyRequired);
     });
   }
 }

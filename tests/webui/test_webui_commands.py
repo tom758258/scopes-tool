@@ -742,6 +742,25 @@ def test_commands_expose_p3c_families_and_conditional_fields() -> None:
     ]
 
 
+def test_command_catalog_exposes_required_field_contracts() -> None:
+    client = TestClient(app)
+    commands = {entry["id"]: entry for entry in client.get("/api/commands").json()}
+
+    reference_fields = {
+        field["name"]: field for field in commands["reference-save"]["fields"]
+    }
+    assert reference_fields["slot"]["required"] is True
+    assert reference_fields["source_channel"]["required"] is True
+
+    scale_fields = {
+        field["name"]: field for field in commands["channel-scale"]["fields"]
+    }
+    assert scale_fields["volts_per_division"]["required_if"] == [
+        {"field": "action", "equals": "set"}
+    ]
+    assert "required" not in scale_fields["volts_per_division"]
+
+
 def test_p3c_request_validation_regressions() -> None:
     client = TestClient(app)
     commands = {entry["id"]: entry for entry in client.get("/api/commands").json()}
