@@ -2413,7 +2413,8 @@ def _csv_values(value: Any) -> list[str]:
     raise WebUIRequestError("workflow list fields must be comma-separated strings")
 
 
-def _validated_direct_measurement_items(value: str) -> str:
+def _validated_direct_measurement_items(value: Any) -> str:
+    value = ",".join(_csv_values(value))
     items = parse_measurement_item_list(value, allow_pair=False)
     return ",".join(validate_statistics_items(items))
 
@@ -2538,7 +2539,7 @@ def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str
                 raise WebUIRequestError("format must be byte or word")
         elif command == "measure-log":
             parameters["channels"] = _workflow_channels(parameters.get("channels"), capabilities, required=False)
-            parameters["items"] = str(parameters.get("items", "vpp,frequency"))
+            parameters["items"] = parameters.get("items", "vpp,frequency")
             parameters["pairs"] = _workflow_pairs(parameters.get("pairs"), capabilities)
             parameters["pair_items"] = str(parameters.get("pair_items", "phase,delay"))
             try:
@@ -2572,7 +2573,7 @@ def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str
             parameters["interval_seconds"] = _finite_number(parameters.get("interval_seconds", 1), "interval_seconds")
         elif command == "triggered-measure-loop":
             parameters["channels"] = _workflow_channels(parameters.get("channels"), capabilities, required=False)
-            parameters["items"] = str(parameters.get("items", "vpp,frequency"))
+            parameters["items"] = parameters.get("items", "vpp,frequency")
             parameters["pairs"] = _workflow_pairs(parameters.get("pairs"), capabilities)
             parameters["pair_items"] = str(parameters.get("pair_items", "phase,delay"))
             parameters["count"] = _integer(parameters.get("count"), "count")

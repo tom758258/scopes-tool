@@ -1006,6 +1006,26 @@ def test_workflow_measurement_validation_matches_catalog_choices() -> None:
                 }
             )
 
+    accepted = validate_job_request(
+        {
+            "command": "measure-log",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"items": ["vpp", "frequency"], "count": 1},
+        }
+    )
+    assert accepted["parameters"]["items"] == "vpp,frequency"
+
+    accepted_tuple = validate_job_request(
+        {
+            "command": "measure-log",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"items": ("vpp", "frequency"), "count": 1},
+        }
+    )
+    assert accepted_tuple["parameters"]["items"] == "vpp,frequency"
+
 
 def test_representative_p3c_simulated_commands_complete() -> None:
     client = TestClient(app)
