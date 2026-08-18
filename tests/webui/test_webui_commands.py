@@ -73,6 +73,29 @@ def test_commands_expose_the_p2_subset() -> None:
     assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)
 
 
+def test_command_catalog_projects_setting_and_model_presentation() -> None:
+    commands = {
+        entry["id"]: entry
+        for entry in TestClient(app).get("/api/commands").json()
+    }
+
+    channel_scale = commands["channel-scale"]
+    assert channel_scale["presentation"]["kind"] == "setting"
+    assert channel_scale["presentation"]["action"] == "apply"
+    assert channel_scale["presentation"]["query_fields"] == ["channel"]
+
+    model_2000x = "keysight-dsox2004a"
+    impedance = commands["channel-impedance"]["presentation"]["models"][model_2000x]
+    assert impedance["fields"]["impedance"]["options"] == ["one_meg"]
+    math_display = commands["math-display"]["presentation"]["models"][model_2000x]
+    assert math_display["fields"]["function"]["maximum"] == 1
+    assert commands["measure-results"]["presentation"]["models"][model_2000x]["supported"] is False
+    segmented = commands["segmented-memory"]["presentation"]
+    assert segmented["kind"] == "setting"
+    assert segmented["query_value"] == "query"
+    assert segmented["action_choices"] == ["enable", "disable"]
+
+
 def test_commands_expose_the_p3a_flat_subset() -> None:
     client = TestClient(app)
 

@@ -143,3 +143,17 @@ def test_list_resources_is_hidden_but_identify_remains_user_facing() -> None:
     )
     assert request["command"] == "list-resources"
     assert request["model_id"] is None
+
+
+def test_identify_result_projects_detected_physical_model_id(tmp_path: Path) -> None:
+    scope = FakeLiveScope("DSOX4024A")
+
+    result = commands._execute_scope_command(
+        scope,
+        "identify",
+        "USB0::TEST::INSTR",
+        {},
+        tmp_path,
+    )
+
+    assert result["result"]["idn"]["model_id"] == "keysight-dsox4024a"

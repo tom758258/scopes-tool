@@ -190,6 +190,89 @@ export function renderIdentityWorkspaceResult(container, job) {
   });
 }
 
+export function renderWorkspaceResult(container, job, context = {}) {
+  if (job.command === "identify") {
+    renderIdentityWorkspaceResult(container, job);
+    return;
+  }
+  const result = jobResultPayload(job);
+  if (result && typeof result === "object") {
+    const display = unwrapStructuredResult(result);
+    const fields = Object.entries(display).filter(([name]) => name !== "raw");
+    if (fields.length) {
+      appendWorkspaceFields(container, fields);
+      appendWorkspaceArtifacts(container, job);
+      return;
+    }
+  }
+  appendWorkspaceFields(container, [
+    ["command", commandLabel(job.command)],
+    ["execution_mode", context.mode || ""],
+    ["summary", successfulJobSummary(job)],
+  ]);
+  appendWorkspaceArtifacts(container, job);
+}
+
+function unwrapStructuredResult(result) {
+  const entries = Object.entries(result);
+  if (entries.length === 1 && entries[0][1] && typeof entries[0][1] === "object"
+      && !Array.isArray(entries[0][1])) {
+    return entries[0][1];
+  }
+  return result;
+}
+
+function appendWorkspaceFields(container, fields) {
+  fields.forEach(([name, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    const field = document.createElement("div");
+    field.className = "workspace-result-field";
+    const label = document.createElement("small");
+    label.textContent = resultFieldLabel(name);
+    const content = document.createElement("span");
+    content.textContent = formatWorkspaceValue(value);
+    field.append(content, label);
+    container.append(field);
+  });
+}
+
+function appendWorkspaceArtifacts(container, job) {
+  (job.artifacts || []).forEach((artifact) => {
+    const field = document.createElement("div");
+    field.className = "workspace-result-field workspace-result-field-wide";
+    const link = document.createElement("a");
+    link.href = artifactUrl(job.job_id, artifact.name);
+    link.download = artifact.name;
+    link.textContent = artifact.name;
+    const label = document.createElement("small");
+    label.textContent = translate("results.artifacts");
+    field.append(link, label);
+    container.append(field);
+  });
+}
+
+function resultFieldLabel(name) {
+  const resultKey = `results.field.${name}`;
+  if (hasTranslation(resultKey)) return translate(resultKey);
+  const fieldKey = `field.${name}`;
+  if (hasTranslation(fieldKey)) return translate(fieldKey);
+  return String(name).replaceAll("_", " ").replace(/^./, (value) => value.toUpperCase());
+}
+
+function formatWorkspaceValue(value) {
+  if (typeof value === "boolean") return translate(value ? "status.enabled" : "status.disabled");
+  if (Array.isArray(value)) {
+    return value.map((item) => formatWorkspaceValue(item)).join("; ");
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .filter(([name]) => name !== "raw")
+      .map(([name, item]) => `${resultFieldLabel(name)}: ${formatWorkspaceValue(item)}`)
+      .join("; ");
+  }
+  return String(value);
+}
+
 function identityFields(job) {
   const result = jobResultPayload(job);
   const idn = result?.idn || result?.resource?.idn || {};

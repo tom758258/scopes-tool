@@ -108,6 +108,19 @@ enums, numbers, booleans, and small conditional field groups. Trigger,
 Search, Serial, Segmented Memory, and Workflow commands use only the
 conditional visibility needed by their existing Core parameter semantics.
 
+Commands that expose the existing Core `query` / `set` contract as an
+instrument setting use a read-edit-Apply workflow in the browser. Selecting
+the command reads its current state, Apply submits the existing set action,
+and the set result's Core readback refreshes the editor. Unsaved field edits
+are not overwritten by later readback. Information and diagnostic commands
+remain explicit Read or Run actions.
+
+Model-aware command availability and field limits are projected from Core
+capabilities. Live uses the detected physical model; Simulate and Dry-run use
+the selected planning model. The command workspace shows the latest successful
+result for that exact command and execution context, while Result History and
+raw Result Detail retain the full job and diagnostic views.
+
 The added instrument-setting commands use Live or Simulate mode and the
 existing Core capability and validation boundaries. They do not add new
 WebUI-specific SCPI behavior. The basic FFT and Math commands use flat forms;

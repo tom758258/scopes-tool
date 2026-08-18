@@ -1,4 +1,9 @@
 import { hasTranslation, translate } from "/static/i18n.js";
+import {
+  commandSupported,
+  commandSupportReason,
+  fieldsForModel,
+} from "/static/command-support.js";
 
 export class CommandCatalog {
   constructor(commands, elements, onSelectionChange = () => {}) {
@@ -9,6 +14,8 @@ export class CommandCatalog {
     this.activeCategory = "";
     this.selectedId = "";
     this.filterText = "";
+    this.activeModelId = null;
+    this.activeModelLabel = "";
 
     this.elements.filter.addEventListener("input", () => {
       this.filterText = this.elements.filter.value.trim().toLowerCase();
@@ -97,7 +104,17 @@ export class CommandCatalog {
         button.type = "button";
         button.className = "command-button";
         button.dataset.command = command.id;
-        button.textContent = this.commandLabel(command);
+        const label = document.createElement("span");
+        label.textContent = this.commandLabel(command);
+        button.append(label);
+        const reason = this.supportReason(command);
+        if (reason) {
+          const status = document.createElement("small");
+          status.textContent = reason;
+          button.append(status);
+          button.disabled = true;
+          button.title = reason;
+        }
         button.setAttribute("aria-pressed", String(command.id === this.selectedId));
         if (command.id === this.selectedId) button.classList.add("active");
         this.elements.list.append(button);
@@ -120,6 +137,26 @@ export class CommandCatalog {
   updateMode(mode) {
     this.activeMode = mode;
     this.renderCategories();
+  }
+
+  updateModel(modelId, modelLabel = "") {
+    this.activeModelId = modelId || null;
+    this.activeModelLabel = modelLabel || modelId || "";
+    this.renderCategories(false);
+  }
+
+  supported(command) {
+    return !this.activeModelId || commandSupported(command, this.activeModelId);
+  }
+
+  supportReason(command) {
+    return this.activeModelId
+      ? commandSupportReason(command, this.activeModelId, this.activeModelLabel)
+      : "";
+  }
+
+  fieldsFor(command) {
+    return fieldsForModel(command, this.activeModelId);
   }
 
   optionsFor(field) {

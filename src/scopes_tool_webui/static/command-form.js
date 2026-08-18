@@ -11,35 +11,72 @@ export class CommandForm {
   constructor(container, catalog) {
     this.container = container;
     this.catalog = catalog;
+    this.command = null;
+    this.presentation = null;
+    this.onDirty = () => {};
+    this.onQueryFieldChange = () => {};
   }
 
-  render(command) {
+  render(command, options = {}) {
+    this.command = command;
+    this.presentation = command?.presentation || null;
+    this.onDirty = options.onDirty || (() => {});
+    this.onQueryFieldChange = options.onQueryFieldChange || (() => {});
     this.container.replaceChildren();
     if (!command) {
-      const empty = document.createElement("p");
-      empty.className = "muted compact-note";
-      empty.textContent = translate("status.noCommands");
-      this.container.append(empty);
+      this.appendEmpty("status.noCommands");
       return;
     }
-    if (!command.fields.length) {
-      const empty = document.createElement("p");
-      empty.className = "muted compact-note";
-      empty.textContent = translate("form.noParameters");
-      this.container.append(empty);
-      return;
-    }
-    command.fields.forEach((field) => this.container.append(this.field(field)));
+
+    const fields = this.catalog.fieldsFor ? this.catalog.fieldsFor(command) : command.fields;
+    const visibleFields = fields.filter((field) => !this.isManagedActionField(field));
+    if (!visibleFields.length) this.appendEmpty("form.noParameters");
+    fields.forEach((field) => this.container.append(this.field(field)));
+    if (options.draft) this.restoreDraft(options.draft);
     this.container.querySelectorAll("[data-field]").forEach((input) => {
-      input.addEventListener("change", () => this.refreshVisibility());
+      if (input.type === "hidden") return;
+      const changed = () => {
+        if (input.dataset.queryField === "true") {
+          this.clearDirty(false);
+          this.onQueryFieldChange(input.dataset.field);
+        } else {
+          input.dataset.dirty = "true";
+          this.onDirty(input.dataset.field);
+        }
+        this.refreshVisibility();
+      };
+      input.addEventListener("input", changed);
+      input.addEventListener("change", changed);
     });
     this.refreshVisibility();
+  }
+
+  appendEmpty(key) {
+    const empty = document.createElement("p");
+    empty.className = "muted compact-note";
+    empty.textContent = translate(key);
+    this.container.append(empty);
+  }
+
+  isSettingEditor() {
+    if (this.presentation?.kind !== "setting") return false;
+    if (this.presentation.action_choices?.length) return true;
+    const action = this.command?.fields.find(
+      (field) => field.name === this.presentation.action_field,
+    );
+    return this.catalog.optionsFor(action).includes(this.presentation.apply_value);
+  }
+
+  isManagedActionField(field) {
+    return this.presentation?.kind === "setting"
+      && !this.presentation.action_choices?.length
+      && field.name === this.presentation.action_field;
   }
 
   values() {
     const values = {};
     for (const element of this.container.querySelectorAll("[data-field]")) {
-      if (element.closest("[data-visible-if-hidden=\"true\"]")) continue;
+      if (element.closest?.("[data-visible-if-hidden=\"true\"]")) continue;
       element.setCustomValidity?.("");
       const rawValue = typeof element.value === "string" ? element.value.trim() : element.value;
       if (element.validity?.badInput || (element.required && rawValue === "")) {
@@ -47,23 +84,9 @@ export class CommandForm {
         return null;
       }
       if (rawValue === "" && element.type !== "checkbox") continue;
-      const name = element.dataset.field;
-      if (element.type === "checkbox") values[name] = element.checked;
-      else if (["integer", "number"].includes(element.dataset.type)) {
-        const parsed = Number(rawValue);
-        const valid = DECIMAL_NUMBER_PATTERN.test(rawValue) && Number.isFinite(parsed)
-          && (element.dataset.type !== "integer" || Number.isInteger(parsed));
-        if (!valid) {
-          element.setCustomValidity?.(translate(
-            element.dataset.type === "integer" ? "form.invalidInteger" : "form.invalidNumber",
-          ));
-          element.reportValidity?.();
-          return null;
-        }
-        values[name] = parsed;
-      }
-      else if (element.dataset.type === "boolean") values[name] = element.value === "true";
-      else values[name] = element.value;
+      const value = this.parseElement(element);
+      if (value === null) return null;
+      values[element.dataset.field] = element.type === "checkbox" ? element.checked : value;
       if (element.checkValidity && !element.checkValidity()) {
         element.reportValidity?.();
         return null;
@@ -72,7 +95,81 @@ export class CommandForm {
     return values;
   }
 
+  queryValues() {
+    if (this.presentation?.kind !== "setting") return null;
+    const values = {
+      [this.presentation.action_field]: this.presentation.query_value,
+    };
+    for (const name of this.presentation.query_fields || []) {
+      const element = this.container.querySelector(`[data-field="${name}"]`);
+      if (!element || element.value === "") continue;
+      const value = this.parseElement(element, false);
+      if (value === null) return null;
+      values[name] = value;
+    }
+    return values;
+  }
+
+  querySignature() {
+    return JSON.stringify(this.queryValues() || {});
+  }
+
+  syncResult(job, preserveDirty = true) {
+    const payload = job?.result?.result !== undefined ? job.result.result : job?.result;
+    if (payload === null || payload === undefined) return;
+    const fields = [...this.container.querySelectorAll("[data-field]")]
+      .filter((input) => input.type !== "hidden");
+    const writableCount = fields.filter((input) => input.dataset.queryField !== "true").length;
+    fields.forEach((input) => {
+      if (preserveDirty && input.dataset.dirty === "true") return;
+      const onlyWritableField = input.dataset.queryField !== "true" && writableCount === 1;
+      const value = findResultValue(payload, input.dataset.field, onlyWritableField);
+      if (value === undefined || value === null || typeof value === "object") return;
+      input.value = input.dataset.type === "boolean" ? String(Boolean(value)) : String(value);
+      delete input.dataset.dirty;
+    });
+    this.refreshVisibility();
+  }
+
+  clearDirty(includeQueryFields = true) {
+    this.container.querySelectorAll("[data-field]").forEach((input) => {
+      if (includeQueryFields || input.dataset.queryField !== "true") delete input.dataset.dirty;
+    });
+  }
+
+  draft() {
+    return [...this.container.querySelectorAll("[data-field]")].map((input) => ({
+      name: input.dataset.field,
+      value: input.value,
+      dirty: input.dataset.dirty === "true",
+    }));
+  }
+
+  restoreDraft(draft) {
+    draft.forEach((entry) => {
+      const input = this.container.querySelector(`[data-field="${entry.name}"]`);
+      if (!input) return;
+      input.value = entry.value;
+      if (entry.dirty) input.dataset.dirty = "true";
+    });
+  }
+
+  isDirty() {
+    return Boolean(this.container.querySelector('[data-dirty="true"]'));
+  }
+
   field(field) {
+    if (this.isManagedActionField(field)) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.dataset.field = field.name;
+      input.dataset.type = field.type;
+      input.value = this.isSettingEditor()
+        ? this.presentation.apply_value
+        : this.presentation.query_value;
+      return input;
+    }
+
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     if (field.visible_if) wrapper.dataset.visibleIf = JSON.stringify(field.visible_if);
@@ -82,16 +179,25 @@ export class CommandForm {
     let input;
     if (field.type === "enum") {
       input = document.createElement("select");
-      if (field.default === undefined) input.append(new Option(translate("form.emptyOption"), ""));
-      this.catalog.optionsFor(field).forEach((option) => {
+      const actionChoices = field.name === this.presentation?.action_field
+        ? this.presentation.action_choices
+        : null;
+      if (field.default === undefined) {
+        const required = field.required === true || Boolean(field.required_if);
+        input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
+      }
+      const options = actionChoices || this.catalog.optionsFor(field);
+      options.forEach((option) => {
         input.append(new Option(translateEnum(option), String(option)));
       });
+      if (actionChoices?.length) input.value = String(actionChoices[0]);
     } else if (field.type === "boolean") {
       input = document.createElement("select");
-      input.append(new Option(translate("form.emptyOption"), ""));
+      const required = field.required === true || Boolean(field.required_if);
+      input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
       input.append(
-        new Option(translate("enum.true"), "true"),
-        new Option(translate("enum.false"), "false"),
+        new Option(translate("status.enabled"), "true"),
+        new Option(translate("status.disabled"), "false"),
       );
     } else {
       input = document.createElement("input");
@@ -102,12 +208,41 @@ export class CommandForm {
     }
     input.dataset.field = field.name;
     input.dataset.type = field.type;
+    input.dataset.queryField = String(
+      (this.presentation?.query_fields || []).includes(field.name),
+    );
     if (field.required_if) input.dataset.requiredIf = JSON.stringify(field.required_if);
     input.dataset.required = String(field.required === true);
     input.required = field.required === true;
-    if (field.default !== undefined) input.value = String(field.default);
+    const managedActionChoice = field.name === this.presentation?.action_field
+      && this.presentation?.action_choices?.length;
+    if (field.default !== undefined && !managedActionChoice) {
+      input.value = String(field.default);
+    }
     wrapper.append(input);
     return wrapper;
+  }
+
+  parseElement(element, report = true) {
+    const rawValue = typeof element.value === "string" ? element.value.trim() : element.value;
+    if (rawValue === "") return undefined;
+    if (["integer", "number"].includes(element.dataset.type)) {
+      const parsed = Number(rawValue);
+      const valid = DECIMAL_NUMBER_PATTERN.test(rawValue) && Number.isFinite(parsed)
+        && (element.dataset.type !== "integer" || Number.isInteger(parsed));
+      if (!valid) {
+        if (report) {
+          element.setCustomValidity?.(translate(
+            element.dataset.type === "integer" ? "form.invalidInteger" : "form.invalidNumber",
+          ));
+          element.reportValidity?.();
+        }
+        return null;
+      }
+      return parsed;
+    }
+    if (element.dataset.type === "boolean") return element.value === "true";
+    return element.value;
   }
 
   refreshVisibility() {
@@ -135,7 +270,7 @@ export class CommandForm {
       wrapper.dataset.visibleIfHidden = String(!visible);
     });
     this.container.querySelectorAll("[data-field]").forEach((input) => {
-      const hidden = Boolean(input.closest("[data-visible-if-hidden=\"true\"]"));
+      const hidden = Boolean(input.closest?.("[data-visible-if-hidden=\"true\"]"));
       let conditionallyRequired = false;
       if (input.dataset.requiredIf) {
         try {
@@ -160,4 +295,20 @@ export class CommandForm {
       input.required = !hidden && (input.dataset.required === "true" || conditionallyRequired);
     });
   }
+}
+
+function findResultValue(result, fieldName, onlyWritableField, depth = 0) {
+  if (result === null || result === undefined || depth > 4) return undefined;
+  if (typeof result !== "object") return onlyWritableField ? result : undefined;
+  if (Object.prototype.hasOwnProperty.call(result, fieldName)) return result[fieldName];
+  if (fieldName === "enabled" && typeof result.state === "boolean") return result.state;
+  const entries = Object.entries(result).filter(([name]) => name !== "raw");
+  if (onlyWritableField && entries.length === 1 && typeof entries[0][1] !== "object") {
+    return entries[0][1];
+  }
+  for (const [_name, value] of entries) {
+    const found = findResultValue(value, fieldName, onlyWritableField, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }

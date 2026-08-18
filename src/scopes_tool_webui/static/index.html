@@ -135,6 +135,7 @@
             <div class="command-title-group">
               <h2 id="selected-command" data-i18n="commands.selectCommand">Select a command</h2>
               <p id="command-description" class="command-description"></p>
+              <p id="command-support-reason" class="command-support-reason" hidden></p>
             </div>
             <span id="execution-status" class="badge badge-idle" data-i18n="device.ready">Ready</span>
           </div>
@@ -142,12 +143,12 @@
             <div class="form-heading"><h3 data-i18n="commands.parameters">Parameters</h3></div>
             <form id="command-form" class="command-form"></form>
             <div class="command-actions">
-              <button id="execute-button" class="primary" type="button" data-i18n="commands.execute">Execute</button>
+              <button id="execute-button" class="primary" type="button" data-i18n="actions.run">Run</button>
               <button id="cancel-button" class="secondary hidden" type="button" data-i18n="commands.cancel">Cancel job</button>
             </div>
-            <section id="identity-workspace-result" class="identity-workspace-result" hidden>
+            <section id="identity-workspace-result" class="workspace-result" hidden>
               <strong data-i18n="workspace.latestSuccessfulResult">Latest successful result</strong>
-              <div id="identity-workspace-result-content" class="identity-workspace-result-content" aria-live="polite"></div>
+              <div id="identity-workspace-result-content" class="workspace-result-content" aria-live="polite"></div>
             </section>
           </div>
         </section>

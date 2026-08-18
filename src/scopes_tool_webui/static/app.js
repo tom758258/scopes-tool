@@ -3,9 +3,17 @@ import { bindBasicControls } from "/static/basic-controls.js";
 import { CommandCatalog } from "/static/command-catalog.js";
 import { CommandForm } from "/static/command-form.js";
 import { DeviceResource } from "/static/device-resource.js";
+import {
+  buildWorkspaceContext,
+  findWorkspaceResult,
+  sameWorkspaceContext,
+  workspaceContextForCompletedJob,
+  workspaceContextKey,
+} from "/static/execution-context.js";
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
-import { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob } from "/static/results.js";
+import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
+import { createInitialState } from "/static/state.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
 const elements = {
@@ -34,6 +42,7 @@ const elements = {
   commandList: document.querySelector("#command-list"),
   selectedCommand: document.querySelector("#selected-command"),
   commandDescription: document.querySelector("#command-description"),
+  commandSupportReason: document.querySelector("#command-support-reason"),
   advanced: document.querySelector("#advanced-commands"),
   advancedToggle: document.querySelector("#advanced-command-toggle"),
   form: document.querySelector("#command-form"),
@@ -53,8 +62,10 @@ const elements = {
 };
 
 let commands = [];
+let models = [];
 let currentJobId = null;
-let context = { mode: "live", resource: null, model_id: null };
+const state = createInitialState();
+let context = state.executionContext;
 let catalog;
 let commandForm;
 let deviceResource;
@@ -65,7 +76,6 @@ let healthState = { status: "checking", version: null, error: null };
 let workspaceExecutionState = { key: "device.ready" };
 let liveCommandState = { key: "device.ready" };
 let pendingResourceLiveSupport = null;
-const latestSuccessfulIdentityResults = new Map();
 let updateBasicAvailability = () => {};
 
 initializeI18n();
@@ -77,11 +87,12 @@ async function initialize() {
   renderCollapseLabels();
   bindPresentationControls();
   await updateHealth();
-  const [loadedCommands, models] = await Promise.all([
+  const [loadedCommands, loadedModels] = await Promise.all([
     getCommands(),
     fetch("/api/models").then((response) => response.json()),
   ]);
   commands = loadedCommands;
+  models = loadedModels;
   models.forEach((model) => elements.model.append(new Option(model.label, model.id)));
   elements.model.value = "keysight-dsox4024a";
 
@@ -89,7 +100,7 @@ async function initialize() {
     filter: elements.filter,
     categories: elements.categories,
     list: elements.commandList,
-  }, syncCommandSelection);
+  }, () => syncCommandSelection());
   commandForm = new CommandForm(elements.form, catalog);
   catalog.render();
 
@@ -108,7 +119,9 @@ async function initialize() {
     status: elements.deviceStatus,
   }, (nextContext) => {
     context = nextContext;
+    state.executionContext = nextContext;
     if (catalog) catalog.updateMode(context.mode);
+    updateCommandSupport();
     syncCommandSelection();
     renderLiveData();
   }, (scanState) => {
@@ -133,7 +146,9 @@ async function initialize() {
     event.preventDefault();
     const selected = catalog.selected();
     const parameters = commandForm.values();
-    if (selected && parameters !== null) executeCommand(selected.id, parameters);
+    if (selected && parameters !== null) executeCommand(selected.id, parameters, {
+      intent: commandForm.isSettingEditor() ? "apply" : "command",
+    });
   });
   elements.cancel.addEventListener("click", async () => {
     if (!currentJobId) return;
@@ -196,7 +211,7 @@ function renderCollapseLabels() {
   renderAdvancedToggle();
 }
 
-async function executeCommand(command, parameters) {
+async function executeCommand(command, parameters, options = {}) {
   const definition = commands.find((item) => item.id === command);
   if (!definition || !definition.modes.includes(context.mode)) {
     elements.deviceStatus.textContent = translate("status.noCommands");
@@ -212,6 +227,8 @@ async function executeCommand(command, parameters) {
   }
   executing = true;
   const commandContext = { ...context };
+  const submittedWorkspaceContext = currentWorkspaceContext(command);
+  const editorKey = options.editorKey || currentEditorKey();
   if (command === "identify") deviceResource?.setIdentityPending?.(commandContext);
   updateAvailability();
   elements.execute.disabled = true;
@@ -229,24 +246,34 @@ async function executeCommand(command, parameters) {
     resultPresentation = { kind: "job", job, message: null };
     renderCurrentResult();
     updateIdentity(job, commandContext);
+    captureWorkspaceResult(job, submittedWorkspaceContext);
+    if (job.status === "completed" && isCurrentEditorJob(command, submittedWorkspaceContext)) {
+      if (options.intent === "apply") commandForm.clearDirty();
+      commandForm.syncResult(job, options.intent !== "apply");
+      state.editorLoadedKey = editorKey || currentEditorKey();
+    }
+    return job;
   } catch (error) {
     if (command === "identify") deviceResource?.setIdentityError?.(error.message, commandContext);
     setExecutionStatus({ status: "failed" });
-    resultPresentation = { kind: "error", job: null, message: error.message };
+    resultPresentation = { kind: "error", job: null, command, message: error.message };
     renderCurrentResult();
+    return null;
   } finally {
     executing = false;
     currentJobId = null;
     elements.cancel.classList.add("hidden");
     updateAvailability();
+    scheduleEditorRead();
   }
 }
 
 function updateIdentity(job, commandContext) {
   if (job.command !== "identify" || !deviceResource || !sameExecutionContext(context, commandContext)) return;
-  captureIdentityWorkspaceResult(job, commandContext);
   if (["queued", "running"].includes(job.status)) {
     deviceResource.setIdentityPending?.(commandContext);
+    updateCommandSupport();
+    renderWorkspace();
     renderLiveData();
     if (typeof updateAvailability === "function") updateAvailability();
     return;
@@ -257,8 +284,11 @@ function updateIdentity(job, commandContext) {
   } else if (["failed", "cancelled"].includes(job.status)) {
     deviceResource.setIdentityError?.(job.error || translate("status.identifyFailed"), commandContext);
   }
+  updateCommandSupport();
+  renderWorkspace();
   renderLiveData();
   if (typeof updateAvailability === "function") updateAvailability();
+  scheduleEditorRead();
 }
 
 async function refreshSelectedResourceContext(selectedContext) {
@@ -341,6 +371,7 @@ async function refreshRequestedResourceLiveSupport(completed) {
 
 function presentSelectedResourceJob(job, commandContext) {
   updateIdentity(job, commandContext);
+  captureWorkspaceResult(job, buildWorkspaceContext("identify", commandContext));
   if (sameExecutionContext(context, commandContext)) {
     resultPresentation = { kind: "job", job, message: null };
     renderCurrentResult();
@@ -355,36 +386,27 @@ function sameExecutionContext(left, right) {
     && left?.model_id === right?.model_id;
 }
 
-function identityWorkspaceKey(commandContext) {
-  return JSON.stringify([
-    commandContext?.mode || null,
-    commandContext?.resource || null,
-    commandContext?.model_id || null,
-  ]);
-}
-
-function captureIdentityWorkspaceResult(job, commandContext) {
-  if (job.command !== "identify" || job.status !== "completed") return false;
-  latestSuccessfulIdentityResults.set(identityWorkspaceKey(commandContext), job);
-  renderIdentityWorkspace();
-  return true;
-}
-
-function renderIdentityWorkspace() {
+function renderWorkspace() {
   const selected = catalog?.selected();
-  const visible = selected?.id === "identify";
-  elements.identityWorkspace.hidden = !visible;
-  if (!visible) return;
+  elements.identityWorkspace.hidden = !selected;
+  if (!selected) return;
 
   elements.identityWorkspaceContent.replaceChildren();
-  const job = latestSuccessfulIdentityResults.get(identityWorkspaceKey(context));
+  const workspaceContext = currentWorkspaceContext(selected.id);
+  const job = findWorkspaceResult(
+    state.workspaceResults,
+    workspaceContext,
+    selected.id === "identify",
+  );
   if (job) {
-    renderIdentityWorkspaceResult(elements.identityWorkspaceContent, job);
+    renderWorkspaceResult(elements.identityWorkspaceContent, job, workspaceContext);
     return;
   }
   const empty = document.createElement("p");
   empty.className = "muted";
-  empty.textContent = translate("workspace.identifyResultEmpty");
+  empty.textContent = translate(
+    selected.id === "identify" ? "workspace.identifyResultEmpty" : "workspace.resultEmpty",
+  );
   elements.identityWorkspaceContent.append(empty);
 }
 
@@ -403,6 +425,7 @@ async function updateHealth() {
 }
 
 document.addEventListener("localechange", () => {
+  const commandDraft = commandForm?.draft();
   renderLocaleToggle();
   renderVersion();
   renderLiveData();
@@ -411,29 +434,48 @@ document.addEventListener("localechange", () => {
   if (deviceResource) deviceResource.refresh();
   if (catalog) {
     catalog.render();
-    syncCommandSelection();
+    syncCommandSelection(commandDraft);
   }
   renderCurrentResult();
 });
 
-function syncCommandSelection() {
+function syncCommandSelection(draft = null) {
   if (!catalog || !commandForm) return;
   const selected = catalog.selected();
-  commandForm.render(selected);
+  state.selectedCommand = selected?.id || null;
+  commandForm.render(selected, {
+    draft,
+    onDirty: () => updateAvailability(),
+    onQueryFieldChange: () => {
+      state.editorLoadedKey = null;
+      scheduleEditorRead();
+    },
+  });
   elements.selectedCommand.textContent = selected
     ? catalog.commandLabel(selected)
     : translate("commands.selectCommand");
   elements.commandDescription.textContent = selected
     ? catalog.description(selected)
     : translate("commands.noDescription");
-  renderIdentityWorkspace();
+  const supportReason = selected ? catalog.supportReason(selected) : "";
+  elements.commandSupportReason.hidden = !supportReason;
+  elements.commandSupportReason.textContent = supportReason;
+  elements.execute.textContent = translate(`actions.${commandAction(selected)}`);
+  const editorContext = currentEditorBaseKey();
+  if (state.editorContextKey !== editorContext) {
+    state.editorContextKey = editorContext;
+    state.editorLoadedKey = null;
+  }
+  renderWorkspace();
   updateAvailability();
+  scheduleEditorRead();
 }
 
 function commandAvailable(command) {
   if (!catalog) return false;
   const definition = commands.find((item) => item.id === command);
   if (!definition || !definition.modes.includes(context.mode)) return false;
+  if (typeof catalog.supported === "function" && !catalog.supported(definition)) return false;
   if (context.mode !== "live" || command === "list-resources") return true;
   if (!context.resource) return false;
   if (command === "identify") return true;
@@ -449,6 +491,77 @@ function updateAvailability() {
   const selected = catalog.selected();
   elements.execute.disabled = executing || !selected || !commandAvailable(selected.id);
   updateBasicAvailability();
+}
+
+function commandAction(command) {
+  if (!command) return "run";
+  if (command.presentation?.kind === "setting" && !commandForm?.isSettingEditor()) {
+    return "read";
+  }
+  return command.presentation?.action || "run";
+}
+
+function currentModelId() {
+  if (context.mode !== "live") return context.model_id;
+  return deviceResource?.hasCurrentIdentity(context)
+    ? deviceResource.identity?.model_id || null
+    : null;
+}
+
+function currentModelLabel() {
+  const modelId = currentModelId();
+  return models.find((model) => model.id === modelId)?.label || modelId || "";
+}
+
+function updateCommandSupport() {
+  catalog?.updateModel(currentModelId(), currentModelLabel());
+}
+
+function currentWorkspaceContext(command = catalog?.selected()?.id) {
+  return buildWorkspaceContext(command, context, currentModelId());
+}
+
+function captureWorkspaceResult(job, submittedContext) {
+  if (job?.status !== "completed" || !job.command || !job.result) return false;
+  const effectiveContext = workspaceContextForCompletedJob(job, submittedContext);
+  const key = workspaceContextKey(effectiveContext);
+  state.workspaceResults.delete(key);
+  state.workspaceResults.set(key, { context: effectiveContext, job });
+  renderWorkspace();
+  return true;
+}
+
+function isCurrentEditorJob(command, submittedContext) {
+  return catalog?.selected()?.id === command
+    && sameWorkspaceContext(currentWorkspaceContext(command), submittedContext);
+}
+
+function currentEditorBaseKey() {
+  const selected = catalog?.selected();
+  return selected ? workspaceContextKey(currentWorkspaceContext(selected.id)) : null;
+}
+
+function currentEditorKey() {
+  const base = currentEditorBaseKey();
+  return base ? `${base}:${commandForm?.querySignature() || "{}"}` : null;
+}
+
+function scheduleEditorRead() {
+  if (state.editorReadPending) return;
+  state.editorReadPending = true;
+  queueMicrotask(async () => {
+    state.editorReadPending = false;
+    const selected = catalog?.selected();
+    if (!selected || selected.presentation?.kind !== "setting") return;
+    if (!commandForm.isSettingEditor() || executing || !commandAvailable(selected.id)) return;
+    const editorKey = currentEditorKey();
+    if (!editorKey || state.editorLoadedKey === editorKey) return;
+    const parameters = commandForm.queryValues();
+    if (parameters === null) return;
+    state.editorLoadedKey = editorKey;
+    const job = await executeCommand(selected.id, parameters, { intent: "readback", editorKey });
+    if (!job || job.status !== "completed") state.editorLoadedKey = null;
+  });
 }
 
 function setExecutionStatus(state) {

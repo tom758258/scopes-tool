@@ -1126,7 +1126,11 @@ class ScopeSessionCloseError(RuntimeError):
 
 
 def command_catalog() -> list[dict[str, Any]]:
-    return [_jsonable(entry) for entry in COMMANDS if not entry.get("hidden")]
+    return [
+        _jsonable(_command_catalog_entry(entry))
+        for entry in COMMANDS
+        if not entry.get("hidden")
+    ]
 
 
 def model_catalog() -> list[dict[str, str]]:
@@ -1138,6 +1142,191 @@ def model_catalog() -> list[dict[str, str]]:
         }
         for model in PHYSICAL_MODEL_REGISTRY
     ]
+
+
+_SETTING_QUERY_FIELDS = {
+    **{
+        command_id: ("channel",)
+        for command_id in (
+            "channel-display",
+            "channel-scale",
+            "channel-label",
+            "channel-offset",
+            "channel-coupling",
+            "channel-probe",
+            "channel-bandwidth-limit",
+            "channel-impedance",
+            "channel-invert",
+            "channel-range",
+            "channel-units",
+            "channel-vernier",
+            "channel-probe-skew",
+        )
+    },
+    "reference-display": ("slot",),
+    "reference-label": ("slot",),
+    "fft": ("function",),
+    "math-display": ("function",),
+    "math-vertical": ("function",),
+    "math-operator": ("function",),
+    "trigger-edge-level": ("source_channel",),
+    **{
+        command_id: ("bus",)
+        for command_id in (
+            "serial-search-uart",
+            "serial-search-i2c",
+            "serial-search-spi",
+            "serial-search-can",
+            "serial-mode",
+            "serial-display",
+            "serial-uart",
+            "serial-i2c",
+            "serial-spi",
+            "serial-can",
+            "serial-trigger-uart",
+            "serial-trigger-i2c",
+            "serial-trigger-spi",
+            "serial-trigger-can",
+        )
+    },
+}
+
+_READ_COMMANDS = frozenset(
+    {
+        "identify",
+        "channel-summary",
+        "measure-results",
+        "reference-query",
+        "save-waveform-length-max",
+        "check-error",
+        "system-status-byte",
+        "system-operation-status",
+        "system-opc",
+        "system-standard-event",
+        "system-options",
+        "dvm-current",
+        "dvm-query",
+        "external-trigger-settings",
+        "search-count",
+        "serial-query",
+        "serial-lister-query",
+    }
+)
+
+
+def _command_catalog_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
+    catalog_entry = dict(entry)
+    presentation = _command_presentation(entry)
+    presentation["models"] = {
+        model.model_id: _model_command_presentation(entry, model.model_id)
+        for model in PHYSICAL_MODEL_REGISTRY
+    }
+    catalog_entry["presentation"] = presentation
+    return catalog_entry
+
+
+def _command_presentation(entry: Mapping[str, Any]) -> dict[str, Any]:
+    action_field = next(
+        (field for field in entry["fields"] if field["name"] == "action"),
+        None,
+    )
+    action_options = set(action_field.get("options", ())) if action_field else set()
+    if action_options == {"query", "set"}:
+        return {
+            "kind": "setting",
+            "action": "apply",
+            "action_field": "action",
+            "query_value": "query",
+            "apply_value": "set",
+            "query_fields": _SETTING_QUERY_FIELDS.get(entry["id"], ()),
+        }
+    if action_options == {"query", "enable", "disable"}:
+        return {
+            "kind": "setting",
+            "action": "apply",
+            "action_field": "action",
+            "action_choices": ("enable", "disable"),
+            "query_value": "query",
+            "query_fields": (),
+        }
+    command_id = entry["id"]
+    if command_id in _READ_COMMANDS:
+        action = "read"
+    elif "clear" in command_id:
+        action = "clear"
+    elif command_id in {"screenshot", "capture", "segmented-capture", "capture-batch"}:
+        action = "capture"
+    elif command_id in {"save-image", "save-waveform", "reference-save"}:
+        action = "save"
+    elif command_id == "serial-lister-export":
+        action = "export"
+    else:
+        action = "run"
+    return {"kind": "command", "action": action}
+
+
+def _model_command_presentation(
+    entry: Mapping[str, Any], model_id: str
+) -> dict[str, Any]:
+    capabilities = capabilities_for_model_id(model_id)
+    supported = _command_supported_by_capabilities(entry, capabilities)
+    fields: dict[str, dict[str, Any]] = {}
+    analog_fields = {
+        "channel",
+        "source_channel",
+        "source2_channel",
+        "reference_channel",
+        "arm_channel",
+        "trigger_channel",
+        "clock_channel",
+        "data_channel",
+    }
+    for field in entry["fields"]:
+        name = field["name"]
+        override: dict[str, Any] = {}
+        if field.get("type") == "integer" and name in analog_fields:
+            override["maximum"] = capabilities.analog_channels
+        if field.get("type") == "integer" and name == "function":
+            override["maximum"] = capabilities.math_function_count
+        if field.get("type") == "integer" and name == "bus":
+            override["maximum"] = capabilities.serial_bus_count
+        if name == "slot" and capabilities.reference_waveforms:
+            override["maximum"] = capabilities.reference_waveforms
+        if entry["id"] == "channel-impedance" and name == "impedance":
+            override["options"] = (
+                ("one_meg", "fifty")
+                if capabilities.supports_50_ohm_impedance
+                else ("one_meg",)
+            )
+        if override:
+            fields[name] = override
+    return {"supported": supported, "fields": fields}
+
+
+def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: Any) -> bool:
+    command_id = entry["id"]
+    category = entry["category"]
+    if command_id == "measure-results":
+        return capabilities.supports_measure_results_dump
+    if category == "Measurement":
+        return capabilities.supports_measurements
+    if command_id == "channel-label":
+        return capabilities.supports_channel_label
+    if command_id == "display-label":
+        return capabilities.supports_display_label
+    if category == "Search":
+        if command_id == "search-event":
+            return capabilities.supports_search_event_navigation
+        return capabilities.supports_search_basic
+    if category == "Serial":
+        return capabilities.supports_serial_decode and capabilities.serial_bus_count > 0
+    if category == "Segmented Memory":
+        return capabilities.supports_segmented_memory
+    if category == "FFT / MATH":
+        if command_id == "math-composite-source":
+            return capabilities.supports_math_goft
+        return capabilities.math_function_count > 0
+    return True
 
 
 def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -1345,7 +1534,9 @@ def _execute_scope_command(
         )
     if command == "identify":
         idn = scope.idn or scope.query_idn()
-        return {"exit_code": 0, "result": {"idn": _jsonable(idn)}, "artifacts": []}
+        idn_payload = _jsonable(idn)
+        idn_payload["model_id"] = idn.model_id
+        return {"exit_code": 0, "result": {"idn": idn_payload}, "artifacts": []}
     if command == "run":
         scope.run()
         return _simple_scope_result("run")

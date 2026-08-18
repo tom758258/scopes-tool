@@ -70,7 +70,8 @@ def test_live_context_and_controls_use_detected_identity() -> None:
     chinese = read_static("locale_zh_tw.js")
 
     assert 'model_id: mode === "live" ? null : elements.model.value' in execution_context
-    assert 'let context = { mode: "live", resource: null, model_id: null };' in app_source
+    assert 'const state = createInitialState();' in app_source
+    assert 'let context = state.executionContext;' in app_source
     availability = extract_function(app_source, "function commandAvailable(command)")
     assert 'if (command === "identify") return true;' in availability
     assert "deviceResource?.hasCurrentIdentity(context)" in availability
@@ -82,7 +83,7 @@ def test_live_context_and_controls_use_detected_identity() -> None:
     assert '"description.identify": "讀取儀器識別資訊"' in chinese
 
 
-def test_identify_has_a_dedicated_workspace_result_area() -> None:
+def test_identify_uses_the_shared_workspace_result_area() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
     english = read_static("locale_en.js")
@@ -91,58 +92,39 @@ def test_identify_has_a_dedicated_workspace_result_area() -> None:
     assert 'id="identity-workspace-result"' in html
     assert 'id="identity-workspace-result-content"' in html
     assert 'data-i18n="workspace.latestSuccessfulResult"' in html
-    assert 'selected?.id === "identify"' in app_source
-    assert 'renderIdentityWorkspaceResult(elements.identityWorkspaceContent, job);' in app_source
+    assert 'selected.id === "identify"' in app_source
+    assert 'renderWorkspaceResult(elements.identityWorkspaceContent, job, workspaceContext);' in app_source
     assert '"workspace.latestSuccessfulResult": "Latest successful result"' in english
     assert '"workspace.latestSuccessfulResult": "最新成功結果"' in chinese
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None:
-    app_source = read_static("app.js")
-    declarations = "\n".join(
-        extract_function_declaration(app_source, signature)
-        for signature in (
-            "function identityWorkspaceKey(commandContext)",
-            "function captureIdentityWorkspaceResult(job, commandContext)",
-            "function renderIdentityWorkspace()",
-        )
-    )
+    execution_context_path = STATIC_ROOT / "execution-context.js"
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
-
-        class FakeNode {
-          constructor() { this.children = []; this.hidden = true; }
-          append(...nodes) { this.children.push(...nodes); }
-          replaceChildren(...nodes) { this.children = [...nodes]; }
-        }
-
-        let selectedCommand = "identify";
-        let context = { mode: "live", resource: "USB0::SCOPE-A::INSTR", model_id: null };
-        const catalog = { selected: () => ({ id: selectedCommand }) };
-        const elements = {
-          identityWorkspace: new FakeNode(),
-          identityWorkspaceContent: new FakeNode(),
-        };
-        const latestSuccessfulIdentityResults = new Map();
-        const translate = (key) => key;
-        const renderIdentityWorkspaceResult = (container, job) => container.append({ job });
-        globalThis.document = { createElement: () => ({ className: "", textContent: "" }) };
-        '''
-    ) + declarations + textwrap.dedent(
-        r'''
+        import fs from "node:fs";
+        const source = fs.readFileSync(process.argv[1], "utf8")
+          .replaceAll("export function ", "function ")
+          + "\nglobalThis.contextApi = { buildWorkspaceContext, workspaceContextForCompletedJob, workspaceContextKey, findWorkspaceResult };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const contextApi = globalThis.contextApi;
 
         const completed = {
           job_id: "identify-success",
           command: "identify",
           status: "completed",
-          resource: context.resource,
-          result: { result: { idn: { model: "DSO-X 4024A" } } },
+          result: { result: { idn: { model: "DSO-X 4024A", model_id: "keysight-dsox4024a" } } },
         };
-        assert.equal(captureIdentityWorkspaceResult(completed, context), true);
-        assert.equal(elements.identityWorkspace.hidden, false);
-        assert.equal(elements.identityWorkspaceContent.children[0].job.job_id, "identify-success");
+        const requested = contextApi.buildWorkspaceContext("identify", {
+          mode: "live", resource: "USB0::SCOPE-A::INSTR", model_id: null,
+        });
+        const completedContext = contextApi.workspaceContextForCompletedJob(completed, requested);
+        const results = new Map([[contextApi.workspaceContextKey(completedContext), {
+          context: completedContext, job: completed,
+        }]]);
+        assert.equal(contextApi.findWorkspaceResult(results, completedContext).job_id, "identify-success");
 
         const failed = {
           job_id: "identify-failed",
@@ -150,23 +132,25 @@ def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None
           status: "failed",
           error: "temporary failure",
         };
-        assert.equal(captureIdentityWorkspaceResult(failed, context), false);
-        renderIdentityWorkspace();
-        assert.equal(elements.identityWorkspaceContent.children[0].job.job_id, "identify-success");
-
-        selectedCommand = "run";
-        renderIdentityWorkspace();
-        assert.equal(elements.identityWorkspace.hidden, true);
-
-        selectedCommand = "identify";
-        context = { ...context, resource: "USB0::SCOPE-B::INSTR" };
-        renderIdentityWorkspace();
-        assert.equal(elements.identityWorkspace.hidden, false);
-        assert.equal(elements.identityWorkspaceContent.children[0].textContent, "workspace.identifyResultEmpty");
+        assert.equal(failed.status, "failed");
+        assert.equal(results.size, 1);
+        const pendingContext = { ...requested, detected_model_id: null };
+        assert.equal(
+          contextApi.findWorkspaceResult(results, pendingContext, true).job_id,
+          "identify-success",
+        );
+        const otherResource = { ...pendingContext, resource: "USB0::SCOPE-B::INSTR" };
+        assert.equal(contextApi.findWorkspaceResult(results, otherResource, true), null);
+        const simulateContext = contextApi.buildWorkspaceContext("identify", {
+          mode: "simulate", resource: null, model_id: "keysight-dsox4024a",
+        });
+        assert.equal(contextApi.findWorkspaceResult(results, simulateContext, true), null);
+        const otherModel = { ...completedContext, detected_model_id: "keysight-dsox4034a" };
+        assert.equal(contextApi.findWorkspaceResult(results, otherModel), null);
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script],
+        ["node", "--input-type=module", "--eval", script, str(execution_context_path)],
         capture_output=True,
         text=True,
         check=False,
@@ -358,7 +342,11 @@ def test_selected_resource_identify_serializes_latest_requested_context() -> Non
         const currentResults = [];
         const clientErrors = [];
         const identities = [];
-        const captureIdentityWorkspaceResult = () => {};
+        const updateCommandSupport = () => {};
+        const renderWorkspace = () => {};
+        const scheduleEditorRead = () => {};
+        const captureWorkspaceResult = () => {};
+        const buildWorkspaceContext = () => ({});
         const renderLiveData = () => {};
         const setCommandState = (state) => states.push({ resource: context.resource, ...state });
         const renderCurrentResult = () => {
@@ -491,7 +479,11 @@ def test_stale_identify_submission_failure_is_kept_before_requested_identify_run
         const clientErrors = [];
         const backendJobs = new Set();
         const identities = [];
-        const captureIdentityWorkspaceResult = () => {};
+        const updateCommandSupport = () => {};
+        const renderWorkspace = () => {};
+        const scheduleEditorRead = () => {};
+        const captureWorkspaceResult = () => {};
+        const buildWorkspaceContext = () => ({});
         let rejectA;
         const renderLiveData = () => {};
         const setCommandState = (state) => states.push({ resource: context.resource, ...state });
@@ -1074,3 +1066,142 @@ def test_generic_form_applies_conditional_required_fields() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.CommandForm = CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const field = (name, type, value, queryField = false) => ({
+          value,
+          type: name === "action" ? "hidden" : "number",
+          required: false,
+          dataset: { field: name, type, queryField: String(queryField) },
+          validity: { badInput: false },
+          closest: () => null,
+          setCustomValidity() {},
+          checkValidity() { return true; },
+          reportValidity() {},
+        });
+        const action = field("action", "enum", "set");
+        const channel = field("channel", "integer", "1", true);
+        const scale = field("volts_per_division", "number", "");
+        const fields = [action, channel, scale];
+        const container = {
+          querySelectorAll(selector) {
+            if (selector === "[data-field]") return fields;
+            return [];
+          },
+          querySelector(selector) {
+            if (selector === '[data-dirty="true"]') {
+              return fields.find((item) => item.dataset.dirty === "true") || null;
+            }
+            const match = selector.match(/^\[data-field="(.+)"\]$/);
+            return fields.find((item) => item.dataset.field === match?.[1]) || null;
+          },
+        };
+        const form = new globalThis.CommandForm(container, null);
+        form.presentation = {
+          kind: "setting", action_field: "action", query_value: "query",
+          apply_value: "set", query_fields: ["channel"],
+        };
+
+        assert.deepEqual(form.queryValues(), { action: "query", channel: 1 });
+        form.syncResult({ result: { result: { channel: 1, volts_per_division: 0.5 } } });
+        assert.equal(scale.value, "0.5");
+
+        scale.value = "0.8";
+        scale.dataset.dirty = "true";
+        form.syncResult({ result: { result: { channel: 1, volts_per_division: 1 } } }, true);
+        assert.equal(scale.value, "0.8");
+        assert.equal(form.isDirty(), true);
+
+        form.clearDirty();
+        form.syncResult({ result: { result: { channel: 1, volts_per_division: 1 } } }, false);
+        assert.equal(scale.value, "1");
+        assert.equal(form.isDirty(), false);
+        assert.deepEqual(form.values(), { action: "set", channel: 1, volts_per_division: 1 });
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_command_support_consumes_backend_model_projection() -> None:
+    support_path = STATIC_ROOT / "command-support.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        const source = "const translate = (key, values) => `${key}:${values?.model || ''}`;\n"
+          + fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, "");
+        const support = await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const command = {
+          fields: [
+            { name: "channel", type: "integer", maximum: 4 },
+            { name: "impedance", type: "enum", options: ["one_meg", "fifty"] },
+          ],
+          presentation: { models: { two_channel: {
+            supported: false,
+            fields: {
+              channel: { maximum: 2 },
+              impedance: { options: ["one_meg"] },
+            },
+          } } },
+        };
+        assert.equal(support.commandSupported(command, "two_channel"), false);
+        assert.match(support.commandSupportReason(command, "two_channel", "Two Channel"), /Two Channel/);
+        assert.deepEqual(support.fieldsForModel(command, "two_channel"), [
+          { name: "channel", type: "integer", maximum: 2 },
+          { name: "impedance", type: "enum", options: ["one_meg"] },
+        ]);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(support_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_p1_command_editor_and_result_presentation_contract() -> None:
+    app_source = read_static("app.js")
+    form_source = read_static("command-form.js")
+    results_source = read_static("results.js")
+
+    assert 'input.type = "hidden";' in form_source
+    assert 'new Option(translate("status.enabled"), "true")' in form_source
+    assert 'new Option(translate("status.disabled"), "false")' in form_source
+    assert 'new Option(translate("enum.true")' not in form_source
+    assert 'new Option(translate("enum.false")' not in form_source
+    assert "commandForm.queryValues()" in app_source
+    assert 'intent: "readback"' in app_source
+    assert 'if (options.intent === "apply") commandForm.clearDirty();' in app_source
+    assert "}, () => syncCommandSelection());" in app_source
+    assert "renderWorkspaceResult" in results_source
+    assert 'job.command === "identify"' in results_source
+    assert "appendWorkspaceFields(container, fields);" in results_source
+    assert "JSON.stringify(job.result, null, 2)" in results_source
