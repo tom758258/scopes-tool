@@ -642,6 +642,8 @@ def test_scope_close_failure_is_preserved_and_blocks_shutdown(monkeypatch) -> No
         completed = _wait_for_manager_job(manager, job.job_id)
         assert completed.status == "failed"
         assert "close failed" in completed.error
+        with pytest.raises(RuntimeError, match="cleanup failed"):
+            asyncio.run(manager.shutdown(timeout_s=2))
     finally:
         release.set()
         shutdown_thread.join(timeout=2)
