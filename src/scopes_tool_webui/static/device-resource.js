@@ -41,12 +41,14 @@ export class DeviceResource {
     onCommandStateChange = () => {},
     onJobUpdate = () => {},
     onScanError = () => {},
+    onSelectedResourceChange = () => {},
   ) {
     this.elements = elements;
     this.onContextChange = onContextChange;
     this.onCommandStateChange = onCommandStateChange;
     this.onJobUpdate = onJobUpdate;
     this.onScanError = onScanError;
+    this.onSelectedResourceChange = onSelectedResourceChange;
     this.resourceCount = null;
     this.statusKey = "device.ready";
     this.statusError = null;
@@ -70,9 +72,14 @@ export class DeviceResource {
     elements.mode.forEach((input) => input.addEventListener("change", () => this.changed()));
     elements.model.addEventListener("change", () => this.changed());
     elements.resource.addEventListener("input", () => this.changed());
+    elements.resource.addEventListener("change", () => {
+      this.changed(true);
+      this.onSelectedResourceChange(this.context());
+    });
     elements.resourceList.addEventListener("change", () => {
       elements.resource.value = elements.resourceList.value;
       this.changed(true);
+      this.onSelectedResourceChange(this.context());
     });
     elements.scan.addEventListener("click", () => this.scan());
     this.changed();
@@ -234,6 +241,7 @@ export class DeviceResource {
       this.scanStatus = resources.length ? "scanned" : "empty";
       this.statusKey = "device.ready";
       this.changed();
+      if (resources.length) this.onSelectedResourceChange(this.context());
     } catch (error) {
       this.onCommandStateChange({ status: "failed" });
       this.resourceCount = null;

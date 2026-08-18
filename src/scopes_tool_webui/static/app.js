@@ -117,6 +117,8 @@ async function initialize() {
       message: scanError,
     };
     renderCurrentResult();
+  }, (selectedContext) => {
+    refreshSelectedResourceContext(selectedContext);
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   updateAvailability();
@@ -232,10 +234,51 @@ async function executeCommand(command, parameters) {
 
 function updateIdentity(job, commandContext) {
   const idn = job.result?.result?.idn || job.result?.idn;
-  if (idn && deviceResource) {
+  if (idn && deviceResource && sameExecutionContext(context, commandContext)) {
     deviceResource.setIdentity(idn, commandContext);
     renderLiveData();
   }
+}
+
+async function refreshSelectedResourceContext(selectedContext) {
+  if (selectedContext?.mode !== "live" || !selectedContext.resource) return;
+  const commandContext = { ...selectedContext };
+  setCommandState({ status: "queued" });
+  try {
+    const job = await runJob("identify", {}, commandContext, (updated) => {
+      setCommandState({ status: updated.status });
+      presentSelectedResourceJob(updated, commandContext);
+    });
+    setCommandState({ status: job.status });
+    presentSelectedResourceJob(job, commandContext);
+  } catch (error) {
+    setCommandState({ status: "failed" });
+    if (sameExecutionContext(context, commandContext)) {
+      resultPresentation = {
+        kind: "error",
+        job: null,
+        command: "identify",
+        message: error.message || String(error),
+      };
+      renderCurrentResult();
+    }
+  }
+}
+
+function presentSelectedResourceJob(job, commandContext) {
+  updateIdentity(job, commandContext);
+  if (sameExecutionContext(context, commandContext)) {
+    resultPresentation = { kind: "job", job, message: null };
+    renderCurrentResult();
+  } else {
+    renderJob(elements.results, job, null);
+  }
+}
+
+function sameExecutionContext(left, right) {
+  return left?.mode === right?.mode
+    && left?.resource === right?.resource
+    && left?.model_id === right?.model_id;
 }
 
 async function updateHealth() {

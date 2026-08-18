@@ -147,6 +147,24 @@ def test_scan_uses_the_common_job_history_flow_before_resource_updates() -> None
     assert "renderCurrentResult();" in app_source
 
 
+def test_selected_resource_refresh_uses_a_formal_identify_job_flow() -> None:
+    device_source = read_static("device-resource.js")
+    app_source = read_static("app.js")
+    refresh = extract_function(app_source, "async function refreshSelectedResourceContext(selectedContext)")
+    present = extract_function(app_source, "function presentSelectedResourceJob(job, commandContext)")
+
+    assert "onSelectedResourceChange = () => {}," in device_source
+    assert "this.onSelectedResourceChange(this.context());" in device_source
+    assert "refreshSelectedResourceContext(selectedContext);" in app_source
+    assert 'runJob("identify", {}, commandContext' in refresh
+    assert "sameExecutionContext(context, commandContext)" in app_source
+    assert "presentSelectedResourceJob(updated, commandContext);" in refresh
+    assert "updateIdentity(job, commandContext);" in present
+    assert "renderCurrentResult();" in present
+    assert "renderJob(elements.results, job, null);" in present
+    assert "resources[1]" not in extract_function(device_source, "async scan()")
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
     jobs_path = STATIC_ROOT / "jobs.js"
@@ -280,6 +298,116 @@ def test_scan_submit_failure_reports_raw_error_and_preserves_scan_failure_state(
         assert.equal(device.statusError, rawError);
         assert.equal(elements.scan.disabled, false);
         assert(states.some((state) => state.status === "failed"));
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(device_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection() -> None:
+    device_path = STATIC_ROOT / "device-resource.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(value = "") {
+            this.children = [];
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.value = value;
+            this.checked = true;
+            this.selectedOptions = [{ textContent: "" }];
+          }
+          addEventListener(name, handler) {
+            (this.listeners[name] ||= []).push(handler);
+          }
+          dispatch(name) {
+            for (const handler of this.listeners[name] || []) handler();
+          }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) { this.children.push(...nodes); }
+          setAttribute() {}
+        }
+
+        const runJob = async (_command, _parameters, _context, onUpdate) => {
+          const completed = {
+            job_id: "scan-job",
+            command: "list-resources",
+            status: "completed",
+            result: { result: { resources: [{ name: "RESOURCE-A" }, { name: "RESOURCE-B" }] } },
+          };
+          onUpdate({ job_id: completed.job_id, command: completed.command, status: "queued" });
+          onUpdate(completed);
+          return completed;
+        };
+        const getExecutionContext = () => ({
+          mode: "live",
+          resource: globalThis.currentResource.value.trim() || null,
+          model_id: "keysight-dsox4024a",
+        });
+        const translate = (key) => key;
+        globalThis.currentResource = new FakeNode();
+        globalThis.testRunJob = runJob;
+        globalThis.testGetExecutionContext = getExecutionContext;
+        globalThis.testTranslate = translate;
+        globalThis.document = { addEventListener() {} };
+        globalThis.Option = function Option(text, value) {
+          return { textContent: text, value: String(value) };
+        };
+
+        const source = [
+          "const runJob = globalThis.testRunJob;",
+          "const getExecutionContext = globalThis.testGetExecutionContext;",
+          "const translate = globalThis.testTranslate;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.deviceApi = { DeviceResource };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const node = () => new FakeNode();
+        const elements = {
+          mode: [node()],
+          model: node(),
+          resource: globalThis.currentResource,
+          resourceList: node(),
+          scan: node(),
+          settings: node(),
+          settingsPanel: node(),
+          body: node(),
+          deviceCollapse: node(),
+          modeBadge: node(),
+          summary: node(),
+          status: node(),
+        };
+        elements.settingsPanel.hidden = true;
+        const selectedResources = [];
+        const device = new globalThis.deviceApi.DeviceResource(
+          elements,
+          () => {},
+          () => {},
+          () => {},
+          () => {},
+          (context) => selectedResources.push(context.resource),
+        );
+
+        await device.scan();
+        assert.equal(elements.resource.value, "RESOURCE-A");
+        assert.deepEqual(selectedResources, ["RESOURCE-A"]);
+
+        elements.resourceList.value = "RESOURCE-B";
+        elements.resourceList.dispatch("change");
+        assert.equal(elements.resource.value, "RESOURCE-B");
+        assert.deepEqual(selectedResources, ["RESOURCE-A", "RESOURCE-B"]);
         '''
     )
     completed = subprocess.run(
