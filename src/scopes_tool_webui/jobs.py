@@ -30,7 +30,7 @@ class Job:
     command: str
     mode: str
     resource: str | None
-    model_id: str
+    model_id: str | None
     parameters: dict[str, Any]
     artifact_dir: Path
     status: str = "queued"

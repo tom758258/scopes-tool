@@ -1,5 +1,7 @@
 import { hasTranslation, translate } from "/static/i18n.js";
 
+const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
 function translateEnum(value) {
   const key = `enum.${String(value)}`;
   return hasTranslation(key) ? translate(key) : String(value);
@@ -36,16 +38,37 @@ export class CommandForm {
 
   values() {
     const values = {};
-    this.container.querySelectorAll("[data-field]").forEach((element) => {
-      if (element.closest("[data-visible-if-hidden=\"true\"]")) return;
-      if (!element.value && element.type !== "checkbox") return;
+    for (const element of this.container.querySelectorAll("[data-field]")) {
+      if (element.closest("[data-visible-if-hidden=\"true\"]")) continue;
+      element.setCustomValidity?.("");
+      const rawValue = typeof element.value === "string" ? element.value.trim() : element.value;
+      if (element.validity?.badInput || (element.required && rawValue === "")) {
+        element.reportValidity?.();
+        return null;
+      }
+      if (rawValue === "" && element.type !== "checkbox") continue;
       const name = element.dataset.field;
       if (element.type === "checkbox") values[name] = element.checked;
-      else if (element.dataset.type === "integer") values[name] = Number.parseInt(element.value, 10);
-      else if (element.dataset.type === "number") values[name] = Number.parseFloat(element.value);
+      else if (["integer", "number"].includes(element.dataset.type)) {
+        const parsed = Number(rawValue);
+        const valid = DECIMAL_NUMBER_PATTERN.test(rawValue) && Number.isFinite(parsed)
+          && (element.dataset.type !== "integer" || Number.isInteger(parsed));
+        if (!valid) {
+          element.setCustomValidity?.(translate(
+            element.dataset.type === "integer" ? "form.invalidInteger" : "form.invalidNumber",
+          ));
+          element.reportValidity?.();
+          return null;
+        }
+        values[name] = parsed;
+      }
       else if (element.dataset.type === "boolean") values[name] = element.value === "true";
       else values[name] = element.value;
-    });
+      if (element.checkValidity && !element.checkValidity()) {
+        element.reportValidity?.();
+        return null;
+      }
+    }
     return values;
   }
 
@@ -72,15 +95,14 @@ export class CommandForm {
       );
     } else {
       input = document.createElement("input");
-      input.type = field.type === "integer" ? "number" : "text";
+      input.type = ["integer", "number"].includes(field.type) ? "number" : "text";
       if (field.type === "integer") input.step = "1";
-      if (field.type === "number") input.inputMode = "decimal";
       if (field.minimum !== undefined) input.min = field.minimum;
       if (field.maximum !== undefined) input.max = field.maximum;
     }
     input.dataset.field = field.name;
     input.dataset.type = field.type;
-    input.required = false;
+    input.required = field.required === true;
     if (field.default !== undefined) input.value = String(field.default);
     wrapper.append(input);
     return wrapper;

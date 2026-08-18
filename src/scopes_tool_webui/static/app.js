@@ -5,7 +5,7 @@ import { CommandForm } from "/static/command-form.js";
 import { DeviceResource } from "/static/device-resource.js";
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
-import { renderEmpty, renderError, renderJob } from "/static/results.js";
+import { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob } from "/static/results.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
 const elements = {
@@ -16,6 +16,9 @@ const elements = {
   liveState: document.querySelector("#live-state"),
   mode: [...document.querySelectorAll("input[name=mode]")],
   model: document.querySelector("#model-select"),
+  modelField: document.querySelector("#planning-model-field"),
+  detectedModelField: document.querySelector("#detected-model-field"),
+  detectedModel: document.querySelector("#detected-model"),
   resource: document.querySelector("#resource-input"),
   resourceList: document.querySelector("#resource-list"),
   scan: document.querySelector("#scan-button"),
@@ -37,6 +40,8 @@ const elements = {
   execute: document.querySelector("#execute-button"),
   cancel: document.querySelector("#cancel-button"),
   executionStatus: document.querySelector("#execution-status"),
+  identityWorkspace: document.querySelector("#identity-workspace-result"),
+  identityWorkspaceContent: document.querySelector("#identity-workspace-result-content"),
   resultsPanel: document.querySelector("#job-result-panel"),
   results: document.querySelector("#results"),
   resultClear: document.querySelector("#job-result-clear"),
@@ -49,7 +54,7 @@ const elements = {
 
 let commands = [];
 let currentJobId = null;
-let context = { mode: "live", resource: null, model_id: "keysight-dsox4024a" };
+let context = { mode: "live", resource: null, model_id: null };
 let catalog;
 let commandForm;
 let deviceResource;
@@ -60,6 +65,7 @@ let healthState = { status: "checking", version: null, error: null };
 let workspaceExecutionState = { key: "device.ready" };
 let liveCommandState = { key: "device.ready" };
 let pendingResourceLiveSupport = null;
+const latestSuccessfulIdentityResults = new Map();
 let updateBasicAvailability = () => {};
 
 initializeI18n();
@@ -126,7 +132,8 @@ async function initialize() {
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
     const selected = catalog.selected();
-    if (selected) executeCommand(selected.id, commandForm.values());
+    const parameters = commandForm.values();
+    if (selected && parameters !== null) executeCommand(selected.id, parameters);
   });
   elements.cancel.addEventListener("click", async () => {
     if (!currentJobId) return;
@@ -205,6 +212,7 @@ async function executeCommand(command, parameters) {
   }
   executing = true;
   const commandContext = { ...context };
+  if (command === "identify") deviceResource?.setIdentityPending?.(commandContext);
   updateAvailability();
   elements.execute.disabled = true;
   elements.cancel.classList.remove("hidden");
@@ -222,6 +230,7 @@ async function executeCommand(command, parameters) {
     renderCurrentResult();
     updateIdentity(job, commandContext);
   } catch (error) {
+    if (command === "identify") deviceResource?.setIdentityError?.(error.message, commandContext);
     setExecutionStatus({ status: "failed" });
     resultPresentation = { kind: "error", job: null, message: error.message };
     renderCurrentResult();
@@ -234,11 +243,22 @@ async function executeCommand(command, parameters) {
 }
 
 function updateIdentity(job, commandContext) {
-  const idn = job.result?.result?.idn || job.result?.idn;
-  if (idn && deviceResource && sameExecutionContext(context, commandContext)) {
-    deviceResource.setIdentity(idn, commandContext);
+  if (job.command !== "identify" || !deviceResource || !sameExecutionContext(context, commandContext)) return;
+  captureIdentityWorkspaceResult(job, commandContext);
+  if (["queued", "running"].includes(job.status)) {
+    deviceResource.setIdentityPending?.(commandContext);
     renderLiveData();
+    if (typeof updateAvailability === "function") updateAvailability();
+    return;
   }
+  const idn = job.result?.result?.idn || job.result?.idn;
+  if (job.status === "completed" && idn) {
+    deviceResource.setIdentity(idn, commandContext);
+  } else if (["failed", "cancelled"].includes(job.status)) {
+    deviceResource.setIdentityError?.(job.error || translate("status.identifyFailed"), commandContext);
+  }
+  renderLiveData();
+  if (typeof updateAvailability === "function") updateAvailability();
 }
 
 async function refreshSelectedResourceContext(selectedContext) {
@@ -269,6 +289,7 @@ async function evaluateResourceLiveSupport(commandContext) {
     requestedContext: null,
   };
   pendingResourceLiveSupport = pending;
+  deviceResource?.setIdentityPending?.(commandContext);
   setCommandState({ status: pending.status });
   try {
     const job = await runJob("identify", {}, commandContext, (updated) => {
@@ -286,6 +307,7 @@ async function evaluateResourceLiveSupport(commandContext) {
     }
     presentSelectedResourceJob(job, commandContext);
   } catch (error) {
+    deviceResource?.setIdentityError?.(error.message || String(error), commandContext);
     if (sameExecutionContext(context, commandContext)) {
       setCommandState({ status: "failed" });
     }
@@ -333,6 +355,39 @@ function sameExecutionContext(left, right) {
     && left?.model_id === right?.model_id;
 }
 
+function identityWorkspaceKey(commandContext) {
+  return JSON.stringify([
+    commandContext?.mode || null,
+    commandContext?.resource || null,
+    commandContext?.model_id || null,
+  ]);
+}
+
+function captureIdentityWorkspaceResult(job, commandContext) {
+  if (job.command !== "identify" || job.status !== "completed") return false;
+  latestSuccessfulIdentityResults.set(identityWorkspaceKey(commandContext), job);
+  renderIdentityWorkspace();
+  return true;
+}
+
+function renderIdentityWorkspace() {
+  const selected = catalog?.selected();
+  const visible = selected?.id === "identify";
+  elements.identityWorkspace.hidden = !visible;
+  if (!visible) return;
+
+  elements.identityWorkspaceContent.replaceChildren();
+  const job = latestSuccessfulIdentityResults.get(identityWorkspaceKey(context));
+  if (job) {
+    renderIdentityWorkspaceResult(elements.identityWorkspaceContent, job);
+    return;
+  }
+  const empty = document.createElement("p");
+  empty.className = "muted";
+  empty.textContent = translate("workspace.identifyResultEmpty");
+  elements.identityWorkspaceContent.append(empty);
+}
+
 async function updateHealth() {
   healthState = { status: "checking", version: null, error: null };
   renderLiveData();
@@ -371,6 +426,7 @@ function syncCommandSelection() {
   elements.commandDescription.textContent = selected
     ? catalog.description(selected)
     : translate("commands.noDescription");
+  renderIdentityWorkspace();
   updateAvailability();
 }
 
@@ -378,7 +434,10 @@ function commandAvailable(command) {
   if (!catalog) return false;
   const definition = commands.find((item) => item.id === command);
   if (!definition || !definition.modes.includes(context.mode)) return false;
-  return context.mode !== "live" || command === "list-resources" || Boolean(context.resource);
+  if (context.mode !== "live" || command === "list-resources") return true;
+  if (!context.resource) return false;
+  if (command === "identify") return true;
+  return Boolean(deviceResource?.hasCurrentIdentity(context));
 }
 
 function basicAvailable(command) {

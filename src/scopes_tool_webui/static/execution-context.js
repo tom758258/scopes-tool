@@ -3,6 +3,6 @@ export function getExecutionContext(elements) {
   return {
     mode,
     resource: elements.resource.value.trim() || null,
-    model_id: elements.model.value,
+    model_id: mode === "live" ? null : elements.model.value,
   };
 }

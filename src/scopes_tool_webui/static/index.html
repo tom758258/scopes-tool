@@ -41,10 +41,14 @@
                     <label><input type="radio" name="mode" value="dry-run"><span data-i18n="device.dryRun">Dry-run</span></label>
                   </div>
                 </fieldset>
-                <label class="field">
+                <label id="planning-model-field" class="field">
                   <span data-i18n="device.model">Planning model</span>
                   <select id="model-select"></select>
                 </label>
+                <div id="detected-model-field" class="field" hidden>
+                  <span data-i18n="device.detectedModel">Detected model</span>
+                  <output id="detected-model" class="readonly-value" data-i18n="device.modelWaiting">Waiting for identification</output>
+                </div>
               </div>
             </div>
             <button id="device-collapse" class="secondary icon-button utility-icon-button" type="button" data-i18n-title="device.collapse" data-i18n-aria-label="device.collapse" title="Collapse Device / Resource" aria-label="Collapse Device / Resource" aria-controls="device-resource-body" aria-expanded="true">-</button>
@@ -104,7 +108,6 @@
           <button id="advanced-command-toggle" class="secondary advanced-command-button" type="button" aria-controls="advanced-commands" aria-expanded="false">Show more commands</button>
         </div>
         <div id="basic-controls" class="basic-controls">
-          <button data-command="identify" class="command-pill-button" type="button" data-i18n="basic.identify">Identify</button>
           <button data-command="run" class="command-pill-button" type="button" data-i18n="basic.run">Run</button>
           <button data-command="stop-acquisition" class="command-pill-button" type="button" data-i18n="basic.stop">Stop</button>
           <button data-command="single" class="command-pill-button" type="button" data-i18n="basic.single">Single</button>
@@ -142,6 +145,10 @@
               <button id="execute-button" class="primary" type="button" data-i18n="commands.execute">Execute</button>
               <button id="cancel-button" class="secondary hidden" type="button" data-i18n="commands.cancel">Cancel job</button>
             </div>
+            <section id="identity-workspace-result" class="identity-workspace-result" hidden>
+              <strong data-i18n="workspace.latestSuccessfulResult">Latest successful result</strong>
+              <div id="identity-workspace-result-content" class="identity-workspace-result-content" aria-live="polite"></div>
+            </section>
           </div>
         </section>
       </div>

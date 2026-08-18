@@ -50,8 +50,9 @@ Remote binding is not supported.
 The default execution mode is **Live**. Open the settings gear in the
 Device / Resource panel to select Live, Simulate, or Dry-run.
 
-- Live requires an explicit VISA resource. A model selection never overrides
-  live physical identity; Core obtains identity from the instrument `*IDN?`.
+- Live requires an explicit VISA resource. The detected model is read-only;
+  Core obtains identity from the instrument `*IDN?` and uses it for capability
+  validation.
 - Simulate and Dry-run use an explicitly registered Core model profile. The
   default planning model is `keysight-dsox4024a`.
 - Resource scanning uses Core VISA discovery and is a host discovery job; it
@@ -59,12 +60,12 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 
 ## Basic Controls and Commands
 
-Basic Controls provides Identify, Run, Stop, Single, and Screenshot. These are
+Basic Controls provides Run, Stop, Single, and Screenshot. These are
 shortcuts that submit the same command jobs used by the Command workbench.
 
 The Command workbench exposes:
 
-- Identity: `identify`
+- Identity: `identify` (Read device information)
 - Acquisition: `run`, `single`, `stop-acquisition`, `acquisition`
 - Channel: `channel-display`, `channel-scale`, `channel-summary`,
   `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,
@@ -98,7 +99,9 @@ The Command workbench exposes:
 - Segmented Memory: `segmented-memory` and `segmented-capture`
 - Workflow: `capture-batch`, `measure-log`, `measure-until`,
   `triggered-measure-loop`, and `triggered-capture-series`
-- Device: `list-resources`
+
+Resource scanning uses the internal `list-resources` command. Its jobs remain
+in Result History, but it is not shown in the Command workbench.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, and small conditional field groups. Trigger,

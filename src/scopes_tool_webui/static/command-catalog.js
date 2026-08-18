@@ -46,6 +46,8 @@ export class CommandCatalog {
   }
 
   description(command) {
+    const key = `description.${command?.id}`;
+    if (command && hasTranslation(key)) return translate(key);
     return command?.description || command?.label || command?.id || "";
   }
 

@@ -38,6 +38,9 @@ export function renderJob(summaryContainer, job, detailContainer) {
   if (!detailContainer) return;
   detailContainer.replaceChildren();
   if (job.error) appendError(detailContainer, job.error);
+  if (job.command === "identify" && job.status === "completed") {
+    appendIdentityDetail(detailContainer, job);
+  }
   if (job.result) {
     const result = document.createElement("pre");
     result.className = "result-block";
@@ -156,6 +159,47 @@ function identifySummary(result) {
     idn.firmware ? translate("results.summary.firmware", { firmware: idn.firmware }) : "",
   ].filter(Boolean);
   return parts.length ? parts.join(" - ") : translate("results.summary.identificationRead");
+}
+
+function appendIdentityDetail(container, job) {
+  const fields = identityFields(job);
+  if (!fields.length) return;
+
+  const detail = document.createElement("dl");
+  detail.className = "identity-result";
+  fields.forEach(([name, value]) => {
+    const label = document.createElement("dt");
+    label.textContent = translate(`results.identity.${name}`);
+    const content = document.createElement("dd");
+    content.textContent = String(value);
+    detail.append(label, content);
+  });
+  container.append(detail);
+}
+
+export function renderIdentityWorkspaceResult(container, job) {
+  identityFields(job).forEach(([name, value]) => {
+    const field = document.createElement("div");
+    field.className = `identity-workspace-field${name === "resource" ? " identity-workspace-field-wide" : ""}`;
+    const label = document.createElement("small");
+    label.textContent = translate(`results.identity.${name}`);
+    const content = document.createElement("span");
+    content.textContent = String(value);
+    field.append(content, label);
+    container.append(field);
+  });
+}
+
+function identityFields(job) {
+  const result = jobResultPayload(job);
+  const idn = result?.idn || result?.resource?.idn || {};
+  return [
+    ["manufacturer", idn.manufacturer || idn.vendor],
+    ["model", idn.model],
+    ["serial", idn.serial],
+    ["firmware", idn.firmware],
+    ["resource", job.resource || result?.resource?.name],
+  ].filter(([_name, value]) => value !== null && value !== undefined && value !== "");
 }
 
 function resourceSummary(result) {

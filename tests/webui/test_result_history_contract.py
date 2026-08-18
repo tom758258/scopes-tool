@@ -12,6 +12,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "results.js"
 APP_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "app.js"
 STYLES_CSS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "styles.css"
+LOCALE_EN_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "locale_en.js"
+LOCALE_ZH_TW_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "locale_zh_tw.js"
 
 
 def test_result_panel_preserves_powers_style_bounded_job_history() -> None:
@@ -47,6 +49,19 @@ def test_result_clear_resets_history_and_detail() -> None:
     assert "renderCurrentResult();" in app_source
 
 
+def test_identify_detail_is_localized_and_keeps_raw_json() -> None:
+    source = RESULTS_JS.read_text(encoding="utf-8")
+    english = LOCALE_EN_JS.read_text(encoding="utf-8")
+    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+
+    assert 'job.command === "identify" && job.status === "completed"' in source
+    assert 'result.textContent = JSON.stringify(job.result, null, 2);' in source
+    assert '"results.identity.manufacturer": "Manufacturer"' in english
+    assert '"results.identity.resource": "Resource"' in english
+    assert '"results.identity.manufacturer": "製造商"' in chinese
+    assert '"results.identity.resource": "資源"' in chinese
+
+
 def test_result_history_has_powers_like_viewport_and_item_presentation() -> None:
     source = STYLES_CSS.read_text(encoding="utf-8")
     viewport = source.split(".results-content {", 1)[1].split("}", 1)[0]
@@ -80,12 +95,12 @@ def test_result_history_runtime_behaviour() -> None:
         globalThis.testLocale = "en";
         const labels = {
           en: {
-            identify: "Identify", run: "Run", listResources: "List resources", completed: "Completed", failed: "Failed", queued: "Queued", running: "Running",
+            identify: "Read device information", run: "Run", listResources: "List resources", completed: "Completed", failed: "Failed", queued: "Queued", running: "Running",
             queuedSummary: "Waiting to run...", runningSummary: "Executing command...", completedSummary: "Command completed successfully", resourceNone: "No resources found", resourceMany: "4 resources found",
             serial: "serial {{serial}}", firmware: "firmware {{firmware}}", empty: "No command has been run yet.",
           },
           "zh-TW": {
-            identify: "\u8b58\u5225", run: "\u57f7\u884c", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d",
+            identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d",
             queuedSummary: "\u7b49\u5f85\u57f7\u884c", runningSummary: "\u6b63\u5728\u57f7\u884c\u6307\u4ee4", completedSummary: "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210", resourceNone: "\u627e\u4e0d\u5230\u8cc7\u6e90", resourceMany: "\u627e\u5230 4 \u500b\u8cc7\u6e90",
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
           },
@@ -127,7 +142,7 @@ def test_result_history_runtime_behaviour() -> None:
           "const translateJobStatus = globalThis.testTranslateJobStatus;",
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
-          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderJob };";
+          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
         const summary = new FakeNode("div");
@@ -150,22 +165,43 @@ def test_result_history_runtime_behaviour() -> None:
         api.renderJob(summary, makeJob("order-a", "identify", "completed", {
           result: { result: { idn: { model: "DSO-X 4024A" } } },
         }), detail);
-        assert.deepEqual(rowTexts().map((row) => row[0]), ["Run", "Identify"]);
+        assert.deepEqual(rowTexts().map((row) => row[0]), ["Run", "Read device information"]);
         assert.equal(rowTexts()[1][1], "Completed");
 
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("status-job", "identify", "queued"), detail);
-        assert.deepEqual(rowTexts()[0], ["Identify", "Queued", "Waiting to run..."]);
+        assert.deepEqual(rowTexts()[0], ["Read device information", "Queued", "Waiting to run..."]);
         api.renderJob(summary, makeJob("status-job", "identify", "running"), detail);
-        assert.deepEqual(rowTexts()[0], ["Identify", "Running", "Executing command..."]);
+        assert.deepEqual(rowTexts()[0], ["Read device information", "Running", "Executing command..."]);
 
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("state-job", "identify", "queued"), detail);
         api.renderJob(summary, makeJob("state-job", "identify", "running"), detail);
         api.renderJob(summary, makeJob("state-job", "identify", "completed", {
-          result: { result: { idn: { model: "DSO-X 4034A", serial: "MY55440270", firmware: "07.20" } } },
+          resource: "USB0::SCOPE::INSTR",
+          result: { result: { idn: { vendor: "KEYSIGHT TECHNOLOGIES", model: "DSO-X 4034A", serial: "MY55440270", firmware: "07.20" } } },
         }), detail);
-        assert.deepEqual(rowTexts(), [["Identify", "Completed", "DSO-X 4034A - serial MY55440270 - firmware 07.20"]]);
+        assert.deepEqual(rowTexts(), [["Read device information", "Completed", "DSO-X 4034A - serial MY55440270 - firmware 07.20"]]);
+        assert.equal(detail.children[0].className, "identity-result");
+        assert.equal(detail.children[0].children.length, 10);
+        assert.equal(detail.children[1].className, "result-block");
+
+        const workspace = new FakeNode("div");
+        api.renderIdentityWorkspaceResult(workspace, makeJob("workspace-identity", "identify", "completed", {
+          resource: "USB0::SCOPE::INSTR",
+          result: { result: { idn: { vendor: "KEYSIGHT TECHNOLOGIES", model: "DSO-X 4034A", serial: "MY55440270", firmware: "07.20" } } },
+        }));
+        assert.equal(workspace.children.length, 5);
+        assert.deepEqual(
+          workspace.children.map((field) => field.children.map((node) => node.textContent)),
+          [
+            ["KEYSIGHT TECHNOLOGIES", "results.identity.manufacturer"],
+            ["DSO-X 4034A", "results.identity.model"],
+            ["MY55440270", "results.identity.serial"],
+            ["07.20", "results.identity.firmware"],
+            ["USB0::SCOPE::INSTR", "results.identity.resource"],
+          ],
+        );
 
         api.renderJob(summary, makeJob("run-job", "run", "completed", { result: { result: { action: "run" } } }), detail);
         assert.equal(rowTexts()[0][2], "Command completed successfully");
@@ -188,9 +224,9 @@ def test_result_history_runtime_behaviour() -> None:
 
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("zh-status-job", "identify", "queued"), detail);
-        assert.deepEqual(rowTexts()[0], ["\u8b58\u5225", "\u6392\u968a\u4e2d", "\u7b49\u5f85\u57f7\u884c"]);
+        assert.deepEqual(rowTexts()[0], ["\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", "\u6392\u968a\u4e2d", "\u7b49\u5f85\u57f7\u884c"]);
         api.renderJob(summary, makeJob("zh-status-job", "identify", "running"), detail);
-        assert.deepEqual(rowTexts()[0], ["\u8b58\u5225", "\u57f7\u884c\u4e2d", "\u6b63\u5728\u57f7\u884c\u6307\u4ee4"]);
+        assert.deepEqual(rowTexts()[0], ["\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", "\u57f7\u884c\u4e2d", "\u6b63\u5728\u57f7\u884c\u6307\u4ee4"]);
 
         const rawError = "VISA <raw> detail";
         api.renderEmpty(summary, detail);

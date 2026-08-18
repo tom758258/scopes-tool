@@ -101,10 +101,13 @@ export class DeviceResource {
       this.clearIdentity();
       if (contextChanged && !this.scanInProgress) {
         this.scanStatus = "not-scanned";
+        this.statusKey = "device.ready";
         this.statusError = null;
       }
     }
     this.elements.model.disabled = live;
+    if (this.elements.modelField) this.elements.modelField.hidden = live;
+    if (this.elements.detectedModelField) this.elements.detectedModelField.hidden = !live;
     this.renderMode(context);
     this.renderStatus(context);
     this.lastContext = contextSnapshot(context);
@@ -135,6 +138,11 @@ export class DeviceResource {
     const mode = translate(labels[context.mode] || context.mode);
     let summary;
     if (context.mode === "live") {
+      if (this.elements.detectedModel) {
+        this.elements.detectedModel.textContent = this.hasCurrentIdentity(context)
+          ? identityLabel(this.identity)
+          : translate("device.modelWaiting");
+      }
       const resource = context.resource || translate("device.resourceNotSelected");
       summary = translate("device.summary.live", {
         mode,
@@ -160,6 +168,12 @@ export class DeviceResource {
       });
     }
     if (this.scanStatus === "scanning") return translate("device.detection.scanning");
+    if (context.resource && this.statusKey === "status.waiting") {
+      return translate("device.detection.identifying");
+    }
+    if (context.resource && this.statusError) {
+      return translate("device.detection.identifyFailed", { error: this.statusError });
+    }
     if (context.resource || this.resourceCount !== null) {
       return translate("device.detection.notIdentified");
     }
@@ -187,8 +201,28 @@ export class DeviceResource {
     }
     this.identity = identity || null;
     this.identityContext = contextSnapshot(associatedContext);
+    this.statusKey = "device.ready";
+    this.statusError = null;
     this.renderStatus(this.context());
     return Boolean(this.identity);
+  }
+
+  setIdentityPending(associatedContext = this.context()) {
+    if (!sameContext(this.context(), associatedContext)) return false;
+    this.clearIdentity();
+    this.statusKey = "status.waiting";
+    this.statusError = null;
+    this.renderStatus(this.context());
+    return true;
+  }
+
+  setIdentityError(error, associatedContext = this.context()) {
+    if (!sameContext(this.context(), associatedContext)) return false;
+    this.clearIdentity();
+    this.statusKey = "status.identifyFailed";
+    this.statusError = error || null;
+    this.renderStatus(this.context());
+    return true;
   }
 
   clearIdentity() {

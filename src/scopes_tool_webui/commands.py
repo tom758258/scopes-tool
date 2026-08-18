@@ -199,6 +199,7 @@ COMMANDS = (
         "id": "list-resources",
         "category": "Device",
         "label": "List resources",
+        "hidden": True,
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
             {"name": "live_only", "type": "boolean", "default": False},
@@ -207,7 +208,8 @@ COMMANDS = (
     {
         "id": "identify",
         "category": "Identity",
-        "label": "Identify",
+        "label": "Read device information",
+        "description": "Read instrument identification information",
         "modes": ("live", "simulate"),
         "fields": (),
     },
@@ -1124,7 +1126,7 @@ class ScopeSessionCloseError(RuntimeError):
 
 
 def command_catalog() -> list[dict[str, Any]]:
-    return [_jsonable(entry) for entry in COMMANDS]
+    return [_jsonable(entry) for entry in COMMANDS if not entry.get("hidden")]
 
 
 def model_catalog() -> list[dict[str, str]]:
@@ -1159,18 +1161,22 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
     resource = payload.get("resource")
     if resource is not None and (not isinstance(resource, str) or not resource.strip()):
         raise WebUIRequestError("resource must be a non-empty string when provided")
-    model_id = payload.get("model_id", DEFAULT_MODEL_ID)
-    if not isinstance(model_id, str) or not model_id.strip():
-        raise WebUIRequestError("model_id must be a non-empty registered model ID")
-    try:
-        physical_model_for_id(model_id)
-    except Exception as exc:
-        raise WebUIRequestError(str(exc)) from exc
+    model_id = None if mode == "live" else payload.get("model_id", DEFAULT_MODEL_ID)
+    if mode != "live":
+        if not isinstance(model_id, str) or not model_id.strip():
+            raise WebUIRequestError("model_id must be a non-empty registered model ID")
+        try:
+            physical_model_for_id(model_id)
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
     if mode == "live" and command != "list-resources" and resource is None:
         raise WebUIRequestError("live execution requires an explicit VISA resource")
 
     normalized = dict(parameters)
-    _validate_parameters(command, normalized, mode, model_id)
+    if mode == "live" and command != "list-resources":
+        _validate_parameter_shapes(command, normalized, mode)
+    else:
+        _validate_parameters(command, normalized, mode, model_id)
     return {
         "command": command,
         "mode": mode,
@@ -1185,7 +1191,7 @@ def execute_command(
     *,
     mode: str,
     resource: str | None,
-    model_id: str,
+    model_id: str | None,
     parameters: Mapping[str, Any],
     artifact_dir: Path,
     stop_requested: Callable[[], bool] | None = None,
@@ -1208,15 +1214,21 @@ def execute_command(
 
     config = _run_config(mode, resource, model_id)
     if mode == "dry-run":
+        if model_id is None:
+            raise WebUIRequestError("dry-run execution requires a planning model")
         return _execute_dry_run(command, parameters, model_id, artifact_dir)
 
     scope = open_scope_for_run(config)
     try:
+        normalized = dict(parameters)
+        if mode == "live":
+            idn = scope.idn or scope.query_idn()
+            _validate_parameters(command, normalized, mode, idn.model_id)
         return _execute_scope_command(
             scope,
             command,
             resource or config.resource or "",
-            parameters,
+            normalized,
             artifact_dir,
             stop_requested=stop_requested,
         )
@@ -2033,7 +2045,9 @@ def _operation_payload(result: OperationResult) -> dict[str, Any]:
     }
 
 
-def _run_config(mode: str, resource: str | None, model_id: str) -> ResolvedRunConfig:
+def _run_config(mode: str, resource: str | None, model_id: str | None) -> ResolvedRunConfig:
+    if mode != "live" and model_id is None:
+        raise WebUIRequestError(f"{mode} execution requires a planning model")
     options = RunModeOptions(
         simulate=mode == "simulate",
         dry_run=mode == "dry-run",
@@ -2510,17 +2524,56 @@ def _validate_p3c_serial(command: str, parameters: dict[str, Any], capabilities:
     parameters.update(values)
 
 
+def _validate_parameter_shapes(
+    command: str,
+    parameters: Mapping[str, Any],
+    mode: str,
+) -> None:
+    fields = {field["name"]: field for field in _COMMAND_BY_ID[command]["fields"]}
+    for name, field in fields.items():
+        if name not in parameters:
+            if field.get("required") is True:
+                raise WebUIRequestError(f"{name} is required")
+            continue
+        value = parameters[name]
+        field_type = field["type"]
+        if field_type == "integer":
+            parsed = _integer(value, name)
+        elif field_type == "number":
+            parsed = _finite_number(value, name)
+        elif field_type == "boolean":
+            _require_boolean(value, name)
+            continue
+        elif field_type == "string":
+            if not isinstance(value, str):
+                raise WebUIRequestError(f"{name} must be a string")
+            continue
+        elif field_type == "enum":
+            options = field.get("mode_options", {}).get(mode, field.get("options", ()))
+            if value not in options:
+                raise WebUIRequestError(f"{name} must be one of: {', '.join(map(str, options))}")
+            continue
+        else:
+            continue
+        if "minimum" in field and parsed < field["minimum"]:
+            raise WebUIRequestError(f"{name} must be at least {field['minimum']}")
+        if "maximum" in field and parsed > field["maximum"]:
+            raise WebUIRequestError(f"{name} must be at most {field['maximum']}")
+
+
 def _validate_parameters(
     command: str,
     parameters: dict[str, Any],
     mode: str,
-    model_id: str,
+    model_id: str | None,
 ) -> None:
-    capabilities = capabilities_for_model_id(model_id)
     if command == "list-resources":
         parameters.setdefault("live_only", False)
         _require_boolean(parameters["live_only"], "live_only")
         return
+    if model_id is None:
+        raise WebUIRequestError("detected model identity is required for live validation")
+    capabilities = capabilities_for_model_id(model_id)
     if command in _P3C_COMMAND_IDS:
         _validate_p3c_parameters(command, parameters, mode, model_id)
         return
