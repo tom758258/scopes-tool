@@ -6,6 +6,10 @@ does not own VISA, SCPI, instrument identity, capability, or safety behavior.
 
 Import package: `scopes_tool_webui`
 
+Maintainers should read [WebUI Change Rules](web-ui-change-rules.md) before
+changing command exposure, browser state, capability presentation, or result
+behavior.
+
 ## Installation
 
 From the repository root, create or reuse the local virtual environment and
@@ -67,6 +71,7 @@ The Command workbench exposes:
 
 - Identity: `identify` (Read device information)
 - Acquisition: `run`, `single`, `stop-acquisition`, `acquisition`
+- Timebase: `timebase-scale`, `timebase-position`
 - Channel: `channel-display`, `channel-scale`, `channel-summary`,
   `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,
   `channel-bandwidth-limit`, `channel-impedance`, `channel-invert`,
@@ -104,9 +109,12 @@ Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
 
 The command form uses simple metadata-driven controls for ordinary values,
-enums, numbers, booleans, and small conditional field groups. Trigger,
-Search, Serial, Segmented Memory, and Workflow commands use only the
-conditional visibility needed by their existing Core parameter semantics.
+enums, numbers, booleans, multi-select lists, and small conditional field
+groups. Workflow channel and measurement-item lists use model-aware
+multi-select controls; channel-pair specifications remain text fields with a
+short example. Trigger, Search, Serial, Segmented Memory, and Workflow
+commands use only the conditional visibility needed by their existing Core
+parameter semantics.
 
 Commands that expose the existing Core `query` / `set` contract as an
 instrument setting use a read-edit-Apply workflow in the browser. Selecting
@@ -120,6 +128,11 @@ capabilities. Live uses the detected physical model; Simulate and Dry-run use
 the selected planning model. The command workspace shows the latest successful
 result for that exact command and execution context, while Result History and
 raw Result Detail retain the full job and diagnostic views.
+
+Timebase scale and position use the same read-edit-Apply-verification pattern.
+Core does not currently expose public Timebase mode or reference controls, so
+the WebUI does not invent them. Display persistence uses explicit Minimum,
+Infinite, and Timed modes instead of requiring a magic string.
 
 The added instrument-setting commands use Live or Simulate mode and the
 existing Core capability and validation boundaries. They do not add new
@@ -151,6 +164,26 @@ can be downloaded through the job result. Instrument-side `save-image` and
 `save-waveform` commands return the Core save result but do not create host
 WebUI artifacts. Artifact downloads are limited to files registered by that
 job.
+
+## Core coverage boundary
+
+The Command workbench intentionally exposes operator-facing settings,
+captures, finite workflows, and structured information commands that have a
+clear browser interaction. Resource discovery uses the hidden
+`list-resources` helper, while `identify` remains the visible Read device
+information command.
+
+Advanced or diagnostic CLI paths are not automatically browser commands.
+Current intentional omissions include direct SCPI sending, setup recall/save,
+autoscale and broad cleanup operations, worker/doctor/hardware-report tooling,
+Generic Sequence editing, Cursor and Annotation editors, WGEN controls,
+advanced measurement sweeps/statistics, and advanced FFT/Math
+transform/filter/visualization controls. Acquisition points, record length,
+sample rate, and similar low-level information remain CLI/Core paths until a
+coherent WebUI presentation is defined. These omissions avoid exposing a Core
+operation without an appropriate interaction, capability, and result model.
+Basic FFT unit and window values remain Core-validated text until Core exposes
+public option metadata that the WebUI can project without duplicating it.
 
 ## Language and current limitations
 

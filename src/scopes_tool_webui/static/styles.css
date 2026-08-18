@@ -193,7 +193,9 @@ button:disabled { cursor: default; opacity: .55; }
 }
 .live-resource-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; min-width: 0; }
 .field, .filter-field { display: grid; gap: 5px; min-width: 0; }
+.field[hidden] { display: none; }
 .field > span, .field-label, .filter-field > span { color: var(--muted); font-size: 11px; font-weight: 600; }
+.field-help { color: var(--muted); font-size: 11px; line-height: 1.35; }
 .readonly-value { min-height: 38px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); color: var(--ink); }
 .identity-result { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); }
 .identity-result dt { color: var(--muted); font-weight: 600; }

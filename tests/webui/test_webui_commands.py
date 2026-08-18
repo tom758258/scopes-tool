@@ -9,7 +9,11 @@ from fastapi.testclient import TestClient
 
 from scopes_tool_core.dvm import DVM_MODES
 from scopes_tool_core.math import MATH_COMPOSITE_OPERATIONS, MATH_OPERATIONS, MATH_SOURCES
-from scopes_tool_core.measurements import MEASUREMENT_WINDOW_CHOICES, SUPPORTED_MEASUREMENT_ITEMS
+from scopes_tool_core.measurements import (
+    MEASUREMENT_WINDOW_CHOICES,
+    SINGLE_CHANNEL_MEASUREMENT_ITEMS,
+    SUPPORTED_MEASUREMENT_ITEMS,
+)
 import scopes_tool_webui.app as app_module
 import scopes_tool_webui.commands as commands_module
 from scopes_tool_webui.app import app
@@ -83,6 +87,17 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     assert channel_scale["presentation"]["kind"] == "setting"
     assert channel_scale["presentation"]["action"] == "apply"
     assert channel_scale["presentation"]["query_fields"] == ["channel"]
+    for command_id, value_name in (
+        ("timebase-scale", "seconds_per_division"),
+        ("timebase-position", "position_seconds"),
+    ):
+        timebase = commands[command_id]
+        assert timebase["presentation"]["kind"] == "setting"
+        assert timebase["presentation"]["action"] == "apply"
+        assert timebase["presentation"]["query_fields"] == []
+        assert next(
+            field for field in timebase["fields"] if field["name"] == value_name
+        )["required_if"] == [{"field": "action", "equals": "set"}]
 
     model_2000x = "keysight-dsox2004a"
     impedance = commands["channel-impedance"]["presentation"]["models"][model_2000x]
@@ -130,6 +145,61 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     }
     assert commands["measure-show"]["presentation"]["kind"] == "one-way"
     assert commands["measure-show"]["presentation"]["action"] == "show"
+
+    persistence_fields = {
+        field["name"]: field for field in commands["display-persistence"]["fields"]
+    }
+    assert persistence_fields["mode"]["options"] == ["minimum", "infinite", "timed"]
+    assert persistence_fields["seconds"]["visible_if"][-1] == {
+        "field": "mode",
+        "equals": "timed",
+    }
+
+    workflow_fields = {
+        field["name"]: field for field in commands["measure-log"]["fields"]
+    }
+    assert workflow_fields["channels"]["type"] == "multi-enum"
+    assert workflow_fields["channels"]["serialize"] == "csv"
+    assert workflow_fields["items"]["options"] == list(SINGLE_CHANNEL_MEASUREMENT_ITEMS)
+    assert workflow_fields["pairs"]["help"]
+    workflow_model = commands["measure-log"]["presentation"]["models"][MODEL_ID]
+    assert workflow_model["fields"]["channels"]["options"] == [1, 2, 3, 4]
+
+
+def test_simulated_timebase_and_display_persistence_use_setting_readback() -> None:
+    client = TestClient(app)
+
+    scale = submit(
+        client,
+        "timebase-scale",
+        "simulate",
+        {"action": "set", "seconds_per_division": 0.002},
+    )
+    assert scale["status"] == "completed"
+    assert scale["result"]["result"]["timebase"] == {
+        "seconds_per_division": 0.002
+    }
+
+    position = submit(
+        client,
+        "timebase-position",
+        "simulate",
+        {"action": "set", "position_seconds": -0.0005},
+    )
+    assert position["status"] == "completed"
+    assert position["result"]["result"]["timebase"] == {
+        "position_seconds": -0.0005
+    }
+
+    persistence = submit(
+        client,
+        "display-persistence",
+        "simulate",
+        {"action": "set", "mode": "timed", "seconds": 2.5},
+    )
+    assert persistence["status"] == "completed"
+    assert persistence["result"]["result"]["persistence"]["mode"] == "timed"
+    assert persistence["result"]["result"]["persistence"]["seconds"] == 2.5
 
 
 def test_commands_expose_the_p3a_flat_subset() -> None:

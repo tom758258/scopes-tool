@@ -906,6 +906,18 @@ def test_live_mode_badge_is_neutral_and_utility_glyphs_are_centered() -> None:
     assert ".execution-mode-badge.mode-live { border-color: var(--line-strong); background: transparent; color: var(--muted); }" in styles
 
 
+def test_hidden_conditional_fields_override_grid_layout() -> None:
+    styles = read_static("styles.css")
+
+    assert ".field[hidden] { display: none; }" in styles
+
+
+def test_number_fields_allow_fractional_html_values() -> None:
+    source = read_static("command-form.js")
+
+    assert 'if (field.type === "number") input.step = "any";' in source
+
+
 def test_summary_uses_only_scopes_supported_states() -> None:
     english = read_static("locale_en.js")
 
@@ -982,6 +994,21 @@ def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_command_help_and_common_result_labels_are_localized() -> None:
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+
+    for key in (
+        "description.action.apply",
+        "description.timebase-scale",
+        "help.pairs",
+        "results.field.seconds_per_division",
+        "results.field.planned_scpi",
+    ):
+        assert f'"{key}":' in english
+        assert f'"{key}":' in chinese
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
@@ -1241,6 +1268,58 @@ def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
         assert.equal(busForm.queryValues(), null);
         bus.value = "1";
         assert.deepEqual(busForm.queryValues(), { action: "query", bus: 1 });
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_multi_select_serializes_the_existing_csv_contract() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.CommandForm = CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const channels = {
+          value: "1",
+          type: "select-multiple",
+          multiple: true,
+          selectedOptions: [{ value: "1" }, { value: "2" }],
+          dataset: { field: "channels", type: "multi-enum", serialize: "csv" },
+          required: true,
+          validity: { badInput: false },
+          closest: () => null,
+          setCustomValidity() {},
+          checkValidity() { return this.selectedOptions.length > 0; },
+          reportValidity() {},
+        };
+        const container = {
+          querySelectorAll(selector) { return selector === "[data-field]" ? [channels] : []; },
+        };
+        const form = new globalThis.CommandForm(container, null);
+        assert.deepEqual(form.values(), { channels: "1,2" });
+
+        channels.value = "";
+        channels.selectedOptions = [];
+        assert.equal(form.values(), null);
         '''
     )
     completed = subprocess.run(

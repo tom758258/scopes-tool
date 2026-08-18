@@ -154,7 +154,9 @@ export class CommandForm {
   draft() {
     return [...this.container.querySelectorAll("[data-field]")].map((input) => ({
       name: input.dataset.field,
-      value: input.value,
+      value: input.multiple
+        ? [...input.selectedOptions].map((option) => option.value)
+        : input.value,
       dirty: input.dataset.dirty === "true",
     }));
   }
@@ -163,7 +165,14 @@ export class CommandForm {
     draft.forEach((entry) => {
       const input = this.container.querySelector(`[data-field="${entry.name}"]`);
       if (!input) return;
-      input.value = entry.value;
+      if (input.multiple) {
+        const selected = new Set(Array.isArray(entry.value) ? entry.value.map(String) : []);
+        [...input.options].forEach((option) => {
+          option.selected = selected.has(option.value);
+        });
+      } else {
+        input.value = entry.value;
+      }
       if (entry.dirty) input.dataset.dirty = "true";
     });
   }
@@ -191,12 +200,13 @@ export class CommandForm {
     label.textContent = translate(`field.${field.name}`);
     wrapper.append(label);
     let input;
-    if (field.type === "enum") {
+    if (["enum", "multi-enum"].includes(field.type)) {
       input = document.createElement("select");
+      input.multiple = field.type === "multi-enum";
       const actionChoices = field.name === this.presentation?.action_field
         ? this.presentation.action_choices
         : null;
-      if (field.default === undefined) {
+      if (!input.multiple && field.default === undefined) {
         const required = field.required === true || Boolean(field.required_if);
         input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
       }
@@ -204,6 +214,7 @@ export class CommandForm {
       options.forEach((option) => {
         input.append(new Option(translateEnum(option), String(option)));
       });
+      if (input.multiple) input.size = Math.min(Math.max(options.length, 2), 6);
       if (actionChoices?.length) input.value = String(actionChoices[0]);
     } else if (field.type === "boolean") {
       input = document.createElement("select");
@@ -217,11 +228,13 @@ export class CommandForm {
       input = document.createElement("input");
       input.type = ["integer", "number"].includes(field.type) ? "number" : "text";
       if (field.type === "integer") input.step = "1";
+      if (field.type === "number") input.step = "any";
       if (field.minimum !== undefined) input.min = field.minimum;
       if (field.maximum !== undefined) input.max = field.maximum;
     }
     input.dataset.field = field.name;
     input.dataset.type = field.type;
+    if (field.serialize) input.dataset.serialize = field.serialize;
     input.dataset.queryField = String(
       (this.presentation?.query_fields || []).includes(field.name),
     );
@@ -231,15 +244,33 @@ export class CommandForm {
     const managedActionChoice = field.name === this.presentation?.action_field
       && this.presentation?.action_choices?.length;
     if (field.default !== undefined && !managedActionChoice) {
-      input.value = String(field.default);
+      if (input.multiple && Array.isArray(field.default)) {
+        const defaults = new Set(field.default.map(String));
+        [...input.options].forEach((option) => {
+          option.selected = defaults.has(option.value);
+        });
+      } else {
+        input.value = String(field.default);
+      }
     }
     wrapper.append(input);
+    if (field.help) {
+      const help = document.createElement("small");
+      help.className = "field-help";
+      const helpKey = `help.${field.name}`;
+      help.textContent = hasTranslation(helpKey) ? translate(helpKey) : field.help;
+      wrapper.append(help);
+    }
     return wrapper;
   }
 
   parseElement(element, report = true) {
     const rawValue = typeof element.value === "string" ? element.value.trim() : element.value;
     if (rawValue === "") return undefined;
+    if (element.dataset.type === "multi-enum") {
+      const values = [...element.selectedOptions].map((option) => option.value);
+      return element.dataset.serialize === "csv" ? values.join(",") : values;
+    }
     if (["integer", "number"].includes(element.dataset.type)) {
       const parsed = Number(rawValue);
       const valid = DECIMAL_NUMBER_PATTERN.test(rawValue) && Number.isFinite(parsed)

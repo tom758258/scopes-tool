@@ -68,6 +68,7 @@ from scopes_tool_core.math import (
 )
 from scopes_tool_core.measurements import (
     MEASUREMENT_WINDOW_CHOICES,
+    SINGLE_CHANNEL_MEASUREMENT_ITEMS,
     SUPPORTED_MEASUREMENT_ITEMS,
     normalize_measurement_item,
     normalize_measurement_window,
@@ -191,6 +192,10 @@ from scopes_tool_core.save_export import (
     validate_save_quoted_string,
     validate_save_waveform_length,
 )
+from scopes_tool_core.timebase import (
+    validate_timebase_position,
+    validate_timebase_scale,
+)
 
 
 DEFAULT_MODEL_ID = "keysight-dsox4024a"
@@ -253,6 +258,26 @@ COMMANDS = (
             },
             {"name": "type", "type": "enum", "options": ("normal", "average", "high_resolution", "peak")},
             {"name": "count", "type": "integer", "minimum": 2, "maximum": 65536},
+        ),
+    },
+    {
+        "id": "timebase-scale",
+        "category": "Timebase",
+        "label": "Timebase scale",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "seconds_per_division", "type": "number", "minimum": 0, "required_if": [{"field": "action", "equals": "set"}]},
+        ),
+    },
+    {
+        "id": "timebase-position",
+        "category": "Timebase",
+        "label": "Timebase position",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "position_seconds", "type": "number", "required_if": [{"field": "action", "equals": "set"}]},
         ),
     },
     {
@@ -429,7 +454,8 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "value", "type": "string", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "mode", "type": "enum", "options": ("minimum", "infinite", "timed"), "visible_if": [{"field": "action", "equals": "set"}], "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "seconds", "type": "number", "minimum": 0.1, "maximum": 60.0, "visible_if": [{"field": "action", "equals": "set"}, {"field": "mode", "equals": "timed"}], "required_if": [{"field": "action", "equals": "set"}, {"field": "mode", "equals": "timed"}]},
         ),
     },
     {
@@ -1087,11 +1113,11 @@ P3C_COMMANDS = (
     },
     {
         "id": "capture-batch", "category": "Workflow", "label": "Capture batch", "modes": ("live", "simulate"),
-        "fields": (_p3c_field("channels", "string", required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("count", "integer", minimum=1, default=1), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("count", "integer", minimum=1, default=1), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
         "id": "measure-log", "category": "Workflow", "label": "Measurement log", "modes": ("live", "simulate"),
-        "fields": (_p3c_field("channels", "string"), _p3c_field("items", "string", default="vpp,frequency"), _p3c_field("pairs", "string"), _p3c_field("pair_items", "string", default="phase,delay"), _p3c_field("interval_seconds", "number", minimum=0, default=1), _p3c_field("count", "integer", minimum=1), _p3c_field("duration_seconds", "number", minimum=0), _p3c_field("stop_on_error", "boolean")),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=SINGLE_CHANNEL_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("interval_seconds", "number", minimum=0, default=1), _p3c_field("count", "integer", minimum=1), _p3c_field("duration_seconds", "number", minimum=0), _p3c_field("stop_on_error", "boolean")),
     },
     {
         "id": "measure-until", "category": "Workflow", "label": "Measure until", "modes": ("live", "simulate", "dry-run"),
@@ -1099,11 +1125,11 @@ P3C_COMMANDS = (
     },
     {
         "id": "triggered-measure-loop", "category": "Workflow", "label": "Triggered measurement loop", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_p3c_field("channels", "string"), _p3c_field("items", "string", default="vpp,frequency"), _p3c_field("pairs", "string"), _p3c_field("pair_items", "string", default="phase,delay"), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=SINGLE_CHANNEL_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
         "id": "triggered-capture-series", "category": "Workflow", "label": "Triggered capture series", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_p3c_field("channels", "string", required=True), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", minimum=0, required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", minimum=0, required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
     },
 )
 
@@ -1333,6 +1359,8 @@ def _model_command_presentation(
         override: dict[str, Any] = {}
         if field.get("type") == "integer" and name in analog_fields:
             override["maximum"] = capabilities.analog_channels
+        if field.get("type") == "multi-enum" and name == "channels":
+            override["options"] = tuple(range(1, capabilities.analog_channels + 1))
         if field.get("type") == "integer" and name == "function":
             override["maximum"] = capabilities.math_function_count
         if field.get("type") == "integer" and name == "bus":
@@ -1611,6 +1639,20 @@ def _execute_scope_command(
         return _simple_scope_result("stop-acquisition")
     if command == "acquisition":
         return _execute_acquisition(scope, parameters)
+    if command == "timebase-scale":
+        if parameters["action"] == "set":
+            scope.set_timebase_scale(parameters["seconds_per_division"])
+        return _state_scope_result(
+            "timebase",
+            {"seconds_per_division": scope.query_timebase_scale()},
+        )
+    if command == "timebase-position":
+        if parameters["action"] == "set":
+            scope.set_timebase_position(parameters["position_seconds"])
+        return _state_scope_result(
+            "timebase",
+            {"position_seconds": scope.query_timebase_position()},
+        )
     if command == "channel-display":
         return _execute_channel_display(scope, parameters)
     if command == "channel-scale":
@@ -1723,8 +1765,21 @@ def _execute_scope_command(
         return _simple_scope_result("display-clear")
     if command == "display-persistence":
         if parameters["action"] == "set":
-            scope.set_display_persistence(parameters["value"])
-        return _state_scope_result("persistence", scope.query_display_persistence())
+            value = (
+                parameters["seconds"]
+                if parameters["mode"] == "timed"
+                else parameters["mode"]
+            )
+            scope.set_display_persistence(value)
+        persistence = scope.query_display_persistence()
+        return _state_scope_result(
+            "persistence",
+            {
+                "mode": persistence.mode or "timed",
+                "seconds": persistence.seconds,
+                "raw_value": persistence.raw_value,
+            },
+        )
     if command == "display-intensity":
         if parameters["action"] == "set":
             scope.set_display_intensity(parameters["value"])
@@ -2850,6 +2905,26 @@ def _validate_parameters(
                 raise WebUIRequestError(str(exc)) from exc
         if mode == "dry-run" and action != "query":
             raise WebUIRequestError("dry-run acquisition supports query only")
+    elif command in {"timebase-scale", "timebase-position"}:
+        action = _action(parameters, command)
+        value_name = (
+            "seconds_per_division"
+            if command == "timebase-scale"
+            else "position_seconds"
+        )
+        if action == "set":
+            _require_parameter(parameters, value_name, command)
+            try:
+                value = _finite_number(parameters[value_name], value_name)
+                parameters[value_name] = (
+                    validate_timebase_scale(value)
+                    if command == "timebase-scale"
+                    else validate_timebase_position(value)
+                )
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            _reject_query_parameters(parameters, (value_name,), command)
     elif command in {"channel-display", "channel-scale"}:
         action = parameters.setdefault("action", "query")
         if action not in {"query", "set"}:
@@ -2936,18 +3011,30 @@ def _validate_parameters(
         action = _action(parameters, command)
         value_name = {
             "display-label": "enabled",
-            "display-persistence": "value",
             "display-intensity": "value",
         }.get(command)
         if action == "set":
-            if value_name is not None:
+            if command == "display-persistence":
+                _require_parameter(parameters, "mode", command)
+            elif value_name is not None:
                 _require_parameter(parameters, value_name, command)
             try:
                 if command == "display-label":
                     _require_boolean(parameters[value_name], value_name)
                 elif command == "display-persistence":
-                    mode, seconds = validate_display_persistence(parameters[value_name])
-                    parameters[value_name] = mode if mode is not None else seconds
+                    mode = parameters["mode"]
+                    if mode not in {"minimum", "infinite", "timed"}:
+                        raise WebUIRequestError(
+                            "display-persistence mode must be minimum, infinite, or timed"
+                        )
+                    value = mode
+                    if mode == "timed":
+                        _require_parameter(parameters, "seconds", command)
+                        parameters["seconds"] = _finite_number(
+                            parameters["seconds"], "seconds"
+                        )
+                        value = parameters["seconds"]
+                    validate_display_persistence(value)
                 elif command == "display-intensity":
                     parameters[value_name] = validate_display_intensity(
                         _integer(parameters[value_name], value_name)
@@ -2955,7 +3042,12 @@ def _validate_parameters(
             except Exception as exc:
                 raise WebUIRequestError(str(exc)) from exc
         else:
-            _reject_query_parameters(parameters, (value_name,) if value_name else (), command)
+            query_names = (
+                ("mode", "seconds")
+                if command == "display-persistence"
+                else ((value_name,) if value_name else ())
+            )
+            _reject_query_parameters(parameters, query_names, command)
     elif command in {"measure-show", "measure-source", "measure-window"}:
         action = _action(parameters, command)
         if command == "measure-show":

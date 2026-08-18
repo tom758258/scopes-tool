@@ -13,6 +13,7 @@ def read_doc(*parts: str) -> str:
 
 def test_webui_docs_are_root_level():
     assert (DOC_ROOT / "README.md").exists()
+    assert (DOC_ROOT / "web-ui-change-rules.md").exists()
     assert (REPO_ROOT / "CHANGELOG.md").exists()
     assert (REPO_ROOT / "AGENTS.md").exists()
     assert (REPO_ROOT / "README.md").exists()
@@ -24,6 +25,7 @@ def test_webui_readme_names_public_package_identity():
     text = read_doc("README.md")
 
     assert "scopes_tool_webui" in text
+    assert "web-ui-change-rules.md" in text
 
 
 def test_root_readme_discovers_webui_and_agent_docs():
@@ -31,3 +33,4 @@ def test_root_readme_discovers_webui_and_agent_docs():
 
     assert "AGENTS.md" in text
     assert "docs/webui/README.md" in text
+    assert "docs/webui/web-ui-change-rules.md" in text

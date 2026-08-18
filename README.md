@@ -220,6 +220,7 @@ user-supplied VISA resource.
 - [CLI README](docs/cli/README.md)
 - [CLI Integration](docs/cli/cli-integration.md)
 - [WebUI README](docs/webui/README.md)
+- [WebUI Change Rules](docs/webui/web-ui-change-rules.md)
 - [Repository / Monorepo Layout](docs/architecture/monorepo-layout.md)
 - [Agent Instructions](AGENTS.md)
 - [Testing Guidelines](docs/testing-guidelines.md)
