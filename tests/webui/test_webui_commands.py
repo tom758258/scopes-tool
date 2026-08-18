@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 import threading
 
@@ -10,6 +11,7 @@ from scopes_tool_core.dvm import DVM_MODES
 from scopes_tool_core.math import MATH_COMPOSITE_OPERATIONS, MATH_OPERATIONS, MATH_SOURCES
 from scopes_tool_core.measurements import MEASUREMENT_WINDOW_CHOICES, SUPPORTED_MEASUREMENT_ITEMS
 import scopes_tool_webui.app as app_module
+import scopes_tool_webui.commands as commands_module
 from scopes_tool_webui.app import app
 from scopes_tool_webui.commands import ScopeSessionCloseError, validate_job_request
 from scopes_tool_webui.jobs import JobManager, JobManagerShuttingDown
@@ -373,7 +375,7 @@ def test_dry_run_acquisition_set_is_rejected_before_queueing(monkeypatch) -> Non
 
 def test_job_submission_returns_503_during_manager_shutdown(monkeypatch) -> None:
     manager = JobManager()
-    manager.shutdown()
+    asyncio.run(manager.shutdown())
     monkeypatch.setattr(app_module, "job_manager", manager)
     client = TestClient(app)
 
@@ -389,6 +391,44 @@ def test_job_submission_returns_503_during_manager_shutdown(monkeypatch) -> None
 
     assert response.status_code == 503
     assert "not accepted" in response.json()["detail"]
+
+
+def test_running_cancel_api_stays_running_until_cleanup(monkeypatch) -> None:
+    manager = JobManager()
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking_execute(*_args, **_kwargs):
+        started.set()
+        release.wait(timeout=2)
+        return {"exit_code": 0, "result": {"ok": True}, "artifacts": []}
+
+    monkeypatch.setattr("scopes_tool_webui.jobs.execute_command", blocking_execute)
+    monkeypatch.setattr(app_module, "job_manager", manager)
+    client = TestClient(app)
+    response = client.post(
+        "/api/jobs",
+        json={
+            "command": "identify",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {},
+        },
+    )
+    job_id = response.json()["job_id"]
+    try:
+        assert started.wait(timeout=2)
+        cancelled = client.post(f"/api/jobs/{job_id}/cancel")
+        assert cancelled.status_code == 200
+        assert cancelled.json()["status"] == "running"
+        assert client.get(f"/api/jobs/{job_id}").json()["status"] == "running"
+
+        release.set()
+        terminal = wait_for_job(client, job_id)
+        assert terminal["status"] == "cancelled"
+    finally:
+        release.set()
+        asyncio.run(manager.shutdown(timeout_s=2))
 
 
 def test_simulated_capture_artifact_is_registered_and_downloadable() -> None:
@@ -424,7 +464,7 @@ def test_invalid_request_is_rejected_before_queueing() -> None:
     assert "resource" in response.json()["detail"]
 
 
-def test_only_queued_jobs_are_cancelled(monkeypatch) -> None:
+def test_queued_and_running_job_cancellation_requests_are_accepted(monkeypatch) -> None:
     manager = JobManager()
     started = threading.Event()
     release = threading.Event()
@@ -451,18 +491,21 @@ def test_only_queued_jobs_are_cancelled(monkeypatch) -> None:
     jobs = [manager.submit(request) for _ in range(4)]
     try:
         assert started.wait(timeout=2)
-        running_state, running_message = manager.cancel(jobs[0].job_id)
+        running_state, running_message, running_accepted = manager.cancel(jobs[0].job_id)
         assert running_state == "running"
-        assert "not cancellable" in running_message
+        assert "waiting for cleanup" in running_message
+        assert running_accepted is True
         assert manager.get(jobs[0].job_id).status == "running"
+        assert manager.get(jobs[0].job_id).cancel_requested is True
 
         queued = manager.submit(request)
-        queued_state, _queued_message = manager.cancel(queued.job_id)
+        queued_state, _queued_message, queued_accepted = manager.cancel(queued.job_id)
         assert queued_state == "cancelled"
+        assert queued_accepted is True
         assert manager.get(queued.job_id).status == "cancelled"
     finally:
         release.set()
-        manager.shutdown(timeout_s=2)
+        asyncio.run(manager.shutdown(timeout_s=2))
 
 
 def test_shutdown_rejects_new_jobs_and_waits_for_running_jobs(monkeypatch) -> None:
@@ -493,7 +536,7 @@ def test_shutdown_rejects_new_jobs_and_waits_for_running_jobs(monkeypatch) -> No
     shutdown_errors = []
     shutdown_thread = threading.Thread(
         target=lambda: _capture_exception(
-            shutdown_errors, manager.shutdown, timeout_s=2
+            shutdown_errors, _run_manager_shutdown, manager=manager, timeout_s=2
         )
     )
     try:
@@ -508,7 +551,7 @@ def test_shutdown_rejects_new_jobs_and_waits_for_running_jobs(monkeypatch) -> No
         release.set()
         shutdown_thread.join(timeout=2)
         assert shutdown_errors == []
-        assert all(manager.get(job.job_id).status == "completed" for job in jobs[:4])
+        assert all(manager.get(job.job_id).status == "cancelled" for job in jobs[:4])
     finally:
         release.set()
         shutdown_thread.join(timeout=2)
@@ -545,12 +588,12 @@ def test_shutdown_timeout_leaves_executor_for_retry(monkeypatch) -> None:
     try:
         assert started.wait(timeout=2)
         with pytest.raises(TimeoutError):
-            manager.shutdown(timeout_s=0.05)
+            asyncio.run(manager.shutdown(timeout_s=0.05))
         assert shutdown_calls == []
         release.set()
-        manager.shutdown(timeout_s=2)
+        asyncio.run(manager.shutdown(timeout_s=2))
         assert shutdown_calls == [((), {"wait": True})]
-        assert manager.get(job.job_id).status == "completed"
+        assert manager.get(job.job_id).status == "cancelled"
     finally:
         release.set()
         if not manager._executor_shutdown:
@@ -579,12 +622,18 @@ def test_scope_close_failure_is_preserved_and_blocks_shutdown(monkeypatch) -> No
     shutdown_errors = []
     shutdown_thread = threading.Thread(
         target=lambda: _capture_exception(
-            shutdown_errors, manager.shutdown, timeout_s=2
+            shutdown_errors, _run_manager_shutdown, manager=manager, timeout_s=2
         )
     )
     try:
         assert started.wait(timeout=2)
         shutdown_thread.start()
+        for _ in range(100):
+            if manager.get(job.job_id).cancel_requested:
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("shutdown did not request cancellation")
         release.set()
         shutdown_thread.join(timeout=2)
         assert len(shutdown_errors) == 1
@@ -607,6 +656,10 @@ def _capture_exception(target, function, **kwargs):
         target.append(exc)
 
 
+def _run_manager_shutdown(manager, timeout_s):
+    asyncio.run(manager.shutdown(timeout_s=timeout_s))
+
+
 def _wait_for_manager_job(manager, job_id):
     for _ in range(100):
         job = manager.get(job_id)
@@ -614,6 +667,44 @@ def _wait_for_manager_job(manager, job_id):
             return job
         time.sleep(0.02)
     raise AssertionError("manager job did not reach a terminal state")
+
+
+@pytest.mark.parametrize(
+    ("command", "runner_name", "parameters"),
+    (
+        ("capture-batch", "run_capture_batch", {"channels": (1,), "points": 1000, "format": "byte", "count": 2, "interval_seconds": 0}),
+        ("measure-log", "run_measure_log", {"channels": (1,), "items": ("vpp",), "pairs": (), "pair_items": (), "interval_seconds": 0, "count": 2}),
+        ("measure-until", "run_measure_until", {"channel": 1, "item": "vpp", "operator": "gt", "threshold": 0.1, "timeout_seconds": 1, "interval_seconds": 0}),
+        ("triggered-measure-loop", "run_triggered_measure_loop", {"count": 2, "trigger_timeout_seconds": 1, "channels": (1,), "items": ("vpp",), "pairs": (), "pair_items": (), "interval_seconds": 0}),
+        ("triggered-capture-series", "run_triggered_capture_series", {"channels": (1,), "count": 2, "trigger_timeout_seconds": 1, "points": 1000, "format": "byte", "interval_seconds": 0}),
+    ),
+)
+def test_long_workflows_receive_existing_core_stop_callback(
+    monkeypatch,
+    tmp_path,
+    command,
+    runner_name,
+    parameters,
+) -> None:
+    stop_requested = lambda: True
+    received = []
+
+    def fake_runner(_scope, _resource, _request, *, stop_requested=None):
+        received.append(stop_requested)
+        return commands_module.OperationResult(exit_code=0, result={"status": "cancelled"})
+
+    monkeypatch.setattr(commands_module, runner_name, fake_runner)
+
+    commands_module._execute_p3c_scope_command(
+        object(),
+        command,
+        "USB0::TEST::INSTR",
+        parameters,
+        tmp_path,
+        stop_requested=stop_requested,
+    )
+
+    assert received == [stop_requested]
 
 
 def test_commands_expose_p3c_families_and_conditional_fields() -> None:

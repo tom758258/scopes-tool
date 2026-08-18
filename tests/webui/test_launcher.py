@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import asyncio
 import json
 import threading
 
@@ -76,6 +77,16 @@ class FakeRoot:
         pass
 
 
+class OrderedRoot(FakeRoot):
+    def __init__(self, events):
+        super().__init__()
+        self.events = events
+
+    def destroy(self):
+        self.events.append("destroy")
+        super().destroy()
+
+
 class FakeSocket:
     def __init__(self):
         self.closed = False
@@ -142,15 +153,49 @@ class LiveThread:
         self.alive = False
 
 
+class OrderedThread(LiveThread):
+    def __init__(self, events):
+        super().__init__()
+        self.events = events
+
+    def join(self, timeout=None):
+        self.events.append("join")
+        super().join(timeout=timeout)
+
+
+class StuckThread(LiveThread):
+    def join(self, timeout=None):
+        self.joined = True
+
+
+class FakeLoop:
+    def is_running(self):
+        return True
+
+
+class StoppedLoop:
+    def is_running(self):
+        return False
+
+
 class FakeJobManager:
     def __init__(self, events=None, error=None):
         self.events = events if events is not None else []
         self.error = error
 
-    def shutdown(self, *, timeout_s):
+    async def shutdown(self, *, timeout_s):
         self.events.append(("jobs", timeout_s))
         if self.error is not None:
             raise self.error
+
+
+class ImmediateFuture:
+    def __init__(self, coroutine):
+        self.coroutine = coroutine
+
+    def result(self, *, timeout):
+        assert timeout == launcher.JOB_SHUTDOWN_TIMEOUT_S + 1.0
+        asyncio.run(self.coroutine)
 
 
 def make_app(
@@ -172,7 +217,9 @@ def make_app(
     app._server = None
     app._server_socket = None
     app._server_thread = None
-    app._server_loop = None
+    app._server_loop = FakeLoop()
+    app._server_loop_ready = threading.Event()
+    app._server_loop_ready.set()
     app._startup_thread = None
     app._shutdown_thread = None
     app._shutdown_in_progress = False
@@ -225,6 +272,7 @@ def test_launcher_constructor_initializes_shutdown_state(monkeypatch):
     assert app._shutdown_thread is None
     assert app._shutdown_in_progress is False
     assert app._jobs_shutdown_complete is False
+    assert app._server_loop_ready.is_set() is False
 
 
 def test_default_port_and_auto_fallback(monkeypatch):
@@ -379,16 +427,23 @@ def test_auto_port_exhaustion_exposes_manual_fallback(monkeypatch):
     assert errors[0][0] == "No available port"
 
 
-def test_clean_shutdown_runs_off_the_ui_thread():
+def test_clean_shutdown_runs_on_server_loop_before_server_exit(monkeypatch):
     events = []
     job_manager = FakeJobManager(events)
     app = make_app()
     app._job_manager = job_manager
+    app._root = OrderedRoot(events)
     app._server = OrderedServer(events)
-    app._server_thread = LiveThread()
+    app._server_thread = OrderedThread(events)
     original_server_thread = app._server_thread
 
     app._server.should_exit = False
+    submitted_loops = []
+    monkeypatch.setattr(
+        launcher.asyncio,
+        "run_coroutine_threadsafe",
+        lambda coroutine, loop: submitted_loops.append(loop) or ImmediateFuture(coroutine),
+    )
 
     app.quit()
     app._shutdown_thread.join(timeout=1)
@@ -396,7 +451,13 @@ def test_clean_shutdown_runs_off_the_ui_thread():
 
     assert app._server.should_exit is True
     assert original_server_thread.joined is True
-    assert events == [("jobs", launcher.JOB_SHUTDOWN_TIMEOUT_S), "server"]
+    assert events == [
+        ("jobs", launcher.JOB_SHUTDOWN_TIMEOUT_S),
+        "server",
+        "join",
+        "destroy",
+    ]
+    assert submitted_loops == [app._server_loop]
     assert app._root.destroyed is True
 
 
@@ -412,6 +473,11 @@ def test_shutdown_failure_keeps_launcher_operable(monkeypatch):
         launcher.messagebox,
         "showerror",
         lambda title, message: errors.append((title, message)),
+    )
+    monkeypatch.setattr(
+        launcher.asyncio,
+        "run_coroutine_threadsafe",
+        lambda coroutine, _loop: ImmediateFuture(coroutine),
     )
 
     app.quit()
@@ -438,6 +504,11 @@ def test_shutdown_timeout_can_be_retried_successfully(monkeypatch):
         "showerror",
         lambda title, message: errors.append((title, message)),
     )
+    monkeypatch.setattr(
+        launcher.asyncio,
+        "run_coroutine_threadsafe",
+        lambda coroutine, _loop: ImmediateFuture(coroutine),
+    )
 
     app.quit()
     app._shutdown_thread.join(timeout=1)
@@ -463,3 +534,71 @@ def test_shutdown_timeout_can_be_retried_successfully(monkeypatch):
     ]
     assert app._server.should_exit is True
     assert app._root.destroyed is True
+
+
+def test_shutdown_requires_server_loop_readiness(monkeypatch):
+    errors = []
+    app = make_app()
+    app._server = FakeServer()
+    app._server_thread = LiveThread()
+    app._server_loop_ready.clear()
+    monkeypatch.setattr(launcher, "SERVER_JOIN_TIMEOUT_S", 0.01)
+    monkeypatch.setattr(
+        launcher.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    app.quit()
+    app._shutdown_thread.join(timeout=1)
+    drain_ui(app)
+
+    assert app._server.should_exit is False
+    assert app._root.destroyed is False
+    assert "event loop is not available" in errors[0][1]
+
+
+def test_shutdown_rejects_stopped_server_loop(monkeypatch):
+    errors = []
+    app = make_app()
+    app._server = FakeServer()
+    app._server_thread = LiveThread()
+    app._server_loop = StoppedLoop()
+    monkeypatch.setattr(
+        launcher.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    app.quit()
+    app._shutdown_thread.join(timeout=1)
+    drain_ui(app)
+
+    assert app._server.should_exit is False
+    assert app._root.destroyed is False
+    assert "event loop is not running" in errors[0][1]
+
+
+def test_server_join_timeout_keeps_launcher_open(monkeypatch):
+    errors = []
+    app = make_app()
+    app._server = FakeServer()
+    app._server_thread = StuckThread()
+    monkeypatch.setattr(
+        launcher.asyncio,
+        "run_coroutine_threadsafe",
+        lambda coroutine, _loop: ImmediateFuture(coroutine),
+    )
+    monkeypatch.setattr(
+        launcher.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    app.quit()
+    app._shutdown_thread.join(timeout=1)
+    drain_ui(app)
+
+    assert app._server.should_exit is True
+    assert app._root.destroyed is False
+    assert "join timeout" in errors[0][1]

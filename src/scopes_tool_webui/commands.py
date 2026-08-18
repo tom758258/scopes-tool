@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 import math
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from scopes_tool_core import (
     CaptureBatchRequest,
@@ -1188,6 +1188,7 @@ def execute_command(
     model_id: str,
     parameters: Mapping[str, Any],
     artifact_dir: Path,
+    stop_requested: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Execute one validated request through the public Core APIs."""
 
@@ -1217,6 +1218,7 @@ def execute_command(
             resource or config.resource or "",
             parameters,
             artifact_dir,
+            stop_requested=stop_requested,
         )
     finally:
         try:
@@ -1315,11 +1317,20 @@ def _execute_scope_command(
     resource: str,
     parameters: Mapping[str, Any],
     artifact_dir: Path,
+    *,
+    stop_requested: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     if scope.capabilities is None:
         scope.query_idn()
     if command in _P3C_COMMAND_IDS:
-        return _execute_p3c_scope_command(scope, command, resource, parameters, artifact_dir)
+        return _execute_p3c_scope_command(
+            scope,
+            command,
+            resource,
+            parameters,
+            artifact_dir,
+            stop_requested=stop_requested,
+        )
     if command == "identify":
         idn = scope.idn or scope.query_idn()
         return {"exit_code": 0, "result": {"idn": _jsonable(idn)}, "artifacts": []}
@@ -1641,6 +1652,8 @@ def _execute_p3c_scope_command(
     resource: str,
     parameters: Mapping[str, Any],
     artifact_dir: Path,
+    *,
+    stop_requested: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     action = parameters.get("action", "query")
     if command == "trigger-edge":
@@ -1840,15 +1853,15 @@ def _execute_p3c_scope_command(
     if command == "segmented-capture":
         return _operation_payload(run_segmented_capture(scope, resource, _segmented_capture_request(parameters, artifact_dir)))
     if command == "capture-batch":
-        return _operation_payload(run_capture_batch(scope, resource, _capture_batch_request(parameters, artifact_dir)))
+        return _operation_payload(run_capture_batch(scope, resource, _capture_batch_request(parameters, artifact_dir), stop_requested=stop_requested))
     if command == "measure-log":
-        return _operation_payload(run_measure_log(scope, resource, _measure_log_request(parameters, artifact_dir)))
+        return _operation_payload(run_measure_log(scope, resource, _measure_log_request(parameters, artifact_dir), stop_requested=stop_requested))
     if command == "measure-until":
-        return _operation_payload(run_measure_until(scope, resource, _measure_until_request(parameters, artifact_dir)))
+        return _operation_payload(run_measure_until(scope, resource, _measure_until_request(parameters, artifact_dir), stop_requested=stop_requested))
     if command == "triggered-measure-loop":
-        return _operation_payload(run_triggered_measure_loop(scope, resource, _triggered_measure_loop_request(parameters, artifact_dir)))
+        return _operation_payload(run_triggered_measure_loop(scope, resource, _triggered_measure_loop_request(parameters, artifact_dir), stop_requested=stop_requested))
     if command == "triggered-capture-series":
-        return _operation_payload(run_triggered_capture_series(scope, resource, _triggered_capture_series_request(parameters, artifact_dir)))
+        return _operation_payload(run_triggered_capture_series(scope, resource, _triggered_capture_series_request(parameters, artifact_dir), stop_requested=stop_requested))
     raise WebUIRequestError(f"command is not supported by the Scopes Tool WebUI: {command}")
 
 

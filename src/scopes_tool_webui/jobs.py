@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -39,6 +40,7 @@ class Job:
     result: dict[str, Any] | None = None
     error: str | None = None
     artifacts: list[dict[str, Any]] = field(default_factory=list)
+    cancel_requested: bool = field(default=False, repr=False)
     cleanup_failed: bool = field(default=False, repr=False)
     future: Future[Any] | None = field(default=None, repr=False)
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -99,7 +101,7 @@ class JobManager:
             job.future = self._executor.submit(self._run, job.job_id)
         return job
 
-    def shutdown(self, timeout_s: float = 10.0) -> None:
+    async def shutdown(self, timeout_s: float = 10.0) -> None:
         """Stop admission and wait for owned jobs without interrupting I/O."""
         if timeout_s < 0:
             raise ValueError("shutdown timeout must not be negative")
@@ -121,29 +123,22 @@ class JobManager:
         deadline = time.monotonic() + timeout_s
         while True:
             with self._lock:
-                pending_job_ids = {
-                    job_id
-                    for job_id in target_job_ids
-                    if (
-                        (job := self._jobs.get(job_id)) is not None
-                        and job.status not in TERMINAL_STATUSES
-                    )
-                }
-                cleanup_failures = {
-                    job_id
-                    for job_id in target_job_ids
-                    if (
-                        (job := self._jobs.get(job_id)) is not None
-                        and job.cleanup_failed
-                    )
-                }
+                pending_job_ids = set()
+                cleanup_failures = set()
+                for job_id in target_job_ids:
+                    job = self._jobs.get(job_id)
+                    if job is None:
+                        continue
+                    with job.lock:
+                        if job.status not in TERMINAL_STATUSES:
+                            pending_job_ids.add(job_id)
+                        if job.cleanup_failed:
+                            cleanup_failures.add(job_id)
 
             if cleanup_failures:
                 failed = ", ".join(sorted(cleanup_failures))
                 raise RuntimeError(f"WebUI job cleanup failed during shutdown: {failed}")
             if not pending_job_ids:
-                if target_job_ids and time.monotonic() >= deadline:
-                    raise TimeoutError("WebUI job shutdown timed out")
                 self._executor.shutdown(wait=True)
                 with self._lock:
                     self._executor_shutdown = True
@@ -151,27 +146,28 @@ class JobManager:
             if time.monotonic() >= deadline:
                 details = ", ".join(sorted(pending_job_ids))
                 raise TimeoutError(f"WebUI job shutdown timed out (pending jobs: {details})")
-            time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
+            await asyncio.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
             return self._jobs.get(job_id)
 
-    def cancel(self, job_id: str) -> tuple[str, str] | None:
+    def cancel(self, job_id: str) -> tuple[str, str, bool] | None:
         job = self.get(job_id)
         if job is None:
             return None
         with job.lock:
             if job.status == "queued":
-                if job.future is not None and job.future.cancel():
-                    job.status = "cancelled"
-                    job.finished_at = _timestamp()
-                    return "cancelled", "Queued job cancelled."
-                if job.status == "queued":
-                    return "running", "Job started before it could be cancelled."
+                job.cancel_requested = True
+                if job.future is not None:
+                    job.future.cancel()
+                job.status = "cancelled"
+                job.finished_at = _timestamp()
+                return "cancelled", "Queued job cancelled.", True
             if job.status == "running":
-                return "running", "Running jobs are not cancellable during VISA I/O."
-            return job.status, f"Job is already {job.status}."
+                job.cancel_requested = True
+                return "running", "Cancellation requested; waiting for cleanup.", True
+            return job.status, f"Job is already {job.status}.", False
 
     def _run(self, job_id: str) -> None:
         job = self.get(job_id)
@@ -186,6 +182,11 @@ class JobManager:
         try:
             lock = self._hardware_lock if job.mode == "live" and job.command != "list-resources" else _NullLock()
             with lock:
+                with job.lock:
+                    if job.cancel_requested:
+                        job.status = "cancelled"
+                        job.finished_at = _timestamp()
+                        return
                 execution = execute_command(
                     job.command,
                     mode=job.mode,
@@ -193,6 +194,7 @@ class JobManager:
                     model_id=job.model_id,
                     parameters=job.parameters,
                     artifact_dir=job.artifact_dir,
+                    stop_requested=lambda: job.cancel_requested,
                 )
             artifacts = self._register_artifacts(job, execution.get("artifacts", []))
             exit_code = execution.get("exit_code", 1)
@@ -208,8 +210,11 @@ class JobManager:
             with job.lock:
                 job.result = public_execution
                 job.artifacts = artifacts
-                job.status = "completed" if exit_code == 0 else "failed"
-                if exit_code != 0:
+                if job.cancel_requested:
+                    job.status = "cancelled"
+                else:
+                    job.status = "completed" if exit_code == 0 else "failed"
+                if exit_code != 0 and not job.cancel_requested:
                     job.error = "Core command returned a non-zero exit code."
                 job.finished_at = _timestamp()
         except Exception as exc:

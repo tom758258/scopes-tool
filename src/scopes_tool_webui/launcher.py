@@ -100,6 +100,7 @@ class LauncherApp:
         self._server_socket: Any | None = None
         self._server_thread: threading.Thread | None = None
         self._server_loop: asyncio.AbstractEventLoop | None = None
+        self._server_loop_ready = threading.Event()
         self._startup_thread: threading.Thread | None = None
         self._shutdown_thread: threading.Thread | None = None
         self._shutdown_in_progress = False
@@ -228,6 +229,7 @@ class LauncherApp:
         self._server_socket = None
         self._server_thread = None
         self._server_loop = None
+        self._server_loop_ready.clear()
         self._startup_thread = None
 
         for port in candidates:
@@ -328,7 +330,16 @@ class LauncherApp:
     def _shutdown_owned_server(self) -> None:
         try:
             if not self._jobs_shutdown_complete:
-                self._job_manager.shutdown(timeout_s=JOB_SHUTDOWN_TIMEOUT_S)
+                if not self._server_loop_ready.wait(timeout=SERVER_JOIN_TIMEOUT_S):
+                    raise RuntimeError("WebUI server event loop is not available.")
+                server_loop = self._server_loop
+                if server_loop is None or not server_loop.is_running():
+                    raise RuntimeError("WebUI server event loop is not running.")
+                future = asyncio.run_coroutine_threadsafe(
+                    self._job_manager.shutdown(timeout_s=JOB_SHUTDOWN_TIMEOUT_S),
+                    server_loop,
+                )
+                future.result(timeout=JOB_SHUTDOWN_TIMEOUT_S + 1.0)
                 self._jobs_shutdown_complete = True
             server = self._server
             if server is not None:
@@ -413,6 +424,7 @@ class LauncherApp:
 
     async def _serve_server(self, server_socket: Any) -> None:
         self._server_loop = asyncio.get_running_loop()
+        self._server_loop_ready.set()
         await self._server.serve(sockets=[server_socket])
 
     def _mark_server_ready(self, url: str, *, startup_attempt: int) -> None:
