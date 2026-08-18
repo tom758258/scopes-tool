@@ -608,6 +608,9 @@ function Restore-SerialState {
         [bool] $RestoreLister,
 
         [Parameter(Mandatory = $true)]
+        [bool] $RestoreSerialDisplay,
+
+        [Parameter(Mandatory = $true)]
         [bool] $RestoreTrigger,
 
         [Parameter(Mandatory = $true)]
@@ -668,6 +671,29 @@ function Restore-SerialState {
         }
         if ($listerRestoreErrors.Count -gt 0) {
             $restoreErrors.Add("Lister: $($listerRestoreErrors -join '; ')")
+        }
+    }
+
+    if ($RestoreSerialDisplay) {
+        try {
+            $expectedEnabled = [bool]$Snapshot.SerialDisplayEnabled
+            $enabledText = if ($expectedEnabled) { "true" } else { "false" }
+            Invoke-LiveCli -Stage "cleanup-serial-display" `
+                -Command "serial-display" -Arguments @(
+                    "--bus", "1", "--enabled", $enabledText
+                ) | Out-Null
+            $serialDisplay = Invoke-LiveCli -Stage "cleanup-serial-display-query" `
+                -Command "serial-display" -Arguments @("--bus", "1", "--query")
+            $actualEnabled = [bool](Get-RequiredResultValue `
+                -Payload $serialDisplay -Name "enabled" -Stage "Serial display cleanup")
+            if ($actualEnabled -ne $expectedEnabled) {
+                $expectedText = if ($expectedEnabled) { "ON" } else { "OFF" }
+                throw "Serial display cleanup did not restore ${expectedText}."
+            }
+        } catch {
+            $restoreErrors.Add("Serial display: $($_.Exception.Message)")
+            Drain-AfterFailure -Stage "cleanup-serial-display-error-drain" `
+                -CaseName "cleanup"
         }
     }
 
@@ -917,6 +943,8 @@ if ($searchPreconditionPassed -and -not $script:FunctionalFailed) {
     try {
         $lister = Invoke-LiveCli -Stage "snapshot-lister" `
             -Command "serial-lister-query"
+        $serialDisplay = Invoke-LiveCli -Stage "snapshot-serial-display" `
+            -Command "serial-display" -Arguments @("--bus", "1", "--query")
         $edgeSource = Invoke-LiveCli -Stage "snapshot-edge-source" `
             -Command "trigger-edge-source" -Arguments @("--query")
         $edgeSlope = Invoke-LiveCli -Stage "snapshot-edge-slope" `
@@ -964,6 +992,8 @@ if ($searchPreconditionPassed -and -not $script:FunctionalFailed) {
                 -Name "display" -Stage "Lister snapshot")
             ListerReference = [string](Get-RequiredResultValue -Payload $lister `
                 -Name "reference" -Stage "Lister snapshot")
+            SerialDisplayEnabled = [bool](Get-RequiredResultValue `
+                -Payload $serialDisplay -Name "enabled" -Stage "Serial display snapshot")
             EdgeSource = $source
             EdgeSourceChannel = $sourceChannel
             EdgeSlope = $slope
@@ -1043,6 +1073,11 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
     if (-not $script:FunctionalFailed) {
         $listerChangeStarted = $true
         Invoke-SerialCase -Name "UART Lister export" -Action {
+            if (-not [bool]$snapshot.SerialDisplayEnabled) {
+                Invoke-LiveCli -Stage "serial-display-enable" `
+                    -Command "serial-display" `
+                    -Arguments @("--bus", "1", "--enabled", "true") | Out-Null
+            }
             Invoke-LiveCli -Stage "lister-display" -Command "serial-lister-display" `
                 -Arguments @("--selection", "bus1") | Out-Null
             Invoke-LiveCli -Stage "lister-reference" `
@@ -1247,6 +1282,7 @@ if ($stateChangeStarted) {
         Restore-SerialState -Snapshot $snapshot `
             -DisableSearch $searchChangeStarted `
             -RestoreLister $listerChangeStarted `
+            -RestoreSerialDisplay $true `
             -RestoreTrigger $triggerChangeStarted `
             -RestoreAcquisition $script:ListerAcquisitionStarted
         Add-CaseResult -Name "cleanup" -Status "PASS"

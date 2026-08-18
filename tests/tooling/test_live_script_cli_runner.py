@@ -1174,16 +1174,27 @@ def test_serial_lister_acquisition_safety_structure() -> None:
     assert 'foreach ($command in @("single", "run", "stop-acquisition"))' in script
 
     snapshot = script.index('-Stage "snapshot-operation-status"')
+    snapshot_display = script.index('-Stage "snapshot-serial-display"')
     was_running = script.index("WasRunning = (", snapshot)
     assert snapshot < was_running
+    assert snapshot_display < script.index('-Stage "uart-configure"')
 
     restore = script.index("function Restore-SerialState")
     search = script.index("if ($DisableSearch)", restore)
     lister = script.index("if ($RestoreLister)", search)
-    trigger = script.index("if ($RestoreTrigger)", lister)
+    serial_display_restore = script.index("if ($RestoreSerialDisplay)", lister)
+    trigger = script.index("if ($RestoreTrigger)", serial_display_restore)
     acquisition = script.index("if ($RestoreAcquisition)", trigger)
     final_drain = script.index('$finalDrain = Get-ErrorDrain -Stage "final-error-queue"')
-    assert restore < search < lister < trigger < acquisition < final_drain
+    assert (
+        restore
+        < search
+        < lister
+        < serial_display_restore
+        < trigger
+        < acquisition
+        < final_drain
+    )
 
     lister_case_start = script.index(
         'Invoke-SerialCase -Name "UART Lister export"'
@@ -1193,7 +1204,10 @@ def test_serial_lister_acquisition_safety_structure() -> None:
     )
     lister_case = script[lister_case_start:search_case_start]
     assert lister_case.count('"serial-lister-export"') == 1
-    assert '"serial-display"' not in lister_case
+    assert lister_case.count('"serial-display"') == 1
+    assert lister_case.index('"serial-display"') < lister_case.index(
+        '"serial-lister-display"'
+    )
     assert ":SAVE:LISTer" not in script
     assert "DIGITIZE" not in lister_case.upper()
     assert '"force-trigger"' not in lister_case
@@ -1201,8 +1215,11 @@ def test_serial_lister_acquisition_safety_structure() -> None:
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("scenario", ["completed", "timeout", "single-failure"])
+@pytest.mark.parametrize(
+    "serial_display_enabled", [True, False], ids=["display-on", "display-off"]
+)
 def test_serial_lister_export_waits_for_fresh_acquisition(
-    tmp_path: Path, scenario: str
+    tmp_path: Path, scenario: str, serial_display_enabled: bool
 ) -> None:
     script_path = REPO_ROOT / "scripts" / "live-serial-check.ps1"
     output_path = tmp_path / "uart-lister.csv"
@@ -1218,7 +1235,11 @@ param(
 
     [Parameter(Mandatory = $true)]
     [ValidateSet("completed", "timeout", "single-failure")]
-    [string] $Scenario
+    [string] $Scenario,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateSet(0, 1)]
+    [int] $SerialDisplayEnabledValue
 )
 
 Set-StrictMode -Version Latest
@@ -1271,6 +1292,7 @@ $Resource = "TEST::INSTR"
 $listerCsvPath = $OutputPath
 $script:RunRoot = Split-Path -Parent $OutputPath
 $snapshot = [pscustomobject]@{
+    SerialDisplayEnabled = $SerialDisplayEnabledValue -eq 1
     WasRunning = $true
     OperationStatus = [pscustomobject]@{
         ok = $true
@@ -1343,6 +1365,11 @@ function Invoke-LiveCli {
                 display = "bus1"
                 reference = "trigger"
             }
+        }
+    }
+    if ($Command -eq "serial-display") {
+        return [pscustomobject]@{
+            result = [pscustomobject]@{ enabled = $true }
         }
     }
     if ($Command -eq "system-operation-status") {
@@ -1467,6 +1494,8 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
             str(output_path),
             "-Scenario",
             scenario,
+            "-SerialDisplayEnabledValue",
+            "1" if serial_display_enabled else "0",
         ],
         cwd=REPO_ROOT,
         text=True,
@@ -1477,26 +1506,50 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
     commands = [entry["command"] for entry in result["invocations"]]
-    expected_prefix = [
+    expected_lister_prefix = [
         "serial-lister-display",
         "serial-lister-reference",
         "serial-lister-query",
         "single",
     ]
-    assert commands[:4] == expected_prefix
-    assert result["invocations"][0]["arguments"] == ["--selection", "bus1"]
+    expected_prefix = expected_lister_prefix
+    if not serial_display_enabled:
+        expected_prefix = ["serial-display"] + expected_lister_prefix
+    assert commands[: len(expected_prefix)] == expected_prefix
+    lister_display_index = 0
+    if not serial_display_enabled:
+        assert result["invocations"][0]["arguments"] == [
+            "--bus",
+            "1",
+            "--enabled",
+            "true",
+        ]
+        lister_display_index = 1
+    assert result["invocations"][lister_display_index]["arguments"] == [
+        "--selection",
+        "bus1",
+    ]
+    lister_query_index = lister_display_index + 2
     assert commands.count("single") == 1
-    assert all(
-        entry["command"]
-        not in {
-            "serial-display",
-            "run",
-            "stop-acquisition",
-            "force-trigger",
-            "digitize",
-        }
-        for entry in result["invocations"]
-    )
+    if serial_display_enabled:
+        assert all(
+            entry["command"]
+            not in {
+                "serial-display",
+                "run",
+                "stop-acquisition",
+                "force-trigger",
+                "digitize",
+            }
+            for entry in result["invocations"]
+        )
+    else:
+        assert commands.count("serial-display") == 1
+        assert all(
+            entry["command"]
+            not in {"run", "stop-acquisition", "force-trigger", "digitize"}
+            for entry in result["invocations"]
+        )
     assert result["acquisition_status"]["was_running"] is True
     if scenario == "single-failure":
         assert result["status"] == "FAIL"
@@ -1510,7 +1563,9 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
         assert result["output_bytes"] == 0
     elif scenario == "completed":
         assert result["acquisition_started"] is True
-        assert result["invocations"][4]["arguments"] == ["--query"]
+        assert result["invocations"][lister_query_index + 2]["arguments"] == [
+            "--query"
+        ]
         assert result["sleep_values"]
         assert result["operation_status_exists"] is True
         assert result["acquisition_status"]["poll_samples"][0]["result"]["value"] == 56
@@ -1531,7 +1586,9 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
         assert result["output_bytes"] > 0
     else:
         assert result["acquisition_started"] is True
-        assert result["invocations"][4]["arguments"] == ["--query"]
+        assert result["invocations"][lister_query_index + 2]["arguments"] == [
+            "--query"
+        ]
         assert result["sleep_values"]
         assert result["operation_status_exists"] is True
         assert result["acquisition_status"]["poll_samples"][0]["result"]["value"] == 56
@@ -1627,7 +1684,7 @@ function Drain-AfterFailure { throw "Unexpected cleanup failure drain." }
 
 $restoreAcquisition = $Outcome -ne "not-started"
 Restore-SerialState -Snapshot $snapshot -DisableSearch $false `
-    -RestoreLister $false -RestoreTrigger $false `
+    -RestoreLister $false -RestoreSerialDisplay $false -RestoreTrigger $false `
     -RestoreAcquisition $restoreAcquisition
 
 [ordered]@{
@@ -1675,6 +1732,191 @@ Restore-SerialState -Snapshot $snapshot -DisableSearch $false `
             f"cleanup-acquisition-{expected_command}",
             "cleanup-acquisition-status",
         ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+@pytest.mark.parametrize(
+    "scenario, original_enabled",
+    [
+        ("original-on", True),
+        ("original-off", False),
+        ("restore-failure", False),
+    ],
+    ids=["original-on", "original-off", "restore-failure"],
+)
+def test_serial_cleanup_restores_serial_display_state(
+    tmp_path: Path, scenario: str, original_enabled: bool
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-serial-check.ps1"
+    harness_path = tmp_path / f"serial-display-cleanup-{scenario}.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("original-on", "original-off", "restore-failure")]
+    [string] $Scenario,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateSet(0, 1)]
+    [int] $OriginalEnabledValue
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw ("Failed to parse Serial live script: " + $parseErrors[0].Message)
+}
+foreach ($name in @("Get-RequiredResultValue", "Restore-SerialState")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $name
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw ("Missing function: " + $name)
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:DrainCalls = New-Object System.Collections.Generic.List[object]
+$script:DisplayState = $OriginalEnabledValue -eq 1
+$snapshot = [pscustomobject]@{
+    SerialDisplayEnabled = $script:DisplayState
+}
+
+function Invoke-LiveCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [string[]] $Arguments = @()
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($Scenario -eq "restore-failure" -and
+        $Stage -eq "cleanup-serial-display") {
+        throw "display restore rejected"
+    }
+    if ($Command -ne "serial-display") {
+        throw ("Unexpected cleanup command: " + $Command)
+    }
+    if ($Arguments -contains "--enabled") {
+        $script:DisplayState = $Arguments[3] -eq "true"
+    }
+    return [pscustomobject]@{
+        result = [pscustomobject]@{
+            enabled = $script:DisplayState
+        }
+    }
+}
+
+function Drain-AfterFailure {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $CaseName
+    )
+    $script:DrainCalls.Add([pscustomobject]@{
+        stage = $Stage
+        case_name = $CaseName
+    })
+}
+
+$restoreError = ""
+try {
+    Restore-SerialState -Snapshot $snapshot -DisableSearch $false -RestoreLister $false -RestoreSerialDisplay $true -RestoreTrigger $false -RestoreAcquisition $false
+} catch {
+    $restoreError = $_.Exception.Message
+}
+
+[ordered]@{
+    scenario = $Scenario
+    initial_enabled = $OriginalEnabledValue -eq 1
+    final_enabled = $script:DisplayState
+    commands = @($script:Invocations | ForEach-Object { $_.command })
+    arguments = @($script:Invocations | ForEach-Object { ,@($_.arguments) })
+    stages = @($script:Invocations | ForEach-Object { $_.stage })
+    drain_calls = @($script:DrainCalls | ForEach-Object {
+        [ordered]@{ stage = $_.stage; case_name = $_.case_name }
+    })
+    restore_error = $restoreError
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-Scenario",
+            scenario,
+            "-OriginalEnabledValue",
+            "1" if original_enabled else "0",
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["scenario"] == scenario
+    assert result["initial_enabled"] is original_enabled
+    if scenario == "restore-failure":
+        assert result["final_enabled"] is False
+        assert result["commands"] == ["serial-display"]
+        assert result["stages"] == ["cleanup-serial-display"]
+        assert result["drain_calls"] == [
+            {
+                "stage": "cleanup-serial-display-error-drain",
+                "case_name": "cleanup",
+            }
+        ]
+        assert "Serial display: display restore rejected" in result["restore_error"]
+    else:
+        expected_text = "true" if original_enabled else "false"
+        assert result["final_enabled"] is original_enabled
+        assert result["commands"] == ["serial-display", "serial-display"]
+        assert result["stages"] == [
+            "cleanup-serial-display",
+            "cleanup-serial-display-query",
+        ]
+        assert result["arguments"] == [
+            ["--bus", "1", "--enabled", expected_text],
+            ["--bus", "1", "--query"],
+        ]
+        assert result["drain_calls"] == []
+        assert result["restore_error"] == ""
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
