@@ -23,15 +23,22 @@ From PowerShell:
 
 ```powershell
 uv venv .venv
-uv pip install -e ".[all,dev]"
+uv sync --all-extras --link-mode=copy
 .\scripts\run-tests.ps1
+```
+
+For CI or strict local checks, require the committed lock file to stay
+unchanged:
+
+```powershell
+uv sync --all-extras --locked --link-mode=copy
 ```
 
 Install the WebUI dependencies separately when only the local browser
 interface is needed:
 
 ```powershell
-uv pip install -e ".[webui]"
+uv sync --extra webui --link-mode=copy
 ```
 
 The WebUI server and Launcher bind only to `127.0.0.1`. The server defaults to
@@ -39,8 +46,9 @@ port 8025; the Launcher automatically searches up to 100 ports from 8025 when
 no explicit port is supplied. See [docs/webui/README.md](docs/webui/README.md)
 for Device / Resource, command, language, and job behavior.
 
-The repository uses one editable package install for local development. It is not
-configured as a committed `uv` workspace.
+The repository uses one editable package install for local development, with
+dependencies synchronized from the committed `uv.lock`. This is not configured
+as a `uv` workspace.
 
 After the editable install, the Windows virtual environment provides the
 `.\.venv\Scripts\scopes-tool.exe` console wrapper. Prefer this wrapper for

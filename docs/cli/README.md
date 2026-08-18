@@ -14,7 +14,7 @@ Module entry point: `python -m scopes_tool_cli.cli`
 From the repository root:
 
 ```powershell
-uv pip install -e ".[all,dev]"
+uv sync --all-extras --link-mode=copy
 ```
 
 ## Basic Usage
@@ -212,13 +212,15 @@ uv venv .venv
 ```
 
 ```powershell
-uv pip install -e ".[all,dev]"
+uv sync --all-extras --link-mode=copy
 ```
 
-This repository currently uses `uv` for the local virtual environment and
-editable installs, but it is not configured as a `uv` workspace and does not
-use a committed `uv.lock`. Do not commit a generated `uv.lock` unless the root
-`pyproject.toml` is later changed to define an explicit uv workspace.
+This repository uses a committed `uv.lock` for dependency synchronization. It
+is not configured as a `uv` workspace. For CI or strict local checks, use:
+
+```powershell
+uv sync --all-extras --locked --link-mode=copy
+```
 
 Run the repository test wrapper from the root directory:
 

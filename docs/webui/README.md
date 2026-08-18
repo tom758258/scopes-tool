@@ -13,7 +13,7 @@ install the optional WebUI dependencies:
 
 ```powershell
 uv venv .venv
-uv pip install -e ".[webui]"
+uv sync --extra webui --link-mode=copy
 ```
 
 The extra provides FastAPI and Uvicorn. The WebUI remains part of the single

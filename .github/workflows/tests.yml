@@ -59,18 +59,20 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
+
+      - name: Install uv
+        run: python -m pip install --upgrade uv
 
       - name: Install packages
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[all,dev]"
+        run: uv sync --python ${{ matrix.python-version }} --all-extras --locked --link-mode=copy
 
       - name: Smoke installed package
         run: |
-          python -c "import scopes_tool_core; import scopes_tool_cli; import scopes_tool_webui"
-          scopes-tool --help
+          ./.venv/bin/python -c "import scopes_tool_core; import scopes_tool_cli; import scopes_tool_webui"
+          ./.venv/bin/scopes-tool --help
 
       - name: Run tests
-        run: python -m pytest -q -m "not hardware"
+        run: ./.venv/bin/python -m pytest -q -m "not hardware"
 
   pytest-windows:
     name: Windows Python ${{ matrix.python-version }}
@@ -92,15 +94,17 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
+
+      - name: Install uv
+        run: python -m pip install --upgrade uv
 
       - name: Install packages
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[all,dev]"
+        run: uv sync --python ${{ matrix.python-version }} --all-extras --locked --link-mode=copy
 
       - name: Smoke installed package
         run: |
-          python -c "import scopes_tool_core; import scopes_tool_cli; import scopes_tool_webui"
-          scopes-tool.exe --help
+          .\.venv\Scripts\python.exe -c "import scopes_tool_core; import scopes_tool_cli; import scopes_tool_webui"
+          .\.venv\Scripts\scopes-tool.exe --help
 
       - name: Run tests
-        run: python -m pytest -q -m "not hardware"
+        run: .\.venv\Scripts\python.exe -m pytest -q -m "not hardware"
