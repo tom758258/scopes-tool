@@ -1,6 +1,6 @@
-import { getJob, submitJob } from "/static/api.js";
 import { getExecutionContext } from "/static/execution-context.js";
 import { translate } from "/static/i18n.js";
+import { runJob } from "/static/jobs.js";
 
 function contextSnapshot(context) {
   return {
@@ -35,10 +35,11 @@ function resourceLabel(resource) {
 }
 
 export class DeviceResource {
-  constructor(elements, onContextChange, onCommandStateChange = () => {}) {
+  constructor(elements, onContextChange, onCommandStateChange = () => {}, onJobUpdate = () => {}) {
     this.elements = elements;
     this.onContextChange = onContextChange;
     this.onCommandStateChange = onCommandStateChange;
+    this.onJobUpdate = onJobUpdate;
     this.resourceCount = null;
     this.statusKey = "device.ready";
     this.statusError = null;
@@ -207,18 +208,15 @@ export class DeviceResource {
     this.onCommandStateChange({ status: "queued" });
     try {
       const context = this.context();
-      const submitted = await submitJob({
-        command: "list-resources",
-        parameters: { live_only: true },
-        ...context,
-      });
-      let job = await getJob(submitted.job_id);
-      this.onCommandStateChange({ status: job.status });
-      while (["queued", "running"].includes(job.status)) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        job = await getJob(submitted.job_id);
-        this.onCommandStateChange({ status: job.status });
-      }
+      const job = await runJob(
+        "list-resources",
+        { live_only: true },
+        context,
+        (updated) => {
+          this.onCommandStateChange({ status: updated.status });
+          this.onJobUpdate(updated);
+        },
+      );
       if (job.status !== "completed") throw new Error(job.error || translate("status.scanFailed"));
       const resources = job.result?.result?.resources || [];
       this.renderResourceList(resources);

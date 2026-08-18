@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
+import textwrap
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -107,11 +112,95 @@ def test_scan_requests_live_only_and_preserves_structured_resource_identity() ->
     chinese = read_static("locale_zh_tw.js")
 
     scan = extract_function(source, "async scan()")
-    assert 'command: "list-resources"' in scan
-    assert "parameters: { live_only: true }" in scan
+    assert '"list-resources",' in scan
+    assert "{ live_only: true }," in scan
     assert "resourceName(resources[0])" in scan
     assert '"device.liveResourceNoResources": "No live resources found"' in english
     assert '"device.liveResourceNoResources": "未找到即時資源"' in chinese
+
+
+def test_scan_uses_the_common_job_history_flow_before_resource_updates() -> None:
+    device_source = read_static("device-resource.js")
+    jobs_source = read_static("jobs.js")
+    app_source = read_static("app.js")
+    scan = extract_function(device_source, "async scan()")
+
+    assert 'import { runJob } from "/static/jobs.js";' in device_source
+    assert "const job = await runJob(" in scan
+    assert '"list-resources",' in scan
+    assert "this.onCommandStateChange({ status: updated.status });" in scan
+    assert "this.onJobUpdate(updated);" in scan
+    assert "submitJob(" not in scan
+    assert "getJob(" not in scan
+    assert "const resources = job.result?.result?.resources || [];" in scan
+
+    assert "onUpdate({" in jobs_source
+    assert "job_id: submitted.job_id" in jobs_source
+    assert "command," in jobs_source
+    assert 'status: submitted.status || "queued"' in jobs_source
+    assert '}, (scanJob) => {' in app_source
+    assert 'resultPresentation = { kind: "job", job: scanJob, message: null };' in app_source
+    assert "renderCurrentResult();" in app_source
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
+    jobs_path = STATIC_ROOT / "jobs.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const submitJob = async (payload) => {
+          assert.equal(payload.command, "list-resources");
+          assert.deepEqual(payload.parameters, { live_only: true });
+          return { job_id: "scan-job", status: "queued" };
+        };
+        const getJob = async (jobId) => ({
+          job_id: jobId,
+          command: "list-resources",
+          status: "completed",
+          result: { result: { resources: ["USB0::1", "USB0::2"] } },
+        });
+        const cancelJob = async () => ({});
+        globalThis.testSubmitJob = submitJob;
+        globalThis.testGetJob = getJob;
+        globalThis.testCancelJob = cancelJob;
+
+        const source = [
+          "const submitJob = globalThis.testSubmitJob;",
+          "const getJob = globalThis.testGetJob;",
+          "const cancelJob = globalThis.testCancelJob;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export async function /gm, "async function ")
+          + "\nglobalThis.jobsApi = { runJob };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const updates = [];
+        const job = await globalThis.jobsApi.runJob(
+          "list-resources",
+          { live_only: true },
+          { mode: "live", resource: null, model_id: "keysight-dsox4024a" },
+          (updated) => updates.push(updated),
+        );
+        assert.equal(job.job_id, "scan-job");
+        assert.deepEqual(
+          updates.map(({ job_id, command, status }) => ({ job_id, command, status })),
+          [
+            { job_id: "scan-job", command: "list-resources", status: "queued" },
+            { job_id: "scan-job", command: "list-resources", status: "completed" },
+          ],
+        );
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(jobs_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 def test_list_resources_command_exposes_a_boolean_live_only_parameter() -> None:

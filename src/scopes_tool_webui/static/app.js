@@ -106,6 +106,9 @@ async function initialize() {
     renderLiveData();
   }, (scanState) => {
     setCommandState(scanState);
+  }, (scanJob) => {
+    resultPresentation = { kind: "job", job: scanJob, message: null };
+    renderCurrentResult();
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   updateAvailability();

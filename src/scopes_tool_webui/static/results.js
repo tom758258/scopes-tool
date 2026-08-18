@@ -101,10 +101,74 @@ function commandLabel(command) {
 }
 
 function jobSummary(job) {
-  if (job.error) return job.error;
-  return job.result || job.artifacts?.length
-    ? translate("results.detailAvailable")
-    : translate("results.status");
+  if (job.status === "failed") return jobErrorSummary(job);
+  if (job.status === "cancelled") return translate("status.cancelled");
+  if (job.status !== "completed") return translateJobStatus(job.status);
+  return successfulJobSummary(job);
+}
+
+function jobErrorSummary(job) {
+  const result = jobResultPayload(job);
+  if (typeof result?.error === "string") return result.error;
+  if (typeof result?.error?.message === "string") return result.error.message;
+  return job.error || translate("results.summary.failed");
+}
+
+function successfulJobSummary(job) {
+  const result = jobResultPayload(job);
+  if (job.command === "identify") return identifySummary(result);
+  if (job.command === "list-resources") return resourceSummary(result);
+  if (job.command === "screenshot") return translate("results.summary.screenshotCaptured");
+
+  const artifactCount = Math.max(
+    Array.isArray(job.artifacts) ? job.artifacts.length : 0,
+    Array.isArray(job.result?.artifacts) ? job.result.artifacts.length : 0,
+  );
+  if (artifactCount) {
+    return translate(
+      artifactCount === 1 ? "results.summary.artifact_one" : "results.summary.artifact_many",
+      { count: artifactCount },
+    );
+  }
+
+  return scalarResultSummary(result) || translate("results.summary.completed");
+}
+
+function jobResultPayload(job) {
+  const result = job?.result;
+  if (!result || typeof result !== "object") return result;
+  return result.result !== undefined ? result.result : result;
+}
+
+function identifySummary(result) {
+  const idn = result?.idn || result?.resource?.idn || {};
+  const parts = [
+    idn.model,
+    idn.serial ? translate("results.summary.serial", { serial: idn.serial }) : "",
+    idn.firmware ? translate("results.summary.firmware", { firmware: idn.firmware }) : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" - ") : translate("results.summary.identificationRead");
+}
+
+function resourceSummary(result) {
+  const count = Array.isArray(result?.resources) ? result.resources.length : 0;
+  if (count === 0) return translate("results.summary.resource_none");
+  return translate(
+    count === 1 ? "results.summary.resource_one" : "results.summary.resource_many",
+    { count },
+  );
+}
+
+function scalarResultSummary(result) {
+  if (result === null || result === undefined) return "";
+  if (["string", "number", "boolean"].includes(typeof result)) return String(result);
+  if (typeof result !== "object") return "";
+  const entries = Object.entries(result);
+  if (entries.length !== 1 || entries[0][0] === "action") return "";
+  const value = entries[0][1];
+  return value !== null && ["string", "number", "boolean"].includes(typeof value)
+    ? String(value)
+    : "";
 }
 
 function appendError(container, message) {
