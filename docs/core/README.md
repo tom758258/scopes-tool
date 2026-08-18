@@ -32,9 +32,11 @@ Core does not import adapter packages.
 ## Identity, Capabilities, And Runtime Boundary
 
 For live operation, the detected `*IDN?` response and the resolved canonical
-physical model are the runtime authority. A selected or expected model may
-select a registered profile for simulator or dry-run planning, but it must not
-override a live detected identity. Unknown, unregistered, or mismatched live
+physical model are the runtime authority. For simulator and dry‑run planning,
+a planning physical model selects the registered capability profile used for
+hardware-free planning and validation. In live mode an expected physical model
+serves only as a safety guard and never replaces the identity or capability
+profile detected through `*IDN?`. Unknown, unregistered, or mismatched live
 vendors, models, profiles, or drivers fail closed.
 
 Capability profiles describe the supported runtime surface for a model. They
@@ -94,9 +96,10 @@ introduce an async runtime, scheduler, persistence layer, or event bus.
 The current workflow surface includes `measure-log`, Periodic Capture through
 `capture-batch`, Triggered Measurement Loop, Triggered Capture Series, Measure
 Until Condition, Generic Sequence, and `segmented-capture` where supported by
-the active profile. Workflow request fields, defaults, terminal statuses,
-artifact schemas, and Generic Sequence action rules are defined in
-[Core Integration](integration.md).
+the active profile. Detailed contracts for the workflow families documented by
+Core Integration — including request fields, defaults, terminal behavior,
+artifact schemas, and Generic Sequence rules where applicable — are maintained
+in [Core Integration](integration.md).
 
 ## Public Package Surface
 
