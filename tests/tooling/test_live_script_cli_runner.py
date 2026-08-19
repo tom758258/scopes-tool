@@ -2831,6 +2831,24 @@ def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
     assert 'Command "math-visualization"' in script
     assert 'Stage "fft-display-off"' in script
     assert 'Stage "fft-advanced-display-off"' in script
+    measure_start = script.index('Invoke-BaselineCase -Name "measure-controls"')
+    measure_end = script.index(
+        'Invoke-BaselineCase -Name "cursor-lifecycle"', measure_start
+    )
+    measure_case = script[measure_start:measure_end]
+    for stage in (
+        'Stage "measure-show-before"',
+        'Stage "measure-source-before"',
+        'Stage "measure-window-before"',
+        'Stage "measure-source-restore"',
+        'Stage "measure-source-restore-query"',
+        'Stage "measure-window-restore"',
+        'Stage "measure-window-restore-query"',
+    ):
+        assert stage in measure_case
+    assert "finally" in measure_case
+    assert 'throw "Measurement control restoration failed:' in measure_case
+    assert "Measure Show may remain ON because the current public CLI exposes" in script
     assert 'Get-ErrorDrain -Stage "final-error-queue"' in script
     assert 'Command "cleanup"' in script
 

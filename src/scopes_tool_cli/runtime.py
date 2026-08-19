@@ -203,6 +203,15 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "supports_measurements": capabilities.supports_measurements,
         "supports_delay_measurement": capabilities.supports_delay_measurement,
         "supports_measure_results_dump": capabilities.supports_measure_results_dump,
+        "supports_demo": capabilities.supports_demo,
+        "demo_functions": sorted(capabilities.demo_functions),
+        "math_function_count": capabilities.math_function_count,
+        "supports_math_goft": capabilities.supports_math_goft,
+        "math_filter_operations": sorted(capabilities.math_filter_operations),
+        "math_visualization_operations": sorted(
+            capabilities.math_visualization_operations
+        ),
+        "supports_advanced_fft": capabilities.supports_advanced_fft,
         "supports_screenshot": capabilities.supports_screenshot,
         "supports_screenshot_format_pack": capabilities.supports_screenshot_format_pack,
         "supports_segmented_memory": capabilities.supports_segmented_memory,

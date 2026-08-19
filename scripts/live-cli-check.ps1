@@ -1345,6 +1345,8 @@ Write-Host "  - Safe Cleanup clears the display; DVM and DEMO may finish OFF rat
 Write-Host "    than return to a pre-test ON state."
 Write-Host "  - The generic trigger mode cannot be restored and will remain Edge after"
 Write-Host "    the trigger case runs. Waveform transfer format may remain WORD."
+Write-Host "  - Measure Show may remain ON because the current public CLI exposes"
+Write-Host "    ON/query but not OFF."
 Write-Host ""
 Write-Host "Press Enter when the environment is ready."
 Write-Host "Ctrl+C to cancel."
@@ -2398,38 +2400,108 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
         Invoke-BaselineCase -Name "measure-controls" -Action {
-            $clear = Invoke-LiveCli -Stage "measure-clear" -Command "measure-clear"
-            Assert-ScpiSent -Payload $clear -Label "Measurement clear" -ExpectedCommands @(":MEASure:CLEar")
+            $showOriginal = Invoke-LiveCli -Stage "measure-show-before" -Command "measure-show" -Arguments @("--query")
+            Assert-ScpiSent -Payload $showOriginal -Label "Measurement show snapshot" -ExpectedCommands @(":MEASure:SHOW?")
+            $showOriginalEnabled = [bool]$showOriginal.result.enabled
 
-            $show = Invoke-LiveCli -Stage "measure-show-on" -Command "measure-show" -Arguments @("--on")
-            Assert-ScpiSent -Payload $show -Label "Measurement show" -ExpectedCommands @(":MEASure:SHOW ON")
-            $showQuery = Invoke-LiveCli -Stage "measure-show-query" -Command "measure-show" -Arguments @("--query")
-            Assert-ScpiSent -Payload $showQuery -Label "Measurement show query" -ExpectedCommands @(":MEASure:SHOW?")
-            if (-not [bool]$showQuery.result.enabled) {
-                throw "Measurement show query did not report enabled."
+            $sourceOriginal = Invoke-LiveCli -Stage "measure-source-before" -Command "measure-source" -Arguments @("--query")
+            Assert-ScpiSent -Payload $sourceOriginal -Label "Measurement source snapshot" -ExpectedCommands @(":MEASure:SOURce?")
+            if ($null -eq $sourceOriginal.result.source1_channel) {
+                throw "Measurement source snapshot is not restorable through the public analog source CLI."
+            }
+            $sourceOriginalChannel = [int]$sourceOriginal.result.source1_channel
+            $sourceOriginalChannel2 = if ($null -ne $sourceOriginal.result.source2_channel) {
+                [int]$sourceOriginal.result.source2_channel
+            } else {
+                $null
+            }
+            $sourceRestoreArguments = @("--source-channel", [string]$sourceOriginalChannel)
+            $sourceRestoreCommand = ":MEASure:SOURce CHANnel${sourceOriginalChannel}"
+            if ($null -ne $sourceOriginalChannel2) {
+                $sourceRestoreArguments += @("--source2-channel", [string]$sourceOriginalChannel2)
+                $sourceRestoreCommand += ",CHANnel${sourceOriginalChannel2}"
             }
 
-            $source = Invoke-LiveCli -Stage "measure-source-set" -Command "measure-source" -Arguments @(
-                "--source-channel", "1", "--source2-channel", "2"
-            )
-            Assert-ScpiSent -Payload $source -Label "Measurement source" -ExpectedCommands @(
-                ":MEASure:SOURce CHANnel1,CHANnel2"
-            )
-            $sourceQuery = Invoke-LiveCli -Stage "measure-source-query" -Command "measure-source" -Arguments @("--query")
-            Assert-ScpiSent -Payload $sourceQuery -Label "Measurement source query" -ExpectedCommands @(
-                ":MEASure:SOURce?"
-            )
-            if ([int]$sourceQuery.result.source1_channel -ne 1 -or
-                [int]$sourceQuery.result.source2_channel -ne 2) {
-                throw "Measurement source query did not report CH1 and CH2."
-            }
+            $windowOriginal = Invoke-LiveCli -Stage "measure-window-before" -Command "measure-window" -Arguments @("--query")
+            Assert-ScpiSent -Payload $windowOriginal -Label "Measurement window snapshot" -ExpectedCommands @(":MEASure:WINDow?")
+            $windowOriginalValue = ([string]$windowOriginal.result.window).ToLowerInvariant()
+            $windowOriginalCommand = ":MEASure:WINDow $($windowOriginalValue.ToUpperInvariant())"
 
-            $window = Invoke-LiveCli -Stage "measure-window-set" -Command "measure-window" -Arguments @("--window", "auto")
-            Assert-ScpiSent -Payload $window -Label "Measurement window" -ExpectedCommands @(":MEASure:WINDow AUTO")
-            $windowQuery = Invoke-LiveCli -Stage "measure-window-query" -Command "measure-window" -Arguments @("--query")
-            Assert-ScpiSent -Payload $windowQuery -Label "Measurement window query" -ExpectedCommands @(":MEASure:WINDow?")
-            if ([string]$windowQuery.result.window -ne "auto") {
-                throw "Measurement window query did not report auto."
+            try {
+                $clear = Invoke-LiveCli -Stage "measure-clear" -Command "measure-clear"
+                Assert-ScpiSent -Payload $clear -Label "Measurement clear" -ExpectedCommands @(":MEASure:CLEar")
+
+                $show = Invoke-LiveCli -Stage "measure-show-on" -Command "measure-show" -Arguments @("--on")
+                Assert-ScpiSent -Payload $show -Label "Measurement show" -ExpectedCommands @(":MEASure:SHOW ON")
+                $showQuery = Invoke-LiveCli -Stage "measure-show-query" -Command "measure-show" -Arguments @("--query")
+                Assert-ScpiSent -Payload $showQuery -Label "Measurement show query" -ExpectedCommands @(":MEASure:SHOW?")
+                if (-not [bool]$showQuery.result.enabled) {
+                    throw "Measurement show query did not report enabled."
+                }
+
+                $source = Invoke-LiveCli -Stage "measure-source-set" -Command "measure-source" -Arguments @(
+                    "--source-channel", "1", "--source2-channel", "2"
+                )
+                Assert-ScpiSent -Payload $source -Label "Measurement source" -ExpectedCommands @(
+                    ":MEASure:SOURce CHANnel1,CHANnel2"
+                )
+                $sourceQuery = Invoke-LiveCli -Stage "measure-source-query" -Command "measure-source" -Arguments @("--query")
+                Assert-ScpiSent -Payload $sourceQuery -Label "Measurement source query" -ExpectedCommands @(
+                    ":MEASure:SOURce?"
+                )
+                if ([int]$sourceQuery.result.source1_channel -ne 1 -or
+                    [int]$sourceQuery.result.source2_channel -ne 2) {
+                    throw "Measurement source query did not report CH1 and CH2."
+                }
+
+                $window = Invoke-LiveCli -Stage "measure-window-set" -Command "measure-window" -Arguments @("--window", "auto")
+                Assert-ScpiSent -Payload $window -Label "Measurement window" -ExpectedCommands @(":MEASure:WINDow AUTO")
+                $windowQuery = Invoke-LiveCli -Stage "measure-window-query" -Command "measure-window" -Arguments @("--query")
+                Assert-ScpiSent -Payload $windowQuery -Label "Measurement window query" -ExpectedCommands @(":MEASure:WINDow?")
+                if (([string]$windowQuery.result.window).ToLowerInvariant() -ne "auto") {
+                    throw "Measurement window query did not report auto."
+                }
+            } finally {
+                $restoreErrors = @()
+
+                try {
+                    $sourceRestore = Invoke-LiveCli -Stage "measure-source-restore" -Command "measure-source" -Arguments $sourceRestoreArguments
+                    Assert-ScpiSent -Payload $sourceRestore -Label "Measurement source restore" -ExpectedCommands @($sourceRestoreCommand)
+                    $sourceRestoreQuery = Invoke-LiveCli -Stage "measure-source-restore-query" -Command "measure-source" -Arguments @("--query")
+                    Assert-ScpiSent -Payload $sourceRestoreQuery -Label "Measurement source restore query" -ExpectedCommands @(":MEASure:SOURce?")
+                    $source2Restored = if ($null -eq $sourceOriginalChannel2) {
+                        $null -eq $sourceRestoreQuery.result.source2_channel
+                    } else {
+                        $null -ne $sourceRestoreQuery.result.source2_channel -and
+                            [int]$sourceRestoreQuery.result.source2_channel -eq [int]$sourceOriginalChannel2
+                    }
+                    if ([int]$sourceRestoreQuery.result.source1_channel -ne $sourceOriginalChannel -or
+                        -not $source2Restored) {
+                        throw "Measurement source restore readback does not match the snapshot."
+                    }
+                } catch {
+                    $restoreErrors += "source: $($_.Exception.Message)"
+                }
+
+                try {
+                    $windowRestore = Invoke-LiveCli -Stage "measure-window-restore" -Command "measure-window" -Arguments @("--window", $windowOriginalValue)
+                    Assert-ScpiSent -Payload $windowRestore -Label "Measurement window restore" -ExpectedCommands @($windowOriginalCommand)
+                    $windowRestoreQuery = Invoke-LiveCli -Stage "measure-window-restore-query" -Command "measure-window" -Arguments @("--query")
+                    Assert-ScpiSent -Payload $windowRestoreQuery -Label "Measurement window restore query" -ExpectedCommands @(":MEASure:WINDow?")
+                    if (([string]$windowRestoreQuery.result.window).ToLowerInvariant() -ne $windowOriginalValue) {
+                        throw "Measurement window restore readback does not match the snapshot."
+                    }
+                } catch {
+                    $restoreErrors += "window: $($_.Exception.Message)"
+                }
+
+                if ($restoreErrors.Count -gt 0) {
+                    throw "Measurement control restoration failed: $($restoreErrors -join '; ')"
+                }
+
+                if (-not $showOriginalEnabled) {
+                    Write-Host "      Measure Show may remain ON because the current public CLI exposes ON/query but not OFF."
+                }
             }
         }
     } elseif (-not $script:FunctionalFailed) {
