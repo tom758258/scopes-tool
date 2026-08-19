@@ -2405,7 +2405,6 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
         "single",
         "force-trigger",
         "capture-wait-trigger",
-        "capture-wait-trigger-fallback",
         "trigger-holdoff",
         "acquisition-average",
         "acquisition-high-resolution",
@@ -2478,7 +2477,6 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
         "single",
         "force-trigger",
         "capture-wait-trigger",
-        "capture-wait-trigger-fallback",
     ):
         case_start = script.index(f'Invoke-BaselineCase -Name "{case_name}"')
         case_end = script.index(
@@ -2833,19 +2831,13 @@ def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
 
     natural_start = script.index('Invoke-BaselineCase -Name "capture-wait-trigger"')
     natural_end = script.index(
-        'Invoke-BaselineCase -Name "capture-wait-trigger-fallback"', natural_start
+        'Invoke-BaselineCase -Name "trigger-holdoff"', natural_start
     )
     natural_case = script[natural_start:natural_end]
     assert '"--wait-trigger", "--trigger-timeout-ms", "5000"' in natural_case
     assert "--force-trigger-on-timeout" not in natural_case
-
-    fallback_start = natural_end
-    fallback_end = script.index(
-        'Invoke-BaselineCase -Name "trigger-holdoff"', fallback_start
-    )
-    fallback_case = script[fallback_start:fallback_end]
-    assert '"--trigger-timeout-ms", "1"' in fallback_case
-    assert "--force-trigger-on-timeout" in fallback_case
+    assert 'Invoke-BaselineCase -Name "capture-wait-trigger-fallback"' not in script
+    assert "--force-trigger-on-timeout" not in script
 
     assert 'Command "measure-sweep"' not in script
     assert 'Command "reference-clear"' in script

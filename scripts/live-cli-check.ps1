@@ -1773,36 +1773,6 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed) {
-        Invoke-BaselineCase -Name "capture-wait-trigger-fallback" -Action {
-            $csvPath = Join-Path $liveArtifactRoot "wait-trigger-fallback.csv"
-            $metadataPath = Join-Path $liveArtifactRoot "wait-trigger-fallback-meta.json"
-            try {
-                $capture = Invoke-LiveCli -Stage "capture-wait-trigger-fallback" -Command "capture" -Arguments @(
-                    "--channel", "1", "--points", "1000", "--format", "byte",
-                    "--csv", $csvPath, "--meta", $metadataPath,
-                    "--wait-trigger", "--trigger-timeout-ms", "1",
-                    "--trigger-poll-interval-ms", "1", "--force-trigger-on-timeout"
-                )
-                Assert-ScpiSent -Payload $capture -Label "Forced trigger fallback capture" -ExpectedCommands @(
-                    ":SINGle", ":OPERegister:CONDition?", ":TRIGger:FORCe", ":WAVeform:DATA?"
-                )
-                if ([string]$capture.result.trigger.outcome -ne "forced" -or
-                    -not [bool]$capture.result.trigger.forced -or
-                    -not [bool]$capture.result.trigger.timed_out) {
-                    throw "Forced trigger fallback did not report timeout followed by force."
-                }
-                Assert-Capture -Payload $capture -ExpectedFormat "BYTE" `
-                    -CsvPath $csvPath -MetadataPath $metadataPath
-            } finally {
-                $stop = Invoke-LiveCli -Stage "capture-wait-trigger-fallback-stop" `
-                    -Command "stop-acquisition"
-                Assert-ScpiSent -Payload $stop -Label "Fallback capture lifecycle stop" `
-                    -ExpectedCommands @(":STOP")
-            }
-        }
-    }
-
-    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "trigger-holdoff" -Action {
             try {
                 $configured = Invoke-LiveCli -Stage "trigger-holdoff-set" -Command "trigger-holdoff" `

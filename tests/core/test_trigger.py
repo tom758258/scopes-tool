@@ -869,6 +869,7 @@ def test_wait_for_trigger_completion_4000x_force_after_timeout_then_completes():
 
     assert result.outcome == "forced"
     assert result.forced is True
+    assert result.timed_out is False
     assert result.capture_allowed is True
     assert result.raw_values == ("56", "56", "56", "56", "48")
     assert backend.history == [
@@ -880,6 +881,29 @@ def test_wait_for_trigger_completion_4000x_force_after_timeout_then_completes():
         ":OPERegister:CONDition?",
         ":OPERegister:CONDition?",
     ]
+
+
+def test_wait_for_trigger_completion_4000x_force_after_timeout_then_times_out():
+    clock = _StepClock()
+    backend = _SequenceBackend(["56"])
+
+    result = wait_for_trigger_completion(
+        SCPIClient(backend),
+        TriggerWaitConfig(
+            2,
+            poll_interval_ms=1,
+            force_on_timeout=True,
+            clock=clock,
+            sleep=clock.sleep,
+        ),
+        classifier_profile="4000x",
+    )
+
+    assert result.outcome == "timeout"
+    assert result.forced is True
+    assert result.timed_out is True
+    assert result.capture_allowed is False
+    assert ":TRIGger:FORCe" in backend.history
 
 
 def test_wait_for_trigger_completion_unknown_blocks_capture():
