@@ -217,6 +217,24 @@ function Invoke-Cli {
         if (-not [string]::IsNullOrWhiteSpace($payloadError)) {
             $detail += "; error=${payloadError}"
         }
+        $systemErrorProperty = $invocation.Payload.PSObject.Properties["system_error"]
+        if ($null -ne $systemErrorProperty -and $null -ne $systemErrorProperty.Value) {
+            $systemError = $systemErrorProperty.Value
+            $codeProperty = $systemError.PSObject.Properties["code"]
+            $messageProperty = $systemError.PSObject.Properties["message"]
+            $rawProperty = $systemError.PSObject.Properties["raw"]
+            $systemErrorDetail = "system error"
+            if ($null -ne $codeProperty) {
+                $systemErrorDetail += " $([int]$codeProperty.Value)"
+            }
+            if ($null -ne $messageProperty) {
+                $systemErrorDetail += ": $([string]$messageProperty.Value)"
+            }
+            if ($null -ne $rawProperty) {
+                $systemErrorDetail += " (raw=$([string]$rawProperty.Value))"
+            }
+            $detail += "; ${systemErrorDetail}"
+        }
         if (-not [string]::IsNullOrWhiteSpace($invocation.Stderr)) {
             $detail += "; stderr=$($invocation.Stderr)"
         }
@@ -1713,6 +1731,8 @@ if ($snapshotComplete) {
     if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "force-trigger" -Action {
             try {
+                $run = Invoke-LiveCli -Stage "force-trigger-run" -Command "run"
+                Assert-ScpiSent -Payload $run -Label "Force-trigger run" -ExpectedCommands @(":RUN")
                 $forced = Invoke-LiveCli -Stage "force-trigger" -Command "force-trigger"
                 Assert-ScpiSent -Payload $forced -Label "Force trigger" -ExpectedCommands @(":TRIGger:FORCe")
             } finally {

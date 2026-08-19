@@ -399,6 +399,7 @@ Write-DrainErrors -Errors @() -CaseName "dc"
 @pytest.mark.parametrize(
     "script_path",
     (
+        REPO_ROOT / "scripts" / "live-cli-check.ps1",
         REPO_ROOT / "scripts" / "live-dvm-check.ps1",
         REPO_ROOT / "scripts" / "live-serial-check.ps1",
     ),
@@ -466,6 +467,7 @@ function Invoke-CliRaw {
                 system_error = [pscustomobject]@{
                     code = -221
                     message = "Settings conflict"
+                    raw = '-221,"Settings conflict"'
                 }
             }
         }
@@ -553,8 +555,13 @@ $success = Invoke-Cli -Stage "zero-system-error-success" `
     assert "-221" in result["nonzero_detail"]
     assert "Settings conflict" in result["nonzero_detail"]
     assert "exited 1" in result["zero_failure_detail"]
-    assert "system error 0" not in result["zero_failure_detail"]
-    assert "No error" not in result["zero_failure_detail"]
+    if script_path.name == "live-cli-check.ps1":
+        assert '-221,"Settings conflict"' in result["nonzero_detail"]
+        assert "system error 0" in result["zero_failure_detail"]
+        assert "No error" in result["zero_failure_detail"]
+    else:
+        assert "system error 0" not in result["zero_failure_detail"]
+        assert "No error" not in result["zero_failure_detail"]
     assert result["success_ok"] is True
 
 
@@ -2479,6 +2486,22 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
         )
         case_block = script[case_start:case_end]
         assert 'Command "stop-acquisition"' in case_block
+
+    force_start = script.index('Invoke-BaselineCase -Name "force-trigger"')
+    force_end = script.index(
+        "\n    if (-not $script:FunctionalFailed", force_start + 1
+    )
+    force_case = script[force_start:force_end]
+    assert force_case.index('Stage "force-trigger-run"') < force_case.index(
+        'Stage "force-trigger"'
+    )
+    assert force_case.index('Command "run"') < force_case.index(
+        'Command "force-trigger"'
+    )
+    assert force_case.index('Command "force-trigger"') < force_case.index(
+        'Command "stop-acquisition"'
+    )
+    assert 'Command "single"' not in force_case
 
     cursor_start = script.index('Invoke-BaselineCase -Name "cursor-lifecycle"')
     cursor_end = script.index(
