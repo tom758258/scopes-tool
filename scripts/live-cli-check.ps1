@@ -909,7 +909,9 @@ function Restore-InstrumentState {
             Arguments = @("--on")
         }
     }
-    if ($Snapshot.AnnotationRestorable) {
+    $annotationRestorableProperty = $Snapshot.PSObject.Properties["AnnotationRestorable"]
+    $annotationSupportedProperty = $Snapshot.PSObject.Properties["AnnotationSupported"]
+    if ($null -ne $annotationRestorableProperty -and [bool]$annotationRestorableProperty.Value) {
         $annotationArguments = @(
             "--slot", "1",
             $(if ($Snapshot.AnnotationEnabled) { "--on" } else { "--off" }),
@@ -931,6 +933,12 @@ function Restore-InstrumentState {
             Name = "annotation slot 1"
             Command = "annotation"
             Arguments = $annotationArguments
+        }
+    } elseif ($null -ne $annotationSupportedProperty -and [bool]$annotationSupportedProperty.Value) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "annotation slot 1"
+            Command = "annotation"
+            Arguments = @("--slot", "1", "--off", "--clear")
         }
     }
     $searchProperty = $Snapshot.PSObject.Properties["SearchSupported"]
@@ -1092,7 +1100,9 @@ function Restore-InstrumentState {
                 throw "Restored display-persistence mode does not match the snapshot."
             }
 
-            if ($Snapshot.AnnotationRestorable) {
+            $annotationRestorableProperty = $Snapshot.PSObject.Properties["AnnotationRestorable"]
+            $annotationSupportedProperty = $Snapshot.PSObject.Properties["AnnotationSupported"]
+            if ($null -ne $annotationRestorableProperty -and [bool]$annotationRestorableProperty.Value) {
                 $annotation = Invoke-LiveCli -Stage "restore-annotation-query" `
                     -Command "annotation" -Arguments @("--slot", "1", "--query")
                 if ([bool]$annotation.result.enabled -ne [bool]$Snapshot.AnnotationEnabled -or
@@ -1102,6 +1112,12 @@ function Restore-InstrumentState {
                     $annotation.result.x -ne $Snapshot.AnnotationX -or
                     $annotation.result.y -ne $Snapshot.AnnotationY) {
                     throw "Restored annotation state does not match the snapshot."
+                }
+            } elseif ($null -ne $annotationSupportedProperty -and [bool]$annotationSupportedProperty.Value) {
+                $annotation = Invoke-LiveCli -Stage "restore-annotation-query" `
+                    -Command "annotation" -Arguments @("--slot", "1", "--query")
+                if ([bool]$annotation.result.enabled -or [string]$annotation.result.text -ne "") {
+                    throw "Annotation cleanup did not leave slot 1 OFF with cleared text."
                 }
             }
             $searchProperty = $Snapshot.PSObject.Properties["SearchSupported"]
@@ -1380,6 +1396,7 @@ try {
         AnnotationBackground = if ($null -ne $annotationState) { [string]$annotationState.result.background } else { "" }
         AnnotationX = if ($null -ne $annotationState) { $annotationState.result.x } else { $null }
         AnnotationY = if ($null -ne $annotationState) { $annotationState.result.y } else { $null }
+        AnnotationSupported = [bool]$identity.capabilities.supports_annotation
         SearchSupported = $searchSupported
         TimebaseScale = Assert-FiniteNumber `
             -Value $timebaseScale.result.seconds_per_division -Label "timebase scale"
@@ -1906,7 +1923,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.AnnotationRestorable) {
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_annotation) {
         Invoke-BaselineCase -Name "display-annotation" -Action {
             $annotation = Invoke-LiveCli -Stage "annotation-set" -Command "annotation" `
                 -Arguments @("--slot", "1", "--on", "--text", "P2 live")
@@ -1922,8 +1939,6 @@ if ($snapshotComplete) {
                 throw "Annotation slot 1 readback does not match the representative state."
             }
         }
-    } elseif (-not $script:FunctionalFailed) {
-        Write-Host "SKIP  display-annotation (slot 1 cannot be safely restored)"
     }
 
     $supportsEdgeSearch = "edge" -in @($identity.capabilities.search_modes)
@@ -2008,6 +2023,11 @@ if ($snapshotComplete) {
 
             $disabled = Invoke-LiveCli -Stage "search-event-cleanup" -Command "search-state" `
                 -Arguments @("--enabled", "false")
+            $disabledState = Invoke-LiveCli -Stage "search-event-cleanup-query" -Command "search-state" `
+                -Arguments @("--query")
+            if ([bool]$disabledState.result.enabled) {
+                throw "Search state query did not report disabled Search after search-event."
+            }
         }
     }
 

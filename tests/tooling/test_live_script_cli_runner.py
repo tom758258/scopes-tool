@@ -4120,6 +4120,12 @@ function Invoke-LiveCli {
                 result = [pscustomobject]@{ enabled = $false }
             }
         }
+        "^search-event-cleanup-query$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:STATe?") }
+                result = [pscustomobject]@{ enabled = $false }
+            }
+        }
         default {
             throw "Unexpected stage in test harness: $Stage"
         }
@@ -4243,6 +4249,7 @@ Run-SearchSection -Identity $identity4000x
     assert "search-state-disable" in stages_4000x
     assert "search-event-set" in stages_4000x
     assert "search-event-cleanup" in stages_4000x
+    assert "search-event-cleanup-query" in stages_4000x
 
     # 4000X count == 0 skips search-event-set
     assert data["zero_hit_results"]["search-basic"] is True
@@ -4252,6 +4259,7 @@ Run-SearchSection -Identity $identity4000x
     assert "search-event-count-query" in stages_zero
     assert "search-event-set" not in stages_zero
     assert "search-event-cleanup" in stages_zero
+    assert "search-event-cleanup-query" in stages_zero
 
     # 2000X N/A: neither case runs
     assert "search-basic" not in data["pass2000x_results"]
@@ -4261,3 +4269,229 @@ Run-SearchSection -Identity $identity4000x
     # Failure simulation
     assert data["fail_passed"] is False
     assert data["fail_functional_failed"] is True
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_annotation_execution_and_cleanup(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-annotation-harness.ps1"
+    harness_path.write_text(
+        r"""
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @("Add-CaseResult", "Assert-ScpiSent", "Invoke-BaselineCase", "Restore-InstrumentState", "ConvertTo-InvariantString", "Assert-NearlyEqual")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$annotationCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "display-annotation"')
+    )
+}, $true))
+if ($annotationCommands.Count -ne 1) {
+    throw "Expected one display-annotation case in ${ScriptPath}."
+}
+$annotationCode = $annotationCommands[0].Extent.Text
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:DrainCalls = 0
+$script:SimulateFailure = $false
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    switch -Regex ($Stage) {
+        "^annotation-set$" {
+            $cmds = @(":DISPlay:ANNotation1:TEXT 'P2 live'", ":DISPlay:ANNotation1:STATe 1")
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = $cmds }
+                result = [pscustomobject]@{ commands = $cmds }
+            }
+        }
+        "^annotation-query$" {
+            $cmds = @(":DISPlay:ANNotation1:TEXT?")
+            if ($script:SimulateFailure) {
+                return [pscustomobject]@{
+                    scpi = [pscustomobject]@{ sent = $cmds }
+                    result = [pscustomobject]@{ commands = $cmds; enabled = $false; text = "wrong"; slot = 1 }
+                }
+            }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = $cmds }
+                result = [pscustomobject]@{ commands = $cmds; enabled = $true; text = "P2 live"; slot = 1 }
+            }
+        }
+        "^restore-channel-summary-query$" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ channels = @(
+                [pscustomobject]@{
+                    label = "Original"
+                    scale = 1.0
+                    range = 8.0
+                    offset = 0.0
+                    bandwidth_limit = $false
+                    impedance = "one_meg"
+                    invert = $false
+                    units = "volt"
+                    vernier = $false
+                    probe_ratio = 10.0
+                    probe_skew = 0.0
+                }
+            ) } }
+        }
+        "^restore-display-label-query$" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ display_label = $true } }
+        }
+        "^restore-display-persistence-query$" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ mode = "minimum"; seconds = $null } }
+        }
+        "^restore-display-intensity-query$" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ value = 50 } }
+        }
+        "^restore-display-vectors-query$" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ value = $true } }
+        }
+        "^restore-annotation-query$" {
+            return [pscustomobject]@{
+                result = [pscustomobject]@{ enabled = $false; text = ""; color = "WHITE"; background = "OPAQ"; x = 20; y = 30 }
+            }
+        }
+        default {
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
+    }
+}
+
+# Run 1: Annotation supported, executes display-annotation
+$identity = [pscustomobject]@{
+    capabilities = [pscustomobject]@{
+        supports_annotation = $true
+    }
+}
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations.Clear()
+
+if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_annotation) {
+    Invoke-Expression $annotationCode
+}
+$passResult = $script:CaseResults["display-annotation"].Passed
+$passInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+# Run 2: Annotation failure
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations.Clear()
+$script:SimulateFailure = $true
+if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_annotation) {
+    Invoke-Expression $annotationCode
+}
+$failResult = $script:CaseResults["display-annotation"].Passed
+$failFunctionalFailed = $script:FunctionalFailed
+
+# Run 3: Restore when not restorable but supported (safe baseline --slot 1 --off --clear)
+$script:Invocations.Clear()
+$nonRestorableSnapshot = [pscustomobject]@{
+    ChannelProbeSkew = 0.0
+    ChannelVernier = $false
+    ChannelUnits = "volt"
+    ChannelInvert = $false
+    ChannelImpedance = "one_meg"
+    ChannelBandwidthLimit = $false
+    ChannelProbeRatio = 10.0
+    ChannelRange = 8.0
+    ChannelScale = 1.0
+    ChannelOffset = 0.0
+    ChannelLabel = "Original"
+    DisplayIntensity = 50
+    DisplayPersistenceSeconds = $null
+    DisplayPersistenceMode = "minimum"
+    DisplayLabels = $true
+    TriggerLevel = 0.0
+    TriggerSlope = "negative"
+    TriggerSource = "analog-channel"
+    TriggerSourceChannel = 2
+    TimebasePosition = 0.0
+    TimebaseScale = 0.001
+    ChannelCoupling = "dc"
+    ChannelDisplay = $true
+    AcquisitionType = "normal"
+    AcquisitionCount = 1
+    DisplayVectors = $true
+    AnnotationRestorable = $false
+    AnnotationSupported = $true
+}
+Restore-InstrumentState -Snapshot $nonRestorableSnapshot
+$nonRestorableRestoreInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+[ordered]@{
+    pass_result = $passResult
+    pass_invocations = $passInvocations
+    fail_result = $failResult
+    fail_functional_failed = $failFunctionalFailed
+    non_restorable_restore_invocations = $nonRestorableRestoreInvocations
+} | ConvertTo-Json -Depth 10 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    data = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert data["pass_result"] is True
+    stages = [entry["stage"] for entry in data["pass_invocations"]]
+    assert "annotation-set" in stages
+    assert "annotation-query" in stages
+
+    assert data["fail_result"] is False
+    assert data["fail_functional_failed"] is True
+
+    restore_commands = [entry for entry in data["non_restorable_restore_invocations"] if entry["command"] == "annotation"]
+    assert len(restore_commands) >= 1
+    assert restore_commands[0]["arguments"] == ["--slot", "1", "--off", "--clear"]
