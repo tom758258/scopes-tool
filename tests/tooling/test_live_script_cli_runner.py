@@ -2452,6 +2452,7 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
         "display-settings",
         "display-annotation",
         "search-basic",
+        "search-event",
         "screenshot-bmp",
         "waveform-amp",
     ):
@@ -2567,7 +2568,6 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
         "display-intensity",
         "annotation",
         "search-state",
-        "search-mode",
     ):
         assert f'Command = "{command}"' in restore
 
@@ -2886,7 +2886,7 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 )
 if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
 
-foreach ($functionName in @("Assert-ScpiSent", "Invoke-BaselineCase")) {
+foreach ($functionName in @("Add-CaseResult", "Assert-ScpiSent", "Invoke-BaselineCase")) {
     $functionAst = $ast.Find({
         param($node)
         return (
@@ -3747,9 +3747,7 @@ $snapshot = [pscustomobject]@{
     AnnotationBackground = "OPAQ"
     AnnotationX = 20
     AnnotationY = 30
-    SearchRestorable = $true
-    SearchMode = "edge"
-    SearchEnabled = $false
+    SearchSupported = $true
     P3Enabled = $true
     TriggerEdgeCoupling = "dc"
     TriggerEdgeReject = "off"
@@ -3813,7 +3811,6 @@ Restore-InstrumentState -Snapshot $snapshot
         "display-intensity",
         "display-vectors",
         "annotation",
-        "search-mode",
         "search-state",
         "math-display",
         "wgen-output",
@@ -3957,3 +3954,310 @@ Drain-AfterFailure -Stage "empty-error-drain" -CaseName "cleanup"
     result = json.loads(completed.stdout)
     assert result["diagnostic_count"] == 0
     assert result["diagnostics"] == []
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_search_basic_and_event_execution(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-search-harness.ps1"
+    harness_path.write_text(
+        r"""
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @("Add-CaseResult", "Assert-ScpiSent", "Invoke-BaselineCase")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$searchBasicCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "search-basic"')
+    )
+}, $true))
+if ($searchBasicCommands.Count -ne 1) {
+    throw "Expected one search-basic case in ${ScriptPath}."
+}
+$searchBasicCode = $searchBasicCommands[0].Extent.Text
+
+$searchEventCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "search-event"')
+    )
+}, $true))
+if ($searchEventCommands.Count -ne 1) {
+    throw "Expected one search-event case in ${ScriptPath}."
+}
+$searchEventCode = $searchEventCommands[0].Extent.Text
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:DrainCalls = 0
+$script:SearchCount = 3
+$script:SimulateFailure = $false
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    switch -Regex ($Stage) {
+        "^search-state-enable$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:STATe 1") }
+                result = [pscustomobject]@{ enabled = $true }
+            }
+        }
+        "^search-state-query$" {
+            if ($script:SimulateFailure) {
+                return [pscustomobject]@{
+                    scpi = [pscustomobject]@{ sent = @(":SEARch:STATe?") }
+                    result = [pscustomobject]@{ enabled = $false }
+                }
+            }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:STATe?") }
+                result = [pscustomobject]@{ enabled = $true }
+            }
+        }
+        "^search-mode-(.*)-set$" {
+            $mode = $Matches[1]
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:STATe 1", ":SEARch:MODE $($mode.ToUpperInvariant())") }
+                result = [pscustomobject]@{ mode = $mode; enabled = $true }
+            }
+        }
+        "^search-mode-(.*)-query$" {
+            $mode = $Matches[1]
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:MODE?") }
+                result = [pscustomobject]@{ mode = $mode; enabled = $true }
+            }
+        }
+        "^search-count-query$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:COUNt?") }
+                result = [pscustomobject]@{ count = [int64]$script:SearchCount }
+            }
+        }
+        "^search-state-disable$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:STATe 0") }
+                result = [pscustomobject]@{ enabled = $false }
+            }
+        }
+        "^search-state-disable-query$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:STATe?") }
+                result = [pscustomobject]@{ enabled = $false }
+            }
+        }
+        "^search-event-enable$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:STATe 1") }
+                result = [pscustomobject]@{ enabled = $true }
+            }
+        }
+        "^search-event-mode-edge$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:MODE EDGE") }
+                result = [pscustomobject]@{ mode = "edge"; enabled = $true }
+            }
+        }
+        "^search-event-query$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:EVENt?") }
+                result = [pscustomobject]@{ event = [int64]1 }
+            }
+        }
+        "^search-event-count-query$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:COUNt?") }
+                result = [pscustomobject]@{ count = [int64]$script:SearchCount }
+            }
+        }
+        "^search-event-set$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:EVENt 1") }
+                result = [pscustomobject]@{ event = [int64]1 }
+            }
+        }
+        "^search-event-readback$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:EVENt?") }
+                result = [pscustomobject]@{ event = [int64]1 }
+            }
+        }
+        "^search-event-cleanup$" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":SEARch:STATe 0") }
+                result = [pscustomobject]@{ enabled = $false }
+            }
+        }
+        default {
+            throw "Unexpected stage in test harness: $Stage"
+        }
+    }
+}
+
+function Run-SearchSection {
+    param($Identity)
+    $supportsEdgeSearch = "edge" -in @($Identity.capabilities.search_modes)
+    if (-not $script:FunctionalFailed -and [bool]$Identity.capabilities.supports_search_basic -and $supportsEdgeSearch) {
+        Invoke-Expression $searchBasicCode
+    }
+    if (-not $script:FunctionalFailed -and [bool]$Identity.capabilities.supports_search_event_navigation) {
+        Invoke-Expression $searchEventCode
+    }
+}
+
+# Run 1: 4000X capabilities, count > 0 (normal pass)
+$identity4000x = [pscustomobject]@{
+    capabilities = [pscustomobject]@{
+        supports_search_basic = $true
+        supports_search_event_navigation = $true
+        search_modes = @("edge", "glitch", "runt", "transition", "serial1", "serial2", "peak")
+    }
+}
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations.Clear()
+$script:SearchCount = 3
+Run-SearchSection -Identity $identity4000x
+$pass4000xResults = [ordered]@{}
+foreach ($k in $script:CaseResults.Keys) {
+    $pass4000xResults[$k] = $script:CaseResults[$k].Passed
+}
+$pass4000xInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+# Run 2: 4000X capabilities, count == 0 (query only, skips event-set)
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations.Clear()
+$script:SearchCount = 0
+Run-SearchSection -Identity $identity4000x
+$zeroHit4000xResults = [ordered]@{}
+foreach ($k in $script:CaseResults.Keys) {
+    $zeroHit4000xResults[$k] = $script:CaseResults[$k].Passed
+}
+$zeroHit4000xInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+# Run 3: 2000X capabilities (search_modes only serial1, no edge)
+$identity2000x = [pscustomobject]@{
+    capabilities = [pscustomobject]@{
+        supports_search_basic = $true
+        supports_search_event_navigation = $false
+        search_modes = @("serial1")
+    }
+}
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations.Clear()
+Run-SearchSection -Identity $identity2000x
+$pass2000xResults = [ordered]@{}
+foreach ($k in $script:CaseResults.Keys) {
+    $pass2000xResults[$k] = $script:CaseResults[$k].Passed
+}
+$pass2000xInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+# Run 4: Failure path
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations.Clear()
+$script:SimulateFailure = $true
+Run-SearchSection -Identity $identity4000x
+
+[ordered]@{
+    pass4000x_results = $pass4000xResults
+    pass4000x_invocations = $pass4000xInvocations
+    zero_hit_results = $zeroHit4000xResults
+    zero_hit_invocations = $zeroHit4000xInvocations
+    pass2000x_results = $pass2000xResults
+    pass2000x_invocations = $pass2000xInvocations
+    fail_passed = $script:CaseResults["search-basic"].Passed
+    fail_functional_failed = $script:FunctionalFailed
+} | ConvertTo-Json -Depth 10 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    data = json.loads(completed.stdout.strip().splitlines()[-1])
+
+    # 4000X normal pass
+    assert data["pass4000x_results"]["search-basic"] is True
+    assert data["pass4000x_results"]["search-event"] is True
+    stages_4000x = [entry["stage"] for entry in data["pass4000x_invocations"]]
+    assert "search-state-enable" in stages_4000x
+    assert "search-mode-edge-set" in stages_4000x
+    assert "search-mode-glitch-set" in stages_4000x
+    assert "search-mode-runt-set" in stages_4000x
+    assert "search-mode-transition-set" in stages_4000x
+    assert "search-mode-peak-set" in stages_4000x
+    assert "search-count-query" in stages_4000x
+    assert "search-state-disable" in stages_4000x
+    assert "search-event-set" in stages_4000x
+    assert "search-event-cleanup" in stages_4000x
+
+    # 4000X count == 0 skips search-event-set
+    assert data["zero_hit_results"]["search-basic"] is True
+    assert data["zero_hit_results"]["search-event"] is True
+    stages_zero = [entry["stage"] for entry in data["zero_hit_invocations"]]
+    assert "search-event-query" in stages_zero
+    assert "search-event-count-query" in stages_zero
+    assert "search-event-set" not in stages_zero
+    assert "search-event-cleanup" in stages_zero
+
+    # 2000X N/A: neither case runs
+    assert "search-basic" not in data["pass2000x_results"]
+    assert "search-event" not in data["pass2000x_results"]
+    assert len(data["pass2000x_invocations"]) == 0
+
+    # Failure simulation
+    assert data["fail_passed"] is False
+    assert data["fail_functional_failed"] is True

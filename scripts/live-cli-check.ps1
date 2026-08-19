@@ -933,16 +933,12 @@ function Restore-InstrumentState {
             Arguments = $annotationArguments
         }
     }
-    if ($Snapshot.SearchRestorable) {
-        $restoreSteps += [pscustomobject]@{
-            Name = "search mode"
-            Command = "search-mode"
-            Arguments = @("--mode", [string]$Snapshot.SearchMode)
-        }
+    $searchProperty = $Snapshot.PSObject.Properties["SearchSupported"]
+    if ($null -ne $searchProperty -and [bool]$searchProperty.Value) {
         $restoreSteps += [pscustomobject]@{
             Name = "search state"
             Command = "search-state"
-            Arguments = @("--enabled", ([string][bool]$Snapshot.SearchEnabled).ToLowerInvariant())
+            Arguments = @("--enabled", "false")
         }
     }
     $p3Property = $Snapshot.PSObject.Properties["P3Enabled"]
@@ -1108,18 +1104,12 @@ function Restore-InstrumentState {
                     throw "Restored annotation state does not match the snapshot."
                 }
             }
-            if ($Snapshot.SearchRestorable) {
+            $searchProperty = $Snapshot.PSObject.Properties["SearchSupported"]
+            if ($null -ne $searchProperty -and [bool]$searchProperty.Value) {
                 $search = Invoke-LiveCli -Stage "restore-search-state-query" `
                     -Command "search-state" -Arguments @("--query")
-                if ([bool]$search.result.enabled -ne [bool]$Snapshot.SearchEnabled) {
-                    throw "Restored Search state does not match the snapshot."
-                }
-                if ($Snapshot.SearchEnabled) {
-                    $mode = Invoke-LiveCli -Stage "restore-search-mode-query" `
-                        -Command "search-mode" -Arguments @("--query")
-                    if ([string]$mode.result.mode -ne [string]$Snapshot.SearchMode) {
-                        throw "Restored Search mode does not match the snapshot."
-                    }
+                if ([bool]$search.result.enabled) {
+                    throw "Search cleanup did not leave Search OFF."
                 }
             }
             if ($null -ne $p3Property -and [bool]$p3Property.Value) {
@@ -1344,19 +1334,7 @@ try {
         $annotationRestorable = $annotationText -notmatch '["]|[^ -~]'
     }
 
-    $searchState = $null
-    $searchMode = $null
-    $searchRestorable = $false
-    if ([bool]$identity.capabilities.supports_search_basic) {
-        $searchState = Invoke-LiveCli -Stage "snapshot-search-state" `
-            -Command "search-state" -Arguments @("--query")
-        $searchMode = Invoke-LiveCli -Stage "snapshot-search-mode" `
-            -Command "search-mode" -Arguments @("--query")
-        $searchRestorable = (
-            "edge" -in @($identity.capabilities.search_modes) -and
-            -not [string]::IsNullOrWhiteSpace([string]$searchMode.result.mode)
-        )
-    }
+    $searchSupported = [bool]$identity.capabilities.supports_search_basic
 
     if ($triggerSource.result.source -notin @("analog-channel", "external", "line")) {
         throw "Unsupported Edge source readback: $($triggerSource.result.source)"
@@ -1402,9 +1380,7 @@ try {
         AnnotationBackground = if ($null -ne $annotationState) { [string]$annotationState.result.background } else { "" }
         AnnotationX = if ($null -ne $annotationState) { $annotationState.result.x } else { $null }
         AnnotationY = if ($null -ne $annotationState) { $annotationState.result.y } else { $null }
-        SearchRestorable = $searchRestorable
-        SearchEnabled = if ($null -ne $searchState) { [bool]$searchState.result.enabled } else { $false }
-        SearchMode = if ($null -ne $searchMode) { [string]$searchMode.result.mode } else { "" }
+        SearchSupported = $searchSupported
         TimebaseScale = Assert-FiniteNumber `
             -Value $timebaseScale.result.seconds_per_division -Label "timebase scale"
         TimebasePosition = Assert-FiniteNumber `
@@ -1951,26 +1927,37 @@ if ($snapshotComplete) {
     }
 
     $supportsEdgeSearch = "edge" -in @($identity.capabilities.search_modes)
-    if (-not $script:FunctionalFailed -and $supportsEdgeSearch -and $snapshot.SearchRestorable) {
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_search_basic -and $supportsEdgeSearch) {
         Invoke-BaselineCase -Name "search-basic" -Action {
             $enabled = Invoke-LiveCli -Stage "search-state-enable" -Command "search-state" `
                 -Arguments @("--enabled", "true")
             Assert-ScpiSent -Payload $enabled -Label "Search state configure" `
                 -ExpectedCommands @(":SEARch:STATe 1")
-            $modeSet = Invoke-LiveCli -Stage "search-mode-edge-set" -Command "search-mode" `
-                -Arguments @("--mode", "edge")
-            Assert-ScpiSent -Payload $modeSet -Label "Search mode configure" `
-                -ExpectedCommands @(":SEARch:STATe 1", ":SEARch:MODE EDGE")
 
             $state = Invoke-LiveCli -Stage "search-state-query" -Command "search-state" `
                 -Arguments @("--query")
-            $mode = Invoke-LiveCli -Stage "search-mode-query" -Command "search-mode" `
-                -Arguments @("--query")
-            if (-not [bool]$state.result.enabled -or
-                -not [bool]$mode.result.enabled -or
-                [string]$mode.result.mode -ne "edge") {
-                throw "Search readback did not report enabled Edge mode."
+            if (-not [bool]$state.result.enabled) {
+                throw "Search state query did not report enabled Search."
             }
+
+            $modesToTest = @("edge", "glitch", "runt", "transition")
+            if ("peak" -in @($identity.capabilities.search_modes)) {
+                $modesToTest += "peak"
+            }
+
+            foreach ($targetMode in $modesToTest) {
+                $modeSet = Invoke-LiveCli -Stage "search-mode-${targetMode}-set" -Command "search-mode" `
+                    -Arguments @("--mode", $targetMode)
+                $modeQuery = Invoke-LiveCli -Stage "search-mode-${targetMode}-query" -Command "search-mode" `
+                    -Arguments @("--query")
+                if (-not [bool]$modeQuery.result.enabled -or
+                    [string]$modeQuery.result.mode -ne $targetMode) {
+                    throw "Search mode query did not report enabled $targetMode mode."
+                }
+            }
+
+            $modeEdge = Invoke-LiveCli -Stage "search-mode-edge-set" -Command "search-mode" `
+                -Arguments @("--mode", "edge")
             $count = Invoke-LiveCli -Stage "search-count-query" -Command "search-count" `
                 -Arguments @("--query")
             Assert-ScpiSent -Payload $count -Label "Search count query" `
@@ -1979,18 +1966,49 @@ if ($snapshotComplete) {
                 throw "Search count must be zero or greater."
             }
 
-            if ([bool]$identity.capabilities.supports_search_event_navigation) {
-                $event = Invoke-LiveCli -Stage "search-event-query" -Command "search-event" `
-                    -Arguments @("--query")
-                Assert-ScpiSent -Payload $event -Label "Search event query" `
-                    -ExpectedCommands @(":SEARch:EVENt?")
-                if ([int64]$event.result.event -lt 0) {
-                    throw "Search event must be zero or greater."
-                }
+            $disabled = Invoke-LiveCli -Stage "search-state-disable" -Command "search-state" `
+                -Arguments @("--enabled", "false")
+            $disabledState = Invoke-LiveCli -Stage "search-state-disable-query" -Command "search-state" `
+                -Arguments @("--query")
+            if ([bool]$disabledState.result.enabled) {
+                throw "Search state query did not report disabled Search."
             }
         }
-    } elseif (-not $script:FunctionalFailed) {
-        Write-Host "SKIP  search-basic (non-Serial mode cannot be safely restored)"
+    }
+
+    if (-not $script:FunctionalFailed -and
+        [bool]$identity.capabilities.supports_search_event_navigation) {
+        Invoke-BaselineCase -Name "search-event" -Action {
+            $enabled = Invoke-LiveCli -Stage "search-event-enable" -Command "search-state" `
+                -Arguments @("--enabled", "true")
+            $modeSet = Invoke-LiveCli -Stage "search-event-mode-edge" -Command "search-mode" `
+                -Arguments @("--mode", "edge")
+
+            $event = Invoke-LiveCli -Stage "search-event-query" -Command "search-event" `
+                -Arguments @("--query")
+            Assert-ScpiSent -Payload $event -Label "Search event query" `
+                -ExpectedCommands @(":SEARch:EVENt?")
+            if ([int64]$event.result.event -lt 0) {
+                throw "Search event must be zero or greater."
+            }
+
+            $count = Invoke-LiveCli -Stage "search-event-count-query" -Command "search-count" `
+                -Arguments @("--query")
+            if ([int64]$count.result.count -gt 0) {
+                $eventSet = Invoke-LiveCli -Stage "search-event-set" -Command "search-event" `
+                    -Arguments @("--event", "1")
+                Assert-ScpiSent -Payload $eventSet -Label "Search event set" `
+                    -ExpectedCommands @(":SEARch:EVENt 1")
+                $eventReadback = Invoke-LiveCli -Stage "search-event-readback" -Command "search-event" `
+                    -Arguments @("--query")
+                if ([int64]$eventReadback.result.event -ne 1) {
+                    throw "Search event readback does not match configured event 1."
+                }
+            }
+
+            $disabled = Invoke-LiveCli -Stage "search-event-cleanup" -Command "search-state" `
+                -Arguments @("--enabled", "false")
+        }
     }
 
     if (-not $script:FunctionalFailed) {
