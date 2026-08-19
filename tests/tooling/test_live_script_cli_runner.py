@@ -2668,11 +2668,12 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     waveform_validation = save_export.index(
         "if (-not [bool]$waveform.result.instrument_side", waveform_stage
     )
+    handoff_sleep = save_export.index("Start-Sleep -Seconds 3", waveform_validation)
     first_restore = save_export.index(
         'Invoke-LiveCli -Stage "save-image-format-restore"'
     )
     assert "Start-Sleep -Milliseconds 500" not in save_export
-    assert waveform_stage < waveform_validation < first_restore
+    assert waveform_stage < waveform_validation < handoff_sleep < first_restore
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
@@ -2740,6 +2741,15 @@ function Assert-ScpiSentPrefix {
     param([object] $Payload, [string] $ExpectedPrefix, [string] $Label)
 }
 
+function Start-Sleep {
+    param([int] $Seconds = 0, [int] $Milliseconds = 0)
+    $script:SleepCalls.Add([pscustomobject]@{
+        Seconds = $Seconds
+        Milliseconds = $Milliseconds
+        InvocationsCount = $script:Invocations.Count
+    })
+}
+
 function Invoke-LiveCli {
     param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
     $script:Invocations.Add($Stage)
@@ -2776,6 +2786,7 @@ function Invoke-Scenario {
     $script:FunctionalFailed = $false
     $script:DrainCalls = 0
     $script:Invocations = New-Object System.Collections.Generic.List[string]
+    $script:SleepCalls = New-Object System.Collections.Generic.List[object]
     $snapshot = [pscustomobject]@{
         SaveImageFormat = "png"
         SaveWaveformFormat = "csv"
@@ -2793,6 +2804,7 @@ function Invoke-Scenario {
             }
         )
         invocations = @($script:Invocations | ForEach-Object { $_ })
+        sleep_calls = @($script:SleepCalls | ForEach-Object { $_ })
         functional_failed = $script:FunctionalFailed
         drain_calls = $script:DrainCalls
     }
@@ -2847,8 +2859,15 @@ function Invoke-Scenario {
     assert "image restore failure" in restore_only["detail"]
     assert restore_only["functional_failed"] is True
     assert restore_only["drain_calls"] == 1
+    assert len(restore_only["sleep_calls"]) == 1
+    assert restore_only["sleep_calls"][0]["Seconds"] == 3
+    # Verify sleep occurred after save-waveform and before restore
+    save_waveform_idx = restore_only["invocations"].index("save-waveform")
+    assert restore_only["sleep_calls"][0]["InvocationsCount"] == save_waveform_idx + 1
+    assert len(combined["sleep_calls"]) == 0
 
     max_enabled = result["max_enabled"]
+    assert len(max_enabled["sleep_calls"]) == 0
     assert max_enabled["passed"] is False
     assert "acceptance prerequisite failed" in max_enabled["detail"]
     assert not any(
