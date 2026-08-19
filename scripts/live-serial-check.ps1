@@ -862,6 +862,9 @@ function Restore-SerialState {
         [Parameter(Mandatory = $true)]
         [bool] $RestoreSerialDisplay,
 
+        [Parameter(Mandatory = $false)]
+        [bool] $RestoreUartBaseline = $false,
+
         [Parameter(Mandatory = $true)]
         [bool] $RestoreTrigger,
 
@@ -946,6 +949,24 @@ function Restore-SerialState {
             $restoreErrors.Add("Serial display: $($_.Exception.Message)")
             Drain-AfterFailure -Stage "cleanup-serial-display-error-drain" `
                 -CaseName "cleanup"
+        }
+    }
+
+    if ($RestoreUartBaseline) {
+        try {
+            Invoke-LiveCli -Stage "cleanup-uart-configure" -Command "serial-uart" `
+                -Arguments @(
+                    "--bus", "1",
+                    "--baud-rate", "115200", "--data-bits", "8", "--parity", "none",
+                    "--polarity", "high", "--bit-order", "lsb-first"
+                ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $uart = Invoke-LiveCli -Stage "cleanup-uart-query" `
+                -Command "serial-uart" -Arguments @("--bus", "1", "--query")
+            Assert-UartReadback -Payload $uart
+        } catch {
+            $restoreErrors.Add("UART baseline: $($_.Exception.Message)")
+            Drain-AfterFailure -Stage "cleanup-uart-error-drain" -CaseName "cleanup"
         }
     }
 
@@ -1672,6 +1693,7 @@ if ($stateChangeStarted) {
             -DisableSearch $searchChangeStarted `
             -RestoreLister $listerChangeStarted `
             -RestoreSerialDisplay $true `
+            -RestoreUartBaseline $true `
             -RestoreTrigger $triggerChangeStarted `
             -RestoreAcquisition $script:ListerAcquisitionStarted
         Add-CaseResult -Name "cleanup" -Status "PASS"

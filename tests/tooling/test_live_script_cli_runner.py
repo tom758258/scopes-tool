@@ -1285,6 +1285,21 @@ def test_serial_protocol_coverage_structure() -> None:
         assert '"digitize"' not in block
         assert '"force-trigger"' not in block
 
+    can_trigger = script.index('Invoke-SerialCase -Name "CAN Serial Trigger"')
+    cleanup = script.index("Restore-SerialState -Snapshot $snapshot", can_trigger)
+    final_drain = script.index(
+        '$finalDrain = Get-ErrorDrain -Stage "final-error-queue"', cleanup
+    )
+
+    assert can_trigger < cleanup < final_drain
+    assert "-RestoreUartBaseline $true" in script[cleanup:final_drain]
+
+    restore_def = script.index("function Restore-SerialState")
+    uart_rebaseline = script.index('-Stage "cleanup-uart-configure"', restore_def)
+    uart_rebaseline_query = script.index('-Stage "cleanup-uart-query"', uart_rebaseline)
+    assert restore_def < uart_rebaseline < uart_rebaseline_query
+    assert "Assert-UartReadback -Payload $uart" in script[uart_rebaseline:cleanup]
+
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("scenario", ["completed", "timeout", "single-failure"])
