@@ -1220,6 +1220,72 @@ def test_serial_lister_acquisition_safety_structure() -> None:
     assert '"force-trigger"' not in lister_case
 
 
+def test_serial_protocol_coverage_structure() -> None:
+    script = (REPO_ROOT / "scripts" / "live-serial-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    expected_preflight = [
+        '-Command "serial-uart"',
+        '-Command "serial-i2c"',
+        '-Command "serial-spi"',
+        '-Command "serial-can"',
+        '-Command "serial-search-uart"',
+        '-Command "serial-search-i2c"',
+        '-Command "serial-search-spi"',
+        '-Command "serial-search-can"',
+        '-Command "serial-trigger-uart"',
+        '-Command "serial-trigger-i2c"',
+        '-Command "serial-trigger-spi"',
+        '-Command "serial-trigger-can"',
+    ]
+    for marker in expected_preflight:
+        assert marker in script
+
+    case_names = [
+        'Invoke-SerialCase -Name "UART configuration roundtrip"',
+        'Invoke-SerialCase -Name "UART Lister export"',
+        'Invoke-SerialCase -Name "UART Serial Search"',
+        'Invoke-SerialCase -Name "UART Serial Trigger"',
+        'Invoke-SerialCase -Name "I2C configuration roundtrip"',
+        'Invoke-SerialCase -Name "I2C Serial Search"',
+        'Invoke-SerialCase -Name "I2C Serial Trigger"',
+        'Invoke-SerialCase -Name "SPI configuration roundtrip"',
+        'Invoke-SerialCase -Name "SPI Serial Search"',
+        'Invoke-SerialCase -Name "SPI Serial Trigger"',
+        'Invoke-SerialCase -Name "CAN configuration roundtrip"',
+        'Invoke-SerialCase -Name "CAN Serial Search"',
+        'Invoke-SerialCase -Name "CAN Serial Trigger"',
+    ]
+    indices = [script.index(name) for name in case_names]
+    assert indices == sorted(indices)
+
+    assert '"--framing", "timeout"' in script
+    assert '"--clock-timeout", "1e-5"' in script
+    assert '"--id", "0x123"' in script
+
+    for case_name in [
+        "I2C configuration roundtrip",
+        "I2C Serial Search",
+        "I2C Serial Trigger",
+        "SPI configuration roundtrip",
+        "SPI Serial Search",
+        "SPI Serial Trigger",
+        "CAN configuration roundtrip",
+        "CAN Serial Search",
+        "CAN Serial Trigger",
+    ]:
+        start = script.index(f'Invoke-SerialCase -Name "{case_name}"')
+        next_pos = script.find('Invoke-SerialCase -Name "', start + 1)
+        if next_pos == -1:
+            next_pos = script.find('if ($stateChangeStarted)', start)
+        block = script[start:next_pos]
+        assert '"single"' not in block
+        assert '"run"' not in block
+        assert '"digitize"' not in block
+        assert '"force-trigger"' not in block
+
+
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("scenario", ["completed", "timeout", "single-failure"])
 @pytest.mark.parametrize(
@@ -1947,7 +2013,14 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 if ($parseErrors.Count -ne 0) {
     throw "Failed to parse Serial live script: $($parseErrors[0].Message)"
 }
-foreach ($name in @("Get-RequiredResultValue", "Assert-SerialCriteriaReadback")) {
+$functionNames = @(
+    "Get-RequiredResultValue",
+    "Assert-SerialCriteriaReadback",
+    "Assert-I2cCriteriaReadback",
+    "Assert-SpiCriteriaReadback",
+    "Assert-CanCriteriaReadback"
+)
+foreach ($name in $functionNames) {
     $functionAst = $ast.Find({
         param($node)
         return (
@@ -1958,16 +2031,30 @@ foreach ($name in @("Get-RequiredResultValue", "Assert-SerialCriteriaReadback"))
     Invoke-Expression $functionAst.Extent.Text
 }
 
+$expectedCaseNames = @(
+    'Invoke-SerialCase -Name "UART Serial Search"',
+    'Invoke-SerialCase -Name "UART Serial Trigger"',
+    'Invoke-SerialCase -Name "I2C Serial Search"',
+    'Invoke-SerialCase -Name "I2C Serial Trigger"',
+    'Invoke-SerialCase -Name "SPI Serial Search"',
+    'Invoke-SerialCase -Name "SPI Serial Trigger"',
+    'Invoke-SerialCase -Name "CAN Serial Search"',
+    'Invoke-SerialCase -Name "CAN Serial Trigger"'
+)
 $caseCommands = @($ast.FindAll({
     param($node)
-    return (
-        $node -is [System.Management.Automation.Language.CommandAst] -and
-        ($node.Extent.Text.Contains('Invoke-SerialCase -Name "UART Serial Search"') -or
-         $node.Extent.Text.Contains('Invoke-SerialCase -Name "UART Serial Trigger"'))
-    )
+    if ($node -isnot [System.Management.Automation.Language.CommandAst]) {
+        return $false
+    }
+    foreach ($caseName in $expectedCaseNames) {
+        if ($node.Extent.Text.Contains($caseName)) {
+            return $true
+        }
+    }
+    return $false
 }, $true))
-if ($caseCommands.Count -ne 2) {
-    throw "Expected production Serial Search and Trigger cases."
+if ($caseCommands.Count -ne 8) {
+    throw "Expected 8 Serial Search and Trigger cases, found $($caseCommands.Count)."
 }
 
 $script:Invocations = New-Object System.Collections.Generic.List[object]
@@ -1993,6 +2080,44 @@ function Invoke-LiveCli {
         return [pscustomobject]@{ result = [pscustomobject]@{
             protocol = "uart"; bus = 1; selected = $true
             type = "rx-data"; data = 1; qualifier = "equal"
+        }}
+    }
+    if ($Command -eq "serial-search-i2c") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "i2c"; bus = 1; selected = $true
+            mode = "read7"; address = 80; data = 1; qualifier = "equal"
+        }}
+    }
+    if ($Command -eq "serial-trigger-i2c") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "i2c"; bus = 1; selected = $true
+            type = "read7"; address = 80; data = 1
+        }}
+    }
+    if ($Command -eq "serial-search-spi") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "spi"; bus = 1; selected = $true
+            mode = "mosi"; width = 1; data = "0x01"
+        }}
+    }
+    if ($Command -eq "serial-trigger-spi") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "spi"; bus = 1; selected = $true
+            type = "mosi"; width = 8; data = "0x01"
+        }}
+    }
+    if ($Command -eq "serial-search-can") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "can"; bus = 1; selected = $true
+            mode = "data"; id_mode = "standard"; id = "0x123"
+            data = "0x01"; data_length = 1
+        }}
+    }
+    if ($Command -eq "serial-trigger-can") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "can"; bus = 1; selected = $true
+            type = "id-and-data"; id_mode = "standard"; id = "0x123"
+            data = "0x01"; data_length = 1
         }}
     }
     throw "Unexpected live command: ${Command}"
@@ -2034,6 +2159,18 @@ foreach ($caseCommand in $caseCommands) {
         "serial-search-uart",
         "serial-trigger-uart",
         "serial-trigger-uart",
+        "serial-search-i2c",
+        "serial-search-i2c",
+        "serial-trigger-i2c",
+        "serial-trigger-i2c",
+        "serial-search-spi",
+        "serial-search-spi",
+        "serial-trigger-spi",
+        "serial-trigger-spi",
+        "serial-search-can",
+        "serial-search-can",
+        "serial-trigger-can",
+        "serial-trigger-can",
     ]
     assert not {
         "single",

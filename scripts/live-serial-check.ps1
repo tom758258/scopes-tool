@@ -461,6 +461,87 @@ function Assert-UartReadback {
     }
 }
 
+function Assert-I2cReadback {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Payload
+    )
+
+    $expected = [ordered]@{
+        mode = "i2c"
+        clock_source = "channel1"
+        data_source = "channel2"
+        address_size = "bit7"
+    }
+    foreach ($entry in $expected.GetEnumerator()) {
+        $actual = Get-RequiredResultValue -Payload $Payload -Name $entry.Key `
+            -Stage "I2C configuration readback"
+        if ([string]$actual -ne [string]$entry.Value) {
+            throw (
+                "I2C $($entry.Key) readback is ${actual}, expected " +
+                "$($entry.Value)."
+            )
+        }
+    }
+}
+
+function Assert-SpiReadback {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Payload
+    )
+
+    $expected = [ordered]@{
+        mode = "spi"
+        clock_source = "channel1"
+        mosi_source = "channel2"
+        clock_slope = "positive"
+        bit_order = "msb-first"
+        word_width = 8
+        framing = "timeout"
+    }
+    foreach ($entry in $expected.GetEnumerator()) {
+        $actual = Get-RequiredResultValue -Payload $Payload -Name $entry.Key `
+            -Stage "SPI configuration readback"
+        if ([string]$actual -ne [string]$entry.Value) {
+            throw (
+                "SPI $($entry.Key) readback is ${actual}, expected " +
+                "$($entry.Value)."
+            )
+        }
+    }
+    $actualTimeout = [double](Get-RequiredResultValue -Payload $Payload `
+        -Name "clock_timeout" -Stage "SPI configuration readback")
+    Assert-NearlyEqual -Actual $actualTimeout -Expected 1e-5 -Label "SPI clock_timeout"
+}
+
+function Assert-CanReadback {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Payload
+    )
+
+    $expected = [ordered]@{
+        mode = "can"
+        source = "channel1"
+        baud_rate = 500000
+        signal_definition = "difl"
+    }
+    foreach ($entry in $expected.GetEnumerator()) {
+        $actual = Get-RequiredResultValue -Payload $Payload -Name $entry.Key `
+            -Stage "CAN configuration readback"
+        if ([string]$actual -ne [string]$entry.Value) {
+            throw (
+                "CAN $($entry.Key) readback is ${actual}, expected " +
+                "$($entry.Value)."
+            )
+        }
+    }
+    $actualSamplePoint = [double](Get-RequiredResultValue -Payload $Payload `
+        -Name "sample_point" -Stage "CAN configuration readback")
+    Assert-NearlyEqual -Actual $actualSamplePoint -Expected 75 -Label "CAN sample_point"
+}
+
 function Assert-SerialCriteriaReadback {
     param(
         [Parameter(Mandatory = $true)]
@@ -486,6 +567,106 @@ function Assert-SerialCriteriaReadback {
         if ([string]$actual -ne [string]$entry.Value) {
             throw (
                 "UART Serial ${Kind} $($entry.Key) readback is ${actual}, " +
+                "expected $($entry.Value)."
+            )
+        }
+    }
+}
+
+function Assert-I2cCriteriaReadback {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Payload,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Search", "Trigger")]
+        [string] $Kind
+    )
+
+    $typeField = if ($Kind -eq "Search") { "mode" } else { "type" }
+    $expected = [ordered]@{
+        protocol = "i2c"
+        bus = 1
+        selected = $true
+        $typeField = "read7"
+        address = 80
+        data = 1
+    }
+    if ($Kind -eq "Search") {
+        $expected["qualifier"] = "equal"
+    }
+    foreach ($entry in $expected.GetEnumerator()) {
+        $actual = Get-RequiredResultValue -Payload $Payload -Name $entry.Key `
+            -Stage "I2C Serial ${Kind} readback"
+        if ([string]$actual -ne [string]$entry.Value) {
+            throw (
+                "I2C Serial ${Kind} $($entry.Key) readback is ${actual}, " +
+                "expected $($entry.Value)."
+            )
+        }
+    }
+}
+
+function Assert-SpiCriteriaReadback {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Payload,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Search", "Trigger")]
+        [string] $Kind
+    )
+
+    $typeField = if ($Kind -eq "Search") { "mode" } else { "type" }
+    $expectedWidth = if ($Kind -eq "Search") { 1 } else { 8 }
+    $expected = [ordered]@{
+        protocol = "spi"
+        bus = 1
+        selected = $true
+        $typeField = "mosi"
+        width = $expectedWidth
+        data = "0x01"
+    }
+    foreach ($entry in $expected.GetEnumerator()) {
+        $actual = Get-RequiredResultValue -Payload $Payload -Name $entry.Key `
+            -Stage "SPI Serial ${Kind} readback"
+        if ([string]$actual -ne [string]$entry.Value) {
+            throw (
+                "SPI Serial ${Kind} $($entry.Key) readback is ${actual}, " +
+                "expected $($entry.Value)."
+            )
+        }
+    }
+}
+
+function Assert-CanCriteriaReadback {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Payload,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Search", "Trigger")]
+        [string] $Kind
+    )
+
+    $typeField = if ($Kind -eq "Search") { "mode" } else { "type" }
+    $typeValue = if ($Kind -eq "Search") { "data" } else { "id-and-data" }
+    $expected = [ordered]@{
+        protocol = "can"
+        bus = 1
+        selected = $true
+        $typeField = $typeValue
+        id_mode = "standard"
+        id = "0x123"
+        data = "0x01"
+        data_length = 1
+    }
+    foreach ($entry in $expected.GetEnumerator()) {
+        $actual = Get-RequiredResultValue -Payload $Payload -Name $entry.Key `
+            -Stage "CAN Serial ${Kind} readback"
+        if ([string]$actual -ne [string]$entry.Value) {
+            throw (
+                "CAN Serial ${Kind} $($entry.Key) readback is ${actual}, " +
                 "expected $($entry.Value)."
             )
         }
@@ -526,6 +707,29 @@ function Invoke-HardwareFreePreflight {
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-uart-query" -Command "serial-uart" `
         -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-i2c-configure" -Command "serial-i2c" `
+        -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--clock-source", "channel1",
+            "--data-source", "channel2", "--address-size", "bit7"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-i2c-query" -Command "serial-i2c" `
+        -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-spi-configure" -Command "serial-spi" `
+        -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--clock-source", "channel1",
+            "--mosi-source", "channel2", "--clock-slope", "positive",
+            "--bit-order", "msb-first", "--word-width", "8",
+            "--framing", "timeout", "--clock-timeout", "1e-5"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-spi-query" -Command "serial-spi" `
+        -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-can-configure" -Command "serial-can" `
+        -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--source", "channel1", "--baud-rate", "500000",
+            "--signal-definition", "difl", "--sample-point", "75"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-can-query" -Command "serial-can" `
+        -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
 
     Invoke-ModeCli -Stage "preflight-operation-status" `
         -Command "system-operation-status" -ModeArguments $simulate `
@@ -565,6 +769,30 @@ function Invoke-HardwareFreePreflight {
     Invoke-ModeCli -Stage "preflight-search-query" `
         -Command "serial-search-uart" -ModeArguments $simulate `
         -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-search-i2c-configure" `
+        -Command "serial-search-i2c" -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--mode", "read7", "--address", "80",
+            "--data", "1", "--qualifier", "equal"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-search-i2c-query" `
+        -Command "serial-search-i2c" -ModeArguments $simulate `
+        -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-search-spi-configure" `
+        -Command "serial-search-spi" -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--mode", "mosi", "--width", "1",
+            "--data", "0x01"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-search-spi-query" `
+        -Command "serial-search-spi" -ModeArguments $simulate `
+        -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-search-can-configure" `
+        -Command "serial-search-can" -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--mode", "data", "--id-mode", "standard",
+            "--id", "0x123", "--data", "0x01", "--data-length", "1"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-search-can-query" `
+        -Command "serial-search-can" -ModeArguments $simulate `
+        -Arguments @("--bus", "1", "--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-configure" `
         -Command "serial-trigger-uart" -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--type", "rx-data", "--data", "1",
@@ -572,6 +800,30 @@ function Invoke-HardwareFreePreflight {
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-query" `
         -Command "serial-trigger-uart" -ModeArguments $simulate `
+        -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-trigger-i2c-configure" `
+        -Command "serial-trigger-i2c" -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--type", "read7", "--address", "80",
+            "--data", "1"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-trigger-i2c-query" `
+        -Command "serial-trigger-i2c" -ModeArguments $simulate `
+        -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-trigger-spi-configure" `
+        -Command "serial-trigger-spi" -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--type", "mosi", "--width", "8",
+            "--data", "0x01"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-trigger-spi-query" `
+        -Command "serial-trigger-spi" -ModeArguments $simulate `
+        -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-trigger-can-configure" `
+        -Command "serial-trigger-can" -ModeArguments $dryRun -Arguments @(
+            "--bus", "1", "--type", "id-and-data", "--id-mode", "standard",
+            "--id", "0x123", "--data", "0x01", "--data-length", "1"
+        ) | Out-Null
+    Invoke-ModeCli -Stage "preflight-trigger-can-query" `
+        -Command "serial-trigger-can" -ModeArguments $simulate `
         -Arguments @("--bus", "1", "--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-search-disable" -Command "search-state" `
         -ModeArguments $dryRun -Arguments @("--enabled", "false") | Out-Null
@@ -1042,7 +1294,7 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
     Write-Host "  - Repeated data value: 0x01."
     Write-Host "  - Ensure another Serial bus is not reserving CH1/CH2 or conflicting protocol"
     Write-Host "    resources."
-    Write-Host "  - This validation will temporarily configure Serial1, Lister, Serial Search,"
+    Write-Host "  - This validation will temporarily configure Serial1 (UART, I2C, SPI, CAN),"
     Write-Host "    and Serial Trigger."
     Write-Host "  - Serial1 is intentionally not restored. After successful UART configuration"
     Write-Host "    it remains at the documented UART test baseline. If UART configuration"
@@ -1273,6 +1525,143 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
                 -Command "serial-trigger-uart" `
                 -Arguments @("--bus", "1", "--query")
             Assert-SerialCriteriaReadback -Payload $trigger -Kind "Trigger"
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-SerialCase -Name "I2C configuration roundtrip" -Action {
+            Invoke-LiveCli -Stage "i2c-configure" -Command "serial-i2c" -Arguments @(
+                "--bus", "1", "--clock-source", "channel1",
+                "--data-source", "channel2", "--address-size", "bit7"
+            ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $i2c = Invoke-LiveCli -Stage "i2c-query" -Command "serial-i2c" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-I2cReadback -Payload $i2c
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        $searchChangeStarted = $true
+        Invoke-SerialCase -Name "I2C Serial Search" -Action {
+            Invoke-LiveCli -Stage "i2c-search-configure" `
+                -Command "serial-search-i2c" -Arguments @(
+                    "--bus", "1", "--mode", "read7", "--address", "80",
+                    "--data", "1", "--qualifier", "equal"
+                ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $search = Invoke-LiveCli -Stage "i2c-search-query" `
+                -Command "serial-search-i2c" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-I2cCriteriaReadback -Payload $search -Kind "Search"
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        $triggerChangeStarted = $true
+        Invoke-SerialCase -Name "I2C Serial Trigger" -Action {
+            Invoke-LiveCli -Stage "i2c-trigger-configure" `
+                -Command "serial-trigger-i2c" -Arguments @(
+                    "--bus", "1", "--type", "read7", "--address", "80",
+                    "--data", "1"
+                ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $trigger = Invoke-LiveCli -Stage "i2c-trigger-query" `
+                -Command "serial-trigger-i2c" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-I2cCriteriaReadback -Payload $trigger -Kind "Trigger"
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-SerialCase -Name "SPI configuration roundtrip" -Action {
+            Invoke-LiveCli -Stage "spi-configure" -Command "serial-spi" -Arguments @(
+                "--bus", "1", "--clock-source", "channel1",
+                "--mosi-source", "channel2", "--clock-slope", "positive",
+                "--bit-order", "msb-first", "--word-width", "8",
+                "--framing", "timeout", "--clock-timeout", "1e-5"
+            ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $spi = Invoke-LiveCli -Stage "spi-query" -Command "serial-spi" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-SpiReadback -Payload $spi
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        $searchChangeStarted = $true
+        Invoke-SerialCase -Name "SPI Serial Search" -Action {
+            Invoke-LiveCli -Stage "spi-search-configure" `
+                -Command "serial-search-spi" -Arguments @(
+                    "--bus", "1", "--mode", "mosi", "--width", "1",
+                    "--data", "0x01"
+                ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $search = Invoke-LiveCli -Stage "spi-search-query" `
+                -Command "serial-search-spi" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-SpiCriteriaReadback -Payload $search -Kind "Search"
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        $triggerChangeStarted = $true
+        Invoke-SerialCase -Name "SPI Serial Trigger" -Action {
+            Invoke-LiveCli -Stage "spi-trigger-configure" `
+                -Command "serial-trigger-spi" -Arguments @(
+                    "--bus", "1", "--type", "mosi", "--width", "8",
+                    "--data", "0x01"
+                ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $trigger = Invoke-LiveCli -Stage "spi-trigger-query" `
+                -Command "serial-trigger-spi" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-SpiCriteriaReadback -Payload $trigger -Kind "Trigger"
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-SerialCase -Name "CAN configuration roundtrip" -Action {
+            Invoke-LiveCli -Stage "can-configure" -Command "serial-can" -Arguments @(
+                "--bus", "1", "--source", "channel1", "--baud-rate", "500000",
+                "--signal-definition", "difl", "--sample-point", "75"
+            ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $can = Invoke-LiveCli -Stage "can-query" -Command "serial-can" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-CanReadback -Payload $can
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        $searchChangeStarted = $true
+        Invoke-SerialCase -Name "CAN Serial Search" -Action {
+            Invoke-LiveCli -Stage "can-search-configure" `
+                -Command "serial-search-can" -Arguments @(
+                    "--bus", "1", "--mode", "data", "--id-mode", "standard",
+                    "--id", "0x123", "--data", "0x01", "--data-length", "1"
+                ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $search = Invoke-LiveCli -Stage "can-search-query" `
+                -Command "serial-search-can" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-CanCriteriaReadback -Payload $search -Kind "Search"
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        $triggerChangeStarted = $true
+        Invoke-SerialCase -Name "CAN Serial Trigger" -Action {
+            Invoke-LiveCli -Stage "can-trigger-configure" `
+                -Command "serial-trigger-can" -Arguments @(
+                    "--bus", "1", "--type", "id-and-data", "--id-mode", "standard",
+                    "--id", "0x123", "--data", "0x01", "--data-length", "1"
+                ) | Out-Null
+            Start-Sleep -Milliseconds 500
+            $trigger = Invoke-LiveCli -Stage "can-trigger-query" `
+                -Command "serial-trigger-can" `
+                -Arguments @("--bus", "1", "--query")
+            Assert-CanCriteriaReadback -Payload $trigger -Kind "Trigger"
         }
     }
 }
