@@ -2511,6 +2511,28 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
     )
     assert 'Arguments @("--off")' in cursor_case
 
+    for case_name, expected_query in (
+        ("measure-phase", ":MEASure:PHASe? CHANnel1,CHANnel2"),
+        ("measure-delay", ":MEASure:DELay? AUTO,CHANnel1,CHANnel2"),
+    ):
+        case_start = script.index(f'Invoke-BaselineCase -Name "{case_name}"')
+        case_end = script.index(
+            "\n    if (-not $script:FunctionalFailed", case_start + 1
+        )
+        case_block = script[case_start:case_end]
+        assert 'Command "channel-display"' in case_block
+        assert expected_query in case_block
+        assert ".result.valid" in case_block
+        assert "Assert-FiniteNumber" in case_block
+        assert f'Stage "{case_name}-ch2-display-before"' in case_block
+        assert f'Stage "{case_name}-ch2-display-restore"' in case_block
+        assert case_block.index(
+            f'Stage "{case_name}-ch2-display-before"'
+        ) < case_block.index(f'Stage "{case_name}"')
+        assert case_block.index(
+            f'Stage "{case_name}"'
+        ) < case_block.index(f'Stage "{case_name}-ch2-display-restore"')
+
     invoke_live_cli_start = script.index("function Invoke-LiveCli {")
     invoke_live_cli_end = script.index(
         "\nfunction Get-ErrorDrain {", invoke_live_cli_start

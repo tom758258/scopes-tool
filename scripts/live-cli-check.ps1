@@ -1350,6 +1350,8 @@ Write-Host ""
 Write-Host "Required setup:"
 Write-Host "  - Connect the CH1 probe to the oscilloscope Probe Demo / Probe Comp output."
 Write-Host "  - Confirm a stable waveform is visible on CH1."
+Write-Host "  - For pair measurements, connect CH2 to the same Probe Demo / Probe Comp output."
+Write-Host "  - Confirm a stable waveform is visible on CH2 for the pair measurement cases."
 Write-Host "  - Disconnect unknown DUT signals."
 Write-Host "  - Leave WGEN output OFF and disconnected from any unknown DUT."
 Write-Host "  - Leave DEMO output OFF."
@@ -2345,13 +2347,48 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
         Invoke-BaselineCase -Name "measure-phase" -Action {
-            $phase = Invoke-LiveCli -Stage "measure-phase" -Command "measure" -Arguments @(
-                "--source-channel", "1", "--reference-channel", "2", "--item", "phase"
-            )
-            Assert-ScpiSent -Payload $phase -Label "Phase measurement" -ExpectedCommands @(
-                ":MEASure:PHASe? CHANnel1,CHANnel2"
-            )
-            [void]$phase.result.value
+            $ch2DisplayOriginal = Invoke-LiveCli -Stage "measure-phase-ch2-display-before" `
+                -Command "channel-display" -Arguments @("--channel", "2", "--query")
+            Assert-ScpiSent -Payload $ch2DisplayOriginal -Label "Phase CH2 display snapshot" `
+                -ExpectedCommands @(":CHANnel2:DISPlay?")
+            $ch2WasDisplayed = [bool]$ch2DisplayOriginal.result.display
+
+            try {
+                if (-not $ch2WasDisplayed) {
+                    $ch2DisplayOn = Invoke-LiveCli -Stage "measure-phase-ch2-display-on" `
+                        -Command "channel-display" -Arguments @("--channel", "2", "--on")
+                    Assert-ScpiSent -Payload $ch2DisplayOn -Label "Phase CH2 display enable" `
+                        -ExpectedCommands @(":CHANnel2:DISPlay ON")
+                    $ch2DisplayOnQuery = Invoke-LiveCli -Stage "measure-phase-ch2-display-on-query" `
+                        -Command "channel-display" -Arguments @("--channel", "2", "--query")
+                    if (-not [bool]$ch2DisplayOnQuery.result.display) {
+                        throw "Phase CH2 display did not report enabled."
+                    }
+                }
+
+                $phase = Invoke-LiveCli -Stage "measure-phase" -Command "measure" -Arguments @(
+                    "--source-channel", "1", "--reference-channel", "2", "--item", "phase"
+                )
+                Assert-ScpiSent -Payload $phase -Label "Phase measurement" -ExpectedCommands @(
+                    ":MEASure:PHASe? CHANnel1,CHANnel2"
+                )
+                if (-not [bool]$phase.result.valid) {
+                    throw "Phase measurement is invalid: $($phase.result.reason)"
+                }
+                [void](Assert-FiniteNumber -Value $phase.result.value -Label "Phase measurement")
+            } finally {
+                if (-not $ch2WasDisplayed) {
+                    $ch2DisplayOff = Invoke-LiveCli -Stage "measure-phase-ch2-display-restore" `
+                        -Command "channel-display" -Arguments @("--channel", "2", "--off")
+                    Assert-ScpiSent -Payload $ch2DisplayOff -Label "Phase CH2 display restore" `
+                        -ExpectedCommands @(":CHANnel2:DISPlay OFF")
+                    $ch2DisplayRestoreQuery = Invoke-LiveCli -Stage "measure-phase-ch2-display-restore-query" `
+                        -Command "channel-display" -Arguments @("--channel", "2", "--query")
+                    if ([bool]$ch2DisplayRestoreQuery.result.display) {
+                        throw "Phase CH2 display restore did not report disabled."
+                    }
+                }
+            }
         }
     } elseif (-not $script:FunctionalFailed) {
         Add-NotApplicableCase -Name "measure-phase" -Detail "Measurement subsystem is unsupported by the detected instrument."
@@ -2359,13 +2396,48 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_delay_measurement) {
         Invoke-BaselineCase -Name "measure-delay" -Action {
-            $delay = Invoke-LiveCli -Stage "measure-delay" -Command "measure" -Arguments @(
-                "--source-channel", "1", "--reference-channel", "2", "--item", "delay"
-            )
-            Assert-ScpiSent -Payload $delay -Label "Delay measurement" -ExpectedCommands @(
-                ":MEASure:DELay? AUTO,CHANnel1,CHANnel2"
-            )
-            [void]$delay.result.value
+            $ch2DisplayOriginal = Invoke-LiveCli -Stage "measure-delay-ch2-display-before" `
+                -Command "channel-display" -Arguments @("--channel", "2", "--query")
+            Assert-ScpiSent -Payload $ch2DisplayOriginal -Label "Delay CH2 display snapshot" `
+                -ExpectedCommands @(":CHANnel2:DISPlay?")
+            $ch2WasDisplayed = [bool]$ch2DisplayOriginal.result.display
+
+            try {
+                if (-not $ch2WasDisplayed) {
+                    $ch2DisplayOn = Invoke-LiveCli -Stage "measure-delay-ch2-display-on" `
+                        -Command "channel-display" -Arguments @("--channel", "2", "--on")
+                    Assert-ScpiSent -Payload $ch2DisplayOn -Label "Delay CH2 display enable" `
+                        -ExpectedCommands @(":CHANnel2:DISPlay ON")
+                    $ch2DisplayOnQuery = Invoke-LiveCli -Stage "measure-delay-ch2-display-on-query" `
+                        -Command "channel-display" -Arguments @("--channel", "2", "--query")
+                    if (-not [bool]$ch2DisplayOnQuery.result.display) {
+                        throw "Delay CH2 display did not report enabled."
+                    }
+                }
+
+                $delay = Invoke-LiveCli -Stage "measure-delay" -Command "measure" -Arguments @(
+                    "--source-channel", "1", "--reference-channel", "2", "--item", "delay"
+                )
+                Assert-ScpiSent -Payload $delay -Label "Delay measurement" -ExpectedCommands @(
+                    ":MEASure:DELay? AUTO,CHANnel1,CHANnel2"
+                )
+                if (-not [bool]$delay.result.valid) {
+                    throw "Delay measurement is invalid: $($delay.result.reason)"
+                }
+                [void](Assert-FiniteNumber -Value $delay.result.value -Label "Delay measurement")
+            } finally {
+                if (-not $ch2WasDisplayed) {
+                    $ch2DisplayOff = Invoke-LiveCli -Stage "measure-delay-ch2-display-restore" `
+                        -Command "channel-display" -Arguments @("--channel", "2", "--off")
+                    Assert-ScpiSent -Payload $ch2DisplayOff -Label "Delay CH2 display restore" `
+                        -ExpectedCommands @(":CHANnel2:DISPlay OFF")
+                    $ch2DisplayRestoreQuery = Invoke-LiveCli -Stage "measure-delay-ch2-display-restore-query" `
+                        -Command "channel-display" -Arguments @("--channel", "2", "--query")
+                    if ([bool]$ch2DisplayRestoreQuery.result.display) {
+                        throw "Delay CH2 display restore did not report disabled."
+                    }
+                }
+            }
         }
     } elseif (-not $script:FunctionalFailed) {
         Add-NotApplicableCase -Name "measure-delay" -Detail "Delay measurement is unsupported by the detected instrument."
