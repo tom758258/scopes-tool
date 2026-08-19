@@ -364,6 +364,91 @@ function Assert-FiniteNumber {
     return $number
 }
 
+function Assert-SingleMeasurementInvocation {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Invocation,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Item
+    )
+
+    $payload = $Invocation.Payload
+    if ($null -eq $payload) {
+        throw "${Item} measurement returned no payload."
+    }
+
+    $systemErrorProperty = $payload.PSObject.Properties["system_error"]
+    if ($null -eq $systemErrorProperty -or $null -eq $systemErrorProperty.Value) {
+        throw "${Item} measurement did not return system_error."
+    }
+    $codeProperty = $systemErrorProperty.Value.PSObject.Properties["code"]
+    if ($null -eq $codeProperty) {
+        throw "${Item} measurement system_error is missing code."
+    }
+    $systemErrorCode = [int]$codeProperty.Value
+    if ($systemErrorCode -ne 0) {
+        $messageProperty = $systemErrorProperty.Value.PSObject.Properties["message"]
+        $rawProperty = $systemErrorProperty.Value.PSObject.Properties["raw"]
+        $message = if ($null -ne $messageProperty) { [string]$messageProperty.Value } else { "" }
+        $raw = if ($null -ne $rawProperty) { [string]$rawProperty.Value } else { "" }
+        throw "${Item} measurement reported system error ${systemErrorCode}: ${message} (raw=${raw})."
+    }
+
+    $scpiProperty = $payload.PSObject.Properties["scpi"]
+    if ($null -eq $scpiProperty -or $null -eq $scpiProperty.Value) {
+        throw "${Item} measurement did not return SCPI history."
+    }
+    $sentProperty = $scpiProperty.Value.PSObject.Properties["sent"]
+    $sent = @(
+        if ($null -ne $sentProperty) {
+            $sentProperty.Value
+        }
+    )
+    if (@($sent | Where-Object { [string]$_ -like ":MEASure:*" }).Count -eq 0) {
+        throw "${Item} measurement did not exercise a measurement SCPI query."
+    }
+
+    $resultProperty = $payload.PSObject.Properties["result"]
+    if ($null -eq $resultProperty -or $null -eq $resultProperty.Value) {
+        throw "${Item} measurement did not return result."
+    }
+    $validProperty = $resultProperty.Value.PSObject.Properties["valid"]
+    if ($null -eq $validProperty) {
+        throw "${Item} measurement result is missing valid."
+    }
+    $valid = [bool]$validProperty.Value
+
+    if ([int]$Invocation.ExitCode -eq 0) {
+        $okProperty = $payload.PSObject.Properties["ok"]
+        if ($null -eq $okProperty -or $okProperty.Value -ne $true) {
+            throw "${Item} measurement exited 0 but did not report ok=true."
+        }
+        if (-not $valid) {
+            throw "${Item} measurement exited 0 but reported valid=false."
+        }
+        $valueProperty = $resultProperty.Value.PSObject.Properties["value"]
+        if ($null -eq $valueProperty -or $null -eq $valueProperty.Value) {
+            throw "${Item} measurement reported valid=true without a value."
+        }
+        [void](Assert-FiniteNumber -Value $valueProperty.Value -Label "${Item} measurement")
+        return $payload
+    }
+
+    $reasonProperty = $resultProperty.Value.PSObject.Properties["reason"]
+    $reason = if ($null -ne $reasonProperty) { [string]$reasonProperty.Value } else { "" }
+    $valueProperty = $resultProperty.Value.PSObject.Properties["value"]
+    if ([int]$Invocation.ExitCode -eq 1 -and
+        -not $valid -and
+        $reason -eq "invalid measurement sentinel" -and
+        $null -ne $valueProperty -and
+        $null -eq $valueProperty.Value) {
+        return $payload
+    }
+
+    throw "${Item} measurement exited $($Invocation.ExitCode) with valid=${valid}, reason=${reason}."
+}
+
 function Assert-ScpiSent {
     param(
         [Parameter(Mandatory = $true)]
@@ -2329,16 +2414,15 @@ if ($snapshotComplete) {
                 } elseif ($item -eq "time_at_edge") {
                     $arguments += @("--slope", "positive", "--occurrence", "1")
                 } elseif ($item -eq "time_at_value") {
-                    $arguments += @("--level", "0", "--slope", "positive", "--occurrence", "1")
+                    $arguments += @("--level", "0.5", "--slope", "positive", "--occurrence", "1")
                 }
-                $measurement = Invoke-LiveCli -Stage "measure-${item}" -Command "measure" `
-                    -Arguments $arguments
-                if (@($measurement.scpi.sent | Where-Object {
-                    [string]$_ -like ":MEASure:*"
-                }).Count -eq 0) {
-                    throw "${item} measurement did not exercise a measurement SCPI query."
-                }
-                [void]$measurement.result.value
+                $rawArguments = @(
+                    "measure", "--live", "--resource", $Resource, "--json"
+                ) + $arguments
+                $measurementInvocation = Invoke-CliRaw -Stage "measure-${item}" `
+                    -Arguments $rawArguments
+                [void](Assert-SingleMeasurementInvocation `
+                    -Invocation $measurementInvocation -Item $item)
             }
         }
     } elseif (-not $script:FunctionalFailed) {
@@ -2913,8 +2997,8 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
         Invoke-BaselineCase -Name "trigger-setup-hold" -Action {
-            $configured = Invoke-LiveCli -Stage "trigger-setup-hold-set" `
-                -Command "trigger-setup-hold" -Arguments @(
+            $configured = Invoke-LiveCli -Stage "trigger-setup-hold-set" -Command "trigger-setup-hold" `
+                -Arguments @(
                     "--clock-channel", "1", "--data-channel", "2", "--slope", "positive",
                     "--setup-time", "0.000000001", "--hold-time", "0.000000001"
                 )
@@ -3100,8 +3184,7 @@ if ($snapshotComplete) {
                 "${mathPrefix}:SCALe 1", "${mathPrefix}:OFFSet 0"
             )
             $query = Invoke-LiveCli -Stage "math-vertical-query" -Command "math-vertical" -Arguments @(
-                "--function", "1", "--query"
-            )
+                "--function", "1", "--query")
             Assert-ScpiSent -Payload $query -Label "Math vertical query" -ExpectedCommands @(
                 "${mathPrefix}:SCALe?", "${mathPrefix}:RANGe?", "${mathPrefix}:OFFSet?"
             )
