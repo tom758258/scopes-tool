@@ -59,8 +59,11 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
   validation.
 - Simulate and Dry-run use an explicitly registered Core model profile. The
   default planning model is `keysight-dsox4024a`.
-- Resource scanning uses Core VISA discovery and is a host discovery job; it
-  does not require a selected Live resource or instrument lock.
+- Core/CLI raw `list-resources` remains available as host VISA resource
+  discovery. WebUI Scan Device is a separate Live-mode-only action that
+  requests `live_only` discovery with bounded `*IDN?` probes.
+- Simulate and Dry-run do not use WebUI Scan Device. Resource discovery does
+  not require a selected Live resource or instrument lock.
 
 ## Basic Controls and Commands
 

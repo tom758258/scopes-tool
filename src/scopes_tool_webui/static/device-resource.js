@@ -106,6 +106,9 @@ export class DeviceResource {
       }
     }
     this.elements.model.disabled = live;
+    this.elements.resource.disabled = !live;
+    this.elements.resourceList.disabled = !live;
+    this.elements.scan.disabled = !live || this.scanInProgress;
     if (this.elements.modelField) this.elements.modelField.hidden = live;
     if (this.elements.detectedModelField) this.elements.detectedModelField.hidden = !live;
     this.renderMode(context);
@@ -245,6 +248,8 @@ export class DeviceResource {
   }
 
   async scan() {
+    const context = this.context();
+    if (context.mode !== "live") return;
     this.elements.scan.disabled = true;
     this.scanInProgress = true;
     this.clearIdentity();
@@ -256,7 +261,6 @@ export class DeviceResource {
     this.onCommandStateChange({ status: "queued" });
     let backendJobReceived = false;
     try {
-      const context = this.context();
       const job = await runJob(
         "list-resources",
         { live_only: true },
@@ -286,7 +290,7 @@ export class DeviceResource {
       if (!backendJobReceived) this.onScanError(error.message || String(error));
     } finally {
       this.scanInProgress = false;
-      this.elements.scan.disabled = false;
+      this.elements.scan.disabled = this.context().mode !== "live" || this.scanInProgress;
     }
   }
 

@@ -234,6 +234,135 @@ def test_resource_controls_match_the_powers_initial_presentation() -> None:
     assert '"device.scan": "掃描裝置"' in chinese
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
+    device_path = STATIC_ROOT / "device-resource.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor() {
+            this.children = [];
+            this.hidden = false;
+            this.disabled = false;
+            this.value = "";
+            this.checked = true;
+            this.selectedOptions = [{ textContent: "" }];
+          }
+          addEventListener() {}
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) { this.children.push(...nodes); }
+          setAttribute() {}
+        }
+
+        let mode = "live";
+        let submissions = 0;
+        let resolveScan;
+        const runJob = async (command, parameters, context) => {
+          assert.equal(command, "list-resources");
+          assert.deepEqual(parameters, { live_only: true });
+          assert.equal(context.mode, "live");
+          submissions += 1;
+          return new Promise((resolve) => { resolveScan = resolve; });
+        };
+        const getExecutionContext = () => ({
+          mode,
+          resource: null,
+          model_id: "keysight-dsox4024a",
+        });
+        const translate = (key) => key;
+        globalThis.testRunJob = runJob;
+        globalThis.testGetExecutionContext = getExecutionContext;
+        globalThis.testTranslate = translate;
+        globalThis.document = { addEventListener() {} };
+        globalThis.Option = function Option(text, value) {
+          return { textContent: text, value: String(value), dataset: {} };
+        };
+
+        const source = [
+          "const runJob = globalThis.testRunJob;",
+          "const getExecutionContext = globalThis.testGetExecutionContext;",
+          "const translate = globalThis.testTranslate;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.deviceApi = { DeviceResource };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const node = () => new FakeNode();
+        const elements = {
+          mode: [node()],
+          model: node(),
+          resource: node(),
+          resourceList: node(),
+          scan: node(),
+          settings: node(),
+          settingsPanel: node(),
+          body: node(),
+          deviceCollapse: node(),
+          modeBadge: node(),
+          summary: node(),
+          status: node(),
+        };
+        elements.settingsPanel.hidden = true;
+        const device = new globalThis.deviceApi.DeviceResource(
+          elements,
+          () => {},
+          () => {},
+          () => {},
+          () => {},
+        );
+        const assertControls = (disabled) => {
+          assert.equal(elements.resource.disabled, disabled);
+          assert.equal(elements.resourceList.disabled, disabled);
+          assert.equal(elements.scan.disabled, disabled);
+        };
+
+        assertControls(false);
+        assert.equal(elements.model.disabled, true);
+
+        mode = "simulate";
+        device.refresh();
+        assertControls(true);
+        assert.equal(elements.model.disabled, false);
+        await device.scan();
+        assert.equal(submissions, 0);
+
+        mode = "dry-run";
+        device.refresh();
+        assertControls(true);
+        await device.scan();
+        assert.equal(submissions, 0);
+
+        mode = "live";
+        device.refresh();
+        assertControls(false);
+
+        const scanPromise = device.scan();
+        assert.equal(elements.scan.disabled, true);
+        mode = "simulate";
+        device.refresh();
+        assert.equal(elements.scan.disabled, true);
+        resolveScan({
+          status: "completed",
+          result: { result: { resources: [] } },
+        });
+        await scanPromise;
+        assert.equal(elements.scan.disabled, true);
+        assert.equal(submissions, 1);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(device_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def test_empty_scan_keeps_a_localized_non_resource_option() -> None:
     source = read_static("device-resource.js")
     render_resource_list = extract_function(source, "  renderResourceList(resources) {")
