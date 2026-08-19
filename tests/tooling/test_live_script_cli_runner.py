@@ -4331,23 +4331,30 @@ function Invoke-LiveCli {
     })
     switch -Regex ($Stage) {
         "^annotation-set$" {
-            $cmds = @(":DISPlay:ANNotation1:TEXT 'P2 live'", ":DISPlay:ANNotation1:STATe 1")
+            $cmds = @(':DISPlay:ANNotation1:TEXT "P2 live"', ":DISPlay:ANNotation1 ON")
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = $cmds }
                 result = [pscustomobject]@{ commands = $cmds }
             }
         }
         "^annotation-query$" {
-            $cmds = @(":DISPlay:ANNotation1:TEXT?")
+            $cmds = @(
+                ":DISPlay:ANNotation1?",
+                ":DISPlay:ANNotation1:TEXT?",
+                ":DISPlay:ANNotation1:COLor?",
+                ":DISPlay:ANNotation1:BACKground?",
+                ":DISPlay:ANNotation1:X1Position?",
+                ":DISPlay:ANNotation1:Y1Position?"
+            )
             if ($script:SimulateFailure) {
                 return [pscustomobject]@{
                     scpi = [pscustomobject]@{ sent = $cmds }
-                    result = [pscustomobject]@{ commands = $cmds; enabled = $false; text = "wrong"; slot = 1 }
+                    result = [pscustomobject]@{ commands = $cmds; enabled = $false; text = "wrong"; slot = 1; color = "WHITE"; background = "OPAQ"; x = 20; y = 30 }
                 }
             }
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = $cmds }
-                result = [pscustomobject]@{ commands = $cmds; enabled = $true; text = "P2 live"; slot = 1 }
+                result = [pscustomobject]@{ commands = $cmds; enabled = $true; text = "P2 live"; slot = 1; color = "WHITE"; background = "OPAQ"; x = 20; y = 30 }
             }
         }
         "^restore-channel-summary-query$" {
