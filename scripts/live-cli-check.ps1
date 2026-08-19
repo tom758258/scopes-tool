@@ -53,9 +53,30 @@ function Add-CaseResult {
     $status = if ($Passed) { "PASS" } else { "FAIL" }
     $script:CaseResults[$Name] = [pscustomobject]@{
         Passed = $Passed
+        Status = $status
         Detail = $Detail
     }
     Write-Host ("{0,-5} {1}" -f $status, $Name)
+    if (-not [string]::IsNullOrWhiteSpace($Detail)) {
+        Write-Host "      ${Detail}"
+    }
+}
+
+function Add-NotApplicableCase {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Name,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Detail
+    )
+
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $false
+        Status = "N/A"
+        Detail = $Detail
+    }
+    Write-Host ("{0,-5} {1}" -f "N/A", $Name)
     if (-not [string]::IsNullOrWhiteSpace($Detail)) {
         Write-Host "      ${Detail}"
     }
@@ -91,7 +112,13 @@ function Write-Summary {
     $lines.Add("| Case | Status | Detail |")
     $lines.Add("|---|---|---|")
     foreach ($entry in $script:CaseResults.GetEnumerator()) {
-        $status = if ($entry.Value.Passed) { "PASS" } else { "FAIL" }
+        $status = if ($null -ne $entry.Value.Status) {
+            [string]$entry.Value.Status
+        } elseif ($entry.Value.Passed) {
+            "PASS"
+        } else {
+            "FAIL"
+        }
         $detail = [System.Convert]::ToString($entry.Value.Detail)
         $detail = $detail.Replace("|", "\|").Replace("`r`n", "<br>")
         $detail = $detail.Replace("`n", "<br>").Replace("`r", "<br>")
@@ -901,6 +928,17 @@ function Restore-InstrumentState {
         Command = "acquisition"
         Arguments = $acquisitionArguments
     }
+    $triggerHoldoffProperty = $Snapshot.PSObject.Properties["TriggerHoldoffSeconds"]
+    if ($null -ne $triggerHoldoffProperty) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "trigger holdoff"
+            Command = "trigger-holdoff"
+            Arguments = @(
+                "--seconds",
+                (ConvertTo-InvariantString -Value ([double]$triggerHoldoffProperty.Value))
+            )
+        }
+    }
 
     if ($Snapshot.DisplayVectors) {
         $restoreSteps += [pscustomobject]@{
@@ -949,22 +987,28 @@ function Restore-InstrumentState {
             Arguments = @("--enabled", "false")
         }
     }
+    $mathFunctionProperty = $Snapshot.PSObject.Properties["MathFunctionCount"]
+    if ($null -ne $mathFunctionProperty -and [int]$mathFunctionProperty.Value -gt 0) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "Math Function 1 display"
+            Command = "math-display"
+            Arguments = @("--function", "1", "--off")
+        }
+    }
+    $demoSupportedProperty = $Snapshot.PSObject.Properties["DemoSupported"]
+    if ($null -ne $demoSupportedProperty -and [bool]$demoSupportedProperty.Value) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "DEMO output"
+            Command = "demo-output"
+            Arguments = @("--enabled", "false")
+        }
+    }
     $p3Property = $Snapshot.PSObject.Properties["P3Enabled"]
     if ($null -ne $p3Property -and [bool]$p3Property.Value) {
         $restoreSteps += @(
             [pscustomobject]@{
-                Name = "Math Function 1 display"
-                Command = "math-display"
-                Arguments = @("--function", "1", "--off")
-            },
-            [pscustomobject]@{
                 Name = "WGEN output"
                 Command = "wgen-output"
-                Arguments = @("--enabled", "false")
-            },
-            [pscustomobject]@{
-                Name = "DEMO output"
-                Command = "demo-output"
                 Arguments = @("--enabled", "false")
             },
             [pscustomobject]@{
@@ -1022,26 +1066,72 @@ function Restore-InstrumentState {
                 )
             }
         )
-        if ([string]$Snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+    }
+    $saveImageFormatProperty = $Snapshot.PSObject.Properties["SaveImageFormat"]
+    $saveWaveformFormatProperty = $Snapshot.PSObject.Properties["SaveWaveformFormat"]
+    $saveWaveformLengthProperty = $Snapshot.PSObject.Properties["SaveWaveformLength"]
+    if ($null -ne $saveImageFormatProperty -and
+        [string]$saveImageFormatProperty.Value -in @("png", "bmp", "bmp8", "bmp24")) {
             $restoreSteps += [pscustomobject]@{
                 Name = "image save format"
                 Command = "save-image-format"
-                Arguments = @("--format", [string]$Snapshot.SaveImageFormat)
+                Arguments = @("--format", [string]$saveImageFormatProperty.Value)
             }
-        } elseif ([string]$Snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+    }
+    if ($null -ne $saveWaveformFormatProperty -and
+        [string]$saveWaveformFormatProperty.Value -in @("ascii-xy", "csv", "binary")) {
             $restoreSteps += [pscustomobject]@{
                 Name = "waveform save format"
                 Command = "save-waveform-format"
-                Arguments = @("--format", [string]$Snapshot.SaveWaveformFormat)
+                Arguments = @("--format", [string]$saveWaveformFormatProperty.Value)
             }
-        }
-        if ([int]$Snapshot.SaveWaveformLength -gt 0) {
+    }
+    if ($null -ne $saveWaveformLengthProperty -and
+        [int]$saveWaveformLengthProperty.Value -gt 0) {
             $restoreSteps += [pscustomobject]@{
                 Name = "waveform save length"
                 Command = "save-waveform-length"
-                Arguments = @("--points", [string]$Snapshot.SaveWaveformLength)
+                Arguments = @("--points", [string]$saveWaveformLengthProperty.Value)
             }
-        }
+    }
+    $savePwdProperty = $Snapshot.PSObject.Properties["SavePwd"]
+    $saveFilenameProperty = $Snapshot.PSObject.Properties["SaveFilename"]
+    $saveImagePaletteProperty = $Snapshot.PSObject.Properties["SaveImagePalette"]
+    $saveImageInkSaverProperty = $Snapshot.PSObject.Properties["SaveImageInkSaver"]
+    $saveImageFactorsProperty = $Snapshot.PSObject.Properties["SaveImageFactors"]
+    if ($null -ne $savePwdProperty -and
+        $null -ne $saveFilenameProperty -and
+        $null -ne $saveImagePaletteProperty -and
+        $null -ne $saveImageInkSaverProperty -and
+        $null -ne $saveImageFactorsProperty -and
+        -not [string]::IsNullOrWhiteSpace([string]$savePwdProperty.Value)) {
+        $restoreSteps += @(
+            [pscustomobject]@{
+                Name = "save directory"
+                Command = "save-pwd"
+                Arguments = @("--path", [string]$savePwdProperty.Value)
+            },
+            [pscustomobject]@{
+                Name = "save filename"
+                Command = "save-filename"
+                Arguments = @("--name", [string]$saveFilenameProperty.Value)
+            },
+            [pscustomobject]@{
+                Name = "image save palette"
+                Command = "save-image-palette"
+                Arguments = @("--palette", [string]$saveImagePaletteProperty.Value)
+            },
+            [pscustomobject]@{
+                Name = "image ink saver"
+                Command = "save-image-ink-saver"
+                Arguments = @("--enabled", ([string][bool]$saveImageInkSaverProperty.Value).ToLowerInvariant())
+            },
+            [pscustomobject]@{
+                Name = "image factors"
+                Command = "save-image-factors"
+                Arguments = @("--enabled", ([string][bool]$saveImageFactorsProperty.Value).ToLowerInvariant())
+            }
+        )
     }
 
     foreach ($step in $restoreSteps) {
@@ -1128,16 +1218,25 @@ function Restore-InstrumentState {
                     throw "Search cleanup did not leave Search OFF."
                 }
             }
+            if ($null -ne $demoSupportedProperty -and [bool]$demoSupportedProperty.Value) {
+                $demo = Invoke-LiveCli -Stage "restore-demo-output-query" `
+                    -Command "demo-output" -Arguments @("--query")
+                if ([bool]$demo.result.enabled) {
+                    throw "DEMO output cleanup did not leave DEMO OFF."
+                }
+            }
+            if ($null -ne $mathFunctionProperty -and [int]$mathFunctionProperty.Value -gt 0) {
+                $math = Invoke-LiveCli -Stage "restore-math-display-query" `
+                    -Command "math-display" -Arguments @("--function", "1", "--query")
+                if ([bool]$math.result.enabled) {
+                    throw "Math cleanup did not leave Math Function 1 OFF."
+                }
+            }
             if ($null -ne $p3Property -and [bool]$p3Property.Value) {
                 $wgen = Invoke-LiveCli -Stage "restore-wgen-output-query" `
                     -Command "wgen-output" -Arguments @("--query")
-                $demo = Invoke-LiveCli -Stage "restore-demo-output-query" `
-                    -Command "demo-output" -Arguments @("--query")
-                $math = Invoke-LiveCli -Stage "restore-math-display-query" `
-                    -Command "math-display" -Arguments @("--function", "1", "--query")
-                if ([bool]$wgen.result.enabled -or [bool]$demo.result.enabled -or
-                    [bool]$math.result.enabled) {
-                    throw "P3 output cleanup did not leave WGEN, DEMO, and Math OFF."
+                if ([bool]$wgen.result.enabled) {
+                    throw "WGEN cleanup did not leave WGEN OFF."
                 }
             }
         } catch {
@@ -1302,6 +1401,8 @@ try {
         -Command "trigger-edge-slope" -Arguments @("--query")
     $triggerLevel = Invoke-LiveCli -Stage "snapshot-trigger-level" `
         -Command "trigger-edge-level" -Arguments @("--source-channel", "1", "--query")
+    $triggerHoldoff = Invoke-LiveCli -Stage "snapshot-trigger-holdoff" `
+        -Command "trigger-holdoff" -Arguments @("--query")
 
     $p3Enabled = [string]$identity.idn.series -eq "4000X"
     $triggerEdgeCoupling = $null
@@ -1311,10 +1412,25 @@ try {
     $triggerHfReject = $null
     $externalTrigger = $null
     $externalTriggerLevel = $null
-    $saveImageFormat = $null
-    $saveWaveformFormat = $null
-    $saveWaveformLength = $null
-    $saveWaveformLengthMax = $null
+    $savePwd = Invoke-LiveCli -Stage "snapshot-save-pwd" `
+        -Command "save-pwd" -Arguments @("--query")
+    $saveFilename = Invoke-LiveCli -Stage "snapshot-save-filename" `
+        -Command "save-filename" -Arguments @("--query")
+    $saveImageFormat = Invoke-LiveCli -Stage "snapshot-save-image-format" `
+        -Command "save-image-format" -Arguments @("--query")
+    $saveImagePalette = Invoke-LiveCli -Stage "snapshot-save-image-palette" `
+        -Command "save-image-palette" -Arguments @("--query")
+    $saveImageInkSaver = Invoke-LiveCli -Stage "snapshot-save-image-ink-saver" `
+        -Command "save-image-ink-saver" -Arguments @("--query")
+    $saveImageFactors = Invoke-LiveCli -Stage "snapshot-save-image-factors" `
+        -Command "save-image-factors" -Arguments @("--query")
+    $saveWaveformFormat = Invoke-LiveCli -Stage "snapshot-save-waveform-format" `
+        -Command "save-waveform-format" -Arguments @("--query")
+    $saveWaveformLength = Invoke-LiveCli -Stage "snapshot-save-waveform-length" `
+        -Command "save-waveform-length" -Arguments @("--query")
+    $saveWaveformLengthMax = Invoke-LiveCli `
+        -Stage "snapshot-save-waveform-length-max" `
+        -Command "save-waveform-length-max" -Arguments @("--query")
     if ($p3Enabled) {
         $triggerEdgeCoupling = Invoke-LiveCli -Stage "snapshot-trigger-edge-coupling" `
             -Command "trigger-edge-coupling" -Arguments @("--query")
@@ -1330,15 +1446,6 @@ try {
             -Command "external-trigger-settings" -Arguments @("--query")
         $externalTriggerLevel = Invoke-LiveCli -Stage "snapshot-external-trigger-level" `
             -Command "trigger-edge-external-level" -Arguments @("--query")
-        $saveImageFormat = Invoke-LiveCli -Stage "snapshot-save-image-format" `
-            -Command "save-image-format" -Arguments @("--query")
-        $saveWaveformFormat = Invoke-LiveCli -Stage "snapshot-save-waveform-format" `
-            -Command "save-waveform-format" -Arguments @("--query")
-        $saveWaveformLength = Invoke-LiveCli -Stage "snapshot-save-waveform-length" `
-            -Command "save-waveform-length" -Arguments @("--query")
-        $saveWaveformLengthMax = Invoke-LiveCli `
-            -Stage "snapshot-save-waveform-length-max" `
-            -Command "save-waveform-length-max" -Arguments @("--query")
     }
 
     $annotationState = $null
@@ -1407,7 +1514,11 @@ try {
         TriggerSlope = [string]$triggerSlope.result.slope
         TriggerLevel = Assert-FiniteNumber `
             -Value $triggerLevel.result.level_volts -Label "CH1 Edge level"
+        TriggerHoldoffSeconds = Assert-FiniteNumber `
+            -Value $triggerHoldoff.result.seconds -Label "Trigger holdoff"
         P3Enabled = $p3Enabled
+        MathFunctionCount = [int]$identity.capabilities.math_function_count
+        DemoSupported = [bool]$identity.capabilities.supports_demo
         TriggerEdgeCoupling = if ($null -ne $triggerEdgeCoupling) { [string]$triggerEdgeCoupling.result.coupling } else { "" }
         TriggerEdgeReject = if ($null -ne $triggerEdgeReject) { [string]$triggerEdgeReject.result.reject } else { "" }
         TriggerSweep = if ($null -ne $triggerSweep) { [string]$triggerSweep.result.mode } else { "" }
@@ -1417,10 +1528,15 @@ try {
         ExternalTriggerProbe = if ($null -ne $externalTrigger) { [double]$externalTrigger.result.probe_attenuation } else { 0.0 }
         ExternalTriggerUnits = if ($null -ne $externalTrigger) { [string]$externalTrigger.result.units } else { "" }
         ExternalTriggerLevel = if ($null -ne $externalTriggerLevel) { [double]$externalTriggerLevel.result.level_volts } else { 0.0 }
-        SaveImageFormat = if ($null -ne $saveImageFormat) { [string]$saveImageFormat.result.format } else { "none" }
-        SaveWaveformFormat = if ($null -ne $saveWaveformFormat) { [string]$saveWaveformFormat.result.format } else { "none" }
-        SaveWaveformLength = if ($null -ne $saveWaveformLength) { [int]$saveWaveformLength.result.points } else { 0 }
-        SaveWaveformLengthMax = if ($null -ne $saveWaveformLengthMax) { [bool]$saveWaveformLengthMax.result.enabled } else { $false }
+        SavePwd = [string]$savePwd.result.path
+        SaveFilename = [string]$saveFilename.result.name
+        SaveImageFormat = [string]$saveImageFormat.result.format
+        SaveImagePalette = [string]$saveImagePalette.result.palette
+        SaveImageInkSaver = [bool]$saveImageInkSaver.result.enabled
+        SaveImageFactors = [bool]$saveImageFactors.result.enabled
+        SaveWaveformFormat = [string]$saveWaveformFormat.result.format
+        SaveWaveformLength = [int]$saveWaveformLength.result.points
+        SaveWaveformLengthMax = [bool]$saveWaveformLengthMax.result.enabled
     }
     $snapshotComplete = $true
 } catch {
@@ -1565,6 +1681,128 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "run" -Action {
+            $run = Invoke-LiveCli -Stage "run" -Command "run"
+            Assert-ScpiSent -Payload $run -Label "Run acquisition" -ExpectedCommands @(":RUN")
+            $stop = Invoke-LiveCli -Stage "run-stop" -Command "stop-acquisition"
+            Assert-ScpiSent -Payload $stop -Label "Run lifecycle stop" -ExpectedCommands @(":STOP")
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "stop-acquisition" -Action {
+            $stop = Invoke-LiveCli -Stage "stop-acquisition" -Command "stop-acquisition"
+            Assert-ScpiSent -Payload $stop -Label "Stop acquisition" -ExpectedCommands @(":STOP")
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "single" -Action {
+            try {
+                $single = Invoke-LiveCli -Stage "single" -Command "single"
+                Assert-ScpiSent -Payload $single -Label "Single acquisition" -ExpectedCommands @(":SINGle")
+            } finally {
+                $stop = Invoke-LiveCli -Stage "single-stop" -Command "stop-acquisition"
+                Assert-ScpiSent -Payload $stop -Label "Single lifecycle stop" -ExpectedCommands @(":STOP")
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "force-trigger" -Action {
+            try {
+                $forced = Invoke-LiveCli -Stage "force-trigger" -Command "force-trigger"
+                Assert-ScpiSent -Payload $forced -Label "Force trigger" -ExpectedCommands @(":TRIGger:FORCe")
+            } finally {
+                $stop = Invoke-LiveCli -Stage "force-trigger-stop" -Command "stop-acquisition"
+                Assert-ScpiSent -Payload $stop -Label "Force-trigger lifecycle stop" -ExpectedCommands @(":STOP")
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "capture-wait-trigger" -Action {
+            $csvPath = Join-Path $liveArtifactRoot "wait-trigger-natural.csv"
+            $metadataPath = Join-Path $liveArtifactRoot "wait-trigger-natural-meta.json"
+            try {
+                $capture = Invoke-LiveCli -Stage "capture-wait-trigger-natural" -Command "capture" -Arguments @(
+                    "--channel", "1", "--points", "1000", "--format", "byte",
+                    "--csv", $csvPath, "--meta", $metadataPath,
+                    "--wait-trigger", "--trigger-timeout-ms", "5000",
+                    "--trigger-poll-interval-ms", "100"
+                )
+                Assert-ScpiSent -Payload $capture -Label "Natural trigger capture" -ExpectedCommands @(
+                    ":SINGle", ":OPERegister:CONDition?", ":WAVeform:DATA?"
+                )
+                if ([string]$capture.result.trigger.outcome -ne "natural" -or
+                    [bool]$capture.result.trigger.forced -or
+                    [bool]$capture.result.trigger.timed_out) {
+                    throw "Natural trigger capture did not report a natural, non-forced success."
+                }
+                Assert-Capture -Payload $capture -ExpectedFormat "BYTE" `
+                    -CsvPath $csvPath -MetadataPath $metadataPath
+            } finally {
+                $stop = Invoke-LiveCli -Stage "capture-wait-trigger-natural-stop" `
+                    -Command "stop-acquisition"
+                Assert-ScpiSent -Payload $stop -Label "Natural capture lifecycle stop" `
+                    -ExpectedCommands @(":STOP")
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "capture-wait-trigger-fallback" -Action {
+            $csvPath = Join-Path $liveArtifactRoot "wait-trigger-fallback.csv"
+            $metadataPath = Join-Path $liveArtifactRoot "wait-trigger-fallback-meta.json"
+            try {
+                $capture = Invoke-LiveCli -Stage "capture-wait-trigger-fallback" -Command "capture" -Arguments @(
+                    "--channel", "1", "--points", "1000", "--format", "byte",
+                    "--csv", $csvPath, "--meta", $metadataPath,
+                    "--wait-trigger", "--trigger-timeout-ms", "1",
+                    "--trigger-poll-interval-ms", "1", "--force-trigger-on-timeout"
+                )
+                Assert-ScpiSent -Payload $capture -Label "Forced trigger fallback capture" -ExpectedCommands @(
+                    ":SINGle", ":OPERegister:CONDition?", ":TRIGger:FORCe", ":WAVeform:DATA?"
+                )
+                if ([string]$capture.result.trigger.outcome -ne "forced" -or
+                    -not [bool]$capture.result.trigger.forced -or
+                    -not [bool]$capture.result.trigger.timed_out) {
+                    throw "Forced trigger fallback did not report timeout followed by force."
+                }
+                Assert-Capture -Payload $capture -ExpectedFormat "BYTE" `
+                    -CsvPath $csvPath -MetadataPath $metadataPath
+            } finally {
+                $stop = Invoke-LiveCli -Stage "capture-wait-trigger-fallback-stop" `
+                    -Command "stop-acquisition"
+                Assert-ScpiSent -Payload $stop -Label "Fallback capture lifecycle stop" `
+                    -ExpectedCommands @(":STOP")
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "trigger-holdoff" -Action {
+            try {
+                $configured = Invoke-LiveCli -Stage "trigger-holdoff-set" -Command "trigger-holdoff" `
+                    -Arguments @("--seconds", "0.000001")
+                Assert-ScpiSent -Payload $configured -Label "Trigger holdoff configure" -ExpectedCommands @(
+                    ":TRIGger:HOLDoff:RANDom OFF", ":TRIGger:HOLDoff 1e-6"
+                )
+                $readback = Invoke-LiveCli -Stage "trigger-holdoff-query" -Command "trigger-holdoff" `
+                    -Arguments @("--query")
+                Assert-ScpiSent -Payload $readback -Label "Trigger holdoff query" -ExpectedCommands @(
+                    ":TRIGger:HOLDoff?"
+                )
+                Assert-NearlyEqual -Actual ([double]$readback.result.seconds) `
+                    -Expected 0.000001 -Label "Trigger holdoff"
+            } finally {
+                Invoke-LiveCli -Stage "trigger-holdoff-restore" -Command "trigger-holdoff" `
+                    -Arguments @("--seconds", (ConvertTo-InvariantString -Value ([double]$snapshot.TriggerHoldoffSeconds))) | Out-Null
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "system-status" -Action {
             $opc = Invoke-LiveCli -Stage "system-opc-query" `
                 -Command "system-opc" -Arguments @("--query")
@@ -1600,6 +1838,16 @@ if ($snapshotComplete) {
             }
             [void]@($operationStatus.result.set_bits)
 
+            $standardEvent = Invoke-LiveCli -Stage "system-standard-event-query" `
+                -Command "system-standard-event" -Arguments @("--query")
+            Assert-ScpiSent -Payload $standardEvent -Label "Standard Event Status query" `
+                -ExpectedCommands @("*ESR?")
+            $standardEventValue = [int]$standardEvent.result.value
+            if ($standardEventValue -lt 0 -or $standardEventValue -gt 255) {
+                throw "Standard Event Status is outside 0..255: ${standardEventValue}."
+            }
+            [void]@($standardEvent.result.set_bits)
+
             $options = Invoke-LiveCli -Stage "system-options-query" `
                 -Command "system-options" -Arguments @("--query")
             Assert-ScpiSent -Payload $options -Label "Installed Options query" `
@@ -1629,7 +1877,7 @@ if ($snapshotComplete) {
             [void]@($results.result.statistics_items)
         }
     } elseif (-not $script:FunctionalFailed) {
-        Write-Host "SKIP  measure-results (not supported by the detected instrument)"
+        Add-NotApplicableCase -Name "measure-results" -Detail "Measurement results dump is unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed) {
@@ -2070,27 +2318,149 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed) {
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
         Invoke-BaselineCase -Name "measurements" -Action {
-            $values = @{}
-            foreach ($item in @("vpp", "frequency", "period")) {
-                $measurement = Invoke-LiveCli -Stage "measure-${item}" -Command "measure" `
-                    -Arguments @("--channel", "1", "--item", $item)
-                if (-not $measurement.result.valid) {
-                    throw "${item} measurement is invalid: $($measurement.result.reason)"
+            $singleItems = @(
+                "vpp", "frequency", "period", "vavg", "vrms", "ac_rms",
+                "minimum", "maximum", "x_at_max", "x_at_min", "rise_time",
+                "fall_time", "amplitude", "top", "base", "overshoot", "preshoot",
+                "positive_width", "negative_width", "duty_cycle", "negative_duty_cycle",
+                "area", "positive_edges", "negative_edges", "positive_pulses", "negative_pulses",
+                "y_at_x", "time_at_edge", "time_at_value"
+            )
+            foreach ($item in $singleItems) {
+                $arguments = @("--channel", "1", "--item", $item)
+                if ($item -eq "y_at_x") {
+                    $arguments += @("--time", "0")
+                } elseif ($item -eq "time_at_edge") {
+                    $arguments += @("--slope", "positive", "--occurrence", "1")
+                } elseif ($item -eq "time_at_value") {
+                    $arguments += @("--level", "0", "--slope", "positive", "--occurrence", "1")
                 }
-                $values[$item] = Assert-FiniteNumber `
-                    -Value $measurement.result.value -Label $item
+                $measurement = Invoke-LiveCli -Stage "measure-${item}" -Command "measure" `
+                    -Arguments $arguments
+                if (@($measurement.scpi.sent | Where-Object {
+                    [string]$_ -like ":MEASure:*"
+                }).Count -eq 0) {
+                    throw "${item} measurement did not exercise a measurement SCPI query."
+                }
+                [void]$measurement.result.value
             }
-            if ($values.vpp -le 0) {
-                throw "Vpp does not indicate a usable signal: $($values.vpp) V."
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "measurements" -Detail "Measurement subsystem is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
+        Invoke-BaselineCase -Name "measure-phase" -Action {
+            $phase = Invoke-LiveCli -Stage "measure-phase" -Command "measure" -Arguments @(
+                "--source-channel", "1", "--reference-channel", "2", "--item", "phase"
+            )
+            Assert-ScpiSent -Payload $phase -Label "Phase measurement" -ExpectedCommands @(
+                ":MEASure:PHASe? CHANnel1,CHANnel2"
+            )
+            [void]$phase.result.value
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "measure-phase" -Detail "Measurement subsystem is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_delay_measurement) {
+        Invoke-BaselineCase -Name "measure-delay" -Action {
+            $delay = Invoke-LiveCli -Stage "measure-delay" -Command "measure" -Arguments @(
+                "--source-channel", "1", "--reference-channel", "2", "--item", "delay"
+            )
+            Assert-ScpiSent -Payload $delay -Label "Delay measurement" -ExpectedCommands @(
+                ":MEASure:DELay? AUTO,CHANnel1,CHANnel2"
+            )
+            [void]$delay.result.value
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "measure-delay" -Detail "Delay measurement is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
+        Invoke-BaselineCase -Name "measure-stats" -Action {
+            $stats = Invoke-LiveCli -Stage "measure-stats" -Command "measure-stats" -Arguments @(
+                "--channel", "1", "--items", "vpp,frequency", "--mode", "all", "--reset"
+            )
+            Assert-ScpiSent -Payload $stats -Label "Measurement statistics" -ExpectedCommands @(
+                ":MEASure:CLEar", ":MEASure:VPP", ":MEASure:FREQuency"
+            )
+            if ([int]$stats.result.channel -ne 1 -or
+                [string]$stats.result.mode -ne "all") {
+                throw "Measurement statistics result metadata is invalid."
             }
-            if ($values.frequency -le 0 -or $values.period -le 0) {
-                throw "Frequency and Period must be positive."
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "measure-stats" -Detail "Measurement subsystem is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
+        Invoke-BaselineCase -Name "measure-controls" -Action {
+            $clear = Invoke-LiveCli -Stage "measure-clear" -Command "measure-clear"
+            Assert-ScpiSent -Payload $clear -Label "Measurement clear" -ExpectedCommands @(":MEASure:CLEar")
+
+            $show = Invoke-LiveCli -Stage "measure-show-on" -Command "measure-show" -Arguments @("--on")
+            Assert-ScpiSent -Payload $show -Label "Measurement show" -ExpectedCommands @(":MEASure:SHOW ON")
+            $showQuery = Invoke-LiveCli -Stage "measure-show-query" -Command "measure-show" -Arguments @("--query")
+            Assert-ScpiSent -Payload $showQuery -Label "Measurement show query" -ExpectedCommands @(":MEASure:SHOW?")
+            if (-not [bool]$showQuery.result.enabled) {
+                throw "Measurement show query did not report enabled."
             }
-            $consistency = $values.frequency * $values.period
-            if ($consistency -lt 0.8 -or $consistency -gt 1.2) {
-                throw "Frequency/Period consistency is ${consistency}, expected 0.8 through 1.2."
+
+            $source = Invoke-LiveCli -Stage "measure-source-set" -Command "measure-source" -Arguments @(
+                "--source-channel", "1", "--source2-channel", "2"
+            )
+            Assert-ScpiSent -Payload $source -Label "Measurement source" -ExpectedCommands @(
+                ":MEASure:SOURce CHANnel1,CHANnel2"
+            )
+            $sourceQuery = Invoke-LiveCli -Stage "measure-source-query" -Command "measure-source" -Arguments @("--query")
+            Assert-ScpiSent -Payload $sourceQuery -Label "Measurement source query" -ExpectedCommands @(
+                ":MEASure:SOURce?"
+            )
+            if ([int]$sourceQuery.result.source1_channel -ne 1 -or
+                [int]$sourceQuery.result.source2_channel -ne 2) {
+                throw "Measurement source query did not report CH1 and CH2."
+            }
+
+            $window = Invoke-LiveCli -Stage "measure-window-set" -Command "measure-window" -Arguments @("--window", "auto")
+            Assert-ScpiSent -Payload $window -Label "Measurement window" -ExpectedCommands @(":MEASure:WINDow AUTO")
+            $windowQuery = Invoke-LiveCli -Stage "measure-window-query" -Command "measure-window" -Arguments @("--query")
+            Assert-ScpiSent -Payload $windowQuery -Label "Measurement window query" -ExpectedCommands @(":MEASure:WINDow?")
+            if ([string]$windowQuery.result.window -ne "auto") {
+                throw "Measurement window query did not report auto."
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "measure-controls" -Detail "Measurement subsystem is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "cursor-lifecycle" -Action {
+            try {
+                $configured = Invoke-LiveCli -Stage "cursor-set" -Command "cursor" -Arguments @(
+                    "--source-channel", "1", "--x1", "0", "--x2", "0.001",
+                    "--y1", "0", "--y2", "0.5"
+                )
+                Assert-ScpiSent -Payload $configured -Label "Cursor configure" -ExpectedCommands @(
+                    ":MARKer:MODE TIME", ":MARKer:X1Position 0", ":MARKer:X2Position 0.001",
+                    ":MARKer:Y1Position 0", ":MARKer:Y2Position 0.5"
+                )
+                $readback = Invoke-LiveCli -Stage "cursor-query" -Command "cursor" -Arguments @("--query")
+                Assert-ScpiSent -Payload $readback -Label "Cursor query" -ExpectedCommands @(
+                    ":MARKer:MODE?", ":MARKer:XDELta?", ":MARKer:YDELta?"
+                )
+                if ([string]$readback.result.mode -eq "off") {
+                    throw "Cursor query reported OFF after configure."
+                }
+            } finally {
+                $off = Invoke-LiveCli -Stage "cursor-off" -Command "cursor" -Arguments @("--off")
+                Assert-ScpiSent -Payload $off -Label "Cursor disable" -ExpectedCommands @(":MARKer:MODE OFF")
+                $offQuery = Invoke-LiveCli -Stage "cursor-off-query" -Command "cursor" -Arguments @("--query")
+                if ([string]$offQuery.result.mode -ne "off") {
+                    throw "Cursor cleanup did not leave cursor mode OFF."
+                }
             }
         }
     }
@@ -2149,7 +2519,7 @@ if ($snapshotComplete) {
             Assert-FileNonEmpty -Path $screenshotPath -Label "BMP screenshot"
         }
     } elseif (-not $script:FunctionalFailed) {
-        Write-Host "SKIP  screenshot-bmp (format pack not supported)"
+        Add-NotApplicableCase -Name "screenshot-bmp" -Detail "Screenshot format pack is unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed) {
@@ -2515,18 +2885,19 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
         Invoke-BaselineCase -Name "math-operator" -Action {
             $configured = Invoke-LiveCli -Stage "math-operator-set" `
                 -Command "math-operator" -Arguments @(
                     "--function", "1", "--operation", "add",
                     "--source1", "channel1", "--source2", "channel2"
                 )
+            $mathPrefix = if ([int]$identity.capabilities.math_function_count -eq 1) { ":FUNCtion" } else { ":FUNCtion1" }
             Assert-ScpiSent -Payload $configured -Label "Math operator" `
                 -ExpectedCommands @(
-                    ":FUNCtion1:OPERation ADD",
-                    ":FUNCtion1:SOURce1 CHANnel1",
-                    ":FUNCtion1:SOURce2 CHANnel2"
+                    "${mathPrefix}:OPERation ADD",
+                    "${mathPrefix}:SOURce1 CHANnel1",
+                    "${mathPrefix}:SOURce2 CHANnel2"
                 )
             $readback = Invoke-LiveCli -Stage "math-operator-query" `
                 -Command "math-operator" -Arguments @("--function", "1", "--query")
@@ -2538,16 +2909,17 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
         Invoke-BaselineCase -Name "math-transform" -Action {
             $configured = Invoke-LiveCli -Stage "math-transform-set" `
                 -Command "math-transform" -Arguments @(
                     "--function", "1", "--operation", "absolute", "--source", "channel1"
                 )
+            $mathPrefix = if ([int]$identity.capabilities.math_function_count -eq 1) { ":FUNCtion" } else { ":FUNCtion1" }
             Assert-ScpiSent -Payload $configured -Label "Math transform" `
                 -ExpectedCommands @(
-                    ":FUNCtion1:OPERation ABSolute",
-                    ":FUNCtion1:SOURce1 CHANnel1"
+                    "${mathPrefix}:OPERation ABSolute",
+                    "${mathPrefix}:SOURce1 CHANnel1"
                 )
             $readback = Invoke-LiveCli -Stage "math-transform-query" `
                 -Command "math-transform" -Arguments @("--function", "1", "--query")
@@ -2558,31 +2930,218 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
-        Invoke-BaselineCase -Name "fft" -Action {
-            $configured = Invoke-LiveCli -Stage "fft-set" -Command "fft" -Arguments @(
-                "--function", "1", "--source-channel", "1", "--units", "decibel",
-                "--window", "hanning", "--display", "on"
-            )
-            Assert-ScpiSent -Payload $configured -Label "FFT configure" -ExpectedCommands @(
-                ":FUNCtion1:OPERation FFT",
-                ":FUNCtion1:SOURce1 CHANnel1",
-                ":FUNCtion1:FFT:WINDow HANNing"
-            )
-            $readback = Invoke-LiveCli -Stage "fft-query" `
-                -Command "fft" -Arguments @("--function", "1", "--query")
-            Assert-ScpiSent -Payload $readback -Label "FFT query" -ExpectedCommands @(
-                ":FUNCtion1:OPERation?",
-                ":FUNCtion1:SOURce1?",
-                ":FUNCtion1:FFT:WINDow?"
-            )
-            $window = ([string]$readback.result.window).Trim().ToUpperInvariant()
-            if ([string]$readback.result.fft_operation_canonical -ne "fft" -or
-                [int]$readback.result.source_channel -ne 1 -or
-                $window -ne "HANN") {
-                throw "FFT readback is invalid."
+    if (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
+        Invoke-BaselineCase -Name "math-display" -Action {
+            try {
+                $display = Invoke-LiveCli -Stage "math-display-on" -Command "math-display" -Arguments @(
+                    "--function", "1", "--on"
+                )
+                $mathPrefix = if ([int]$identity.capabilities.math_function_count -eq 1) { ":FUNCtion" } else { ":FUNCtion1" }
+                Assert-ScpiSent -Payload $display -Label "Math display" -ExpectedCommands @(
+                    "${mathPrefix}:DISPlay ON"
+                )
+                $query = Invoke-LiveCli -Stage "math-display-query" -Command "math-display" -Arguments @(
+                    "--function", "1", "--query"
+                )
+                if (-not [bool]$query.result.enabled) {
+                    throw "Math display query did not report enabled."
+                }
+            } finally {
+                Invoke-LiveCli -Stage "math-display-off" -Command "math-display" -Arguments @(
+                    "--function", "1", "--off"
+                ) | Out-Null
             }
         }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "math-display" -Detail "Math functions are unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
+        Invoke-BaselineCase -Name "math-vertical" -Action {
+            $configured = Invoke-LiveCli -Stage "math-vertical-set" -Command "math-vertical" -Arguments @(
+                "--function", "1", "--scale", "1", "--offset", "0"
+            )
+            $mathPrefix = if ([int]$identity.capabilities.math_function_count -eq 1) { ":FUNCtion" } else { ":FUNCtion1" }
+            Assert-ScpiSent -Payload $configured -Label "Math vertical" -ExpectedCommands @(
+                "${mathPrefix}:SCALe 1", "${mathPrefix}:OFFSet 0"
+            )
+            $query = Invoke-LiveCli -Stage "math-vertical-query" -Command "math-vertical" -Arguments @(
+                "--function", "1", "--query"
+            )
+            Assert-ScpiSent -Payload $query -Label "Math vertical query" -ExpectedCommands @(
+                "${mathPrefix}:SCALe?", "${mathPrefix}:RANGe?", "${mathPrefix}:OFFSet?"
+            )
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "math-vertical" -Detail "Math functions are unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_math_goft) {
+        Invoke-BaselineCase -Name "math-composite-source" -Action {
+            $configured = Invoke-LiveCli -Stage "math-composite-source-set" -Command "math-composite-source" -Arguments @(
+                "--operation", "subtract", "--source1", "channel1", "--source2", "channel2"
+            )
+            Assert-ScpiSent -Payload $configured -Label "Math composite source" -ExpectedCommands @(
+                ":FUNCtion:GOFT:OPERation SUBTract",
+                ":FUNCtion:GOFT:SOURce1 CHANnel1",
+                ":FUNCtion:GOFT:SOURce2 CHANnel2"
+            )
+            $query = Invoke-LiveCli -Stage "math-composite-source-query" -Command "math-composite-source" -Arguments @("--query")
+            if ([string]$query.result.math_operation -ne "subtract" -or
+                [string]$query.result.source1 -ne "channel1" -or
+                [string]$query.result.source2 -ne "channel2") {
+                throw "Math composite source readback is invalid."
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "math-composite-source" -Detail "Global GOFT Math is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and @($identity.capabilities.math_filter_operations).Count -gt 0) {
+        Invoke-BaselineCase -Name "math-filter" -Action {
+            $operation = if ("low-pass" -in @($identity.capabilities.math_filter_operations)) { "low-pass" } else { @($identity.capabilities.math_filter_operations)[0] }
+            $arguments = @("--function", "1", "--operation", $operation, "--source", "channel1")
+            if ($operation -in @("low-pass", "high-pass")) {
+                $arguments += @("--cutoff-hz", "1000000")
+            }
+            $configured = Invoke-LiveCli -Stage "math-filter-set" -Command "math-filter" -Arguments $arguments
+            $query = Invoke-LiveCli -Stage "math-filter-query" -Command "math-filter" -Arguments @("--function", "1", "--query")
+            if ([string]$query.result.math_operation -ne $operation -or
+                [string]$query.result.source -ne "channel1") {
+                throw "Math filter readback is invalid."
+            }
+            [void]$configured
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "math-filter" -Detail "Math filters are unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and @($identity.capabilities.math_visualization_operations).Count -gt 0) {
+        Invoke-BaselineCase -Name "math-visualization" -Action {
+            $operation = if ("magnify" -in @($identity.capabilities.math_visualization_operations)) { "magnify" } else { @($identity.capabilities.math_visualization_operations)[0] }
+            $configured = Invoke-LiveCli -Stage "math-visualization-set" -Command "math-visualization" -Arguments @(
+                "--function", "1", "--operation", $operation, "--source", "channel1"
+            )
+            $query = Invoke-LiveCli -Stage "math-visualization-query" -Command "math-visualization" -Arguments @("--function", "1", "--query")
+            if ([string]$query.result.math_operation -ne $operation) {
+                throw "Math visualization readback is invalid."
+            }
+            [void]$configured
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "math-visualization" -Detail "Math visualizations are unsupported by the detected instrument."
+    }
+
+    $mathClearSupported = @(
+        @("average", "max-hold", "min-hold") | Where-Object {
+            $_ -in @($identity.capabilities.math_filter_operations) -or
+            $_ -in @($identity.capabilities.math_visualization_operations)
+        }
+    )
+    if (-not $script:FunctionalFailed -and $mathClearSupported.Count -gt 0) {
+        Invoke-BaselineCase -Name "math-clear" -Action {
+            $clearOperation = [string]$mathClearSupported[0]
+            if ($clearOperation -in @($identity.capabilities.math_filter_operations)) {
+                $filterArgs = @("--function", "1", "--operation", $clearOperation, "--source", "channel1")
+                if ($clearOperation -eq "average") {
+                    $filterArgs += @("--average-count", "64")
+                }
+                Invoke-LiveCli -Stage "math-clear-prepare" -Command "math-filter" -Arguments $filterArgs | Out-Null
+            } else {
+                Invoke-LiveCli -Stage "math-clear-prepare" -Command "math-visualization" -Arguments @(
+                    "--function", "1", "--operation", $clearOperation, "--source", "channel1"
+                ) | Out-Null
+            }
+            $cleared = Invoke-LiveCli -Stage "math-clear" -Command "math-clear" -Arguments @("--function", "1")
+            Assert-ScpiSent -Payload $cleared -Label "Math clear" -ExpectedCommands @($cleared.result.command)
+            if (-not [bool]$cleared.result.cleared) {
+                throw "Math clear did not report cleared=true."
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "math-clear" -Detail "Math accumulation clear is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
+        Invoke-BaselineCase -Name "fft" -Action {
+            $fftPrefix = if ([int]$identity.capabilities.math_function_count -eq 1) { ":FUNCtion" } else { ":FUNCtion1" }
+            try {
+                $configured = Invoke-LiveCli -Stage "fft-set" -Command "fft" -Arguments @(
+                    "--function", "1", "--source-channel", "1", "--units", "decibel",
+                    "--window", "hanning", "--display", "on"
+                )
+                Assert-ScpiSent -Payload $configured -Label "FFT configure" -ExpectedCommands @(
+                    "${fftPrefix}:OPERation FFT",
+                    "${fftPrefix}:SOURce1 CHANnel1",
+                    "${fftPrefix}:FFT:WINDow HANNing"
+                )
+                $readback = Invoke-LiveCli -Stage "fft-query" `
+                    -Command "fft" -Arguments @("--function", "1", "--query")
+                Assert-ScpiSent -Payload $readback -Label "FFT query" -ExpectedCommands @(
+                    "${fftPrefix}:OPERation?",
+                    "${fftPrefix}:SOURce1?",
+                    "${fftPrefix}:FFT:WINDow?"
+                )
+                $window = ([string]$readback.result.window).Trim().ToUpperInvariant()
+                if ([string]$readback.result.fft_operation_canonical -ne "fft" -or
+                    [int]$readback.result.source_channel -ne 1 -or
+                    $window -ne "HANN") {
+                    throw "FFT readback is invalid."
+                }
+            } finally {
+                $off = Invoke-LiveCli -Stage "fft-display-off" -Command "math-display" -Arguments @(
+                    "--function", "1", "--off"
+                )
+                Assert-ScpiSent -Payload $off -Label "FFT display cleanup" -ExpectedCommands @(
+                    "${fftPrefix}:DISPlay OFF"
+                )
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "fft" -Detail "Math functions are unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_advanced_fft) {
+        Invoke-BaselineCase -Name "fft-advanced" -Action {
+            try {
+                $configured = Invoke-LiveCli -Stage "fft-advanced-set" -Command "fft" -Arguments @(
+                    "--function", "1", "--source-channel", "1", "--fft-operation", "fft-phase",
+                    "--start-hz", "100", "--stop-hz", "1000000", "--gate", "zoom",
+                    "--phase-reference", "display", "--detection-type", "average",
+                    "--detection-points", "4096", "--display", "on"
+                )
+                Assert-ScpiSent -Payload $configured -Label "Advanced FFT configure" -ExpectedCommands @(
+                    ":FUNCtion1:OPERation FFTPhase", ":FUNCtion1:FREQuency:STARt 100",
+                    ":FUNCtion1:FREQuency:STOP 1000000", ":FUNCtion1:GATE ZOOM",
+                    ":FUNCtion1:PHASe:REFerence DISP", ":FUNCtion1:DETection:TYPE AVERage",
+                    ":FUNCtion1:DETection:POINts 4096"
+                )
+                $query = Invoke-LiveCli -Stage "fft-advanced-query" -Command "fft" -Arguments @("--function", "1", "--query")
+                Assert-ScpiSent -Payload $query -Label "Advanced FFT query" -ExpectedCommands @(
+                    ":FUNCtion1:FREQuency:STARt?", ":FUNCtion1:FREQuency:STOP?",
+                    ":FUNCtion1:GATE?", ":FUNCtion1:PHASe:REFerence?",
+                    ":FUNCtion1:DETection:TYPE?", ":FUNCtion1:DETection:POINts?"
+                )
+                if ([string]$query.result.fft_operation_canonical -ne "fft-phase" -or
+                    [double]$query.result.start_hz -ne 100 -or
+                    [double]$query.result.stop_hz -ne 1000000 -or
+                    [string]$query.result.gate -ne "zoom" -or
+                    [string]$query.result.phase_reference -ne "display" -or
+                    [string]$query.result.detection_type -ne "average" -or
+                    [int]$query.result.detection_points -ne 4096) {
+                    throw "Advanced FFT readback is invalid."
+                }
+            } finally {
+                $off = Invoke-LiveCli -Stage "fft-advanced-display-off" -Command "math-display" -Arguments @(
+                    "--function", "1", "--off"
+                )
+                Assert-ScpiSent -Payload $off -Label "Advanced FFT display cleanup" -ExpectedCommands @(
+                    ":FUNCtion1:DISPlay OFF"
+                )
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "fft-advanced" -Detail "Advanced FFT is unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
@@ -2621,7 +3180,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_demo) {
         Invoke-BaselineCase -Name "demo-basic" -Action {
             try {
                 $function = Invoke-LiveCli -Stage "demo-function-set" `
@@ -2642,6 +3201,29 @@ if ($snapshotComplete) {
                     -ExpectedCommands @(":DEMO:OUTPut OFF")
             }
         }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "demo-basic" -Detail "DEMO is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and
+        [bool]$identity.capabilities.supports_demo -and
+        "phase" -in @($identity.capabilities.demo_functions)) {
+        Invoke-BaselineCase -Name "demo-phase" -Action {
+            $configured = Invoke-LiveCli -Stage "demo-phase-set" -Command "demo-phase" `
+                -Arguments @("--degrees", "90")
+            Assert-ScpiSent -Payload $configured -Label "DEMO phase" -ExpectedCommands @(
+                ":DEMO:FUNCtion:PHASe:PHASe 90"
+            )
+            $query = Invoke-LiveCli -Stage "demo-phase-query" -Command "demo-phase" `
+                -Arguments @("--query")
+            Assert-ScpiSent -Payload $query -Label "DEMO phase query" -ExpectedCommands @(
+                ":DEMO:FUNCtion:PHASe:PHASe?"
+            )
+            Assert-NearlyEqual -Actual ([double]$query.result.degrees) -Expected 90 `
+                -Label "DEMO phase"
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "demo-phase" -Detail "DEMO phase is unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
@@ -2654,7 +3236,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "setup-lifecycle" -Action {
             $setupFile = "\usb\scopes-tool-live-${timestamp}.scp"
             $saved = Invoke-LiveCli -Stage "setup-save" -Command "setup-save" `
@@ -2662,10 +3244,10 @@ if ($snapshotComplete) {
             Assert-ScpiSentPrefix -Payload $saved -ExpectedPrefix ':SAVE:SETup "\usb\scopes-tool-live-' `
                 -Label "Setup save"
             Invoke-LiveCli -Stage "setup-label-change" -Command "channel-label" `
-                -Arguments @("--channel", "1", "--text", "P3 recall") | Out-Null
+                    -Arguments @("--channel", "1", "--text", "live recall") | Out-Null
             $changed = Invoke-LiveCli -Stage "setup-label-change-query" `
                 -Command "channel-label" -Arguments @("--channel", "1", "--query")
-            if ([string]$changed.result.text -ne "P3 recall") {
+            if ([string]$changed.result.text -ne "live recall") {
                 throw "Setup lifecycle change was not applied."
             }
             $recalled = Invoke-LiveCli -Stage "setup-recall" -Command "setup-recall" `
@@ -2680,7 +3262,138 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and [int]$identity.capabilities.reference_waveforms -gt 0) {
+        Invoke-BaselineCase -Name "reference-lifecycle" -Action {
+            try {
+                $saved = Invoke-LiveCli -Stage "reference-save" -Command "reference-save" `
+                    -Arguments @("--slot", "1", "--source-channel", "1")
+                Assert-ScpiSent -Payload $saved -Label "Reference save" -ExpectedCommands @(
+                    ":WMEMory1:SAVE CHANnel1"
+                )
+                $savedQuery = Invoke-LiveCli -Stage "reference-save-query" -Command "reference-query" `
+                    -Arguments @("--slot", "1")
+                if ($null -eq $savedQuery.result.PSObject.Properties["displayed"]) {
+                    throw "Reference query did not return display state."
+                }
+
+                $display = Invoke-LiveCli -Stage "reference-display-on" -Command "reference-display" `
+                    -Arguments @("--slot", "1", "--state", "on")
+                Assert-ScpiSent -Payload $display -Label "Reference display" -ExpectedCommands @(
+                    ":WMEMory1:DISPlay ON"
+                )
+                $displayQuery = Invoke-LiveCli -Stage "reference-display-query" -Command "reference-display" `
+                    -Arguments @("--slot", "1", "--query")
+                if (-not [bool]$displayQuery.result.displayed) {
+                    throw "Reference display query did not report ON."
+                }
+
+                $label = Invoke-LiveCli -Stage "reference-label-set" -Command "reference-label" `
+                    -Arguments @("--slot", "1", "--text", "BASELINE")
+                Assert-ScpiSent -Payload $label -Label "Reference label" -ExpectedCommands @(
+                    ':WMEMory1:LABel "BASELINE"'
+                )
+                $labelQuery = Invoke-LiveCli -Stage "reference-label-query" -Command "reference-label" `
+                    -Arguments @("--slot", "1", "--query")
+                if ([string]$labelQuery.result.label -ne "BASELINE") {
+                    throw "Reference label query did not report BASELINE."
+                }
+            } finally {
+                $displayOff = Invoke-LiveCli -Stage "reference-display-off" -Command "reference-display" `
+                    -Arguments @("--slot", "1", "--state", "off")
+                Assert-ScpiSent -Payload $displayOff -Label "Reference display cleanup" -ExpectedCommands @(
+                    ":WMEMory1:DISPlay OFF"
+                )
+                $cleared = Invoke-LiveCli -Stage "reference-clear" -Command "reference-clear" `
+                    -Arguments @("--slot", "1")
+                Assert-ScpiSent -Payload $cleared -Label "Reference clear" -ExpectedCommands @(
+                    ":WMEMory1:CLEar"
+                )
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "reference-lifecycle" -Detail "Reference waveforms are unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "setup-slot-lifecycle" -Action {
+            $saved = Invoke-LiveCli -Stage "setup-slot-save" -Command "setup-save" `
+                -Arguments @("--slot", "1")
+            Assert-ScpiSent -Payload $saved -Label "Setup slot save" -ExpectedCommands @(
+                ":SAVE:SETup 1"
+            )
+            Invoke-LiveCli -Stage "setup-slot-label-change" -Command "channel-label" `
+                -Arguments @("--channel", "1", "--text", "slot recall") | Out-Null
+            $recalled = Invoke-LiveCli -Stage "setup-slot-recall" -Command "setup-recall" `
+                -Arguments @("--slot", "1")
+            Assert-ScpiSent -Payload $recalled -Label "Setup slot recall" -ExpectedCommands @(
+                ":RECall:SETup 1"
+            )
+            $restored = Invoke-LiveCli -Stage "setup-slot-label-query" -Command "channel-label" `
+                -Arguments @("--channel", "1", "--query")
+            if ([string]$restored.result.text -ne [string]$snapshot.ChannelLabel) {
+                throw "Setup slot recall did not restore the CH1 label."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "save-settings" -Action {
+            try {
+                $pwd = Invoke-LiveCli -Stage "save-pwd-set" -Command "save-pwd" -Arguments @("--path", "\usb")
+                Assert-ScpiSent -Payload $pwd -Label "Save directory" -ExpectedCommands @(':SAVE:PWD "\usb"')
+                $pwdQuery = Invoke-LiveCli -Stage "save-pwd-query" -Command "save-pwd" -Arguments @("--query")
+                if ([string]$pwdQuery.result.path -ne "\usb") {
+                    throw "Save directory readback did not report \usb."
+                }
+
+                $filename = Invoke-LiveCli -Stage "save-filename-set" -Command "save-filename" -Arguments @("--name", "live_validation")
+                Assert-ScpiSent -Payload $filename -Label "Save filename" -ExpectedCommands @(':SAVE:FILename "live_validation"')
+                $filenameQuery = Invoke-LiveCli -Stage "save-filename-query" -Command "save-filename" -Arguments @("--query")
+                if ([string]$filenameQuery.result.name -ne "live_validation") {
+                    throw "Save filename readback did not report live_validation."
+                }
+
+                $palette = Invoke-LiveCli -Stage "save-image-palette-set" -Command "save-image-palette" -Arguments @("--palette", "color")
+                Assert-ScpiSent -Payload $palette -Label "Image palette" -ExpectedCommands @(':SAVE:IMAGe:PALette COLOR')
+                $paletteQuery = Invoke-LiveCli -Stage "save-image-palette-query" -Command "save-image-palette" -Arguments @("--query")
+                if ([string]$paletteQuery.result.palette -ne "color") {
+                    throw "Image palette readback did not report color."
+                }
+
+                $inkSaver = Invoke-LiveCli -Stage "save-image-ink-saver-set" -Command "save-image-ink-saver" -Arguments @("--enabled", "false")
+                Assert-ScpiSent -Payload $inkSaver -Label "Image ink saver" -ExpectedCommands @(':SAVE:IMAGe:INKSaver 0')
+                $inkQuery = Invoke-LiveCli -Stage "save-image-ink-saver-query" -Command "save-image-ink-saver" -Arguments @("--query")
+                if ([bool]$inkQuery.result.enabled) {
+                    throw "Image ink saver readback did not report disabled."
+                }
+
+                $factors = Invoke-LiveCli -Stage "save-image-factors-set" -Command "save-image-factors" -Arguments @("--enabled", "true")
+                Assert-ScpiSent -Payload $factors -Label "Image factors" -ExpectedCommands @(':SAVE:IMAGe:FACTors 1')
+                $factorsQuery = Invoke-LiveCli -Stage "save-image-factors-query" -Command "save-image-factors" -Arguments @("--query")
+                if (-not [bool]$factorsQuery.result.enabled) {
+                    throw "Image factors readback did not report enabled."
+                }
+            } finally {
+                Invoke-LiveCli -Stage "save-pwd-restore" -Command "save-pwd" -Arguments @(
+                    "--path", [string]$snapshot.SavePwd
+                ) | Out-Null
+                Invoke-LiveCli -Stage "save-filename-restore" -Command "save-filename" -Arguments @(
+                    "--name", [string]$snapshot.SaveFilename
+                ) | Out-Null
+                Invoke-LiveCli -Stage "save-image-palette-restore" -Command "save-image-palette" -Arguments @(
+                    "--palette", [string]$snapshot.SaveImagePalette
+                ) | Out-Null
+                Invoke-LiveCli -Stage "save-image-ink-saver-restore" -Command "save-image-ink-saver" -Arguments @(
+                    "--enabled", ([string][bool]$snapshot.SaveImageInkSaver).ToLowerInvariant()
+                ) | Out-Null
+                Invoke-LiveCli -Stage "save-image-factors-restore" -Command "save-image-factors" -Arguments @(
+                    "--enabled", ([string][bool]$snapshot.SaveImageFactors).ToLowerInvariant()
+                ) | Out-Null
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "save-export" -Action {
             $primaryException = $null
             $firstRestoreException = $null
@@ -2779,7 +3492,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "safe-cleanup" -Action {
             $cleanup = Invoke-LiveCli -Stage "safe-cleanup" -Command "cleanup" `
                 -Arguments @("--profile", "safe")
@@ -2787,7 +3500,8 @@ if ($snapshotComplete) {
                 -not [bool]$cleanup.result.final_error_queue_clean -or
                 "final_error_check" -notin @($cleanup.result.actions) -or
                 "disable_dvm" -notin @($cleanup.result.actions) -or
-                "disable_demo_output" -notin @($cleanup.result.actions)) {
+                ([bool]$identity.capabilities.supports_demo -and
+                    "disable_demo_output" -notin @($cleanup.result.actions))) {
                 throw "Safe cleanup result is invalid."
             }
             $wgenSkip = @($cleanup.result.skipped | Where-Object {
@@ -2803,8 +3517,6 @@ if ($snapshotComplete) {
                     ":DEMO:OUTPut OFF", "*OPC?", ":SYSTem:ERRor?"
                 )
         }
-    } elseif (-not $script:FunctionalFailed) {
-        Write-Host "SKIP  P3 coverage (representative cases require detected 4000X capabilities)"
     }
 }
 
@@ -2843,12 +3555,19 @@ Write-Host "  - The original generic trigger mode is not queryable through the e
 Write-Host "    public CLI. If the trigger case ran, the mode remains Edge."
 Write-Host "  - Waveform source, format, and points are transfer-session settings without"
 Write-Host "    an existing public restore path. The transfer format may remain WORD."
-Write-Host "  - Cursor and trigger holdoff are not changed because their current public"
-Write-Host "    query surfaces do not expose all state required for safe restoration."
+Write-Host "  - Cursor is a disposable validation state and is explicitly left OFF."
+Write-Host "  - REF1 and Setup slot 1 are disposable validation slots; existing contents"
+Write-Host "    may be overwritten or cleared by this script."
 Write-Host ""
 Write-Host "Summary"
 foreach ($entry in $script:CaseResults.GetEnumerator()) {
-    $status = if ($entry.Value.Passed) { "PASS" } else { "FAIL" }
+    $status = if ($null -ne $entry.Value.Status) {
+        [string]$entry.Value.Status
+    } elseif ($entry.Value.Passed) {
+        "PASS"
+    } else {
+        "FAIL"
+    }
     Write-Host ("{0,-5} {1}" -f $status, $entry.Key)
 }
 Write-Host "Artifacts: $($script:RunRoot)"

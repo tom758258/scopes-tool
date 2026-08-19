@@ -2393,11 +2393,24 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
     )
 
     for case_name in (
+        "run",
+        "stop-acquisition",
+        "single",
+        "force-trigger",
+        "capture-wait-trigger",
+        "capture-wait-trigger-fallback",
+        "trigger-holdoff",
         "acquisition-average",
         "acquisition-high-resolution",
         "acquisition-peak",
         "acquisition-queries",
         "system-status",
+        "measurements",
+        "measure-phase",
+        "measure-delay",
+        "measure-stats",
+        "measure-controls",
+        "cursor-lifecycle",
         "measure-results",
         "channel-summary",
     ):
@@ -2410,7 +2423,21 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
         'Command "system-opc"',
         'Command "system-status-byte"',
         'Command "system-operation-status"',
+        'Command "system-standard-event"',
         'Command "system-options"',
+        'Command "run"',
+        'Command "stop-acquisition"',
+        'Command "single"',
+        'Command "force-trigger"',
+        'Command "capture"',
+        'Command "trigger-holdoff"',
+        'Command "measure"',
+        'Command "measure-stats"',
+        'Command "measure-clear"',
+        'Command "measure-show"',
+        'Command "measure-source"',
+        'Command "measure-window"',
+        'Command "cursor"',
         'Command "measure-results"',
         'Command "channel-summary"',
     ):
@@ -2429,8 +2456,39 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
         "\n    if (-not $script:FunctionalFailed -and", system_status_start
     )
     system_status_case = script[system_status_start:system_status_end]
-    assert '"system-standard-event"' not in system_status_case
-    assert "*ESR?" not in system_status_case
+    assert '"system-standard-event"' in system_status_case
+    assert "*ESR?" in system_status_case
+
+    screenshot_start = script.index('Invoke-BaselineCase -Name "screenshot-bmp"')
+    screenshot_end = script.index(
+        "\n    if (-not $script:FunctionalFailed", screenshot_start + 1
+    )
+    screenshot_case = script[screenshot_start:screenshot_end]
+    assert 'Add-NotApplicableCase -Name "screenshot-bmp"' in screenshot_case
+
+    for case_name in (
+        "run",
+        "single",
+        "force-trigger",
+        "capture-wait-trigger",
+        "capture-wait-trigger-fallback",
+    ):
+        case_start = script.index(f'Invoke-BaselineCase -Name "{case_name}"')
+        case_end = script.index(
+            "\n    if (-not $script:FunctionalFailed", case_start + 1
+        )
+        case_block = script[case_start:case_end]
+        assert 'Command "stop-acquisition"' in case_block
+
+    cursor_start = script.index('Invoke-BaselineCase -Name "cursor-lifecycle"')
+    cursor_end = script.index(
+        "\n    if (-not $script:FunctionalFailed", cursor_start + 1
+    )
+    cursor_case = script[cursor_start:cursor_end]
+    assert cursor_case.index('Stage "cursor-off"') < cursor_case.index(
+        'Stage "cursor-off-query"'
+    )
+    assert 'Arguments @("--off")' in cursor_case
 
     invoke_live_cli_start = script.index("function Invoke-LiveCli {")
     invoke_live_cli_end = script.index(
@@ -2592,11 +2650,22 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         "trigger-or",
         "math-operator",
         "math-transform",
+        "math-display",
+        "math-vertical",
+        "math-composite-source",
+        "math-filter",
+        "math-visualization",
+        "math-clear",
         "fft",
+        "fft-advanced",
         "wgen-basic",
         "demo-basic",
+        "demo-phase",
         "autoscale",
         "setup-lifecycle",
+        "setup-slot-lifecycle",
+        "reference-lifecycle",
+        "save-settings",
         "save-export",
         "safe-cleanup",
     ):
@@ -2650,10 +2719,47 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert '-Arguments @("--query")' in preflight
     assert '-Stage "snapshot-save-waveform-length-max"' in script
     assert '-Command "save-waveform-length-max" -Arguments @("--query")' in script
-    assert "SaveWaveformLengthMax = if" in script
+    assert "SaveWaveformLengthMax = [bool]$saveWaveformLengthMax.result.enabled" in script
     assert '@("--format", "none")' not in script
     assert '"\\usb\\scopes-tool-live-${timestamp}.scp"' in script
-    assert '"--slot"' not in script[script.index('Invoke-BaselineCase -Name "setup-lifecycle"'):]
+    setup_slot_start = script.index('Invoke-BaselineCase -Name "setup-slot-lifecycle"')
+    setup_slot_end = script.index(
+        'Invoke-BaselineCase -Name "save-settings"', setup_slot_start
+    )
+    setup_slot_case = script[setup_slot_start:setup_slot_end]
+    assert 'Command "setup-save"' in setup_slot_case
+    assert 'Command "setup-recall"' in setup_slot_case
+    assert '"--slot", "1"' in setup_slot_case
+    reference_start = script.index('Invoke-BaselineCase -Name "reference-lifecycle"')
+    reference_end = script.index(
+        'Invoke-BaselineCase -Name "setup-slot-lifecycle"', reference_start
+    )
+    reference_case = script[reference_start:reference_end]
+    for command in (
+        "reference-save",
+        "reference-query",
+        "reference-display",
+        "reference-label",
+        "reference-clear",
+    ):
+        assert f'Command "{command}"' in reference_case
+    save_settings_start = script.index('Invoke-BaselineCase -Name "save-settings"')
+    save_settings_end = script.index(
+        'Invoke-BaselineCase -Name "save-export"', save_settings_start
+    )
+    save_settings_case = script[save_settings_start:save_settings_end]
+    for command in (
+        "save-pwd",
+        "save-filename",
+        "save-image-palette",
+        "save-image-ink-saver",
+        "save-image-factors",
+    ):
+        assert f'Command "{command}"' in save_settings_case
+    assert "finally" in save_settings_case
+    assert "$identity.capabilities.supports_advanced_fft" in script
+    assert "$identity.capabilities.supports_math_goft" in script
+    assert "$identity.capabilities.demo_functions" in script
     assert "Leave WGEN output OFF" in script
     assert "Leave DEMO output OFF" in script
     assert "External trigger input" in script
@@ -2674,6 +2780,59 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     )
     assert "Start-Sleep -Milliseconds 500" not in save_export
     assert waveform_stage < waveform_validation < handoff_sleep < first_restore
+
+
+def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    gated_cases = {
+        "measure-delay": "$identity.capabilities.supports_delay_measurement",
+        "math-composite-source": "$identity.capabilities.supports_math_goft",
+        "fft-advanced": "$identity.capabilities.supports_advanced_fft",
+        "demo-phase": "$identity.capabilities.demo_functions",
+        "reference-lifecycle": "reference_waveforms",
+        "math-filter": "math_filter_operations",
+        "math-visualization": "math_visualization_operations",
+        "math-clear": "mathClearSupported",
+    }
+    for case_name, capability in gated_cases.items():
+        case_start = script.index(f'Invoke-BaselineCase -Name "{case_name}"')
+        gate_start = script.rfind("\n    if (-not $script:FunctionalFailed", 0, case_start)
+        assert gate_start >= 0
+        case_end = script.index(
+            "\n    if (-not $script:FunctionalFailed", case_start + 1
+        )
+        case_block = script[gate_start:case_end]
+        assert capability in case_block
+        assert f'Add-NotApplicableCase -Name "{case_name}"' in case_block
+
+    natural_start = script.index('Invoke-BaselineCase -Name "capture-wait-trigger"')
+    natural_end = script.index(
+        'Invoke-BaselineCase -Name "capture-wait-trigger-fallback"', natural_start
+    )
+    natural_case = script[natural_start:natural_end]
+    assert '"--wait-trigger", "--trigger-timeout-ms", "5000"' in natural_case
+    assert "--force-trigger-on-timeout" not in natural_case
+
+    fallback_start = natural_end
+    fallback_end = script.index(
+        'Invoke-BaselineCase -Name "trigger-holdoff"', fallback_start
+    )
+    fallback_case = script[fallback_start:fallback_end]
+    assert '"--trigger-timeout-ms", "1"' in fallback_case
+    assert "--force-trigger-on-timeout" in fallback_case
+
+    assert 'Command "measure-sweep"' not in script
+    assert 'Command "reference-clear"' in script
+    assert 'Command "setup-save"' in script
+    assert 'Command "setup-recall"' in script
+    assert 'Command "math-visualization"' in script
+    assert 'Stage "fft-display-off"' in script
+    assert 'Stage "fft-advanced-display-off"' in script
+    assert 'Get-ErrorDrain -Stage "final-error-queue"' in script
+    assert 'Command "cleanup"' in script
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
@@ -2964,26 +3123,42 @@ function Invoke-LiveCli {
             }
         }
     }
+    if ($Stage -eq "fft-display-off") {
+        $script:FftCleanupCalls += 1
+        return [pscustomobject]@{
+            scpi = [pscustomobject]@{ sent = @(":FUNCtion1:DISPlay OFF") }
+            result = [pscustomobject]@{}
+        }
+    }
     throw "Unexpected stage: ${Stage}"
 }
 
 $script:CaseResults = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:DrainCalls = 0
+$script:FftCleanupCalls = 0
 $script:FftWindow = "HANN"
+$identity = [pscustomobject]@{
+    capabilities = [pscustomobject]@{
+        math_function_count = 4
+    }
+}
 Invoke-Expression $caseBlock
 $pass = $script:CaseResults["fft"].Passed
 $passFailed = $script:FunctionalFailed
+$pass_cleanup_calls = $script:FftCleanupCalls
 
 $script:CaseResults = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:DrainCalls = 0
+$script:FftCleanupCalls = 0
 $script:FftWindow = "FLAT"
 Invoke-Expression $caseBlock
 
 [ordered]@{
     pass = $pass
     pass_failed = $passFailed
+    pass_cleanup_calls = $pass_cleanup_calls
     failure_passed = $script:CaseResults["fft"].Passed
     failure_detail = $script:CaseResults["fft"].Detail
     failure_functional_failed = $script:FunctionalFailed
@@ -3016,6 +3191,7 @@ Invoke-Expression $caseBlock
     result = json.loads(completed.stdout)
     assert result["pass"] is True
     assert result["pass_failed"] is False
+    assert result["pass_cleanup_calls"] == 1
     assert result["failure_passed"] is False
     assert "FFT readback is invalid" in result["failure_detail"]
     assert result["failure_functional_failed"] is True
@@ -3758,17 +3934,20 @@ $snapshot = [pscustomobject]@{
     ChannelDisplay = $true
     AcquisitionType = "normal"
     AcquisitionCount = 1
-    DisplayVectors = $true
-    AnnotationRestorable = $true
+        DisplayVectors = $true
+        TriggerHoldoffSeconds = 0.000001
+        AnnotationRestorable = $true
     AnnotationEnabled = $false
     AnnotationText = ""
     AnnotationColor = "WHITE"
     AnnotationBackground = "OPAQ"
     AnnotationX = 20
     AnnotationY = 30
-    SearchSupported = $true
-    P3Enabled = $true
-    TriggerEdgeCoupling = "dc"
+        SearchSupported = $true
+        P3Enabled = $true
+        MathFunctionCount = 4
+        DemoSupported = $true
+        TriggerEdgeCoupling = "dc"
     TriggerEdgeReject = "off"
     TriggerSweep = "auto"
     TriggerNoiseReject = $false
@@ -3777,8 +3956,13 @@ $snapshot = [pscustomobject]@{
     ExternalTriggerProbe = 1.0
     ExternalTriggerUnits = "volts"
     ExternalTriggerLevel = -0.25
-    SaveImageFormat = "none"
-    SaveWaveformFormat = "csv"
+        SaveImageFormat = "none"
+        SavePwd = "\\usb"
+        SaveFilename = "scope"
+        SaveImagePalette = "color"
+        SaveImageInkSaver = $true
+        SaveImageFactors = $false
+        SaveWaveformFormat = "csv"
     SaveWaveformLength = 1000
 }
 
@@ -3831,6 +4015,7 @@ Restore-InstrumentState -Snapshot $snapshot
         "display-vectors",
         "annotation",
         "search-state",
+        "trigger-holdoff",
         "math-display",
         "wgen-output",
         "demo-output",
@@ -3845,6 +4030,11 @@ Restore-InstrumentState -Snapshot $snapshot
         "trigger-edge-external-level",
         "save-waveform-format",
         "save-waveform-length",
+        "save-pwd",
+        "save-filename",
+        "save-image-palette",
+        "save-image-ink-saver",
+        "save-image-factors",
     ):
         assert command in commands
     annotation_restore = next(
