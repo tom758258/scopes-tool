@@ -3142,13 +3142,21 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert "Start-Sleep -Milliseconds $sleepMilliseconds" in reference_readiness
     assert "CH1 reference-waveform precondition did not become measurement-ready" in reference_readiness
     assert "if ($systemErrorCode -ne 0)" in reference_readiness
+    save_pwd_start = script.index('Invoke-BaselineCase -Name "save-pwd"')
     save_settings_start = script.index('Invoke-BaselineCase -Name "save-settings"')
     save_settings_end = script.index(
         'Invoke-BaselineCase -Name "save-export"', save_settings_start
     )
+    save_pwd_case = script[save_pwd_start:save_settings_start]
     save_settings_case = script[save_settings_start:save_settings_end]
+    assert 'Stage "save-pwd-prerequisite-set"' in script[setup_slot_start:save_pwd_start]
+    assert 'Stage "save-pwd-prerequisite-query"' in script[setup_slot_start:save_pwd_start]
+    assert 'Add-NotApplicableCase -Name "save-pwd"' in script[setup_slot_start:save_pwd_start]
+    assert 'Stage "save-pwd-set"' in save_pwd_case
+    assert 'Stage "save-pwd-query"' in save_pwd_case
+    assert 'Stage "save-pwd-restore"' in save_pwd_case
+    assert 'Stage "save-pwd-restore-query"' in save_pwd_case
     for command in (
-        "save-pwd",
         "save-filename",
         "save-image-format",
         "save-image-palette",
@@ -3158,7 +3166,6 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         assert f'Command "{command}"' in save_settings_case
     assert "finally" in save_settings_case
     configure_order = [
-        save_settings_case.index('Stage "save-pwd-set"'),
         save_settings_case.index('Stage "save-filename-set"'),
         save_settings_case.index('Stage "save-image-format-png"'),
         save_settings_case.index('Stage "save-image-palette-set"'),
@@ -3171,11 +3178,9 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         save_settings_case.index('Stage = "save-image-ink-saver-restore"'),
         save_settings_case.index('Stage = "save-image-palette-restore"'),
         save_settings_case.index('Stage = "save-filename-restore"'),
-        save_settings_case.index('Stage = "save-pwd-restore"'),
     ]
     assert restore_order == sorted(restore_order)
     for stage in (
-        "save-pwd-restore-query",
         "save-filename-restore-query",
         "save-image-palette-restore-query",
         "save-image-ink-saver-restore-query",
@@ -3623,7 +3628,336 @@ function Invoke-Scenario {
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_save_settings_handles_path_equivalence_and_partial_rollback(
+def test_baseline_save_pwd_reversible_prerequisite_and_case_ownership(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-save-pwd-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @(
+    "Test-SavePathEquivalent", "Assert-ScpiSent", "Invoke-BaselineCase"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$savePwdFlow = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.IfStatementAst] -and
+        $node.Extent.Text.TrimStart().StartsWith('if (-not $script:FunctionalFailed)') -and
+        $node.Extent.Text.Contains('Stage "save-pwd-prerequisite-set"') -and
+        $node.Extent.Text.Contains('Invoke-BaselineCase -Name "save-pwd"')
+    )
+}, $true).Extent.Text
+
+function Get-CaseBlock {
+    param([string] $Name)
+    $command = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.CommandAst] -and
+            $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+            $node.Extent.Text.Contains("-Name `"${Name}`"")
+        )
+    }, $true)
+    if ($null -eq $command) { throw "Missing ${Name} case." }
+    return $command.Extent.Text
+}
+
+$saveSettingsBlock = Get-CaseBlock -Name "save-settings"
+$saveExportBlock = Get-CaseBlock -Name "save-export"
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Status = if ($Passed) { "PASS" } else { "FAIL" }
+        Detail = $Detail
+    }
+}
+
+function Add-NotApplicableCase {
+    param([string] $Name, [string] $Detail)
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $false
+        Status = "N/A"
+        Detail = $Detail
+    }
+}
+
+function Add-Diagnostic {
+    param([string] $Name, [string] $Message)
+    if (-not $script:Diagnostics.Contains($Name)) {
+        $script:Diagnostics[$Name] = New-Object System.Collections.Generic.List[string]
+    }
+    $script:Diagnostics[$Name].Add($Message)
+}
+
+function Get-ErrorDrain {
+    param([string] $Stage)
+    $script:DrainStages.Add($Stage)
+    return [pscustomobject]@{
+        Errors = @()
+        Terminated = $true
+    }
+}
+
+function Write-DrainErrors {
+    param([object[]] $Errors, [string] $CaseName = "")
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainStages.Add($Stage)
+}
+
+function Assert-ScpiSentPrefix {
+    param([object] $Payload, [string] $ExpectedPrefix, [string] $Label)
+}
+
+function Start-Sleep {
+    param([int] $Seconds = 0, [int] $Milliseconds = 0)
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+
+    if ($Stage -eq "save-pwd-prerequisite-set") {
+        if ($script:Scenario -in @("non-restorable", "changed-after-rejection")) {
+            throw '-151,"Invalid string data"'
+        }
+        if ($script:Scenario -eq "unexpected-error") {
+            throw '-222,"Data out of range"'
+        }
+        return [pscustomobject]@{
+            scpi = [pscustomobject]@{
+                sent = @(':SAVE:PWD "' + $Arguments[1] + '"')
+            }
+            result = [pscustomobject]@{}
+        }
+    }
+
+    $result = [ordered]@{}
+    $sent = @()
+    switch ($Stage) {
+        "save-pwd-prerequisite-query" {
+            $result.path = if ($script:Scenario -eq "changed-after-rejection") {
+                "\usb"
+            } else {
+                $script:OriginalPath
+            }
+        }
+        "save-pwd-set" { $sent = @(':SAVE:PWD "\usb"') }
+        "save-pwd-query" { $result.path = "\usb\" }
+        "save-pwd-restore" {
+            $sent = @(':SAVE:PWD "' + $Arguments[1] + '"')
+        }
+        "save-pwd-restore-query" { $result.path = $script:OriginalPath }
+        "save-filename-set" { $sent = @(':SAVE:FILename "live_validation"') }
+        "save-filename-query" { $result.name = "live_validation" }
+        "save-filename-restore" { $sent = @(':SAVE:FILename "scope"') }
+        "save-filename-restore-query" { $result.name = "scope" }
+        "save-image-format-png" { $sent = @(':SAVE:IMAGe:FORMat PNG') }
+        "save-image-palette-set" { $sent = @(':SAVE:IMAGe:PALette COLOR') }
+        "save-image-palette-query" { $result.palette = "color" }
+        "save-image-palette-restore" { $sent = @(':SAVE:IMAGe:PALette COLOR') }
+        "save-image-palette-restore-query" { $result.palette = "color" }
+        "save-image-ink-saver-set" { $sent = @(':SAVE:IMAGe:INKSaver 0') }
+        "save-image-ink-saver-query" { $result.enabled = $false }
+        "save-image-ink-saver-restore" { $sent = @(':SAVE:IMAGe:INKSaver 1') }
+        "save-image-ink-saver-restore-query" { $result.enabled = $true }
+        "save-image-factors-set" { $sent = @(':SAVE:IMAGe:FACTors 1') }
+        "save-image-factors-query" { $result.enabled = $true }
+        "save-image-factors-restore" { $sent = @(':SAVE:IMAGe:FACTors 0') }
+        "save-image-factors-restore-query" { $result.enabled = $false }
+        "save-image" {
+            $result.instrument_side = $true
+            $result.operation_complete = $true
+            $result.filename = $Arguments[1]
+        }
+        "save-waveform" {
+            $result.instrument_side = $true
+            $result.operation_complete = $true
+            $result.filename = $Arguments[1]
+        }
+    }
+    return [pscustomobject]@{
+        scpi = [pscustomobject]@{ sent = $sent }
+        result = [pscustomobject]$result
+    }
+}
+
+function Invoke-Scenario {
+    param(
+        [ValidateSet(
+            "restorable", "non-restorable", "unexpected-error", "changed-after-rejection"
+        )]
+        [string] $Name
+    )
+    $script:Scenario = $Name
+    $script:OriginalPath = if ($Name -eq "restorable") { "\usb" } else { "\Temp\" }
+    $script:CaseResults = [ordered]@{}
+    $script:Diagnostics = [ordered]@{}
+    $script:FunctionalFailed = $false
+    $script:Invocations = New-Object System.Collections.Generic.List[object]
+    $script:DrainStages = New-Object System.Collections.Generic.List[string]
+    $snapshot = [pscustomobject]@{
+        SavePwd = $script:OriginalPath
+        SaveFilename = "scope"
+        SaveImageFormat = "png"
+        SaveImagePalette = "color"
+        SaveImageInkSaver = $true
+        SaveImageFactors = $false
+        SaveWaveformFormat = "csv"
+        SaveWaveformLength = 2000
+        SaveWaveformLengthMax = $false
+    }
+    $timestamp = "test"
+
+    Invoke-Expression $savePwdFlow
+    if ($Name -eq "non-restorable" -and -not $script:FunctionalFailed) {
+        Invoke-Expression $saveSettingsBlock
+        if (-not $script:FunctionalFailed) {
+            Invoke-Expression $saveExportBlock
+        }
+    }
+
+    return [pscustomobject]@{
+        status = [string]$script:CaseResults["save-pwd"].Status
+        detail = [string]$script:CaseResults["save-pwd"].Detail
+        functional_failed = $script:FunctionalFailed
+        stages = @($script:Invocations | ForEach-Object { $_.stage })
+        commands = @($script:Invocations | ForEach-Object { $_.command })
+        drain_stages = @($script:DrainStages | ForEach-Object { $_ })
+        save_settings_status = if ($script:CaseResults.Contains("save-settings")) {
+            [string]$script:CaseResults["save-settings"].Status
+        } else { "" }
+        save_export_status = if ($script:CaseResults.Contains("save-export")) {
+            [string]$script:CaseResults["save-export"].Status
+        } else { "" }
+    }
+}
+
+[ordered]@{
+    restorable = Invoke-Scenario -Name "restorable"
+    non_restorable = Invoke-Scenario -Name "non-restorable"
+    unexpected_error = Invoke-Scenario -Name "unexpected-error"
+    changed_after_rejection = Invoke-Scenario -Name "changed-after-rejection"
+} | ConvertTo-Json -Depth 10 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    restorable = result["restorable"]
+    assert restorable["status"] == "PASS"
+    assert restorable["functional_failed"] is False
+    assert restorable["stages"] == [
+        "save-pwd-prerequisite-set",
+        "save-pwd-set",
+        "save-pwd-query",
+        "save-pwd-restore",
+        "save-pwd-restore-query",
+    ]
+
+    non_restorable = result["non_restorable"]
+    assert non_restorable["status"] == "N/A"
+    assert "queryable but not setter-restorable" in non_restorable["detail"]
+    assert non_restorable["functional_failed"] is False
+    assert non_restorable["stages"][:2] == [
+        "save-pwd-prerequisite-set",
+        "save-pwd-prerequisite-query",
+    ]
+    assert "save-pwd-set" not in non_restorable["stages"]
+    assert "save-pwd-restore" not in non_restorable["stages"]
+    assert non_restorable["drain_stages"] == ["save-pwd-prerequisite-error-drain"]
+    assert non_restorable["save_settings_status"] == "PASS"
+    assert non_restorable["save_export_status"] == "PASS"
+    for command in (
+        "save-filename",
+        "save-image-format",
+        "save-image-palette",
+        "save-image-ink-saver",
+        "save-image-factors",
+        "save-waveform-format",
+        "save-waveform-length",
+    ):
+        assert command in non_restorable["commands"]
+    assert non_restorable["stages"][-3:] == [
+        "save-waveform-length-restore",
+        "save-waveform-format-restore",
+        "save-image-format-restore",
+    ]
+
+    unexpected = result["unexpected_error"]
+    assert unexpected["status"] == "FAIL"
+    assert unexpected["functional_failed"] is True
+    assert unexpected["stages"] == ["save-pwd-prerequisite-set"]
+    assert unexpected["drain_stages"] == [
+        "save-pwd-prerequisite-unexpected-error-drain"
+    ]
+
+    changed = result["changed_after_rejection"]
+    assert changed["status"] == "FAIL"
+    assert changed["functional_failed"] is True
+    assert changed["stages"] == [
+        "save-pwd-prerequisite-set",
+        "save-pwd-prerequisite-query",
+    ]
+    assert changed["drain_stages"] == [
+        "save-pwd-prerequisite-error-drain",
+        "save-pwd-prerequisite-query-error-drain",
+    ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_save_settings_owns_mutations_and_partial_rollback(
     tmp_path: Path,
 ) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -3641,9 +3975,7 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 )
 if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
 
-foreach ($functionName in @(
-    "Test-SavePathEquivalent", "Assert-ScpiSent", "Invoke-BaselineCase"
-)) {
+foreach ($functionName in @("Assert-ScpiSent", "Invoke-BaselineCase")) {
     $functionAst = $ast.Find({
         param($node)
         return (
@@ -3695,17 +4027,14 @@ function Invoke-LiveCli {
         arguments = @($Arguments)
     })
 
-    if ($script:Scenario -eq "pwd-query-failure" -and $Stage -eq "save-pwd-query") {
-        throw "PWD readback failure"
+    if ($script:Scenario -eq "filename-query-failure" -and
+        $Stage -eq "save-filename-query") {
+        throw "filename readback failure"
     }
 
     $sent = @()
     $result = [ordered]@{}
     switch ($Stage) {
-        "save-pwd-set" { $sent = @(':SAVE:PWD "\usb"') }
-        "save-pwd-query" { $result.path = "\usb\" }
-        "save-pwd-restore" { $sent = @(':SAVE:PWD "\usb"') }
-        "save-pwd-restore-query" { $result.path = "\usb\" }
         "save-filename-set" { $sent = @(':SAVE:FILename "live_validation"') }
         "save-filename-query" { $result.name = "live_validation" }
         "save-filename-restore" { $sent = @(':SAVE:FILename "scope"') }
@@ -3731,7 +4060,7 @@ function Invoke-LiveCli {
 }
 
 function Invoke-Scenario {
-    param([ValidateSet("path-equivalence", "pwd-query-failure")][string] $Name)
+    param([ValidateSet("pass", "filename-query-failure")][string] $Name)
     $script:Scenario = $Name
     $script:CaseResults = [ordered]@{}
     $script:Diagnostics = [ordered]@{}
@@ -3763,8 +4092,8 @@ function Invoke-Scenario {
 }
 
 [ordered]@{
-    path_equivalence = Invoke-Scenario -Name "path-equivalence"
-    pwd_query_failure = Invoke-Scenario -Name "pwd-query-failure"
+    pass = Invoke-Scenario -Name "pass"
+    filename_query_failure = Invoke-Scenario -Name "filename-query-failure"
 } | ConvertTo-Json -Depth 10 -Compress
 ''',
         encoding="utf-8",
@@ -3792,11 +4121,9 @@ function Invoke-Scenario {
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
 
-    path_equivalence = result["path_equivalence"]
-    assert path_equivalence["passed"] is True
-    assert path_equivalence["stages"][:11] == [
-        "save-pwd-set",
-        "save-pwd-query",
+    passing = result["pass"]
+    assert passing["passed"] is True
+    assert passing["stages"][:9] == [
         "save-filename-set",
         "save-filename-query",
         "save-image-format-png",
@@ -3807,54 +4134,52 @@ function Invoke-Scenario {
         "save-image-factors-set",
         "save-image-factors-query",
     ]
-    restore_start = path_equivalence["stages"].index("save-image-factors-restore")
-    assert path_equivalence["stages"][restore_start : restore_start + 5] == [
+    restore_start = passing["stages"].index("save-image-factors-restore")
+    assert passing["stages"][restore_start : restore_start + 4] == [
         "save-image-factors-restore",
         "save-image-ink-saver-restore",
         "save-image-palette-restore",
         "save-filename-restore",
-        "save-pwd-restore",
     ]
-    assert path_equivalence["commands"][restore_start + 4] == "save-pwd"
     assert [
-        stage for stage in path_equivalence["stages"]
+        stage for stage in passing["stages"]
         if stage.endswith("-restore")
     ] == [
         "save-image-factors-restore",
         "save-image-ink-saver-restore",
         "save-image-palette-restore",
         "save-filename-restore",
-        "save-pwd-restore",
         "save-waveform-format-restore",
     ]
-    assert "save-waveform-format-restore" in path_equivalence["stages"]
-    assert "save-image-format-restore" not in path_equivalence["stages"]
-    assert "--format|none" not in path_equivalence["image_format_arguments"]
+    assert "save-waveform-format-restore" in passing["stages"]
+    assert "save-image-format-restore" not in passing["stages"]
+    assert "--format|none" not in passing["image_format_arguments"]
     assert [
-        stage for stage in path_equivalence["stages"]
+        stage for stage in passing["stages"]
         if stage.endswith("-restore-query")
     ] == [
-        "save-pwd-restore-query",
         "save-filename-restore-query",
         "save-image-palette-restore-query",
         "save-image-ink-saver-restore-query",
         "save-image-factors-restore-query",
     ]
 
-    pwd_failure = result["pwd_query_failure"]
-    assert pwd_failure["passed"] is False
-    assert "PWD readback failure" in pwd_failure["detail"]
-    assert pwd_failure["stages"] == [
-        "save-pwd-set",
-        "save-pwd-query",
-        "save-pwd-restore",
-        "save-pwd-restore-query",
+    failure = result["filename_query_failure"]
+    assert failure["passed"] is False
+    assert "filename readback failure" in failure["detail"]
+    assert failure["stages"] == [
+        "save-filename-set",
+        "save-filename-query",
+        "save-filename-restore",
+        "save-filename-restore-query",
     ]
+    assert not any(command == "save-pwd" for command in passing["commands"])
+    assert not any(command == "save-pwd" for command in failure["commands"])
     assert not any(
         stage.startswith("save-image-palette")
         or stage.startswith("save-image-ink-saver")
         or stage.startswith("save-image-factors")
-        for stage in pwd_failure["stages"]
+        for stage in failure["stages"]
     )
 
 
@@ -4954,7 +5279,7 @@ Invoke-Expression $caseBlock
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_p2_restore_executes_public_cli_steps(tmp_path: Path) -> None:
+def test_baseline_p2_restore_excludes_case_owned_save_settings(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
     harness_path = tmp_path / "baseline-p2-restore-harness.ps1"
     harness_path.write_text(
@@ -4971,7 +5296,8 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
 
 foreach ($functionName in @(
-    "ConvertTo-InvariantString", "Assert-NearlyEqual", "Restore-InstrumentState"
+    "ConvertTo-InvariantString", "Assert-NearlyEqual", "Assert-ScpiSent",
+    "Invoke-BaselineCase", "Restore-InstrumentState"
 )) {
     $functionAst = $ast.Find({
         param($node)
@@ -4984,12 +5310,32 @@ foreach ($functionName in @(
     Invoke-Expression $functionAst.Extent.Text
 }
 
+$autoscaleCommand = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "autoscale"')
+    )
+}, $true)
+if ($null -eq $autoscaleCommand) { throw "Missing autoscale case." }
+$autoscaleBlock = $autoscaleCommand.Extent.Text
+
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:DrainCalls = 0
 
 function Drain-AfterFailure {
     param([string] $Stage, [string] $CaseName)
     $script:DrainCalls += 1
+}
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Status = if ($Passed) { "PASS" } else { "FAIL" }
+        Detail = $Detail
+    }
 }
 
 function Invoke-LiveCli {
@@ -4999,7 +5345,16 @@ function Invoke-LiveCli {
         command = $Command
         arguments = @($Arguments)
     })
+    if ($Command -like "save-*") {
+        throw "Global restore must not invoke ${Command}."
+    }
     switch ($Stage) {
+        "autoscale-ch1" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(':AUToscale CHANnel1') }
+                result = [pscustomobject]@{}
+            }
+        }
         "restore-channel-summary-query" {
             return [pscustomobject]@{ result = [pscustomobject]@{ channels = @(
                 [pscustomobject]@{
@@ -5105,7 +5460,7 @@ $snapshot = [pscustomobject]@{
     ExternalTriggerUnits = "volts"
     ExternalTriggerLevel = -0.25
         SaveImageFormat = "none"
-        SavePwd = "\\usb"
+        SavePwd = "\\Temp\\"
         SaveFilename = "scope"
         SaveImagePalette = "color"
         SaveImageInkSaver = $true
@@ -5114,6 +5469,13 @@ $snapshot = [pscustomobject]@{
     SaveWaveformLength = 1000
 }
 
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+Invoke-Expression $autoscaleBlock
+$autoscaleInvocations = @($script:Invocations | ForEach-Object { $_ })
+$autoscaleStatus = [string]$script:CaseResults["autoscale"].Status
+$autoscaleFunctionalFailed = $script:FunctionalFailed
+$script:Invocations.Clear()
 Restore-InstrumentState -Snapshot $snapshot
 $installedInvocations = @($script:Invocations | ForEach-Object { $_ })
 $snapshot.WgenApplicable = $false
@@ -5125,6 +5487,9 @@ $script:Invocations.Clear()
 Restore-InstrumentState -Snapshot $snapshot
 $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
 [ordered]@{
+    autoscale_invocations = $autoscaleInvocations
+    autoscale_status = $autoscaleStatus
+    autoscale_functional_failed = $autoscaleFunctionalFailed
     invocations = $installedInvocations
     absent_invocations = $absentInvocations
     unknown_invocations = $unknownInvocations
@@ -5155,6 +5520,14 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
+    assert result["autoscale_status"] == "PASS"
+    assert result["autoscale_functional_failed"] is False
+    autoscale_commands = [
+        entry["command"] for entry in result["autoscale_invocations"]
+    ]
+    assert autoscale_commands[0] == "autoscale"
+    assert "channel-scale" in autoscale_commands
+    assert not any(command.startswith("save-") for command in autoscale_commands)
     commands = [entry["command"] for entry in result["invocations"]]
     for command in (
         "channel-label",
@@ -5187,13 +5560,6 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         "external-trigger-probe",
         "external-trigger-units",
         "trigger-edge-external-level",
-        "save-waveform-format",
-        "save-waveform-length",
-        "save-pwd",
-        "save-filename",
-        "save-image-palette",
-        "save-image-ink-saver",
-        "save-image-factors",
     ):
         assert command in commands
     annotation_restore = next(
@@ -5204,16 +5570,6 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     assert "" not in annotation_restore["arguments"]
     assert any(
         entry["stage"] == "restore-annotation-query"
-        for entry in result["invocations"]
-    )
-    assert not any(
-        entry["command"] == "save-image-format"
-        and entry["arguments"] == ["--format", "none"]
-        for entry in result["invocations"]
-    )
-    assert any(
-        entry["command"] == "save-waveform-format"
-        and entry["arguments"] == ["--format", "csv"]
         for entry in result["invocations"]
     )
     save_restore_commands = [
@@ -5230,23 +5586,7 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
             "save-waveform-length",
         }
     ]
-    assert save_restore_commands == [
-        "save-image-format",
-        "save-image-factors",
-        "save-image-ink-saver",
-        "save-image-palette",
-        "save-filename",
-        "save-pwd",
-        "save-waveform-format",
-        "save-waveform-length",
-    ]
-    assert result["invocations"][
-        next(
-            index
-            for index, entry in enumerate(result["invocations"])
-            if entry["command"] == "save-image-format"
-        )
-    ]["arguments"] == ["--format", "png"]
+    assert save_restore_commands == []
     assert any(
         entry["command"] == "trigger-edge-source"
         and entry["arguments"] == ["--source-channel", "2"]

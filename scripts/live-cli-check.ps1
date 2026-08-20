@@ -1669,107 +1669,6 @@ function Restore-InstrumentState {
             }
         )
     }
-    $saveImageFormatProperty = $Snapshot.PSObject.Properties["SaveImageFormat"]
-    $saveWaveformFormatProperty = $Snapshot.PSObject.Properties["SaveWaveformFormat"]
-    $saveWaveformLengthProperty = $Snapshot.PSObject.Properties["SaveWaveformLength"]
-    $savePwdProperty = $Snapshot.PSObject.Properties["SavePwd"]
-    $saveFilenameProperty = $Snapshot.PSObject.Properties["SaveFilename"]
-    $saveImagePaletteProperty = $Snapshot.PSObject.Properties["SaveImagePalette"]
-    $saveImageInkSaverProperty = $Snapshot.PSObject.Properties["SaveImageInkSaver"]
-    $saveImageFactorsProperty = $Snapshot.PSObject.Properties["SaveImageFactors"]
-    if ($null -ne $savePwdProperty -and
-        $null -ne $saveFilenameProperty -and
-        $null -ne $saveImageFormatProperty -and
-        $null -ne $saveWaveformFormatProperty -and
-        $null -ne $saveImagePaletteProperty -and
-        $null -ne $saveImageInkSaverProperty -and
-        $null -ne $saveImageFactorsProperty -and
-        -not [string]::IsNullOrWhiteSpace([string]$savePwdProperty.Value)) {
-        $imageFormat = [string]$saveImageFormatProperty.Value
-        $waveformFormat = [string]$saveWaveformFormatProperty.Value
-        if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24") -or
-            $waveformFormat -in @("ascii-xy", "csv", "binary")) {
-            $restoreSteps += [pscustomobject]@{
-                Name = "image save format context"
-                Command = "save-image-format"
-                Arguments = @("--format", "png")
-            }
-            $restoreSteps += @(
-                [pscustomobject]@{
-                    Name = "image factors"
-                    Command = "save-image-factors"
-                    Arguments = @("--enabled", ([string][bool]$saveImageFactorsProperty.Value).ToLowerInvariant())
-                },
-                [pscustomobject]@{
-                    Name = "image ink saver"
-                    Command = "save-image-ink-saver"
-                    Arguments = @("--enabled", ([string][bool]$saveImageInkSaverProperty.Value).ToLowerInvariant())
-                },
-                [pscustomobject]@{
-                    Name = "image save palette"
-                    Command = "save-image-palette"
-                    Arguments = @("--palette", [string]$saveImagePaletteProperty.Value)
-                },
-                [pscustomobject]@{
-                    Name = "save filename"
-                    Command = "save-filename"
-                    Arguments = @("--name", [string]$saveFilenameProperty.Value)
-                },
-                [pscustomobject]@{
-                    Name = "save directory"
-                    Command = "save-pwd"
-                    Arguments = @("--path", [string]$savePwdProperty.Value)
-                }
-            )
-            if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
-                $restoreSteps += [pscustomobject]@{
-                    Name = "image save format"
-                    Command = "save-image-format"
-                    Arguments = @("--format", $imageFormat)
-                }
-            } else {
-                $restoreSteps += [pscustomobject]@{
-                    Name = "waveform save format"
-                    Command = "save-waveform-format"
-                    Arguments = @("--format", $waveformFormat)
-                }
-            }
-        } else {
-            $restoreErrors.Add(
-                "save settings restore context is unavailable; no save format was restored."
-            )
-        }
-    }
-    if ($null -ne $saveImageFormatProperty -and
-        [string]$saveImageFormatProperty.Value -in @("png", "bmp", "bmp8", "bmp24") -and
-        ($null -eq $savePwdProperty -or $null -eq $saveFilenameProperty -or
-            $null -eq $saveImagePaletteProperty -or $null -eq $saveImageInkSaverProperty -or
-            $null -eq $saveImageFactorsProperty)) {
-        $restoreSteps += [pscustomobject]@{
-            Name = "image save format"
-            Command = "save-image-format"
-            Arguments = @("--format", [string]$saveImageFormatProperty.Value)
-        }
-    } elseif ($null -ne $saveWaveformFormatProperty -and
-        [string]$saveWaveformFormatProperty.Value -in @("ascii-xy", "csv", "binary") -and
-        ($null -eq $savePwdProperty -or $null -eq $saveFilenameProperty -or
-            $null -eq $saveImagePaletteProperty -or $null -eq $saveImageInkSaverProperty -or
-            $null -eq $saveImageFactorsProperty)) {
-        $restoreSteps += [pscustomobject]@{
-            Name = "waveform save format"
-            Command = "save-waveform-format"
-            Arguments = @("--format", [string]$saveWaveformFormatProperty.Value)
-        }
-    }
-    if ($null -ne $saveWaveformLengthProperty -and
-        [int]$saveWaveformLengthProperty.Value -gt 0) {
-        $restoreSteps += [pscustomobject]@{
-            Name = "waveform save length"
-            Command = "save-waveform-length"
-            Arguments = @("--points", [string]$saveWaveformLengthProperty.Value)
-        }
-    }
-
     foreach ($step in $restoreSteps) {
         try {
             Invoke-LiveCli -Stage "restore-$($step.Command)" -Command $step.Command `
@@ -4121,24 +4020,113 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed) {
+        $savePwdApplicable = $true
+        try {
+            $pwdPrerequisite = Invoke-LiveCli -Stage "save-pwd-prerequisite-set" `
+                -Command "save-pwd" -Arguments @("--path", [string]$snapshot.SavePwd)
+            Assert-ScpiSent -Payload $pwdPrerequisite -Label "Save directory reversible prerequisite" `
+                -ExpectedCommands @(':SAVE:PWD "' + [string]$snapshot.SavePwd + '"')
+        } catch {
+            $prerequisiteMessage = $_.Exception.Message
+            if ($prerequisiteMessage -match '(?i)(^|[^0-9])-151([^0-9]|$)' -and
+                $prerequisiteMessage -match '(?i)Invalid string data') {
+                try {
+                    $prerequisiteDrain = Get-ErrorDrain `
+                        -Stage "save-pwd-prerequisite-error-drain"
+                    if ($prerequisiteDrain.Errors.Count -gt 0) {
+                        Write-DrainErrors -Errors $prerequisiteDrain.Errors -CaseName "save-pwd"
+                        throw "Save PWD reversible prerequisite left unexpected system errors."
+                    }
+                    if (-not $prerequisiteDrain.Terminated) {
+                        throw "Save PWD reversible prerequisite error queue did not reach code 0."
+                    }
+                    $pwdAfterPrerequisite = Invoke-LiveCli -Stage "save-pwd-prerequisite-query" `
+                        -Command "save-pwd" -Arguments @("--query")
+                    if (-not (Test-SavePathEquivalent `
+                            -Actual ([string]$pwdAfterPrerequisite.result.path) `
+                            -Expected ([string]$snapshot.SavePwd))) {
+                        throw "Save directory changed after the rejected reversible prerequisite."
+                    }
+                    Add-NotApplicableCase -Name "save-pwd" -Detail (
+                        "Current instrument save directory is queryable but not setter-restorable; " +
+                        "mutating Save PWD was not safely applicable."
+                    )
+                    $savePwdApplicable = $false
+                } catch {
+                    Add-CaseResult -Name "save-pwd" -Passed $false -Detail $_.Exception.Message
+                    $script:FunctionalFailed = $true
+                    Drain-AfterFailure -Stage "save-pwd-prerequisite-query-error-drain" `
+                        -CaseName "save-pwd"
+                }
+            } else {
+                Add-CaseResult -Name "save-pwd" -Passed $false -Detail $prerequisiteMessage
+                $script:FunctionalFailed = $true
+                Drain-AfterFailure -Stage "save-pwd-prerequisite-unexpected-error-drain" `
+                    -CaseName "save-pwd"
+            }
+        }
+
+        if (-not $script:FunctionalFailed -and $savePwdApplicable) {
+            Invoke-BaselineCase -Name "save-pwd" -Action {
+                $primaryException = $null
+                $firstRestoreException = $null
+                $pwdChanged = $false
+                try {
+                    $pwd = Invoke-LiveCli -Stage "save-pwd-set" -Command "save-pwd" `
+                        -Arguments @("--path", "\usb")
+                    $pwdChanged = $true
+                    Assert-ScpiSent -Payload $pwd -Label "Save directory" `
+                        -ExpectedCommands @(':SAVE:PWD "\usb"')
+                    $pwdQuery = Invoke-LiveCli -Stage "save-pwd-query" `
+                        -Command "save-pwd" -Arguments @("--query")
+                    if (-not (Test-SavePathEquivalent `
+                            -Actual ([string]$pwdQuery.result.path) -Expected "\usb")) {
+                        throw "Save directory readback did not report \usb."
+                    }
+                } catch {
+                    $primaryException = $_.Exception
+                } finally {
+                    if ($pwdChanged) {
+                        try {
+                            Invoke-LiveCli -Stage "save-pwd-restore" -Command "save-pwd" `
+                                -Arguments @("--path", [string]$snapshot.SavePwd) | Out-Null
+                            $restoredPwd = Invoke-LiveCli -Stage "save-pwd-restore-query" `
+                                -Command "save-pwd" -Arguments @("--query")
+                            if (-not (Test-SavePathEquivalent `
+                                    -Actual ([string]$restoredPwd.result.path) `
+                                    -Expected ([string]$snapshot.SavePwd))) {
+                                throw "Save directory restore readback did not match the snapshot."
+                            }
+                        } catch {
+                            $firstRestoreException = $_.Exception
+                            Add-Diagnostic -Name "save-pwd" -Message (
+                                "save directory restore failed: $($_.Exception.Message)"
+                            )
+                            Drain-AfterFailure -Stage "save-pwd-restore-error-drain" `
+                                -CaseName "save-pwd"
+                        }
+                    }
+                }
+                if ($null -ne $primaryException) {
+                    throw $primaryException
+                }
+                if ($null -ne $firstRestoreException) {
+                    throw $firstRestoreException
+                }
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "save-settings" -Action {
             $primaryException = $null
             $firstRestoreException = $null
-            $pwdChanged = $false
             $filenameChanged = $false
             $imageFormatChanged = $false
             $paletteChanged = $false
             $inkSaverChanged = $false
             $factorsChanged = $false
             try {
-                $pwd = Invoke-LiveCli -Stage "save-pwd-set" -Command "save-pwd" -Arguments @("--path", "\usb")
-                $pwdChanged = $true
-                Assert-ScpiSent -Payload $pwd -Label "Save directory" -ExpectedCommands @(':SAVE:PWD "\usb"')
-                $pwdQuery = Invoke-LiveCli -Stage "save-pwd-query" -Command "save-pwd" -Arguments @("--query")
-                if (-not (Test-SavePathEquivalent -Actual ([string]$pwdQuery.result.path) -Expected "\usb")) {
-                    throw "Save directory readback did not report \usb."
-                }
-
                 $filename = Invoke-LiveCli -Stage "save-filename-set" -Command "save-filename" -Arguments @("--name", "live_validation")
                 $filenameChanged = $true
                 Assert-ScpiSent -Payload $filename -Label "Save filename" -ExpectedCommands @(':SAVE:FILename "live_validation"')
@@ -4216,15 +4204,6 @@ if ($snapshotComplete) {
                         Arguments = @("--name", [string]$snapshot.SaveFilename)
                     }
                 }
-                if ($pwdChanged) {
-                    $restoreSteps += [pscustomobject]@{
-                        Stage = "save-pwd-restore"
-                        Name = "save directory"
-                        Command = "save-pwd"
-                        Arguments = @("--path", [string]$snapshot.SavePwd)
-                    }
-                }
-
                 if ($restoreSteps.Count -gt 0) {
                     foreach ($restoreStep in $restoreSteps) {
                         try {
@@ -4243,15 +4222,6 @@ if ($snapshotComplete) {
                     }
 
                     try {
-                        if ($pwdChanged) {
-                            $restoredPwd = Invoke-LiveCli -Stage "save-pwd-restore-query" `
-                                -Command "save-pwd" -Arguments @("--query")
-                            if (-not (Test-SavePathEquivalent `
-                                    -Actual ([string]$restoredPwd.result.path) `
-                                    -Expected ([string]$snapshot.SavePwd))) {
-                                throw "Save directory restore readback did not match the snapshot."
-                            }
-                        }
                         if ($filenameChanged) {
                             $restoredFilename = Invoke-LiveCli -Stage "save-filename-restore-query" `
                                 -Command "save-filename" -Arguments @("--query")
