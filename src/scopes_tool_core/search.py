@@ -1153,10 +1153,10 @@ def serial_search_can_configure_commands(
         search_mode_command(f"serial{bus}"),
         f":SEARch:SERial:CAN:MODE {scpi_mode}",
     ]
-    if data is not None:
-        cmds.append(f':SEARch:SERial:CAN:PATTern:DATA "{data}"')
     if data_length is not None:
         cmds.append(f":SEARch:SERial:CAN:PATTern:DATA:LENGth {data_length}")
+    if data is not None:
+        cmds.append(f':SEARch:SERial:CAN:PATTern:DATA "{data}"')
     if id_mode is not None:
         scpi_id_mode = _CAN_SEARCH_ID_MODE_TOKENS[id_mode]
         cmds.append(f":SEARch:SERial:CAN:PATTern:ID:MODE {scpi_id_mode}")

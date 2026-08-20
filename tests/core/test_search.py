@@ -252,8 +252,8 @@ def test_search_event_unsupported_profiles_reject(model):
                 ":SEARch:STATe 1",
                 ":SEARch:MODE SERial1",
                 ":SEARch:SERial:CAN:MODE DATA",
-                ':SEARch:SERial:CAN:PATTern:DATA "0x12XX"',
                 ":SEARch:SERial:CAN:PATTern:DATA:LENGth 2",
+                ':SEARch:SERial:CAN:PATTern:DATA "0x12XX"',
                 ":SEARch:SERial:CAN:PATTern:ID:MODE STANdard",
                 ':SEARch:SERial:CAN:PATTern:ID "0x123"',
             ],
@@ -266,6 +266,57 @@ def test_core_serial_search_configure_commands(protocol, configure_fn, args, exp
     scope.query_idn()
     getattr(scope, configure_fn)(**args)
     assert backend.history == ["*IDN?", *expected_scpi]
+
+
+def test_core_serial_search_can_data_length_precedes_data_when_length_changes():
+    class LengthSensitiveCanBackend(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.data = "0x12XX"
+            self.data_length = 2
+
+        def write(self, command: str) -> None:
+            super().write(command)
+            if command.endswith(":DATA:LENGth 1"):
+                self.data_length = 1
+                self.data = "0xXX"
+            elif command.endswith(':DATA "0x01"'):
+                self.data = "0x01"
+
+        def query(self, command: str) -> str:
+            if command == "*IDN?":
+                return super().query(command)
+            self._ensure_open()
+            self.history.append(command)
+            return {
+                ":SEARch:STATe?": "1",
+                ":SEARch:MODE?": "SER1",
+                ":SEARch:SERial:CAN:MODE?": "DATA",
+                ":SEARch:SERial:CAN:PATTern:DATA?": f'"{self.data}"',
+                ":SEARch:SERial:CAN:PATTern:DATA:LENGth?": str(self.data_length),
+                ":SEARch:SERial:CAN:PATTern:ID?": '"0x123"',
+                ":SEARch:SERial:CAN:PATTern:ID:MODE?": "STAN",
+            }[command]
+
+    backend = LengthSensitiveCanBackend()
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.configure_serial_search_can(
+        bus=1,
+        mode="data",
+        data="0x01",
+        data_length=1,
+        id_val="0x123",
+        id_mode="standard",
+    )
+    state = scope.query_serial_search_can(bus=1)
+
+    assert state.data_length == 1
+    assert state.data == "0x01"
+    assert backend.history.index(":SEARch:SERial:CAN:PATTern:DATA:LENGth 1") < backend.history.index(
+        ':SEARch:SERial:CAN:PATTern:DATA "0x01"'
+    )
 
 
 @pytest.mark.parametrize(
