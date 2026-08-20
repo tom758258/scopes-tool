@@ -3034,6 +3034,18 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         assert f'Command = "{command}"' in preflight
 
     assert '$snapshot.P3Enabled' in script
+    assert "function Get-WgenApplicability" in script
+    assert '$snapshot.InstalledOptions = @($options.result.options)' in script
+    assert '$snapshot.WgenApplicable' in script
+    assert 'Waveform Generator option is not installed' in script
+    system_status_start = script.index('Invoke-BaselineCase -Name "system-status"')
+    system_status_end = script.index(
+        '\n    if (-not $script:FunctionalFailed', system_status_start
+    )
+    system_status = script[system_status_start:system_status_end]
+    assert system_status.count('-Command "system-options"') == 1
+    assert 'ExpectedCommands @("*OPT?")' in system_status
+    assert script.count('-Command "system-options"') == 1
     assert 'Stage "wgen-output-off"' in script
     assert 'Stage "demo-output-off"' in script
     assert 'Command = "wgen-output"' in script
@@ -3204,6 +3216,226 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert "Start-Sleep -Milliseconds 500" not in save_export
     assert waveform_stage < waveform_validation < handoff_sleep < length_restore
     assert length_restore < waveform_format_restore < image_format_restore
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_wgen_applicability_and_runtime_failure(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-wgen-applicability-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @(
+    "Add-CaseResult", "Add-NotApplicableCase", "Assert-NearlyEqual",
+    "Assert-ScpiSent", "Get-WgenApplicability",
+    "Invoke-BaselineCase"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+}
+
+$wgenIf = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.IfStatementAst] -and
+        $node.Extent.Text.TrimStart().StartsWith('if (-not $script:FunctionalFailed -and [bool]$snapshot.WgenApplicable)')
+    )
+}, $true)
+if ($null -eq $wgenIf) { throw "Missing wgen-basic applicability gate." }
+$wgenCode = $wgenIf.Extent.Text
+
+$demoIf = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.IfStatementAst] -and
+        $node.Extent.Text.TrimStart().StartsWith('if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_demo)')
+    )
+}, $true)
+if ($null -eq $demoIf) { throw "Missing demo-basic continuation gate." }
+$demoCode = $demoIf.Extent.Text
+
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Scenario = ""
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($script:Scenario -eq "runtime-failure" -and $Command -eq "wgen-function") {
+        throw "-241,Hardware missing"
+    }
+    switch ($Command) {
+        "wgen-output" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(
+                    if ($Arguments -contains "true") { ":WGEN1:OUTPut ON" } else { ":WGEN1:OUTPut OFF" }
+                ) }
+                result = [pscustomobject]@{}
+            }
+        }
+        "wgen-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{
+                enabled = $true
+                function = "sine"
+                load = "one-meg"
+                frequency_hz = 1000
+                amplitude_volts = 0.5
+            } }
+        }
+        "demo-function" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":DEMO:FUNCtion SIN") }
+                result = [pscustomobject]@{}
+            }
+        }
+        "demo-output" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(
+                    if ($Arguments -contains "true") { ":DEMO:OUTPut ON" } else { ":DEMO:OUTPut OFF" }
+                ) }
+                result = [pscustomobject]@{}
+            }
+        }
+        "demo-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{
+                enabled = $true
+                function = "sine"
+            } }
+        }
+        default {
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
+    }
+}
+
+function Invoke-Scenario {
+    param(
+        [ValidateSet("installed", "absent", "runtime-failure")]
+        [string] $Name
+    )
+    $script:Scenario = $Name
+    $script:Invocations.Clear()
+    $script:CaseResults = [ordered]@{}
+    $script:FunctionalFailed = $false
+    $identity = [pscustomobject]@{
+        capabilities = [pscustomobject]@{
+            supports_wgen = $true
+            supports_demo = $true
+        }
+    }
+    $options = if ($Name -eq "installed" -or $Name -eq "runtime-failure") {
+        @("WAVEGEN")
+    } else {
+        @("BASIC")
+    }
+    $applicability = Get-WgenApplicability `
+        -SupportsWgen ([bool]$identity.capabilities.supports_wgen) `
+        -InstalledOptions $options
+    $snapshot = [pscustomobject]@{
+        WgenApplicable = [bool]$applicability.Applicable
+        WgenApplicabilityDetail = [string]$applicability.Detail
+    }
+    Invoke-Expression $wgenCode
+    $wgenCommands = @($script:Invocations | ForEach-Object { $_.command })
+    if ($Name -eq "absent") {
+        Invoke-Expression $demoCode
+    }
+    return [pscustomobject]@{
+        applicability = $applicability
+        wgen_status = [string]$script:CaseResults["wgen-basic"].Status
+        wgen_commands = $wgenCommands
+        demo_status = if ($script:CaseResults.Contains("demo-basic")) {
+            [string]$script:CaseResults["demo-basic"].Status
+        } else { "" }
+        functional_failed = [bool]$script:FunctionalFailed
+    }
+}
+
+[ordered]@{
+    installed = Invoke-Scenario -Name "installed"
+    absent = Invoke-Scenario -Name "absent"
+    runtime_failure = Invoke-Scenario -Name "runtime-failure"
+} | ConvertTo-Json -Depth 10 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.strip().splitlines()[-1])
+
+    installed = result["installed"]
+    assert installed["applicability"]["Applicable"] is True
+    assert installed["wgen_status"] == "PASS"
+    assert installed["wgen_commands"] == [
+        "wgen-function",
+        "wgen-frequency",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-load",
+        "wgen-output",
+        "wgen-query",
+        "wgen-output",
+    ]
+    assert installed["functional_failed"] is False
+
+    absent = result["absent"]
+    assert absent["applicability"]["Applicable"] is False
+    assert "option is not installed" in absent["applicability"]["Detail"]
+    assert absent["wgen_status"] == "N/A"
+    assert absent["wgen_commands"] == []
+    assert absent["demo_status"] == "PASS"
+    assert absent["functional_failed"] is False
+
+    runtime_failure = result["runtime_failure"]
+    assert runtime_failure["applicability"]["Applicable"] is True
+    assert runtime_failure["wgen_status"] == "FAIL"
+    assert runtime_failure["functional_failed"] is True
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
@@ -4676,6 +4908,7 @@ $snapshot = [pscustomobject]@{
     AnnotationY = 30
         SearchSupported = $true
         P3Enabled = $true
+        WgenApplicable = $true
         MathFunctionCount = 4
         DemoSupported = $true
         TriggerEdgeCoupling = "dc"
@@ -4698,8 +4931,14 @@ $snapshot = [pscustomobject]@{
 }
 
 Restore-InstrumentState -Snapshot $snapshot
+$installedInvocations = @($script:Invocations | ForEach-Object { $_ })
+$snapshot.WgenApplicable = $false
+$script:Invocations.Clear()
+Restore-InstrumentState -Snapshot $snapshot
+$absentInvocations = @($script:Invocations | ForEach-Object { $_ })
 [ordered]@{
-    invocations = @($script:Invocations | ForEach-Object { $_ })
+    invocations = $installedInvocations
+    absent_invocations = $absentInvocations
     drain_calls = $script:DrainCalls
 } | ConvertTo-Json -Depth 10 -Compress
 ''',
@@ -4841,6 +5080,20 @@ Restore-InstrumentState -Snapshot $snapshot
         for entry in result["invocations"]
     )
     assert result["drain_calls"] == 0
+    absent_commands = [entry["command"] for entry in result["absent_invocations"]]
+    assert "wgen-output" not in absent_commands
+    for command in (
+        "trigger-sweep",
+        "trigger-noise-reject",
+        "trigger-hf-reject",
+        "trigger-edge-coupling",
+        "trigger-edge-reject",
+        "external-trigger-range",
+        "external-trigger-probe",
+        "external-trigger-units",
+        "trigger-edge-external-level",
+    ):
+        assert command in absent_commands
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")

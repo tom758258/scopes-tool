@@ -106,6 +106,33 @@ function Add-NotApplicableCase {
     }
 }
 
+function Get-WgenApplicability {
+    param(
+        [Parameter(Mandatory = $true)]
+        [bool] $SupportsWgen,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $InstalledOptions
+    )
+
+    if (-not $SupportsWgen) {
+        return [pscustomobject]@{
+            Applicable = $false
+            Detail = "WGEN is unsupported by the detected instrument."
+        }
+    }
+    if (@($InstalledOptions) -notcontains "WAVEGEN") {
+        return [pscustomobject]@{
+            Applicable = $false
+            Detail = "Waveform Generator option is not installed on the detected instrument."
+        }
+    }
+    return [pscustomobject]@{
+        Applicable = $true
+        Detail = "Waveform Generator option is installed on the detected instrument."
+    }
+}
+
 function Add-Diagnostic {
     param(
         [Parameter(Mandatory = $true)]
@@ -1602,14 +1629,17 @@ function Restore-InstrumentState {
             Arguments = @("--enabled", "false")
         }
     }
+    $wgenApplicableProperty = $Snapshot.PSObject.Properties["WgenApplicable"]
+    if ($null -ne $wgenApplicableProperty -and [bool]$wgenApplicableProperty.Value) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "WGEN output"
+            Command = "wgen-output"
+            Arguments = @("--enabled", "false")
+        }
+    }
     $p3Property = $Snapshot.PSObject.Properties["P3Enabled"]
     if ($null -ne $p3Property -and [bool]$p3Property.Value) {
         $restoreSteps += @(
-            [pscustomobject]@{
-                Name = "WGEN output"
-                Command = "wgen-output"
-                Arguments = @("--enabled", "false")
-            },
             [pscustomobject]@{
                 Name = "trigger sweep"
                 Command = "trigger-sweep"
@@ -1865,7 +1895,7 @@ function Restore-InstrumentState {
                     throw "Math cleanup did not leave Math Function 1 OFF."
                 }
             }
-            if ($null -ne $p3Property -and [bool]$p3Property.Value) {
+            if ($null -ne $wgenApplicableProperty -and [bool]$wgenApplicableProperty.Value) {
                 $wgen = Invoke-LiveCli -Stage "restore-wgen-output-query" `
                     -Command "wgen-output" -Arguments @("--query")
                 if ([bool]$wgen.result.enabled) {
@@ -2465,6 +2495,12 @@ if ($snapshotComplete) {
                 @($options.result.options).Count -eq 0) {
                 throw "Installed Options query returned no option data."
             }
+            $snapshot.InstalledOptions = @($options.result.options)
+            $wgenApplicability = Get-WgenApplicability `
+                -SupportsWgen ([bool]$identity.capabilities.supports_wgen) `
+                -InstalledOptions $snapshot.InstalledOptions
+            $snapshot.WgenApplicable = [bool]$wgenApplicability.Applicable
+            $snapshot.WgenApplicabilityDetail = [string]$wgenApplicability.Detail
         }
     }
 
@@ -3883,7 +3919,7 @@ if ($snapshotComplete) {
         Add-NotApplicableCase -Name "fft-advanced" -Detail "Advanced FFT is unsupported by the detected instrument."
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and [bool]$snapshot.WgenApplicable) {
         Invoke-BaselineCase -Name "wgen-basic" -Action {
             try {
                 Invoke-LiveCli -Stage "wgen-function-set" -Command "wgen-function" `
@@ -3917,6 +3953,8 @@ if ($snapshotComplete) {
                     -ExpectedCommands @(":WGEN1:OUTPut OFF")
             }
         }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "wgen-basic" -Detail $snapshot.WgenApplicabilityDetail
     }
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_demo) {
