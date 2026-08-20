@@ -59,7 +59,7 @@ def test_inspect_text_file_rejects_missing_final_newline(tmp_path: Path) -> None
 
 def test_inspect_text_file_rejects_bom_nul_and_invalid_utf8(tmp_path: Path) -> None:
     bom_path = tmp_path / "bom.py"
-    nul_path = tmp_path / "nul.py"
+    nul_path = tmp_path / "contains_nul.py"
     invalid_path = tmp_path / "invalid.py"
     _write_bytes(bom_path, bytes((0xEF, 0xBB, 0xBF)) + b"value = 'ok'\n")
     _write_bytes(nul_path, b"value\0\n")
@@ -68,8 +68,8 @@ def test_inspect_text_file_rejects_bom_nul_and_invalid_utf8(tmp_path: Path) -> N
     assert CHECKER.inspect_text_file(bom_path, Path("bom.py")) == [
         "bom.py:1: UTF-8 BOM is not allowed"
     ]
-    assert CHECKER.inspect_text_file(nul_path, Path("nul.py")) == [
-        "nul.py:byte 5: NUL byte is not allowed"
+    assert CHECKER.inspect_text_file(nul_path, Path("contains_nul.py")) == [
+        "contains_nul.py:byte 5: NUL byte is not allowed"
     ]
     assert CHECKER.inspect_text_file(invalid_path, Path("invalid.py")) == [
         "invalid.py:byte 9: invalid UTF-8"
