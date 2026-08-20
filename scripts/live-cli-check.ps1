@@ -2662,7 +2662,7 @@ if ($snapshotComplete) {
                     "--y1", "0", "--y2", "0.5"
                 )
                 Assert-ScpiSent -Payload $configured -Label "Cursor configure" -ExpectedCommands @(
-                    ":MARKer:MODE TIME", ":MARKer:X1Position 0", ":MARKer:X2Position 0.001",
+                    ":MARKer:MODE MANual", ":MARKer:X1Position 0", ":MARKer:X2Position 0.001",
                     ":MARKer:Y1Position 0", ":MARKer:Y2Position 0.5"
                 )
                 $readback = Invoke-LiveCli -Stage "cursor-query" -Command "cursor" -Arguments @("--query")

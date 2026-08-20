@@ -2662,6 +2662,8 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
         'Stage "cursor-off-query"'
     )
     assert 'Arguments @("--off")' in cursor_case
+    assert ':MARKer:MODE MANual' in cursor_case
+    assert ':MARKer:MODE TIME' not in cursor_case
 
     for case_name, expected_query in (
         ("measure-phase", ":MEASure:PHASe? CHANnel1,CHANnel2"),
