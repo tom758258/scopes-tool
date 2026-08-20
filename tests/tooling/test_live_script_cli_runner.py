@@ -2665,6 +2665,42 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
     assert ':MARKer:MODE MANual' in cursor_case
     assert ':MARKer:MODE TIME' not in cursor_case
 
+    pair_start = script.index("$pairMeasurementSnapshot = $null")
+    pair_end = script.index(
+        'Invoke-BaselineCase -Name "measure-stats"', pair_start
+    )
+    pair_lifecycle = script[pair_start:pair_end]
+    for stage in (
+        'Stage "pair-ch2-snapshot-display"',
+        'Stage "pair-ch2-snapshot-coupling"',
+        'Stage "pair-ch2-snapshot-scale"',
+        'Stage "pair-ch2-snapshot-offset"',
+        'Stage "pair-ch2-snapshot-probe"',
+        'Stage "pair-ch2-prepare-display"',
+        'Stage "pair-ch2-prepare-coupling"',
+        'Stage "pair-ch2-prepare-scale"',
+        'Stage "pair-ch2-prepare-offset"',
+        'Stage "measure-ch2-readiness"',
+    ):
+        assert stage in script
+    assert "Prepare-PairMeasurementChannel" in pair_lifecycle
+    assert "Invoke-StrictPairMeasurement" in pair_lifecycle
+    assert "Restore-PairMeasurementChannel" in pair_lifecycle
+    assert pair_lifecycle.index("Prepare-PairMeasurementChannel") < pair_lifecycle.index(
+        'Stage "measure-ch2-readiness"'
+    )
+    assert pair_lifecycle.index('Stage "measure-ch2-readiness"') < pair_lifecycle.index(
+        'Invoke-BaselineCase -Name "measure-phase"'
+    )
+    assert pair_lifecycle.index('Invoke-BaselineCase -Name "measure-phase"') < pair_lifecycle.index(
+        'Invoke-BaselineCase -Name "measure-delay"'
+    )
+    assert pair_lifecycle.index('Invoke-BaselineCase -Name "measure-delay"') < pair_lifecycle.index(
+        "Restore-PairMeasurementChannel"
+    )
+    assert "pair-ch2-restore-$($step.Kind)-query" in script
+    assert "invalid measurement sentinels are not accepted" in script
+
     for case_name, expected_query in (
         ("measure-phase", ":MEASure:PHASe? CHANnel1,CHANnel2"),
         ("measure-delay", ":MEASure:DELay? AUTO,CHANnel1,CHANnel2"),
@@ -2674,18 +2710,11 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
             "\n    if (-not $script:FunctionalFailed", case_start + 1
         )
         case_block = script[case_start:case_end]
-        assert 'Command "channel-display"' in case_block
         assert expected_query in case_block
         assert ".result.valid" in case_block
         assert "Assert-FiniteNumber" in case_block
-        assert f'Stage "{case_name}-ch2-display-before"' in case_block
-        assert f'Stage "{case_name}-ch2-display-restore"' in case_block
-        assert case_block.index(
-            f'Stage "{case_name}-ch2-display-before"'
-        ) < case_block.index(f'Stage "{case_name}"')
-        assert case_block.index(
-            f'Stage "{case_name}"'
-        ) < case_block.index(f'Stage "{case_name}-ch2-display-restore"')
+        assert "Invoke-StrictPairMeasurement" in case_block
+        assert 'Command "channel-display"' not in case_block
 
     invoke_live_cli_start = script.index("function Invoke-LiveCli {")
     invoke_live_cli_end = script.index(
@@ -2948,12 +2977,42 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     for command in (
         "save-pwd",
         "save-filename",
+        "save-image-format",
         "save-image-palette",
         "save-image-ink-saver",
         "save-image-factors",
     ):
         assert f'Command "{command}"' in save_settings_case
     assert "finally" in save_settings_case
+    configure_order = [
+        save_settings_case.index('Stage "save-pwd-set"'),
+        save_settings_case.index('Stage "save-filename-set"'),
+        save_settings_case.index('Stage "save-image-format-png"'),
+        save_settings_case.index('Stage "save-image-palette-set"'),
+        save_settings_case.index('Stage "save-image-ink-saver-set"'),
+        save_settings_case.index('Stage "save-image-factors-set"'),
+    ]
+    assert configure_order == sorted(configure_order)
+    restore_order = [
+        save_settings_case.index('Stage = "save-image-factors-restore"'),
+        save_settings_case.index('Stage = "save-image-ink-saver-restore"'),
+        save_settings_case.index('Stage = "save-image-palette-restore"'),
+        save_settings_case.index('Stage = "save-filename-restore"'),
+        save_settings_case.index('Stage = "save-pwd-restore"'),
+    ]
+    assert restore_order == sorted(restore_order)
+    for stage in (
+        "save-pwd-restore-query",
+        "save-filename-restore-query",
+        "save-image-palette-restore-query",
+        "save-image-ink-saver-restore-query",
+        "save-image-factors-restore-query",
+    ):
+        assert f'Stage "{stage}"' in save_settings_case
+    save_format_restore = save_settings_case.index(
+        'Stage "save-image-format-restore"'
+    )
+    assert restore_order[-1] < save_format_restore
     assert "$identity.capabilities.supports_advanced_fft" in script
     assert "$identity.capabilities.supports_math_goft" in script
     assert "$identity.capabilities.demo_functions" in script
@@ -2972,11 +3031,18 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         "if (-not [bool]$waveform.result.instrument_side", waveform_stage
     )
     handoff_sleep = save_export.index("Start-Sleep -Seconds 3", waveform_validation)
-    first_restore = save_export.index(
+    length_restore = save_export.index(
+        'Invoke-LiveCli -Stage "save-waveform-length-restore"'
+    )
+    waveform_format_restore = save_export.index(
+        'Invoke-LiveCli -Stage "save-waveform-format-restore"'
+    )
+    image_format_restore = save_export.index(
         'Invoke-LiveCli -Stage "save-image-format-restore"'
     )
     assert "Start-Sleep -Milliseconds 500" not in save_export
-    assert waveform_stage < waveform_validation < handoff_sleep < first_restore
+    assert waveform_stage < waveform_validation < handoff_sleep < length_restore
+    assert length_restore < waveform_format_restore < image_format_restore
 
 
 def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
@@ -3276,9 +3342,9 @@ function Invoke-Scenario {
     assert "image restore failure" not in combined["detail"]
     assert any("image restore failure" in item for item in combined["diagnostics"])
     assert combined["invocations"][-3:] == [
-        "save-image-format-restore",
-        "save-waveform-format-restore",
         "save-waveform-length-restore",
+        "save-waveform-format-restore",
+        "save-image-format-restore",
     ]
 
     restore_only = result["restore_only_fail"]
@@ -4325,6 +4391,37 @@ Restore-InstrumentState -Snapshot $snapshot
         and entry["arguments"] == ["--format", "csv"]
         for entry in result["invocations"]
     )
+    save_restore_commands = [
+        entry["command"]
+        for entry in result["invocations"]
+        if entry["command"] in {
+            "save-image-format",
+            "save-image-factors",
+            "save-image-ink-saver",
+            "save-image-palette",
+            "save-filename",
+            "save-pwd",
+            "save-waveform-format",
+            "save-waveform-length",
+        }
+    ]
+    assert save_restore_commands == [
+        "save-image-format",
+        "save-image-factors",
+        "save-image-ink-saver",
+        "save-image-palette",
+        "save-filename",
+        "save-pwd",
+        "save-waveform-format",
+        "save-waveform-length",
+    ]
+    assert result["invocations"][
+        next(
+            index
+            for index, entry in enumerate(result["invocations"])
+            if entry["command"] == "save-image-format"
+        )
+    ]["arguments"] == ["--format", "png"]
     assert any(
         entry["command"] == "trigger-edge-source"
         and entry["arguments"] == ["--source-channel", "2"]

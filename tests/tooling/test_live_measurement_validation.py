@@ -18,6 +18,12 @@ def _case_block(script: str, case_name: str, next_case_name: str) -> str:
     return script[start:end]
 
 
+def _pair_lifecycle_block(script: str) -> str:
+    start = script.index("$pairMeasurementSnapshot = $null")
+    end = script.index('Invoke-BaselineCase -Name "measure-stats"', start)
+    return script[start:end]
+
+
 def test_single_measurement_breadth_uses_raw_acceptance_path() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
     block = _case_block(script, "measurements", "measure-phase")
@@ -31,13 +37,74 @@ def test_single_measurement_breadth_uses_raw_acceptance_path() -> None:
 def test_pair_measurements_remain_strict() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 
+    lifecycle = _pair_lifecycle_block(script)
     phase = _case_block(script, "measure-phase", "measure-delay")
     delay = _case_block(script, "measure-delay", "measure-stats")
+
+    for field in ("Display", "Coupling", "Scale", "Offset", "ProbeRatio"):
+        assert f"{field} =" in script[script.index("function Get-PairMeasurementChannelSnapshot") :]
+    for stage in (
+        'Stage "pair-ch2-snapshot-display"',
+        'Stage "pair-ch2-snapshot-coupling"',
+        'Stage "pair-ch2-snapshot-scale"',
+        'Stage "pair-ch2-snapshot-offset"',
+        'Stage "pair-ch2-snapshot-probe"',
+    ):
+        assert stage in script
+    assert lifecycle.index("Get-PairMeasurementChannelSnapshot") < lifecycle.index(
+        "Prepare-PairMeasurementChannel"
+    )
+    assert lifecycle.index("Prepare-PairMeasurementChannel") < lifecycle.index(
+        'Stage "measure-ch2-readiness"'
+    )
+    assert lifecycle.index('Stage "measure-ch2-readiness"') < lifecycle.index(
+        'Invoke-BaselineCase -Name "measure-phase"'
+    )
+    assert lifecycle.index('Invoke-BaselineCase -Name "measure-phase"') < lifecycle.index(
+        'Invoke-BaselineCase -Name "measure-delay"'
+    )
+    assert lifecycle.index('Invoke-BaselineCase -Name "measure-delay"') < lifecycle.index(
+        "Restore-PairMeasurementChannel"
+    )
+    assert 'Stage "measure-ch2-readiness"' in lifecycle
+    assert 'Item "vpp"' in lifecycle
+    assert 'Channel 2' in lifecycle
+    assert ':MEASure:VPP? CHANnel2' in lifecycle
+    assert "CH2 pair-measurement precondition is invalid" in lifecycle
+    assert "function Assert-StrictMeasurementInvocation" in script
+    assert "invalid measurement sentinels are not accepted" in script
+    assert "systemErrorCode -ne 0" in script
+    assert "function Restore-PairMeasurementChannel" in script
+    assert "pair-ch2-restore-$($step.Kind)-query" in script
+    prepare_start = script.index("function Prepare-PairMeasurementChannel")
+    prepare_end = script.index("function Restore-PairMeasurementChannel", prepare_start)
+    prepare = script[prepare_start:prepare_end]
+    assert '"--channel", "2", "--on"' in prepare
+    assert '"--channel", "2", "--coupling", "dc"' in prepare
+    assert "$Ch1Snapshot.ChannelScale" in prepare
+    assert "$Ch1Snapshot.ChannelOffset" in prepare
+    assert "$Ch1Snapshot.ChannelProbeRatio" in prepare
+    restore_start = script.index("function Restore-PairMeasurementChannel")
+    restore_end = script.index("function Assert-ScpiSent", restore_start)
+    restore = script[restore_start:restore_end]
+    for previous, following in (
+        ('Kind = "offset"', 'Kind = "scale"'),
+        ('Kind = "scale"', 'Kind = "probe"'),
+        ('Kind = "probe"', 'Kind = "coupling"'),
+        ('Kind = "coupling"', 'Kind = "display"'),
+    ):
+        assert restore.index(previous) < restore.index(following)
+    assert '"--query"' in restore
+    assert "pairMeasurementSnapshot = $null" in lifecycle
+    assert "finally" in lifecycle
+    assert "measure-phase-ch2-display-before" not in script
+    assert "measure-delay-ch2-display-before" not in script
+
     for block in (phase, delay):
-        assert "Invoke-LiveCli" in block
         assert ".result.valid" in block
         assert "Assert-FiniteNumber" in block
         assert "Assert-SingleMeasurementInvocation" not in block
+        assert "Invoke-StrictPairMeasurement" in block
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")

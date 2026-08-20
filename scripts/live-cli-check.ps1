@@ -449,6 +449,298 @@ function Assert-SingleMeasurementInvocation {
     throw "${Item} measurement exited $($Invocation.ExitCode) with valid=${valid}, reason=${reason}."
 }
 
+function Assert-StrictMeasurementInvocation {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Invocation,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Item
+    )
+
+    $payload = $Invocation.Payload
+    if ($null -eq $payload) {
+        throw "${Item} measurement returned no payload."
+    }
+
+    $systemErrorProperty = $payload.PSObject.Properties["system_error"]
+    if ($null -eq $systemErrorProperty -or $null -eq $systemErrorProperty.Value) {
+        throw "${Item} measurement did not return system_error."
+    }
+    $systemError = $systemErrorProperty.Value
+    $codeProperty = $systemError.PSObject.Properties["code"]
+    if ($null -eq $codeProperty) {
+        throw "${Item} measurement system_error is missing code."
+    }
+    $systemErrorCode = [int]$codeProperty.Value
+    if ($systemErrorCode -ne 0) {
+        $messageProperty = $systemError.PSObject.Properties["message"]
+        $message = if ($null -ne $messageProperty) { [string]$messageProperty.Value } else { "" }
+        throw "${Item} measurement reported system error ${systemErrorCode}: ${message}."
+    }
+
+    $resultProperty = $payload.PSObject.Properties["result"]
+    if ($null -eq $resultProperty -or $null -eq $resultProperty.Value) {
+        throw "${Item} measurement did not return result."
+    }
+    $result = $resultProperty.Value
+    $validProperty = $result.PSObject.Properties["valid"]
+    if ($null -eq $validProperty -or -not [bool]$validProperty.Value) {
+        throw (
+            "${Item} measurement is invalid; invalid measurement sentinels are not accepted " +
+            "for strict live validation. reason=$($result.reason)."
+        )
+    }
+
+    $valueProperty = $result.PSObject.Properties["value"]
+    if ($null -eq $valueProperty -or $null -eq $valueProperty.Value) {
+        throw "${Item} measurement reported valid=true without a value."
+    }
+    [void](Assert-FiniteNumber -Value $valueProperty.Value -Label "${Item} measurement")
+
+    $okProperty = $payload.PSObject.Properties["ok"]
+    if ([int]$Invocation.ExitCode -ne 0 -or
+        $null -eq $okProperty -or $okProperty.Value -ne $true) {
+        throw (
+            "${Item} measurement exited $($Invocation.ExitCode) with " +
+            "valid=$([bool]$validProperty.Value)."
+        )
+    }
+
+    return $payload
+}
+
+function Invoke-StrictPairMeasurement {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("phase", "delay", "vpp")]
+        [string] $Item,
+
+        [Parameter(Mandatory = $true)]
+        [int] $Channel,
+
+        [int] $ReferenceChannel = 0,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $ExpectedCommands
+    )
+
+    $arguments = @(
+        "measure", "--live", "--resource", $Resource, "--json",
+        "--source-channel", [string]$Channel
+    )
+    if ($ReferenceChannel -gt 0) {
+        $arguments += @("--reference-channel", [string]$ReferenceChannel)
+    }
+    $arguments += @("--item", $Item)
+    $invocation = Invoke-CliRaw -Stage $Stage -Arguments $arguments
+    $payload = Assert-StrictMeasurementInvocation -Invocation $invocation -Item $Item
+    Assert-ScpiSent -Payload $payload -Label "${Item} measurement" `
+        -ExpectedCommands $ExpectedCommands
+    return $payload
+}
+
+function Get-PairMeasurementChannelSnapshot {
+    $display = Invoke-LiveCli -Stage "pair-ch2-snapshot-display" `
+        -Command "channel-display" -Arguments @("--channel", "2", "--query")
+    Assert-ScpiSent -Payload $display -Label "Pair CH2 display snapshot" `
+        -ExpectedCommands @(":CHANnel2:DISPlay?")
+    $coupling = Invoke-LiveCli -Stage "pair-ch2-snapshot-coupling" `
+        -Command "channel-coupling" -Arguments @("--channel", "2", "--query")
+    Assert-ScpiSent -Payload $coupling -Label "Pair CH2 coupling snapshot" `
+        -ExpectedCommands @(":CHANnel2:COUPling?")
+    $scale = Invoke-LiveCli -Stage "pair-ch2-snapshot-scale" `
+        -Command "channel-scale" -Arguments @("--channel", "2", "--query")
+    Assert-ScpiSent -Payload $scale -Label "Pair CH2 scale snapshot" `
+        -ExpectedCommands @(":CHANnel2:SCALe?")
+    $offset = Invoke-LiveCli -Stage "pair-ch2-snapshot-offset" `
+        -Command "channel-offset" -Arguments @("--channel", "2", "--query")
+    Assert-ScpiSent -Payload $offset -Label "Pair CH2 offset snapshot" `
+        -ExpectedCommands @(":CHANnel2:OFFSet?")
+    $probe = Invoke-LiveCli -Stage "pair-ch2-snapshot-probe" `
+        -Command "channel-probe" -Arguments @("--channel", "2", "--query")
+    Assert-ScpiSent -Payload $probe -Label "Pair CH2 probe snapshot" `
+        -ExpectedCommands @(":CHANnel2:PROBe?")
+
+    return [pscustomobject]@{
+        Display = [bool]$display.result.display
+        Coupling = [string]$coupling.result.coupling
+        Scale = Assert-FiniteNumber -Value $scale.result.volts_per_division `
+            -Label "CH2 scale snapshot"
+        Offset = Assert-FiniteNumber -Value $offset.result.volts `
+            -Label "CH2 offset snapshot"
+        ProbeRatio = Assert-FiniteNumber -Value $probe.result.probe_ratio `
+            -Label "CH2 probe ratio snapshot"
+    }
+}
+
+function Prepare-PairMeasurementChannel {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Ch1Snapshot
+    )
+
+    $display = Invoke-LiveCli -Stage "pair-ch2-prepare-display" `
+        -Command "channel-display" -Arguments @("--channel", "2", "--on")
+    Assert-ScpiSent -Payload $display -Label "Pair CH2 display prepare" `
+        -ExpectedCommands @(":CHANnel2:DISPlay ON")
+    $displayQuery = Invoke-LiveCli -Stage "pair-ch2-prepare-display-query" `
+        -Command "channel-display" -Arguments @("--channel", "2", "--query")
+    if (-not [bool]$displayQuery.result.display) {
+        throw "CH2 pair-measurement precondition is invalid: CH2 display did not enable."
+    }
+
+    $coupling = Invoke-LiveCli -Stage "pair-ch2-prepare-coupling" `
+        -Command "channel-coupling" -Arguments @("--channel", "2", "--coupling", "dc")
+    Assert-ScpiSent -Payload $coupling -Label "Pair CH2 coupling prepare" `
+        -ExpectedCommands @(":CHANnel2:COUPling DC")
+    $couplingQuery = Invoke-LiveCli -Stage "pair-ch2-prepare-coupling-query" `
+        -Command "channel-coupling" -Arguments @("--channel", "2", "--query")
+    if ([string]$couplingQuery.result.coupling -ne "dc") {
+        throw "CH2 pair-measurement precondition is invalid: CH2 coupling is not DC."
+    }
+
+    $probeRatio = ConvertTo-InvariantString -Value ([double]$Ch1Snapshot.ChannelProbeRatio)
+    $probe = Invoke-LiveCli -Stage "pair-ch2-prepare-probe" `
+        -Command "channel-probe" -Arguments @("--channel", "2", "--ratio", $probeRatio)
+    Assert-ScpiSent -Payload $probe -Label "Pair CH2 probe prepare" `
+        -ExpectedCommands @(":CHANnel2:PROBe $probeRatio")
+    $probeQuery = Invoke-LiveCli -Stage "pair-ch2-prepare-probe-query" `
+        -Command "channel-probe" -Arguments @("--channel", "2", "--query")
+    Assert-NearlyEqual -Actual ([double]$probeQuery.result.probe_ratio) `
+        -Expected ([double]$Ch1Snapshot.ChannelProbeRatio) -Label "Prepared CH2 probe ratio"
+
+    $scaleValue = ConvertTo-InvariantString -Value ([double]$Ch1Snapshot.ChannelScale)
+    $scale = Invoke-LiveCli -Stage "pair-ch2-prepare-scale" `
+        -Command "channel-scale" -Arguments @("--channel", "2", "--volts-per-division", $scaleValue)
+    Assert-ScpiSent -Payload $scale -Label "Pair CH2 scale prepare" `
+        -ExpectedCommands @(":CHANnel2:SCALe $scaleValue")
+    $scaleQuery = Invoke-LiveCli -Stage "pair-ch2-prepare-scale-query" `
+        -Command "channel-scale" -Arguments @("--channel", "2", "--query")
+    Assert-NearlyEqual -Actual ([double]$scaleQuery.result.volts_per_division) `
+        -Expected ([double]$Ch1Snapshot.ChannelScale) -Label "Prepared CH2 scale"
+
+    $offsetValue = ConvertTo-InvariantString -Value ([double]$Ch1Snapshot.ChannelOffset)
+    $offset = Invoke-LiveCli -Stage "pair-ch2-prepare-offset" `
+        -Command "channel-offset" -Arguments @("--channel", "2", "--volts", $offsetValue)
+    Assert-ScpiSent -Payload $offset -Label "Pair CH2 offset prepare" `
+        -ExpectedCommands @(":CHANnel2:OFFSet $offsetValue")
+    $offsetQuery = Invoke-LiveCli -Stage "pair-ch2-prepare-offset-query" `
+        -Command "channel-offset" -Arguments @("--channel", "2", "--query")
+    Assert-NearlyEqual -Actual ([double]$offsetQuery.result.volts) `
+        -Expected ([double]$Ch1Snapshot.ChannelOffset) -Label "Prepared CH2 offset"
+}
+
+function Restore-PairMeasurementChannel {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Snapshot
+    )
+
+    $restoreErrors = [System.Collections.Generic.List[string]]::new()
+    $restoreSteps = @(
+        [pscustomobject]@{
+            Name = "CH2 offset"
+            Command = "channel-offset"
+            Arguments = @(
+                "--channel", "2", "--volts",
+                (ConvertTo-InvariantString -Value ([double]$Snapshot.Offset))
+            )
+            QueryArguments = @("--channel", "2", "--query")
+            ExpectedPrefix = ":CHANnel2:OFFSet "
+            Kind = "offset"
+        },
+        [pscustomobject]@{
+            Name = "CH2 scale"
+            Command = "channel-scale"
+            Arguments = @(
+                "--channel", "2", "--volts-per-division",
+                (ConvertTo-InvariantString -Value ([double]$Snapshot.Scale))
+            )
+            QueryArguments = @("--channel", "2", "--query")
+            ExpectedPrefix = ":CHANnel2:SCALe "
+            Kind = "scale"
+        },
+        [pscustomobject]@{
+            Name = "CH2 probe ratio"
+            Command = "channel-probe"
+            Arguments = @(
+                "--channel", "2", "--ratio",
+                (ConvertTo-InvariantString -Value ([double]$Snapshot.ProbeRatio))
+            )
+            QueryArguments = @("--channel", "2", "--query")
+            ExpectedPrefix = ":CHANnel2:PROBe "
+            Kind = "probe"
+        },
+        [pscustomobject]@{
+            Name = "CH2 coupling"
+            Command = "channel-coupling"
+            Arguments = @("--channel", "2", "--coupling", [string]$Snapshot.Coupling)
+            QueryArguments = @("--channel", "2", "--query")
+            ExpectedPrefix = ":CHANnel2:COUPling "
+            Kind = "coupling"
+        },
+        [pscustomobject]@{
+            Name = "CH2 display"
+            Command = "channel-display"
+            Arguments = @(
+                "--channel", "2", $(if ($Snapshot.Display) { "--on" } else { "--off" })
+            )
+            QueryArguments = @("--channel", "2", "--query")
+            ExpectedPrefix = ":CHANnel2:DISPlay "
+            Kind = "display"
+        }
+    )
+
+    foreach ($step in $restoreSteps) {
+        try {
+            $configured = Invoke-LiveCli -Stage "pair-ch2-restore-$($step.Kind)" `
+                -Command $step.Command -Arguments $step.Arguments
+            Assert-ScpiSentPrefix -Payload $configured -Label "$($step.Name) restore" `
+                -ExpectedPrefix $step.ExpectedPrefix
+            $readback = Invoke-LiveCli -Stage "pair-ch2-restore-$($step.Kind)-query" `
+                -Command $step.Command -Arguments $step.QueryArguments
+            switch ([string]$step.Kind) {
+                "display" {
+                    if ([bool]$readback.result.display -ne [bool]$Snapshot.Display) {
+                        throw "CH2 display restore readback does not match the snapshot."
+                    }
+                }
+                "coupling" {
+                    if ([string]$readback.result.coupling -ne [string]$Snapshot.Coupling) {
+                        throw "CH2 coupling restore readback does not match the snapshot."
+                    }
+                }
+                "scale" {
+                    Assert-NearlyEqual -Actual ([double]$readback.result.volts_per_division) `
+                        -Expected ([double]$Snapshot.Scale) -Label "Restored CH2 scale"
+                }
+                "offset" {
+                    Assert-NearlyEqual -Actual ([double]$readback.result.volts) `
+                        -Expected ([double]$Snapshot.Offset) -Label "Restored CH2 offset"
+                }
+                "probe" {
+                    Assert-NearlyEqual -Actual ([double]$readback.result.probe_ratio) `
+                        -Expected ([double]$Snapshot.ProbeRatio) -Label "Restored CH2 probe ratio"
+                }
+            }
+        } catch {
+            $message = "$($step.Name) restore failed: $($_.Exception.Message)"
+            $restoreErrors.Add($message)
+            Add-Diagnostic -Name "pair-measurement" -Message $message
+            Drain-AfterFailure -Stage "pair-ch2-restore-$($step.Kind)-error-drain" `
+                -CaseName "pair-measurement"
+        }
+    }
+
+    if ($restoreErrors.Count -gt 0) {
+        throw ($restoreErrors -join " | ")
+    }
+}
+
 function Assert-ScpiSent {
     param(
         [Parameter(Mandatory = $true)]
@@ -1173,30 +1465,6 @@ function Restore-InstrumentState {
     $saveImageFormatProperty = $Snapshot.PSObject.Properties["SaveImageFormat"]
     $saveWaveformFormatProperty = $Snapshot.PSObject.Properties["SaveWaveformFormat"]
     $saveWaveformLengthProperty = $Snapshot.PSObject.Properties["SaveWaveformLength"]
-    if ($null -ne $saveImageFormatProperty -and
-        [string]$saveImageFormatProperty.Value -in @("png", "bmp", "bmp8", "bmp24")) {
-            $restoreSteps += [pscustomobject]@{
-                Name = "image save format"
-                Command = "save-image-format"
-                Arguments = @("--format", [string]$saveImageFormatProperty.Value)
-            }
-    }
-    if ($null -ne $saveWaveformFormatProperty -and
-        [string]$saveWaveformFormatProperty.Value -in @("ascii-xy", "csv", "binary")) {
-            $restoreSteps += [pscustomobject]@{
-                Name = "waveform save format"
-                Command = "save-waveform-format"
-                Arguments = @("--format", [string]$saveWaveformFormatProperty.Value)
-            }
-    }
-    if ($null -ne $saveWaveformLengthProperty -and
-        [int]$saveWaveformLengthProperty.Value -gt 0) {
-            $restoreSteps += [pscustomobject]@{
-                Name = "waveform save length"
-                Command = "save-waveform-length"
-                Arguments = @("--points", [string]$saveWaveformLengthProperty.Value)
-            }
-    }
     $savePwdProperty = $Snapshot.PSObject.Properties["SavePwd"]
     $saveFilenameProperty = $Snapshot.PSObject.Properties["SaveFilename"]
     $saveImagePaletteProperty = $Snapshot.PSObject.Properties["SaveImagePalette"]
@@ -1204,37 +1472,95 @@ function Restore-InstrumentState {
     $saveImageFactorsProperty = $Snapshot.PSObject.Properties["SaveImageFactors"]
     if ($null -ne $savePwdProperty -and
         $null -ne $saveFilenameProperty -and
+        $null -ne $saveImageFormatProperty -and
+        $null -ne $saveWaveformFormatProperty -and
         $null -ne $saveImagePaletteProperty -and
         $null -ne $saveImageInkSaverProperty -and
         $null -ne $saveImageFactorsProperty -and
         -not [string]::IsNullOrWhiteSpace([string]$savePwdProperty.Value)) {
-        $restoreSteps += @(
-            [pscustomobject]@{
-                Name = "save directory"
-                Command = "save-pwd"
-                Arguments = @("--path", [string]$savePwdProperty.Value)
-            },
-            [pscustomobject]@{
-                Name = "save filename"
-                Command = "save-filename"
-                Arguments = @("--name", [string]$saveFilenameProperty.Value)
-            },
-            [pscustomobject]@{
-                Name = "image save palette"
-                Command = "save-image-palette"
-                Arguments = @("--palette", [string]$saveImagePaletteProperty.Value)
-            },
-            [pscustomobject]@{
-                Name = "image ink saver"
-                Command = "save-image-ink-saver"
-                Arguments = @("--enabled", ([string][bool]$saveImageInkSaverProperty.Value).ToLowerInvariant())
-            },
-            [pscustomobject]@{
-                Name = "image factors"
-                Command = "save-image-factors"
-                Arguments = @("--enabled", ([string][bool]$saveImageFactorsProperty.Value).ToLowerInvariant())
+        $imageFormat = [string]$saveImageFormatProperty.Value
+        $waveformFormat = [string]$saveWaveformFormatProperty.Value
+        if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24") -or
+            $waveformFormat -in @("ascii-xy", "csv", "binary")) {
+            $restoreSteps += [pscustomobject]@{
+                Name = "image save format context"
+                Command = "save-image-format"
+                Arguments = @("--format", "png")
             }
-        )
+            $restoreSteps += @(
+                [pscustomobject]@{
+                    Name = "image factors"
+                    Command = "save-image-factors"
+                    Arguments = @("--enabled", ([string][bool]$saveImageFactorsProperty.Value).ToLowerInvariant())
+                },
+                [pscustomobject]@{
+                    Name = "image ink saver"
+                    Command = "save-image-ink-saver"
+                    Arguments = @("--enabled", ([string][bool]$saveImageInkSaverProperty.Value).ToLowerInvariant())
+                },
+                [pscustomobject]@{
+                    Name = "image save palette"
+                    Command = "save-image-palette"
+                    Arguments = @("--palette", [string]$saveImagePaletteProperty.Value)
+                },
+                [pscustomobject]@{
+                    Name = "save filename"
+                    Command = "save-filename"
+                    Arguments = @("--name", [string]$saveFilenameProperty.Value)
+                },
+                [pscustomobject]@{
+                    Name = "save directory"
+                    Command = "save-pwd"
+                    Arguments = @("--path", [string]$savePwdProperty.Value)
+                }
+            )
+            if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                $restoreSteps += [pscustomobject]@{
+                    Name = "image save format"
+                    Command = "save-image-format"
+                    Arguments = @("--format", $imageFormat)
+                }
+            } else {
+                $restoreSteps += [pscustomobject]@{
+                    Name = "waveform save format"
+                    Command = "save-waveform-format"
+                    Arguments = @("--format", $waveformFormat)
+                }
+            }
+        } else {
+            $restoreErrors.Add(
+                "save settings restore context is unavailable; no save format was restored."
+            )
+        }
+    }
+    if ($null -ne $saveImageFormatProperty -and
+        [string]$saveImageFormatProperty.Value -in @("png", "bmp", "bmp8", "bmp24") -and
+        ($null -eq $savePwdProperty -or $null -eq $saveFilenameProperty -or
+            $null -eq $saveImagePaletteProperty -or $null -eq $saveImageInkSaverProperty -or
+            $null -eq $saveImageFactorsProperty)) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "image save format"
+            Command = "save-image-format"
+            Arguments = @("--format", [string]$saveImageFormatProperty.Value)
+        }
+    } elseif ($null -ne $saveWaveformFormatProperty -and
+        [string]$saveWaveformFormatProperty.Value -in @("ascii-xy", "csv", "binary") -and
+        ($null -eq $savePwdProperty -or $null -eq $saveFilenameProperty -or
+            $null -eq $saveImagePaletteProperty -or $null -eq $saveImageInkSaverProperty -or
+            $null -eq $saveImageFactorsProperty)) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "waveform save format"
+            Command = "save-waveform-format"
+            Arguments = @("--format", [string]$saveWaveformFormatProperty.Value)
+        }
+    }
+    if ($null -ne $saveWaveformLengthProperty -and
+        [int]$saveWaveformLengthProperty.Value -gt 0) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "waveform save length"
+            Command = "save-waveform-length"
+            Arguments = @("--points", [string]$saveWaveformLengthProperty.Value)
+        }
     }
 
     foreach ($step in $restoreSteps) {
@@ -1436,7 +1762,7 @@ Write-Host "Required setup:"
 Write-Host "  - Connect the CH1 probe to the oscilloscope Probe Demo / Probe Comp output."
 Write-Host "  - Confirm a stable waveform is visible on CH1."
 Write-Host "  - For pair measurements, connect CH2 to the same Probe Demo / Probe Comp output."
-Write-Host "  - Confirm a stable waveform is visible on CH2 for the pair measurement cases."
+Write-Host "  - The validator will prepare CH2 vertical settings for pair measurements."
 Write-Host "  - Disconnect unknown DUT signals."
 Write-Host "  - Leave WGEN output OFF and disconnected from any unknown DUT."
 Write-Host "  - Leave DEMO output OFF."
@@ -2430,101 +2756,76 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
-        Invoke-BaselineCase -Name "measure-phase" -Action {
-            $ch2DisplayOriginal = Invoke-LiveCli -Stage "measure-phase-ch2-display-before" `
-                -Command "channel-display" -Arguments @("--channel", "2", "--query")
-            Assert-ScpiSent -Payload $ch2DisplayOriginal -Label "Phase CH2 display snapshot" `
-                -ExpectedCommands @(":CHANnel2:DISPlay?")
-            $ch2WasDisplayed = [bool]$ch2DisplayOriginal.result.display
+        $pairMeasurementSnapshot = $null
+        try {
+            $pairMeasurementSnapshot = Get-PairMeasurementChannelSnapshot
+            Prepare-PairMeasurementChannel -Ch1Snapshot $snapshot
 
             try {
-                if (-not $ch2WasDisplayed) {
-                    $ch2DisplayOn = Invoke-LiveCli -Stage "measure-phase-ch2-display-on" `
-                        -Command "channel-display" -Arguments @("--channel", "2", "--on")
-                    Assert-ScpiSent -Payload $ch2DisplayOn -Label "Phase CH2 display enable" `
-                        -ExpectedCommands @(":CHANnel2:DISPlay ON")
-                    $ch2DisplayOnQuery = Invoke-LiveCli -Stage "measure-phase-ch2-display-on-query" `
-                        -Command "channel-display" -Arguments @("--channel", "2", "--query")
-                    if (-not [bool]$ch2DisplayOnQuery.result.display) {
-                        throw "Phase CH2 display did not report enabled."
-                    }
-                }
+                $readiness = Invoke-StrictPairMeasurement -Stage "measure-ch2-readiness" `
+                    -Item "vpp" -Channel 2 `
+                    -ExpectedCommands @(":MEASure:VPP? CHANnel2")
+            } catch {
+                throw "CH2 pair-measurement precondition is invalid: $($_.Exception.Message)"
+            }
 
-                $phase = Invoke-LiveCli -Stage "measure-phase" -Command "measure" -Arguments @(
-                    "--source-channel", "1", "--reference-channel", "2", "--item", "phase"
-                )
-                Assert-ScpiSent -Payload $phase -Label "Phase measurement" -ExpectedCommands @(
-                    ":MEASure:PHASe? CHANnel1,CHANnel2"
-                )
+            Invoke-BaselineCase -Name "measure-phase" -Action {
+                $phase = Invoke-StrictPairMeasurement -Stage "measure-phase" `
+                    -Item "phase" -Channel 1 -ReferenceChannel 2 `
+                    -ExpectedCommands @(":MEASure:PHASe? CHANnel1,CHANnel2")
                 if (-not [bool]$phase.result.valid) {
                     throw "Phase measurement is invalid: $($phase.result.reason)"
                 }
                 [void](Assert-FiniteNumber -Value $phase.result.value -Label "Phase measurement")
-            } finally {
-                if (-not $ch2WasDisplayed) {
-                    $ch2DisplayOff = Invoke-LiveCli -Stage "measure-phase-ch2-display-restore" `
-                        -Command "channel-display" -Arguments @("--channel", "2", "--off")
-                    Assert-ScpiSent -Payload $ch2DisplayOff -Label "Phase CH2 display restore" `
-                        -ExpectedCommands @(":CHANnel2:DISPlay OFF")
-                    $ch2DisplayRestoreQuery = Invoke-LiveCli -Stage "measure-phase-ch2-display-restore-query" `
-                        -Command "channel-display" -Arguments @("--channel", "2", "--query")
-                    if ([bool]$ch2DisplayRestoreQuery.result.display) {
-                        throw "Phase CH2 display restore did not report disabled."
+            }
+
+            if (-not $script:FunctionalFailed -and
+                [bool]$identity.capabilities.supports_delay_measurement) {
+                Invoke-BaselineCase -Name "measure-delay" -Action {
+                    $delay = Invoke-StrictPairMeasurement -Stage "measure-delay" `
+                        -Item "delay" -Channel 1 -ReferenceChannel 2 `
+                        -ExpectedCommands @(":MEASure:DELay? AUTO,CHANnel1,CHANnel2")
+                    if (-not [bool]$delay.result.valid) {
+                        throw "Delay measurement is invalid: $($delay.result.reason)"
                     }
+                    [void](Assert-FiniteNumber -Value $delay.result.value -Label "Delay measurement")
+                }
+            } elseif (-not $script:FunctionalFailed) {
+                Add-NotApplicableCase -Name "measure-delay" `
+                    -Detail "Delay measurement is unsupported by the detected instrument."
+            } elseif ([bool]$identity.capabilities.supports_delay_measurement -and
+                -not $script:CaseResults.Contains("measure-delay")) {
+                Add-CaseResult -Name "measure-delay" -Passed $false `
+                    -Detail "CH2 pair-measurement fixture was prepared, but delay was not run because phase failed."
+            }
+        } catch {
+            $script:FunctionalFailed = $true
+            $detail = [string]$_.Exception.Message
+            Add-CaseResult -Name "measure-phase" -Passed $false -Detail $detail
+            if ([bool]$identity.capabilities.supports_delay_measurement -and
+                -not $script:CaseResults.Contains("measure-delay")) {
+                Add-CaseResult -Name "measure-delay" -Passed $false `
+                    -Detail "CH2 pair-measurement precondition is invalid; delay was not run. $detail"
+            }
+            Drain-AfterFailure -Stage "pair-measurement-error-drain" -CaseName "measure-phase"
+        } finally {
+            if ($null -ne $pairMeasurementSnapshot) {
+                try {
+                    Restore-PairMeasurementChannel -Snapshot $pairMeasurementSnapshot
+                } catch {
+                    $script:FunctionalFailed = $true
+                    Add-Diagnostic -Name "pair-measurement" `
+                        -Message "CH2 pair-measurement restore failed: $($_.Exception.Message)"
+                    Drain-AfterFailure -Stage "pair-measurement-restore-error-drain" `
+                        -CaseName "pair-measurement"
                 }
             }
         }
     } elseif (-not $script:FunctionalFailed) {
-        Add-NotApplicableCase -Name "measure-phase" -Detail "Measurement subsystem is unsupported by the detected instrument."
-    }
-
-    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_delay_measurement) {
-        Invoke-BaselineCase -Name "measure-delay" -Action {
-            $ch2DisplayOriginal = Invoke-LiveCli -Stage "measure-delay-ch2-display-before" `
-                -Command "channel-display" -Arguments @("--channel", "2", "--query")
-            Assert-ScpiSent -Payload $ch2DisplayOriginal -Label "Delay CH2 display snapshot" `
-                -ExpectedCommands @(":CHANnel2:DISPlay?")
-            $ch2WasDisplayed = [bool]$ch2DisplayOriginal.result.display
-
-            try {
-                if (-not $ch2WasDisplayed) {
-                    $ch2DisplayOn = Invoke-LiveCli -Stage "measure-delay-ch2-display-on" `
-                        -Command "channel-display" -Arguments @("--channel", "2", "--on")
-                    Assert-ScpiSent -Payload $ch2DisplayOn -Label "Delay CH2 display enable" `
-                        -ExpectedCommands @(":CHANnel2:DISPlay ON")
-                    $ch2DisplayOnQuery = Invoke-LiveCli -Stage "measure-delay-ch2-display-on-query" `
-                        -Command "channel-display" -Arguments @("--channel", "2", "--query")
-                    if (-not [bool]$ch2DisplayOnQuery.result.display) {
-                        throw "Delay CH2 display did not report enabled."
-                    }
-                }
-
-                $delay = Invoke-LiveCli -Stage "measure-delay" -Command "measure" -Arguments @(
-                    "--source-channel", "1", "--reference-channel", "2", "--item", "delay"
-                )
-                Assert-ScpiSent -Payload $delay -Label "Delay measurement" -ExpectedCommands @(
-                    ":MEASure:DELay? AUTO,CHANnel1,CHANnel2"
-                )
-                if (-not [bool]$delay.result.valid) {
-                    throw "Delay measurement is invalid: $($delay.result.reason)"
-                }
-                [void](Assert-FiniteNumber -Value $delay.result.value -Label "Delay measurement")
-            } finally {
-                if (-not $ch2WasDisplayed) {
-                    $ch2DisplayOff = Invoke-LiveCli -Stage "measure-delay-ch2-display-restore" `
-                        -Command "channel-display" -Arguments @("--channel", "2", "--off")
-                    Assert-ScpiSent -Payload $ch2DisplayOff -Label "Delay CH2 display restore" `
-                        -ExpectedCommands @(":CHANnel2:DISPlay OFF")
-                    $ch2DisplayRestoreQuery = Invoke-LiveCli -Stage "measure-delay-ch2-display-restore-query" `
-                        -Command "channel-display" -Arguments @("--channel", "2", "--query")
-                    if ([bool]$ch2DisplayRestoreQuery.result.display) {
-                        throw "Delay CH2 display restore did not report disabled."
-                    }
-                }
-            }
-        }
-    } elseif (-not $script:FunctionalFailed) {
-        Add-NotApplicableCase -Name "measure-delay" -Detail "Delay measurement is unsupported by the detected instrument."
+        Add-NotApplicableCase -Name "measure-phase" `
+            -Detail "Measurement subsystem is unsupported by the detected instrument."
+        Add-NotApplicableCase -Name "measure-delay" `
+            -Detail "Measurement subsystem is unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
@@ -3563,7 +3864,11 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "save-settings" -Action {
+            $primaryException = $null
+            $firstRestoreException = $null
+            $restoreNeeded = $false
             try {
+                $restoreNeeded = $true
                 $pwd = Invoke-LiveCli -Stage "save-pwd-set" -Command "save-pwd" -Arguments @("--path", "\usb")
                 Assert-ScpiSent -Payload $pwd -Label "Save directory" -ExpectedCommands @(':SAVE:PWD "\usb"')
                 $pwdQuery = Invoke-LiveCli -Stage "save-pwd-query" -Command "save-pwd" -Arguments @("--query")
@@ -3577,6 +3882,11 @@ if ($snapshotComplete) {
                 if ([string]$filenameQuery.result.name -ne "live_validation") {
                     throw "Save filename readback did not report live_validation."
                 }
+
+                $imageFormat = Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
+                    -Arguments @("--format", "png")
+                Assert-ScpiSent -Payload $imageFormat -Label "Image save format context" `
+                    -ExpectedCommands @(':SAVE:IMAGe:FORMat PNG')
 
                 $palette = Invoke-LiveCli -Stage "save-image-palette-set" -Command "save-image-palette" -Arguments @("--palette", "color")
                 Assert-ScpiSent -Payload $palette -Label "Image palette" -ExpectedCommands @(':SAVE:IMAGe:PALette COLOR')
@@ -3598,22 +3908,120 @@ if ($snapshotComplete) {
                 if (-not [bool]$factorsQuery.result.enabled) {
                     throw "Image factors readback did not report enabled."
                 }
+            } catch {
+                $primaryException = $_.Exception
             } finally {
-                Invoke-LiveCli -Stage "save-pwd-restore" -Command "save-pwd" -Arguments @(
-                    "--path", [string]$snapshot.SavePwd
-                ) | Out-Null
-                Invoke-LiveCli -Stage "save-filename-restore" -Command "save-filename" -Arguments @(
-                    "--name", [string]$snapshot.SaveFilename
-                ) | Out-Null
-                Invoke-LiveCli -Stage "save-image-palette-restore" -Command "save-image-palette" -Arguments @(
-                    "--palette", [string]$snapshot.SaveImagePalette
-                ) | Out-Null
-                Invoke-LiveCli -Stage "save-image-ink-saver-restore" -Command "save-image-ink-saver" -Arguments @(
-                    "--enabled", ([string][bool]$snapshot.SaveImageInkSaver).ToLowerInvariant()
-                ) | Out-Null
-                Invoke-LiveCli -Stage "save-image-factors-restore" -Command "save-image-factors" -Arguments @(
-                    "--enabled", ([string][bool]$snapshot.SaveImageFactors).ToLowerInvariant()
-                ) | Out-Null
+                if ($restoreNeeded) {
+                    $restoreSteps = @(
+                        [pscustomobject]@{
+                            Stage = "save-image-factors-restore"
+                            Name = "image factors"
+                            Command = "save-image-factors"
+                            Arguments = @(
+                                "--enabled", ([string][bool]$snapshot.SaveImageFactors).ToLowerInvariant()
+                            )
+                        },
+                        [pscustomobject]@{
+                            Stage = "save-image-ink-saver-restore"
+                            Name = "image ink saver"
+                            Command = "save-image-ink-saver"
+                            Arguments = @(
+                                "--enabled", ([string][bool]$snapshot.SaveImageInkSaver).ToLowerInvariant()
+                            )
+                        },
+                        [pscustomobject]@{
+                            Stage = "save-image-palette-restore"
+                            Name = "image save palette"
+                            Command = "save-image-palette"
+                            Arguments = @("--palette", [string]$snapshot.SaveImagePalette)
+                        },
+                        [pscustomobject]@{
+                            Stage = "save-filename-restore"
+                            Name = "save filename"
+                            Command = "save-filename"
+                            Arguments = @("--name", [string]$snapshot.SaveFilename)
+                        },
+                        [pscustomobject]@{
+                            Stage = "save-pwd-restore"
+                            Name = "save directory"
+                            Command = "save-pwd"
+                            Arguments = @("--path", [string]$snapshot.SavePwd)
+                        }
+                    )
+                    foreach ($restoreStep in $restoreSteps) {
+                        try {
+                            Invoke-LiveCli -Stage $restoreStep.Stage -Command $restoreStep.Command `
+                                -Arguments $restoreStep.Arguments | Out-Null
+                        } catch {
+                            if ($null -eq $firstRestoreException) {
+                                $firstRestoreException = $_.Exception
+                            }
+                            Add-Diagnostic -Name "save-settings" -Message (
+                                "$($restoreStep.Name) restore failed: $($_.Exception.Message)"
+                            )
+                            Drain-AfterFailure -Stage "$($restoreStep.Stage)-error-drain" `
+                                -CaseName "save-settings"
+                        }
+                    }
+
+                    try {
+                        $restoredPwd = Invoke-LiveCli -Stage "save-pwd-restore-query" `
+                            -Command "save-pwd" -Arguments @("--query")
+                        $restoredFilename = Invoke-LiveCli -Stage "save-filename-restore-query" `
+                            -Command "save-filename" -Arguments @("--query")
+                        $restoredPalette = Invoke-LiveCli -Stage "save-image-palette-restore-query" `
+                            -Command "save-image-palette" -Arguments @("--query")
+                        $restoredInkSaver = Invoke-LiveCli -Stage "save-image-ink-saver-restore-query" `
+                            -Command "save-image-ink-saver" -Arguments @("--query")
+                        $restoredFactors = Invoke-LiveCli -Stage "save-image-factors-restore-query" `
+                            -Command "save-image-factors" -Arguments @("--query")
+                        if ([string]$restoredPwd.result.path -ne [string]$snapshot.SavePwd -or
+                            [string]$restoredFilename.result.name -ne [string]$snapshot.SaveFilename -or
+                            [string]$restoredPalette.result.palette -ne [string]$snapshot.SaveImagePalette -or
+                            [bool]$restoredInkSaver.result.enabled -ne [bool]$snapshot.SaveImageInkSaver -or
+                            [bool]$restoredFactors.result.enabled -ne [bool]$snapshot.SaveImageFactors) {
+                            throw "Save settings restore readback did not match the snapshot."
+                        }
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-settings" -Message (
+                            "restore readback failed: $($_.Exception.Message)"
+                        )
+                        Drain-AfterFailure -Stage "save-settings-restore-readback-error-drain" `
+                            -CaseName "save-settings"
+                    }
+
+                    try {
+                        if ([string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                            Invoke-LiveCli -Stage "save-image-format-restore" `
+                                -Command "save-image-format" `
+                                -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
+                        } elseif ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+                            Invoke-LiveCli -Stage "save-waveform-format-restore" `
+                                -Command "save-waveform-format" `
+                                -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
+                        } else {
+                            throw "Original save format context is not restorable."
+                        }
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-settings" -Message (
+                            "save format restore failed: $($_.Exception.Message)"
+                        )
+                        Drain-AfterFailure -Stage "save-settings-format-restore-error-drain" `
+                            -CaseName "save-settings"
+                    }
+                }
+            }
+            if ($null -ne $primaryException) {
+                throw $primaryException
+            }
+            if ($null -ne $firstRestoreException) {
+                throw $firstRestoreException
             }
         }
     }
@@ -3663,18 +4071,17 @@ if ($snapshotComplete) {
             } catch {
                 $primaryException = $_.Exception
             } finally {
-                if ($restoreNeeded -and
-                    [string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                if ($restoreNeeded -and [int]$snapshot.SaveWaveformLength -gt 0) {
                     try {
-                        Invoke-LiveCli -Stage "save-image-format-restore" `
-                            -Command "save-image-format" `
-                            -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
+                        Invoke-LiveCli -Stage "save-waveform-length-restore" `
+                            -Command "save-waveform-length" `
+                            -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
                     } catch {
                         if ($null -eq $firstRestoreException) {
                             $firstRestoreException = $_.Exception
                         }
                         Add-Diagnostic -Name "save-export" -Message (
-                            "image format restore failed: $($_.Exception.Message)"
+                            "waveform length restore failed: $($_.Exception.Message)"
                         )
                     }
                 }
@@ -3693,17 +4100,18 @@ if ($snapshotComplete) {
                         )
                     }
                 }
-                if ($restoreNeeded -and [int]$snapshot.SaveWaveformLength -gt 0) {
+                if ($restoreNeeded -and
+                    [string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
                     try {
-                        Invoke-LiveCli -Stage "save-waveform-length-restore" `
-                            -Command "save-waveform-length" `
-                            -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
+                        Invoke-LiveCli -Stage "save-image-format-restore" `
+                            -Command "save-image-format" `
+                            -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
                     } catch {
                         if ($null -eq $firstRestoreException) {
                             $firstRestoreException = $_.Exception
                         }
                         Add-Diagnostic -Name "save-export" -Message (
-                            "waveform length restore failed: $($_.Exception.Message)"
+                            "image format restore failed: $($_.Exception.Message)"
                         )
                     }
                 }
