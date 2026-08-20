@@ -3439,7 +3439,12 @@ if ($snapshotComplete) {
             Assert-ScpiSent -Payload $query -Label "DEMO phase query" -ExpectedCommands @(
                 ":DEMO:FUNCtion:PHASe:PHASe?"
             )
-            Assert-NearlyEqual -Actual ([double]$query.result.degrees) -Expected 90 `
+            $phaseRawProperty = $query.result.PSObject.Properties["phase_raw"]
+            if ($null -eq $phaseRawProperty -or
+                [string]::IsNullOrWhiteSpace([string]$phaseRawProperty.Value)) {
+                throw "DEMO phase query did not return a raw phase value."
+            }
+            Assert-NearlyEqual -Actual ([double]$query.result.phase_degrees) -Expected 90 `
                 -Label "DEMO phase"
         }
     } elseif (-not $script:FunctionalFailed) {

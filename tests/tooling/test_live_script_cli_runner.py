@@ -3035,6 +3035,22 @@ def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
     assert 'Stage "fft-advanced-display-off"' in fft_advanced_case
     assert '"--function", "4", "--off"' in fft_advanced_case
 
+    demo_phase_start = script.index('Invoke-BaselineCase -Name "demo-phase"')
+    demo_phase_end = script.index(
+        'Invoke-BaselineCase -Name "autoscale"', demo_phase_start
+    )
+    demo_phase_case = script[demo_phase_start:demo_phase_end]
+    assert 'Command "demo-phase"' in demo_phase_case
+    assert 'Arguments @("--degrees", "90")' in demo_phase_case
+    assert ':DEMO:FUNCtion:PHASe:PHASe 90' in demo_phase_case
+    assert 'Stage "demo-phase-query"' in demo_phase_case
+    assert 'Arguments @("--query")' in demo_phase_case
+    assert ':DEMO:FUNCtion:PHASe:PHASe?' in demo_phase_case
+    assert '$query.result.phase_degrees' in demo_phase_case
+    assert '$query.result.degrees' not in demo_phase_case
+    assert 'Properties["phase_raw"]' in demo_phase_case
+    assert '-Expected 90' in demo_phase_case
+
     composite_start = script.index(
         'Invoke-BaselineCase -Name "math-composite-source"'
     )
