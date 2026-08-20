@@ -3005,6 +3005,49 @@ def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
         assert capability in case_block
         assert f'Add-NotApplicableCase -Name "{case_name}"' in case_block
 
+    fft_advanced_start = script.index('Invoke-BaselineCase -Name "fft-advanced"')
+    fft_advanced_end = script.index(
+        'Invoke-BaselineCase -Name "wgen-basic"', fft_advanced_start
+    )
+    fft_advanced_case = script[fft_advanced_start:fft_advanced_end]
+    assert "$identity.capabilities.math_function_count" in script[
+        script.rfind("\n    if (-not $script:FunctionalFailed", 0, fft_advanced_start):
+    ]
+    assert '"--function", "4"' in fft_advanced_case
+    assert '"--start-hz", "0"' in fft_advanced_case
+    assert '"--gate", "none"' in fft_advanced_case
+    assert '"--phase-reference", "trigger"' in fft_advanced_case
+    assert '"--detection-type", "sample"' in fft_advanced_case
+    assert '"--detection-points", "640"' in fft_advanced_case
+    assert '"--gate", "zoom"' not in fft_advanced_case
+    for command in (
+        ":FUNCtion4:OPERation FFTPhase",
+        ":FUNCtion4:FREQuency:STARt 0",
+        ":FUNCtion4:FREQuency:STOP 1000000",
+        ":FUNCtion4:GATE NONE",
+        ":FUNCtion4:PHASe:REFerence TRIGger",
+        ":FUNCtion4:DETection:TYPE SAMPle",
+        ":FUNCtion4:DETection:POINts 640",
+    ):
+        assert command in fft_advanced_case
+    assert 'Stage "fft-advanced-query"' in fft_advanced_case
+    assert '"--function", "4", "--query"' in fft_advanced_case
+    assert 'Stage "fft-advanced-display-off"' in fft_advanced_case
+    assert '"--function", "4", "--off"' in fft_advanced_case
+
+    composite_start = script.index(
+        'Invoke-BaselineCase -Name "math-composite-source"'
+    )
+    composite_end = script.index(
+        'Invoke-BaselineCase -Name "math-filter"', composite_start
+    )
+    composite_gate_start = script.rfind(
+        "\n    if (-not $script:FunctionalFailed", 0, composite_start
+    )
+    composite_case = script[composite_gate_start:composite_end]
+    assert "$identity.capabilities.supports_math_goft" in composite_case
+    assert 'Add-NotApplicableCase -Name "math-composite-source"' in composite_case
+
     natural_start = script.index('Invoke-BaselineCase -Name "capture-wait-trigger"')
     natural_end = script.index(
         'Invoke-BaselineCase -Name "trigger-holdoff"', natural_start

@@ -3318,42 +3318,45 @@ if ($snapshotComplete) {
         Add-NotApplicableCase -Name "fft" -Detail "Math functions are unsupported by the detected instrument."
     }
 
-    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_advanced_fft) {
+    if (-not $script:FunctionalFailed -and
+        [bool]$identity.capabilities.supports_advanced_fft -and
+        [int]$identity.capabilities.math_function_count -ge 4) {
         Invoke-BaselineCase -Name "fft-advanced" -Action {
             try {
                 $configured = Invoke-LiveCli -Stage "fft-advanced-set" -Command "fft" -Arguments @(
-                    "--function", "1", "--source-channel", "1", "--fft-operation", "fft-phase",
-                    "--start-hz", "100", "--stop-hz", "1000000", "--gate", "zoom",
-                    "--phase-reference", "display", "--detection-type", "average",
-                    "--detection-points", "4096", "--display", "on"
+                    "--function", "4", "--source-channel", "1", "--fft-operation", "fft-phase",
+                    "--start-hz", "0", "--stop-hz", "1000000", "--gate", "none",
+                    "--phase-reference", "trigger", "--detection-type", "sample",
+                    "--detection-points", "640"
                 )
                 Assert-ScpiSent -Payload $configured -Label "Advanced FFT configure" -ExpectedCommands @(
-                    ":FUNCtion1:OPERation FFTPhase", ":FUNCtion1:FREQuency:STARt 100",
-                    ":FUNCtion1:FREQuency:STOP 1000000", ":FUNCtion1:GATE ZOOM",
-                    ":FUNCtion1:PHASe:REFerence DISP", ":FUNCtion1:DETection:TYPE AVERage",
-                    ":FUNCtion1:DETection:POINts 4096"
+                    ":FUNCtion4:OPERation FFTPhase", ":FUNCtion4:SOURce1 CHANnel1",
+                    ":FUNCtion4:FREQuency:STARt 0", ":FUNCtion4:FREQuency:STOP 1000000",
+                    ":FUNCtion4:GATE NONE", ":FUNCtion4:PHASe:REFerence TRIGger",
+                    ":FUNCtion4:DETection:TYPE SAMPle", ":FUNCtion4:DETection:POINts 640"
                 )
-                $query = Invoke-LiveCli -Stage "fft-advanced-query" -Command "fft" -Arguments @("--function", "1", "--query")
+                $query = Invoke-LiveCli -Stage "fft-advanced-query" -Command "fft" -Arguments @("--function", "4", "--query")
                 Assert-ScpiSent -Payload $query -Label "Advanced FFT query" -ExpectedCommands @(
-                    ":FUNCtion1:FREQuency:STARt?", ":FUNCtion1:FREQuency:STOP?",
-                    ":FUNCtion1:GATE?", ":FUNCtion1:PHASe:REFerence?",
-                    ":FUNCtion1:DETection:TYPE?", ":FUNCtion1:DETection:POINts?"
+                    ":FUNCtion4:OPERation?", ":FUNCtion4:FREQuency:STARt?",
+                    ":FUNCtion4:FREQuency:STOP?", ":FUNCtion4:GATE?",
+                    ":FUNCtion4:PHASe:REFerence?", ":FUNCtion4:DETection:TYPE?",
+                    ":FUNCtion4:DETection:POINts?"
                 )
                 if ([string]$query.result.fft_operation_canonical -ne "fft-phase" -or
-                    [double]$query.result.start_hz -ne 100 -or
+                    [double]$query.result.start_hz -ne 0 -or
                     [double]$query.result.stop_hz -ne 1000000 -or
-                    [string]$query.result.gate -ne "zoom" -or
-                    [string]$query.result.phase_reference -ne "display" -or
-                    [string]$query.result.detection_type -ne "average" -or
-                    [int]$query.result.detection_points -ne 4096) {
+                    [string]$query.result.gate -ne "none" -or
+                    [string]$query.result.phase_reference -ne "trigger" -or
+                    [string]$query.result.detection_type -ne "sample" -or
+                    [int]$query.result.detection_points -ne 640) {
                     throw "Advanced FFT readback is invalid."
                 }
             } finally {
                 $off = Invoke-LiveCli -Stage "fft-advanced-display-off" -Command "math-display" -Arguments @(
-                    "--function", "1", "--off"
+                    "--function", "4", "--off"
                 )
                 Assert-ScpiSent -Payload $off -Label "Advanced FFT display cleanup" -ExpectedCommands @(
-                    ":FUNCtion1:DISPlay OFF"
+                    ":FUNCtion4:DISPlay OFF"
                 )
             }
         }
