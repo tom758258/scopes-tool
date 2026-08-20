@@ -543,6 +543,96 @@ function Invoke-StrictPairMeasurement {
     return $payload
 }
 
+function Invoke-PairMeasurementReadiness {
+    param(
+        [int] $TimeoutMilliseconds = 2500,
+
+        [int] $PollIntervalMilliseconds = 100
+    )
+
+    if ($TimeoutMilliseconds -le 0 -or $PollIntervalMilliseconds -le 0) {
+        throw "CH2 pair-measurement readiness polling requires positive timeout and poll interval."
+    }
+
+    $elapsedMilliseconds = 0
+    $lastReason = "invalid measurement sentinel"
+    while ($elapsedMilliseconds -le $TimeoutMilliseconds) {
+        $invocation = Invoke-CliRaw -Stage "measure-ch2-readiness" -Arguments @(
+            "measure", "--live", "--resource", $Resource, "--json",
+            "--source-channel", "2", "--item", "vpp"
+        )
+        $payload = $invocation.Payload
+        if ($null -eq $payload) {
+            throw "CH2 pair-measurement precondition is invalid: readiness returned no payload."
+        }
+        Assert-ScpiSent -Payload $payload -Label "CH2 VPP readiness" `
+            -ExpectedCommands @(":MEASure:VPP? CHANnel2")
+
+        $systemErrorProperty = $payload.PSObject.Properties["system_error"]
+        if ($null -eq $systemErrorProperty -or $null -eq $systemErrorProperty.Value) {
+            throw "CH2 pair-measurement precondition is invalid: readiness did not return system_error."
+        }
+        $systemError = $systemErrorProperty.Value
+        $codeProperty = $systemError.PSObject.Properties["code"]
+        if ($null -eq $codeProperty) {
+            throw "CH2 pair-measurement precondition is invalid: readiness system_error is missing code."
+        }
+        $systemErrorCode = [int]$codeProperty.Value
+        if ($systemErrorCode -ne 0) {
+            $messageProperty = $systemError.PSObject.Properties["message"]
+            $message = if ($null -ne $messageProperty) { [string]$messageProperty.Value } else { "" }
+            throw (
+                "CH2 pair-measurement precondition failed with system error " +
+                "${systemErrorCode}: ${message}."
+            )
+        }
+
+        $resultProperty = $payload.PSObject.Properties["result"]
+        if ($null -eq $resultProperty -or $null -eq $resultProperty.Value) {
+            throw "CH2 pair-measurement precondition is invalid: readiness did not return result."
+        }
+        $result = $resultProperty.Value
+        $validProperty = $result.PSObject.Properties["valid"]
+        if ($null -eq $validProperty) {
+            throw "CH2 pair-measurement precondition is invalid: readiness result is missing valid."
+        }
+        if ([bool]$validProperty.Value) {
+            $valueProperty = $result.PSObject.Properties["value"]
+            if ($null -eq $valueProperty -or $null -eq $valueProperty.Value) {
+                throw "CH2 pair-measurement precondition is invalid: readiness value is missing."
+            }
+            [void](Assert-FiniteNumber -Value $valueProperty.Value -Label "CH2 VPP readiness")
+            $okProperty = $payload.PSObject.Properties["ok"]
+            if ([int]$invocation.ExitCode -ne 0 -or
+                $null -eq $okProperty -or $okProperty.Value -ne $true) {
+                throw "CH2 pair-measurement precondition is invalid: readiness invocation did not succeed."
+            }
+            return $payload
+        }
+
+        $reasonProperty = $result.PSObject.Properties["reason"]
+        $lastReason = if ($null -ne $reasonProperty) {
+            [string]$reasonProperty.Value
+        } else {
+            "invalid measurement sentinel"
+        }
+        if ($elapsedMilliseconds -ge $TimeoutMilliseconds) {
+            break
+        }
+        $sleepMilliseconds = [int][Math]::Min(
+            $PollIntervalMilliseconds,
+            $TimeoutMilliseconds - $elapsedMilliseconds
+        )
+        Start-Sleep -Milliseconds $sleepMilliseconds
+        $elapsedMilliseconds += $sleepMilliseconds
+    }
+
+    throw (
+        "CH2 pair-measurement precondition did not become measurement-ready. " +
+        "timeout_ms=${TimeoutMilliseconds}; last_reason=${lastReason}."
+    )
+}
+
 function Get-PairMeasurementChannelSnapshot {
     $display = Invoke-LiveCli -Stage "pair-ch2-snapshot-display" `
         -Command "channel-display" -Arguments @("--channel", "2", "--query")
@@ -2761,10 +2851,12 @@ if ($snapshotComplete) {
             $pairMeasurementSnapshot = Get-PairMeasurementChannelSnapshot
             Prepare-PairMeasurementChannel -Ch1Snapshot $snapshot
 
+            $run = Invoke-LiveCli -Stage "pair-measurement-run" -Command "run"
+            Assert-ScpiSent -Payload $run -Label "Pair measurement acquisition start" `
+                -ExpectedCommands @(":RUN")
+
             try {
-                $readiness = Invoke-StrictPairMeasurement -Stage "measure-ch2-readiness" `
-                    -Item "vpp" -Channel 2 `
-                    -ExpectedCommands @(":MEASure:VPP? CHANnel2")
+                $readiness = Invoke-PairMeasurementReadiness
             } catch {
                 throw "CH2 pair-measurement precondition is invalid: $($_.Exception.Message)"
             }
@@ -2810,6 +2902,18 @@ if ($snapshotComplete) {
             Drain-AfterFailure -Stage "pair-measurement-error-drain" -CaseName "measure-phase"
         } finally {
             if ($null -ne $pairMeasurementSnapshot) {
+                try {
+                    $stop = Invoke-LiveCli -Stage "pair-measurement-stop" `
+                        -Command "stop-acquisition"
+                    Assert-ScpiSent -Payload $stop -Label "Pair measurement acquisition stop" `
+                        -ExpectedCommands @(":STOP")
+                } catch {
+                    $script:FunctionalFailed = $true
+                    $message = "Pair measurement acquisition stop failed: $($_.Exception.Message)"
+                    Add-Diagnostic -Name "pair-measurement" -Message $message
+                    Drain-AfterFailure -Stage "pair-measurement-stop-error-drain" `
+                        -CaseName "pair-measurement"
+                }
                 try {
                     Restore-PairMeasurementChannel -Snapshot $pairMeasurementSnapshot
                 } catch {

@@ -2685,21 +2685,40 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
         assert stage in script
     assert "Prepare-PairMeasurementChannel" in pair_lifecycle
     assert "Invoke-StrictPairMeasurement" in pair_lifecycle
+    assert "Invoke-PairMeasurementReadiness" in pair_lifecycle
     assert "Restore-PairMeasurementChannel" in pair_lifecycle
     assert pair_lifecycle.index("Prepare-PairMeasurementChannel") < pair_lifecycle.index(
-        'Stage "measure-ch2-readiness"'
+        'Stage "pair-measurement-run"'
     )
-    assert pair_lifecycle.index('Stage "measure-ch2-readiness"') < pair_lifecycle.index(
+    assert pair_lifecycle.index('Stage "pair-measurement-run"') < pair_lifecycle.index(
+        "Invoke-PairMeasurementReadiness"
+    )
+    assert pair_lifecycle.index("Invoke-PairMeasurementReadiness") < pair_lifecycle.index(
         'Invoke-BaselineCase -Name "measure-phase"'
     )
     assert pair_lifecycle.index('Invoke-BaselineCase -Name "measure-phase"') < pair_lifecycle.index(
         'Invoke-BaselineCase -Name "measure-delay"'
     )
     assert pair_lifecycle.index('Invoke-BaselineCase -Name "measure-delay"') < pair_lifecycle.index(
+        'Stage "pair-measurement-stop"'
+    )
+    assert pair_lifecycle.index('Stage "pair-measurement-stop"') < pair_lifecycle.index(
         "Restore-PairMeasurementChannel"
     )
+    assert 'Command "run"' in pair_lifecycle
+    assert 'ExpectedCommands @(":RUN")' in pair_lifecycle
+    assert 'Command "stop-acquisition"' in pair_lifecycle
+    assert 'ExpectedCommands @(":STOP")' in pair_lifecycle
     assert "pair-ch2-restore-$($step.Kind)-query" in script
     assert "invalid measurement sentinels are not accepted" in script
+    readiness_start = script.index("function Invoke-PairMeasurementReadiness")
+    readiness_end = script.index("function Get-PairMeasurementChannelSnapshot", readiness_start)
+    readiness = script[readiness_start:readiness_end]
+    assert "while ($elapsedMilliseconds -le $TimeoutMilliseconds)" in readiness
+    assert "Start-Sleep -Milliseconds $sleepMilliseconds" in readiness
+    assert "CH2 pair-measurement precondition did not become measurement-ready" in readiness
+    assert "if ($systemErrorCode -ne 0)" in readiness
+    assert "Invoke-StrictPairMeasurement" not in readiness
 
     for case_name, expected_query in (
         ("measure-phase", ":MEASure:PHASe? CHANnel1,CHANnel2"),

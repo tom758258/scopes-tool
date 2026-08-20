@@ -55,22 +55,41 @@ def test_pair_measurements_remain_strict() -> None:
         "Prepare-PairMeasurementChannel"
     )
     assert lifecycle.index("Prepare-PairMeasurementChannel") < lifecycle.index(
-        'Stage "measure-ch2-readiness"'
+        'Stage "pair-measurement-run"'
     )
-    assert lifecycle.index('Stage "measure-ch2-readiness"') < lifecycle.index(
+    assert lifecycle.index("Invoke-PairMeasurementReadiness") < lifecycle.index(
         'Invoke-BaselineCase -Name "measure-phase"'
+    )
+    assert lifecycle.index('Stage "pair-measurement-run"') < lifecycle.index(
+        "Invoke-PairMeasurementReadiness"
     )
     assert lifecycle.index('Invoke-BaselineCase -Name "measure-phase"') < lifecycle.index(
         'Invoke-BaselineCase -Name "measure-delay"'
     )
     assert lifecycle.index('Invoke-BaselineCase -Name "measure-delay"') < lifecycle.index(
+        'Stage "pair-measurement-stop"'
+    )
+    assert lifecycle.index('Stage "pair-measurement-stop"') < lifecycle.index(
         "Restore-PairMeasurementChannel"
     )
-    assert 'Stage "measure-ch2-readiness"' in lifecycle
-    assert 'Item "vpp"' in lifecycle
-    assert 'Channel 2' in lifecycle
-    assert ':MEASure:VPP? CHANnel2' in lifecycle
+    assert 'Command "run"' in lifecycle
+    assert 'ExpectedCommands @(":RUN")' in lifecycle
+    assert 'Command "stop-acquisition"' in lifecycle
+    assert 'ExpectedCommands @(":STOP")' in lifecycle
+    assert 'Stage "measure-ch2-readiness"' in script
     assert "CH2 pair-measurement precondition is invalid" in lifecycle
+    readiness_start = script.index("function Invoke-PairMeasurementReadiness")
+    readiness_end = script.index("function Get-PairMeasurementChannelSnapshot", readiness_start)
+    readiness = script[readiness_start:readiness_end]
+    assert '"--source-channel", "2"' in readiness
+    assert '"--item", "vpp"' in readiness
+    assert ':MEASure:VPP? CHANnel2' in readiness
+    assert "while ($elapsedMilliseconds -le $TimeoutMilliseconds)" in readiness
+    assert "if ([bool]$validProperty.Value)" in readiness
+    assert "Start-Sleep -Milliseconds $sleepMilliseconds" in readiness
+    assert "CH2 pair-measurement precondition did not become measurement-ready" in readiness
+    assert "if ($systemErrorCode -ne 0)" in readiness
+    assert "Invoke-StrictPairMeasurement" not in readiness
     assert "function Assert-StrictMeasurementInvocation" in script
     assert "invalid measurement sentinels are not accepted" in script
     assert "systemErrorCode -ne 0" in script
@@ -97,6 +116,7 @@ def test_pair_measurements_remain_strict() -> None:
     assert '"--query"' in restore
     assert "pairMeasurementSnapshot = $null" in lifecycle
     assert "finally" in lifecycle
+    assert "Start-Sleep" not in prepare
     assert "measure-phase-ch2-display-before" not in script
     assert "measure-delay-ch2-display-before" not in script
 
@@ -105,6 +125,169 @@ def test_pair_measurements_remain_strict() -> None:
         assert "Assert-FiniteNumber" in block
         assert "Assert-SingleMeasurementInvocation" not in block
         assert "Invoke-StrictPairMeasurement" in block
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_pair_readiness_polling_retries_sentinels_and_fails_fast_on_system_error(
+    tmp_path: Path,
+) -> None:
+    harness_path = tmp_path / "pair-readiness-harness.ps1"
+    harness_path.write_text(
+        """\
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @("Assert-FiniteNumber", "Invoke-PairMeasurementReadiness")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$Resource = "SIMULATED"
+$script:Scenario = ""
+$script:ReadinessCalls = 0
+$script:SleepCalls = 0
+
+function Assert-ScpiSent {
+    param([object] $Payload, [string] $Label, [string[]] $ExpectedCommands)
+}
+
+function Start-Sleep {
+    param([int] $Milliseconds = 0)
+    $script:SleepCalls += 1
+}
+
+function New-ReadinessInvocation {
+    param(
+        [bool] $Valid,
+        [object] $Value,
+        [int] $SystemErrorCode,
+        [int] $ExitCode,
+        [bool] $Ok,
+        [string] $Reason
+    )
+    return [pscustomobject]@{
+        ExitCode = $ExitCode
+        Payload = [pscustomobject]@{
+            ok = $Ok
+            result = [pscustomobject]@{ valid = $Valid; value = $Value; reason = $Reason }
+            system_error = [pscustomobject]@{
+                code = $SystemErrorCode
+                message = if ($SystemErrorCode -eq 0) { "No error" } else { "Parameter error" }
+            }
+            scpi = [pscustomobject]@{
+                sent = @("*IDN?", ":MEASure:VPP? CHANnel2", ":SYSTem:ERRor?")
+            }
+        }
+    }
+}
+
+function Invoke-CliRaw {
+    param([string] $Stage, [string[]] $Arguments)
+    $script:ReadinessCalls += 1
+    if ($script:Scenario -eq "retry" -and $script:ReadinessCalls -eq 1) {
+        return New-ReadinessInvocation `
+            -Valid:$false -Value $null -SystemErrorCode 0 -ExitCode 1 -Ok:$false `
+            -Reason "invalid measurement sentinel"
+    }
+    if ($script:Scenario -eq "timeout") {
+        return New-ReadinessInvocation `
+            -Valid:$false -Value $null -SystemErrorCode 0 -ExitCode 1 -Ok:$false `
+            -Reason "invalid measurement sentinel"
+    }
+    if ($script:Scenario -eq "system-error") {
+        return New-ReadinessInvocation `
+            -Valid:$false -Value $null -SystemErrorCode -222 -ExitCode 1 -Ok:$false `
+            -Reason "invalid measurement sentinel"
+    }
+    return New-ReadinessInvocation `
+        -Valid:$true -Value 2.74 -SystemErrorCode 0 -ExitCode 0 -Ok:$true -Reason ""
+}
+
+$script:Scenario = "retry"
+$script:ReadinessCalls = 0
+$script:SleepCalls = 0
+$retry = Invoke-PairMeasurementReadiness -TimeoutMilliseconds 300 -PollIntervalMilliseconds 100
+$retryCalls = $script:ReadinessCalls
+$retrySleeps = $script:SleepCalls
+
+$script:Scenario = "timeout"
+$script:ReadinessCalls = 0
+$script:SleepCalls = 0
+$timeoutMessage = ""
+try { [void](Invoke-PairMeasurementReadiness -TimeoutMilliseconds 250 -PollIntervalMilliseconds 100) }
+catch { $timeoutMessage = $_.Exception.Message }
+$timeoutCalls = $script:ReadinessCalls
+$timeoutSleeps = $script:SleepCalls
+
+$script:Scenario = "system-error"
+$script:ReadinessCalls = 0
+$script:SleepCalls = 0
+$systemErrorMessage = ""
+try { [void](Invoke-PairMeasurementReadiness -TimeoutMilliseconds 2500 -PollIntervalMilliseconds 100) }
+catch { $systemErrorMessage = $_.Exception.Message }
+$systemErrorCalls = $script:ReadinessCalls
+$systemErrorSleeps = $script:SleepCalls
+
+[ordered]@{
+    retry_value = $retry.result.value
+    retry_calls = $retryCalls
+    retry_sleeps = $retrySleeps
+    timeout_message = $timeoutMessage
+    timeout_calls = $timeoutCalls
+    timeout_sleeps = $timeoutSleeps
+    system_error_message = $systemErrorMessage
+    system_error_calls = $systemErrorCalls
+    system_error_sleeps = $systemErrorSleeps
+} | ConvertTo-Json -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(SCRIPT_PATH),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["retry_value"] == 2.74
+    assert result["retry_calls"] == 2
+    assert result["retry_sleeps"] == 1
+    assert "did not become measurement-ready" in result["timeout_message"]
+    assert result["timeout_calls"] > 2
+    assert result["timeout_sleeps"] > 0
+    assert "system error -222" in result["system_error_message"]
+    assert result["system_error_calls"] == 1
+    assert result["system_error_sleeps"] == 0
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
