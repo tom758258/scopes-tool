@@ -2180,7 +2180,7 @@ function Invoke-LiveCli {
     if ($Command -eq "serial-trigger-spi") {
         return [pscustomobject]@{ result = [pscustomobject]@{
             protocol = "spi"; bus = 1; selected = $true
-            type = "mosi"; width = 8; data = "0x01"
+            type = "mosi"; width = 8; data = "00000001"
         }}
     }
     if ($Command -eq "serial-search-can") {
@@ -2193,8 +2193,9 @@ function Invoke-LiveCli {
     if ($Command -eq "serial-trigger-can") {
         return [pscustomobject]@{ result = [pscustomobject]@{
             protocol = "can"; bus = 1; selected = $true
-            type = "id-and-data"; id_mode = "standard"; id = "0x123"
-            data = "0x01"; data_length = 1
+            type = "id-and-data"; id_mode = "standard"
+            id = "00000000000000000000100100011"
+            data = "00000001"; data_length = 1
         }}
     }
     throw "Unexpected live command: ${Command}"
@@ -2257,6 +2258,32 @@ foreach ($caseCommand in $caseCommands) {
         "digitize",
         "serial-lister-export",
     }.intersection(commands)
+
+    def arguments_for(command: str) -> list[list[str]]:
+        return [entry["arguments"] for entry in invocations if entry["command"] == command]
+
+    assert arguments_for("serial-search-spi") == [
+        ["--bus", "1", "--mode", "mosi", "--width", "1", "--data", "0x01"],
+        ["--bus", "1", "--query"],
+    ]
+    assert arguments_for("serial-trigger-spi") == [
+        ["--bus", "1", "--type", "mosi", "--width", "8", "--data", "0x01"],
+        ["--bus", "1", "--query"],
+    ]
+    assert arguments_for("serial-search-can") == [
+        [
+            "--bus", "1", "--mode", "data", "--id-mode", "standard",
+            "--id", "0x123", "--data", "0x01", "--data-length", "1",
+        ],
+        ["--bus", "1", "--query"],
+    ]
+    assert arguments_for("serial-trigger-can") == [
+        [
+            "--bus", "1", "--type", "id-and-data", "--id-mode", "standard",
+            "--id", "0x123", "--data", "0x01", "--data-length", "1",
+        ],
+        ["--bus", "1", "--query"],
+    ]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")

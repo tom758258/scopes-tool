@@ -619,13 +619,14 @@ function Assert-SpiCriteriaReadback {
 
     $typeField = if ($Kind -eq "Search") { "mode" } else { "type" }
     $expectedWidth = if ($Kind -eq "Search") { 1 } else { 8 }
+    $expectedData = if ($Kind -eq "Search") { "0x01" } else { "00000001" }
     $expected = [ordered]@{
         protocol = "spi"
         bus = 1
         selected = $true
         $typeField = "mosi"
         width = $expectedWidth
-        data = "0x01"
+        data = $expectedData
     }
     foreach ($entry in $expected.GetEnumerator()) {
         $actual = Get-RequiredResultValue -Payload $Payload -Name $entry.Key `
@@ -651,14 +652,20 @@ function Assert-CanCriteriaReadback {
 
     $typeField = if ($Kind -eq "Search") { "mode" } else { "type" }
     $typeValue = if ($Kind -eq "Search") { "data" } else { "id-and-data" }
+    $expectedId = if ($Kind -eq "Search") {
+        "0x123"
+    } else {
+        "00000000000000000000100100011"
+    }
+    $expectedData = if ($Kind -eq "Search") { "0x01" } else { "00000001" }
     $expected = [ordered]@{
         protocol = "can"
         bus = 1
         selected = $true
         $typeField = $typeValue
         id_mode = "standard"
-        id = "0x123"
-        data = "0x01"
+        id = $expectedId
+        data = $expectedData
         data_length = 1
     }
     foreach ($entry in $expected.GetEnumerator()) {
