@@ -1301,6 +1301,68 @@ def test_serial_protocol_coverage_structure() -> None:
     assert "Assert-UartReadback -Payload $uart" in script[uart_rebaseline:cleanup]
 
 
+def test_serial_protocol_query_preflights_preserve_simulator_contract() -> None:
+    script = (REPO_ROOT / "scripts" / "live-serial-check.ps1").read_text(
+        encoding="utf-8"
+    )
+    preflight_start = script.index("function Invoke-HardwareFreePreflight {")
+    preflight_end = script.index("\nfunction Restore-SerialState {", preflight_start)
+    preflight = script[preflight_start:preflight_end]
+
+    for protocol in ("i2c", "spi", "can"):
+        stage_start = preflight.index(
+            f'Invoke-ModeCli -Stage "preflight-{protocol}-query" '
+            f'-Command "serial-{protocol}"'
+        )
+        stage_end = preflight.find("\n    Invoke-ModeCli", stage_start + 1)
+        if stage_end == -1:
+            stage_end = len(preflight)
+        stage = preflight[stage_start:stage_end]
+        assert "-ModeArguments $dryRun" in stage
+        assert "-ModeArguments $simulate" not in stage
+
+        command = [
+            sys.executable,
+            "-m",
+            "scopes_tool_cli.cli",
+            f"serial-{protocol}",
+            "--simulate",
+            "--model",
+            "keysight-dsox4034a",
+            "--json",
+            "--bus",
+            "1",
+            "--query",
+        ]
+        simulated = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert simulated.returncode != 0
+        simulated_payload = json.loads(simulated.stdout)
+        assert simulated_payload["ok"] is False
+        assert simulated_payload["error"]["message"] == (
+            f"Serial bus 1 is in mode 'uart'; expected '{protocol}'."
+        )
+
+        command[command.index("--simulate")] = "--dry-run"
+        dry_run = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert dry_run.returncode == 0, dry_run.stderr
+        dry_run_payload = json.loads(dry_run.stdout)
+        assert dry_run_payload["ok"] is True
+        assert dry_run_payload["mode"] == "dry_run"
+        assert dry_run_payload["result"]["operation"] == "query"
+
+
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("scenario", ["completed", "timeout", "single-failure"])
 @pytest.mark.parametrize(

@@ -713,7 +713,7 @@ function Invoke-HardwareFreePreflight {
             "--data-source", "channel2", "--address-size", "bit7"
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-i2c-query" -Command "serial-i2c" `
-        -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
+        -ModeArguments $dryRun -Arguments @("--bus", "1", "--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-spi-configure" -Command "serial-spi" `
         -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--clock-source", "channel1",
@@ -722,14 +722,14 @@ function Invoke-HardwareFreePreflight {
             "--framing", "timeout", "--clock-timeout", "1e-5"
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-spi-query" -Command "serial-spi" `
-        -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
+        -ModeArguments $dryRun -Arguments @("--bus", "1", "--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-can-configure" -Command "serial-can" `
         -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--source", "channel1", "--baud-rate", "500000",
             "--signal-definition", "difl", "--sample-point", "75"
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-can-query" -Command "serial-can" `
-        -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
+        -ModeArguments $dryRun -Arguments @("--bus", "1", "--query") | Out-Null
 
     Invoke-ModeCli -Stage "preflight-operation-status" `
         -Command "system-operation-status" -ModeArguments $simulate `
