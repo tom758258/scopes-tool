@@ -106,33 +106,6 @@ function Add-NotApplicableCase {
     }
 }
 
-function Get-WgenApplicability {
-    param(
-        [Parameter(Mandatory = $true)]
-        [bool] $SupportsWgen,
-
-        [Parameter(Mandatory = $true)]
-        [string[]] $InstalledOptions
-    )
-
-    if (-not $SupportsWgen) {
-        return [pscustomobject]@{
-            Applicable = $false
-            Detail = "WGEN is unsupported by the detected instrument."
-        }
-    }
-    if (@($InstalledOptions) -notcontains "WAVEGEN") {
-        return [pscustomobject]@{
-            Applicable = $false
-            Detail = "Waveform Generator option is not installed on the detected instrument."
-        }
-    }
-    return [pscustomobject]@{
-        Applicable = $true
-        Detail = "Waveform Generator option is installed on the detected instrument."
-    }
-}
-
 function Add-Diagnostic {
     param(
         [Parameter(Mandatory = $true)]
@@ -1630,7 +1603,7 @@ function Restore-InstrumentState {
         }
     }
     $wgenApplicableProperty = $Snapshot.PSObject.Properties["WgenApplicable"]
-    if ($null -ne $wgenApplicableProperty -and [bool]$wgenApplicableProperty.Value) {
+    if ($null -ne $wgenApplicableProperty -and $wgenApplicableProperty.Value -eq $true) {
         $restoreSteps += [pscustomobject]@{
             Name = "WGEN output"
             Command = "wgen-output"
@@ -1895,7 +1868,7 @@ function Restore-InstrumentState {
                     throw "Math cleanup did not leave Math Function 1 OFF."
                 }
             }
-            if ($null -ne $wgenApplicableProperty -and [bool]$wgenApplicableProperty.Value) {
+            if ($null -ne $wgenApplicableProperty -and $wgenApplicableProperty.Value -eq $true) {
                 $wgen = Invoke-LiveCli -Stage "restore-wgen-output-query" `
                     -Command "wgen-output" -Arguments @("--query")
                 if ([bool]$wgen.result.enabled) {
@@ -2184,6 +2157,9 @@ try {
         TriggerHoldoffSeconds = Assert-FiniteNumber `
             -Value $triggerHoldoff.result.seconds -Label "Trigger holdoff"
         P3Enabled = $p3Enabled
+        InstalledOptions = @()
+        WgenApplicable = $null
+        WgenApplicabilityDetail = ""
         MathFunctionCount = [int]$identity.capabilities.math_function_count
         DemoSupported = [bool]$identity.capabilities.supports_demo
         TriggerEdgeCoupling = if ($null -ne $triggerEdgeCoupling) { [string]$triggerEdgeCoupling.result.coupling } else { "" }
@@ -2496,11 +2472,12 @@ if ($snapshotComplete) {
                 throw "Installed Options query returned no option data."
             }
             $snapshot.InstalledOptions = @($options.result.options)
-            $wgenApplicability = Get-WgenApplicability `
-                -SupportsWgen ([bool]$identity.capabilities.supports_wgen) `
-                -InstalledOptions $snapshot.InstalledOptions
-            $snapshot.WgenApplicable = [bool]$wgenApplicability.Applicable
-            $snapshot.WgenApplicabilityDetail = [string]$wgenApplicability.Detail
+            $snapshot.WgenApplicable = "WAVEGEN" -in @($snapshot.InstalledOptions)
+            $snapshot.WgenApplicabilityDetail = if ($snapshot.WgenApplicable) {
+                "Waveform Generator option is installed on the detected instrument."
+            } else {
+                "Waveform Generator option is not installed on the detected instrument."
+            }
         }
     }
 
@@ -3919,7 +3896,7 @@ if ($snapshotComplete) {
         Add-NotApplicableCase -Name "fft-advanced" -Detail "Advanced FFT is unsupported by the detected instrument."
     }
 
-    if (-not $script:FunctionalFailed -and [bool]$snapshot.WgenApplicable) {
+    if (-not $script:FunctionalFailed -and $snapshot.WgenApplicable -eq $true) {
         Invoke-BaselineCase -Name "wgen-basic" -Action {
             try {
                 Invoke-LiveCli -Stage "wgen-function-set" -Command "wgen-function" `

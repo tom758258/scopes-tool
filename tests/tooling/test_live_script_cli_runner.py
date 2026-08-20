@@ -3034,8 +3034,8 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         assert f'Command = "{command}"' in preflight
 
     assert '$snapshot.P3Enabled' in script
-    assert "function Get-WgenApplicability" in script
     assert '$snapshot.InstalledOptions = @($options.result.options)' in script
+    assert '$snapshot.WgenApplicable = "WAVEGEN" -in @($snapshot.InstalledOptions)' in script
     assert '$snapshot.WgenApplicable' in script
     assert 'Waveform Generator option is not installed' in script
     system_status_start = script.index('Invoke-BaselineCase -Name "system-status"')
@@ -3237,8 +3237,7 @@ if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
 
 foreach ($functionName in @(
     "Add-CaseResult", "Add-NotApplicableCase", "Assert-NearlyEqual",
-    "Assert-ScpiSent", "Get-WgenApplicability",
-    "Invoke-BaselineCase"
+    "Assert-FiniteNumber", "Assert-ScpiSent", "Invoke-BaselineCase"
 )) {
     $functionAst = $ast.Find({
         param($node)
@@ -3251,6 +3250,26 @@ foreach ($functionName in @(
     Invoke-Expression $functionAst.Extent.Text
 }
 
+$snapshotAssignment = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Extent.Text.TrimStart().StartsWith('$snapshot = [pscustomobject]@{')
+    )
+}, $true)
+if ($null -eq $snapshotAssignment) { throw "Missing production snapshot construction." }
+
+$systemStatusCommand = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "system-status"') -and
+        $node.Extent.Text.Contains('$snapshot.InstalledOptions = @($options.result.options)')
+    )
+}, $true)
+if ($null -eq $systemStatusCommand) { throw "Missing production system-status command." }
+
 function Drain-AfterFailure {
     param([string] $Stage, [string] $CaseName)
 }
@@ -3259,7 +3278,7 @@ $wgenIf = $ast.Find({
     param($node)
     return (
         $node -is [System.Management.Automation.Language.IfStatementAst] -and
-        $node.Extent.Text.TrimStart().StartsWith('if (-not $script:FunctionalFailed -and [bool]$snapshot.WgenApplicable)')
+        $node.Extent.Text.TrimStart().StartsWith('if (-not $script:FunctionalFailed -and $snapshot.WgenApplicable -eq $true)')
     )
 }, $true)
 if ($null -eq $wgenIf) { throw "Missing wgen-basic applicability gate." }
@@ -3280,6 +3299,113 @@ $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:Scenario = ""
+$script:InstalledOptions = @()
+
+function New-QueryPayload {
+    param([hashtable] $Values)
+    return [pscustomobject]@{
+        result = [pscustomobject]$Values
+    }
+}
+
+function New-ProductionIdentity {
+    return [pscustomobject]@{
+        capabilities = [pscustomobject]@{
+            series = "4000X"
+            analog_channels = 4
+            default_waveform_points = 1000
+            safe_max_waveform_points = 4000000
+            supports_word_format = $true
+            supports_raw_points_mode = $true
+            supports_measurements = $true
+            supports_delay_measurement = $true
+            supports_measure_results_dump = $true
+            supports_demo = $true
+            demo_functions = @("sine")
+            math_function_count = 4
+            supports_math_goft = $true
+            math_filter_operations = @()
+            math_visualization_operations = @()
+            supports_advanced_fft = $true
+            supports_screenshot = $true
+            supports_screenshot_format_pack = $true
+            supports_segmented_memory = $true
+            segmented_max_segments = 1000
+            supports_serial_decode = $true
+            serial_bus_count = 2
+            serial_modes = @("uart", "i2c", "spi", "can")
+            reference_waveforms = 4
+            supports_channel_label = $true
+            channel_label_max_length = 10
+            supports_display_label = $true
+            supports_annotation = $false
+            supports_annotation_position = $false
+            annotation_slots = 0
+            supports_indexed_annotation = $false
+            supports_50_ohm_impedance = $true
+            supports_search_basic = $true
+            supports_search_event_navigation = $true
+            search_modes = @("edge")
+        }
+    }
+}
+
+function Initialize-ProductionSnapshot {
+    param([Parameter(Mandatory = $true)] $Identity)
+
+    $acquisition = New-QueryPayload @{ type = "normal"; count = 1 }
+    $channelDisplay = New-QueryPayload @{ display = $true }
+    $channelCoupling = New-QueryPayload @{ coupling = "dc" }
+    $channelLabel = New-QueryPayload @{ text = "Original" }
+    $channelScale = New-QueryPayload @{ volts_per_division = 1.0 }
+    $channelOffset = New-QueryPayload @{ volts = 0.0 }
+    $channelProbe = New-QueryPayload @{ probe_ratio = 10.0 }
+    $channelBandwidth = New-QueryPayload @{ bandwidth_limit = $false }
+    $channelImpedance = New-QueryPayload @{ impedance = "one_meg" }
+    $channelInvert = New-QueryPayload @{ invert = $false }
+    $channelRange = New-QueryPayload @{ range_volts = 8.0 }
+    $channelUnits = New-QueryPayload @{ units = "volt" }
+    $channelVernier = New-QueryPayload @{ vernier = $false }
+    $channelProbeSkew = New-QueryPayload @{ probe_skew_seconds = 0.0 }
+    $displayLabels = New-QueryPayload @{ display_label = $true }
+    $displayPersistence = New-QueryPayload @{ mode = "minimum"; seconds = $null }
+    $displayIntensity = New-QueryPayload @{ value = 50 }
+    $displayVectors = New-QueryPayload @{ value = $true }
+    $annotationState = $null
+    $annotationRestorable = $false
+    $timebaseScale = New-QueryPayload @{ seconds_per_division = 0.001 }
+    $timebasePosition = New-QueryPayload @{ position_seconds = 0.0 }
+    $triggerSource = New-QueryPayload @{ source = "analog-channel"; source_channel = 1 }
+    $triggerSlope = New-QueryPayload @{ slope = "negative" }
+    $triggerLevel = New-QueryPayload @{ level_volts = 0.0 }
+    $triggerHoldoff = New-QueryPayload @{ seconds = 0.000001 }
+    $p3Enabled = $false
+    $triggerEdgeCoupling = $null
+    $triggerEdgeReject = $null
+    $triggerSweep = $null
+    $triggerNoiseReject = $null
+    $triggerHfReject = $null
+    $externalTrigger = $null
+    $externalTriggerLevel = $null
+    $searchSupported = $true
+    $identity = $Identity
+    $savePwd = New-QueryPayload @{ path = "\\usb" }
+    $saveFilename = New-QueryPayload @{ name = "scope" }
+    $saveImageFormat = New-QueryPayload @{ format = "none" }
+    $saveImagePalette = New-QueryPayload @{ palette = "color" }
+    $saveImageInkSaver = New-QueryPayload @{ enabled = $true }
+    $saveImageFactors = New-QueryPayload @{ enabled = $false }
+    $saveWaveformFormat = New-QueryPayload @{ format = "csv" }
+    $saveWaveformLength = New-QueryPayload @{ points = 1000 }
+    $saveWaveformLengthMax = New-QueryPayload @{ enabled = $false }
+    $snapshot = $null
+    Invoke-Expression $snapshotAssignment.Extent.Text | Out-Null
+    return $snapshot
+}
+
+function Invoke-ProductionSystemStatus {
+    Invoke-Expression $systemStatusCommand.Extent.Text | Out-Null
+}
 
 function Invoke-LiveCli {
     param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
@@ -3292,6 +3418,39 @@ function Invoke-LiveCli {
         throw "-241,Hardware missing"
     }
     switch ($Command) {
+        "system-opc" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @("*OPC?") }
+                result = [pscustomobject]@{ complete = $true; raw = "1" }
+            }
+        }
+        "system-status-byte" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @("*STB?") }
+                result = [pscustomobject]@{ value = 0; set_bits = @() }
+            }
+        }
+        "system-operation-status" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":OPERegister:CONDition?") }
+                result = [pscustomobject]@{ value = 0; set_bits = @() }
+            }
+        }
+        "system-standard-event" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @("*ESR?") }
+                result = [pscustomobject]@{ value = 0; set_bits = @() }
+            }
+        }
+        "system-options" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @("*OPT?") }
+                result = [pscustomobject]@{
+                    raw = ($script:InstalledOptions -join ",")
+                    options = @($script:InstalledOptions)
+                }
+            }
+        }
         "wgen-output" {
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @(
@@ -3344,31 +3503,37 @@ function Invoke-Scenario {
     $script:Invocations.Clear()
     $script:CaseResults = [ordered]@{}
     $script:FunctionalFailed = $false
-    $identity = [pscustomobject]@{
-        capabilities = [pscustomobject]@{
-            supports_wgen = $true
-            supports_demo = $true
-        }
-    }
-    $options = if ($Name -eq "installed" -or $Name -eq "runtime-failure") {
+    $identity = New-ProductionIdentity
+    $script:InstalledOptions = if ($Name -eq "installed" -or $Name -eq "runtime-failure") {
         @("WAVEGEN")
     } else {
         @("BASIC")
     }
-    $applicability = Get-WgenApplicability `
-        -SupportsWgen ([bool]$identity.capabilities.supports_wgen) `
-        -InstalledOptions $options
-    $snapshot = [pscustomobject]@{
-        WgenApplicable = [bool]$applicability.Applicable
-        WgenApplicabilityDetail = [string]$applicability.Detail
+    $snapshot = Initialize-ProductionSnapshot -Identity $identity
+    $initialInstalledOptions = @($snapshot.InstalledOptions)
+    $unknownBeforeSystemStatus = $null -eq $snapshot.WgenApplicable
+    Invoke-ProductionSystemStatus
+    $applicability = [pscustomobject]@{
+        Applicable = $snapshot.WgenApplicable
+        Detail = $snapshot.WgenApplicabilityDetail
     }
     Invoke-Expression $wgenCode
-    $wgenCommands = @($script:Invocations | ForEach-Object { $_.command })
+    $wgenCommands = @($script:Invocations |
+        Where-Object { $_.command -like "wgen-*" } |
+        ForEach-Object { $_.command })
     if ($Name -eq "absent") {
         Invoke-Expression $demoCode
     }
     return [pscustomobject]@{
         applicability = $applicability
+        initial_installed_options = $initialInstalledOptions
+        installed_options = @($snapshot.InstalledOptions)
+        wgen_applicable = $snapshot.WgenApplicable
+        unknown_before_system_status = $unknownBeforeSystemStatus
+        supports_wgen_absent = $null -eq $identity.capabilities.PSObject.Properties["supports_wgen"]
+        system_status = [string]$script:CaseResults["system-status"].Status
+        system_options_queries = @($script:Invocations |
+            Where-Object { $_.command -eq "system-options" }).Count
         wgen_status = [string]$script:CaseResults["wgen-basic"].Status
         wgen_commands = $wgenCommands
         demo_status = if ($script:CaseResults.Contains("demo-basic")) {
@@ -3411,6 +3576,13 @@ function Invoke-Scenario {
 
     installed = result["installed"]
     assert installed["applicability"]["Applicable"] is True
+    assert installed["initial_installed_options"] == []
+    assert installed["unknown_before_system_status"] is True
+    assert installed["supports_wgen_absent"] is True
+    assert installed["system_status"] == "PASS"
+    assert installed["system_options_queries"] == 1
+    assert installed["installed_options"] == ["WAVEGEN"]
+    assert installed["wgen_applicable"] is True
     assert installed["wgen_status"] == "PASS"
     assert installed["wgen_commands"] == [
         "wgen-function",
@@ -3427,6 +3599,13 @@ function Invoke-Scenario {
     absent = result["absent"]
     assert absent["applicability"]["Applicable"] is False
     assert "option is not installed" in absent["applicability"]["Detail"]
+    assert absent["initial_installed_options"] == []
+    assert absent["unknown_before_system_status"] is True
+    assert absent["supports_wgen_absent"] is True
+    assert absent["system_status"] == "PASS"
+    assert absent["system_options_queries"] == 1
+    assert absent["installed_options"] == ["BASIC"]
+    assert absent["wgen_applicable"] is False
     assert absent["wgen_status"] == "N/A"
     assert absent["wgen_commands"] == []
     assert absent["demo_status"] == "PASS"
@@ -3434,6 +3613,11 @@ function Invoke-Scenario {
 
     runtime_failure = result["runtime_failure"]
     assert runtime_failure["applicability"]["Applicable"] is True
+    assert runtime_failure["supports_wgen_absent"] is True
+    assert runtime_failure["system_status"] == "PASS"
+    assert runtime_failure["system_options_queries"] == 1
+    assert runtime_failure["installed_options"] == ["WAVEGEN"]
+    assert runtime_failure["wgen_applicable"] is True
     assert runtime_failure["wgen_status"] == "FAIL"
     assert runtime_failure["functional_failed"] is True
 
@@ -4936,9 +5120,14 @@ $snapshot.WgenApplicable = $false
 $script:Invocations.Clear()
 Restore-InstrumentState -Snapshot $snapshot
 $absentInvocations = @($script:Invocations | ForEach-Object { $_ })
+$snapshot.WgenApplicable = $null
+$script:Invocations.Clear()
+Restore-InstrumentState -Snapshot $snapshot
+$unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
 [ordered]@{
     invocations = $installedInvocations
     absent_invocations = $absentInvocations
+    unknown_invocations = $unknownInvocations
     drain_calls = $script:DrainCalls
 } | ConvertTo-Json -Depth 10 -Compress
 ''',
@@ -5094,6 +5283,9 @@ $absentInvocations = @($script:Invocations | ForEach-Object { $_ })
         "trigger-edge-external-level",
     ):
         assert command in absent_commands
+    assert not any(command.startswith("wgen-") for command in absent_commands)
+    unknown_commands = [entry["command"] for entry in result["unknown_invocations"]]
+    assert not any(command.startswith("wgen-") for command in unknown_commands)
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
