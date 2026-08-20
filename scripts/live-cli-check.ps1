@@ -543,6 +543,96 @@ function Invoke-StrictPairMeasurement {
     return $payload
 }
 
+function Invoke-ReferenceWaveformReadiness {
+    param(
+        [int] $TimeoutMilliseconds = 2500,
+
+        [int] $PollIntervalMilliseconds = 100
+    )
+
+    if ($TimeoutMilliseconds -le 0 -or $PollIntervalMilliseconds -le 0) {
+        throw "CH1 reference-waveform readiness polling requires positive timeout and poll interval."
+    }
+
+    $elapsedMilliseconds = 0
+    $lastReason = "invalid measurement sentinel"
+    while ($elapsedMilliseconds -le $TimeoutMilliseconds) {
+        $invocation = Invoke-CliRaw -Stage "reference-ch1-readiness" -Arguments @(
+            "measure", "--live", "--resource", $Resource, "--json",
+            "--source-channel", "1", "--item", "vpp"
+        )
+        $payload = $invocation.Payload
+        if ($null -eq $payload) {
+            throw "CH1 reference-waveform precondition is invalid: readiness returned no payload."
+        }
+        Assert-ScpiSent -Payload $payload -Label "CH1 VPP readiness" `
+            -ExpectedCommands @(":MEASure:VPP? CHANnel1")
+
+        $systemErrorProperty = $payload.PSObject.Properties["system_error"]
+        if ($null -eq $systemErrorProperty -or $null -eq $systemErrorProperty.Value) {
+            throw "CH1 reference-waveform precondition is invalid: readiness did not return system_error."
+        }
+        $systemError = $systemErrorProperty.Value
+        $codeProperty = $systemError.PSObject.Properties["code"]
+        if ($null -eq $codeProperty) {
+            throw "CH1 reference-waveform precondition is invalid: readiness system_error is missing code."
+        }
+        $systemErrorCode = [int]$codeProperty.Value
+        if ($systemErrorCode -ne 0) {
+            $messageProperty = $systemError.PSObject.Properties["message"]
+            $message = if ($null -ne $messageProperty) { [string]$messageProperty.Value } else { "" }
+            throw (
+                "CH1 reference-waveform precondition failed with system error " +
+                "${systemErrorCode}: ${message}."
+            )
+        }
+
+        $resultProperty = $payload.PSObject.Properties["result"]
+        if ($null -eq $resultProperty -or $null -eq $resultProperty.Value) {
+            throw "CH1 reference-waveform precondition is invalid: readiness did not return result."
+        }
+        $result = $resultProperty.Value
+        $validProperty = $result.PSObject.Properties["valid"]
+        if ($null -eq $validProperty) {
+            throw "CH1 reference-waveform precondition is invalid: readiness result is missing valid."
+        }
+        if ([bool]$validProperty.Value) {
+            $valueProperty = $result.PSObject.Properties["value"]
+            if ($null -eq $valueProperty -or $null -eq $valueProperty.Value) {
+                throw "CH1 reference-waveform precondition is invalid: readiness value is missing."
+            }
+            [void](Assert-FiniteNumber -Value $valueProperty.Value -Label "CH1 VPP readiness")
+            $okProperty = $payload.PSObject.Properties["ok"]
+            if ([int]$invocation.ExitCode -ne 0 -or
+                $null -eq $okProperty -or $okProperty.Value -ne $true) {
+                throw "CH1 reference-waveform precondition is invalid: readiness invocation did not succeed."
+            }
+            return $payload
+        }
+
+        $reasonProperty = $result.PSObject.Properties["reason"]
+        $lastReason = if ($null -ne $reasonProperty) {
+            [string]$reasonProperty.Value
+        } else {
+            "invalid measurement sentinel"
+        }
+        if ($elapsedMilliseconds -ge $TimeoutMilliseconds) {
+            break
+        }
+        $sleepMilliseconds = [int][Math]::Min(
+            $PollIntervalMilliseconds,
+            $TimeoutMilliseconds - $elapsedMilliseconds
+        )
+        Start-Sleep -Milliseconds $sleepMilliseconds
+        $elapsedMilliseconds += $sleepMilliseconds
+    }
+
+    throw (
+        "CH1 reference-waveform precondition did not become measurement-ready. " +
+        "timeout_ms=${TimeoutMilliseconds}; last_reason=${lastReason}."
+    )
+}
+
 function Invoke-PairMeasurementReadiness {
     param(
         [int] $TimeoutMilliseconds = 2500,
@@ -3894,50 +3984,75 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and [int]$identity.capabilities.reference_waveforms -gt 0) {
         Invoke-BaselineCase -Name "reference-lifecycle" -Action {
+            $referenceFailure = $null
             try {
-                $saved = Invoke-LiveCli -Stage "reference-save" -Command "reference-save" `
-                    -Arguments @("--slot", "1", "--source-channel", "1")
-                Assert-ScpiSent -Payload $saved -Label "Reference save" -ExpectedCommands @(
-                    ":WMEMory1:SAVE CHANnel1"
-                )
-                $savedQuery = Invoke-LiveCli -Stage "reference-save-query" -Command "reference-query" `
-                    -Arguments @("--slot", "1")
-                if ($null -eq $savedQuery.result.PSObject.Properties["displayed"]) {
-                    throw "Reference query did not return display state."
-                }
+                try {
+                    $run = Invoke-LiveCli -Stage "reference-run" -Command "run"
+                    Assert-ScpiSent -Payload $run -Label "Reference acquisition run" -ExpectedCommands @(":RUN")
+                    Invoke-ReferenceWaveformReadiness | Out-Null
 
-                $display = Invoke-LiveCli -Stage "reference-display-on" -Command "reference-display" `
-                    -Arguments @("--slot", "1", "--state", "on")
-                Assert-ScpiSent -Payload $display -Label "Reference display" -ExpectedCommands @(
-                    ":WMEMory1:DISPlay ON"
-                )
-                $displayQuery = Invoke-LiveCli -Stage "reference-display-query" -Command "reference-display" `
-                    -Arguments @("--slot", "1", "--query")
-                if (-not [bool]$displayQuery.result.displayed) {
-                    throw "Reference display query did not report ON."
-                }
+                    $saved = Invoke-LiveCli -Stage "reference-save" -Command "reference-save" `
+                        -Arguments @("--slot", "1", "--source-channel", "1")
+                    Assert-ScpiSent -Payload $saved -Label "Reference save" -ExpectedCommands @(
+                        ":WMEMory1:SAVE CHANnel1"
+                    )
 
-                $label = Invoke-LiveCli -Stage "reference-label-set" -Command "reference-label" `
-                    -Arguments @("--slot", "1", "--text", "BASELINE")
-                Assert-ScpiSent -Payload $label -Label "Reference label" -ExpectedCommands @(
-                    ':WMEMory1:LABel "BASELINE"'
-                )
-                $labelQuery = Invoke-LiveCli -Stage "reference-label-query" -Command "reference-label" `
-                    -Arguments @("--slot", "1", "--query")
-                if ([string]$labelQuery.result.label -ne "BASELINE") {
-                    throw "Reference label query did not report BASELINE."
+                    $display = Invoke-LiveCli -Stage "reference-display-on" -Command "reference-display" `
+                        -Arguments @("--slot", "1", "--state", "on")
+                    Assert-ScpiSent -Payload $display -Label "Reference display" -ExpectedCommands @(
+                        ":WMEMory1:DISPlay ON"
+                    )
+                    $displayQuery = Invoke-LiveCli -Stage "reference-display-query" -Command "reference-display" `
+                        -Arguments @("--slot", "1", "--query")
+                    if (-not [bool]$displayQuery.result.displayed) {
+                        throw "Reference display query did not report ON."
+                    }
+
+                    $label = Invoke-LiveCli -Stage "reference-label-set" -Command "reference-label" `
+                        -Arguments @("--slot", "1", "--text", "BASELINE")
+                    Assert-ScpiSent -Payload $label -Label "Reference label" -ExpectedCommands @(
+                        ':WMEMory1:LABel "BASELINE"'
+                    )
+                    $labelQuery = Invoke-LiveCli -Stage "reference-label-query" -Command "reference-label" `
+                        -Arguments @("--slot", "1", "--query")
+                    if ([string]$labelQuery.result.label -ne "BASELINE") {
+                        throw "Reference label query did not report BASELINE."
+                    }
+                    $savedQuery = Invoke-LiveCli -Stage "reference-save-query" -Command "reference-query" `
+                        -Arguments @("--slot", "1")
+                    if ($null -eq $savedQuery.result.PSObject.Properties["displayed"]) {
+                        throw "Reference query did not return display state."
+                    }
+                } finally {
+                    try {
+                        $displayOff = Invoke-LiveCli -Stage "reference-display-off" -Command "reference-display" `
+                            -Arguments @("--slot", "1", "--state", "off")
+                        Assert-ScpiSent -Payload $displayOff -Label "Reference display cleanup" -ExpectedCommands @(
+                            ":WMEMory1:DISPlay OFF"
+                        )
+                    } finally {
+                        $cleared = Invoke-LiveCli -Stage "reference-clear" -Command "reference-clear" `
+                            -Arguments @("--slot", "1")
+                        Assert-ScpiSent -Payload $cleared -Label "Reference clear" -ExpectedCommands @(
+                            ":WMEMory1:CLEar"
+                        )
+                    }
                 }
+            } catch {
+                $referenceFailure = $_
+                throw
             } finally {
-                $displayOff = Invoke-LiveCli -Stage "reference-display-off" -Command "reference-display" `
-                    -Arguments @("--slot", "1", "--state", "off")
-                Assert-ScpiSent -Payload $displayOff -Label "Reference display cleanup" -ExpectedCommands @(
-                    ":WMEMory1:DISPlay OFF"
-                )
-                $cleared = Invoke-LiveCli -Stage "reference-clear" -Command "reference-clear" `
-                    -Arguments @("--slot", "1")
-                Assert-ScpiSent -Payload $cleared -Label "Reference clear" -ExpectedCommands @(
-                    ":WMEMory1:CLEar"
-                )
+                try {
+                    $stopped = Invoke-LiveCli -Stage "reference-stop" -Command "stop-acquisition"
+                    Assert-ScpiSent -Payload $stopped -Label "Reference acquisition stop" -ExpectedCommands @(":STOP")
+                } catch {
+                    $stopMessage = "reference-stop failed: $($_.Exception.Message)"
+                    Write-Host "      ${stopMessage}"
+                    Add-Diagnostic -Name "reference-lifecycle" -Message $stopMessage
+                    if ($null -eq $referenceFailure) {
+                        throw
+                    }
+                }
             }
         }
     } elseif (-not $script:FunctionalFailed) {

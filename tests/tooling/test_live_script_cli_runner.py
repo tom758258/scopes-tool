@@ -2980,14 +2980,67 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         'Invoke-BaselineCase -Name "setup-slot-lifecycle"', reference_start
     )
     reference_case = script[reference_start:reference_end]
+    for stage in (
+        'Stage "reference-run"',
+        'Stage "reference-save"',
+        'Stage "reference-display-query"',
+        'Stage "reference-label-query"',
+        'Stage "reference-clear"',
+        'Stage "reference-stop"',
+    ):
+        assert stage in reference_case
     for command in (
+        "run",
         "reference-save",
         "reference-query",
         "reference-display",
         "reference-label",
         "reference-clear",
+        "stop-acquisition",
     ):
         assert f'Command "{command}"' in reference_case
+    assert 'ExpectedCommands @(\":RUN\")' in reference_case
+    assert 'ExpectedCommands @(\":STOP\")' in reference_case
+    assert ':WMEMory1:SAVE CHANnel1' in reference_case
+    assert '*OPC?' not in reference_case
+    assert 'Start-Sleep' not in reference_case
+    assert '$referenceFailure = $null' in reference_case
+    assert 'Add-Diagnostic -Name "reference-lifecycle" -Message $stopMessage' in reference_case
+    assert 'if ($null -eq $referenceFailure)' in reference_case
+    assert 'Command "autoscale"' not in reference_case
+    assert 'Command "channel-scale"' not in reference_case
+    assert reference_case.index('Stage "reference-run"') < reference_case.index(
+        "Invoke-ReferenceWaveformReadiness"
+    )
+    assert reference_case.index("Invoke-ReferenceWaveformReadiness") < reference_case.index(
+        'Stage "reference-save"'
+    )
+    assert reference_case.index('Stage "reference-save"') < reference_case.index(
+        'Stage "reference-display-on"'
+    )
+    assert reference_case.index('Stage "reference-display-query"') < reference_case.index(
+        'Stage "reference-label-set"'
+    )
+    assert reference_case.index('Stage "reference-label-query"') < reference_case.index(
+        'Stage "reference-clear"'
+    )
+    assert reference_case.index('Stage "reference-clear"') < reference_case.index(
+        'Stage "reference-stop"'
+    )
+
+    reference_readiness_start = script.index("function Invoke-ReferenceWaveformReadiness")
+    reference_readiness_end = script.index(
+        "function Invoke-PairMeasurementReadiness", reference_readiness_start
+    )
+    reference_readiness = script[reference_readiness_start:reference_readiness_end]
+    assert 'Stage "reference-ch1-readiness"' in reference_readiness
+    assert '"--source-channel", "1"' in reference_readiness
+    assert '"--item", "vpp"' in reference_readiness
+    assert ':MEASure:VPP? CHANnel1' in reference_readiness
+    assert "while ($elapsedMilliseconds -le $TimeoutMilliseconds)" in reference_readiness
+    assert "Start-Sleep -Milliseconds $sleepMilliseconds" in reference_readiness
+    assert "CH1 reference-waveform precondition did not become measurement-ready" in reference_readiness
+    assert "if ($systemErrorCode -ne 0)" in reference_readiness
     save_settings_start = script.index('Invoke-BaselineCase -Name "save-settings"')
     save_settings_end = script.index(
         'Invoke-BaselineCase -Name "save-export"', save_settings_start
