@@ -20,13 +20,13 @@ from .scpi import SCPIClient
 @dataclass(frozen=True)
 class CursorState:
     mode: str
-    x1_seconds: float
-    x2_seconds: float
-    y1_volts: float
-    y2_volts: float
-    x_delta_seconds: float
-    y_delta_volts: float
-    dydx: float
+    x1_seconds: float | None
+    x2_seconds: float | None
+    y1_volts: float | None
+    y2_volts: float | None
+    x_delta_seconds: float | None
+    y_delta_volts: float | None
+    dydx: float | None
 
 @dataclass(frozen=True)
 class CursorAutoTimebaseResult:
@@ -126,8 +126,20 @@ class CursorController:
         self.scpi.write(":MARKer:MODE OFF")
 
     def query(self) -> CursorState:
+        mode = self.scpi.query(":MARKer:MODE?")
+        if mode.strip().lower() == "off":
+            return CursorState(
+                mode=mode,
+                x1_seconds=None,
+                x2_seconds=None,
+                y1_volts=None,
+                y2_volts=None,
+                x_delta_seconds=None,
+                y_delta_volts=None,
+                dydx=None,
+            )
         return CursorState(
-            mode=self.scpi.query(":MARKer:MODE?"),
+            mode=mode,
             x1_seconds=self.scpi.query_float(":MARKer:X1Position?"),
             x2_seconds=self.scpi.query_float(":MARKer:X2Position?"),
             y1_volts=self.scpi.query_float(":MARKer:Y1Position?"),

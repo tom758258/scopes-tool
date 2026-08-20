@@ -814,11 +814,16 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
         if args.cursor_query:
             state = scope.query_cursor()
             runtime._json_update_result(operation="query", **state.__dict__)
-            for command in _cursor_query_commands():
+            commands = (
+                [":MARKer:MODE?"]
+                if state.mode.strip().lower() == "off"
+                else _cursor_query_commands()
+            )
+            for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode}")
-            print(f"X delta s: {state.x_delta_seconds:.12g}")
-            print(f"Y delta V: {state.y_delta_volts:.12g}")
+            print(f"X delta s: {_format_optional_number(state.x_delta_seconds)}")
+            print(f"Y delta V: {_format_optional_number(state.y_delta_volts)}")
         elif args.cursor_off:
             scope.cursor_off()
             runtime._json_update_result(operation="off", command=":MARKer:MODE OFF")

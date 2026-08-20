@@ -155,3 +155,21 @@ def test_configure_cursor_invalid_x_fails_before_auto_timebase_or_vertical_write
         scope.configure_cursor(1, float("nan"), 0.01, auto_timebase=True, auto_vertical=True, y1_volts=1.0)
 
     assert backend.history == ["*IDN?"]
+
+
+def test_query_cursor_off_only_queries_mode():
+    backend = SimulatorBackend(marker_mode="OFF")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    state = scope.query_cursor()
+
+    assert state.mode == "OFF"
+    assert state.x1_seconds is None
+    assert state.x2_seconds is None
+    assert state.y1_volts is None
+    assert state.y2_volts is None
+    assert state.x_delta_seconds is None
+    assert state.y_delta_volts is None
+    assert state.dydx is None
+    assert backend.history == ["*IDN?", ":MARKer:MODE?"]
