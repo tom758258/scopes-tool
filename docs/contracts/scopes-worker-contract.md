@@ -2097,7 +2097,7 @@ The only accepted request shapes are:
 ```
 
 ```json
-{"command": "save-pwd", "arguments": {"path": "USB:\\captures"}}
+{"command": "save-pwd", "arguments": {"path": "\\usb"}}
 ```
 
 `save-filename` accepts exactly `{"query": true}` or `{"name": "scope_01"}`.
@@ -2110,11 +2110,11 @@ accepts exactly `{"query": true}` or one canonical `palette`: `color` or
 Start commands require an explicit filename:
 
 ```json
-{"command": "save-image", "arguments": {"filename": "USB:/captures/screen.png"}}
+{"command": "save-image", "arguments": {"filename": "\\usb\\screen.png"}}
 ```
 
 ```json
-{"command": "save-waveform", "arguments": {"filename": "USB:/captures/wave.csv"}}
+{"command": "save-waveform", "arguments": {"filename": "\\usb\\wave.csv"}}
 ```
 
 `save-waveform-format` accepts exactly `{"query": true}` or one canonical

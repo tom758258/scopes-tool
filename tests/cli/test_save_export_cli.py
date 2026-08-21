@@ -15,7 +15,7 @@ def _payload(capsys):
     "args, target",
     [
         (["save-pwd", "--query"], ":SAVE:PWD?"),
-        (["save-pwd", "--path", r"USB:\captures"], ':SAVE:PWD "USB:\\captures"'),
+        (["save-pwd", "--path", r"\usb"], r':SAVE:PWD "\usb"'),
         (["save-filename", "--name", "scope_01"], ':SAVE:FILename "scope_01"'),
         (["save-image-format", "--format", "bmp8"], ":SAVE:IMAGe:FORMat BMP8bit"),
         (["save-image-palette", "--palette", "grayscale"], ":SAVE:IMAGe:PALette GRAYscale"),
@@ -37,12 +37,12 @@ def test_save_export_dry_run_preview_never_opens_scope(monkeypatch, capsys, args
 def test_save_image_dry_run_includes_opc(monkeypatch, capsys):
     monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main(
-        ["save-image", "--filename", "USB:/screen.png", "--dry-run", "--json"]
+        ["save-image", "--filename", r"\usb\screen.png", "--dry-run", "--json"]
     ) == 0
     payload = _payload(capsys)
     assert payload["scpi"]["planned"] == [
         "*IDN?",
-        ':SAVE:IMAGe "USB:/screen.png"',
+        r':SAVE:IMAGe "\usb\screen.png"',
         "*OPC?",
         ":SYSTem:ERRor?",
     ]
@@ -52,12 +52,12 @@ def test_save_image_dry_run_includes_opc(monkeypatch, capsys):
 def test_4000x_save_waveform_dry_run_includes_rui_readiness(monkeypatch, capsys):
     monkeypatch.setattr(runtime, "_open_scope", lambda *unused: pytest.fail("opened scope"))
     assert cli.main(
-        ["save-waveform", "--filename", "USB:/wave.csv", "--dry-run", "--json"]
+        ["save-waveform", "--filename", r"\usb\wave.csv", "--dry-run", "--json"]
     ) == 0
     payload = _payload(capsys)
     assert payload["scpi"]["planned"] == [
         "*IDN?",
-        ':SAVE:WAVeform "USB:/wave.csv"',
+        r':SAVE:WAVeform "\usb\wave.csv"',
         "*OPC?",
         ":OPERegister:CONDition?",
         ":SYSTem:ERRor?",
@@ -70,7 +70,7 @@ def test_save_image_simulate_json_is_instrument_side_and_creates_no_command_file
 ):
     monkeypatch.chdir(tmp_path)
     assert cli.main(
-        ["save-image", "--filename", "USB:/screen.png", "--simulate", "--json"]
+        ["save-image", "--filename", r"\usb\screen.png", "--simulate", "--json"]
     ) == 0
     payload = _payload(capsys)
     assert payload["result"]["operation"] == "save-image"
@@ -78,7 +78,7 @@ def test_save_image_simulate_json_is_instrument_side_and_creates_no_command_file
     assert payload["files"] == []
     assert payload["scpi"]["sent"] == [
         "*IDN?",
-        ':SAVE:IMAGe "USB:/screen.png"',
+        r':SAVE:IMAGe "\usb\screen.png"',
         "*OPC?",
         ":SYSTem:ERRor?",
     ]

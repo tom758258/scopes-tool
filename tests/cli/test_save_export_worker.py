@@ -21,7 +21,7 @@ def _runtime(tmp_path):
     "command, arguments",
     [
         ("save-pwd", {"query": True}),
-        ("save-pwd", {"path": r"USB:\captures"}),
+        ("save-pwd", {"path": r"\usb"}),
         ("save-filename", {"query": True}),
         ("save-filename", {"name": "scope_01"}),
         ("save-image-format", {"format": "png"}),
@@ -29,11 +29,11 @@ def _runtime(tmp_path):
         ("save-image-palette", {"palette": "color"}),
         ("save-image-ink-saver", {"enabled": False}),
         ("save-image-factors", {"enabled": True}),
-        ("save-image", {"filename": "USB:/screen.png"}),
+        ("save-image", {"filename": r"\usb\screen.png"}),
         ("save-waveform-format", {"format": "ascii-xy"}),
         ("save-waveform-length", {"points": 100}),
         ("save-waveform-length-max", {"query": True}),
-        ("save-waveform", {"filename": "USB:/wave.csv"}),
+        ("save-waveform", {"filename": r"\usb\wave.csv"}),
     ],
 )
 def test_worker_accepts_canonical_save_export_payloads(tmp_path, command, arguments):
@@ -84,7 +84,7 @@ def test_worker_rejects_noncanonical_save_payloads_before_side_effects(
 
 def test_worker_save_waveform_simulator_execution_has_no_command_artifacts(tmp_path):
     parsed = worker.parse_domain_command(
-        "save-waveform", {"filename": "USB:/wave.csv"}, _runtime(tmp_path)
+        "save-waveform", {"filename": r"\usb\wave.csv"}, _runtime(tmp_path)
     )
     payload, exit_code = cli._execute_json_command(parsed)
     assert exit_code == 0
@@ -93,7 +93,7 @@ def test_worker_save_waveform_simulator_execution_has_no_command_artifacts(tmp_p
     assert payload["files"] == []
     assert payload["scpi"]["sent"] == [
         "*IDN?",
-        ':SAVE:WAVeform "USB:/wave.csv"',
+        r':SAVE:WAVeform "\usb\wave.csv"',
         "*OPC?",
         ":OPERegister:CONDition?",
         ":SYSTem:ERRor?",

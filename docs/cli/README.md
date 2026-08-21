@@ -1828,18 +1828,18 @@ standard IDs must be `0x000` through `0x7FF`, and extended IDs must be
 Use instrument-side save commands for file saving:
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe save-pwd --path "USB:\captures" --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-pwd --path "\usb" --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-pwd --query --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-filename --name scope_01 --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-image-format --format png --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-image-palette --palette color --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-image-ink-saver --enabled false --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-image-factors --enabled true --simulate --json
-.\.venv\Scripts\scopes-tool.exe save-image --filename "USB:\captures\screen.png" --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-image --filename "\usb\screen.png" --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-waveform-format --format csv --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-waveform-length --points 1000 --simulate --json
 .\.venv\Scripts\scopes-tool.exe save-waveform-length-max --query --simulate --json
-.\.venv\Scripts\scopes-tool.exe save-waveform --filename "USB:\captures\wave.csv" --simulate --json
+.\.venv\Scripts\scopes-tool.exe save-waveform --filename "\usb\wave.csv" --simulate --json
 ```
 
 Query-capable commands require exactly `--query` or their setting argument.

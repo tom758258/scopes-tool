@@ -26,7 +26,7 @@ from scopes_tool_core.scpi import SCPIClient
 
 
 def test_save_export_v1_scpi_builders_use_common_commands():
-    assert save_pwd_command(r"USB:\captures") == ':SAVE:PWD "USB:\\captures"'
+    assert save_pwd_command(r"\usb") == ':SAVE:PWD "\\usb"'
     assert save_filename_command("capture_01") == ':SAVE:FILename "capture_01"'
     assert save_image_format_command("png") == ":SAVE:IMAGe:FORMat PNG"
     assert save_image_format_command("bmp") == ":SAVE:IMAGe:FORMat BMP"
@@ -65,9 +65,9 @@ def test_quoted_save_strings_reject_unsafe_values(value):
 
 
 def test_path_like_start_values_are_allowed_but_base_name_rejects_separators():
-    file_spec = r"USB:\folder\screen.png"
+    file_spec = r"\usb\folder\screen.png"
     assert save_image_command(file_spec) == f':SAVE:IMAGe "{file_spec}"'
-    assert save_waveform_command("USB:/wave.csv") == ':SAVE:WAVeform "USB:/wave.csv"'
+    assert save_waveform_command(r"\usb\wave.csv") == r':SAVE:WAVeform "\usb\wave.csv"'
     for value in ("folder/name", r"folder\name", "USB:name"):
         with pytest.raises(ParameterValidationError):
             validate_save_filename_base(value)
@@ -76,7 +76,7 @@ def test_path_like_start_values_are_allowed_but_base_name_rejects_separators():
 def test_query_states_are_canonical_and_preserve_raw_readbacks():
     backend = FakeBackend(
         responses={
-            ":SAVE:PWD?": '"USB:\\captures"',
+            ":SAVE:PWD?": '"\\usb"',
             ":SAVE:FILename?": '"scope_01"',
             ":SAVE:IMAGe:FORMat?": "BMP8bit",
             ":SAVE:IMAGe:PALette?": "GRAYscale",
@@ -89,8 +89,8 @@ def test_query_states_are_canonical_and_preserve_raw_readbacks():
     )
     controller = SaveExportController(SCPIClient(backend))
     assert controller.query_pwd().to_json() == {
-        "path": r"USB:\captures",
-        "raw_response": '"USB:\\captures"',
+        "path": r"\usb",
+        "raw_response": '"\\usb"',
     }
     assert controller.query_filename().name == "scope_01"
     assert controller.query_image_format().format == "bmp8"
@@ -108,8 +108,8 @@ def test_query_states_are_canonical_and_preserve_raw_readbacks():
 @pytest.mark.parametrize(
     "operation, command",
     [
-        ("save-image", ':SAVE:IMAGe "USB:/screen.png"'),
-        ("save-waveform", ':SAVE:WAVeform "USB:/wave.csv"'),
+        ("save-image", r':SAVE:IMAGe "\usb\screen.png"'),
+        ("save-waveform", r':SAVE:WAVeform "\usb\wave.csv"'),
     ],
 )
 def test_start_operations_wait_for_opc(operation, command):
@@ -139,7 +139,7 @@ def test_save_image_temporarily_uses_bounded_opc_timeout_and_restores_original(
         return query(command)
 
     monkeypatch.setattr(backend, "query", record_query_timeout)
-    result = SaveExportController(SCPIClient(backend)).save_image("USB:/screen.png")
+    result = SaveExportController(SCPIClient(backend)).save_image(r"\usb\screen.png")
 
     assert result.raw_operation_complete == "1"
     assert opc_query_timeouts == [15000]
@@ -151,7 +151,7 @@ def test_save_image_restores_original_timeout_when_opc_query_raises():
     backend = FakeBackend(responses={}, timeout=2000)
 
     with pytest.raises(FakeBackendError):
-        SaveExportController(SCPIClient(backend)).save_image("USB:/screen.png")
+        SaveExportController(SCPIClient(backend)).save_image(r"\usb\screen.png")
 
     assert backend.timeout_history == [15000, 2000]
     assert backend.timeout == 2000
@@ -171,13 +171,13 @@ def test_save_waveform_temporarily_uses_bounded_opc_timeout_and_restores_origina
     monkeypatch.setattr(backend, "query", record_query_timeout)
     result = SaveExportController(
         SCPIClient(backend), capabilities_for_model_id("keysight-dsox3024a")
-    ).save_waveform("USB:/wave.csv")
+    ).save_waveform(r"\usb\wave.csv")
 
     assert result.raw_operation_complete == "1"
     assert opc_query_timeouts == [15000]
     assert backend.timeout_history == [15000, 2000]
     assert backend.timeout == 2000
-    assert backend.history == [':SAVE:WAVeform "USB:/wave.csv"', "*OPC?"]
+    assert backend.history == [r':SAVE:WAVeform "\usb\wave.csv"', "*OPC?"]
 
 
 def test_4000x_save_waveform_waits_for_remote_interface_readiness(monkeypatch):
@@ -197,11 +197,11 @@ def test_4000x_save_waveform_waits_for_remote_interface_readiness(monkeypatch):
 
     result = SaveExportController(
         SCPIClient(backend), capabilities_for_model_id("keysight-dsox4034a")
-    ).save_waveform("USB:/wave.csv")
+    ).save_waveform(r"\usb\wave.csv")
 
     assert result.raw_operation_complete == "1"
     assert backend.history == [
-        ':SAVE:WAVeform "USB:/wave.csv"',
+        r':SAVE:WAVeform "\usb\wave.csv"',
         "*OPC?",
         ":OPERegister:CONDition?",
         ":OPERegister:CONDition?",
@@ -228,10 +228,10 @@ def test_4000x_save_waveform_times_out_waiting_for_remote_interface(monkeypatch)
     ):
         SaveExportController(
             SCPIClient(backend), capabilities_for_model_id("keysight-dsox4034a")
-        ).save_waveform("USB:/wave.csv")
+        ).save_waveform(r"\usb\wave.csv")
 
     assert backend.history == [
-        ':SAVE:WAVeform "USB:/wave.csv"',
+        r':SAVE:WAVeform "\usb\wave.csv"',
         "*OPC?",
         ":OPERegister:CONDition?",
     ]
@@ -243,11 +243,11 @@ def test_save_waveform_restores_original_timeout_when_opc_query_raises():
     backend = FakeBackend(responses={}, timeout=2000)
 
     with pytest.raises(FakeBackendError):
-        SaveExportController(SCPIClient(backend)).save_waveform("USB:/wave.csv")
+        SaveExportController(SCPIClient(backend)).save_waveform(r"\usb\wave.csv")
 
     assert backend.timeout_history == [15000, 2000]
     assert backend.timeout == 2000
-    assert backend.history == [':SAVE:WAVeform "USB:/wave.csv"', "*OPC?"]
+    assert backend.history == [r':SAVE:WAVeform "\usb\wave.csv"', "*OPC?"]
 
 
 @pytest.mark.parametrize("points", [True, 99, 1.5, "100"])
