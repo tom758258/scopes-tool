@@ -1778,6 +1778,78 @@ function Restore-InstrumentState {
             }
         )
     }
+    $saveImageFormatProperty = $Snapshot.PSObject.Properties["SaveImageFormat"]
+    $saveWaveformFormatProperty = $Snapshot.PSObject.Properties["SaveWaveformFormat"]
+    $saveWaveformLengthProperty = $Snapshot.PSObject.Properties["SaveWaveformLength"]
+    $saveFilenameProperty = $Snapshot.PSObject.Properties["SaveFilename"]
+    $saveImagePaletteProperty = $Snapshot.PSObject.Properties["SaveImagePalette"]
+    $saveImageInkSaverProperty = $Snapshot.PSObject.Properties["SaveImageInkSaver"]
+    $saveImageFactorsProperty = $Snapshot.PSObject.Properties["SaveImageFactors"]
+    if ($null -ne $saveFilenameProperty -and
+        $null -ne $saveImageFormatProperty -and
+        $null -ne $saveWaveformFormatProperty -and
+        $null -ne $saveImagePaletteProperty -and
+        $null -ne $saveImageInkSaverProperty -and
+        $null -ne $saveImageFactorsProperty) {
+        $imageFormat = [string]$saveImageFormatProperty.Value
+        $waveformFormat = [string]$saveWaveformFormatProperty.Value
+        if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24") -or
+            $waveformFormat -in @("ascii-xy", "csv", "binary")) {
+            $restoreSteps += [pscustomobject]@{
+                Name = "image save format context"
+                Command = "save-image-format"
+                Arguments = @("--format", "png")
+            }
+            $restoreSteps += @(
+                [pscustomobject]@{
+                    Name = "image factors"
+                    Command = "save-image-factors"
+                    Arguments = @("--enabled", ([string][bool]$saveImageFactorsProperty.Value).ToLowerInvariant())
+                },
+                [pscustomobject]@{
+                    Name = "image ink saver"
+                    Command = "save-image-ink-saver"
+                    Arguments = @("--enabled", ([string][bool]$saveImageInkSaverProperty.Value).ToLowerInvariant())
+                },
+                [pscustomobject]@{
+                    Name = "image save palette"
+                    Command = "save-image-palette"
+                    Arguments = @("--palette", [string]$saveImagePaletteProperty.Value)
+                },
+                [pscustomobject]@{
+                    Name = "save filename"
+                    Command = "save-filename"
+                    Arguments = @("--name", [string]$saveFilenameProperty.Value)
+                }
+            )
+            if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                $restoreSteps += [pscustomobject]@{
+                    Name = "image save format"
+                    Command = "save-image-format"
+                    Arguments = @("--format", $imageFormat)
+                }
+            } else {
+                $restoreSteps += [pscustomobject]@{
+                    Name = "waveform save format"
+                    Command = "save-waveform-format"
+                    Arguments = @("--format", $waveformFormat)
+                }
+            }
+        } else {
+            $restoreErrors.Add(
+                "save settings restore context is unavailable; no save format was restored."
+            )
+        }
+    }
+    if ($null -ne $saveWaveformLengthProperty -and
+        [int]$saveWaveformLengthProperty.Value -gt 0) {
+        $restoreSteps += [pscustomobject]@{
+            Name = "waveform save length"
+            Command = "save-waveform-length"
+            Arguments = @("--points", [string]$saveWaveformLengthProperty.Value)
+        }
+    }
+
     foreach ($step in $restoreSteps) {
         try {
             Invoke-LiveCli -Stage "restore-$($step.Command)" -Command $step.Command `

@@ -5315,7 +5315,9 @@ Invoke-Expression $caseBlock
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_p2_restore_excludes_case_owned_save_settings(tmp_path: Path) -> None:
+def test_baseline_p2_restore_carries_proven_save_context_and_excludes_pwd(
+    tmp_path: Path,
+) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
     harness_path = tmp_path / "baseline-p2-restore-harness.ps1"
     harness_path.write_text(
@@ -5381,9 +5383,6 @@ function Invoke-LiveCli {
         command = $Command
         arguments = @($Arguments)
     })
-    if ($Command -like "save-*") {
-        throw "Global restore must not invoke ${Command}."
-    }
     switch ($Stage) {
         "fixture-baseline-display" {
             return [pscustomobject]@{
@@ -5584,6 +5583,22 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
+
+    script_text = script_path.read_text(encoding="utf-8")
+    assert script_text.index('"image save format context"') < script_text.index(
+        'Invoke-BaselineCase -Name "setup-lifecycle"'
+    )
+
+    proven_save_context = [
+        "save-image-format",
+        "save-image-factors",
+        "save-image-ink-saver",
+        "save-image-palette",
+        "save-filename",
+        "save-waveform-format",
+        "save-waveform-length",
+    ]
+
     assert result["autoscale_status"] == "PASS"
     assert result["autoscale_functional_failed"] is False
     autoscale_commands = [
@@ -5591,7 +5606,9 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     ]
     assert autoscale_commands[0] == "autoscale"
     assert "channel-scale" in autoscale_commands
-    assert not any(command.startswith("save-") for command in autoscale_commands)
+    assert [c for c in autoscale_commands if c.startswith("save-")] == (
+        proven_save_context
+    )
     commands = [entry["command"] for entry in result["invocations"]]
     for command in (
         "channel-label",
@@ -5636,21 +5653,19 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         entry["stage"] == "restore-annotation-query"
         for entry in result["invocations"]
     )
-    save_restore_commands = [
-        entry["command"]
-        for entry in result["invocations"]
-        if entry["command"] in {
-            "save-image-format",
-            "save-image-factors",
-            "save-image-ink-saver",
-            "save-image-palette",
-            "save-filename",
-            "save-pwd",
-            "save-waveform-format",
-            "save-waveform-length",
-        }
+    save_entries = [
+        entry for entry in result["invocations"]
+        if entry["command"].startswith("save-")
     ]
-    assert save_restore_commands == []
+    assert [entry["command"] for entry in save_entries] == proven_save_context
+    assert save_entries[0]["arguments"] == ["--format", "png"]
+    assert save_entries[1]["arguments"] == ["--enabled", "false"]
+    assert save_entries[2]["arguments"] == ["--enabled", "true"]
+    assert save_entries[3]["arguments"] == ["--palette", "color"]
+    assert save_entries[4]["arguments"] == ["--name", "scope"]
+    assert save_entries[5]["arguments"] == ["--format", "csv"]
+    assert save_entries[6]["arguments"] == ["--points", "1000"]
+    assert not any(entry["command"] == "save-pwd" for entry in result["invocations"])
     assert any(
         entry["command"] == "trigger-edge-source"
         and entry["arguments"] == ["--source-channel", "2"]
