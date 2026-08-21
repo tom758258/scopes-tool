@@ -2318,6 +2318,200 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "save-pwd" -Action {
+            $pwd = Invoke-LiveCli -Stage "save-pwd-set" -Command "save-pwd" `
+                -Arguments @("--path", "\usb")
+            Assert-ScpiSent -Payload $pwd -Label "Save directory" `
+                -ExpectedCommands @(':SAVE:PWD "\usb"')
+            $pwdQuery = Invoke-LiveCli -Stage "save-pwd-query" `
+                -Command "save-pwd" -Arguments @("--query")
+            if (-not (Test-SavePathEquivalent `
+                    -Actual ([string]$pwdQuery.result.path) -Expected "\usb")) {
+                throw "Save directory readback did not report \usb."
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "save-settings" -Action {
+            $primaryException = $null
+            $firstRestoreException = $null
+            $imageFormatChanged = $false
+            $filenameChanged = $false
+            $paletteChanged = $false
+            $inkSaverChanged = $false
+            $factorsChanged = $false
+            try {
+                $imageFormat = Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
+                    -Arguments @("--format", "png")
+                $imageFormatChanged = $true
+                Assert-ScpiSent -Payload $imageFormat -Label "Image save format context" `
+                    -ExpectedCommands @(':SAVE:IMAGe:FORMat PNG')
+
+                $filename = Invoke-LiveCli -Stage "save-filename-set" -Command "save-filename" -Arguments @("--name", "live_validation")
+                $filenameChanged = $true
+                Assert-ScpiSent -Payload $filename -Label "Save filename" -ExpectedCommands @(':SAVE:FILename "live_validation"')
+                $filenameQuery = Invoke-LiveCli -Stage "save-filename-query" -Command "save-filename" -Arguments @("--query")
+                if ([string]$filenameQuery.result.name -ne "live_validation") {
+                    throw "Save filename readback did not report live_validation."
+                }
+
+                $palette = Invoke-LiveCli -Stage "save-image-palette-set" -Command "save-image-palette" -Arguments @("--palette", "color")
+                $paletteChanged = $true
+                Assert-ScpiSent -Payload $palette -Label "Image palette" -ExpectedCommands @(':SAVE:IMAGe:PALette COLOR')
+                $paletteQuery = Invoke-LiveCli -Stage "save-image-palette-query" -Command "save-image-palette" -Arguments @("--query")
+                if ([string]$paletteQuery.result.palette -ne "color") {
+                    throw "Image palette readback did not report color."
+                }
+
+                $inkSaver = Invoke-LiveCli -Stage "save-image-ink-saver-set" -Command "save-image-ink-saver" -Arguments @("--enabled", "false")
+                $inkSaverChanged = $true
+                Assert-ScpiSent -Payload $inkSaver -Label "Image ink saver" -ExpectedCommands @(':SAVE:IMAGe:INKSaver 0')
+                $inkQuery = Invoke-LiveCli -Stage "save-image-ink-saver-query" -Command "save-image-ink-saver" -Arguments @("--query")
+                if ([bool]$inkQuery.result.enabled) {
+                    throw "Image ink saver readback did not report disabled."
+                }
+
+                $factors = Invoke-LiveCli -Stage "save-image-factors-set" -Command "save-image-factors" -Arguments @("--enabled", "true")
+                $factorsChanged = $true
+                Assert-ScpiSent -Payload $factors -Label "Image factors" -ExpectedCommands @(':SAVE:IMAGe:FACTors 1')
+                $factorsQuery = Invoke-LiveCli -Stage "save-image-factors-query" -Command "save-image-factors" -Arguments @("--query")
+                if (-not [bool]$factorsQuery.result.enabled) {
+                    throw "Image factors readback did not report enabled."
+                }
+            } catch {
+                $primaryException = $_.Exception
+            } finally {
+                $restoreSteps = @()
+                if ($factorsChanged) {
+                    $restoreSteps += [pscustomobject]@{
+                        Stage = "save-image-factors-restore"
+                        Name = "image factors"
+                        Command = "save-image-factors"
+                        Arguments = @(
+                            "--enabled", ([string][bool]$snapshot.SaveImageFactors).ToLowerInvariant()
+                        )
+                    }
+                }
+                if ($inkSaverChanged) {
+                    $restoreSteps += [pscustomobject]@{
+                        Stage = "save-image-ink-saver-restore"
+                        Name = "image ink saver"
+                        Command = "save-image-ink-saver"
+                        Arguments = @(
+                            "--enabled", ([string][bool]$snapshot.SaveImageInkSaver).ToLowerInvariant()
+                        )
+                    }
+                }
+                if ($paletteChanged) {
+                    $restoreSteps += [pscustomobject]@{
+                        Stage = "save-image-palette-restore"
+                        Name = "image save palette"
+                        Command = "save-image-palette"
+                        Arguments = @("--palette", [string]$snapshot.SaveImagePalette)
+                    }
+                }
+                if ($filenameChanged) {
+                    $restoreSteps += [pscustomobject]@{
+                        Stage = "save-filename-restore"
+                        Name = "save filename"
+                        Command = "save-filename"
+                        Arguments = @("--name", [string]$snapshot.SaveFilename)
+                    }
+                }
+                if ($restoreSteps.Count -gt 0) {
+                    foreach ($restoreStep in $restoreSteps) {
+                        try {
+                            Invoke-LiveCli -Stage $restoreStep.Stage -Command $restoreStep.Command `
+                                -Arguments $restoreStep.Arguments | Out-Null
+                        } catch {
+                            if ($null -eq $firstRestoreException) {
+                                $firstRestoreException = $_.Exception
+                            }
+                            Add-Diagnostic -Name "save-settings" -Message (
+                                "$($restoreStep.Name) restore failed: $($_.Exception.Message)"
+                            )
+                            Drain-AfterFailure -Stage "$($restoreStep.Stage)-error-drain" `
+                                -CaseName "save-settings"
+                        }
+                    }
+
+                    try {
+                        if ($filenameChanged) {
+                            $restoredFilename = Invoke-LiveCli -Stage "save-filename-restore-query" `
+                                -Command "save-filename" -Arguments @("--query")
+                            if ([string]$restoredFilename.result.name -ne [string]$snapshot.SaveFilename) {
+                                throw "Save filename restore readback did not match the snapshot."
+                            }
+                        }
+                        if ($paletteChanged) {
+                            $restoredPalette = Invoke-LiveCli -Stage "save-image-palette-restore-query" `
+                                -Command "save-image-palette" -Arguments @("--query")
+                            if ([string]$restoredPalette.result.palette -ne [string]$snapshot.SaveImagePalette) {
+                                throw "Image palette restore readback did not match the snapshot."
+                            }
+                        }
+                        if ($inkSaverChanged) {
+                            $restoredInkSaver = Invoke-LiveCli -Stage "save-image-ink-saver-restore-query" `
+                                -Command "save-image-ink-saver" -Arguments @("--query")
+                            if ([bool]$restoredInkSaver.result.enabled -ne [bool]$snapshot.SaveImageInkSaver) {
+                                throw "Image ink saver restore readback did not match the snapshot."
+                            }
+                        }
+                        if ($factorsChanged) {
+                            $restoredFactors = Invoke-LiveCli -Stage "save-image-factors-restore-query" `
+                                -Command "save-image-factors" -Arguments @("--query")
+                            if ([bool]$restoredFactors.result.enabled -ne [bool]$snapshot.SaveImageFactors) {
+                                throw "Image factors restore readback did not match the snapshot."
+                            }
+                        }
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-settings" -Message (
+                            "restore readback failed: $($_.Exception.Message)"
+                        )
+                        Drain-AfterFailure -Stage "save-settings-restore-readback-error-drain" `
+                            -CaseName "save-settings"
+                    }
+                }
+
+                if ($imageFormatChanged) {
+                    try {
+                        if ([string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                            Invoke-LiveCli -Stage "save-image-format-restore" `
+                                -Command "save-image-format" `
+                                -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
+                        } elseif ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+                            Invoke-LiveCli -Stage "save-waveform-format-restore" `
+                                -Command "save-waveform-format" `
+                                -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
+                        } else {
+                            throw "Original save format context is not restorable."
+                        }
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-settings" -Message (
+                            "save format restore failed: $($_.Exception.Message)"
+                        )
+                        Drain-AfterFailure -Stage "save-settings-format-restore-error-drain" `
+                            -CaseName "save-settings"
+                    }
+                }
+            }
+            if ($null -ne $primaryException) {
+                throw $primaryException
+            }
+            if ($null -ne $firstRestoreException) {
+                throw $firstRestoreException
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "acquisition" -Action {
             Invoke-LiveCli -Stage "acquisition-set" -Command "acquisition" `
                 -Arguments @("--type", "normal") | Out-Null
@@ -4279,200 +4473,6 @@ if ($snapshotComplete) {
                 -Arguments @("--channel", "1", "--query")
             if ([string]$restored.result.text -ne [string]$snapshot.ChannelLabel) {
                 throw "Setup slot recall did not restore the CH1 label."
-            }
-        }
-    }
-
-    if (-not $script:FunctionalFailed) {
-        Invoke-BaselineCase -Name "save-pwd" -Action {
-            $pwd = Invoke-LiveCli -Stage "save-pwd-set" -Command "save-pwd" `
-                -Arguments @("--path", "\usb")
-            Assert-ScpiSent -Payload $pwd -Label "Save directory" `
-                -ExpectedCommands @(':SAVE:PWD "\usb"')
-            $pwdQuery = Invoke-LiveCli -Stage "save-pwd-query" `
-                -Command "save-pwd" -Arguments @("--query")
-            if (-not (Test-SavePathEquivalent `
-                    -Actual ([string]$pwdQuery.result.path) -Expected "\usb")) {
-                throw "Save directory readback did not report \usb."
-            }
-        }
-    }
-
-    if (-not $script:FunctionalFailed) {
-        Invoke-BaselineCase -Name "save-settings" -Action {
-            $primaryException = $null
-            $firstRestoreException = $null
-            $imageFormatChanged = $false
-            $filenameChanged = $false
-            $paletteChanged = $false
-            $inkSaverChanged = $false
-            $factorsChanged = $false
-            try {
-                $imageFormat = Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
-                    -Arguments @("--format", "png")
-                $imageFormatChanged = $true
-                Assert-ScpiSent -Payload $imageFormat -Label "Image save format context" `
-                    -ExpectedCommands @(':SAVE:IMAGe:FORMat PNG')
-
-                $filename = Invoke-LiveCli -Stage "save-filename-set" -Command "save-filename" -Arguments @("--name", "live_validation")
-                $filenameChanged = $true
-                Assert-ScpiSent -Payload $filename -Label "Save filename" -ExpectedCommands @(':SAVE:FILename "live_validation"')
-                $filenameQuery = Invoke-LiveCli -Stage "save-filename-query" -Command "save-filename" -Arguments @("--query")
-                if ([string]$filenameQuery.result.name -ne "live_validation") {
-                    throw "Save filename readback did not report live_validation."
-                }
-
-                $palette = Invoke-LiveCli -Stage "save-image-palette-set" -Command "save-image-palette" -Arguments @("--palette", "color")
-                $paletteChanged = $true
-                Assert-ScpiSent -Payload $palette -Label "Image palette" -ExpectedCommands @(':SAVE:IMAGe:PALette COLOR')
-                $paletteQuery = Invoke-LiveCli -Stage "save-image-palette-query" -Command "save-image-palette" -Arguments @("--query")
-                if ([string]$paletteQuery.result.palette -ne "color") {
-                    throw "Image palette readback did not report color."
-                }
-
-                $inkSaver = Invoke-LiveCli -Stage "save-image-ink-saver-set" -Command "save-image-ink-saver" -Arguments @("--enabled", "false")
-                $inkSaverChanged = $true
-                Assert-ScpiSent -Payload $inkSaver -Label "Image ink saver" -ExpectedCommands @(':SAVE:IMAGe:INKSaver 0')
-                $inkQuery = Invoke-LiveCli -Stage "save-image-ink-saver-query" -Command "save-image-ink-saver" -Arguments @("--query")
-                if ([bool]$inkQuery.result.enabled) {
-                    throw "Image ink saver readback did not report disabled."
-                }
-
-                $factors = Invoke-LiveCli -Stage "save-image-factors-set" -Command "save-image-factors" -Arguments @("--enabled", "true")
-                $factorsChanged = $true
-                Assert-ScpiSent -Payload $factors -Label "Image factors" -ExpectedCommands @(':SAVE:IMAGe:FACTors 1')
-                $factorsQuery = Invoke-LiveCli -Stage "save-image-factors-query" -Command "save-image-factors" -Arguments @("--query")
-                if (-not [bool]$factorsQuery.result.enabled) {
-                    throw "Image factors readback did not report enabled."
-                }
-            } catch {
-                $primaryException = $_.Exception
-            } finally {
-                $restoreSteps = @()
-                if ($factorsChanged) {
-                    $restoreSteps += [pscustomobject]@{
-                        Stage = "save-image-factors-restore"
-                        Name = "image factors"
-                        Command = "save-image-factors"
-                        Arguments = @(
-                            "--enabled", ([string][bool]$snapshot.SaveImageFactors).ToLowerInvariant()
-                        )
-                    }
-                }
-                if ($inkSaverChanged) {
-                    $restoreSteps += [pscustomobject]@{
-                        Stage = "save-image-ink-saver-restore"
-                        Name = "image ink saver"
-                        Command = "save-image-ink-saver"
-                        Arguments = @(
-                            "--enabled", ([string][bool]$snapshot.SaveImageInkSaver).ToLowerInvariant()
-                        )
-                    }
-                }
-                if ($paletteChanged) {
-                    $restoreSteps += [pscustomobject]@{
-                        Stage = "save-image-palette-restore"
-                        Name = "image save palette"
-                        Command = "save-image-palette"
-                        Arguments = @("--palette", [string]$snapshot.SaveImagePalette)
-                    }
-                }
-                if ($filenameChanged) {
-                    $restoreSteps += [pscustomobject]@{
-                        Stage = "save-filename-restore"
-                        Name = "save filename"
-                        Command = "save-filename"
-                        Arguments = @("--name", [string]$snapshot.SaveFilename)
-                    }
-                }
-                if ($restoreSteps.Count -gt 0) {
-                    foreach ($restoreStep in $restoreSteps) {
-                        try {
-                            Invoke-LiveCli -Stage $restoreStep.Stage -Command $restoreStep.Command `
-                                -Arguments $restoreStep.Arguments | Out-Null
-                        } catch {
-                            if ($null -eq $firstRestoreException) {
-                                $firstRestoreException = $_.Exception
-                            }
-                            Add-Diagnostic -Name "save-settings" -Message (
-                                "$($restoreStep.Name) restore failed: $($_.Exception.Message)"
-                            )
-                            Drain-AfterFailure -Stage "$($restoreStep.Stage)-error-drain" `
-                                -CaseName "save-settings"
-                        }
-                    }
-
-                    try {
-                        if ($filenameChanged) {
-                            $restoredFilename = Invoke-LiveCli -Stage "save-filename-restore-query" `
-                                -Command "save-filename" -Arguments @("--query")
-                            if ([string]$restoredFilename.result.name -ne [string]$snapshot.SaveFilename) {
-                                throw "Save filename restore readback did not match the snapshot."
-                            }
-                        }
-                        if ($paletteChanged) {
-                            $restoredPalette = Invoke-LiveCli -Stage "save-image-palette-restore-query" `
-                                -Command "save-image-palette" -Arguments @("--query")
-                            if ([string]$restoredPalette.result.palette -ne [string]$snapshot.SaveImagePalette) {
-                                throw "Image palette restore readback did not match the snapshot."
-                            }
-                        }
-                        if ($inkSaverChanged) {
-                            $restoredInkSaver = Invoke-LiveCli -Stage "save-image-ink-saver-restore-query" `
-                                -Command "save-image-ink-saver" -Arguments @("--query")
-                            if ([bool]$restoredInkSaver.result.enabled -ne [bool]$snapshot.SaveImageInkSaver) {
-                                throw "Image ink saver restore readback did not match the snapshot."
-                            }
-                        }
-                        if ($factorsChanged) {
-                            $restoredFactors = Invoke-LiveCli -Stage "save-image-factors-restore-query" `
-                                -Command "save-image-factors" -Arguments @("--query")
-                            if ([bool]$restoredFactors.result.enabled -ne [bool]$snapshot.SaveImageFactors) {
-                                throw "Image factors restore readback did not match the snapshot."
-                            }
-                        }
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "save-settings" -Message (
-                            "restore readback failed: $($_.Exception.Message)"
-                        )
-                        Drain-AfterFailure -Stage "save-settings-restore-readback-error-drain" `
-                            -CaseName "save-settings"
-                    }
-                }
-
-                if ($imageFormatChanged) {
-                    try {
-                        if ([string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
-                            Invoke-LiveCli -Stage "save-image-format-restore" `
-                                -Command "save-image-format" `
-                                -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
-                        } elseif ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
-                            Invoke-LiveCli -Stage "save-waveform-format-restore" `
-                                -Command "save-waveform-format" `
-                                -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
-                        } else {
-                            throw "Original save format context is not restorable."
-                        }
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "save-settings" -Message (
-                            "save format restore failed: $($_.Exception.Message)"
-                        )
-                        Drain-AfterFailure -Stage "save-settings-format-restore-error-drain" `
-                            -CaseName "save-settings"
-                    }
-                }
-            }
-            if ($null -ne $primaryException) {
-                throw $primaryException
-            }
-            if ($null -ne $firstRestoreException) {
-                throw $firstRestoreException
             }
         }
     }
