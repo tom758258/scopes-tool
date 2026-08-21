@@ -17,6 +17,10 @@ LIVE_SCRIPTS = (
     REPO_ROOT / "scripts" / "live-serial-check.ps1",
 )
 
+requires_windows = pytest.mark.skipif(
+    os.name != "nt", reason="requires Windows PowerShell"
+)
+
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
@@ -89,6 +93,26 @@ $script:CliInvocationIndex = 0
 $script:RunRoot = $RunRoot
 $Python = $PythonPath
 
+if ((Split-Path -Leaf $ScriptPath) -eq "live-cli-check.ps1") {
+    # The migrated live-cli-check Invoke-CliRaw delegates process capture to
+    # the shared validation helpers and records invocation metadata.
+    . (Join-Path (Split-Path -Parent $ScriptPath) "_validation_helpers.ps1")
+    $runRelativeFunction = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq "Get-ArtifactRelativePath"
+        )
+    }, $true)
+    if ($null -eq $runRelativeFunction) {
+        throw "Get-ArtifactRelativePath was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $runRelativeFunction.Extent.Text
+    $RepoRoot = $RunRoot
+    $script:RunDirectory = $RunRoot
+    $script:Invocations = New-Object System.Collections.Generic.List[object]
+}
+
 $empty = Invoke-CliRaw -Stage "empty-stderr" -Arguments @("empty-stderr")
 $emptyPath = Join-Path $RunRoot "cli-001-empty-stderr.stderr.txt"
 $emptyPreference = [string]$ErrorActionPreference
@@ -101,7 +125,7 @@ $failure = Invoke-CliRaw -Stage "failure-stderr" -Arguments @("failure-stderr")
 $failurePath = Join-Path $RunRoot "cli-003-failure-stderr.stderr.txt"
 $failurePreference = [string]$ErrorActionPreference
 
-[ordered]@{
+$resultOutput = [ordered]@{
     empty_exit_code = $empty.ExitCode
     empty_ok = $empty.Payload.ok
     empty_stderr = $empty.Stderr
@@ -119,7 +143,24 @@ $failurePreference = [string]$ErrorActionPreference
     failure_artifact_exists = Test-Path -LiteralPath $failurePath
     failure_artifact = [string](Get-Content -LiteralPath $failurePath -Raw)
     failure_preference = $failurePreference
-} | ConvertTo-Json -Depth 8 -Compress
+}
+if ((Split-Path -Leaf $ScriptPath) -eq "live-cli-check.ps1") {
+    $firstRecord = $script:Invocations[0]
+    $resultOutput["cli_stdout_artifact_exists"] =
+        Test-Path -LiteralPath (Join-Path $RunRoot "cli-001-empty-stderr.stdout.txt")
+    $resultOutput["cli_json_artifact_exists"] =
+        Test-Path -LiteralPath (Join-Path $RunRoot "cli-001-empty-stderr.json")
+    $resultOutput["cli_duration_gt_zero"] = ($null -ne $empty.DurationMs -and $empty.DurationMs -gt 0)
+    $resultOutput["cli_invocation_count"] = $script:Invocations.Count
+    $resultOutput["cli_record_stage0"] = [string]$firstRecord.stage
+    $resultOutput["cli_record_index0"] = [int]$firstRecord.index
+    $resultOutput["cli_record_exit0"] = [int]$firstRecord.exit_code
+    $resultOutput["cli_record_success_last"] = [bool]$script:Invocations[2].success
+    $resultOutput["cli_record_relative_stdout"] = [string]$firstRecord.stdout
+    $resultOutput["cli_empty_stdout_path_set"] =
+        (-not [string]::IsNullOrWhiteSpace([string]$empty.StdOutPath))
+}
+$resultOutput | ConvertTo-Json -Depth 8 -Compress
 """,
         encoding="utf-8",
     )
@@ -173,6 +214,19 @@ $failurePreference = [string]$ErrorActionPreference
     assert result["failure_artifact_exists"] is True
     assert "known diagnostic: failure-stderr" in result["failure_artifact"]
     assert result["failure_preference"] == "Stop"
+    if script_path.name == "live-cli-check.ps1":
+        assert result["cli_stdout_artifact_exists"] is True
+        assert result["cli_json_artifact_exists"] is True
+        assert result["cli_duration_gt_zero"] is True
+        assert result["cli_invocation_count"] == 3
+        assert result["cli_record_stage0"] == "empty-stderr"
+        assert result["cli_record_index0"] == 1
+        assert result["cli_record_exit0"] == 0
+        assert result["cli_record_success_last"] is False
+        assert result["cli_record_relative_stdout"].replace("\\", "/").endswith(
+            "cli-001-empty-stderr.stdout.txt"
+        )
+        assert result["cli_empty_stdout_path_set"] is True
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
@@ -2366,6 +2420,10 @@ foreach ($drainBlock in @(
 }
 
 $supportsSkip = [System.IO.Path]::GetFileName($ScriptPath) -ne "live-cli-check.ps1"
+if (-not $supportsSkip) {
+    $script:Target = "keysight-dsox4034a"
+    $script:Connection = "usb"
+}
 
 $script:RunRoot = Join-Path $OutputRoot "pass"
 New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
@@ -2587,6 +2645,10 @@ sys.exit(9)
 
     output_root = tmp_path / "artifacts"
     invocation_log = tmp_path / "fake-cli-invocations.jsonl"
+    script_args = ["-Resource", "TEST::INSTR", "-Python", sys.executable]
+    if script_path.name == "live-cli-check.ps1":
+        script_args += ["-Target", "keysight-dsox4034a", "-Connection", "usb"]
+    script_args += ["-OutputRoot", str(output_root)]
     environment = os.environ.copy()
     python_path = str(fake_package.parent)
     if environment.get("PYTHONPATH"):
@@ -2604,12 +2666,7 @@ sys.exit(9)
             "Bypass",
             "-File",
             str(script_path),
-            "-Resource",
-            "TEST::INSTR",
-            "-Python",
-            sys.executable,
-            "-OutputRoot",
-            str(output_root),
+            *script_args,
         ],
         cwd=REPO_ROOT,
         env=environment,
@@ -2623,6 +2680,8 @@ sys.exit(9)
     run_roots = [path for path in output_root.iterdir() if path.is_dir()]
     assert len(run_roots) == 1
     summary_path = run_roots[0] / "summary.md"
+    if script_path.name == "live-cli-check.ps1":
+        summary_path = run_roots[0] / "private" / "summary.md"
     summary_bytes = summary_path.read_bytes()
     summary = summary_bytes.decode("utf-8")
     assert not summary_bytes.startswith(b"\xef\xbb\xbf")
@@ -7090,3 +7149,402 @@ def test_live_cli_check_recommends_restart_before_validation() -> None:
     checklist = script[physical_setup:prompt]
     assert "restart" not in checklist.lower()
     assert 'Write-Host "  [11]' not in script
+
+
+P2_HELPERS = REPO_ROOT / "scripts" / "_validation_helpers.ps1"
+P2_PRIVACY = REPO_ROOT / "scripts" / "_artifact_privacy.ps1"
+LIVE_CLI_SCRIPT = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+CANONICAL_TARGETS = (
+    "keysight-dsox2004a",
+    "keysight-dsox3024a",
+    "keysight-dsox4024a",
+    "keysight-dsox4034a",
+)
+
+
+def ps_quote_p2(value):
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def run_live_cli_script(*args, timeout=180):
+    return subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(LIVE_CLI_SCRIPT),
+            *args,
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+        timeout=timeout,
+    )
+
+
+def run_live_cli_harness(body, timeout=180):
+    command = (
+        ". "
+        + ps_quote_p2(P2_HELPERS)
+        + "; . "
+        + ps_quote_p2(P2_PRIVACY)
+        + "; "
+        + body
+    )
+    return subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            command,
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+        timeout=timeout,
+    )
+
+
+def extract_live_cli_functions_ps(names):
+    name_list = ", ".join(ps_quote_p2(name) for name in names)
+    return """
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    '@SCRIPT@',
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
+}
+$functionSources = New-Object System.Collections.Generic.List[string]
+foreach ($functionName in @(@FUNCS@)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in the live script."
+    }
+    $functionSources.Add($functionAst.Extent.Text)
+}
+# Define through a temporary file so function bodies are file-backed, matching
+# how production loads them. Invoke-Expression compilation trips a PowerShell
+# 5.1 DLR array-binding bug for some bodies.
+$functionsFile = Join-Path $env:TEMP (
+    'live_cli_extracted_' + [guid]::NewGuid().ToString('N') + '.ps1'
+)
+[System.IO.File]::WriteAllLines(
+    $functionsFile,
+    $functionSources.ToArray(),
+    [System.Text.UTF8Encoding]::new($false)
+)
+. $functionsFile
+Remove-Item -LiteralPath $functionsFile -Force
+""".replace("@SCRIPT@", str(LIVE_CLI_SCRIPT)).replace("@FUNCS@", name_list)
+
+
+@requires_windows
+@pytest.mark.parametrize(
+    ("args", "expected_error"),
+    (
+        pytest.param(
+            ("-Target", "all", "-Connection", "usb", "-Resource", "TEST::INSTR"),
+            "'all' is not supported for live validation",
+            id="target-all-rejected",
+        ),
+        pytest.param(
+            (
+                "-Target",
+                "keysight-dsox9999a",
+                "-Connection",
+                "usb",
+                "-Resource",
+                "TEST::INSTR",
+            ),
+            "Unsupported target 'keysight-dsox9999a'",
+            id="invalid-target-rejected",
+        ),
+        pytest.param(
+            (
+                "-Target",
+                "keysight-dsox4034a",
+                "-Connection",
+                "rs232",
+                "-Resource",
+                "TEST::INSTR",
+            ),
+            "Unsupported connection 'rs232'",
+            id="invalid-connection-rejected",
+        ),
+    ),
+)
+def test_live_cli_check_usage_errors(args, expected_error):
+    completed = run_live_cli_script(*args)
+    assert completed.returncode == 2, completed.stderr + completed.stdout
+    assert "[live][cli]" in completed.stderr
+    assert expected_error in completed.stderr
+
+
+@requires_windows
+def test_live_cli_check_requires_target_and_connection():
+    completed = run_live_cli_script("-Resource", "TEST::INSTR")
+    assert completed.returncode != 0
+    assert "Target" in completed.stderr
+
+    completed = run_live_cli_script("-Target", "keysight-dsox4034a")
+    assert completed.returncode != 0
+    assert "Connection" in completed.stderr
+
+
+@requires_windows
+def test_live_cli_check_target_model_match_gate():
+    body = extract_live_cli_functions_ps(
+        ("Get-NormalizedModelToken", "Assert-TargetModelMatch")
+    ) + """
+$results = @{}
+$matching = [pscustomobject]@{
+    idn = [pscustomobject]@{
+        model = "DSOX4034A"
+        raw = "KEYSIGHT TECHNOLOGIES,DSOX4034A,MY55440270,07.20"
+    }
+}
+try {
+    Assert-TargetModelMatch -Identity $matching -ResolvedTarget "keysight-dsox4034a"
+    $results.match_canonical = ""
+} catch {
+    $results.match_canonical = $_.Exception.Message
+}
+$aliased = [pscustomobject]@{ idn = [pscustomobject]@{ model = "DSO-X 3024A" } }
+try {
+    Assert-TargetModelMatch -Identity $aliased -ResolvedTarget "keysight-dsox3024a"
+    $results.match_alias = ""
+} catch {
+    $results.match_alias = $_.Exception.Message
+}
+$mismatched = [pscustomobject]@{ idn = [pscustomobject]@{ model = "DSOX2004A" } }
+try {
+    Assert-TargetModelMatch -Identity $mismatched -ResolvedTarget "keysight-dsox3024a"
+    $results.mismatch = ""
+} catch {
+    $results.mismatch = $_.Exception.Message
+}
+$missing = [pscustomobject]@{ idn = $null }
+try {
+    Assert-TargetModelMatch -Identity $missing -ResolvedTarget "keysight-dsox4034a"
+    $results.missing = ""
+} catch {
+    $results.missing = $_.Exception.Message
+}
+[ordered]@{
+    match_canonical = [string]$results.match_canonical
+    match_alias = [string]$results.match_alias
+    mismatch = [string]$results.mismatch
+    missing = [string]$results.missing
+} | ConvertTo-Json -Depth 4 -Compress
+"""
+    result = run_live_cli_harness(body)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.splitlines()[-1])
+    assert payload["match_canonical"] == ""
+    assert payload["match_alias"] == ""
+    assert "DSOX2004A" in payload["mismatch"]
+    assert "does not match" in payload["mismatch"]
+    assert "keysight-dsox3024a" in payload["mismatch"]
+    assert "unavailable" in payload["missing"]
+
+
+def _normalize_json_text(text):
+    return (
+        text.replace("\\u003c", "<")
+        .replace("\\u003e", ">")
+        .replace("\\/", "/")
+        .replace("\\\\", "\\")
+    )
+
+
+@requires_windows
+def test_live_cli_check_complete_run_builds_private_and_shareable_evidence(tmp_path):
+    runs_root = tmp_path / "runs"
+    resource = "USB0::0x0957::0x17A4::MY55440270::0::INSTR"
+    body = extract_live_cli_functions_ps(
+        ("Write-Summary", "Get-ArtifactRelativePath", "Complete-LiveCliRun")
+    ) + """
+$Resource = '@RESOURCE@'
+$RepoRoot = '@REPO@'
+$RunsRoot = '@RUNS@'
+
+# --- scenario 1: FAIL run carrying sensitive evidence ---
+$layout = New-ValidationRunDirectory -BaseRoot $RunsRoot -Prefix 'run'
+$script:RunDirectory = $layout.Root
+$script:RunRoot = $layout.Private
+$script:ShareableRoot = $layout.Shareable
+$script:Target = 'keysight-dsox4034a'
+$script:Connection = 'usb'
+$script:FunctionalFailed = $true
+$script:ShareableGenerationFailed = $false
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:CliInvocationIndex = 0
+$stdoutPath = Join-Path $script:RunRoot 'cli-001-identity.stdout.txt'
+$jsonPath = Join-Path $script:RunRoot 'cli-001-identity.json'
+Write-Utf8NoBomText -LiteralPath $stdoutPath `
+    -Text ('{"ok":true,"resource":"' + $Resource + '"}')
+Write-Utf8NoBomText -LiteralPath $jsonPath `
+    -Text '{"ok":true,"idn":{"raw":"KEYSIGHT TECHNOLOGIES,DSOX4034A,MY55440270,07.20"}}'
+$script:Invocations.Add([pscustomobject]@{
+    index = 1
+    stage = 'identity'
+    command = 'python -m scopes_tool_cli.cli identify'
+    arguments = @('identify', '--resource', $Resource)
+    exit_code = 0
+    duration_ms = 123.4
+    success = $true
+    stdout = (Get-ArtifactRelativePath -Path $stdoutPath)
+    stderr = ''
+    json = (Get-ArtifactRelativePath -Path $jsonPath)
+}) | Out-Null
+$script:CaseResults['identity'] = [pscustomobject]@{
+    Passed = $true; Status = 'PASS'; Detail = '' }
+$script:CaseResults['pair-measurement'] = [pscustomobject]@{
+    Passed = $false; Status = 'FAIL';
+    Detail = ('VISA query failed for ' + $Resource +
+        ' at host 192.168.1.50 under repo ' + $RepoRoot) }
+$script:CaseResults['math-composite-source'] = [pscustomobject]@{
+    Passed = $false; Status = 'N/A'; Detail = 'unsupported on detected model' }
+
+Complete-LiveCliRun -Result 'FAIL'
+
+$privateReportRaw =
+    [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'report.json'))
+$privateSummaryText =
+    [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'summary.md'))
+$shareableDir = Join-Path $script:RunDirectory 'shareable'
+$shareableReportRaw =
+    [System.IO.File]::ReadAllText((Join-Path $shareableDir 'report.json'))
+$shareableSummaryRaw =
+    [System.IO.File]::ReadAllText((Join-Path $shareableDir 'summary.md'))
+$shareableReport = $shareableReportRaw | ConvertFrom-Json
+$privateReport = $privateReportRaw | ConvertFrom-Json
+$firstInvocation = @($shareableReport.invocations)[0]
+$mirrorReference = [string]$firstInvocation.json
+$mirrorPath = Join-Path $shareableDir $mirrorReference.Substring('shareable/'.Length)
+$mirrorText = [System.IO.File]::ReadAllText($mirrorPath)
+
+# --- scenario 2: passing cases but shareable generation fails ---
+function New-ShareableArtifactSet {
+    throw [System.InvalidOperationException]::new(
+        'simulated shareable artifact generation failure')
+}
+$layout2 = New-ValidationRunDirectory -BaseRoot $RunsRoot -Prefix 'run'
+$script:RunDirectory = $layout2.Root
+$script:RunRoot = $layout2.Private
+$script:ShareableRoot = $layout2.Shareable
+$script:FunctionalFailed = $false
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:CaseResults['identity'] = [pscustomobject]@{
+    Passed = $true; Status = 'PASS'; Detail = '' }
+Complete-LiveCliRun -Result 'PASS'
+
+$s2ReportRaw =
+    [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'report.json'))
+$s2SummaryText =
+    [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'summary.md'))
+$s2Report = $s2ReportRaw | ConvertFrom-Json
+
+[ordered]@{
+    s1_status = [string]$privateReport.status
+    s1_target = [string]$privateReport.target
+    s1_connection = [string]$privateReport.connection
+    s1_counts_cases = [int]$privateReport.summary_counts.cases
+    s1_counts_passed = [int]$privateReport.summary_counts.passed
+    s1_counts_failed = [int]$privateReport.summary_counts.failed
+    s1_counts_na = [int]$privateReport.summary_counts.na
+    s1_counts_invocations = [int]$privateReport.summary_counts.invocations
+    s1_private_report_raw = $privateReportRaw
+    s1_private_summary_has_target =
+        $privateSummaryText.Contains('Target: keysight-dsox4034a')
+    s1_shareable_report_raw = $shareableReportRaw
+    s1_shareable_summary_raw = $shareableSummaryRaw
+    s1_mirror_reference = $mirrorReference
+    s1_mirror_exists = (Test-Path -LiteralPath $mirrorPath -PathType Leaf)
+    s1_mirror_text = $mirrorText
+    s1_case_statuses = @(@($shareableReport.cases) |
+        ForEach-Object { [string]$_.status })
+    s1_shareable_status = [string]$shareableReport.status
+    s2_flag = $script:ShareableGenerationFailed
+    s2_status = [string]$s2Report.status
+    s2_error = [string]$s2Report.shareable_generation_error
+    s2_summary_reason = $s2SummaryText.Contains(
+        'Shareable artifact generation failed:')
+} | ConvertTo-Json -Depth 8 -Compress
+""".replace("@RESOURCE@", resource).replace("@REPO@", str(REPO_ROOT)).replace(
+        "@RUNS@", str(runs_root)
+    )
+
+    result = run_live_cli_harness(body, timeout=300)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.splitlines()[-1])
+
+    assert payload["s1_status"] == "failed"
+    assert payload["s1_target"] == "keysight-dsox4034a"
+    assert payload["s1_connection"] == "usb"
+    assert payload["s1_counts_cases"] == 3
+    assert payload["s1_counts_passed"] == 1
+    assert payload["s1_counts_failed"] == 1
+    assert payload["s1_counts_na"] == 1
+    assert payload["s1_counts_invocations"] == 1
+    assert payload["s1_case_statuses"] == ["PASS", "FAIL", "N/A"]
+    assert payload["s1_private_summary_has_target"] is True
+    assert payload["s1_shareable_status"] == "failed"
+
+    # Private evidence retains raw sensitive values.
+    normalized_private = _normalize_json_text(payload["s1_private_report_raw"])
+    assert resource in normalized_private
+    assert "MY55440270" in normalized_private
+
+    # Shareable artifacts are redacted everywhere.
+    joined_shareable = _normalize_json_text(
+        "\n".join(
+            (
+                payload["s1_shareable_report_raw"],
+                payload["s1_shareable_summary_raw"],
+                payload["s1_mirror_text"],
+            )
+        )
+    )
+    for secret in (resource, "MY55440270", "192.168.1.50", str(REPO_ROOT)):
+        assert secret not in joined_shareable, secret
+    assert "<redacted-resource>" in joined_shareable
+    assert "<redacted-idn>" in joined_shareable
+    assert "<redacted-ip>" in joined_shareable
+
+    # Invocation references point into the existing shareable tree.
+    reference = payload["s1_mirror_reference"]
+    assert reference.startswith("shareable/")
+    assert payload["s1_mirror_exists"] is True
+
+    # Scenario 2: all cases passed, but shareable generation failed.
+    assert payload["s2_flag"] is True
+    assert payload["s2_status"] == "failed"
+    assert payload["s2_error"] == "simulated shareable artifact generation failure"
+    assert payload["s2_summary_reason"] is True

@@ -2,6 +2,14 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
+    [string] $Target,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $Connection,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
     [string] $Resource,
 
     [string] $Python = ".\.venv\Scripts\python.exe",
@@ -12,10 +20,49 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$script:RepoRoot = $RepoRoot
+. (Join-Path $PSScriptRoot "_validation_helpers.ps1")
+. (Join-Path $PSScriptRoot "_artifact_privacy.ps1")
+
 $script:CliInvocationIndex = 0
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
 $script:FunctionalFailed = $false
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:ShareableGenerationFailed = $false
+
+function Write-LiveUsageError {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    [Console]::Error.WriteLine("[live][cli] ${Message}")
+    exit 2
+}
+
+$normalizedConnection = $Connection.Trim().ToLowerInvariant()
+if ($normalizedConnection -notin @("usb", "tcpip")) {
+    Write-LiveUsageError "Unsupported connection '${Connection}'. Use usb or tcpip."
+}
+
+$normalizedTarget = $Target.Trim().ToLowerInvariant()
+if ($normalizedTarget -eq "all") {
+    Write-LiveUsageError (
+        "Target 'all' is not supported for live validation. " +
+        "Specify one of: $(@(Get-SupportedTargetModelIds) -join ', ')."
+    )
+}
+try {
+    $resolvedTargets = @(Resolve-ValidationTargets -Target $normalizedTarget)
+} catch {
+    Write-LiveUsageError $_.Exception.Message
+}
+if ($resolvedTargets.Count -ne 1) {
+    Write-LiveUsageError (
+        "Live validation requires a single canonical target. " +
+        "Supported targets: $(@(Get-SupportedTargetModelIds) -join ', ')."
+    )
+}
+$script:Target = $resolvedTargets[0]
+$script:Connection = $normalizedConnection
 
 function ConvertTo-InvariantString {
     param(
@@ -122,7 +169,7 @@ function Add-CaseResult {
         Status = $status
         Detail = $Detail
     }
-    Write-Host ("{0,-5} {1}" -f $status, $Name)
+    Write-Host ("{0,-5} [live][cli] {1}" -f $status, $Name)
     if (-not [string]::IsNullOrWhiteSpace($Detail)) {
         Write-Host "      ${Detail}"
     }
@@ -142,7 +189,7 @@ function Add-NotApplicableCase {
         Status = "N/A"
         Detail = $Detail
     }
-    Write-Host ("{0,-5} {1}" -f "N/A", $Name)
+    Write-Host ("{0,-5} [live][cli] {1}" -f "N/A", $Name)
     if (-not [string]::IsNullOrWhiteSpace($Detail)) {
         Write-Host "      ${Detail}"
     }
@@ -174,6 +221,8 @@ function Write-Summary {
     $lines.Add("# Scopes Tool Live Validation Summary")
     $lines.Add("")
     $lines.Add("Result: ${Result}")
+    $lines.Add("Target: $($script:Target)")
+    $lines.Add("Connection: $($script:Connection)")
     $lines.Add("")
     $lines.Add("| Case | Status | Detail |")
     $lines.Add("|---|---|---|")
@@ -215,6 +264,198 @@ function Write-Summary {
     Write-Host "Summary: ${summaryPath}"
 }
 
+function Get-NormalizedModelToken {
+    param([AllowNull()][AllowEmptyString()][string]$Value)
+
+    return ([regex]::Replace([string]$Value, "[^A-Za-z0-9]", "")).ToUpperInvariant()
+}
+
+function Assert-TargetModelMatch {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Identity,
+
+        [Parameter(Mandatory = $true)]
+        [string] $ResolvedTarget
+    )
+
+    $profile = Get-ValidationTargetProfile -Target $ResolvedTarget
+    $expected = Get-NormalizedModelToken -Value ([string]$profile.model)
+
+    $detected = ""
+    $idnProperty = $Identity.PSObject.Properties["idn"]
+    if ($null -ne $idnProperty -and $null -ne $idnProperty.Value) {
+        $modelProperty = $idnProperty.Value.PSObject.Properties["model"]
+        if ($null -ne $modelProperty) {
+            $detected = [string]$modelProperty.Value
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($detected)) {
+        throw (
+            "Detected instrument model is unavailable; expected ${expected} " +
+            "for target '${ResolvedTarget}'."
+        )
+    }
+    if ((Get-NormalizedModelToken -Value $detected) -ne $expected) {
+        throw (
+            "Detected instrument model '${detected}' does not match validation " +
+            "target '${ResolvedTarget}' (expected ${expected}). Connect the " +
+            "intended instrument or rerun with the matching -Target."
+        )
+    }
+}
+
+function Get-ArtifactRelativePath {
+    param([AllowNull()][AllowEmptyString()][string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+    try {
+        $full = [System.IO.Path]::GetFullPath($Path)
+        $rootFull = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
+        $comparison = [System.StringComparison]::OrdinalIgnoreCase
+        $prefix = $rootFull + [System.IO.Path]::DirectorySeparatorChar
+        if ($full.StartsWith($prefix, $comparison)) {
+            return $full.Substring($rootFull.Length + 1).Replace('\', '/')
+        }
+    } catch {
+    }
+    return $Path
+}
+
+function Complete-LiveCliRun {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("PASS", "FAIL")]
+        [string] $Result
+    )
+
+    $status = if ($Result -eq "PASS") { "passed" } else { "failed" }
+
+    $cases = @(
+        foreach ($entry in $script:CaseResults.GetEnumerator()) {
+            $caseStatus = if ($null -ne $entry.Value.Status) {
+                [string]$entry.Value.Status
+            } elseif ($entry.Value.Passed) {
+                "PASS"
+            } else {
+                "FAIL"
+            }
+            [pscustomobject]@{
+                name = [string]$entry.Key
+                status = $caseStatus
+                passed = [bool]$entry.Value.Passed
+                detail = [string]$entry.Value.Detail
+            }
+        }
+    )
+
+    $diagnostics = [ordered]@{}
+    foreach ($entry in $script:Diagnostics.GetEnumerator()) {
+        $messageValues = @()
+        foreach ($value in ($entry.Value)) {
+            $messageValues += [string]$value
+        }
+        $diagnostics[[string]$entry.Key] = $messageValues
+    }
+
+    $passedCaseCount = 0
+    $failedCaseCount = 0
+    $naCaseCount = 0
+    foreach ($caseEntry in $cases) {
+        switch ($caseEntry.status) {
+            "PASS" { $passedCaseCount += 1 }
+            "FAIL" { $failedCaseCount += 1 }
+            "N/A" { $naCaseCount += 1 }
+        }
+    }
+
+    $invocationArray = @($script:Invocations.ToArray())
+
+    # Values are resolved before the report literal: PowerShell 5.1 can raise
+    # ArgumentException ("argument types do not match") when array-binding
+    # expressions are compiled inside hashtable literals.
+    $packageVersionValue = Get-PackageVersion -ProjectRoot $RepoRoot
+    $gitHeadValue = Get-GitHead -ProjectRoot $RepoRoot
+    $generatedAtValue = (Get-Date).ToUniversalTime().ToString("o")
+    $runRootRelative = Get-ArtifactRelativePath -Path $script:RunDirectory
+
+    $privateReportPath = Join-Path $script:RunRoot "report.json"
+    $privateSummaryPath = Join-Path $script:RunRoot "summary.md"
+    $reportRelative = Get-ArtifactRelativePath -Path $privateReportPath
+    $summaryRelative = Get-ArtifactRelativePath -Path $privateSummaryPath
+
+    $report = [ordered]@{
+        schema_version = 1
+        kind = "scopes-tool-live-cli-check"
+        status = $status
+        target = $script:Target
+        connection = $script:Connection
+        package_version = $packageVersionValue
+        git_head = $gitHeadValue
+        generated_at = $generatedAtValue
+        validation_mode = "live"
+        hardware_touched = $true
+        resource = $Resource
+        run_root = $runRootRelative
+        artifact_paths = [ordered]@{
+            output_dir = $runRootRelative
+            report = $reportRelative
+            summary = $summaryRelative
+        }
+        summary_counts = [ordered]@{
+            cases = $cases.Count
+            passed = $passedCaseCount
+            failed = $failedCaseCount
+            na = $naCaseCount
+            invocations = $invocationArray.Count
+        }
+        cases = $cases
+        diagnostics = $diagnostics
+        invocations = $invocationArray
+    }
+
+    Write-JsonReport -LiteralPath $privateReportPath -Report $report
+
+    Write-Summary -Result $Result
+
+    $shareableError = $null
+    try {
+        $null = New-ShareableArtifactSet `
+            -PrivateReport $report `
+            -PrivateSummaryPath (Join-Path $script:RunRoot "summary.md") `
+            -RunRoot $script:RunDirectory `
+            -PrivateRoot $script:RunRoot `
+            -ShareableRoot $script:ShareableRoot `
+            -RepoRoot $RepoRoot `
+            -Resource $Resource
+    } catch {
+        $shareableError = $_.Exception.Message
+    }
+
+    if ($null -ne $shareableError) {
+        Write-Host "[live][cli] shareable artifact generation failed: ${shareableError}"
+        Write-Host "[live][cli] private artifacts retained: $($script:RunDirectory)"
+        $report["status"] = "failed"
+        $report["shareable_generation_error"] = $shareableError
+        Write-JsonReport -LiteralPath $privateReportPath -Report $report
+        $summaryPath = Join-Path $script:RunRoot "summary.md"
+        $summaryText = ""
+        if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+            $summaryText = [System.IO.File]::ReadAllText($summaryPath)
+        }
+        $updated = $summaryText.TrimEnd() +
+            [Environment]::NewLine +
+            "- Shareable artifact generation failed: ${shareableError}" +
+            [Environment]::NewLine
+        Write-Utf8NoBomText -LiteralPath $summaryPath -Text $updated
+        $script:ShareableGenerationFailed = $true
+    }
+
+    Write-Host "[live][cli] report: private/report.json under $($script:RunDirectory)"
+}
+
 function Invoke-CliRaw {
     param(
         [Parameter(Mandatory = $true)]
@@ -226,35 +467,59 @@ function Invoke-CliRaw {
 
     $script:CliInvocationIndex += 1
     $safeStage = $Stage -replace "[^A-Za-z0-9_-]", "-"
-    $stderrPath = Join-Path $script:RunRoot (
-        "cli-{0:D3}-{1}.stderr.txt" -f $script:CliInvocationIndex, $safeStage
-    )
+    $baseName = "cli-{0:D3}-{1}" -f $script:CliInvocationIndex, $safeStage
+    $stdoutPath = Join-Path $script:RunRoot "${baseName}.stdout.txt"
+    $stderrPath = Join-Path $script:RunRoot "${baseName}.stderr.txt"
+    $jsonPath = Join-Path $script:RunRoot "${baseName}.json"
 
-    $previousErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $stdoutLines = @(& $Python -m scopes_tool_cli.cli @Arguments 2> $stderrPath)
-        $exitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
+    $record = Invoke-CapturedCommand `
+        -Name $Stage `
+        -FilePath $Python `
+        -Arguments (@("-m", "scopes_tool_cli.cli") + @($Arguments)) `
+        -StdOutPath $stdoutPath `
+        -StdErrPath $stderrPath `
+        -JsonPath $jsonPath `
+        -WorkingDirectory $RepoRoot
+
+    $exitCode = [int]$record["exit_code"]
+    $invocationRecord = [pscustomobject]@{
+        index = $script:CliInvocationIndex
+        stage = $Stage
+        command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
+        arguments = @($Arguments)
+        exit_code = $exitCode
+        duration_ms = $record["duration_ms"]
+        success = ($exitCode -eq 0)
+        stdout = Get-ArtifactRelativePath -Path ([string]$record["stdout"])
+        stderr = Get-ArtifactRelativePath -Path ([string]$record["stderr"])
+        json = Get-ArtifactRelativePath -Path ([string]$record["json"])
+    }
+    $script:Invocations.Add($invocationRecord) | Out-Null
+
+    $stdoutText = ""
+    if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) {
+        $stdoutText = [System.Convert]::ToString((Get-Content -LiteralPath $stdoutPath -Raw)).Trim()
     }
     $stderrText = ""
-    if (Test-Path -LiteralPath $stderrPath) {
-        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath $stderrPath -Raw)).Trim()
-        if ([string]::IsNullOrWhiteSpace($stderrText)) {
-            Remove-Item -LiteralPath $stderrPath -Force
-        }
+    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"]) -and
+        (Test-Path -LiteralPath ([string]$record["stderr"]) -PathType Leaf)) {
+        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath ([string]$record["stderr"]) -Raw)).Trim()
+    }
+    $artifactHint = "stdout=${stdoutPath}"
+    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"])) {
+        $artifactHint += "; stderr=$($record['stderr'])"
+    } else {
+        $artifactHint += "; stderr=(empty)"
     }
 
-    $stdoutText = ($stdoutLines -join [Environment]::NewLine).Trim()
     if ([string]::IsNullOrWhiteSpace($stdoutText)) {
-        throw "${Stage}: CLI returned no JSON (exit ${exitCode}). ${stderrText}"
+        throw "${Stage}: CLI returned no JSON (exit ${exitCode}). ${stderrText} [artifacts: ${artifactHint}]"
     }
 
     try {
         $payload = $stdoutText | ConvertFrom-Json -ErrorAction Stop
     } catch {
-        throw "${Stage}: CLI returned invalid JSON (exit ${exitCode}). ${stderrText}"
+        throw "${Stage}: CLI returned invalid JSON (exit ${exitCode}). ${stderrText} [artifacts: ${artifactHint}]"
     }
 
     return [pscustomobject]@{
@@ -262,6 +527,10 @@ function Invoke-CliRaw {
         Payload = $payload
         Stderr = $stderrText
         Command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
+        DurationMs = $record["duration_ms"]
+        StdOutPath = $stdoutPath
+        StdErrPath = [string]$record["stderr"]
+        JsonPath = [string]$record["json"]
     }
 }
 
@@ -1241,13 +1510,19 @@ function Invoke-HardwareFreePreflight {
         [string] $PreflightRoot
     )
 
-    $acquisitionPreflight = Join-Path $PSScriptRoot "preflight-acquisition.ps1"
-    if (-not (Test-Path -LiteralPath $acquisitionPreflight -PathType Leaf)) {
-        throw "Missing acquisition preflight script: ${acquisitionPreflight}"
+    $preflightCli = Join-Path $PSScriptRoot "preflight-cli.ps1"
+    if (-not (Test-Path -LiteralPath $preflightCli -PathType Leaf)) {
+        throw "Missing CLI preflight script: ${preflightCli}"
     }
 
-    Write-Host "Running existing acquisition preflight before live access."
-    & $acquisitionPreflight -Python $Python -OutputRoot (Join-Path $PreflightRoot "acquisition")
+    Write-Host "Running no-hardware CLI preflight before live access."
+    & $preflightCli `
+        -Target $script:Target `
+        -Python $Python `
+        -OutputRoot (Join-Path $PreflightRoot "preflight-cli")
+    if ($LASTEXITCODE -ne 0) {
+        throw "CLI preflight failed with exit code ${LASTEXITCODE}."
+    }
 
     $model = "keysight-dsox4024a"
     $dryRun = @("--dry-run", "--model", $model)
@@ -1978,15 +2253,29 @@ if (-not (Get-Command $Python -ErrorAction SilentlyContinue)) {
     throw "Python executable not found: ${Python}"
 }
 
-$timestamp = [DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss")
-$script:RunRoot = Join-Path $OutputRoot $timestamp
-$preflightRoot = Join-Path $script:RunRoot "preflight"
+$outputBase = Get-FullPath -Path $OutputRoot -BaseRoot $RepoRoot
+try {
+    Assert-PathUnderRoot `
+        -RootPath (Join-Path $RepoRoot ".tmp_tests") `
+        -Path $outputBase `
+        -Message "Live validation artifacts must stay under repository .tmp_tests: {0}"
+} catch {
+    Write-LiveUsageError $_.Exception.Message
+}
+
+$runLayout = New-ValidationRunDirectory -BaseRoot $outputBase -Prefix "run"
+$script:RunDirectory = $runLayout.Root
+$script:RunRoot = $runLayout.Private
+$script:ShareableRoot = $runLayout.Shareable
+$preflightRoot = Join-Path $script:RunDirectory "preflight"
 $liveArtifactRoot = Join-Path $script:RunRoot "live"
 New-Item -ItemType Directory -Path $preflightRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $liveArtifactRoot -Force | Out-Null
 
 Write-Host "Scopes Tool baseline live validation"
-Write-Host "Artifacts: $($script:RunRoot)"
+Write-Host "[live][cli] target: $($script:Target)"
+Write-Host "[live][cli] connection: $($script:Connection)"
+Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
 Write-Host ""
 
 try {
@@ -1997,8 +2286,8 @@ try {
     Write-Host ""
     Write-Host "FAIL  baseline live validation"
     Write-Host "No live hardware was accessed."
-    Write-Host "Artifacts: $($script:RunRoot)"
-    Write-Summary -Result "FAIL"
+    Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
+    Complete-LiveCliRun -Result "FAIL"
     exit 1
 }
 
@@ -2014,8 +2303,21 @@ try {
     Add-CaseResult -Name "identity" -Passed $false -Detail $_.Exception.Message
     Write-Host ""
     Write-Host "FAIL  baseline live validation"
-    Write-Host "Artifacts: $($script:RunRoot)"
-    Write-Summary -Result "FAIL"
+    Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
+    Complete-LiveCliRun -Result "FAIL"
+    exit 1
+}
+
+try {
+    Assert-TargetModelMatch -Identity $identity -ResolvedTarget $script:Target
+    Add-CaseResult -Name "target-model-match" -Passed $true
+} catch {
+    Add-CaseResult -Name "target-model-match" -Passed $false -Detail $_.Exception.Message
+    Write-Host ""
+    Write-Host "FAIL  baseline live validation"
+    Write-Host "Functional cases were not run because the detected model does not match the requested target."
+    Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
+    Complete-LiveCliRun -Result "FAIL"
     exit 1
 }
 
@@ -2039,8 +2341,8 @@ if (-not $initialDrainPassed) {
     Write-Host ""
     Write-Host "FAIL  baseline live validation"
     Write-Host "No state-changing baseline cases were run."
-    Write-Host "Artifacts: $($script:RunRoot)"
-    Write-Summary -Result "FAIL"
+    Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
+    Complete-LiveCliRun -Result "FAIL"
     exit 1
 }
 
@@ -4630,16 +4932,23 @@ foreach ($entry in $script:CaseResults.GetEnumerator()) {
     } else {
         "FAIL"
     }
-    Write-Host ("{0,-5} {1}" -f $status, $entry.Key)
+    Write-Host ("{0,-5} [live][cli] {1}" -f $status, $entry.Key)
 }
-Write-Host "Artifacts: $($script:RunRoot)"
+Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
 
 if ($script:FunctionalFailed) {
-    Write-Summary -Result "FAIL"
+    Complete-LiveCliRun -Result "FAIL"
     Write-Host "FAIL  baseline live validation"
+    if ($script:ShareableGenerationFailed) {
+        Write-Host "[live][cli] run failed; see private report for the shareable generation error"
+    }
     exit 1
 }
 
-Write-Summary -Result "PASS"
+Complete-LiveCliRun -Result "PASS"
+if ($script:ShareableGenerationFailed) {
+    Write-Host "FAIL  baseline live validation (shareable artifact generation failed)"
+    exit 1
+}
 Write-Host "PASS  baseline live validation"
 exit 0
