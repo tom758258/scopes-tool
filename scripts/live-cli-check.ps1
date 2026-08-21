@@ -1912,14 +1912,20 @@ Write-Host "Connection/resource: ${Resource}"
 Write-Host ""
 Write-Host "Required setup:"
 Write-Host "  - Connect the CH1 probe to the oscilloscope Probe Demo / Probe Comp output."
-Write-Host "  - Confirm a stable waveform is visible on CH1."
-Write-Host "  - For pair measurements, connect CH2 to the same Probe Demo / Probe Comp output."
+Write-Host "  - Connect the CH2 probe to the same Probe Demo / Probe Comp output."
+Write-Host "  - Ensure each probe's physical attenuation switch / ratio matches the"
+Write-Host "    oscilloscope channel probe attenuation setting."
+Write-Host "  - Confirm a stable Probe Comp waveform is visible on CH1."
+Write-Host "  - Confirm CH2 has the same Probe Comp waveform for pair measurements."
 Write-Host "  - The validator will prepare CH2 vertical settings for pair measurements."
 Write-Host "  - Disconnect unknown DUT signals."
 Write-Host "  - Leave WGEN output OFF and disconnected from any unknown DUT."
 Write-Host "  - Leave DEMO output OFF."
 Write-Host "  - Do not connect the External trigger input to an unknown or sensitive DUT."
 Write-Host "  - Insert writable USB storage for setup and Save/Export test files."
+Write-Host "  - This validation uses a fixed laboratory fixture."
+Write-Host "  - Incorrect probe connection, attenuation, or Probe Comp signal is a test"
+Write-Host "    setup failure and will not be automatically corrected by the validator."
 Write-Host "  - This test temporarily changes CH1, acquisition, display, Search,"
 Write-Host "    annotation, timebase, trigger, Math, WGEN, DEMO, and save settings."
 Write-Host "  - Modified public settings will be restored where practical."
@@ -2315,104 +2321,11 @@ if ($snapshotComplete) {
             $csvPath = Join-Path $liveArtifactRoot "wait-trigger-natural.csv"
             $metadataPath = Join-Path $liveArtifactRoot "wait-trigger-natural-meta.json"
             $primaryException = $null
-            $firstRestoreException = $null
-            $caseTriggerSnapshot = $null
-            $triggerMutationAttempted = $false
-            $captureAttempted = $false
+            $stopException = $null
             try {
-                $caseTriggerSource = Invoke-LiveCli `
-                    -Stage "capture-wait-trigger-snapshot-source" `
-                    -Command "trigger-edge-source" -Arguments @("--query")
-                $caseTriggerSlope = Invoke-LiveCli `
-                    -Stage "capture-wait-trigger-snapshot-slope" `
-                    -Command "trigger-edge-slope" -Arguments @("--query")
-                $caseTriggerLevel = Invoke-LiveCli `
-                    -Stage "capture-wait-trigger-snapshot-level" `
-                    -Command "trigger-edge-level" `
-                    -Arguments @("--source-channel", "1", "--query")
-
-                $originalSource = [string]$caseTriggerSource.result.source
-                if ($originalSource -notin @("analog-channel", "external", "line")) {
-                    throw "Natural trigger case-entry Edge source is not restorable: ${originalSource}."
-                }
-                $originalSourceChannel = $caseTriggerSource.result.source_channel
-                if ($originalSource -eq "analog-channel" -and $null -eq $originalSourceChannel) {
-                    throw "Natural trigger case-entry analog Edge source is missing source_channel."
-                }
-                $originalSlope = [string]$caseTriggerSlope.result.slope
-                if ($originalSlope -notin @("positive", "negative", "either", "alternate")) {
-                    throw "Natural trigger case-entry Edge slope is not restorable: ${originalSlope}."
-                }
-                $originalLevel = Assert-FiniteNumber `
-                    -Value $caseTriggerLevel.result.level_volts `
-                    -Label "Natural trigger case-entry CH1 Edge level"
-                $caseTriggerSnapshot = [pscustomobject]@{
-                    Source = $originalSource
-                    SourceChannel = $originalSourceChannel
-                    Slope = $originalSlope
-                    Level = $originalLevel
-                }
-
-                $fixtureFailure = (
-                    "CH1 Probe Comp natural-trigger prerequisite " +
-                    "could not derive a valid signal crossing level."
-                )
-                try {
-                    $minimumInvocation = Invoke-CliRaw `
-                        -Stage "capture-wait-trigger-measure-minimum" -Arguments @(
-                            "measure", "--live", "--resource", $Resource, "--json",
-                            "--channel", "1", "--item", "minimum"
-                        )
-                    $minimumPayload = Assert-SingleMeasurementInvocation `
-                        -Invocation $minimumInvocation -Item "minimum"
-                    $minimumValidProperty = $minimumPayload.result.PSObject.Properties["valid"]
-                    $minimumValueProperty = $minimumPayload.result.PSObject.Properties["value"]
-                    if ($null -eq $minimumValidProperty -or
-                        $minimumValidProperty.Value -ne $true -or
-                        $null -eq $minimumValueProperty -or
-                        $null -eq $minimumValueProperty.Value) {
-                        throw "CH1 minimum measurement is not valid."
-                    }
-                    $minimum = Assert-FiniteNumber `
-                        -Value $minimumValueProperty.Value -Label "CH1 minimum"
-
-                    $maximumInvocation = Invoke-CliRaw `
-                        -Stage "capture-wait-trigger-measure-maximum" -Arguments @(
-                            "measure", "--live", "--resource", $Resource, "--json",
-                            "--channel", "1", "--item", "maximum"
-                        )
-                    $maximumPayload = Assert-SingleMeasurementInvocation `
-                        -Invocation $maximumInvocation -Item "maximum"
-                    $maximumValidProperty = $maximumPayload.result.PSObject.Properties["valid"]
-                    $maximumValueProperty = $maximumPayload.result.PSObject.Properties["value"]
-                    if ($null -eq $maximumValidProperty -or
-                        $maximumValidProperty.Value -ne $true -or
-                        $null -eq $maximumValueProperty -or
-                        $null -eq $maximumValueProperty.Value) {
-                        throw "CH1 maximum measurement is not valid."
-                    }
-                    $maximum = Assert-FiniteNumber `
-                        -Value $maximumValueProperty.Value -Label "CH1 maximum"
-                    if ($maximum -le $minimum) {
-                        throw "CH1 maximum must be greater than CH1 minimum."
-                    }
-
-                    $triggerLevel = $minimum + (($maximum - $minimum) / 2)
-                    $triggerLevel = Assert-FiniteNumber `
-                        -Value $triggerLevel -Label "CH1 natural trigger level"
-                    if ($triggerLevel -le $minimum -or $triggerLevel -ge $maximum) {
-                        throw "Derived CH1 trigger level is not inside the measured signal range."
-                    }
-                } catch {
-                    throw "${fixtureFailure} $($_.Exception.Message)"
-                }
-
-                $triggerMutationAttempted = $true
                 Invoke-LiveCli -Stage "capture-wait-trigger-prepare" `
                     -Command "trigger-edge" -Arguments @(
-                        "--source-channel", "1",
-                        "--level", (ConvertTo-InvariantString -Value $triggerLevel),
-                        "--slope", "positive"
+                        "--source-channel", "1", "--level", "1", "--slope", "positive"
                     ) | Out-Null
 
                 $preparedSource = Invoke-LiveCli `
@@ -2428,18 +2341,26 @@ if ($snapshotComplete) {
                 if ([string]$preparedSource.result.source -ne "analog-channel" -or
                     [int]$preparedSource.result.source_channel -ne 1 -or
                     [string]$preparedSlope.result.slope -ne "positive") {
-                    throw "Natural trigger preparation readback did not report CH1 with positive slope."
+                    throw "Fixed natural trigger readback did not report CH1 with positive slope."
                 }
                 Assert-NearlyEqual -Actual ([double]$preparedLevel.result.level_volts) `
-                    -Expected $triggerLevel -Label "Natural trigger CH1 Edge level"
+                    -Expected 1.0 -Label "Fixed natural trigger CH1 Edge level"
 
-                $captureAttempted = $true
-                $capture = Invoke-LiveCli -Stage "capture-wait-trigger-natural" -Command "capture" -Arguments @(
-                    "--channel", "1", "--points", "1000", "--format", "byte",
-                    "--csv", $csvPath, "--meta", $metadataPath,
-                    "--wait-trigger", "--trigger-timeout-ms", "5000",
-                    "--trigger-poll-interval-ms", "100"
-                )
+                try {
+                    $capture = Invoke-LiveCli `
+                        -Stage "capture-wait-trigger-natural" -Command "capture" -Arguments @(
+                            "--channel", "1", "--points", "1000", "--format", "byte",
+                            "--csv", $csvPath, "--meta", $metadataPath,
+                            "--wait-trigger", "--trigger-timeout-ms", "5000",
+                            "--trigger-poll-interval-ms", "100"
+                        )
+                } catch {
+                    throw (
+                        "Fixed natural-trigger fixture capture failed. Check the CH1 Probe Comp " +
+                        "connection, probe attenuation, stable Probe Comp waveform, and fixed " +
+                        "trigger fixture. $($_.Exception.Message)"
+                    )
+                }
                 Assert-ScpiSent -Payload $capture -Label "Natural trigger capture" -ExpectedCommands @(
                     ":SINGle", ":OPERegister:CONDition?", ":WAVeform:DATA?"
                 )
@@ -2447,147 +2368,39 @@ if ($snapshotComplete) {
                     [bool]$capture.result.trigger.forced -or
                     [bool]$capture.result.trigger.timed_out -or
                     -not [bool]$capture.result.trigger.capture_allowed) {
-                    throw "Natural trigger capture did not report a natural, non-forced success."
+                    throw (
+                        "Natural trigger capture did not report a natural, non-forced success. " +
+                        "Check the CH1 Probe Comp connection, probe attenuation, stable Probe " +
+                        "Comp waveform, and fixed trigger fixture."
+                    )
                 }
                 Assert-Capture -Payload $capture -ExpectedFormat "BYTE" `
                     -CsvPath $csvPath -MetadataPath $metadataPath
             } catch {
                 $primaryException = $_.Exception
             } finally {
-                if ($captureAttempted) {
-                    try {
-                        $stop = Invoke-LiveCli `
-                            -Stage "capture-wait-trigger-natural-stop" `
-                            -Command "stop-acquisition"
-                        Assert-ScpiSent -Payload $stop `
-                            -Label "Natural capture lifecycle stop" `
-                            -ExpectedCommands @(":STOP")
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "capture-wait-trigger" -Message (
-                            "natural capture stop failed: $($_.Exception.Message)"
-                        )
-                        Drain-AfterFailure `
-                            -Stage "capture-wait-trigger-natural-stop-error-drain" `
-                            -CaseName "capture-wait-trigger"
-                    }
-                }
-
-                if ($triggerMutationAttempted -and $null -ne $caseTriggerSnapshot) {
-                    $sourceRestoreArguments = if ($caseTriggerSnapshot.Source -eq "analog-channel") {
-                        @("--source-channel", [string]$caseTriggerSnapshot.SourceChannel)
-                    } else {
-                        @("--source", [string]$caseTriggerSnapshot.Source)
-                    }
-                    $restoreSteps = @(
-                        [pscustomobject]@{
-                            Stage = "capture-wait-trigger-restore-level"
-                            Name = "CH1 Edge level"
-                            Command = "trigger-edge-level"
-                            Arguments = @(
-                                "--source-channel", "1", "--level-volts",
-                                (ConvertTo-InvariantString -Value $caseTriggerSnapshot.Level)
-                            )
-                        },
-                        [pscustomobject]@{
-                            Stage = "capture-wait-trigger-restore-slope"
-                            Name = "Edge slope"
-                            Command = "trigger-edge-slope"
-                            Arguments = @("--slope", [string]$caseTriggerSnapshot.Slope)
-                        },
-                        [pscustomobject]@{
-                            Stage = "capture-wait-trigger-restore-source"
-                            Name = "Edge source"
-                            Command = "trigger-edge-source"
-                            Arguments = $sourceRestoreArguments
-                        }
+                try {
+                    $stop = Invoke-LiveCli `
+                        -Stage "capture-wait-trigger-natural-stop" `
+                        -Command "stop-acquisition"
+                    Assert-ScpiSent -Payload $stop `
+                        -Label "Natural capture lifecycle stop" `
+                        -ExpectedCommands @(":STOP")
+                } catch {
+                    $stopException = $_.Exception
+                    Add-Diagnostic -Name "capture-wait-trigger" -Message (
+                        "natural capture stop failed: $($_.Exception.Message)"
                     )
-                    foreach ($restoreStep in $restoreSteps) {
-                        try {
-                            Invoke-LiveCli -Stage $restoreStep.Stage `
-                                -Command $restoreStep.Command `
-                                -Arguments $restoreStep.Arguments | Out-Null
-                        } catch {
-                            if ($null -eq $firstRestoreException) {
-                                $firstRestoreException = $_.Exception
-                            }
-                            Add-Diagnostic -Name "capture-wait-trigger" -Message (
-                                "$($restoreStep.Name) restore failed: $($_.Exception.Message)"
-                            )
-                            Drain-AfterFailure -Stage "$($restoreStep.Stage)-error-drain" `
-                                -CaseName "capture-wait-trigger"
-                        }
-                    }
-
-                    $restoreReadbacks = @(
-                        [pscustomobject]@{
-                            Stage = "capture-wait-trigger-restore-source-query"
-                            Name = "Edge source"
-                            Command = "trigger-edge-source"
-                            Arguments = @("--query")
-                            Validate = {
-                                param($payload)
-                                if ([string]$payload.result.source -ne $caseTriggerSnapshot.Source) {
-                                    throw "Edge source restore readback did not match the case-entry state."
-                                }
-                                if ($caseTriggerSnapshot.Source -eq "analog-channel" -and
-                                    [int]$payload.result.source_channel -ne
-                                    [int]$caseTriggerSnapshot.SourceChannel) {
-                                    throw "Edge source channel restore readback did not match the case-entry state."
-                                }
-                            }
-                        },
-                        [pscustomobject]@{
-                            Stage = "capture-wait-trigger-restore-slope-query"
-                            Name = "Edge slope"
-                            Command = "trigger-edge-slope"
-                            Arguments = @("--query")
-                            Validate = {
-                                param($payload)
-                                if ([string]$payload.result.slope -ne $caseTriggerSnapshot.Slope) {
-                                    throw "Edge slope restore readback did not match the case-entry state."
-                                }
-                            }
-                        },
-                        [pscustomobject]@{
-                            Stage = "capture-wait-trigger-restore-level-query"
-                            Name = "CH1 Edge level"
-                            Command = "trigger-edge-level"
-                            Arguments = @("--source-channel", "1", "--query")
-                            Validate = {
-                                param($payload)
-                                Assert-NearlyEqual `
-                                    -Actual ([double]$payload.result.level_volts) `
-                                    -Expected ([double]$caseTriggerSnapshot.Level) `
-                                    -Label "Restored CH1 Edge level"
-                            }
-                        }
-                    )
-                    foreach ($readback in $restoreReadbacks) {
-                        try {
-                            $payload = Invoke-LiveCli -Stage $readback.Stage `
-                                -Command $readback.Command -Arguments $readback.Arguments
-                            & $readback.Validate $payload
-                        } catch {
-                            if ($null -eq $firstRestoreException) {
-                                $firstRestoreException = $_.Exception
-                            }
-                            Add-Diagnostic -Name "capture-wait-trigger" -Message (
-                                "$($readback.Name) restore readback failed: $($_.Exception.Message)"
-                            )
-                            Drain-AfterFailure -Stage "$($readback.Stage)-error-drain" `
-                                -CaseName "capture-wait-trigger"
-                        }
-                    }
+                    Drain-AfterFailure `
+                        -Stage "capture-wait-trigger-natural-stop-error-drain" `
+                        -CaseName "capture-wait-trigger"
                 }
             }
             if ($null -ne $primaryException) {
                 throw $primaryException
             }
-            if ($null -ne $firstRestoreException) {
-                throw $firstRestoreException
+            if ($null -ne $stopException) {
+                throw $stopException
             }
         }
     }
