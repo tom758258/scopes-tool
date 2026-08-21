@@ -5315,7 +5315,7 @@ Invoke-Expression $caseBlock
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_p2_restore_carries_proven_save_context_and_excludes_pwd(
+def test_baseline_p2_restore_carries_proven_save_context_with_fixed_usb_pwd(
     tmp_path: Path,
 ) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -5595,6 +5595,7 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         "save-image-ink-saver",
         "save-image-palette",
         "save-filename",
+        "save-pwd",
         "save-waveform-format",
         "save-waveform-length",
     ]
@@ -5663,9 +5664,24 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     assert save_entries[2]["arguments"] == ["--enabled", "true"]
     assert save_entries[3]["arguments"] == ["--palette", "color"]
     assert save_entries[4]["arguments"] == ["--name", "scope"]
-    assert save_entries[5]["arguments"] == ["--format", "csv"]
-    assert save_entries[6]["arguments"] == ["--points", "1000"]
-    assert not any(entry["command"] == "save-pwd" for entry in result["invocations"])
+    assert save_entries[5]["arguments"] == ["--path", "\\usb"]
+    assert save_entries[6]["arguments"] == ["--format", "csv"]
+    assert save_entries[7]["arguments"] == ["--points", "1000"]
+    pwd_entries = [
+        entry for entry in result["invocations"]
+        if entry["command"] == "save-pwd"
+    ]
+    assert len(pwd_entries) == 1
+    assert pwd_entries[0]["stage"] == "restore-save-pwd"
+    assert pwd_entries[0]["arguments"] == ["--path", "\\usb"]
+    restore_start = script_text.index("function Restore-InstrumentState {")
+    restore_end = script_text.index(
+        "\nif ([string]::IsNullOrWhiteSpace($Resource))", restore_start
+    )
+    restore_body = script_text[restore_start:restore_end]
+    assert 'Command = "save-pwd"' in restore_body
+    assert '@("--path", "\\usb")' in restore_body
+    assert "SavePwd" not in restore_body
     assert any(
         entry["command"] == "trigger-edge-source"
         and entry["arguments"] == ["--source-channel", "2"]

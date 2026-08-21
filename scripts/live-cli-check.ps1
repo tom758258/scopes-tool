@@ -1820,6 +1820,11 @@ function Restore-InstrumentState {
                     Name = "save filename"
                     Command = "save-filename"
                     Arguments = @("--name", [string]$saveFilenameProperty.Value)
+                },
+                [pscustomobject]@{
+                    Name = "save directory"
+                    Command = "save-pwd"
+                    Arguments = @("--path", "\usb")
                 }
             )
             if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
