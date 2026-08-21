@@ -50,6 +50,19 @@ function Test-SavePathEquivalent {
     )
 }
 
+function Get-SavePathSetterArgument {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+
+    $setterPath = $Path
+    while ($setterPath.Length -gt 1 -and $setterPath.EndsWith("\")) {
+        $setterPath = $setterPath.Substring(0, $setterPath.Length - 1)
+    }
+    return $setterPath
+}
+
 function Get-PayloadErrorText {
     param(
         [Parameter(Mandatory = $true)]
@@ -4189,11 +4202,13 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed) {
         $savePwdApplicable = $true
+        $savePwdSetterPath =
+            Get-SavePathSetterArgument -Path ([string]$snapshot.SavePwd)
         try {
             $pwdPrerequisite = Invoke-LiveCli -Stage "save-pwd-prerequisite-set" `
-                -Command "save-pwd" -Arguments @("--path", [string]$snapshot.SavePwd)
+                -Command "save-pwd" -Arguments @("--path", $savePwdSetterPath)
             Assert-ScpiSent -Payload $pwdPrerequisite -Label "Save directory reversible prerequisite" `
-                -ExpectedCommands @(':SAVE:PWD "' + [string]$snapshot.SavePwd + '"')
+                -ExpectedCommands @(':SAVE:PWD "' + $savePwdSetterPath + '"')
         } catch {
             $prerequisiteMessage = $_.Exception.Message
             if ($prerequisiteMessage -match '(?i)(^|[^0-9])-151([^0-9]|$)' -and
@@ -4257,7 +4272,7 @@ if ($snapshotComplete) {
                     if ($pwdChanged) {
                         try {
                             Invoke-LiveCli -Stage "save-pwd-restore" -Command "save-pwd" `
-                                -Arguments @("--path", [string]$snapshot.SavePwd) | Out-Null
+                                -Arguments @("--path", $savePwdSetterPath) | Out-Null
                             $restoredPwd = Invoke-LiveCli -Stage "save-pwd-restore-query" `
                                 -Command "save-pwd" -Arguments @("--query")
                             if (-not (Test-SavePathEquivalent `

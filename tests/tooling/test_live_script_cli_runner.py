@@ -3730,7 +3730,8 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
 
 foreach ($functionName in @(
-    "Test-SavePathEquivalent", "Assert-ScpiSent", "Invoke-BaselineCase"
+    "Get-SavePathSetterArgument", "Test-SavePathEquivalent",
+    "Assert-ScpiSent", "Invoke-BaselineCase"
 )) {
     $functionAst = $ast.Find({
         param($node)
@@ -4037,6 +4038,240 @@ function Invoke-Scenario {
         "save-pwd-prerequisite-error-drain",
         "save-pwd-prerequisite-query-error-drain",
     ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_save_pwd_setter_path_normalizes_trailing_separator_for_native_argv(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "save-pwd-setter-path-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @(
+    "Get-SavePathSetterArgument", "Test-SavePathEquivalent",
+    "Assert-ScpiSent", "Invoke-BaselineCase"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$savePwdFlow = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.IfStatementAst] -and
+        $node.Extent.Text.TrimStart().StartsWith('if (-not $script:FunctionalFailed)') -and
+        $node.Extent.Text.Contains('Stage "save-pwd-prerequisite-set"') -and
+        $node.Extent.Text.Contains('Invoke-BaselineCase -Name "save-pwd"')
+    )
+}, $true).Extent.Text
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Status = if ($Passed) { "PASS" } else { "FAIL" }
+        Detail = $Detail
+    }
+}
+
+function Add-NotApplicableCase {
+    param([string] $Name, [string] $Detail)
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $false
+        Status = "N/A"
+        Detail = $Detail
+    }
+}
+
+function Get-ErrorDrain {
+    param([string] $Stage)
+    $script:DrainStages.Add($Stage)
+    return [pscustomobject]@{
+        Errors = @()
+        Terminated = $true
+    }
+}
+
+function Write-DrainErrors {
+    param([object[]] $Errors, [string] $CaseName = "")
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainStages.Add($Stage)
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+
+    if ($Stage -eq "save-pwd-prerequisite-set") {
+        if ($script:Scenario -eq "na-151") {
+            throw '-151,"Invalid string data"'
+        }
+        return [pscustomobject]@{
+            scpi = [pscustomobject]@{
+                sent = @(':SAVE:PWD "' + $Arguments[1] + '"')
+            }
+            result = [pscustomobject]@{}
+        }
+    }
+
+    $result = [ordered]@{}
+    $sent = @()
+    switch ($Stage) {
+        "save-pwd-prerequisite-query" { $result.path = $script:OriginalPath }
+        "save-pwd-set" { $sent = @(':SAVE:PWD "\usb"') }
+        "save-pwd-query" { $result.path = "\usb\" }
+        "save-pwd-restore" {
+            $sent = @(':SAVE:PWD "' + $Arguments[1] + '"')
+        }
+        "save-pwd-restore-query" {
+            $result.path = if ($script:Scenario -eq "trimmed-readback") {
+                "\Agilent Flash\setups"
+            } else {
+                $script:OriginalPath
+            }
+        }
+    }
+    return [pscustomobject]@{
+        scpi = [pscustomobject]@{ sent = $sent }
+        result = [pscustomobject]$result
+    }
+}
+
+function Invoke-Scenario {
+    param(
+        [ValidateSet("pass", "trimmed-readback", "na-151")]
+        [string] $Name
+    )
+    $script:Scenario = $Name
+    $script:OriginalPath = "\Agilent Flash\setups\"
+    $script:CaseResults = [ordered]@{}
+    $script:FunctionalFailed = $false
+    $script:Invocations = New-Object System.Collections.Generic.List[object]
+    $script:DrainStages = New-Object System.Collections.Generic.List[string]
+    $snapshot = [pscustomobject]@{ SavePwd = $script:OriginalPath }
+
+    Invoke-Expression $savePwdFlow
+
+    $prereq = $script:Invocations | Where-Object {
+        $_.stage -eq "save-pwd-prerequisite-set"
+    } | Select-Object -First 1
+    $restore = $script:Invocations | Where-Object {
+        $_.stage -eq "save-pwd-restore"
+    } | Select-Object -First 1
+    return [pscustomobject]@{
+        status = if ($script:CaseResults.Contains("save-pwd")) {
+            [string]$script:CaseResults["save-pwd"].Status
+        } else { "" }
+        detail = if ($script:CaseResults.Contains("save-pwd")) {
+            [string]$script:CaseResults["save-pwd"].Detail
+        } else { "" }
+        functional_failed = $script:FunctionalFailed
+        prerequisite_arguments = if ($null -ne $prereq) {
+            @($prereq.arguments)
+        } else { @() }
+        restore_arguments = if ($null -ne $restore) {
+            @($restore.arguments)
+        } else { @() }
+        stages = @($script:Invocations | ForEach-Object { $_.stage })
+        drain_stages = @($script:DrainStages | ForEach-Object { $_ })
+    }
+}
+
+$helperChecks = [ordered]@{
+    trailing_separator = Get-SavePathSetterArgument -Path "\Agilent Flash\setups\"
+    root = Get-SavePathSetterArgument -Path "\"
+    already_trimmed = Get-SavePathSetterArgument -Path "\Agilent Flash\setups"
+    short_trailing = Get-SavePathSetterArgument -Path "\usb\"
+}
+
+[ordered]@{
+    helper = $helperChecks
+    pass = Invoke-Scenario -Name "pass"
+    trimmed_readback = Invoke-Scenario -Name "trimmed-readback"
+    na_151 = Invoke-Scenario -Name "na-151"
+} | ConvertTo-Json -Depth 10 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    helper = result["helper"]
+    assert helper["trailing_separator"] == "\\Agilent Flash\\setups"
+    assert helper["root"] == "\\"
+    assert helper["already_trimmed"] == "\\Agilent Flash\\setups"
+    assert helper["short_trailing"] == "\\usb"
+
+    passed = result["pass"]
+    assert passed["status"] == "PASS"
+    assert passed["functional_failed"] is False
+    assert passed["prerequisite_arguments"] == ["--path", "\\Agilent Flash\\setups"]
+    assert passed["restore_arguments"] == ["--path", "\\Agilent Flash\\setups"]
+    assert passed["stages"] == [
+        "save-pwd-prerequisite-set",
+        "save-pwd-set",
+        "save-pwd-query",
+        "save-pwd-restore",
+        "save-pwd-restore-query",
+    ]
+
+    trimmed = result["trimmed_readback"]
+    assert trimmed["status"] == "PASS"
+    assert trimmed["functional_failed"] is False
+    assert trimmed["restore_arguments"] == ["--path", "\\Agilent Flash\\setups"]
+
+    na = result["na_151"]
+    assert na["status"] == "N/A"
+    assert "queryable but not setter-restorable" in na["detail"]
+    assert na["functional_failed"] is False
+    assert na["prerequisite_arguments"] == ["--path", "\\Agilent Flash\\setups"]
+    assert na["drain_stages"] == ["save-pwd-prerequisite-error-drain"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
