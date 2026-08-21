@@ -1172,6 +1172,69 @@ function Restore-EdgeTriggerBaseline {
     }
 }
 
+function Invoke-FixtureBaseline {
+    $display = Invoke-LiveCli -Stage "fixture-baseline-display" `
+        -Command "channel-display" -Arguments @("--channel", "1", "--on")
+    Assert-ScpiSent -Payload $display -Label "Fixture CH1 display" `
+        -ExpectedCommands @(":CHANnel1:DISPlay ON")
+
+    $scale = Invoke-LiveCli -Stage "fixture-baseline-scale" `
+        -Command "channel-scale" -Arguments @(
+            "--channel", "1", "--volts-per-division", "2"
+        )
+    Assert-ScpiSent -Payload $scale -Label "Fixture CH1 scale" `
+        -ExpectedCommands @(":CHANnel1:SCALe 2")
+
+    $acquisition = Invoke-LiveCli -Stage "fixture-baseline-acquisition" `
+        -Command "acquisition" -Arguments @("--type", "normal")
+    Assert-ScpiSent -Payload $acquisition -Label "Fixture acquisition" `
+        -ExpectedCommands @(":ACQuire:TYPE NORMal")
+
+    $trigger = Invoke-LiveCli -Stage "fixture-baseline-trigger" `
+        -Command "trigger-edge" -Arguments @(
+            "--source-channel", "1", "--level", "1", "--slope", "positive"
+        )
+    Assert-ScpiSent -Payload $trigger -Label "Fixture Edge trigger" -ExpectedCommands @(
+        ":TRIGger:MODE EDGE",
+        ":TRIGger:EDGE:SOURce CHANnel1",
+        ":TRIGger:EDGE:SLOPe POSitive"
+    )
+
+    $displayQuery = Invoke-LiveCli -Stage "fixture-baseline-display-query" `
+        -Command "channel-display" -Arguments @("--channel", "1", "--query")
+    if (-not [bool]$displayQuery.result.display) {
+        throw "Fixture baseline readback did not report CH1 display ON."
+    }
+
+    $scaleQuery = Invoke-LiveCli -Stage "fixture-baseline-scale-query" `
+        -Command "channel-scale" -Arguments @("--channel", "1", "--query")
+    Assert-NearlyEqual -Actual ([double]$scaleQuery.result.volts_per_division) `
+        -Expected 2.0 -Label "Fixture CH1 scale"
+
+    $acquisitionQuery = Invoke-LiveCli -Stage "fixture-baseline-acquisition-query" `
+        -Command "acquisition" -Arguments @("--query")
+    if ([string]$acquisitionQuery.result.type -ne "normal") {
+        throw (
+            "Fixture baseline readback is acquisition=$($acquisitionQuery.result.type), " +
+            "expected normal."
+        )
+    }
+
+    $sourceQuery = Invoke-LiveCli -Stage "fixture-baseline-source-query" `
+        -Command "trigger-edge-source" -Arguments @("--query")
+    $slopeQuery = Invoke-LiveCli -Stage "fixture-baseline-slope-query" `
+        -Command "trigger-edge-slope" -Arguments @("--query")
+    $levelQuery = Invoke-LiveCli -Stage "fixture-baseline-level-query" `
+        -Command "trigger-edge-level" -Arguments @("--source-channel", "1", "--query")
+    if ([string]$sourceQuery.result.source -ne "analog-channel" -or
+        [int]$sourceQuery.result.source_channel -ne 1 -or
+        [string]$slopeQuery.result.slope -ne "positive") {
+        throw "Fixture baseline readback did not report CH1 with positive slope."
+    }
+    Assert-NearlyEqual -Actual ([double]$levelQuery.result.level_volts) `
+        -Expected 1.0 -Label "Fixture CH1 Edge level"
+}
+
 function Invoke-HardwareFreePreflight {
     param(
         [Parameter(Mandatory = $true)]
@@ -1905,39 +1968,53 @@ if (-not $initialDrainPassed) {
 }
 
 Write-Host ""
-Write-Host "Baseline live validation target"
+Write-Host "--------------------------------------------------"
+Write-Host "Scopes Tool live validation target"
 Write-Host ""
 Write-Host "Detected instrument: $($identity.idn.raw)"
 Write-Host "Connection/resource: ${Resource}"
 Write-Host ""
-Write-Host "Required setup:"
-Write-Host "  - Connect the CH1 probe to the oscilloscope Probe Demo / Probe Comp output."
-Write-Host "  - Connect the CH2 probe to the same Probe Demo / Probe Comp output."
-Write-Host "  - Ensure each probe's physical attenuation switch / ratio matches the"
-Write-Host "    oscilloscope channel probe attenuation setting."
-Write-Host "  - Confirm a stable Probe Comp waveform is visible on CH1."
-Write-Host "  - Confirm CH2 has the same Probe Comp waveform for pair measurements."
-Write-Host "  - The validator will prepare CH2 vertical settings for pair measurements."
-Write-Host "  - Disconnect unknown DUT signals."
-Write-Host "  - Leave WGEN output OFF and disconnected from any unknown DUT."
-Write-Host "  - Leave DEMO output OFF."
-Write-Host "  - Do not connect the External trigger input to an unknown or sensitive DUT."
-Write-Host "  - Insert writable USB storage for setup and Save/Export test files."
-Write-Host "  - This validation uses a fixed laboratory fixture."
-Write-Host "  - Incorrect probe connection, attenuation, or Probe Comp signal is a test"
-Write-Host "    setup failure and will not be automatically corrected by the validator."
-Write-Host "  - This test temporarily changes CH1, acquisition, display, Search,"
-Write-Host "    annotation, timebase, trigger, Math, WGEN, DEMO, and save settings."
-Write-Host "  - Modified public settings will be restored where practical."
+Write-Host "PHYSICAL SETUP  operator must prepare"
+Write-Host ""
+Write-Host "  [1] CH1 probe -> Probe Demo / Probe Comp"
+Write-Host "  [2] CH2 probe -> same Probe Demo / Probe Comp"
+Write-Host "  [3] Confirm stable Probe Comp waveforms are visible"
+Write-Host "  [4] Probe physical attenuation must match the"
+Write-Host "      oscilloscope channel attenuation setting"
+Write-Host "  [5] Insert writable USB storage"
+Write-Host "  [6] Disconnect unknown DUT signals"
+Write-Host "  [7] WGEN output OFF and disconnected from unknown DUT"
+Write-Host "  [8] DEMO output OFF"
+Write-Host "  [9] External trigger input disconnected from unknown/sensitive DUT"
+Write-Host ""
+Write-Host "THE VALIDATOR WILL CONFIGURE"
+Write-Host ""
+Write-Host "  - CH1 display ON"
+Write-Host "  - CH1 vertical scale = 2 V/div"
+Write-Host "  - acquisition type = Normal"
+Write-Host "  - trigger = Edge / CH1 / Positive / 1 V"
+Write-Host "  - additional settings required by individual validation cases"
+Write-Host ""
+Write-Host "FIXTURE POLICY"
+Write-Host ""
+Write-Host "  - This is a fixed laboratory validation fixture."
+Write-Host "  - Incorrect physical connection, attenuation, or Probe Comp signal is"
+Write-Host "    a setup failure."
+Write-Host "  - The validator does not adapt an incorrect physical fixture."
+Write-Host "  - If the fixed instrument baseline cannot be configured or read back,"
+Write-Host "    validation stops with FAIL."
+Write-Host ""
+Write-Host "STATE / CLEANUP NOTES"
+Write-Host ""
+Write-Host "  - Original public instrument state is snapshotted before validation."
+Write-Host "  - Restorable settings are restored where practical."
 Write-Host "  - Math Function 1 is disposable acceptance state and will finish OFF."
 Write-Host "  - Safe Cleanup clears the display; DVM and DEMO may finish OFF rather"
 Write-Host "    than return to a pre-test ON state."
-Write-Host "  - The generic trigger mode cannot be restored and will remain Edge after"
-Write-Host "    the trigger case runs. Waveform transfer format may remain WORD."
-Write-Host "  - Measure Show may remain ON because the current public CLI exposes"
-Write-Host "    ON/query but not OFF."
+Write-Host "  - Generic trigger mode remains Edge; waveform transfer format may remain WORD."
+Write-Host "  - Measure Show may remain ON because public CLI exposes ON/query but not OFF."
 Write-Host ""
-Write-Host "Press Enter when the environment is ready."
+Write-Host "Press Enter only after the PHYSICAL SETUP above is ready."
 Write-Host "Ctrl+C to cancel."
 [void](Read-Host)
 
@@ -2142,6 +2219,10 @@ try {
 if ($snapshotComplete) {
     $stateChangeStarted = $true
 
+    Invoke-BaselineCase -Name "fixture-baseline" -Action {
+        Invoke-FixtureBaseline
+    }
+
     Invoke-BaselineCase -Name "acquisition" -Action {
         Invoke-LiveCli -Stage "acquisition-set" -Command "acquisition" `
             -Arguments @("--type", "normal") | Out-Null
@@ -2323,29 +2404,6 @@ if ($snapshotComplete) {
             $primaryException = $null
             $stopException = $null
             try {
-                Invoke-LiveCli -Stage "capture-wait-trigger-prepare" `
-                    -Command "trigger-edge" -Arguments @(
-                        "--source-channel", "1", "--level", "1", "--slope", "positive"
-                    ) | Out-Null
-
-                $preparedSource = Invoke-LiveCli `
-                    -Stage "capture-wait-trigger-prepare-source-query" `
-                    -Command "trigger-edge-source" -Arguments @("--query")
-                $preparedSlope = Invoke-LiveCli `
-                    -Stage "capture-wait-trigger-prepare-slope-query" `
-                    -Command "trigger-edge-slope" -Arguments @("--query")
-                $preparedLevel = Invoke-LiveCli `
-                    -Stage "capture-wait-trigger-prepare-level-query" `
-                    -Command "trigger-edge-level" `
-                    -Arguments @("--source-channel", "1", "--query")
-                if ([string]$preparedSource.result.source -ne "analog-channel" -or
-                    [int]$preparedSource.result.source_channel -ne 1 -or
-                    [string]$preparedSlope.result.slope -ne "positive") {
-                    throw "Fixed natural trigger readback did not report CH1 with positive slope."
-                }
-                Assert-NearlyEqual -Actual ([double]$preparedLevel.result.level_volts) `
-                    -Expected 1.0 -Label "Fixed natural trigger CH1 Edge level"
-
                 try {
                     $capture = Invoke-LiveCli `
                         -Stage "capture-wait-trigger-natural" -Command "capture" -Arguments @(
@@ -2582,20 +2640,19 @@ if ($snapshotComplete) {
                 throw "CH1 label readback does not match the snapshot."
             }
 
-            $scaleValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelScale)
             $scaleSet = Invoke-LiveCli -Stage "channel-scale-set-p2" -Command "channel-scale" `
-                -Arguments @("--channel", "1", "--volts-per-division", $scaleValue)
+                -Arguments @("--channel", "1", "--volts-per-division", "2")
             $scale = Invoke-LiveCli -Stage "channel-scale-query-p2" -Command "channel-scale" `
                 -Arguments @("--channel", "1", "--query")
             Assert-ScpiSent -Payload $scale -Label "CH1 scale query" `
                 -ExpectedCommands @(":CHANnel1:SCALe?")
-            Assert-NearlyEqual -Actual ([double]$scale.result.volts_per_division) `
-                -Expected ([double]$snapshot.ChannelScale) -Label "CH1 scale"
             if (-not @($scaleSet.scpi.sent | Where-Object {
                 ([string]$_).StartsWith(":CHANnel1:SCALe ")
             })) {
                 throw "CH1 scale configure did not use the CH1 scale SCPI path."
             }
+            Assert-NearlyEqual -Actual ([double]$scale.result.volts_per_division) `
+                -Expected 2.0 -Label "CH1 scale"
 
             $rangeValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelRange)
             $rangeSet = Invoke-LiveCli -Stage "channel-range-set" -Command "channel-range" `
@@ -3460,7 +3517,7 @@ if ($snapshotComplete) {
                 [string]$readback.result.qualifier -ne "greater-than") {
                 throw "Pulse-width trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-pulse-width-edge-reset"
         }
     }
@@ -3483,7 +3540,7 @@ if ($snapshotComplete) {
                 [string]$readback.result.polarity -ne "positive") {
                 throw "Runt trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-runt-edge-reset"
         }
     }
@@ -3507,7 +3564,7 @@ if ($snapshotComplete) {
                 [string]$readback.result.slope -ne "positive") {
                 throw "Transition trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-transition-edge-reset"
         }
     }
@@ -3532,7 +3589,7 @@ if ($snapshotComplete) {
                 [int]$readback.result.count -ne 2) {
                 throw "Delay trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-delay-edge-reset"
         }
     }
@@ -3555,7 +3612,7 @@ if ($snapshotComplete) {
                 [int]$readback.result.data_channel -ne 2) {
                 throw "Setup/hold trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-setup-hold-edge-reset"
         }
     }
@@ -3578,7 +3635,7 @@ if ($snapshotComplete) {
                 [int]$readback.result.count -ne 2) {
                 throw "Nth Edge Burst trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-edge-burst-edge-reset"
         }
     }
@@ -3602,7 +3659,7 @@ if ($snapshotComplete) {
                 [string]$readback.result.tv_mode -ne "all-lines") {
                 throw "TV trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-tv-edge-reset"
         }
     }
@@ -3621,7 +3678,7 @@ if ($snapshotComplete) {
                 [string]$readback.result.pattern -ne "XXX1") {
                 throw "Pattern trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-pattern-edge-reset"
         }
     }
@@ -3640,7 +3697,7 @@ if ($snapshotComplete) {
                 [string]$readback.result.pattern -ne "XXXR") {
                 throw "OR trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts $snapshot.TriggerLevel `
+            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
                 -Stage "trigger-or-edge-reset"
         }
     }

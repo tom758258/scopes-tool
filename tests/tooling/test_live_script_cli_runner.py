@@ -2757,6 +2757,15 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
     assert ':MARKer:MODE MANual' in cursor_case
     assert ':MARKer:MODE TIME' not in cursor_case
 
+    lifecycle_markers = [
+        script.index('Invoke-BaselineCase -Name "fixture-baseline"'),
+        script.index('Invoke-BaselineCase -Name "acquisition"'),
+        script.index('Invoke-BaselineCase -Name "single"'),
+        script.index('Invoke-BaselineCase -Name "capture-wait-trigger"'),
+    ]
+    assert lifecycle_markers == sorted(lifecycle_markers)
+    assert script.index("Invoke-FixtureBaseline") < lifecycle_markers[0]
+
     pair_start = script.index("$pairMeasurementSnapshot = $null")
     pair_end = script.index(
         'Invoke-BaselineCase -Name "measure-stats"', pair_start
@@ -2803,6 +2812,36 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
     assert 'ExpectedCommands @(":STOP")' in pair_lifecycle
     assert "pair-ch2-restore-$($step.Kind)-query" in script
     assert "invalid measurement sentinels are not accepted" in script
+    prompt_start = script.index('Write-Host "PHYSICAL SETUP  operator must prepare"')
+    prompt_fixture_start = script.index('Write-Host "FIXTURE POLICY"', prompt_start)
+    prompt_cleanup_start = script.index(
+        'Write-Host "Press Enter only after the PHYSICAL SETUP above is ready."',
+        prompt_fixture_start,
+    )
+    prompt = script[prompt_start : prompt_cleanup_start + 1000]
+    assert prompt.index("PHYSICAL SETUP") < prompt.index("THE VALIDATOR WILL CONFIGURE")
+    assert prompt.index("THE VALIDATOR WILL CONFIGURE") < prompt.index("FIXTURE POLICY")
+    for required_prompt_text in (
+        "CH1 probe -> Probe Demo / Probe Comp",
+        "CH2 probe -> same Probe Demo / Probe Comp",
+        "stable Probe Comp waveforms are visible",
+        "physical attenuation must match",
+        "Insert writable USB storage",
+        "CH1 vertical scale = 2 V/div",
+        "trigger = Edge / CH1 / Positive / 1 V",
+        "fixed laboratory validation fixture",
+        "does not adapt an incorrect physical fixture",
+        "Press Enter only after the PHYSICAL SETUP above is ready",
+    ):
+        assert required_prompt_text in prompt
+    assert "measure minimum" not in script
+    assert "measure maximum" not in script
+    assert "midpoint" not in script.lower()
+    assert "autoscale fallback" not in script.lower()
+    assert "--force-trigger-on-timeout" not in script[
+        script.index('Invoke-BaselineCase -Name "capture-wait-trigger"'):
+        script.index('Invoke-BaselineCase -Name "trigger-holdoff"')
+    ]
     readiness_start = script.index("function Invoke-PairMeasurementReadiness")
     readiness_end = script.index("function Get-PairMeasurementChannelSnapshot", readiness_start)
     readiness = script[readiness_start:readiness_end]
@@ -2921,6 +2960,9 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
     assert channel_vertical.index('Stage "channel-range-set"') < (
         channel_vertical.index('Stage "channel-range-query"')
     )
+    assert '"--volts-per-division", "2"' in channel_vertical
+    assert "-Expected 2.0" in channel_vertical
+    assert "$snapshot.ChannelScale" not in channel_vertical
 
     assert '$identity.capabilities.supports_screenshot_format_pack' in script
     assert '$identity.capabilities.supports_search_event_navigation' in script
@@ -3197,8 +3239,8 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert "$identity.capabilities.supports_advanced_fft" in script
     assert "$identity.capabilities.supports_math_goft" in script
     assert "$identity.capabilities.demo_functions" in script
-    assert "Leave WGEN output OFF" in script
-    assert "Leave DEMO output OFF" in script
+    assert "WGEN output OFF and disconnected from unknown DUT" in script
+    assert "DEMO output OFF" in script
     assert "External trigger input" in script
     assert "Math Function 1 is disposable" in script
 
@@ -3257,6 +3299,16 @@ foreach ($functionName in @(
     if ($null -eq $functionAst) { throw "Missing ${functionName}." }
     Invoke-Expression $functionAst.Extent.Text
 }
+
+$fixtureFunctionAst = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Invoke-FixtureBaseline"
+    )
+}, $true)
+if ($null -eq $fixtureFunctionAst) { throw "Missing Invoke-FixtureBaseline." }
+Invoke-Expression $fixtureFunctionAst.Extent.Text
 
 $snapshotAssignment = $ast.Find({
     param($node)
@@ -3426,6 +3478,34 @@ function Invoke-LiveCli {
         throw "-241,Hardware missing"
     }
     switch ($Command) {
+        "channel-display" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:DISPlay ON") }
+                result = [pscustomobject]@{ command = ":CHANnel1:DISPlay ON" }
+            }
+        }
+        "channel-scale" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:SCALe 2") }
+                result = [pscustomobject]@{ command = ":CHANnel1:SCALe 2" }
+            }
+        }
+        "acquisition" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":ACQuire:TYPE NORMal") }
+                result = [pscustomobject]@{ command = ":ACQuire:TYPE NORMal" }
+            }
+        }
+        "trigger-edge" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(
+                    ":TRIGger:MODE EDGE",
+                    ":TRIGger:EDGE:SOURce CHANnel1",
+                    ":TRIGger:EDGE:SLOPe POSitive"
+                ) }
+                result = [pscustomobject]@{ command = ":TRIGger:EDGE:SLOPe POSitive" }
+            }
+        }
         "system-opc" {
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @("*OPC?") }
@@ -4278,7 +4358,7 @@ def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
     natural_case = script[natural_start:natural_end]
     assert '"--wait-trigger", "--trigger-timeout-ms", "5000"' in natural_case
     assert '"--trigger-poll-interval-ms", "100"' in natural_case
-    assert '"--source-channel", "1", "--level", "1", "--slope", "positive"' in natural_case
+    assert "trigger-edge" not in natural_case
     assert '"--item", "minimum"' not in natural_case
     assert '"--item", "maximum"' not in natural_case
     assert "--force-trigger-on-timeout" not in natural_case
@@ -4783,9 +4863,9 @@ function Invoke-LiveCli {
         }
         "channel-scale-set-p2" {
             $commandText = if ($script:WrongScalePath) {
-                ":CHANnel1:OFFSet 0.5"
+                ":CHANnel1:OFFSet 2"
             } else {
-                ":CHANnel1:SCALe 0.5"
+                ":CHANnel1:SCALe 2"
             }
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @($commandText) }
@@ -4793,9 +4873,10 @@ function Invoke-LiveCli {
             }
         }
         "channel-scale-query-p2" {
+            $scale = if ($script:WrongScalePath) { 0.5 } else { 2.0 }
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @(":CHANnel1:SCALe?") }
-                result = [pscustomobject]@{ volts_per_division = 0.5 }
+                result = [pscustomobject]@{ volts_per_division = $scale }
             }
         }
         "channel-range-set" {
@@ -5173,6 +5254,34 @@ function Invoke-LiveCli {
         arguments = @($Arguments)
     })
     switch ($Stage) {
+        "fixture-baseline-display" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:DISPlay ON") }
+                result = [pscustomobject]@{ command = ":CHANnel1:DISPlay ON" }
+            }
+        }
+        "fixture-baseline-scale" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:SCALe 2") }
+                result = [pscustomobject]@{ command = ":CHANnel1:SCALe 2" }
+            }
+        }
+        "fixture-baseline-acquisition" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":ACQuire:TYPE NORMal") }
+                result = [pscustomobject]@{ command = ":ACQuire:TYPE NORMal" }
+            }
+        }
+        "fixture-baseline-trigger" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(
+                    ":TRIGger:MODE EDGE",
+                    ":TRIGger:EDGE:SOURce CHANnel1",
+                    ":TRIGger:EDGE:SLOPe POSitive"
+                ) }
+                result = [pscustomobject]@{ command = ":TRIGger:EDGE:SLOPe POSitive" }
+            }
+        }
         "waveform-amp-unit-set" {
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @(":CHANnel1:UNITs AMP") }
@@ -5356,6 +5465,34 @@ function Invoke-LiveCli {
         throw "Global restore must not invoke ${Command}."
     }
     switch ($Stage) {
+        "fixture-baseline-display" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:DISPlay ON") }
+                result = [pscustomobject]@{ command = ":CHANnel1:DISPlay ON" }
+            }
+        }
+        "fixture-baseline-scale" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":CHANnel1:SCALe 2") }
+                result = [pscustomobject]@{ command = ":CHANnel1:SCALe 2" }
+            }
+        }
+        "fixture-baseline-acquisition" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":ACQuire:TYPE NORMal") }
+                result = [pscustomobject]@{ command = ":ACQuire:TYPE NORMal" }
+            }
+        }
+        "fixture-baseline-trigger" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(
+                    ":TRIGger:MODE EDGE",
+                    ":TRIGger:EDGE:SOURce CHANnel1",
+                    ":TRIGger:EDGE:SLOPe POSitive"
+                ) }
+                result = [pscustomobject]@{ command = ":TRIGger:EDGE:SLOPe POSitive" }
+            }
+        }
         "autoscale-ch1" {
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @(':AUToscale CHANnel1') }
@@ -5616,6 +5753,14 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         for entry in result["invocations"]
     )
     assert result["drain_calls"] == 0
+    scale_restore = next(
+        entry for entry in result["invocations"] if entry["stage"] == "restore-channel-scale"
+    )
+    assert float(scale_restore["arguments"][-1]) == 1.0
+    trigger_level_restore = next(
+        entry for entry in result["invocations"] if entry["stage"] == "restore-trigger-edge-level"
+    )
+    assert float(trigger_level_restore["arguments"][-1]) == 0.0
     absent_commands = [entry["command"] for entry in result["absent_invocations"]]
     assert "wgen-output" not in absent_commands
     for command in (
@@ -6295,6 +6440,7 @@ if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
 foreach ($functionName in @(
         "Get-PayloadErrorText",
         "Get-TriggerDiagnosticText",
+        "Invoke-FixtureBaseline",
         "Add-CaseResult",
         "Add-Diagnostic",
         "Invoke-Cli",
@@ -6330,6 +6476,17 @@ if ($caseCommands.Count -ne 1) {
 }
 $caseCode = $caseCommands[0].Extent.Text
 
+$fixtureCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "fixture-baseline"')
+    )
+}, $true))
+if ($fixtureCommands.Count -ne 1) {
+    throw "Expected one production fixture-baseline case."
+}
 function Drain-AfterFailure {
     param([string] $Stage, [string] $CaseName)
     $script:DrainStages.Add($Stage)
@@ -6396,71 +6553,6 @@ function Invoke-CliRaw {
     }
 
     switch ($Stage) {
-        "capture-wait-trigger-prepare" {
-            $script:PrepareCount += 1
-            if ($script:PrepareCount -ne 1) {
-                throw "The fixed trigger fixture may only be configured once."
-            }
-            $script:State.Source = "analog-channel"
-            $script:State.SourceChannel = [int](Get-ArgumentValue $Arguments "--source-channel")
-            $script:State.Slope = Get-ArgumentValue $Arguments "--slope"
-            $script:State.Level = [double]::Parse(
-                (Get-ArgumentValue $Arguments "--level"),
-                [System.Globalization.CultureInfo]::InvariantCulture
-            )
-            $result = [pscustomobject]@{
-                operation = "configure"
-                source = $script:State.Source
-                source_channel = $script:State.SourceChannel
-                slope = $script:State.Slope
-                level_volts = $script:State.Level
-            }
-            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
-        }
-        "capture-wait-trigger-prepare-source-query" {
-            $channel = if ($script:Scenario.ReadbackMismatch -eq "source") {
-                2
-            } else {
-                $script:State.SourceChannel
-            }
-            $result = [pscustomobject]@{
-                operation = "query"
-                command = ":TRIGger:EDGE:SOURce?"
-                source = "analog-channel"
-                source_channel = $channel
-                raw_source = "CHANnel${channel}"
-            }
-            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
-        }
-        "capture-wait-trigger-prepare-slope-query" {
-            $slope = if ($script:Scenario.ReadbackMismatch -eq "slope") {
-                "negative"
-            } else {
-                $script:State.Slope
-            }
-            $result = [pscustomobject]@{
-                operation = "query"
-                command = ":TRIGger:EDGE:SLOPe?"
-                slope = $slope
-                raw_slope = $slope
-            }
-            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
-        }
-        "capture-wait-trigger-prepare-level-query" {
-            $level = if ($script:Scenario.ReadbackMismatch -eq "level") {
-                2.0
-            } else {
-                $script:State.Level
-            }
-            $result = [pscustomobject]@{
-                operation = "query"
-                command = ":TRIGger:LEVel? CHANnel1"
-                source_channel = 1
-                level_volts = $level
-                raw_level = [string]$level
-            }
-            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
-        }
         "capture-wait-trigger-natural" {
             $script:CaptureCount += 1
             if ($script:CaptureCount -ne 1) {
@@ -6573,13 +6665,6 @@ function Run-Scenario {
     param([object] $Scenario)
 
     $script:Scenario = $Scenario
-    $script:State = [pscustomobject]@{
-        Source = "external"
-        SourceChannel = $null
-        Slope = "negative"
-        Level = 100.0
-    }
-    $script:PrepareCount = 0
     $script:CaptureCount = 0
     $script:Invocations = [System.Collections.Generic.List[object]]::new()
     $script:DrainStages = [System.Collections.Generic.List[string]]::new()
@@ -6600,39 +6685,14 @@ function Run-Scenario {
     return [pscustomobject]@{
         name = $Scenario.Name
         result = $script:CaseResults["capture-wait-trigger"]
-        invocations = @($script:Invocations)
+        invocations = @($script:Invocations | ForEach-Object { $_ })
         diagnostics = $diagnostics
         drains = @($script:DrainStages)
-        prepare_count = $script:PrepareCount
         capture_count = $script:CaptureCount
     }
 }
 
 $scenarios = @(
-    [pscustomobject]@{
-        Name = "success"
-        ReadbackMismatch = ""
-        Timeout = $false
-        StopFailure = $false
-    },
-    [pscustomobject]@{
-        Name = "source-mismatch"
-        ReadbackMismatch = "source"
-        Timeout = $false
-        StopFailure = $false
-    },
-    [pscustomobject]@{
-        Name = "slope-mismatch"
-        ReadbackMismatch = "slope"
-        Timeout = $false
-        StopFailure = $false
-    },
-    [pscustomobject]@{
-        Name = "level-mismatch"
-        ReadbackMismatch = "level"
-        Timeout = $false
-        StopFailure = $false
-    },
     [pscustomobject]@{
         Name = "timeout"
         ReadbackMismatch = ""
@@ -6697,58 +6757,10 @@ $scenarios = @(
         )
 
     expected_success_order = [
-        "capture-wait-trigger-prepare",
-        "capture-wait-trigger-prepare-source-query",
-        "capture-wait-trigger-prepare-slope-query",
-        "capture-wait-trigger-prepare-level-query",
         "capture-wait-trigger-natural",
         "capture-wait-trigger-natural-stop",
     ]
-    assert scenarios["success"]["result"]["Passed"] is True
-    assert stages("success") == expected_success_order
-    assert scenarios["success"]["prepare_count"] == 1
-    assert scenarios["success"]["capture_count"] == 1
-
-    prepare_arguments = invocation(
-        "success", "capture-wait-trigger-prepare"
-    )["arguments"]
-    assert prepare_arguments == [
-        "trigger-edge",
-        "--live",
-        "--resource",
-        "TEST::INSTR",
-        "--json",
-        "--source-channel",
-        "1",
-        "--level",
-        "1",
-        "--slope",
-        "positive",
-    ]
-    source_query = invocation(
-        "success", "capture-wait-trigger-prepare-source-query"
-    )
-    assert source_query["command"] == "trigger-edge-source"
-    assert source_query["arguments"][-1:] == ["--query"]
-    slope_query = invocation(
-        "success", "capture-wait-trigger-prepare-slope-query"
-    )
-    assert slope_query["command"] == "trigger-edge-slope"
-    assert slope_query["arguments"][-1:] == ["--query"]
-    level_query = invocation(
-        "success", "capture-wait-trigger-prepare-level-query"
-    )
-    assert level_query["command"] == "trigger-edge-level"
-    assert level_query["arguments"][-3:] == [
-        "--source-channel",
-        "1",
-        "--query",
-    ]
-
-    capture_invocation = invocation(
-        "success", "capture-wait-trigger-natural"
-    )
-    assert capture_invocation["command"] == "capture"
+    capture_invocation = invocation("timeout", "capture-wait-trigger-natural")
     capture_arguments = capture_invocation["arguments"]
     assert "--wait-trigger" in capture_arguments
     assert capture_arguments[
@@ -6759,23 +6771,14 @@ $scenarios = @(
     ] == "100"
     assert "--force-trigger-on-timeout" not in capture_arguments
     assert invocation(
-        "success", "capture-wait-trigger-natural-stop"
+        "timeout", "capture-wait-trigger-natural-stop"
     )["command"] == "stop-acquisition"
-
-    for name in ("source-mismatch", "slope-mismatch", "level-mismatch"):
-        assert scenarios[name]["result"]["Passed"] is False
-        assert scenarios[name]["result"]["Status"] == "FAIL"
-        assert "capture-wait-trigger-natural" not in stages(name)
-        assert stages(name)[-1] == "capture-wait-trigger-natural-stop"
-        assert scenarios[name]["prepare_count"] == 1
-        assert scenarios[name]["capture_count"] == 0
 
     timeout = scenarios["timeout"]
     timeout_detail = timeout["result"]["Detail"]
     assert timeout["result"]["Passed"] is False
     assert timeout["result"]["Status"] == "FAIL"
     assert stages("timeout") == expected_success_order
-    assert timeout["prepare_count"] == 1
     assert timeout["capture_count"] == 1
     assert "Fixed natural-trigger fixture capture failed" in timeout_detail
     assert "CH1 Probe Comp connection" in timeout_detail
@@ -6807,10 +6810,262 @@ $scenarios = @(
     )
     assert stages("timeout-stop-failure") == expected_success_order
 
-    success_stop_failure = scenarios["success-stop-failure"]
-    assert success_stop_failure["result"]["Passed"] is False
-    assert "secondary stop failure" in success_stop_failure["result"]["Detail"]
-    assert "secondary stop failure" in json.dumps(
-        success_stop_failure["diagnostics"]
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_fixture_baseline_executes_fixed_commands_and_gates_readback_failures(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "fixture-baseline-harness.ps1"
+    harness_path.write_text(
+        r"""
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @(
+    "Assert-ScpiSent", "Assert-NearlyEqual", "Invoke-BaselineCase",
+    "Add-CaseResult",
+    "Invoke-FixtureBaseline"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing production function ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$fixtureCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "fixture-baseline"')
     )
-    assert stages("success-stop-failure") == expected_success_order
+}, $true))
+if ($fixtureCommands.Count -ne 1) { throw "Expected one fixture-baseline case." }
+$fixtureCode = $fixtureCommands[0].Extent.Text
+
+$script:snapshot = [pscustomobject]@{
+    ChannelScale = 5.0
+    TriggerLevel = 100.0
+    TriggerSlope = "negative"
+    TriggerSource = "analog-channel"
+    TriggerSourceChannel = 2
+    AcquisitionType = "average"
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($Stage -eq $script:FailureStage) {
+        throw "Injected ${Stage} failure"
+    }
+    switch ($Stage) {
+        "fixture-baseline-display-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ display = $true } }
+        }
+        "fixture-baseline-scale-query" {
+            return [pscustomobject]@{
+                result = [pscustomobject]@{ volts_per_division = $script:ScaleReadback }
+            }
+        }
+        "fixture-baseline-acquisition-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ type = "normal" } }
+        }
+        "fixture-baseline-source-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{
+                source = $script:TriggerReadback.Source
+                source_channel = $script:TriggerReadback.SourceChannel
+            } }
+        }
+        "fixture-baseline-slope-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{
+                slope = $script:TriggerReadback.Slope
+            } }
+        }
+        "fixture-baseline-level-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{
+                level_volts = $script:TriggerReadback.Level
+            } }
+        }
+        default {
+            $sent = switch ($Stage) {
+                "fixture-baseline-display" { @(":CHANnel1:DISPlay ON") }
+                "fixture-baseline-scale" { @(":CHANnel1:SCALe 2") }
+                "fixture-baseline-acquisition" { @(":ACQuire:TYPE NORMal") }
+                "fixture-baseline-trigger" {
+                    @(
+                        ":TRIGger:MODE EDGE",
+                        ":TRIGger:EDGE:SOURce CHANnel1",
+                        ":TRIGger:EDGE:SLOPe POSitive"
+                    )
+                }
+                default { @("fixture-${Stage}") }
+            }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = $sent }
+                result = [pscustomobject]@{}
+            }
+        }
+    }
+}
+
+function Run-Fixture {
+    param(
+        [string] $Name,
+        [object] $TriggerReadback,
+        [double] $ScaleReadback = 2.0
+    )
+    $script:FailureStage = ""
+    $script:ScaleReadback = $ScaleReadback
+    $script:TriggerReadback = $TriggerReadback
+    $script:Invocations = New-Object System.Collections.Generic.List[object]
+    $script:DrainCalls = 0
+    $script:CaseResults = [ordered]@{}
+    $script:FunctionalFailed = $false
+    Invoke-Expression $fixtureCode
+    return [pscustomobject]@{
+        name = $Name
+        result = $script:CaseResults["fixture-baseline"]
+        functional_failed = $script:FunctionalFailed
+        drain_calls = $script:DrainCalls
+        invocations = @($script:Invocations | ForEach-Object { $_ })
+    }
+}
+
+$results = @(
+    Run-Fixture "pass" (
+        [pscustomobject]@{
+            Source = "analog-channel"; SourceChannel = 1; Slope = "positive"; Level = 1.0
+        }
+    )
+    Run-Fixture "scale-mismatch" (
+        [pscustomobject]@{
+            Source = "analog-channel"; SourceChannel = 1; Slope = "positive"; Level = 1.0
+        }
+    ) 5.0
+    Run-Fixture "trigger-source-mismatch" (
+        [pscustomobject]@{
+            Source = "analog-channel"; SourceChannel = 2; Slope = "positive"; Level = 1.0
+        }
+    )
+    Run-Fixture "trigger-slope-mismatch" (
+        [pscustomobject]@{
+            Source = "analog-channel"; SourceChannel = 1; Slope = "negative"; Level = 1.0
+        }
+    )
+    Run-Fixture "trigger-level-mismatch" (
+        [pscustomobject]@{
+            Source = "analog-channel"; SourceChannel = 1; Slope = "positive"; Level = 2.0
+        }
+    )
+)
+$script:ScaleReadback = 2.0
+$script:TriggerReadback = [pscustomobject]@{
+    Source = "analog-channel"; SourceChannel = 1; Slope = "positive"; Level = 1.0
+}
+$script:FailureStage = "fixture-baseline-scale"
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:DrainCalls = 0
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+Invoke-Expression $fixtureCode
+$results += [pscustomobject]@{
+    name = "setter-failure"
+    result = $script:CaseResults["fixture-baseline"]
+    functional_failed = $script:FunctionalFailed
+    drain_calls = $script:DrainCalls
+    invocations = @($script:Invocations | ForEach-Object { $_ })
+}
+
+@($results) | ConvertTo-Json -Depth 12 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    scenarios = {
+        scenario["name"]: scenario
+        for scenario in json.loads(completed.stdout.strip().splitlines()[-1])
+    }
+
+    pass_stages = [
+        entry["stage"] for entry in scenarios["pass"]["invocations"]
+    ]
+    assert pass_stages == [
+        "fixture-baseline-display",
+        "fixture-baseline-scale",
+        "fixture-baseline-acquisition",
+        "fixture-baseline-trigger",
+        "fixture-baseline-display-query",
+        "fixture-baseline-scale-query",
+        "fixture-baseline-acquisition-query",
+        "fixture-baseline-source-query",
+        "fixture-baseline-slope-query",
+        "fixture-baseline-level-query",
+    ]
+    assert scenarios["pass"]["result"]["Passed"] is True
+    assert scenarios["pass"]["functional_failed"] is False
+
+    scale_set = scenarios["pass"]["invocations"][1]
+    assert scale_set["command"] == "channel-scale"
+    assert scale_set["arguments"][-2:] == ["--volts-per-division", "2"]
+    trigger_set = scenarios["pass"]["invocations"][3]
+    assert trigger_set["command"] == "trigger-edge"
+    assert trigger_set["arguments"][-6:] == [
+        "--source-channel", "1", "--level", "1", "--slope", "positive"
+    ]
+
+    for name in (
+        "scale-mismatch",
+        "trigger-source-mismatch",
+        "trigger-slope-mismatch",
+        "trigger-level-mismatch",
+        "setter-failure",
+    ):
+        scenario = scenarios[name]
+        assert scenario["result"]["Passed"] is False
+        assert scenario["functional_failed"] is True
+        assert scenario["drain_calls"] == 1
+        if name == "scale-mismatch":
+            assert "Fixture CH1 scale" in scenario["result"]["Detail"]
