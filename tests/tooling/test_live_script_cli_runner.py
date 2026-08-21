@@ -3203,15 +3203,16 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert 'Stage "save-pwd-query"' in save_pwd_case
     assert "save-pwd-restore" not in save_pwd_case
     for command in (
+        "save-image-format",
         "save-filename",
         "save-image-palette",
         "save-image-ink-saver",
         "save-image-factors",
     ):
         assert f'Command "{command}"' in save_settings_case
-    assert 'Command "save-image-format"' not in save_settings_case
     assert "finally" in save_settings_case
     configure_order = [
+        save_settings_case.index('Stage "save-image-format-png"'),
         save_settings_case.index('Stage "save-filename-set"'),
         save_settings_case.index('Stage "save-image-palette-set"'),
         save_settings_case.index('Stage "save-image-ink-saver-set"'),
@@ -3232,6 +3233,10 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         "save-image-factors-restore-query",
     ):
         assert f'Stage "{stage}"' in save_settings_case
+    save_format_restore = save_settings_case.index(
+        'Stage "save-image-format-restore"'
+    )
+    assert restore_order[-1] < save_format_restore
     assert "$identity.capabilities.supports_advanced_fft" in script
     assert "$identity.capabilities.supports_math_goft" in script
     assert "$identity.capabilities.demo_functions" in script
@@ -4036,6 +4041,9 @@ function Invoke-LiveCli {
     $sent = @()
     $result = [ordered]@{}
     switch ($Stage) {
+        "save-image-format-png" { $sent = @(':SAVE:IMAGe:FORMat PNG') }
+        "save-image-format-restore" { $sent = @(':SAVE:IMAGe:FORMat PNG') }
+        "save-waveform-format-restore" { $sent = @(':SAVE:WAVeform:FORMat CSV') }
         "save-filename-set" { $sent = @(':SAVE:FILename "live_validation"') }
         "save-filename-query" { $result.name = "live_validation" }
         "save-filename-restore" { $sent = @(':SAVE:FILename "scope"') }
@@ -4118,7 +4126,8 @@ function Invoke-Scenario {
 
     passing = result["pass"]
     assert passing["passed"] is True
-    assert passing["stages"][:8] == [
+    assert passing["stages"][:9] == [
+        "save-image-format-png",
         "save-filename-set",
         "save-filename-query",
         "save-image-palette-set",
@@ -4143,10 +4152,11 @@ function Invoke-Scenario {
         "save-image-ink-saver-restore",
         "save-image-palette-restore",
         "save-filename-restore",
+        "save-waveform-format-restore",
     ]
-    assert "save-waveform-format-restore" not in passing["stages"]
+    assert "save-waveform-format-restore" in passing["stages"]
     assert "save-image-format-restore" not in passing["stages"]
-    assert "save-image-format" not in passing["commands"]
+    assert passing["stages"][-1] == "save-waveform-format-restore"
     assert [
         stage for stage in passing["stages"]
         if stage.endswith("-restore-query")
@@ -4161,10 +4171,12 @@ function Invoke-Scenario {
     assert failure["passed"] is False
     assert "filename readback failure" in failure["detail"]
     assert failure["stages"] == [
+        "save-image-format-png",
         "save-filename-set",
         "save-filename-query",
         "save-filename-restore",
         "save-filename-restore-query",
+        "save-waveform-format-restore",
     ]
     assert not any(command == "save-pwd" for command in passing["commands"])
     assert not any(command == "save-pwd" for command in failure["commands"])

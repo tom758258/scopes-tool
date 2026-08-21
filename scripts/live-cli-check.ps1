@@ -4302,11 +4302,18 @@ if ($snapshotComplete) {
         Invoke-BaselineCase -Name "save-settings" -Action {
             $primaryException = $null
             $firstRestoreException = $null
+            $imageFormatChanged = $false
             $filenameChanged = $false
             $paletteChanged = $false
             $inkSaverChanged = $false
             $factorsChanged = $false
             try {
+                $imageFormat = Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
+                    -Arguments @("--format", "png")
+                $imageFormatChanged = $true
+                Assert-ScpiSent -Payload $imageFormat -Label "Image save format context" `
+                    -ExpectedCommands @(':SAVE:IMAGe:FORMat PNG')
+
                 $filename = Invoke-LiveCli -Stage "save-filename-set" -Command "save-filename" -Arguments @("--name", "live_validation")
                 $filenameChanged = $true
                 Assert-ScpiSent -Payload $filename -Label "Save filename" -ExpectedCommands @(':SAVE:FILename "live_validation"')
@@ -4432,6 +4439,31 @@ if ($snapshotComplete) {
                             "restore readback failed: $($_.Exception.Message)"
                         )
                         Drain-AfterFailure -Stage "save-settings-restore-readback-error-drain" `
+                            -CaseName "save-settings"
+                    }
+                }
+
+                if ($imageFormatChanged) {
+                    try {
+                        if ([string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                            Invoke-LiveCli -Stage "save-image-format-restore" `
+                                -Command "save-image-format" `
+                                -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
+                        } elseif ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+                            Invoke-LiveCli -Stage "save-waveform-format-restore" `
+                                -Command "save-waveform-format" `
+                                -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
+                        } else {
+                            throw "Original save format context is not restorable."
+                        }
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-settings" -Message (
+                            "save format restore failed: $($_.Exception.Message)"
+                        )
+                        Drain-AfterFailure -Stage "save-settings-format-restore-error-drain" `
                             -CaseName "save-settings"
                     }
                 }
