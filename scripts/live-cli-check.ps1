@@ -2556,17 +2556,18 @@ if ($snapshotComplete) {
             } catch {
                 $primaryException = $_.Exception
             } finally {
-                if ($restoreNeeded -and [int]$snapshot.SaveWaveformLength -gt 0) {
+                if ($restoreNeeded -and
+                    [string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
                     try {
-                        Invoke-LiveCli -Stage "save-waveform-length-restore" `
-                            -Command "save-waveform-length" `
-                            -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
+                        Invoke-LiveCli -Stage "save-image-format-restore" `
+                            -Command "save-image-format" `
+                            -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
                     } catch {
                         if ($null -eq $firstRestoreException) {
                             $firstRestoreException = $_.Exception
                         }
                         Add-Diagnostic -Name "save-export" -Message (
-                            "waveform length restore failed: $($_.Exception.Message)"
+                            "image format restore failed: $($_.Exception.Message)"
                         )
                     }
                 }
@@ -2585,18 +2586,17 @@ if ($snapshotComplete) {
                         )
                     }
                 }
-                if ($restoreNeeded -and
-                    [string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                if ($restoreNeeded -and [int]$snapshot.SaveWaveformLength -gt 0) {
                     try {
-                        Invoke-LiveCli -Stage "save-image-format-restore" `
-                            -Command "save-image-format" `
-                            -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
+                        Invoke-LiveCli -Stage "save-waveform-length-restore" `
+                            -Command "save-waveform-length" `
+                            -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
                     } catch {
                         if ($null -eq $firstRestoreException) {
                             $firstRestoreException = $_.Exception
                         }
                         Add-Diagnostic -Name "save-export" -Message (
-                            "image format restore failed: $($_.Exception.Message)"
+                            "waveform length restore failed: $($_.Exception.Message)"
                         )
                     }
                 }

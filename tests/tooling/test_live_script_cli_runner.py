@@ -3281,8 +3281,9 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         'Invoke-LiveCli -Stage "save-image-format-restore"'
     )
     assert "Start-Sleep -Milliseconds 500" not in save_export
-    assert waveform_stage < waveform_validation < handoff_sleep < length_restore
-    assert length_restore < waveform_format_restore < image_format_restore
+    assert waveform_stage < waveform_validation < handoff_sleep < image_format_restore
+    # Hardware-proven 4000X ordering; do not reorder without new live evidence.
+    assert image_format_restore < waveform_format_restore < length_restore
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
@@ -4502,9 +4503,9 @@ function Invoke-Scenario {
     assert "image restore failure" not in combined["detail"]
     assert any("image restore failure" in item for item in combined["diagnostics"])
     assert combined["invocations"][-3:] == [
-        "save-waveform-length-restore",
-        "save-waveform-format-restore",
         "save-image-format-restore",
+        "save-waveform-format-restore",
+        "save-waveform-length-restore",
     ]
 
     restore_only = result["restore_only_fail"]
