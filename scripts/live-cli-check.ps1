@@ -31,6 +31,7 @@ $script:Diagnostics = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:ShareableGenerationFailed = $false
+$script:HardwareTouched = $false
 
 function Write-LiveUsageError {
     param([Parameter(Mandatory = $true)][string]$Message)
@@ -63,6 +64,18 @@ if ($resolvedTargets.Count -ne 1) {
 }
 $script:Target = $resolvedTargets[0]
 $script:Connection = $normalizedConnection
+
+$resourceMatchesConnection =
+    ($normalizedConnection -eq "usb" -and $Resource -match "^(?i)USB\d*::") -or
+    ($normalizedConnection -eq "tcpip" -and $Resource -match "^(?i)TCPIP\d*::")
+if (-not $resourceMatchesConnection) {
+    $mismatchMessage =
+        "Connection '{0}' does not match resource '{1}'. usb requires a " +
+        "USB0::-style resource; tcpip requires a TCPIP0::-style resource."
+    Write-LiveUsageError (
+        $mismatchMessage -f $normalizedConnection, $Resource
+    )
+}
 
 function ConvertTo-InvariantString {
     param(
@@ -396,7 +409,7 @@ function Complete-LiveCliRun {
         git_head = $gitHeadValue
         generated_at = $generatedAtValue
         validation_mode = "live"
-        hardware_touched = $true
+        hardware_touched = $script:HardwareTouched
         resource = $Resource
         run_root = $runRootRelative
         artifact_paths = [ordered]@{
@@ -611,6 +624,8 @@ function Invoke-LiveCli {
         [string[]] $Arguments = @()
     )
 
+    $script:HardwareTouched = $true
+
     return Invoke-ModeCli -Stage $Stage -Command $Command -ModeArguments @(
         "--live", "--resource", $Resource
     ) -Arguments $Arguments
@@ -621,6 +636,8 @@ function Get-ErrorDrain {
         [Parameter(Mandatory = $true)]
         [string] $Stage
     )
+
+    $script:HardwareTouched = $true
 
     $arguments = @(
         "check-error", "--live", "--resource", $Resource, "--json",

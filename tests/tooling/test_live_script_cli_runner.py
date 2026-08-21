@@ -2647,6 +2647,14 @@ sys.exit(9)
     invocation_log = tmp_path / "fake-cli-invocations.jsonl"
     script_args = ["-Resource", "TEST::INSTR", "-Python", sys.executable]
     if script_path.name == "live-cli-check.ps1":
+        # live-cli-check validates that -Connection matches the resource
+        # transport, so the fake CLI run needs a USB-shaped resource.
+        script_args = [
+            "-Resource",
+            "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR",
+            "-Python",
+            sys.executable,
+        ]
         script_args += ["-Target", "keysight-dsox4034a", "-Connection", "usb"]
     script_args += ["-OutputRoot", str(output_root)]
     environment = os.environ.copy()
@@ -2688,6 +2696,12 @@ sys.exit(9)
     assert "Result: FAIL" in summary
     assert "| preflight | FAIL |" in summary
     assert "| preflight | FAIL |  |" not in summary
+    if script_path.name == "live-cli-check.ps1":
+        report = json.loads(
+            (run_roots[0] / "private" / "report.json").read_text(encoding="utf-8")
+        )
+        assert report["status"] == "failed"
+        assert report["hardware_touched"] is False
 
     invocations = [
         json.loads(line)
@@ -7293,6 +7307,30 @@ Remove-Item -LiteralPath $functionsFile -Force
             "Unsupported connection 'rs232'",
             id="invalid-connection-rejected",
         ),
+        pytest.param(
+            (
+                "-Target",
+                "keysight-dsox4034a",
+                "-Connection",
+                "usb",
+                "-Resource",
+                "TCPIP0::198.51.100.7::inst0::INSTR",
+            ),
+            "does not match resource 'TCPIP0::198.51.100.7::inst0::INSTR'",
+            id="usb-label-with-tcpip-resource-rejected",
+        ),
+        pytest.param(
+            (
+                "-Target",
+                "keysight-dsox4034a",
+                "-Connection",
+                "tcpip",
+                "-Resource",
+                "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR",
+            ),
+            "does not match resource 'USB0::0x0957::0x17A4::SYNTH12345::0::INSTR'",
+            id="tcpip-label-with-usb-resource-rejected",
+        ),
     ),
 )
 def test_live_cli_check_usage_errors(args, expected_error):
@@ -7399,6 +7437,7 @@ $script:Target = 'keysight-dsox4034a'
 $script:Connection = 'usb'
 $script:FunctionalFailed = $true
 $script:ShareableGenerationFailed = $false
+$script:HardwareTouched = $true
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
 $script:Invocations = New-Object System.Collections.Generic.List[object]
@@ -7480,6 +7519,7 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     s1_counts_failed = [int]$privateReport.summary_counts.failed
     s1_counts_na = [int]$privateReport.summary_counts.na
     s1_counts_invocations = [int]$privateReport.summary_counts.invocations
+    s1_hardware_touched = [bool]$privateReport.hardware_touched
     s1_private_report_raw = $privateReportRaw
     s1_private_summary_has_target =
         $privateSummaryText.Contains('Target: keysight-dsox4034a')
@@ -7513,6 +7553,7 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     assert payload["s1_counts_failed"] == 1
     assert payload["s1_counts_na"] == 1
     assert payload["s1_counts_invocations"] == 1
+    assert payload["s1_hardware_touched"] is True
     assert payload["s1_case_statuses"] == ["PASS", "FAIL", "N/A"]
     assert payload["s1_private_summary_has_target"] is True
     assert payload["s1_shareable_status"] == "failed"
