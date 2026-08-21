@@ -432,6 +432,9 @@ if ($parseErrors.Count -ne 0) {
 }
 
 $functionNames = @("Get-PayloadErrorText")
+if ([System.IO.Path]::GetFileName($ScriptPath) -eq "live-cli-check.ps1") {
+    $functionNames += "Get-TriggerDiagnosticText"
+}
 if ([System.IO.Path]::GetFileName($ScriptPath) -eq "live-serial-check.ps1") {
     $functionNames += @("Get-PayloadSystemError", "Get-InvocationFailureDetail")
 }
@@ -4274,6 +4277,7 @@ def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
     )
     natural_case = script[natural_start:natural_end]
     assert '"--wait-trigger", "--trigger-timeout-ms", "5000"' in natural_case
+    assert '"--trigger-poll-interval-ms", "100"' in natural_case
     assert "--force-trigger-on-timeout" not in natural_case
     assert 'Invoke-BaselineCase -Name "capture-wait-trigger-fallback"' not in script
     assert "--force-trigger-on-timeout" not in script
@@ -6258,3 +6262,601 @@ $nonRestorableRestoreInvocations = @($script:Invocations | ForEach-Object { $_ }
     restore_commands = [entry for entry in data["non_restorable_restore_invocations"] if entry["command"] == "annotation"]
     assert len(restore_commands) >= 1
     assert restore_commands[0]["arguments"] == ["--slot", "1", "--off", "--clear"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_capture_wait_trigger_owns_signal_derived_fixture_and_cleanup(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    artifact_root = tmp_path / "natural-trigger-artifacts"
+    artifact_root.mkdir()
+    harness_path = tmp_path / "natural-trigger-harness.ps1"
+    harness_path.write_text(
+        r"""
+param(
+    [Parameter(Mandatory = $true)][string] $ScriptPath,
+    [Parameter(Mandatory = $true)][string] $ArtifactRoot
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @(
+        "ConvertTo-InvariantString",
+        "Get-PayloadErrorText",
+        "Get-TriggerDiagnosticText",
+        "Add-CaseResult",
+        "Add-Diagnostic",
+        "Invoke-Cli",
+        "Invoke-ModeCli",
+        "Invoke-LiveCli",
+        "Assert-FiniteNumber",
+        "Assert-SingleMeasurementInvocation",
+        "Assert-ScpiSent",
+        "Assert-NearlyEqual",
+        "Assert-FileNonEmpty",
+        "Assert-Capture",
+        "Invoke-BaselineCase"
+    )) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing production function ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$caseCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "capture-wait-trigger"')
+    )
+}, $true))
+if ($caseCommands.Count -ne 1) {
+    throw "Expected one production capture-wait-trigger case."
+}
+$caseCode = $caseCommands[0].Extent.Text
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainStages.Add($Stage)
+}
+
+function Get-ArgumentValue {
+    param([string[]] $Arguments, [string] $Name)
+    $index = [Array]::IndexOf($Arguments, $Name)
+    if ($index -lt 0 -or $index + 1 -ge $Arguments.Count) {
+        throw "Missing fake CLI argument ${Name}."
+    }
+    return [string]$Arguments[$index + 1]
+}
+
+function New-FakeInvocation {
+    param(
+        [int] $ExitCode,
+        [object] $Payload,
+        [string] $Stage,
+        [string[]] $Arguments
+    )
+    return [pscustomobject]@{
+        ExitCode = $ExitCode
+        Payload = $Payload
+        Stderr = ""
+        Command = "fake-cli $($Arguments -join ' ')"
+    }
+}
+
+function New-SystemError {
+    param([int] $Code = 0, [string] $Message = "No error")
+    return [pscustomobject]@{
+        code = $Code
+        message = $Message
+        raw = if ($Code -eq 0) { '+0,"No error"' } else { "${Code},`"${Message}`"" }
+    }
+}
+
+function New-SuccessPayload {
+    param([object] $Result, [string[]] $Sent = @())
+    return [pscustomobject]@{
+        schema_version = 2
+        ok = $true
+        command = "fake"
+        result = $Result
+        system_error = New-SystemError
+        scpi = [pscustomobject]@{ sent = @($Sent) }
+    }
+}
+
+function New-MeasurementInvocation {
+    param([string] $Stage, [string[]] $Arguments, [string] $Item)
+    if ((Get-ArgumentValue $Arguments "--channel") -ne "1" -or
+        (Get-ArgumentValue $Arguments "--item") -ne $Item) {
+        throw "Natural-trigger measurement did not query CH1 ${Item}."
+    }
+    $isInvalid = $script:Scenario.InvalidItem -eq $Item
+    $value = if ($Item -eq "minimum") {
+        $script:Scenario.Minimum
+    } else {
+        $script:Scenario.Maximum
+    }
+    $result = [pscustomobject]@{
+        item = $Item
+        channel = 1
+        reference_channel = $null
+        value = if ($isInvalid) { $null } else { [double]$value }
+        unit = "V"
+        valid = -not $isInvalid
+        raw_value = if ($isInvalid) { "9.9E+37" } else { [string]$value }
+        reason = if ($isInvalid) { "invalid measurement sentinel" } else { $null }
+        parameters = [pscustomobject]@{}
+    }
+    $scpi = if ($Item -eq "minimum") {
+        ":MEASure:VMIN? CHANnel1"
+    } else {
+        ":MEASure:VMAX? CHANnel1"
+    }
+    $payload = [pscustomobject]@{
+        schema_version = 2
+        ok = -not $isInvalid
+        command = "measure"
+        result = $result
+        system_error = New-SystemError
+        scpi = [pscustomobject]@{ sent = @($scpi) }
+    }
+    return New-FakeInvocation -ExitCode $(if ($isInvalid) { 1 } else { 0 }) `
+        -Payload $payload -Stage $Stage -Arguments $Arguments
+}
+
+function Invoke-CliRaw {
+    param(
+        [Parameter(Mandatory = $true)][string] $Stage,
+        [Parameter(Mandatory = $true)][string[]] $Arguments
+    )
+    $command = [string]$Arguments[0]
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $command
+        arguments = @($Arguments)
+    })
+
+    if ($Stage -eq "capture-wait-trigger-measure-minimum") {
+        return New-MeasurementInvocation -Stage $Stage -Arguments $Arguments -Item "minimum"
+    }
+    if ($Stage -eq "capture-wait-trigger-measure-maximum") {
+        return New-MeasurementInvocation -Stage $Stage -Arguments $Arguments -Item "maximum"
+    }
+
+    switch ($Stage) {
+        "capture-wait-trigger-snapshot-source" {
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:EDGE:SOURce?"
+                source = $script:State.Source
+                source_channel = $script:State.SourceChannel
+                raw_source = if ($script:State.Source -eq "analog-channel") {
+                    "CHANnel$($script:State.SourceChannel)"
+                } else { $script:State.Source.ToUpperInvariant() }
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        "capture-wait-trigger-snapshot-slope" {
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:EDGE:SLOPe?"
+                slope = $script:State.Slope; raw_slope = $script:State.Slope.ToUpperInvariant()
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        "capture-wait-trigger-snapshot-level" {
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:LEVel? CHANnel1"
+                source_channel = 1; level_volts = $script:State.Level
+                raw_level = [string]$script:State.Level
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        "capture-wait-trigger-prepare" {
+            $sourceChannel = [int](Get-ArgumentValue -Arguments $Arguments -Name "--source-channel")
+            $slope = Get-ArgumentValue -Arguments $Arguments -Name "--slope"
+            $levelText = Get-ArgumentValue -Arguments $Arguments -Name "--level"
+            $level = [double]::Parse(
+                $levelText, [System.Globalization.CultureInfo]::InvariantCulture
+            )
+            $script:PreparedLevels.Add($level)
+            $script:State.Source = "analog-channel"
+            $script:State.SourceChannel = $sourceChannel
+            $script:State.Slope = $slope
+            $script:State.Level = $level
+            if ($script:Scenario.PartialConfigureFailure) {
+                $payload = [pscustomobject]@{
+                    schema_version = 2; ok = $false; command = "trigger-edge"
+                    result = [pscustomobject]@{}
+                    error = [pscustomobject]@{
+                        type = "instrument_error"; message = "partial trigger configure failure"
+                    }
+                    system_error = New-SystemError -Code -222 -Message "Data out of range"
+                }
+                return New-FakeInvocation 1 $payload $Stage $Arguments
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload ([pscustomobject]@{
+                operation = "configure"; source_channel = 1
+                level_volts = $level; slope = "positive"
+            })) $Stage $Arguments
+        }
+        "capture-wait-trigger-prepare-source-query" {
+            $channel = if ($script:Scenario.ReadbackMismatch) { 2 } else { $script:State.SourceChannel }
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:EDGE:SOURce?"
+                source = "analog-channel"; source_channel = $channel
+                raw_source = "CHANnel${channel}"
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        "capture-wait-trigger-prepare-slope-query" {
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:EDGE:SLOPe?"
+                slope = $script:State.Slope; raw_slope = "POSitive"
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        "capture-wait-trigger-prepare-level-query" {
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:LEVel? CHANnel1"
+                source_channel = 1; level_volts = $script:State.Level
+                raw_level = [string]$script:State.Level
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        "capture-wait-trigger-natural" {
+            $fixtureIsPrepared = (
+                $script:State.Source -eq "analog-channel" -and
+                $script:State.SourceChannel -eq 1 -and
+                $script:State.Slope -eq "positive" -and
+                [Math]::Abs($script:State.Level - $script:ExpectedLevel) -le 1e-12
+            )
+            if ($script:Scenario.Timeout -or -not $fixtureIsPrepared) {
+                $trigger = [pscustomobject]@{
+                    wait_enabled = $true; arm_command = ":SINGle"
+                    poll_source = "operation_condition"
+                    poll_command = ":OPERegister:CONDition?"
+                    timeout_ms = 5000; poll_interval_ms = 100
+                    force_on_timeout = $false; force_command = $null
+                    outcome = "timeout"; forced = $false; timed_out = $true
+                    poll_count = 51; elapsed_ms = 5007
+                    condition_values = @(8, 8, 8); raw_values = @("8", "8", "8")
+                    capture_allowed = $false
+                    capture_block_reason = "trigger wait did not complete naturally"
+                    error = "trigger timeout"
+                }
+                $payload = [pscustomobject]@{
+                    schema_version = 2; ok = $false; command = "capture"
+                    result = [pscustomobject]@{ trigger = $trigger }
+                    error = [pscustomobject]@{
+                        type = "operation_error"; message = "trigger wait timed out"
+                    }
+                    system_error = New-SystemError
+                    scpi = [pscustomobject]@{
+                        sent = @("SINGle", ":OPERegister:CONDition?")
+                    }
+                }
+                return New-FakeInvocation 1 $payload $Stage $Arguments
+            }
+
+            $csvPath = Get-ArgumentValue -Arguments $Arguments -Name "--csv"
+            $metadataPath = Get-ArgumentValue -Arguments $Arguments -Name "--meta"
+            [System.IO.File]::WriteAllText($csvPath, "time,channel_1`n0,0`n")
+            [System.IO.File]::WriteAllText(
+                $metadataPath,
+                ([ordered]@{ format = "BYTE"; actual_points = 2 } | ConvertTo-Json -Compress)
+            )
+            $trigger = [pscustomobject]@{
+                wait_enabled = $true; arm_command = ":SINGle"
+                poll_source = "operation_condition"
+                poll_command = ":OPERegister:CONDition?"
+                timeout_ms = 5000; poll_interval_ms = 100
+                force_on_timeout = $false; force_command = $null
+                outcome = "natural"; forced = $false; timed_out = $false
+                poll_count = 2; elapsed_ms = 100
+                condition_values = @(8, 0); raw_values = @("8", "0")
+                capture_allowed = $true; capture_block_reason = $null; error = $null
+            }
+            $result = [pscustomobject]@{
+                channel = 1; requested_points = 1000; actual_points = 2
+                format = "BYTE"; captures = @(); trigger = $trigger
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result @(
+                ":SINGle", ":OPERegister:CONDition?", ":WAVeform:DATA?"
+            )) $Stage $Arguments
+        }
+        "capture-wait-trigger-natural-stop" {
+            if ($script:Scenario.StopFailure) {
+                $payload = [pscustomobject]@{
+                    schema_version = 2; ok = $false; command = "stop-acquisition"
+                    result = [pscustomobject]@{}
+                    error = [pscustomobject]@{
+                        type = "instrument_error"; message = "secondary stop failure"
+                    }
+                    system_error = New-SystemError -Code -310 -Message "System error"
+                }
+                return New-FakeInvocation 1 $payload $Stage $Arguments
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload ([pscustomobject]@{
+                operation = "stop"
+            }) @(
+                ":STOP"
+            )) $Stage $Arguments
+        }
+        "capture-wait-trigger-restore-level" {
+            $script:State.Level = [double]::Parse(
+                (Get-ArgumentValue $Arguments "--level-volts"),
+                [System.Globalization.CultureInfo]::InvariantCulture
+            )
+            return New-FakeInvocation 0 (New-SuccessPayload ([pscustomobject]@{
+                operation = "configure"; source_channel = 1; level_volts = $script:State.Level
+            })) $Stage $Arguments
+        }
+        "capture-wait-trigger-restore-slope" {
+            $script:State.Slope = Get-ArgumentValue $Arguments "--slope"
+            return New-FakeInvocation 0 (New-SuccessPayload ([pscustomobject]@{
+                operation = "configure"; slope = $script:State.Slope
+            })) $Stage $Arguments
+        }
+        "capture-wait-trigger-restore-source" {
+            if ([Array]::IndexOf($Arguments, "--source-channel") -ge 0) {
+                $script:State.Source = "analog-channel"
+                $script:State.SourceChannel = [int](Get-ArgumentValue $Arguments "--source-channel")
+            } else {
+                $script:State.Source = Get-ArgumentValue $Arguments "--source"
+                $script:State.SourceChannel = $null
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload ([pscustomobject]@{
+                operation = "configure"; source = $script:State.Source
+                source_channel = $script:State.SourceChannel
+            })) $Stage $Arguments
+        }
+        "capture-wait-trigger-restore-source-query" {
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:EDGE:SOURce?"
+                source = $script:State.Source; source_channel = $script:State.SourceChannel
+                raw_source = $script:State.Source
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        "capture-wait-trigger-restore-slope-query" {
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:EDGE:SLOPe?"
+                slope = $script:State.Slope; raw_slope = $script:State.Slope
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        "capture-wait-trigger-restore-level-query" {
+            $result = [pscustomobject]@{
+                operation = "query"; command = ":TRIGger:LEVel? CHANnel1"
+                source_channel = 1; level_volts = $script:State.Level
+                raw_level = [string]$script:State.Level
+            }
+            return New-FakeInvocation 0 (New-SuccessPayload $result) $Stage $Arguments
+        }
+        default { throw "Unexpected fake CLI stage: ${Stage}." }
+    }
+}
+
+function Run-Scenario {
+    param([object] $Scenario)
+    $script:Scenario = $Scenario
+    $script:ExpectedLevel = [double]$Scenario.Minimum + (
+        ([double]$Scenario.Maximum - [double]$Scenario.Minimum) / 2
+    )
+    $script:State = [pscustomobject]@{
+        Source = $Scenario.EntrySource
+        SourceChannel = $Scenario.EntrySourceChannel
+        Slope = "negative"
+        Level = 100.0
+    }
+    $script:Invocations = [System.Collections.Generic.List[object]]::new()
+    $script:PreparedLevels = [System.Collections.Generic.List[double]]::new()
+    $script:DrainStages = [System.Collections.Generic.List[string]]::new()
+    $script:CaseResults = [ordered]@{}
+    $script:Diagnostics = [ordered]@{}
+    $script:FunctionalFailed = $false
+    $Resource = "TEST::INSTR"
+    $liveArtifactRoot = Join-Path $ArtifactRoot $Scenario.Name
+    [void](New-Item -ItemType Directory -Path $liveArtifactRoot -Force)
+
+    Invoke-Expression $caseCode
+
+    $diagnostics = if ($script:Diagnostics.Contains("capture-wait-trigger")) {
+        @($script:Diagnostics["capture-wait-trigger"])
+    } else { @() }
+    return [pscustomobject]@{
+        name = $Scenario.Name
+        result = $script:CaseResults["capture-wait-trigger"]
+        invocations = @($script:Invocations)
+        prepared_levels = @($script:PreparedLevels)
+        diagnostics = $diagnostics
+        drains = @($script:DrainStages)
+        final_state = $script:State
+    }
+}
+
+$scenarioDefaults = [ordered]@{
+    Minimum = 0.2; Maximum = 2.8; InvalidItem = ""
+    EntrySource = "analog-channel"; EntrySourceChannel = 2
+    ReadbackMismatch = $false; Timeout = $false
+    StopFailure = $false; PartialConfigureFailure = $false
+}
+function New-Scenario {
+    param([string] $Name, [hashtable] $Overrides = @{})
+    $values = [ordered]@{}
+    foreach ($entry in $scenarioDefaults.GetEnumerator()) { $values[$entry.Key] = $entry.Value }
+    foreach ($entry in $Overrides.GetEnumerator()) { $values[$entry.Key] = $entry.Value }
+    $values["Name"] = $Name
+    return [pscustomobject]$values
+}
+
+$scenarios = @(
+    (New-Scenario "success-a"),
+    (New-Scenario "success-b" @{ Minimum = -1.0; Maximum = 3.0; EntrySource = "external"; EntrySourceChannel = $null }),
+    (New-Scenario "success-line" @{ EntrySource = "line"; EntrySourceChannel = $null }),
+    (New-Scenario "invalid-minimum" @{ InvalidItem = "minimum" }),
+    (New-Scenario "invalid-maximum" @{ InvalidItem = "maximum" }),
+    (New-Scenario "invalid-range" @{ Minimum = 2.8; Maximum = 0.2 }),
+    (New-Scenario "readback-mismatch" @{ ReadbackMismatch = $true }),
+    (New-Scenario "timeout" @{ Timeout = $true }),
+    (New-Scenario "timeout-cleanup" @{ Timeout = $true; StopFailure = $true }),
+    (New-Scenario "partial-configure" @{ PartialConfigureFailure = $true })
+)
+@($scenarios | ForEach-Object { Run-Scenario $_ }) |
+    ConvertTo-Json -Depth 20 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-ArtifactRoot",
+            str(artifact_root),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    scenarios = {
+        scenario["name"]: scenario
+        for scenario in json.loads(completed.stdout.strip().splitlines()[-1])
+    }
+
+    def stages(name: str) -> list[str]:
+        return [entry["stage"] for entry in scenarios[name]["invocations"]]
+
+    def invocation(name: str, stage: str) -> dict[str, object]:
+        return next(
+            entry
+            for entry in scenarios[name]["invocations"]
+            if entry["stage"] == stage
+        )
+
+    expected_success_order = [
+        "capture-wait-trigger-snapshot-source",
+        "capture-wait-trigger-snapshot-slope",
+        "capture-wait-trigger-snapshot-level",
+        "capture-wait-trigger-measure-minimum",
+        "capture-wait-trigger-measure-maximum",
+        "capture-wait-trigger-prepare",
+        "capture-wait-trigger-prepare-source-query",
+        "capture-wait-trigger-prepare-slope-query",
+        "capture-wait-trigger-prepare-level-query",
+        "capture-wait-trigger-natural",
+        "capture-wait-trigger-natural-stop",
+        "capture-wait-trigger-restore-level",
+        "capture-wait-trigger-restore-slope",
+        "capture-wait-trigger-restore-source",
+        "capture-wait-trigger-restore-source-query",
+        "capture-wait-trigger-restore-slope-query",
+        "capture-wait-trigger-restore-level-query",
+    ]
+    assert scenarios["success-a"]["result"]["Passed"] is True
+    assert stages("success-a") == expected_success_order
+    assert scenarios["success-a"]["prepared_levels"] == pytest.approx([1.5])
+    prepare_a = invocation("success-a", "capture-wait-trigger-prepare")["arguments"]
+    assert float(prepare_a[prepare_a.index("--level") + 1]) == pytest.approx(1.5)
+    assert "100" not in prepare_a
+    restore_a = invocation("success-a", "capture-wait-trigger-restore-level")[
+        "arguments"
+    ]
+    assert restore_a[restore_a.index("--level-volts") + 1] == "100"
+    assert scenarios["success-a"]["final_state"] == {
+        "Source": "analog-channel",
+        "SourceChannel": 2,
+        "Slope": "negative",
+        "Level": 100.0,
+    }
+
+    assert scenarios["success-b"]["result"]["Passed"] is True
+    assert scenarios["success-b"]["prepared_levels"] == pytest.approx([1.0])
+    assert scenarios["success-b"]["final_state"]["Source"] == "external"
+    external_restore = invocation(
+        "success-b", "capture-wait-trigger-restore-source"
+    )["arguments"]
+    assert external_restore[-2:] == ["--source", "external"]
+    assert scenarios["success-line"]["result"]["Passed"] is True
+    line_restore = invocation(
+        "success-line", "capture-wait-trigger-restore-source"
+    )["arguments"]
+    assert line_restore[-2:] == ["--source", "line"]
+
+    for name in ("invalid-minimum", "invalid-maximum", "invalid-range"):
+        assert scenarios[name]["result"]["Passed"] is False
+        assert scenarios[name]["result"]["Status"] == "FAIL"
+        detail = scenarios[name]["result"]["Detail"]
+        assert "natural-trigger prerequisite" in detail
+        assert "valid signal crossing level" in detail
+        assert "capture-wait-trigger-prepare" not in stages(name)
+        assert "capture-wait-trigger-natural" not in stages(name)
+        assert all("--force-trigger-on-timeout" not in entry["arguments"] for entry in scenarios[name]["invocations"])
+
+    assert scenarios["readback-mismatch"]["result"]["Passed"] is False
+    assert "preparation readback" in scenarios["readback-mismatch"]["result"]["Detail"]
+    assert "capture-wait-trigger-natural" not in stages("readback-mismatch")
+    assert "capture-wait-trigger-restore-level" in stages("readback-mismatch")
+
+    timeout_detail = scenarios["timeout"]["result"]["Detail"]
+    assert scenarios["timeout"]["result"]["Passed"] is False
+    assert scenarios["timeout"]["result"]["Status"] == "FAIL"
+    assert "exited 1" in timeout_detail
+    assert "system error 0: No error" in timeout_detail
+    assert "outcome=timeout" in timeout_detail
+    assert "timed_out=true" in timeout_detail
+    assert "forced=false" in timeout_detail
+    assert "capture_allowed=false" in timeout_detail
+    assert "poll_count=51" in timeout_detail
+    assert "elapsed_ms=5007" in timeout_detail
+    assert "raw_values=" in timeout_detail
+    assert "capture-wait-trigger-natural-stop" in stages("timeout")
+    assert all("force-trigger" not in entry["command"] for entry in scenarios["timeout"]["invocations"])
+
+    cleanup_detail = scenarios["timeout-cleanup"]["result"]["Detail"]
+    assert "outcome=timeout" in cleanup_detail
+    assert "secondary stop failure" not in cleanup_detail
+    assert "secondary stop failure" in json.dumps(
+        scenarios["timeout-cleanup"]["diagnostics"]
+    )
+    assert "capture-wait-trigger-restore-level" in stages("timeout-cleanup")
+
+    partial = scenarios["partial-configure"]
+    assert partial["result"]["Passed"] is False
+    assert "partial trigger configure failure" in partial["result"]["Detail"]
+    assert "capture-wait-trigger-natural" not in stages("partial-configure")
+    assert "capture-wait-trigger-natural-stop" not in stages("partial-configure")
+    assert stages("partial-configure")[-6:] == [
+        "capture-wait-trigger-restore-level",
+        "capture-wait-trigger-restore-slope",
+        "capture-wait-trigger-restore-source",
+        "capture-wait-trigger-restore-source-query",
+        "capture-wait-trigger-restore-slope-query",
+        "capture-wait-trigger-restore-level-query",
+    ]
