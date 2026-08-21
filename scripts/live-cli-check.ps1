@@ -50,19 +50,6 @@ function Test-SavePathEquivalent {
     )
 }
 
-function Get-SavePathSetterArgument {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $Path
-    )
-
-    $setterPath = $Path
-    while ($setterPath.Length -gt 1 -and $setterPath.EndsWith("\")) {
-        $setterPath = $setterPath.Substring(0, $setterPath.Length - 1)
-    }
-    return $setterPath
-}
-
 function Get-PayloadErrorText {
     param(
         [Parameter(Mandatory = $true)]
@@ -1999,6 +1986,7 @@ Write-Host "  [6] Disconnect unknown DUT signals"
 Write-Host "  [7] WGEN output OFF and disconnected from unknown DUT"
 Write-Host "  [8] DEMO output OFF"
 Write-Host "  [9] External trigger input disconnected from unknown/sensitive DUT"
+Write-Host "  [10] Set the instrument Save directory / PWD to the writable USB root (\usb)"
 Write-Host ""
 Write-Host "THE VALIDATOR WILL CONFIGURE"
 Write-Host ""
@@ -2014,6 +2002,7 @@ Write-Host "  - This is a fixed laboratory validation fixture."
 Write-Host "  - Incorrect physical connection, attenuation, or Probe Comp signal is"
 Write-Host "    a setup failure."
 Write-Host "  - The validator does not adapt an incorrect physical fixture."
+Write-Host "  - The Save PWD must already be the writable USB root (\usb)."
 Write-Host "  - If the fixed instrument baseline cannot be configured or read back,"
 Write-Host "    validation stops with FAIL."
 Write-Host ""
@@ -2234,6 +2223,21 @@ if ($snapshotComplete) {
 
     Invoke-BaselineCase -Name "fixture-baseline" -Action {
         Invoke-FixtureBaseline
+    }
+
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "save-pwd-fixture" -Action {
+            $pwdFixture = Invoke-LiveCli -Stage "save-pwd-fixture-query" `
+                -Command "save-pwd" -Arguments @("--query")
+            if (-not (Test-SavePathEquivalent `
+                    -Actual ([string]$pwdFixture.result.path) -Expected "\usb")) {
+                throw (
+                    "Save PWD fixture is `"$([string]$pwdFixture.result.path)`"; " +
+                    "expected writable USB root \usb. Set the instrument Save " +
+                    "directory to \usb before validation."
+                )
+            }
+        }
     }
 
     Invoke-BaselineCase -Name "acquisition" -Action {
@@ -4201,101 +4205,16 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed) {
-        $savePwdApplicable = $true
-        $savePwdSetterPath =
-            Get-SavePathSetterArgument -Path ([string]$snapshot.SavePwd)
-        try {
-            $pwdPrerequisite = Invoke-LiveCli -Stage "save-pwd-prerequisite-set" `
-                -Command "save-pwd" -Arguments @("--path", $savePwdSetterPath)
-            Assert-ScpiSent -Payload $pwdPrerequisite -Label "Save directory reversible prerequisite" `
-                -ExpectedCommands @(':SAVE:PWD "' + $savePwdSetterPath + '"')
-        } catch {
-            $prerequisiteMessage = $_.Exception.Message
-            if ($prerequisiteMessage -match '(?i)(^|[^0-9])-151([^0-9]|$)' -and
-                $prerequisiteMessage -match '(?i)Invalid string data') {
-                try {
-                    $prerequisiteDrain = Get-ErrorDrain `
-                        -Stage "save-pwd-prerequisite-error-drain"
-                    if ($prerequisiteDrain.Errors.Count -gt 0) {
-                        Write-DrainErrors -Errors $prerequisiteDrain.Errors -CaseName "save-pwd"
-                        throw "Save PWD reversible prerequisite left unexpected system errors."
-                    }
-                    if (-not $prerequisiteDrain.Terminated) {
-                        throw "Save PWD reversible prerequisite error queue did not reach code 0."
-                    }
-                    $pwdAfterPrerequisite = Invoke-LiveCli -Stage "save-pwd-prerequisite-query" `
-                        -Command "save-pwd" -Arguments @("--query")
-                    if (-not (Test-SavePathEquivalent `
-                            -Actual ([string]$pwdAfterPrerequisite.result.path) `
-                            -Expected ([string]$snapshot.SavePwd))) {
-                        throw "Save directory changed after the rejected reversible prerequisite."
-                    }
-                    Add-NotApplicableCase -Name "save-pwd" -Detail (
-                        "Current instrument save directory is queryable but not setter-restorable; " +
-                        "mutating Save PWD was not safely applicable."
-                    )
-                    $savePwdApplicable = $false
-                } catch {
-                    Add-CaseResult -Name "save-pwd" -Passed $false -Detail $_.Exception.Message
-                    $script:FunctionalFailed = $true
-                    Drain-AfterFailure -Stage "save-pwd-prerequisite-query-error-drain" `
-                        -CaseName "save-pwd"
-                }
-            } else {
-                Add-CaseResult -Name "save-pwd" -Passed $false -Detail $prerequisiteMessage
-                $script:FunctionalFailed = $true
-                Drain-AfterFailure -Stage "save-pwd-prerequisite-unexpected-error-drain" `
-                    -CaseName "save-pwd"
-            }
-        }
-
-        if (-not $script:FunctionalFailed -and $savePwdApplicable) {
-            Invoke-BaselineCase -Name "save-pwd" -Action {
-                $primaryException = $null
-                $firstRestoreException = $null
-                $pwdChanged = $false
-                try {
-                    $pwd = Invoke-LiveCli -Stage "save-pwd-set" -Command "save-pwd" `
-                        -Arguments @("--path", "\usb")
-                    $pwdChanged = $true
-                    Assert-ScpiSent -Payload $pwd -Label "Save directory" `
-                        -ExpectedCommands @(':SAVE:PWD "\usb"')
-                    $pwdQuery = Invoke-LiveCli -Stage "save-pwd-query" `
-                        -Command "save-pwd" -Arguments @("--query")
-                    if (-not (Test-SavePathEquivalent `
-                            -Actual ([string]$pwdQuery.result.path) -Expected "\usb")) {
-                        throw "Save directory readback did not report \usb."
-                    }
-                } catch {
-                    $primaryException = $_.Exception
-                } finally {
-                    if ($pwdChanged) {
-                        try {
-                            Invoke-LiveCli -Stage "save-pwd-restore" -Command "save-pwd" `
-                                -Arguments @("--path", $savePwdSetterPath) | Out-Null
-                            $restoredPwd = Invoke-LiveCli -Stage "save-pwd-restore-query" `
-                                -Command "save-pwd" -Arguments @("--query")
-                            if (-not (Test-SavePathEquivalent `
-                                    -Actual ([string]$restoredPwd.result.path) `
-                                    -Expected ([string]$snapshot.SavePwd))) {
-                                throw "Save directory restore readback did not match the snapshot."
-                            }
-                        } catch {
-                            $firstRestoreException = $_.Exception
-                            Add-Diagnostic -Name "save-pwd" -Message (
-                                "save directory restore failed: $($_.Exception.Message)"
-                            )
-                            Drain-AfterFailure -Stage "save-pwd-restore-error-drain" `
-                                -CaseName "save-pwd"
-                        }
-                    }
-                }
-                if ($null -ne $primaryException) {
-                    throw $primaryException
-                }
-                if ($null -ne $firstRestoreException) {
-                    throw $firstRestoreException
-                }
+        Invoke-BaselineCase -Name "save-pwd" -Action {
+            $pwd = Invoke-LiveCli -Stage "save-pwd-set" -Command "save-pwd" `
+                -Arguments @("--path", "\usb")
+            Assert-ScpiSent -Payload $pwd -Label "Save directory" `
+                -ExpectedCommands @(':SAVE:PWD "\usb"')
+            $pwdQuery = Invoke-LiveCli -Stage "save-pwd-query" `
+                -Command "save-pwd" -Arguments @("--query")
+            if (-not (Test-SavePathEquivalent `
+                    -Actual ([string]$pwdQuery.result.path) -Expected "\usb")) {
+                throw "Save directory readback did not report \usb."
             }
         }
     }
