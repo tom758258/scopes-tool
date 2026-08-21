@@ -2240,13 +2240,15 @@ if ($snapshotComplete) {
         }
     }
 
-    Invoke-BaselineCase -Name "acquisition" -Action {
-        Invoke-LiveCli -Stage "acquisition-set" -Command "acquisition" `
-            -Arguments @("--type", "normal") | Out-Null
-        $readback = Invoke-LiveCli -Stage "acquisition-query" -Command "acquisition" `
-            -Arguments @("--query")
-        if ($readback.result.type -ne "normal") {
-            throw "Acquisition type readback is $($readback.result.type), expected normal."
+    if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "acquisition" -Action {
+            Invoke-LiveCli -Stage "acquisition-set" -Command "acquisition" `
+                -Arguments @("--type", "normal") | Out-Null
+            $readback = Invoke-LiveCli -Stage "acquisition-query" -Command "acquisition" `
+                -Arguments @("--query")
+            if ($readback.result.type -ne "normal") {
+                throw "Acquisition type readback is $($readback.result.type), expected normal."
+            }
         }
     }
 
