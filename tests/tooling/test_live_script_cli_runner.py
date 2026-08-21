@@ -7064,3 +7064,29 @@ $results += [pscustomobject]@{
         assert scenario["drain_calls"] == 1
         if name == "scale-mismatch":
             assert "Fixture CH1 scale" in scenario["result"]["Detail"]
+
+
+def test_live_cli_check_recommends_restart_before_validation() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    recommended_start = script.index('Write-Host "RECOMMENDED BEFORE VALIDATION"')
+    physical_setup = script.index(
+        'Write-Host "PHYSICAL SETUP  operator must prepare"'
+    )
+    prompt = script.index(
+        'Write-Host "Press Enter only after the PHYSICAL SETUP above is ready."'
+    )
+
+    assert recommended_start < physical_setup < prompt
+
+    block = script[recommended_start:physical_setup].lower()
+    assert "restart" in block
+    assert "recommended" in block
+    assert "not required" in block
+    assert "transient instrument-side state" in block
+
+    checklist = script[physical_setup:prompt]
+    assert "restart" not in checklist.lower()
+    assert 'Write-Host "  [11]' not in script
