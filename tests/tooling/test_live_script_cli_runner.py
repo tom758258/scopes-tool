@@ -2762,12 +2762,18 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
         script.index('Invoke-BaselineCase -Name "save-pwd-fixture"'),
         script.index('Invoke-BaselineCase -Name "save-pwd"'),
         script.index('Invoke-BaselineCase -Name "save-settings"'),
+        script.index('Invoke-BaselineCase -Name "save-export"'),
         script.index('Invoke-BaselineCase -Name "acquisition"'),
         script.index('Invoke-BaselineCase -Name "single"'),
         script.index('Invoke-BaselineCase -Name "capture-wait-trigger"'),
     ]
     assert lifecycle_markers == sorted(lifecycle_markers)
-    for case_name in ("save-pwd-fixture", "save-pwd", "save-settings"):
+    for case_name in (
+        "save-pwd-fixture",
+        "save-pwd",
+        "save-settings",
+        "save-export",
+    ):
         assert (
             script.count(f'Invoke-BaselineCase -Name "{case_name}"') == 1
         )
@@ -3122,7 +3128,7 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert '"\\usb\\scopes-tool-live-${timestamp}.scp"' in script
     setup_slot_start = script.index('Invoke-BaselineCase -Name "setup-slot-lifecycle"')
     setup_slot_end = script.index(
-        'Invoke-BaselineCase -Name "save-export"', setup_slot_start
+        'Invoke-BaselineCase -Name "safe-cleanup"', setup_slot_start
     )
     setup_slot_case = script[setup_slot_start:setup_slot_end]
     assert 'Command "setup-save"' in setup_slot_case
@@ -3197,7 +3203,7 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     save_pwd_start = script.index('Invoke-BaselineCase -Name "save-pwd"')
     save_settings_start = script.index('Invoke-BaselineCase -Name "save-settings"')
     save_settings_end = script.index(
-        'Invoke-BaselineCase -Name "acquisition"', save_settings_start
+        'Invoke-BaselineCase -Name "save-export"', save_settings_start
     )
     save_pwd_case = script[save_pwd_start:save_settings_start]
     save_settings_case = script[save_settings_start:save_settings_end]
@@ -3254,7 +3260,7 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
 
     save_export_start = script.index('Invoke-BaselineCase -Name "save-export"')
     save_export_end = script.index(
-        'Invoke-BaselineCase -Name "safe-cleanup"', save_export_start
+        'Invoke-BaselineCase -Name "acquisition"', save_export_start
     )
     save_export = script[save_export_start:save_export_end]
     image_format_set = save_export.index('Stage "save-image-format-png"')

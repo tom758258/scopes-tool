@@ -2512,6 +2512,105 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed) {
+        Invoke-BaselineCase -Name "save-export" -Action {
+            $primaryException = $null
+            $firstRestoreException = $null
+            $restoreNeeded = $false
+            try {
+                if ([bool]$snapshot.SaveWaveformLengthMax) {
+                    throw (
+                        "Save/export acceptance prerequisite failed: " +
+                        "maximum waveform save length is enabled; " +
+                        "the 1000-point CSV path was not executed."
+                    )
+                }
+                $imageFile = "\usb\scopes-tool-live-${timestamp}.png"
+                $waveformFile = "\usb\scopes-tool-live-${timestamp}.csv"
+                $restoreNeeded = $true
+                Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
+                    -Arguments @("--format", "png") | Out-Null
+                $image = Invoke-LiveCli -Stage "save-image" -Command "save-image" `
+                    -Arguments @("--filename", $imageFile)
+                Assert-ScpiSentPrefix -Payload $image -ExpectedPrefix ':SAVE:IMAGe "\usb\scopes-tool-live-' `
+                    -Label "Instrument image save"
+                if (-not [bool]$image.result.instrument_side -or
+                    -not [bool]$image.result.operation_complete -or
+                    [string]$image.result.filename -ne $imageFile) {
+                    throw "Instrument image save result is invalid."
+                }
+                Invoke-LiveCli -Stage "save-waveform-format-csv" `
+                    -Command "save-waveform-format" -Arguments @("--format", "csv") | Out-Null
+                Invoke-LiveCli -Stage "save-waveform-length-1000" `
+                    -Command "save-waveform-length" -Arguments @("--points", "1000") | Out-Null
+                $waveform = Invoke-LiveCli -Stage "save-waveform" -Command "save-waveform" `
+                    -Arguments @("--filename", $waveformFile)
+                Assert-ScpiSentPrefix -Payload $waveform `
+                    -ExpectedPrefix ':SAVE:WAVeform "\usb\scopes-tool-live-' `
+                    -Label "Instrument waveform save"
+                if (-not [bool]$waveform.result.instrument_side -or
+                    -not [bool]$waveform.result.operation_complete -or
+                    [string]$waveform.result.filename -ne $waveformFile) {
+                    throw "Instrument waveform save result is invalid."
+                }
+                Start-Sleep -Seconds 3
+            } catch {
+                $primaryException = $_.Exception
+            } finally {
+                if ($restoreNeeded -and [int]$snapshot.SaveWaveformLength -gt 0) {
+                    try {
+                        Invoke-LiveCli -Stage "save-waveform-length-restore" `
+                            -Command "save-waveform-length" `
+                            -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-export" -Message (
+                            "waveform length restore failed: $($_.Exception.Message)"
+                        )
+                    }
+                }
+                if ($restoreNeeded -and
+                    [string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
+                    try {
+                        Invoke-LiveCli -Stage "save-waveform-format-restore" `
+                            -Command "save-waveform-format" `
+                            -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-export" -Message (
+                            "waveform format restore failed: $($_.Exception.Message)"
+                        )
+                    }
+                }
+                if ($restoreNeeded -and
+                    [string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
+                    try {
+                        Invoke-LiveCli -Stage "save-image-format-restore" `
+                            -Command "save-image-format" `
+                            -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
+                    } catch {
+                        if ($null -eq $firstRestoreException) {
+                            $firstRestoreException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "save-export" -Message (
+                            "image format restore failed: $($_.Exception.Message)"
+                        )
+                    }
+                }
+            }
+            if ($null -ne $primaryException) {
+                throw $primaryException
+            }
+            if ($null -ne $firstRestoreException) {
+                throw $firstRestoreException
+            }
+        }
+    }
+
+    if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "acquisition" -Action {
             Invoke-LiveCli -Stage "acquisition-set" -Command "acquisition" `
                 -Arguments @("--type", "normal") | Out-Null
@@ -4473,105 +4572,6 @@ if ($snapshotComplete) {
                 -Arguments @("--channel", "1", "--query")
             if ([string]$restored.result.text -ne [string]$snapshot.ChannelLabel) {
                 throw "Setup slot recall did not restore the CH1 label."
-            }
-        }
-    }
-
-    if (-not $script:FunctionalFailed) {
-        Invoke-BaselineCase -Name "save-export" -Action {
-            $primaryException = $null
-            $firstRestoreException = $null
-            $restoreNeeded = $false
-            try {
-                if ([bool]$snapshot.SaveWaveformLengthMax) {
-                    throw (
-                        "Save/export acceptance prerequisite failed: " +
-                        "maximum waveform save length is enabled; " +
-                        "the 1000-point CSV path was not executed."
-                    )
-                }
-                $imageFile = "\usb\scopes-tool-live-${timestamp}.png"
-                $waveformFile = "\usb\scopes-tool-live-${timestamp}.csv"
-                $restoreNeeded = $true
-                Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
-                    -Arguments @("--format", "png") | Out-Null
-                $image = Invoke-LiveCli -Stage "save-image" -Command "save-image" `
-                    -Arguments @("--filename", $imageFile)
-                Assert-ScpiSentPrefix -Payload $image -ExpectedPrefix ':SAVE:IMAGe "\usb\scopes-tool-live-' `
-                    -Label "Instrument image save"
-                if (-not [bool]$image.result.instrument_side -or
-                    -not [bool]$image.result.operation_complete -or
-                    [string]$image.result.filename -ne $imageFile) {
-                    throw "Instrument image save result is invalid."
-                }
-                Invoke-LiveCli -Stage "save-waveform-format-csv" `
-                    -Command "save-waveform-format" -Arguments @("--format", "csv") | Out-Null
-                Invoke-LiveCli -Stage "save-waveform-length-1000" `
-                    -Command "save-waveform-length" -Arguments @("--points", "1000") | Out-Null
-                $waveform = Invoke-LiveCli -Stage "save-waveform" -Command "save-waveform" `
-                    -Arguments @("--filename", $waveformFile)
-                Assert-ScpiSentPrefix -Payload $waveform `
-                    -ExpectedPrefix ':SAVE:WAVeform "\usb\scopes-tool-live-' `
-                    -Label "Instrument waveform save"
-                if (-not [bool]$waveform.result.instrument_side -or
-                    -not [bool]$waveform.result.operation_complete -or
-                    [string]$waveform.result.filename -ne $waveformFile) {
-                    throw "Instrument waveform save result is invalid."
-                }
-                Start-Sleep -Seconds 3
-            } catch {
-                $primaryException = $_.Exception
-            } finally {
-                if ($restoreNeeded -and [int]$snapshot.SaveWaveformLength -gt 0) {
-                    try {
-                        Invoke-LiveCli -Stage "save-waveform-length-restore" `
-                            -Command "save-waveform-length" `
-                            -Arguments @("--points", [string]$snapshot.SaveWaveformLength) | Out-Null
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "save-export" -Message (
-                            "waveform length restore failed: $($_.Exception.Message)"
-                        )
-                    }
-                }
-                if ($restoreNeeded -and
-                    [string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
-                    try {
-                        Invoke-LiveCli -Stage "save-waveform-format-restore" `
-                            -Command "save-waveform-format" `
-                            -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "save-export" -Message (
-                            "waveform format restore failed: $($_.Exception.Message)"
-                        )
-                    }
-                }
-                if ($restoreNeeded -and
-                    [string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
-                    try {
-                        Invoke-LiveCli -Stage "save-image-format-restore" `
-                            -Command "save-image-format" `
-                            -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "save-export" -Message (
-                            "image format restore failed: $($_.Exception.Message)"
-                        )
-                    }
-                }
-            }
-            if ($null -ne $primaryException) {
-                throw $primaryException
-            }
-            if ($null -ne $firstRestoreException) {
-                throw $firstRestoreException
             }
         }
     }
