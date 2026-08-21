@@ -134,6 +134,23 @@ function ConvertTo-ShareableArtifactValue {
             }
             return '<redacted-path>'
         }
+        if (($text.Contains('\') -or $text.Contains('/')) -and -not [string]::IsNullOrWhiteSpace($RepoRoot)) {
+            # Repository-relative references into the private tree are rewritten
+            # to their mirrored shareable location when that mirror exists;
+            # private-tree locations without a mirror stay redacted.
+            try {
+                $resolved = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $text))
+                if (Test-ArtifactPathUnderRoot -RootPath $PrivateRoot -Path $resolved) {
+                    $relative = Get-PortableRelativePath -BasePath $PrivateRoot -Path $resolved
+                    if (Test-Path -LiteralPath (Join-Path $ShareableRoot $relative) -PathType Leaf) {
+                        return ('shareable/' + $relative.Replace('\', '/'))
+                    }
+                    return '<private-local-path>'
+                }
+            } catch {
+                # Not a resolvable repository-relative path; keep text redaction.
+            }
+        }
         return Protect-ArtifactText -Text $text -Resource $Resource -RepoRoot $RepoRoot -PrivateRoot $PrivateRoot -SensitiveValues $SensitiveValues
     }
     if ($Value -is [System.Collections.IDictionary]) {

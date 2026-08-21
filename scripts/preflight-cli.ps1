@@ -364,6 +364,7 @@ foreach ($case in $cases) {
 $privateSummaryPath = Join-Path $privateRoot "summary.md"
 Write-Utf8NoBomLines -LiteralPath $privateSummaryPath -Lines $summaryLines
 
+$shareableError = $null
 try {
     $null = New-ShareableArtifactSet `
         -PrivateReport $report `
@@ -373,13 +374,25 @@ try {
         -ShareableRoot $shareableRoot `
         -RepoRoot $RepoRoot
 } catch {
-    Write-Host "[preflight][cli] shareable artifact generation failed: $($_.Exception.Message)"
+    $shareableError = $_.Exception.Message
+}
+
+if ($null -ne $shareableError) {
+    Write-Host "[preflight][cli] shareable artifact generation failed: ${shareableError}"
     Write-Host "[preflight][cli] private artifacts retained: $(ConvertTo-RepoRelativePath -Path $privateRoot)"
+    $report["status"] = "failed"
+    $report["shareable_generation_error"] = $shareableError
+    Write-JsonReport -LiteralPath $privateReportPath -Report $report
+    $summaryLines += @(
+        "",
+        "- Shareable artifact generation failed: ${shareableError}"
+    )
+    Write-Utf8NoBomLines -LiteralPath $privateSummaryPath -Lines $summaryLines
 }
 
 Write-Host "[preflight][cli] $($report.status): $($failed.Count) of $($cases.Count) cases failed"
 Write-Host "[preflight][cli] report: $($report.artifact_paths.report)"
-if ($failed.Count -gt 0) {
+if ($failed.Count -gt 0 -or $null -ne $shareableError) {
     exit 1
 }
 exit 0

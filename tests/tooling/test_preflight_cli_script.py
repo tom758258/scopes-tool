@@ -247,6 +247,28 @@ class TestSuccessfulSingleTargetPreflight:
         assert "acquisition-simulate" in summary
         assert "hardware-report-render" in summary
 
+    def test_shareable_report_references_resolve_inside_shareable_tree(
+        self, successful_single_target_run
+    ) -> None:
+        context = successful_single_target_run
+        run_dir: Path = context["run_dir"]
+        raw = (run_dir / "shareable" / "report.json").read_text(encoding="utf-8")
+        assert "/private/" not in raw.replace("\\", "/")
+
+        shareable_report = context["shareable_report"]
+        checked_references = 0
+        for case in shareable_report["cases"]:
+            for reference in case["artifacts"].values():
+                assert reference.startswith("shareable/"), reference
+                assert (run_dir / reference).is_file(), reference
+                checked_references += 1
+        assert checked_references >= 3
+
+        artifact_paths = shareable_report["artifact_paths"]
+        assert artifact_paths["report"] == "shareable/report.json"
+        assert (run_dir / artifact_paths["report"]).is_file()
+        assert (run_dir / artifact_paths["summary"]).is_file()
+
 
 @requires_windows
 def test_failed_command_preserves_artifacts_and_fails_preflight(tmp_path: Path) -> None:
@@ -322,6 +344,83 @@ def test_target_all_runs_every_registered_model() -> None:
             assert (
                 run_dir / "shareable" / target / "acquisition-simulate.json"
             ).is_file()
+    finally:
+        shutil.rmtree(output_root, ignore_errors=True)
+
+
+@requires_windows
+def test_shareable_generation_failure_fails_preflight(tmp_path: Path) -> None:
+    # Minimal substitution: run a patched copy of the preflight script whose
+    # privacy helper re-defines New-ShareableArtifactSet to throw, so all
+    # validation cases pass but shareable artifact generation fails.
+    harness_dir = tmp_path / "scripts"
+    harness_dir.mkdir()
+    failing_privacy = harness_dir / "_artifact_privacy.failing.ps1"
+    failing_privacy.write_text(
+        ". " + ps_quote(PRIVACY) + "\n"
+        "function New-ShareableArtifactSet { "
+        "throw [System.InvalidOperationException]::new("
+        "'simulated shareable artifact generation failure') }\n",
+        encoding="utf-8",
+    )
+
+    script_text = SCRIPT.read_text(encoding="utf-8")
+    replacements = {
+        '$RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path':
+            f"$RepoRoot = {ps_quote(REPO_ROOT)}",
+        '. (Join-Path $PSScriptRoot "_validation_helpers.ps1")':
+            f". {ps_quote(HELPERS)}",
+        '. (Join-Path $PSScriptRoot "_artifact_privacy.ps1")':
+            f". {ps_quote(failing_privacy)}",
+    }
+    for old, new in replacements.items():
+        assert script_text.count(old) == 1, old
+        script_text = script_text.replace(old, new)
+    harness_script = harness_dir / "preflight-cli-failing-shareable.ps1"
+    harness_script.write_text(script_text, encoding="utf-8")
+
+    output_root = REPO_ROOT / ".tmp_tests" / f"preflight_cli_tests_{uuid.uuid4().hex[:8]}"
+    try:
+        completed = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(harness_script),
+                "-Target",
+                "keysight-dsox4024a",
+                "-OutputRoot",
+                str(output_root),
+            ],
+            cwd=REPO_ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+            timeout=300,
+        )
+        assert completed.returncode == 1
+        assert "shareable artifact generation failed" in completed.stdout
+        assert (
+            "simulated shareable artifact generation failure" in completed.stdout
+        )
+
+        run_dir = newest_run_dir(output_root)
+        assert (run_dir / "private" / "report.json").is_file()
+        assert (run_dir / "private" / "summary.md").is_file()
+        report = read_json(run_dir / "private" / "report.json")
+        assert all(case["passed"] is True for case in report["cases"])
+        assert report["status"] == "failed"
+        assert report.get("shareable_generation_error") == (
+            "simulated shareable artifact generation failure"
+        )
+        summary = (run_dir / "private" / "summary.md").read_text(encoding="utf-8")
+        assert "Shareable artifact generation failed:" in summary
     finally:
         shutil.rmtree(output_root, ignore_errors=True)
 
