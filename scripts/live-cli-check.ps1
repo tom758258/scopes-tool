@@ -2556,36 +2556,6 @@ if ($snapshotComplete) {
             } catch {
                 $primaryException = $_.Exception
             } finally {
-                if ($restoreNeeded -and
-                    [string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
-                    try {
-                        Invoke-LiveCli -Stage "save-image-format-restore" `
-                            -Command "save-image-format" `
-                            -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "save-export" -Message (
-                            "image format restore failed: $($_.Exception.Message)"
-                        )
-                    }
-                }
-                if ($restoreNeeded -and
-                    [string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
-                    try {
-                        Invoke-LiveCli -Stage "save-waveform-format-restore" `
-                            -Command "save-waveform-format" `
-                            -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "save-export" -Message (
-                            "waveform format restore failed: $($_.Exception.Message)"
-                        )
-                    }
-                }
                 if ($restoreNeeded -and [int]$snapshot.SaveWaveformLength -gt 0) {
                     try {
                         Invoke-LiveCli -Stage "save-waveform-length-restore" `

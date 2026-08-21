@@ -3265,7 +3265,8 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     save_export = script[save_export_start:save_export_end]
     image_format_set = save_export.index('Stage "save-image-format-png"')
     image_save = save_export.index('$image = Invoke-LiveCli -Stage "save-image"')
-    assert image_format_set < image_save
+    waveform_format_set = save_export.index('Stage "save-waveform-format-csv"')
+    waveform_length_set = save_export.index('Stage "save-waveform-length-1000"')
     waveform_stage = save_export.index('$waveform = Invoke-LiveCli -Stage "save-waveform"')
     waveform_validation = save_export.index(
         "if (-not [bool]$waveform.result.instrument_side", waveform_stage
@@ -3274,16 +3275,32 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     length_restore = save_export.index(
         'Invoke-LiveCli -Stage "save-waveform-length-restore"'
     )
-    waveform_format_restore = save_export.index(
-        'Invoke-LiveCli -Stage "save-waveform-format-restore"'
-    )
-    image_format_restore = save_export.index(
-        'Invoke-LiveCli -Stage "save-image-format-restore"'
-    )
     assert "Start-Sleep -Milliseconds 500" not in save_export
-    assert waveform_stage < waveform_validation < handoff_sleep < image_format_restore
-    # Hardware-proven 4000X ordering; do not reorder without new live evidence.
-    assert image_format_restore < waveform_format_restore < length_restore
+    assert (
+        image_format_set
+        < image_save
+        < waveform_format_set
+        < waveform_length_set
+        < waveform_stage
+        < waveform_validation
+        < handoff_sleep
+        < length_restore
+    )
+    assert 'Stage "save-image-format-restore"' not in save_export
+    assert 'Stage "save-waveform-format-restore"' not in save_export
+
+    restore_start = script.index("function Restore-InstrumentState {")
+    restore_end = script.index(
+        "\nif ([string]::IsNullOrWhiteSpace($Resource))", restore_start
+    )
+    restore = script[restore_start:restore_end]
+    assert 'Name = "image save format context"' in restore
+    assert 'Command = "save-image-format"' in restore
+    assert 'Name = "image save format"' in restore
+    assert 'Name = "waveform save format"' in restore
+    assert 'Command = "save-waveform-format"' in restore
+    assert 'Name = "waveform save length"' in restore
+    assert 'Command = "save-waveform-length"' in restore
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
@@ -4412,8 +4429,8 @@ function Invoke-LiveCli {
         throw "body primary failure"
     }
     if ($script:Scenario -in @("body-and-restore-fail", "restore-only-fail") -and
-        $Stage -eq "save-image-format-restore") {
-        throw "image restore failure"
+        $Stage -eq "save-waveform-length-restore") {
+        throw "waveform length restore failure"
     }
     if ($Stage -eq "save-image") {
         return [pscustomobject]@{ result = [pscustomobject]@{
@@ -4500,17 +4517,16 @@ function Invoke-Scenario {
     combined = result["body_and_restore_fail"]
     assert combined["passed"] is False
     assert "body primary failure" in combined["detail"]
-    assert "image restore failure" not in combined["detail"]
-    assert any("image restore failure" in item for item in combined["diagnostics"])
-    assert combined["invocations"][-3:] == [
-        "save-image-format-restore",
-        "save-waveform-format-restore",
-        "save-waveform-length-restore",
-    ]
+    assert "waveform length restore failure" not in combined["detail"]
+    assert any(
+        "waveform length restore failure" in item
+        for item in combined["diagnostics"]
+    )
+    assert combined["invocations"][-1] == "save-waveform-length-restore"
 
     restore_only = result["restore_only_fail"]
     assert restore_only["passed"] is False
-    assert "image restore failure" in restore_only["detail"]
+    assert "waveform length restore failure" in restore_only["detail"]
     assert restore_only["functional_failed"] is True
     assert restore_only["drain_calls"] == 1
     assert len(restore_only["sleep_calls"]) == 1
@@ -4522,6 +4538,14 @@ function Invoke-Scenario {
         restore_only["invocations"].index("save-image-format-png")
         < restore_only["invocations"].index("save-image")
     )
+    assert restore_only["invocations"] == [
+        "save-image-format-png",
+        "save-image",
+        "save-waveform-format-csv",
+        "save-waveform-length-1000",
+        "save-waveform",
+        "save-waveform-length-restore",
+    ]
     assert len(combined["sleep_calls"]) == 0
 
     max_enabled = result["max_enabled"]
