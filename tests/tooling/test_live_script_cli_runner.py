@@ -3204,16 +3204,15 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert "save-pwd-restore" not in save_pwd_case
     for command in (
         "save-filename",
-        "save-image-format",
         "save-image-palette",
         "save-image-ink-saver",
         "save-image-factors",
     ):
         assert f'Command "{command}"' in save_settings_case
+    assert 'Command "save-image-format"' not in save_settings_case
     assert "finally" in save_settings_case
     configure_order = [
         save_settings_case.index('Stage "save-filename-set"'),
-        save_settings_case.index('Stage "save-image-format-png"'),
         save_settings_case.index('Stage "save-image-palette-set"'),
         save_settings_case.index('Stage "save-image-ink-saver-set"'),
         save_settings_case.index('Stage "save-image-factors-set"'),
@@ -3233,10 +3232,6 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         "save-image-factors-restore-query",
     ):
         assert f'Stage "{stage}"' in save_settings_case
-    save_format_restore = save_settings_case.index(
-        'Stage "save-image-format-restore"'
-    )
-    assert restore_order[-1] < save_format_restore
     assert "$identity.capabilities.supports_advanced_fft" in script
     assert "$identity.capabilities.supports_math_goft" in script
     assert "$identity.capabilities.demo_functions" in script
@@ -3250,6 +3245,9 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         'Invoke-BaselineCase -Name "safe-cleanup"', save_export_start
     )
     save_export = script[save_export_start:save_export_end]
+    image_format_set = save_export.index('Stage "save-image-format-png"')
+    image_save = save_export.index('$image = Invoke-LiveCli -Stage "save-image"')
+    assert image_format_set < image_save
     waveform_stage = save_export.index('$waveform = Invoke-LiveCli -Stage "save-waveform"')
     waveform_validation = save_export.index(
         "if (-not [bool]$waveform.result.instrument_side", waveform_stage
@@ -4042,7 +4040,6 @@ function Invoke-LiveCli {
         "save-filename-query" { $result.name = "live_validation" }
         "save-filename-restore" { $sent = @(':SAVE:FILename "scope"') }
         "save-filename-restore-query" { $result.name = "scope" }
-        "save-image-format-png" { $sent = @(':SAVE:IMAGe:FORMat PNG') }
         "save-image-palette-set" { $sent = @(':SAVE:IMAGe:PALette COLOR') }
         "save-image-palette-query" { $result.palette = "color" }
         "save-image-palette-restore" { $sent = @(':SAVE:IMAGe:PALette COLOR') }
@@ -4085,11 +4082,6 @@ function Invoke-Scenario {
         detail = $script:CaseResults["save-settings"].Detail
         stages = @($script:Invocations | ForEach-Object { $_.stage })
         commands = @($script:Invocations | ForEach-Object { $_.command })
-        image_format_arguments = @(
-            $script:Invocations |
-                Where-Object { $_.command -eq "save-image-format" } |
-                ForEach-Object { [string]::Join("|", $_.arguments) }
-        )
         drain_calls = $script:DrainCalls
     }
 }
@@ -4126,10 +4118,9 @@ function Invoke-Scenario {
 
     passing = result["pass"]
     assert passing["passed"] is True
-    assert passing["stages"][:9] == [
+    assert passing["stages"][:8] == [
         "save-filename-set",
         "save-filename-query",
-        "save-image-format-png",
         "save-image-palette-set",
         "save-image-palette-query",
         "save-image-ink-saver-set",
@@ -4152,11 +4143,10 @@ function Invoke-Scenario {
         "save-image-ink-saver-restore",
         "save-image-palette-restore",
         "save-filename-restore",
-        "save-waveform-format-restore",
     ]
-    assert "save-waveform-format-restore" in passing["stages"]
+    assert "save-waveform-format-restore" not in passing["stages"]
     assert "save-image-format-restore" not in passing["stages"]
-    assert "--format|none" not in passing["image_format_arguments"]
+    assert "save-image-format" not in passing["commands"]
     assert [
         stage for stage in passing["stages"]
         if stage.endswith("-restore-query")
@@ -4502,6 +4492,10 @@ function Invoke-Scenario {
     # Verify sleep occurred after save-waveform and before restore
     save_waveform_idx = restore_only["invocations"].index("save-waveform")
     assert restore_only["sleep_calls"][0]["InvocationsCount"] == save_waveform_idx + 1
+    assert (
+        restore_only["invocations"].index("save-image-format-png")
+        < restore_only["invocations"].index("save-image")
+    )
     assert len(combined["sleep_calls"]) == 0
 
     max_enabled = result["max_enabled"]
