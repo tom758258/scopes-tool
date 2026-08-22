@@ -5,8 +5,11 @@
 - Adds a mode-aware Serial editor to the WebUI that coordinates bus selection,
   Serial Mode with explicit Apply Mode and readback verification, Serial
   Display, and UART/I2C/SPI/CAN configuration over the existing commands while
-  showing unsupported instrument protocols without protocol-specific queries
-  and confirming before discarding unapplied edits on bus or mode switches.
+  showing unsupported instrument protocols without protocol-specific queries,
+  keeping the Protocol selector synchronized with confirmed readbacks,
+  re-checking the active mode before configuration writes, and confirming
+  before discarding unapplied edits on bus switches and unapplied
+  configuration edits on protocol switches.
 - Adds collapsible command groups to the WebUI Command Browser for dense
   Trigger, Search, Serial, Save/Export, and Workflow categories while keeping
   the flat command list for ungrouped categories.

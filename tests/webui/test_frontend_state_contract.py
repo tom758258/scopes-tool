@@ -281,7 +281,12 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             maxBus,
             protocolChoices: ["uart", "i2c", "spi", "can"],
           });
-          return { controller, submitted, confirmations };
+          return {
+            controller,
+            submitted,
+            confirmations,
+            setCurrentMode: (mode) => { currentMode = mode; },
+          };
         };
 
         const commandsOf = (harness) =>
@@ -337,6 +342,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             "serial-can:query",
           ]);
           assert.equal(canBus.controller.state.configCommand, "serial-can");
+          assert.equal(canBus.controller.state.selectedProtocol, "can");
         }
 
         {
@@ -405,6 +411,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           ]);
           assert.equal(commands.includes("serial-uart:query"), false);
           assert.equal(mismatch.controller.state.confirmedMode, "can");
+          assert.equal(mismatch.controller.state.selectedProtocol, "can");
           assert.equal(mismatch.controller.state.dirtyConfig, true);
         }
 
@@ -460,6 +467,218 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.deepEqual(idle.confirmations, []);
           assert.equal(idle.submitted.length, 3);
         }
+
+        {
+          const dualModes = makeHarness({
+            initialMode: "can",
+            maxBus: 2,
+          });
+          dualModes.controller.scheduleRefresh();
+          await settle();
+          assert.equal(dualModes.controller.state.selectedProtocol, "can");
+          dualModes.setCurrentMode("uart");
+          dualModes.controller.selectBus(2);
+          await settle();
+          assert.equal(dualModes.controller.state.confirmedMode, "uart");
+          assert.equal(dualModes.controller.state.selectedProtocol, "uart");
+        }
+
+        {
+          const displayOnly = makeHarness({ initialMode: "can" });
+          displayOnly.controller.scheduleRefresh();
+          await settle();
+          displayOnly.controller.setDirty("display", true);
+          displayOnly.controller.selectProtocol("uart");
+          await displayOnly.controller.applyMode();
+          await settle();
+          assert.deepEqual(displayOnly.confirmations, []);
+          assert.equal(displayOnly.controller.state.confirmedMode, "uart");
+          assert.equal(displayOnly.controller.state.dirtyDisplay, true);
+          const commands = commandsOf(displayOnly);
+          assert.deepEqual(commands.slice(-2), ["serial-mode:set", "serial-uart:query"]);
+        }
+
+        {
+          const external = makeHarness({ initialMode: "uart" });
+          external.controller.scheduleRefresh();
+          await settle();
+          external.setCurrentMode("can");
+          external.controller.setDirty("config", true);
+          await external.controller.applyConfig({ baud_rate: 115200 });
+          await settle();
+          const tail = commandsOf(external).slice(3);
+          assert.equal(tail[0], "serial-mode:query");
+          assert.equal(tail.some((entry) => entry === "serial-uart:set"), false);
+          assert.deepEqual(tail.slice(1), [
+            "serial-display:query",
+            "serial-can:query",
+          ]);
+          assert.equal(external.controller.state.confirmedMode, "can");
+          assert.equal(external.controller.state.selectedProtocol, "can");
+          assert.equal(external.controller.state.dirtyConfig, false);
+        }
+
+        {
+          const stable = makeHarness({ initialMode: "can" });
+          stable.controller.scheduleRefresh();
+          await settle();
+          stable.controller.setDirty("config", true);
+          await stable.controller.applyConfig({ baud_rate: 500000 });
+          await settle();
+          assert.deepEqual(commandsOf(stable).slice(3), [
+            "serial-mode:query",
+            "serial-can:set",
+          ]);
+          assert.equal(stable.submitted[4].intent, "apply");
+          assert.equal(stable.controller.state.dirtyConfig, false);
+          assert.equal(stable.controller.state.confirmedMode, "can");
+        }
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(serial_editor_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback() -> None:
+    serial_editor_path = STATIC_ROOT / "serial-editor.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.value = "";
+            this.className = "";
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) { this.children.push(...nodes); }
+          querySelectorAll() { return []; }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.Option = function Option(text, value) {
+          return { textContent: text, value: String(value) };
+        };
+        globalThis.window = { confirm: () => true };
+        globalThis.translate = (key) => key;
+        globalThis.hasTranslation = () => true;
+        globalThis.CommandForm = class CommandForm {
+          render() {}
+          values() { return {}; }
+          setDisabled() {}
+          clearDirty() {}
+          syncResult() {}
+          isDirty() { return false; }
+        };
+
+        const source = fs.readFileSync(process.argv[1], "utf8")
+          .replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export /gm, "")
+          + "\nglobalThis.serialApi = { SerialEditor };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { SerialEditor } = globalThis.serialApi;
+
+        const settle = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+
+        const settingFields = [{ name: "action", type: "enum", options: ["query", "set"] }];
+        const definitionFor = (id) => ({
+          id,
+          category: "Serial",
+          modes: ["live"],
+          presentation: { kind: "setting", action_field: "action", apply_value: "set", query_value: "query", query_fields: ["bus"] },
+          fields: [...settingFields],
+        });
+        const catalog = {
+          commands: [
+            "serial-mode", "serial-display", "serial-uart",
+            "serial-i2c", "serial-spi", "serial-can",
+          ].map(definitionFor),
+          fieldsFor: (definition) => definition.fields,
+          optionsFor: (field) => field.options || [],
+        };
+
+        const submitted = [];
+        let currentMode = "can";
+        let editor = null;
+        const respond = (command, parameters) => {
+          if (command === "serial-mode") {
+            if (parameters.action === "set") currentMode = parameters.mode;
+            return {
+              job_id: `mode-${submitted.length}`,
+              status: "completed",
+              result: { result: { mode: {
+                bus: parameters.bus,
+                mode: currentMode,
+                raw_mode: String(currentMode).toUpperCase(),
+              } } },
+            };
+          }
+          if (command === "serial-display") {
+            return {
+              job_id: `display-${submitted.length}`,
+              status: "completed",
+              result: { result: { display: { bus: parameters.bus, enabled: false } } },
+            };
+          }
+          const protocol = command.replace("serial-", "");
+          return {
+            job_id: `${protocol}-${submitted.length}`,
+            status: "completed",
+            result: { result: { [protocol]: { bus: parameters.bus } } },
+          };
+        };
+        const executeCommand = async (command, parameters) => {
+          const job = respond(command, parameters);
+          submitted.push({ command, bus: parameters.bus, action: parameters.action });
+          queueMicrotask(() => editor.scheduleRefresh());
+          return job;
+        };
+
+        editor = new SerialEditor(new FakeNode(), catalog, {
+          executeCommand,
+          isAvailable: () => true,
+          contextKey: () => "ctx",
+          modelInfo: () => ({ supported: true, maxBus: 2, protocols: ["uart", "i2c", "spi", "can"] }),
+        });
+
+        editor.scheduleRefresh();
+        await settle();
+        assert.equal(editor.protocolSelect.value, "can");
+        assert.deepEqual(submitted.map((entry) => entry.bus), [1, 1, 1]);
+
+        editor.busSelect.value = "2";
+        editor.busSelect.dispatch("change");
+        await settle();
+        assert.equal(editor.controller.state.bus, 2);
+        assert.equal(editor.protocolSelect.value, "can");
+
+        editor.refreshButton.dispatch("click");
+        await settle();
+
+        const laterSubmissions = submitted.slice(3);
+        assert.equal(laterSubmissions.length > 0, true);
+        assert.equal(laterSubmissions.every((entry) => entry.bus === 2), true);
+        assert.equal(laterSubmissions.some((entry) =>
+          entry.command === "serial-mode" && entry.action === "query"), true);
+        assert.equal(laterSubmissions.some((entry) =>
+          entry.command === "serial-display" && entry.action === "query"), true);
         '''
     )
     completed = subprocess.run(

@@ -136,10 +136,13 @@ and CAN with an explicit Apply Mode action. Configuration queries run only
 after `serial-mode` readback confirms the bus is in that protocol; when the
 bus reports another recognized protocol such as LIN, FlexRay, or A429, the
 editor shows the current protocol with an unsupported-configuration note
-instead of issuing protocol-specific reads. Mode, Display, and each protocol
+instead of issuing protocol-specific reads. The Protocol selector follows the
+protocol confirmed by the latest readback. Mode, Display, and each protocol
 configuration remain separate Apply operations over the existing commands.
-Switching Bus, or applying a different protocol while the configuration has
-unapplied edits, asks for confirmation before discarding those edits.
+Switching Bus asks for confirmation before discarding any unapplied edits,
+and applying a different protocol asks before discarding unapplied
+Configuration edits. A configuration Apply first re-checks `serial-mode` and
+skips the write when the instrument no longer reports the expected protocol.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field

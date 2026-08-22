@@ -63,15 +63,39 @@ export function createSerialEditorController({
   });
 
   const isCompleted = (job) => job?.status === "completed";
+
+  function notifyState() {
+    emitState(state());
+  }
   const modeFromJob = (job) => {
     if (!isCompleted(job)) return { mode: null, rawMode: null };
     const payload = job.result?.result?.mode || {};
     return { mode: payload.mode ?? null, rawMode: payload.raw_mode ?? null };
   };
 
+  function syncSelectedProtocol() {
+    if (confirmedMode && protocols.includes(confirmedMode)) {
+      selectedProtocol = confirmedMode;
+    }
+  }
+
   async function runQuery(command, parameters) {
     const job = await execute(command, parameters, { intent: "readback" });
     return isCompleted(job) ? job : null;
+  }
+
+  async function readDisplayAndConfig() {
+    const displayJob = await runQuery("serial-display", { action: "query", bus });
+    jobs.display = displayJob ? { job: displayJob, applied: false } : null;
+    notifyState();
+    const configCommand = configCommandFor(confirmedMode);
+    if (configCommand) {
+      const configJob = await runQuery(configCommand, { action: "query", bus });
+      jobs.config = configJob ? { job: configJob, applied: false } : null;
+    } else {
+      jobs.config = null;
+    }
+    notifyState();
   }
 
   async function readBusState() {
@@ -80,18 +104,9 @@ export function createSerialEditorController({
     const reported = modeFromJob(modeJob);
     confirmedMode = reported.mode;
     rawMode = reported.rawMode;
-    emitState();
-    const displayJob = await runQuery("serial-display", { action: "query", bus });
-    jobs.display = displayJob ? { job: displayJob, applied: false } : null;
-    emitState();
-    const configCommand = configCommandFor(confirmedMode);
-    if (configCommand) {
-      const configJob = await runQuery(configCommand, { action: "query", bus });
-      jobs.config = configJob ? { job: configJob, applied: false } : null;
-    } else {
-      jobs.config = null;
-    }
-    emitState();
+    syncSelectedProtocol();
+    notifyState();
+    await readDisplayAndConfig();
   }
 
   async function refresh() {
@@ -105,7 +120,7 @@ export function createSerialEditorController({
       await readBusState();
     } finally {
       busyCount -= 1;
-      emitState();
+      notifyState();
       if (refreshQueued) {
         refreshQueued = false;
         await refresh();
@@ -115,12 +130,12 @@ export function createSerialEditorController({
 
   function beginBusy() {
     busyCount += 1;
-    emitState();
+    notifyState();
   }
 
   function endBusy() {
     busyCount -= 1;
-    emitState();
+    notifyState();
   }
 
   function scheduleRefresh() {
@@ -149,7 +164,7 @@ export function createSerialEditorController({
       jobs.display = null;
       jobs.config = null;
       formEpoch += 1;
-      emitState();
+      notifyState();
     },
     scheduleRefresh() {
       scheduleRefresh();
@@ -159,7 +174,7 @@ export function createSerialEditorController({
       if (busyCount > 0 || candidate === bus) return;
       if (!busOptions(maxBus).includes(candidate)) return;
       if ((dirtyConfig || dirtyDisplay) && !confirmDiscard()) {
-        emitState();
+        notifyState();
         return;
       }
       bus = candidate;
@@ -171,18 +186,18 @@ export function createSerialEditorController({
       jobs.display = null;
       jobs.config = null;
       formEpoch += 1;
-      emitState();
+      notifyState();
       scheduleRefresh();
     },
     selectProtocol(protocol) {
       if (busyCount > 0 || !protocols.includes(protocol)) return;
       selectedProtocol = protocol;
-      emitState();
+      notifyState();
     },
     setDirty(kind, value) {
       if (kind === "config") dirtyConfig = Boolean(value);
       if (kind === "display") dirtyDisplay = Boolean(value);
-      emitState();
+      notifyState();
     },
     isDirty() {
       return dirtyConfig || dirtyDisplay;
@@ -190,7 +205,7 @@ export function createSerialEditorController({
     applyMode: async function applyMode() {
       if (busyCount > 0 || !available() || !selectedProtocol) return null;
       if (selectedProtocol === confirmedMode) return null;
-      if ((dirtyConfig || dirtyDisplay) && !confirmDiscard()) return null;
+      if (dirtyConfig && !confirmDiscard()) return null;
       const target = selectedProtocol;
       beginBusy();
       try {
@@ -207,7 +222,7 @@ export function createSerialEditorController({
             dirtyConfig = false;
             jobs.config = null;
             jobs.mode = { job, applied: true };
-            emitState();
+            notifyState();
             const configJob = await runQuery(`serial-${target}`, { action: "query", bus });
             jobs.config = configJob ? { job: configJob, applied: false } : null;
           } else {
@@ -233,7 +248,7 @@ export function createSerialEditorController({
         if (isCompleted(job)) {
           dirtyDisplay = false;
           jobs.display = { job, applied: true };
-          emitState();
+          notifyState();
         }
         return job;
       } finally {
@@ -247,6 +262,18 @@ export function createSerialEditorController({
       if (!Object.keys(payload).length) return null;
       beginBusy();
       try {
+        const modeJob = await runQuery("serial-mode", { action: "query", bus });
+        const reported = modeFromJob(modeJob);
+        if (reported.mode !== confirmedMode) {
+          confirmedMode = reported.mode;
+          rawMode = reported.rawMode;
+          dirtyConfig = false;
+          jobs.config = null;
+          syncSelectedProtocol();
+          notifyState();
+          await readDisplayAndConfig();
+          return modeJob;
+        }
         const job = await execute(
           command,
           { action: "set", bus, ...payload },
@@ -255,7 +282,7 @@ export function createSerialEditorController({
         if (isCompleted(job)) {
           dirtyConfig = false;
           jobs.config = { job, applied: true };
-          emitState();
+          notifyState();
         }
         return job;
       } finally {
@@ -340,7 +367,6 @@ export class SerialEditor {
     this.refreshButton.className = "secondary serial-editor-refresh";
     this.refreshButton.textContent = translate("serial.editor.refresh");
     this.refreshButton.addEventListener("click", () => {
-      this.lastAvailabilityKey = null;
       this.controller.scheduleRefresh();
     });
 
