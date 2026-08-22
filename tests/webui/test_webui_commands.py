@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 import threading
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -905,6 +906,76 @@ def test_command_catalog_exposes_required_field_contracts() -> None:
         {"field": "action", "equals": "set"}
     ]
     assert "required" not in scale_fields["volts_per_division"]
+
+
+def test_command_catalog_group_metadata_contract() -> None:
+    commands = {
+        entry["id"]: entry
+        for entry in TestClient(app).get("/api/commands").json()
+    }
+
+    expected_groups = {
+        "trigger-edge": "edge",
+        "trigger-edge-coupling": "edge",
+        "trigger-sweep": "common",
+        "trigger-holdoff": "common",
+        "external-trigger-settings": "external",
+        "trigger-pulse-width": "pulse-width",
+        "trigger-runt": "runt",
+        "trigger-transition": "transition",
+        "trigger-delay": "delay",
+        "trigger-setup-hold": "setup-hold",
+        "trigger-edge-burst": "edge-burst",
+        "trigger-tv": "tv",
+        "trigger-or": "pattern-or",
+        "search-state": "basic",
+        "search-event": "event",
+        "serial-search-uart": "uart",
+        "serial-search-can": "can",
+        "serial-mode": "bus",
+        "serial-uart": "uart",
+        "serial-trigger-i2c": "i2c",
+        "serial-lister-display": "lister",
+        "serial-lister-export": "lister",
+        "save-pwd": "path-filename",
+        "save-image": "image",
+        "save-waveform": "waveform",
+        "capture-batch": "capture",
+        "measure-log": "measurement",
+        "measure-until": "measurement",
+        "triggered-measure-loop": "triggered",
+    }
+    for command_id, group in expected_groups.items():
+        assert commands[command_id]["group"] == group, command_id
+
+    for command_id in ("acquisition", "screenshot", "channel-scale"):
+        assert "group" not in commands[command_id], command_id
+
+
+def test_catalog_group_keys_stay_scoped_and_localized() -> None:
+    client = TestClient(app)
+    entries = client.get("/api/commands").json()
+    grouped = [entry for entry in entries if "group" in entry]
+
+    assert {entry["category"] for entry in grouped} <= {
+        "Trigger", "Search", "Serial", "Save / Export", "Workflow"
+    }
+    assert {entry["group"] for entry in grouped} == {
+        "edge", "common", "external", "pulse-width", "runt", "transition",
+        "delay", "setup-hold", "edge-burst", "tv", "pattern-or",
+        "basic", "event", "uart", "i2c", "spi", "can",
+        "bus", "lister",
+        "path-filename", "image", "waveform",
+        "measurement", "capture", "triggered",
+    }
+
+    static_root = Path(__file__).resolve().parents[2] / "src" / "scopes_tool_webui" / "static"
+    english = (static_root / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (static_root / "locale_zh_tw.js").read_text(encoding="utf-8")
+    for group in sorted({entry["group"] for entry in grouped}):
+        key = f'"group.{group}":'
+        assert key in english, key
+        assert key in chinese, key
 
 
 def test_p3c_request_validation_regressions() -> None:
