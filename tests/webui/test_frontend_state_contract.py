@@ -1721,9 +1721,7 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
         r'''
         const { elements, catalog } = buildCatalog();
         catalog.render();
-
-        clickGroupHeader(elements.list, sectionFor(elements.list, "common"));
-        assert.equal(sectionFor(elements.list, "common").children[1].hidden, true);
+        assert.equal(sectionFor(elements.list, "common").children[0].attributes["aria-expanded"], "true");
 
         elements.filter.value = "sweep";
         elements.filter.dispatch("input");
@@ -1736,6 +1734,29 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
           forcedSection.children[1].children.map((node) => node.dataset.command),
           ["trigger-sweep"],
         );
+
+        clickGroupHeader(elements.list, sectionFor(elements.list, "common"));
+        const clickedSection = sectionFor(elements.list, "common");
+        assert.equal(clickedSection.children[0].attributes["aria-expanded"], "true");
+        assert.equal(clickedSection.children[1].hidden, false);
+        assert.equal(catalog.collapsedGroups.size, 0);
+
+        elements.filter.value = "";
+        elements.filter.dispatch("input");
+        assert.deepEqual(
+          sections(elements.list).map((node) => node.children[0].dataset.commandGroup),
+          ["edge", "common", "runt"],
+        );
+        assert.equal(sectionFor(elements.list, "common").children[0].attributes["aria-expanded"], "true");
+        assert.equal(sectionFor(elements.list, "common").children[1].hidden, false);
+
+        clickGroupHeader(elements.list, sectionFor(elements.list, "common"));
+        assert.equal(sectionFor(elements.list, "common").children[1].hidden, true);
+
+        elements.filter.value = "sweep";
+        elements.filter.dispatch("input");
+        assert.equal(sectionFor(elements.list, "common").children[0].attributes["aria-expanded"], "true");
+        assert.equal(sectionFor(elements.list, "common").children[1].hidden, false);
 
         elements.filter.value = "";
         elements.filter.dispatch("input");

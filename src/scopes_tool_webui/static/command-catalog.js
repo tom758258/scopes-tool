@@ -179,6 +179,7 @@ export class CommandCatalog {
   }
 
   toggleGroup(group) {
+    if (this.filterText) return;
     const key = this.groupStateKey(this.activeCategory, group);
     if (this.collapsedGroups.has(key)) this.collapsedGroups.delete(key);
     else this.collapsedGroups.add(key);
