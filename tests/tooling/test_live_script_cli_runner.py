@@ -2668,7 +2668,7 @@ sys.exit(9)
     # private/report.json + private/summary.md before any live access.
     script_args = [
         "-Resource",
-        "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR",
+        "USB0::1::2::SYNTH12345::INSTR",
         "-Target",
         "keysight-dsox4034a",
         "-Connection",
@@ -7342,9 +7342,9 @@ Remove-Item -LiteralPath $functionsFile -Force
                 "-Connection",
                 "tcpip",
                 "-Resource",
-                "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR",
+                "USB0::1::2::SYNTH12345::INSTR",
             ),
-            "does not match resource 'USB0::0x0957::0x17A4::SYNTH12345::0::INSTR'",
+            "does not match resource 'USB0::1::2::SYNTH12345::INSTR'",
             id="tcpip-label-with-usb-resource-rejected",
         ),
     ),
@@ -7434,7 +7434,7 @@ P3_VALIDATOR_SCRIPTS = (
 @pytest.mark.parametrize(("script_name", "domain"), P3_VALIDATOR_SCRIPTS)
 def test_p3_validators_enforce_canonical_target_contract(tmp_path, script_name, domain):
     script = REPO_ROOT / "scripts" / script_name
-    usb = "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR"
+    usb = "USB0::1::2::SYNTH12345::INSTR"
     tcpip = "TCPIP0::198.51.100.7::inst0::INSTR"
 
     def run(*extra: str) -> subprocess.CompletedProcess[str]:
@@ -7511,7 +7511,7 @@ def _normalize_json_text(text):
 @requires_windows
 def test_live_cli_check_complete_run_builds_private_and_shareable_evidence(tmp_path):
     runs_root = tmp_path / "runs"
-    resource = "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR"
+    resource = "USB0::1::2::SYNTH12345::INSTR"
     body = extract_live_cli_functions_ps(("Write-Summary",)) + """
 $Resource = '@RESOURCE@'
 $RepoRoot = '@REPO@'
