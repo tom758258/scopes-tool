@@ -7374,7 +7374,7 @@ $results = @{}
 $matching = [pscustomobject]@{
     idn = [pscustomobject]@{
         model = "DSOX4034A"
-        raw = "KEYSIGHT TECHNOLOGIES,DSOX4034A,MY55440270,07.20"
+        raw = "KEYSIGHT TECHNOLOGIES,DSOX4034A,SYNTH12345,07.20"
     }
 }
 try {
@@ -7511,7 +7511,7 @@ def _normalize_json_text(text):
 @requires_windows
 def test_live_cli_check_complete_run_builds_private_and_shareable_evidence(tmp_path):
     runs_root = tmp_path / "runs"
-    resource = "USB0::0x0957::0x17A4::MY55440270::0::INSTR"
+    resource = "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR"
     body = extract_live_cli_functions_ps(("Write-Summary",)) + """
 $Resource = '@RESOURCE@'
 $RepoRoot = '@REPO@'
@@ -7536,7 +7536,7 @@ $jsonPath = Join-Path $script:RunRoot 'cli-001-identity.json'
 Write-Utf8NoBomText -LiteralPath $stdoutPath `
     -Text ('{"ok":true,"resource":"' + $Resource + '"}')
 Write-Utf8NoBomText -LiteralPath $jsonPath `
-    -Text '{"ok":true,"idn":{"raw":"KEYSIGHT TECHNOLOGIES,DSOX4034A,MY55440270,07.20"}}'
+    -Text '{"ok":true,"idn":{"raw":"KEYSIGHT TECHNOLOGIES,DSOX4034A,SYNTH12345,07.20"}}'
 $script:Invocations.Add([pscustomobject]@{
     index = 1
     stage = 'identity'
@@ -7650,7 +7650,7 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     # Private evidence retains raw sensitive values.
     normalized_private = _normalize_json_text(payload["s1_private_report_raw"])
     assert resource in normalized_private
-    assert "MY55440270" in normalized_private
+    assert "SYNTH12345" in normalized_private
 
     # Shareable artifacts are redacted everywhere.
     joined_shareable = _normalize_json_text(
@@ -7662,7 +7662,7 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
             )
         )
     )
-    for secret in (resource, "MY55440270", "192.168.1.50", str(REPO_ROOT)):
+    for secret in (resource, "SYNTH12345", "192.168.1.50", str(REPO_ROOT)):
         assert secret not in joined_shareable, secret
     assert "<redacted-resource>" in joined_shareable
     assert "<redacted-idn>" in joined_shareable

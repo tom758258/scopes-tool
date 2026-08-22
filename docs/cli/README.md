@@ -228,10 +228,10 @@ Run the hardware-free test suite from the root directory:
 .\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
 ```
 
-This runs tests from all three areas: `tests/core`, `tests/cli`, and
-`tests/webui`. Use a repository-local pytest temporary directory to avoid
+This runs the repository hardware-free tests, including `tests/core`,
+`tests/cli`, `tests/webui`, and `tests/tooling`. Use a repository-local pytest temporary directory to avoid
 Windows shared-temp permission conflicts; remove it after a successful run.
-Additional pytest arguments can be passed after the script path.
+Additional pytest arguments can be passed directly to pytest.
 
 Without `--visa-library`, PyVISA uses `pyvisa.ResourceManager()` and the
 default System VISA runtime discovered on the computer. The generic
@@ -2439,8 +2439,8 @@ Normal tests are hardware-free:
 .\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
 ```
 
-This runs tests from all three areas: `tests/core`, `tests/cli`, and
-`tests/webui`.
+This runs the repository hardware-free tests, including `tests/core`,
+`tests/cli`, `tests/webui`, and `tests/tooling`.
 
 For a filtered hardware-free run, target one area directly:
 

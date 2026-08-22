@@ -72,7 +72,7 @@ jobs:
           ./.venv/bin/scopes-tool --help
 
       - name: Run tests
-        run: ./.venv/bin/python -m pytest -q -m "not hardware"
+        run: ./.venv/bin/python -m pytest -q -m "not hardware" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
 
   pytest-windows:
     name: Windows Python ${{ matrix.python-version }}
@@ -107,4 +107,4 @@ jobs:
           .\.venv\Scripts\scopes-tool.exe --help
 
       - name: Run tests
-        run: .\.venv\Scripts\python.exe -m pytest -q -m "not hardware"
+        run: .\.venv\Scripts\python.exe -m pytest -q -m "not hardware" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}

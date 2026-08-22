@@ -427,14 +427,14 @@ def test_shareable_generation_failure_fails_preflight(tmp_path: Path) -> None:
 
 @requires_windows
 def test_shareable_artifacts_redact_sensitive_values(tmp_path: Path) -> None:
-    resource = "USB0::0x0957::0x17A4::MY55440270::0::INSTR"
-    idn_raw = "KEYSIGHT TECHNOLOGIES,DSOX4034A,MY55440270,07.20.2017102615"
+    resource = "USB0::1::2::SYNTH12345::INSTR"
+    idn_raw = "KEYSIGHT TECHNOLOGIES,DSOX4034A,SYNTH12345,0.0"
     secrets = {
-        "serial": "MY55440270",
+        "serial": "SYNTH12345",
         "resource": resource,
         "idn": idn_raw,
         "ip": "192.168.1.50",
-        "link_local_ip": "169.254.16.163",
+        "link_local_ip": "169.254.8.9",
         "user_path": "C:\\Users\\alice\\evidence.txt",
         "repo_path": str(REPO_ROOT),
     }
@@ -453,8 +453,8 @@ def test_shareable_artifacts_redact_sensitive_values(tmp_path: Path) -> None:
         "$report = [pscustomobject]@{{ "
         "kind = 'scopes-tool-cli-preflight'; status = 'passed'; "
         "targets = @('keysight-dsox4034a'); resource = $resource; "
-        "notes = 'host 192.168.1.50 link 169.254.16.163 user C:\\Users\\alice\\evidence.txt repo ' + $repoRoot; "
-        "idn = [pscustomobject]@{{ raw = $idnRaw; serial = 'MY55440270' }}; "
+        "notes = 'host 192.168.1.50 link 169.254.8.9 user C:\\Users\\alice\\evidence.txt repo ' + $repoRoot; "
+        "idn = [pscustomobject]@{{ raw = $idnRaw; serial = 'SYNTH12345' }}; "
         "artifact_paths = [ordered]@{{ report = (Join-Path $privateRoot 'report.json') }} }}; "
         "Write-Utf8NoBomText -LiteralPath (Join-Path $privateRoot 'report.json') "
         "($report | ConvertTo-Json -Depth 12); "

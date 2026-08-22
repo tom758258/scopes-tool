@@ -179,9 +179,9 @@ def test_result_history_runtime_behaviour() -> None:
         api.renderJob(summary, makeJob("state-job", "identify", "running"), detail);
         api.renderJob(summary, makeJob("state-job", "identify", "completed", {
           resource: "USB0::SCOPE::INSTR",
-          result: { result: { idn: { vendor: "KEYSIGHT TECHNOLOGIES", model: "DSO-X 4034A", serial: "MY55440270", firmware: "07.20" } } },
+          result: { result: { idn: { vendor: "KEYSIGHT TECHNOLOGIES", model: "DSO-X 4034A", serial: "SYNTH12345", firmware: "0.0" } } },
         }), detail);
-        assert.deepEqual(rowTexts(), [["Read device information", "Completed", "DSO-X 4034A - serial MY55440270 - firmware 07.20"]]);
+        assert.deepEqual(rowTexts(), [["Read device information", "Completed", "DSO-X 4034A - serial SYNTH12345 - firmware 0.0"]]);
         assert.equal(detail.children[0].className, "identity-result");
         assert.equal(detail.children[0].children.length, 10);
         assert.equal(detail.children[1].className, "result-block");
@@ -189,7 +189,7 @@ def test_result_history_runtime_behaviour() -> None:
         const workspace = new FakeNode("div");
         api.renderIdentityWorkspaceResult(workspace, makeJob("workspace-identity", "identify", "completed", {
           resource: "USB0::SCOPE::INSTR",
-          result: { result: { idn: { vendor: "KEYSIGHT TECHNOLOGIES", model: "DSO-X 4034A", serial: "MY55440270", firmware: "07.20" } } },
+          result: { result: { idn: { vendor: "KEYSIGHT TECHNOLOGIES", model: "DSO-X 4034A", serial: "SYNTH12345", firmware: "0.0" } } },
         }));
         assert.equal(workspace.children.length, 5);
         assert.deepEqual(
@@ -197,8 +197,8 @@ def test_result_history_runtime_behaviour() -> None:
           [
             ["KEYSIGHT TECHNOLOGIES", "results.identity.manufacturer"],
             ["DSO-X 4034A", "results.identity.model"],
-            ["MY55440270", "results.identity.serial"],
-            ["07.20", "results.identity.firmware"],
+            ["SYNTH12345", "results.identity.serial"],
+            ["0.0", "results.identity.firmware"],
             ["USB0::SCOPE::INSTR", "results.identity.resource"],
           ],
         );
@@ -232,7 +232,7 @@ def test_result_history_runtime_behaviour() -> None:
         assert.equal(summary.children.length, 5);
         assert.equal(rowTexts()[0][2], "\u627e\u5230 4 \u500b\u8cc7\u6e90");
         assert(rowTexts().some((row) => row[2] === "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210"));
-        assert(rowTexts().some((row) => row[2] === "DSO-X 4034A - \u5e8f\u865f MY55440270 - \u97cc\u9ad4 07.20"));
+        assert(rowTexts().some((row) => row[2] === "DSO-X 4034A - \u5e8f\u865f SYNTH12345 - \u97cc\u9ad4 0.0"));
 
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("zh-status-job", "identify", "queued"), detail);
