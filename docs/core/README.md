@@ -117,7 +117,7 @@ From the repository root, the focused Core documentation and ownership check
 can be run with:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests\core\test_core_docs_ownership.py -q -p no:cacheprovider
+.\.venv\Scripts\python.exe -m pytest tests\core\test_core_docs_ownership.py -q -p no:cacheprovider --basetemp .tmp_tests\core-docs
 ```
 
 ## Docs
