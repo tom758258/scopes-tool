@@ -111,7 +111,7 @@ function Add-CaseResult {
         Status = $Status
         Detail = $Detail
     }
-    Write-Host ("{0,-5} [live][@DOMAIN@] {1}" -f $Status, $Name)
+    Write-Host ("{0,-5} [live][dvm] {1}" -f $Status, $Name)
     if (-not [string]::IsNullOrWhiteSpace($Detail)) {
         Write-Host "      ${Detail}"
     }
@@ -1079,7 +1079,7 @@ if ($script:DvmUnavailable) {
     exit 0
 }
 
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "PASS"
 if ($script:ShareableGenerationFailed) {
     Write-Host "FAIL  DVM live validation (shareable artifact generation failed)"
     exit 1

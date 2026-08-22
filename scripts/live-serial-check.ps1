@@ -1864,8 +1864,8 @@ if ($script:FunctionalFailed) {
     Write-Host "FAIL  Serial live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][serial] run failed; see private report for the shareable generation error"
-        exit 1
     }
+    exit 1
 }
 
 if ($script:SerialUnavailable) {

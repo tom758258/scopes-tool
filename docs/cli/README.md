@@ -222,18 +222,16 @@ is not configured as a `uv` workspace. For CI or strict local checks, use:
 uv sync --all-extras --locked --link-mode=copy
 ```
 
-Run the repository test wrapper from the root directory:
+Run the hardware-free test suite from the root directory:
 
 ```powershell
-.\scripts\run-tests.ps1
+.\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
 ```
 
 This runs tests from all three areas: `tests/core`, `tests/cli`, and
-`tests/webui`.
-
-The wrapper creates an isolated pytest temporary directory, removes it after a
-successful run, and preserves it after a failure for inspection. Additional
-pytest arguments can be passed after the script path.
+`tests/webui`. Use a repository-local pytest temporary directory to avoid
+Windows shared-temp permission conflicts; remove it after a successful run.
+Additional pytest arguments can be passed after the script path.
 
 Without `--visa-library`, PyVISA uses `pyvisa.ResourceManager()` and the
 default System VISA runtime discovered on the computer. The generic
@@ -2438,20 +2436,20 @@ does not change screenshot's PC-side byte retrieval behavior.
 Normal tests are hardware-free:
 
 ```powershell
-.\scripts\run-tests.ps1
+.\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
 ```
 
 This runs tests from all three areas: `tests/core`, `tests/cli`, and
 `tests/webui`.
 
-For a filtered hardware-free run, pass pytest arguments after the script path:
+For a filtered hardware-free run, target one area directly:
 
 ```powershell
-.\scripts\run-tests.ps1 tests/cli -q
+.\.venv\Scripts\python.exe -m pytest tests/cli -q --basetemp .tmp_tests\cli
 ```
 
-Do not pass `--basetemp`; the wrapper creates an isolated pytest temporary
-directory and preserves it only when the run fails.
+Always pass a repository-local `--basetemp`; the default Windows user Temp
+directory can hit shared-temp permission conflicts.
 
 Real instrument checks are manual. Start with `--dry-run --json`, then
 `--simulate --json`, and only use an explicit `--resource <RESOURCE>` or
@@ -2483,7 +2481,7 @@ oscilloscopes with an expected model target, transport, and explicit VISA
 resource:
 
 ```powershell
-.\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource "<VISA_RESOURCE>"
+.\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
 ```
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
@@ -2514,7 +2512,7 @@ Run this script on the prepared instrument before claiming a live PASS.
 Run the optional, license-dependent DVM validation separately from the baseline:
 
 ```powershell
-.\scripts\live-dvm-check.ps1 -Target keysight-dsox4024a -Connection usb -Resource "<VISA_RESOURCE>"
+.\scripts\live-dvm-check.ps1 -Target keysight-dsox4024a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
 ```
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
@@ -2540,7 +2538,7 @@ not live validation evidence.
 Run the optional, license-dependent Segmented Memory validation separately:
 
 ```powershell
-.\scripts\live-segmented-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource "<VISA_RESOURCE>"
+.\scripts\live-segmented-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
 ```
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output,
@@ -2571,7 +2569,7 @@ evidence.
 Run the optional, license-dependent Serial validation separately:
 
 ```powershell
-.\scripts\live-serial-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource "<VISA_RESOURCE>"
+.\scripts\live-serial-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
 ```
 
 The maintained runner intentionally uses UART as the representative Serial

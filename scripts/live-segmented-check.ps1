@@ -1030,8 +1030,8 @@ if ($script:FunctionalFailed) {
     Write-Host "FAIL  Segmented Memory live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][segmented] run failed; see private report for the shareable generation error"
-        exit 1
     }
+    exit 1
 }
 
 if ($script:SegmentedUnavailable) {

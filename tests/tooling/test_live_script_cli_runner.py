@@ -7678,3 +7678,92 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     assert payload["s2_status"] == "failed"
     assert payload["s2_error"] == "simulated shareable artifact generation failure"
     assert payload["s2_summary_reason"] is True
+
+
+P3_FINALIZE_CONTRACTS = (
+    (
+        "live-dvm-check.ps1",
+        "scopes-tool-live-dvm-check",
+        "dvm",
+        "FAIL  DVM live validation",
+        "PASS  DVM live validation",
+    ),
+    (
+        "live-segmented-check.ps1",
+        "scopes-tool-live-segmented-check",
+        "segmented",
+        "FAIL  Segmented Memory live validation",
+        "PASS  Segmented Memory live validation",
+    ),
+    (
+        "live-serial-check.ps1",
+        "scopes-tool-live-serial-check",
+        "serial",
+        "FAIL  Serial live validation",
+        "PASS  Serial live validation",
+    ),
+    (
+        "live-workflow-check.ps1",
+        "scopes-tool-live-workflow-check",
+        "workflow",
+        "FAIL  Workflow live validation",
+        "PASS  Workflow live validation",
+    ),
+)
+
+
+def _extract_balanced_block(text: str, start_marker: str) -> str:
+    start = text.index(start_marker)
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    raise AssertionError("unbalanced braces")
+
+
+@pytest.mark.parametrize(
+    ("script_name", "kind", "domain", "fail_label", "pass_label"),
+    P3_FINALIZE_CONTRACTS,
+)
+def test_p3_finalization_control_flow(
+    script_name, kind, domain, fail_label, pass_label
+):
+    text = (REPO_ROOT / "scripts" / script_name).read_text(encoding="utf-8")
+
+    # Migration template placeholders must never reach production output.
+    assert "@DOMAIN@" not in text
+    assert "@OUTPUTROOT@" not in text
+
+    fail_block = _extract_balanced_block(text, "if ($script:FunctionalFailed) {")
+    fail_finalize = (
+        "Complete-LiveValidationRun -Kind '{kind}' "
+        "-Domain '{domain}' -Result \"FAIL\""
+    ).format(kind=kind, domain=domain)
+    assert fail_block.count(fail_finalize) == 1
+    # The FAIL path always terminates: no fall-through into SKIP/PASS
+    # finalization regardless of shareable generation outcome.
+    assert fail_block.rstrip().endswith("exit 1\n}")
+
+    block_end = text.index(fail_block) + len(fail_block)
+    tail_after_fail = text[block_end:]
+
+    # Exactly one PASS finalization follows, and no stray FAIL finalize.
+    pass_finalize = (
+        "Complete-LiveValidationRun -Kind '{kind}' "
+        "-Domain '{domain}' -Result \"PASS\""
+    ).format(kind=kind, domain=domain)
+    assert tail_after_fail.count(pass_finalize) == 1
+    assert '-Result "FAIL"' not in tail_after_fail
+
+    # Success contract: PASS finalization, then console PASS, then exit 0;
+    # a shareable failure downgrades it to FAIL with exit 1.
+    pass_tail = tail_after_fail[tail_after_fail.index(pass_finalize) :]
+    assert "$script:ShareableGenerationFailed) {" in pass_tail
+    assert pass_tail.index('Write-Host "%s"' % pass_label) > pass_tail.index(
+        "if ($script:ShareableGenerationFailed)"
+    )
+    assert pass_tail.rstrip().endswith('Write-Host "%s"\nexit 0' % pass_label)

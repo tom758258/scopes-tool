@@ -939,8 +939,8 @@ if ($script:FunctionalFailed) {
     Write-Host "FAIL  Workflow live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][workflow] run failed; see private report for the shareable generation error"
-        exit 1
     }
+    exit 1
 }
 
     Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "PASS"

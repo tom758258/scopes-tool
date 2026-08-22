@@ -190,22 +190,20 @@ dist\
 
 ## Test
 
-Run the repository test suite through the repository wrapper:
+Run the hardware-free test suite with a repository-local pytest temporary
+directory to avoid Windows shared-temp permission conflicts:
 
 ```powershell
-.\scripts\run-tests.ps1
+.\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
 ```
 
-The wrapper creates an isolated pytest temporary directory to avoid Windows
-shared-temp permission conflicts. It removes the directory after a successful
-run and preserves it after a failure for inspection. Additional pytest
-arguments are forwarded, so focused runs can target one area:
+Focused runs target one area:
 
 ```powershell
-.\scripts\run-tests.ps1 tests\core
-.\scripts\run-tests.ps1 tests\cli
-.\scripts\run-tests.ps1 tests\webui
-.\scripts\run-tests.ps1 tests\tooling
+.\.venv\Scripts\python.exe -m pytest tests\core -q --basetemp .tmp_tests\core
+.\.venv\Scripts\python.exe -m pytest tests\cli -q --basetemp .tmp_tests\cli
+.\.venv\Scripts\python.exe -m pytest tests\webui -q --basetemp .tmp_tests\webui
+.\.venv\Scripts\python.exe -m pytest tests\tooling -q --basetemp .tmp_tests\tooling
 ```
 
 See [Testing Guidelines](docs/testing-guidelines.md) for repository testing
