@@ -1767,6 +1767,18 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
         assert.equal(sectionFor(elements.list, "common").children[0].attributes["aria-expanded"], "false");
         assert.equal(sectionFor(elements.list, "common").children[1].hidden, true);
 
+        elements.filter.value = "runt";
+        elements.filter.dispatch("input");
+        catalog.select("trigger-runt");
+        assert.equal(sectionFor(elements.list, "runt").children[0].attributes["aria-expanded"], "true");
+        assert.equal(catalog.collapsedGroups.size, 1);
+
+        elements.filter.value = "";
+        elements.filter.dispatch("input");
+        assert.equal(sectionFor(elements.list, "runt").children[0].attributes["aria-expanded"], "true");
+        assert.equal(sectionFor(elements.list, "runt").children[1].hidden, false);
+        assert.equal(catalog.selectedId, "trigger-runt");
+
         elements.filter.value = "zzz-no-match";
         elements.filter.dispatch("input");
         assert.equal(elements.list.children.length, 1);

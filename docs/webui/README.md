@@ -111,6 +111,21 @@ The Command workbench exposes:
 Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
 
+The Command Browser keeps Category as its first level. Categories with group
+metadata (Trigger, Search, Serial, Save / Export, and Workflow) show
+Category → Group → Commands sections, while categories without group metadata
+keep the plain Category → Commands list. Groups start expanded and can be
+collapsed and reopened; collapse state lives only in the current page session
+and resets to all-expanded after a reload. The command filter still applies
+only to the active category. While a filter matches commands in a group, that
+group temporarily stays expanded; clearing the filter restores the previous
+collapse state. Selecting a command inside a collapsed group expands that
+group first.
+
+Grouping is presentation only: it does not change Core command semantics,
+model or capability gating, or the metadata-driven forms, and it does not add
+dedicated Trigger, Search, Serial, Save/Export, or Workflow editors.
+
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field
 groups. Workflow channel and measurement-item lists use model-aware

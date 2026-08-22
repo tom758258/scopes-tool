@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Adds collapsible command groups to the WebUI Command Browser for dense
+  Trigger, Search, Serial, Save/Export, and Workflow categories while keeping
+  the flat command list for ungrouped categories.
 - Expands the WebUI with Core-backed conditional command coverage for Trigger,
   Search, Serial, Segmented Memory, and finite Workflow operations while
   keeping Generic Sequence and advanced FFT/Math editors deferred.
