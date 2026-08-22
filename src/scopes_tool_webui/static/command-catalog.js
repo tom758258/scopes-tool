@@ -16,6 +16,7 @@ export class CommandCatalog {
     this.filterText = "";
     this.activeModelId = null;
     this.activeModelLabel = "";
+    this.collapsedGroups = new Set();
 
     this.elements.filter.addEventListener("input", () => {
       this.filterText = this.elements.filter.value.trim().toLowerCase();
@@ -28,6 +29,11 @@ export class CommandCatalog {
       this.renderCategories();
     });
     this.elements.list.addEventListener("click", (event) => {
+      const toggle = event.target.closest("button[data-command-group]");
+      if (toggle) {
+        this.toggleGroup(toggle.dataset.commandGroup);
+        return;
+      }
       const button = event.target.closest("button[data-command]");
       if (!button) return;
       this.select(button.dataset.command);
@@ -45,6 +51,11 @@ export class CommandCatalog {
   categoryLabel(category) {
     const key = `category.${category}`;
     return hasTranslation(key) ? translate(key) : category;
+  }
+
+  groupLabel(group) {
+    const key = `group.${group}`;
+    return hasTranslation(key) ? translate(key) : group;
   }
 
   commandLabel(command) {
@@ -101,29 +112,77 @@ export class CommandCatalog {
       empty.textContent = translate("commands.noMatches");
       this.elements.list.append(empty);
     } else {
+      const sections = new Map();
       filtered.forEach((command) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "command-button";
-        button.dataset.command = command.id;
-        const label = document.createElement("span");
-        label.textContent = this.commandLabel(command);
-        button.append(label);
-        const reason = this.supportReason(command);
-        if (reason) {
-          const status = document.createElement("small");
-          status.textContent = reason;
-          button.append(status);
-          button.disabled = true;
-          button.title = reason;
+        if (!command.group) {
+          this.elements.list.append(this.renderCommandButton(command));
+          return;
         }
-        button.setAttribute("aria-pressed", String(command.id === this.selectedId));
-        if (command.id === this.selectedId) button.classList.add("active");
-        this.elements.list.append(button);
+        let section = sections.get(command.group);
+        if (!section) {
+          section = this.renderGroup(command.group);
+          sections.set(command.group, section);
+          this.elements.list.append(section.root);
+        }
+        section.items.append(this.renderCommandButton(command));
       });
     }
 
     if (notify && previous !== this.selectedId) this.onSelectionChange(this.selected());
+  }
+
+  renderGroup(group) {
+    const expanded = Boolean(this.filterText) || !this.collapsedGroups.has(this.groupStateKey(this.activeCategory, group));
+    const root = document.createElement("div");
+    root.className = "command-group";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "command-group-toggle";
+    toggle.dataset.commandGroup = group;
+    toggle.setAttribute("aria-expanded", String(expanded));
+    const caret = document.createElement("span");
+    caret.setAttribute("aria-hidden", "true");
+    caret.textContent = expanded ? "▾" : "▸";
+    const label = document.createElement("span");
+    label.textContent = this.groupLabel(group);
+    toggle.append(caret, label);
+    const items = document.createElement("div");
+    items.className = "command-group-items";
+    items.hidden = !expanded;
+    root.append(toggle, items);
+    return { root, items };
+  }
+
+  renderCommandButton(command) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "command-button";
+    button.dataset.command = command.id;
+    const label = document.createElement("span");
+    label.textContent = this.commandLabel(command);
+    button.append(label);
+    const reason = this.supportReason(command);
+    if (reason) {
+      const status = document.createElement("small");
+      status.textContent = reason;
+      button.append(status);
+      button.disabled = true;
+      button.title = reason;
+    }
+    button.setAttribute("aria-pressed", String(command.id === this.selectedId));
+    if (command.id === this.selectedId) button.classList.add("active");
+    return button;
+  }
+
+  groupStateKey(category, group) {
+    return `${category}|${group}`;
+  }
+
+  toggleGroup(group) {
+    const key = this.groupStateKey(this.activeCategory, group);
+    if (this.collapsedGroups.has(key)) this.collapsedGroups.delete(key);
+    else this.collapsedGroups.add(key);
+    this.renderCommands(false);
   }
 
   select(commandId) {
@@ -131,6 +190,9 @@ export class CommandCatalog {
     const command = this.commands.find((item) => item.id === commandId);
     const previous = this.selectedId;
     if (command?.category !== this.activeCategory) this.activeCategory = command.category;
+    if (command?.group && !this.filterText) {
+      this.collapsedGroups.delete(this.groupStateKey(this.activeCategory, command.group));
+    }
     this.selectedId = commandId;
     this.renderCategories(false);
     if (previous !== this.selectedId) this.onSelectionChange(this.selected());
