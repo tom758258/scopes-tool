@@ -946,6 +946,7 @@ def _p3c_action_command(
     *,
     modes: tuple[str, ...] = ("live", "simulate"),
     group: str | None = None,
+    editor: str | None = None,
 ) -> dict[str, Any]:
     entry = {
         "id": command_id,
@@ -956,6 +957,8 @@ def _p3c_action_command(
     }
     if group is not None:
         entry["group"] = group
+    if editor is not None:
+        entry["editor"] = editor
     return entry
 
 
@@ -1126,8 +1129,8 @@ P3C_COMMANDS = (
         "modes": ("live", "simulate"), "fields": (_p3c_field("bus", "integer", minimum=1),),
         "group": "bus",
     },
-    _p3c_action_command("serial-mode", "Serial", "Serial mode", (_p3c_field("bus", "integer", minimum=1), _p3c_field("mode", "enum", options=SERIAL_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility())), group="bus"),
-    _p3c_action_command("serial-display", "Serial", "Serial display", (_p3c_field("bus", "integer", minimum=1), _p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility())), group="bus"),
+    _p3c_action_command("serial-mode", "Serial", "Serial mode", (_p3c_field("bus", "integer", minimum=1), _p3c_field("mode", "enum", options=SERIAL_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility())), group="bus", editor="serial"),
+    _p3c_action_command("serial-display", "Serial", "Serial display", (_p3c_field("bus", "integer", minimum=1), _p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility())), group="bus", editor="serial"),
     _p3c_action_command(
         "serial-uart", "Serial", "UART configuration", (
             _p3c_field("bus", "integer", minimum=1),
@@ -1137,10 +1140,11 @@ P3C_COMMANDS = (
             _p3c_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_p3c_set_visibility()),
         ),
         group="uart",
+        editor="serial",
     ),
-    _p3c_action_command("serial-i2c", "Serial", "I2C configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("clock_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("data_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("address_size", "enum", options=I2C_ADDRESS_SIZES, visible_if=_p3c_set_visibility())), group="i2c"),
-    _p3c_action_command("serial-spi", "Serial", "SPI configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("clock_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("mosi_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("miso_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("frame_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("clock_slope", "enum", options=SPI_CLOCK_SLOPES, visible_if=_p3c_set_visibility()), _p3c_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_p3c_set_visibility()), _p3c_field("word_width", "integer", minimum=4, maximum=16, visible_if=_p3c_set_visibility()), _p3c_field("framing", "enum", options=SPI_FRAMINGS, visible_if=_p3c_set_visibility()), _p3c_field("clock_timeout", "number", visible_if=_p3c_set_visibility())), group="spi"),
-    _p3c_action_command("serial-can", "Serial", "CAN configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("source", "string", visible_if=_p3c_set_visibility()), _p3c_field("baud_rate", "integer", visible_if=_p3c_set_visibility()), _p3c_field("signal_definition", "enum", options=CAN_SIGNAL_DEFINITIONS, visible_if=_p3c_set_visibility()), _p3c_field("sample_point", "number", visible_if=_p3c_set_visibility())), group="can"),
+    _p3c_action_command("serial-i2c", "Serial", "I2C configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("clock_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("data_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("address_size", "enum", options=I2C_ADDRESS_SIZES, visible_if=_p3c_set_visibility())), group="i2c", editor="serial"),
+    _p3c_action_command("serial-spi", "Serial", "SPI configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("clock_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("mosi_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("miso_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("frame_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("clock_slope", "enum", options=SPI_CLOCK_SLOPES, visible_if=_p3c_set_visibility()), _p3c_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_p3c_set_visibility()), _p3c_field("word_width", "integer", minimum=4, maximum=16, visible_if=_p3c_set_visibility()), _p3c_field("framing", "enum", options=SPI_FRAMINGS, visible_if=_p3c_set_visibility()), _p3c_field("clock_timeout", "number", visible_if=_p3c_set_visibility())), group="spi", editor="serial"),
+    _p3c_action_command("serial-can", "Serial", "CAN configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("source", "string", visible_if=_p3c_set_visibility()), _p3c_field("baud_rate", "integer", visible_if=_p3c_set_visibility()), _p3c_field("signal_definition", "enum", options=CAN_SIGNAL_DEFINITIONS, visible_if=_p3c_set_visibility()), _p3c_field("sample_point", "number", visible_if=_p3c_set_visibility())), group="can", editor="serial"),
     _p3c_action_command("serial-trigger-uart", "Serial", "UART serial trigger", (_p3c_field("bus", "integer", minimum=1), _p3c_field("type", "enum", options=UART_TRIGGER_TYPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("data", "integer", visible_if=_p3c_set_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_p3c_set_visibility({"field": "type", "in": ("rx-data", "tx-data")})), _p3c_field("qualifier", "enum", options=UART_TRIGGER_QUALIFIERS, visible_if=_p3c_set_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_p3c_set_visibility({"field": "type", "in": ("rx-data", "tx-data")}))), group="uart"),
     _p3c_action_command("serial-trigger-i2c", "Serial", "I2C serial trigger", (_p3c_field("bus", "integer", minimum=1), _p3c_field("type", "enum", options=I2C_TRIGGER_TYPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("address", "integer", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")})), _p3c_field("data", "integer", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility({"field": "type", "in": ("read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")})), _p3c_field("data2", "integer", visible_if=_p3c_set_visibility({"field": "type", "in": ("read7-data2", "write7-data2")}), required_if=_p3c_set_visibility({"field": "type", "in": ("read7-data2", "write7-data2")})), _p3c_field("qualifier", "enum", options=I2C_TRIGGER_QUALIFIERS, visible_if=_p3c_set_visibility({"field": "type", "equals": "read-eeprom"}), required_if=_p3c_set_visibility({"field": "type", "equals": "read-eeprom"}))), group="i2c"),
     _p3c_action_command("serial-trigger-spi", "Serial", "SPI serial trigger", (_p3c_field("bus", "integer", minimum=1), _p3c_field("type", "enum", options=SPI_TRIGGER_TYPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("width", "integer", minimum=1, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("data", "string", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility())), group="spi"),

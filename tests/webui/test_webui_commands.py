@@ -962,6 +962,34 @@ def test_command_catalog_group_metadata_contract() -> None:
         assert "group" not in commands[command_id], command_id
 
 
+def test_serial_editor_marks_b1_configuration_commands() -> None:
+    commands = {
+        entry["id"]: entry
+        for entry in TestClient(app).get("/api/commands").json()
+    }
+
+    for command_id in (
+        "serial-mode",
+        "serial-display",
+        "serial-uart",
+        "serial-i2c",
+        "serial-spi",
+        "serial-can",
+    ):
+        entry = commands[command_id]
+        assert entry["editor"] == "serial", command_id
+        assert entry["presentation"]["kind"] == "setting", command_id
+        assert entry["presentation"]["query_fields"] == ["bus"], command_id
+
+    for command_id in (
+        "serial-query",
+        "serial-search-uart",
+        "serial-trigger-uart",
+        "serial-lister-query",
+    ):
+        assert "editor" not in commands[command_id], command_id
+
+
 def test_catalog_group_keys_stay_scoped_and_localized() -> None:
     client = TestClient(app)
     entries = client.get("/api/commands").json()

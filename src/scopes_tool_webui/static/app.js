@@ -13,6 +13,7 @@ import {
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
+import { SerialEditor, SERIAL_EDITOR_COMMANDS } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
@@ -46,6 +47,8 @@ const elements = {
   advanced: document.querySelector("#advanced-commands"),
   advancedToggle: document.querySelector("#advanced-command-toggle"),
   form: document.querySelector("#command-form"),
+  formHeading: document.querySelector("#form-heading"),
+  serialEditor: document.querySelector("#serial-editor"),
   execute: document.querySelector("#execute-button"),
   cancel: document.querySelector("#cancel-button"),
   executionStatus: document.querySelector("#execution-status"),
@@ -68,6 +71,7 @@ const state = createInitialState();
 let context = state.executionContext;
 let catalog;
 let commandForm;
+let serialEditor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -102,6 +106,15 @@ async function initialize() {
     list: elements.commandList,
   }, () => syncCommandSelection());
   commandForm = new CommandForm(elements.form, catalog);
+  serialEditor = new SerialEditor(elements.serialEditor, catalog, {
+    executeCommand,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    modelInfo: serialEditorModelInfo,
+  });
   catalog.render();
 
   deviceResource = new DeviceResource({
@@ -441,6 +454,7 @@ document.addEventListener("localechange", () => {
     catalog.render();
     syncCommandSelection(commandDraft);
   }
+  serialEditor?.rerender();
   renderCurrentResult();
 });
 
@@ -448,6 +462,7 @@ function syncCommandSelection(draft = null) {
   if (!catalog || !commandForm) return;
   const selected = catalog.selected();
   state.selectedCommand = selected?.id || null;
+  const editorOwned = SERIAL_EDITOR_COMMANDS.includes(selected?.id);
   commandForm.render(selected, {
     draft,
     onDirty: () => updateAvailability(),
@@ -456,11 +471,19 @@ function syncCommandSelection(draft = null) {
       scheduleEditorRead();
     },
   });
+  elements.formHeading.hidden = editorOwned;
+  elements.form.hidden = editorOwned;
+  elements.serialEditor.hidden = !editorOwned;
+  elements.execute.hidden = editorOwned;
   elements.selectedCommand.textContent = selected
-    ? catalog.commandLabel(selected)
+    ? editorOwned
+      ? translate("serial.editor.title")
+      : catalog.commandLabel(selected)
     : translate("commands.selectCommand");
   elements.commandDescription.textContent = selected
-    ? catalog.description(selected)
+    ? editorOwned
+      ? translate("serial.editor.description")
+      : catalog.description(selected)
     : translate("commands.noDescription");
   const supportReason = selected ? catalog.supportReason(selected) : "";
   elements.commandSupportReason.hidden = !supportReason;
@@ -518,6 +541,22 @@ function currentModelLabel() {
   return models.find((model) => model.id === modelId)?.label || modelId || "";
 }
 
+function serialEditorModelInfo() {
+  const definition = commands.find((item) => item.id === "serial-mode");
+  if (!definition) return { supported: false, maxBus: 0, protocols: [] };
+  const fields = catalog.fieldsFor(definition);
+  const busField = fields.find((field) => field.name === "bus");
+  const modeField = fields.find((field) => field.name === "mode");
+  const modeOptions = modeField?.options || [];
+  return {
+    supported: Boolean(currentModelId()) && catalog.supported(definition),
+    maxBus: Number(busField?.maximum) || 1,
+    protocols: ["uart", "i2c", "spi", "can"].filter(
+      (protocol) => !modeOptions.length || modeOptions.includes(protocol),
+    ),
+  };
+}
+
 function updateCommandSupport(rerender = true) {
   if (!catalog) return false;
   const modelId = currentModelId();
@@ -563,7 +602,12 @@ function scheduleEditorRead() {
   queueMicrotask(async () => {
     state.editorReadPending = false;
     const selected = catalog?.selected();
-    if (!selected || selected.presentation?.kind !== "setting") return;
+    if (!selected) return;
+    if (SERIAL_EDITOR_COMMANDS.includes(selected.id)) {
+      serialEditor?.scheduleRefresh();
+      return;
+    }
+    if (selected.presentation?.kind !== "setting") return;
     if (!commandForm.isSettingEditor() || executing || !commandAvailable(selected.id)) return;
     const editorKey = currentEditorKey();
     if (!editorKey || state.editorLoadedKey === editorKey) return;

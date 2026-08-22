@@ -140,8 +140,9 @@
             <span id="execution-status" class="badge badge-idle" data-i18n="device.ready">Ready</span>
           </div>
           <div class="workspace-content">
-            <div class="form-heading"><h3 data-i18n="commands.parameters">Parameters</h3></div>
+            <div class="form-heading" id="form-heading"><h3 data-i18n="commands.parameters">Parameters</h3></div>
             <form id="command-form" class="command-form"></form>
+            <div id="serial-editor" class="serial-editor" hidden></div>
             <div class="command-actions">
               <button id="execute-button" class="primary" type="button" data-i18n="actions.run">Run</button>
               <button id="cancel-button" class="secondary hidden" type="button" data-i18n="commands.cancel">Cancel job</button>

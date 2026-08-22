@@ -102,8 +102,10 @@ The Command workbench exposes:
   holdoff commands
 - Search: basic Search state/mode/event/count and UART/I2C/SPI/CAN serial
   Search commands
-- Serial: query/mode/display, UART/I2C/SPI/CAN configuration and triggers,
-  and Serial Lister query/display/reference/export
+- Serial: a dedicated mode-aware Serial editor for bus selection, Serial Mode,
+  Serial Display, and UART/I2C/SPI/CAN configuration, plus `serial-query`,
+  UART/I2C/SPI/CAN serial triggers, and Serial Lister query/display/reference/
+  export commands
 - Segmented Memory: `segmented-memory` and `segmented-capture`
 - Workflow: `capture-batch`, `measure-log`, `measure-until`,
   `triggered-measure-loop`, and `triggered-capture-series`
@@ -124,7 +126,20 @@ group first.
 
 Grouping is presentation only: it does not change Core command semantics,
 model or capability gating, or the metadata-driven forms, and it does not add
-dedicated Trigger, Search, Serial, Save/Export, or Workflow editors.
+dedicated Trigger, Search, Save/Export, or Workflow editors.
+
+Selecting a Serial bus/mode/display/configuration command opens the dedicated
+Serial editor instead of a plain command form. The editor projects the model's
+serial bus count and available protocols from Core capabilities, shows the
+current protocol reported by the instrument, and offers only UART, I2C, SPI,
+and CAN with an explicit Apply Mode action. Configuration queries run only
+after `serial-mode` readback confirms the bus is in that protocol; when the
+bus reports another recognized protocol such as LIN, FlexRay, or A429, the
+editor shows the current protocol with an unsupported-configuration note
+instead of issuing protocol-specific reads. Mode, Display, and each protocol
+configuration remain separate Apply operations over the existing commands.
+Switching Bus, or applying a different protocol while the configuration has
+unapplied edits, asks for confirmation before discarding those edits.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field

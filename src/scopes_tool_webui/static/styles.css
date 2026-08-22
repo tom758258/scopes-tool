@@ -288,6 +288,15 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .multi-choice-option input[type="checkbox"] { width: auto; min-width: 0; height: auto; min-height: 0; margin: 0; accent-color: var(--accent); }
 .multi-choice-option input[type="checkbox"]:disabled { opacity: .55; }
 .command-actions { justify-content: flex-end; gap: 7px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.serial-editor { display: grid; gap: 14px; padding-top: 12px; }
+.serial-editor-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 12px; }
+.serial-editor-field select { min-width: 120px; }
+.serial-editor-current-value { display: inline-flex; align-items: center; min-width: 90px; }
+.serial-editor-action { align-self: end; min-height: var(--control-h); }
+.serial-editor-refresh { justify-self: start; }
+.serial-editor-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.serial-editor-heading { font-size: 12px; font-weight: 700; }
+.serial-editor-section .command-form { padding-top: 0; }
 .workspace-result { margin-top: 16px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); }
 .workspace-result > strong { display: block; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .workspace-result-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
