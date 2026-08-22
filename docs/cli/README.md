@@ -225,6 +225,7 @@ uv sync --all-extras --locked --link-mode=copy
 Run the hardware-free test suite from the root directory:
 
 ```powershell
+New-Item -ItemType Directory -Force .tmp_tests | Out-Null
 .\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
 ```
 
@@ -2436,6 +2437,7 @@ does not change screenshot's PC-side byte retrieval behavior.
 Normal tests are hardware-free:
 
 ```powershell
+New-Item -ItemType Directory -Force .tmp_tests | Out-Null
 .\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
 ```
 

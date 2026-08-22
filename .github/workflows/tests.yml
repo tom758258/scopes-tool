@@ -71,6 +71,9 @@ jobs:
           ./.venv/bin/python -c "import scopes_tool_core; import scopes_tool_cli; import scopes_tool_webui"
           ./.venv/bin/scopes-tool --help
 
+      - name: Prepare pytest temp root
+        run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
+
       - name: Run tests
         run: ./.venv/bin/python -m pytest -q -m "not hardware" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
 
@@ -105,6 +108,9 @@ jobs:
         run: |
           .\.venv\Scripts\python.exe -c "import scopes_tool_core; import scopes_tool_cli; import scopes_tool_webui"
           .\.venv\Scripts\scopes-tool.exe --help
+
+      - name: Prepare pytest temp root
+        run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
 
       - name: Run tests
         run: .\.venv\Scripts\python.exe -m pytest -q -m "not hardware" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}

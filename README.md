@@ -191,9 +191,11 @@ dist\
 ## Test
 
 Run the hardware-free test suite with a repository-local pytest temporary
-directory to avoid Windows shared-temp permission conflicts:
+directory to avoid Windows shared-temp permission conflicts. On a fresh
+checkout, create the `.tmp_tests` parent first:
 
 ```powershell
+New-Item -ItemType Directory -Force .tmp_tests | Out-Null
 .\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
 ```
 
