@@ -240,8 +240,16 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
         } = {}) => {
           const submitted = [];
           let currentMode = initialMode;
+          let modeQueryFails = false;
           const respond = (command, parameters) => {
             if (command === "serial-mode") {
+              if (parameters.action === "query" && modeQueryFails) {
+                return {
+                  job_id: `mode-${submitted.length}`,
+                  status: "failed",
+                  error: "temporary VISA failure",
+                };
+              }
               if (parameters.action === "set" && setTakesEffect) currentMode = parameters.mode;
               return {
                 job_id: `mode-${submitted.length}`,
@@ -286,6 +294,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             submitted,
             confirmations,
             setCurrentMode: (mode) => { currentMode = mode; },
+            setModeQueryFails: (value) => { modeQueryFails = Boolean(value); },
           };
         };
 
@@ -532,6 +541,31 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.equal(stable.submitted[4].intent, "apply");
           assert.equal(stable.controller.state.dirtyConfig, false);
           assert.equal(stable.controller.state.confirmedMode, "can");
+        }
+
+        {
+          const failedRecheck = makeHarness({ initialMode: "uart" });
+          failedRecheck.controller.scheduleRefresh();
+          await settle();
+          failedRecheck.controller.setDirty("config", true);
+          failedRecheck.setModeQueryFails(true);
+          await failedRecheck.controller.applyConfig({ baud_rate: 115200 });
+          await settle();
+          assert.deepEqual(commandsOf(failedRecheck).slice(3), [
+            "serial-mode:query",
+          ]);
+          assert.equal(failedRecheck.controller.state.confirmedMode, "uart");
+          assert.equal(failedRecheck.controller.state.selectedProtocol, "uart");
+          assert.equal(failedRecheck.controller.state.dirtyConfig, true);
+
+          failedRecheck.setModeQueryFails(false);
+          await failedRecheck.controller.applyConfig({ baud_rate: 115200 });
+          await settle();
+          assert.deepEqual(commandsOf(failedRecheck).slice(4), [
+            "serial-mode:query",
+            "serial-uart:set",
+          ]);
+          assert.equal(failedRecheck.controller.state.dirtyConfig, false);
         }
         '''
     )

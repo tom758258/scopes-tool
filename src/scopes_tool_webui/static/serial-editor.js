@@ -263,6 +263,7 @@ export function createSerialEditorController({
       beginBusy();
       try {
         const modeJob = await runQuery("serial-mode", { action: "query", bus });
+        if (!modeJob) return null;
         const reported = modeFromJob(modeJob);
         if (reported.mode !== confirmedMode) {
           confirmedMode = reported.mode;
