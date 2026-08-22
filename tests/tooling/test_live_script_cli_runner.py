@@ -93,21 +93,17 @@ $script:CliInvocationIndex = 0
 $script:RunRoot = $RunRoot
 $Python = $PythonPath
 
-if ((Split-Path -Leaf $ScriptPath) -eq "live-cli-check.ps1") {
-    # The migrated live-cli-check Invoke-CliRaw delegates process capture to
-    # the shared validation helpers and records invocation metadata.
+# Invoke-CliRaw in these migrated validators delegates process capture to the
+# shared validation helpers and records invocation metadata.
+$migratedCliRawScripts = @(
+    "live-cli-check.ps1",
+    "live-dvm-check.ps1",
+    "live-segmented-check.ps1",
+    "live-serial-check.ps1",
+    "live-workflow-check.ps1"
+)
+if ((Split-Path -Leaf $ScriptPath) -in $migratedCliRawScripts) {
     . (Join-Path (Split-Path -Parent $ScriptPath) "_validation_helpers.ps1")
-    $runRelativeFunction = $ast.Find({
-        param($node)
-        return (
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -eq "Get-ArtifactRelativePath"
-        )
-    }, $true)
-    if ($null -eq $runRelativeFunction) {
-        throw "Get-ArtifactRelativePath was not found in ${ScriptPath}."
-    }
-    Invoke-Expression $runRelativeFunction.Extent.Text
     $RepoRoot = $RunRoot
     $script:RunDirectory = $RunRoot
     $script:Invocations = New-Object System.Collections.Generic.List[object]
@@ -144,7 +140,7 @@ $resultOutput = [ordered]@{
     failure_artifact = [string](Get-Content -LiteralPath $failurePath -Raw)
     failure_preference = $failurePreference
 }
-if ((Split-Path -Leaf $ScriptPath) -eq "live-cli-check.ps1") {
+if ((Split-Path -Leaf $ScriptPath) -in $migratedCliRawScripts) {
     $firstRecord = $script:Invocations[0]
     $resultOutput["cli_stdout_artifact_exists"] =
         Test-Path -LiteralPath (Join-Path $RunRoot "cli-001-empty-stderr.stdout.txt")
@@ -214,7 +210,13 @@ $resultOutput | ConvertTo-Json -Depth 8 -Compress
     assert result["failure_artifact_exists"] is True
     assert "known diagnostic: failure-stderr" in result["failure_artifact"]
     assert result["failure_preference"] == "Stop"
-    if script_path.name == "live-cli-check.ps1":
+    if script_path.name in {
+        "live-cli-check.ps1",
+        "live-dvm-check.ps1",
+        "live-segmented-check.ps1",
+        "live-serial-check.ps1",
+        "live-workflow-check.ps1",
+    }:
         assert result["cli_stdout_artifact_exists"] is True
         assert result["cli_json_artifact_exists"] is True
         assert result["cli_duration_gt_zero"] is True
@@ -2365,6 +2367,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Shared finalize (invoked by extracted production failure paths) lives in the
+# validation helpers/privacy helpers.
+. (Join-Path (Split-Path -Parent $ScriptPath) "_validation_helpers.ps1")
+. (Join-Path (Split-Path -Parent $ScriptPath) "_artifact_privacy.ps1")
+
 $tokens = $null
 $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -2420,10 +2427,21 @@ foreach ($drainBlock in @(
 }
 
 $supportsSkip = [System.IO.Path]::GetFileName($ScriptPath) -ne "live-cli-check.ps1"
-if (-not $supportsSkip) {
-    $script:Target = "keysight-dsox4034a"
-    $script:Connection = "usb"
-}
+# Migrated validators' Write-Summary reports target/connection metadata.
+$script:Target = "keysight-dsox4034a"
+$script:Connection = "usb"
+# Extracted production drain blocks may invoke the shared finalize on their
+# failure paths; provide a disposable run layout for those calls.
+$Resource = "TEST::INSTR"
+$RepoRoot = Split-Path -Parent $ScriptPath
+$RepoRoot = Split-Path -Parent $RepoRoot
+$scratchLayout = New-ValidationRunDirectory -BaseRoot $OutputRoot -Prefix "scratch"
+$script:RunDirectory = $scratchLayout.Root
+$script:RunRoot = $scratchLayout.Private
+$script:ShareableRoot = $scratchLayout.Shareable
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:HardwareTouched = $false
+$script:ShareableGenerationFailed = $false
 
 $script:RunRoot = Join-Path $OutputRoot "pass"
 New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
@@ -2645,17 +2663,19 @@ sys.exit(9)
 
     output_root = tmp_path / "artifacts"
     invocation_log = tmp_path / "fake-cli-invocations.jsonl"
-    script_args = ["-Resource", "TEST::INSTR", "-Python", sys.executable]
-    if script_path.name == "live-cli-check.ps1":
-        # live-cli-check validates that -Connection matches the resource
-        # transport, so the fake CLI run needs a USB-shaped resource.
-        script_args = [
-            "-Resource",
-            "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR",
-            "-Python",
-            sys.executable,
-        ]
-        script_args += ["-Target", "keysight-dsox4034a", "-Connection", "usb"]
+    # All migrated validators take the canonical Target/Connection contract,
+    # validate Connection against the resource transport, and write
+    # private/report.json + private/summary.md before any live access.
+    script_args = [
+        "-Resource",
+        "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR",
+        "-Target",
+        "keysight-dsox4034a",
+        "-Connection",
+        "usb",
+        "-Python",
+        sys.executable,
+    ]
     script_args += ["-OutputRoot", str(output_root)]
     environment = os.environ.copy()
     python_path = str(fake_package.parent)
@@ -2687,21 +2707,17 @@ sys.exit(9)
     assert "No live hardware was accessed." in completed.stdout
     run_roots = [path for path in output_root.iterdir() if path.is_dir()]
     assert len(run_roots) == 1
-    summary_path = run_roots[0] / "summary.md"
-    if script_path.name == "live-cli-check.ps1":
-        summary_path = run_roots[0] / "private" / "summary.md"
+    summary_path = run_roots[0] / "private" / "summary.md"
     summary_bytes = summary_path.read_bytes()
     summary = summary_bytes.decode("utf-8")
     assert not summary_bytes.startswith(b"\xef\xbb\xbf")
     assert "Result: FAIL" in summary
     assert "| preflight | FAIL |" in summary
     assert "| preflight | FAIL |  |" not in summary
-    if script_path.name == "live-cli-check.ps1":
-        report = json.loads(
-            (run_roots[0] / "private" / "report.json").read_text(encoding="utf-8")
-        )
-        assert report["status"] == "failed"
-        assert report["hardware_touched"] is False
+    report_path = run_roots[0] / "private" / "report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["status"] == "failed"
+    assert report["hardware_touched"] is False
 
     invocations = [
         json.loads(line)
@@ -7353,9 +7369,7 @@ def test_live_cli_check_requires_target_and_connection():
 
 @requires_windows
 def test_live_cli_check_target_model_match_gate():
-    body = extract_live_cli_functions_ps(
-        ("Get-NormalizedModelToken", "Assert-TargetModelMatch")
-    ) + """
+    body = """
 $results = @{}
 $matching = [pscustomobject]@{
     idn = [pscustomobject]@{
@@ -7408,6 +7422,83 @@ try {
     assert "unavailable" in payload["missing"]
 
 
+P3_VALIDATOR_SCRIPTS = (
+    ("live-dvm-check.ps1", "dvm"),
+    ("live-segmented-check.ps1", "segmented"),
+    ("live-serial-check.ps1", "serial"),
+    ("live-workflow-check.ps1", "workflow"),
+)
+
+
+@requires_windows
+@pytest.mark.parametrize(("script_name", "domain"), P3_VALIDATOR_SCRIPTS)
+def test_p3_validators_enforce_canonical_target_contract(tmp_path, script_name, domain):
+    script = REPO_ROOT / "scripts" / script_name
+    usb = "USB0::0x0957::0x17A4::SYNTH12345::0::INSTR"
+    tcpip = "TCPIP0::198.51.100.7::inst0::INSTR"
+
+    def run(*extra: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                "powershell.exe",
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script),
+                *extra,
+            ],
+            cwd=REPO_ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+            timeout=120,
+        )
+
+    completed = run("-Target", "all", "-Connection", "usb", "-Resource", usb)
+    assert completed.returncode == 2
+    assert "[live][%s]" % domain in completed.stderr
+    assert "'all' is not supported for live validation" in completed.stderr
+
+    completed = run(
+        "-Target", "keysight-dsox9999a", "-Connection", "usb", "-Resource", usb
+    )
+    assert completed.returncode == 2
+    assert "Unsupported target 'keysight-dsox9999a'" in completed.stderr
+
+    completed = run(
+        "-Target", "keysight-dsox4034a", "-Connection", "rs232", "-Resource", usb
+    )
+    assert completed.returncode == 2
+    assert "Unsupported connection 'rs232'" in completed.stderr
+
+    completed = run(
+        "-Target", "keysight-dsox4034a", "-Connection", "usb", "-Resource", tcpip
+    )
+    assert completed.returncode == 2
+    assert f"does not match resource '{tcpip}'" in completed.stderr
+
+
+@pytest.mark.parametrize(("script_name", "domain"), P3_VALIDATOR_SCRIPTS)
+def test_p3_validators_wire_shared_framework(script_name, domain):
+    text = (REPO_ROOT / "scripts" / script_name).read_text(encoding="utf-8")
+    for marker in (
+        "_validation_helpers.ps1",
+        "_artifact_privacy.ps1",
+        "Invoke-CapturedCommand ",
+        "New-ValidationRunDirectory -BaseRoot $outputBase",
+        "Assert-TargetModelMatch -Identity $identity -ResolvedTarget $script:Target",
+        f"Complete-LiveValidationRun -Kind 'scopes-tool-live-{domain}-check'",
+        "$script:HardwareTouched = $true",
+        "$script:Invocations.Add($invocationRecord) | Out-Null",
+    ):
+        assert marker in text, (script_name, marker)
+
+
 def _normalize_json_text(text):
     return (
         text.replace("\\u003c", "<")
@@ -7421,9 +7512,7 @@ def _normalize_json_text(text):
 def test_live_cli_check_complete_run_builds_private_and_shareable_evidence(tmp_path):
     runs_root = tmp_path / "runs"
     resource = "USB0::0x0957::0x17A4::MY55440270::0::INSTR"
-    body = extract_live_cli_functions_ps(
-        ("Write-Summary", "Get-ArtifactRelativePath", "Complete-LiveCliRun")
-    ) + """
+    body = extract_live_cli_functions_ps(("Write-Summary",)) + """
 $Resource = '@RESOURCE@'
 $RepoRoot = '@REPO@'
 $RunsRoot = '@RUNS@'
@@ -7456,9 +7545,9 @@ $script:Invocations.Add([pscustomobject]@{
     exit_code = 0
     duration_ms = 123.4
     success = $true
-    stdout = (Get-ArtifactRelativePath -Path $stdoutPath)
+    stdout = (Get-ArtifactRelativePath -Path $stdoutPath -BaseRoot $RepoRoot)
     stderr = ''
-    json = (Get-ArtifactRelativePath -Path $jsonPath)
+    json = (Get-ArtifactRelativePath -Path $jsonPath -BaseRoot $RepoRoot)
 }) | Out-Null
 $script:CaseResults['identity'] = [pscustomobject]@{
     Passed = $true; Status = 'PASS'; Detail = '' }
@@ -7469,7 +7558,7 @@ $script:CaseResults['pair-measurement'] = [pscustomobject]@{
 $script:CaseResults['math-composite-source'] = [pscustomobject]@{
     Passed = $false; Status = 'N/A'; Detail = 'unsupported on detected model' }
 
-Complete-LiveCliRun -Result 'FAIL'
+Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result 'FAIL'
 
 $privateReportRaw =
     [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'report.json'))
@@ -7502,7 +7591,7 @@ $script:Diagnostics = [ordered]@{}
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:CaseResults['identity'] = [pscustomobject]@{
     Passed = $true; Status = 'PASS'; Detail = '' }
-Complete-LiveCliRun -Result 'PASS'
+Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result 'PASS'
 
 $s2ReportRaw =
     [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'report.json'))

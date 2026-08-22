@@ -33,20 +33,14 @@ $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:ShareableGenerationFailed = $false
 $script:HardwareTouched = $false
 
-function Write-LiveUsageError {
-    param([Parameter(Mandatory = $true)][string]$Message)
-    [Console]::Error.WriteLine("[live][cli] ${Message}")
-    exit 2
-}
-
 $normalizedConnection = $Connection.Trim().ToLowerInvariant()
 if ($normalizedConnection -notin @("usb", "tcpip")) {
-    Write-LiveUsageError "Unsupported connection '${Connection}'. Use usb or tcpip."
+    Write-LiveUsageError -Domain cli "Unsupported connection '${Connection}'. Use usb or tcpip."
 }
 
 $normalizedTarget = $Target.Trim().ToLowerInvariant()
 if ($normalizedTarget -eq "all") {
-    Write-LiveUsageError (
+    Write-LiveUsageError -Domain cli (
         "Target 'all' is not supported for live validation. " +
         "Specify one of: $(@(Get-SupportedTargetModelIds) -join ', ')."
     )
@@ -54,10 +48,10 @@ if ($normalizedTarget -eq "all") {
 try {
     $resolvedTargets = @(Resolve-ValidationTargets -Target $normalizedTarget)
 } catch {
-    Write-LiveUsageError $_.Exception.Message
+    Write-LiveUsageError -Domain cli $_.Exception.Message
 }
 if ($resolvedTargets.Count -ne 1) {
-    Write-LiveUsageError (
+    Write-LiveUsageError -Domain cli (
         "Live validation requires a single canonical target. " +
         "Supported targets: $(@(Get-SupportedTargetModelIds) -join ', ')."
     )
@@ -72,7 +66,7 @@ if (-not $resourceMatchesConnection) {
     $mismatchMessage =
         "Connection '{0}' does not match resource '{1}'. usb requires a " +
         "USB0::-style resource; tcpip requires a TCPIP0::-style resource."
-    Write-LiveUsageError (
+    Write-LiveUsageError -Domain cli (
         $mismatchMessage -f $normalizedConnection, $Resource
     )
 }
@@ -277,198 +271,6 @@ function Write-Summary {
     Write-Host "Summary: ${summaryPath}"
 }
 
-function Get-NormalizedModelToken {
-    param([AllowNull()][AllowEmptyString()][string]$Value)
-
-    return ([regex]::Replace([string]$Value, "[^A-Za-z0-9]", "")).ToUpperInvariant()
-}
-
-function Assert-TargetModelMatch {
-    param(
-        [Parameter(Mandatory = $true)]
-        [object] $Identity,
-
-        [Parameter(Mandatory = $true)]
-        [string] $ResolvedTarget
-    )
-
-    $profile = Get-ValidationTargetProfile -Target $ResolvedTarget
-    $expected = Get-NormalizedModelToken -Value ([string]$profile.model)
-
-    $detected = ""
-    $idnProperty = $Identity.PSObject.Properties["idn"]
-    if ($null -ne $idnProperty -and $null -ne $idnProperty.Value) {
-        $modelProperty = $idnProperty.Value.PSObject.Properties["model"]
-        if ($null -ne $modelProperty) {
-            $detected = [string]$modelProperty.Value
-        }
-    }
-    if ([string]::IsNullOrWhiteSpace($detected)) {
-        throw (
-            "Detected instrument model is unavailable; expected ${expected} " +
-            "for target '${ResolvedTarget}'."
-        )
-    }
-    if ((Get-NormalizedModelToken -Value $detected) -ne $expected) {
-        throw (
-            "Detected instrument model '${detected}' does not match validation " +
-            "target '${ResolvedTarget}' (expected ${expected}). Connect the " +
-            "intended instrument or rerun with the matching -Target."
-        )
-    }
-}
-
-function Get-ArtifactRelativePath {
-    param([AllowNull()][AllowEmptyString()][string]$Path)
-
-    if ([string]::IsNullOrWhiteSpace($Path)) {
-        return ""
-    }
-    try {
-        $full = [System.IO.Path]::GetFullPath($Path)
-        $rootFull = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
-        $comparison = [System.StringComparison]::OrdinalIgnoreCase
-        $prefix = $rootFull + [System.IO.Path]::DirectorySeparatorChar
-        if ($full.StartsWith($prefix, $comparison)) {
-            return $full.Substring($rootFull.Length + 1).Replace('\', '/')
-        }
-    } catch {
-    }
-    return $Path
-}
-
-function Complete-LiveCliRun {
-    param(
-        [Parameter(Mandatory = $true)]
-        [ValidateSet("PASS", "FAIL")]
-        [string] $Result
-    )
-
-    $status = if ($Result -eq "PASS") { "passed" } else { "failed" }
-
-    $cases = @(
-        foreach ($entry in $script:CaseResults.GetEnumerator()) {
-            $caseStatus = if ($null -ne $entry.Value.Status) {
-                [string]$entry.Value.Status
-            } elseif ($entry.Value.Passed) {
-                "PASS"
-            } else {
-                "FAIL"
-            }
-            [pscustomobject]@{
-                name = [string]$entry.Key
-                status = $caseStatus
-                passed = [bool]$entry.Value.Passed
-                detail = [string]$entry.Value.Detail
-            }
-        }
-    )
-
-    $diagnostics = [ordered]@{}
-    foreach ($entry in $script:Diagnostics.GetEnumerator()) {
-        $messageValues = @()
-        foreach ($value in ($entry.Value)) {
-            $messageValues += [string]$value
-        }
-        $diagnostics[[string]$entry.Key] = $messageValues
-    }
-
-    $passedCaseCount = 0
-    $failedCaseCount = 0
-    $naCaseCount = 0
-    foreach ($caseEntry in $cases) {
-        switch ($caseEntry.status) {
-            "PASS" { $passedCaseCount += 1 }
-            "FAIL" { $failedCaseCount += 1 }
-            "N/A" { $naCaseCount += 1 }
-        }
-    }
-
-    $invocationArray = @($script:Invocations.ToArray())
-
-    # Values are resolved before the report literal: PowerShell 5.1 can raise
-    # ArgumentException ("argument types do not match") when array-binding
-    # expressions are compiled inside hashtable literals.
-    $packageVersionValue = Get-PackageVersion -ProjectRoot $RepoRoot
-    $gitHeadValue = Get-GitHead -ProjectRoot $RepoRoot
-    $generatedAtValue = (Get-Date).ToUniversalTime().ToString("o")
-    $runRootRelative = Get-ArtifactRelativePath -Path $script:RunDirectory
-
-    $privateReportPath = Join-Path $script:RunRoot "report.json"
-    $privateSummaryPath = Join-Path $script:RunRoot "summary.md"
-    $reportRelative = Get-ArtifactRelativePath -Path $privateReportPath
-    $summaryRelative = Get-ArtifactRelativePath -Path $privateSummaryPath
-
-    $report = [ordered]@{
-        schema_version = 1
-        kind = "scopes-tool-live-cli-check"
-        status = $status
-        target = $script:Target
-        connection = $script:Connection
-        package_version = $packageVersionValue
-        git_head = $gitHeadValue
-        generated_at = $generatedAtValue
-        validation_mode = "live"
-        hardware_touched = $script:HardwareTouched
-        resource = $Resource
-        run_root = $runRootRelative
-        artifact_paths = [ordered]@{
-            output_dir = $runRootRelative
-            report = $reportRelative
-            summary = $summaryRelative
-        }
-        summary_counts = [ordered]@{
-            cases = $cases.Count
-            passed = $passedCaseCount
-            failed = $failedCaseCount
-            na = $naCaseCount
-            invocations = $invocationArray.Count
-        }
-        cases = $cases
-        diagnostics = $diagnostics
-        invocations = $invocationArray
-    }
-
-    Write-JsonReport -LiteralPath $privateReportPath -Report $report
-
-    Write-Summary -Result $Result
-
-    $shareableError = $null
-    try {
-        $null = New-ShareableArtifactSet `
-            -PrivateReport $report `
-            -PrivateSummaryPath (Join-Path $script:RunRoot "summary.md") `
-            -RunRoot $script:RunDirectory `
-            -PrivateRoot $script:RunRoot `
-            -ShareableRoot $script:ShareableRoot `
-            -RepoRoot $RepoRoot `
-            -Resource $Resource
-    } catch {
-        $shareableError = $_.Exception.Message
-    }
-
-    if ($null -ne $shareableError) {
-        Write-Host "[live][cli] shareable artifact generation failed: ${shareableError}"
-        Write-Host "[live][cli] private artifacts retained: $($script:RunDirectory)"
-        $report["status"] = "failed"
-        $report["shareable_generation_error"] = $shareableError
-        Write-JsonReport -LiteralPath $privateReportPath -Report $report
-        $summaryPath = Join-Path $script:RunRoot "summary.md"
-        $summaryText = ""
-        if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
-            $summaryText = [System.IO.File]::ReadAllText($summaryPath)
-        }
-        $updated = $summaryText.TrimEnd() +
-            [Environment]::NewLine +
-            "- Shareable artifact generation failed: ${shareableError}" +
-            [Environment]::NewLine
-        Write-Utf8NoBomText -LiteralPath $summaryPath -Text $updated
-        $script:ShareableGenerationFailed = $true
-    }
-
-    Write-Host "[live][cli] report: private/report.json under $($script:RunDirectory)"
-}
-
 function Invoke-CliRaw {
     param(
         [Parameter(Mandatory = $true)]
@@ -503,9 +305,9 @@ function Invoke-CliRaw {
         exit_code = $exitCode
         duration_ms = $record["duration_ms"]
         success = ($exitCode -eq 0)
-        stdout = Get-ArtifactRelativePath -Path ([string]$record["stdout"])
-        stderr = Get-ArtifactRelativePath -Path ([string]$record["stderr"])
-        json = Get-ArtifactRelativePath -Path ([string]$record["json"])
+        stdout = Get-ArtifactRelativePath -Path ([string]$record["stdout"]) -BaseRoot $RepoRoot
+        stderr = Get-ArtifactRelativePath -Path ([string]$record["stderr"]) -BaseRoot $RepoRoot
+        json = Get-ArtifactRelativePath -Path ([string]$record["json"]) -BaseRoot $RepoRoot
     }
     $script:Invocations.Add($invocationRecord) | Out-Null
 
@@ -2277,7 +2079,7 @@ try {
         -Path $outputBase `
         -Message "Live validation artifacts must stay under repository .tmp_tests: {0}"
 } catch {
-    Write-LiveUsageError $_.Exception.Message
+    Write-LiveUsageError -Domain cli $_.Exception.Message
 }
 
 $runLayout = New-ValidationRunDirectory -BaseRoot $outputBase -Prefix "run"
@@ -2304,7 +2106,7 @@ try {
     Write-Host "FAIL  baseline live validation"
     Write-Host "No live hardware was accessed."
     Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
-    Complete-LiveCliRun -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
     exit 1
 }
 
@@ -2321,7 +2123,7 @@ try {
     Write-Host ""
     Write-Host "FAIL  baseline live validation"
     Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
-    Complete-LiveCliRun -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
     exit 1
 }
 
@@ -2334,7 +2136,7 @@ try {
     Write-Host "FAIL  baseline live validation"
     Write-Host "Functional cases were not run because the detected model does not match the requested target."
     Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
-    Complete-LiveCliRun -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
     exit 1
 }
 
@@ -2359,7 +2161,7 @@ if (-not $initialDrainPassed) {
     Write-Host "FAIL  baseline live validation"
     Write-Host "No state-changing baseline cases were run."
     Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
-    Complete-LiveCliRun -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
     exit 1
 }
 
@@ -4954,7 +4756,7 @@ foreach ($entry in $script:CaseResults.GetEnumerator()) {
 Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
 
 if ($script:FunctionalFailed) {
-    Complete-LiveCliRun -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
     Write-Host "FAIL  baseline live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][cli] run failed; see private report for the shareable generation error"
@@ -4962,7 +4764,7 @@ if ($script:FunctionalFailed) {
     exit 1
 }
 
-Complete-LiveCliRun -Result "PASS"
+Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "PASS"
 if ($script:ShareableGenerationFailed) {
     Write-Host "FAIL  baseline live validation (shareable artifact generation failed)"
     exit 1

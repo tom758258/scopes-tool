@@ -2,6 +2,14 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
+    [string] $Target,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $Connection,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
     [string] $Resource,
 
     [string] $Python = ".\.venv\Scripts\python.exe",
@@ -12,11 +20,58 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$script:RepoRoot = $RepoRoot
+. (Join-Path $PSScriptRoot "_validation_helpers.ps1")
+. (Join-Path $PSScriptRoot "_artifact_privacy.ps1")
+
 $script:CliInvocationIndex = 0
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:DvmUnavailable = $false
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:ShareableGenerationFailed = $false
+$script:HardwareTouched = $false
+
+$normalizedConnection = $Connection.Trim().ToLowerInvariant()
+if ($normalizedConnection -notin @("usb", "tcpip")) {
+    Write-LiveUsageError -Domain "dvm" `
+        "Unsupported connection '${Connection}'. Use usb or tcpip."
+}
+
+$normalizedTarget = $Target.Trim().ToLowerInvariant()
+if ($normalizedTarget -eq "all") {
+    Write-LiveUsageError -Domain "dvm" (
+        "Target 'all' is not supported for live validation. " +
+        "Specify one of: $(@(Get-SupportedTargetModelIds) -join ', ')."
+    )
+}
+try {
+    $resolvedTargets = @(Resolve-ValidationTargets -Target $normalizedTarget)
+} catch {
+    Write-LiveUsageError -Domain "dvm" $_.Exception.Message
+}
+if ($resolvedTargets.Count -ne 1) {
+    Write-LiveUsageError -Domain "dvm" (
+        "Live validation requires a single canonical target. " +
+        "Supported targets: $(@(Get-SupportedTargetModelIds) -join ', ')."
+    )
+}
+$script:Target = $resolvedTargets[0]
+$script:Connection = $normalizedConnection
+
+$resourceMatchesConnection =
+    ($normalizedConnection -eq "usb" -and $Resource -match "^(?i)USB\d*::") -or
+    ($normalizedConnection -eq "tcpip" -and $Resource -match "^(?i)TCPIP\d*::")
+if (-not $resourceMatchesConnection) {
+    $mismatchMessage =
+        "Connection '{0}' does not match resource '{1}'. usb requires a " +
+        "USB0::-style resource; tcpip requires a TCPIP0::-style resource."
+    Write-LiveUsageError -Domain "dvm" (
+        $mismatchMessage -f $normalizedConnection, $Resource
+    )
+}
 
 function ConvertTo-InvariantString {
     param(
@@ -56,7 +111,7 @@ function Add-CaseResult {
         Status = $Status
         Detail = $Detail
     }
-    Write-Host ("{0,-5} {1}" -f $Status, $Name)
+    Write-Host ("{0,-5} [live][@DOMAIN@] {1}" -f $Status, $Name)
     if (-not [string]::IsNullOrWhiteSpace($Detail)) {
         Write-Host "      ${Detail}"
     }
@@ -88,6 +143,8 @@ function Write-Summary {
     $lines.Add("# Scopes Tool Live Validation Summary")
     $lines.Add("")
     $lines.Add("Result: ${Result}")
+    $lines.Add("Target: $($script:Target)")
+    $lines.Add("Connection: $($script:Connection)")
     $lines.Add("")
     $lines.Add("| Case | Status | Detail |")
     $lines.Add("|---|---|---|")
@@ -133,35 +190,65 @@ function Invoke-CliRaw {
 
     $script:CliInvocationIndex += 1
     $safeStage = $Stage -replace "[^A-Za-z0-9_-]", "-"
-    $stderrPath = Join-Path $script:RunRoot (
-        "cli-{0:D3}-{1}.stderr.txt" -f $script:CliInvocationIndex, $safeStage
-    )
+    $baseName = "cli-{0:D3}-{1}" -f $script:CliInvocationIndex, $safeStage
+    $stdoutPath = Join-Path $script:RunRoot "${baseName}.stdout.txt"
+    $stderrPath = Join-Path $script:RunRoot "${baseName}.stderr.txt"
+    $jsonPath = Join-Path $script:RunRoot "${baseName}.json"
 
-    $previousErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $stdoutLines = @(& $Python -m scopes_tool_cli.cli @Arguments 2> $stderrPath)
-        $exitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
+    $record = Invoke-CapturedCommand `
+        -Name $Stage `
+        -FilePath $Python `
+        -Arguments (@("-m", "scopes_tool_cli.cli") + @($Arguments)) `
+        -StdOutPath $stdoutPath `
+        -StdErrPath $stderrPath `
+        -JsonPath $jsonPath `
+        -WorkingDirectory $RepoRoot
+
+    $exitCode = [int]$record["exit_code"]
+    $invocationRecord = [pscustomobject]@{
+        index = $script:CliInvocationIndex
+        stage = $Stage
+        command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
+        arguments = @($Arguments)
+        exit_code = $exitCode
+        duration_ms = $record["duration_ms"]
+        success = ($exitCode -eq 0)
+        stdout = Get-ArtifactRelativePath `
+            -Path ([string]$record["stdout"]) `
+            -BaseRoot $RepoRoot
+        stderr = Get-ArtifactRelativePath `
+            -Path ([string]$record["stderr"]) `
+            -BaseRoot $RepoRoot
+        json = Get-ArtifactRelativePath `
+            -Path ([string]$record["json"]) `
+            -BaseRoot $RepoRoot
+    }
+    $script:Invocations.Add($invocationRecord) | Out-Null
+
+    $stdoutText = ""
+    if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) {
+        $stdoutText = [System.Convert]::ToString((Get-Content -LiteralPath $stdoutPath -Raw)).Trim()
     }
     $stderrText = ""
-    if (Test-Path -LiteralPath $stderrPath) {
-        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath $stderrPath -Raw)).Trim()
-        if ([string]::IsNullOrWhiteSpace($stderrText)) {
-            Remove-Item -LiteralPath $stderrPath -Force
-        }
+    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"]) -and
+        (Test-Path -LiteralPath ([string]$record["stderr"]) -PathType Leaf)) {
+        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath ([string]$record["stderr"]) -Raw)).Trim()
+    }
+    $artifactHint = "stdout=${stdoutPath}"
+    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"])) {
+        $artifactHint += "; stderr=$($record['stderr'])"
+    } else {
+        $artifactHint += "; stderr=(empty)"
     }
 
-    $stdoutText = ($stdoutLines -join [Environment]::NewLine).Trim()
     if ([string]::IsNullOrWhiteSpace($stdoutText)) {
-        throw "${Stage}: CLI returned no JSON (exit ${exitCode}). ${stderrText}"
+        throw "${Stage}: CLI returned no JSON (exit ${exitCode}). ${stderrText} [artifacts: ${artifactHint}]"
     }
 
     try {
         $payload = $stdoutText | ConvertFrom-Json -ErrorAction Stop
     } catch {
-        throw "${Stage}: CLI returned invalid JSON (exit ${exitCode}). ${stderrText}"
+        throw "${Stage}: CLI returned invalid JSON (exit ${exitCode}). ${stderrText} [artifacts: ${artifactHint}]"
     }
 
     return [pscustomobject]@{
@@ -169,6 +256,10 @@ function Invoke-CliRaw {
         Payload = $payload
         Stderr = $stderrText
         Command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
+        DurationMs = $record["duration_ms"]
+        StdOutPath = $stdoutPath
+        StdErrPath = [string]$record["stderr"]
+        JsonPath = [string]$record["json"]
     }
 }
 
@@ -240,6 +331,8 @@ function Invoke-LiveCli {
         [string[]] $Arguments = @()
     )
 
+    $script:HardwareTouched = $true
+
     return Invoke-ModeCli -Stage $Stage -Command $Command -ModeArguments @(
         "--live", "--resource", $Resource
     ) -Arguments $Arguments
@@ -250,6 +343,8 @@ function Get-ErrorDrain {
         [Parameter(Mandatory = $true)]
         [string] $Stage
     )
+
+    $script:HardwareTouched = $true
 
     $arguments = @(
         "check-error", "--live", "--resource", $Resource, "--json",
@@ -647,12 +742,25 @@ if (-not (Get-Command $Python -ErrorAction SilentlyContinue)) {
     throw "Python executable not found: ${Python}"
 }
 
-$timestamp = [DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss")
-$script:RunRoot = Join-Path $OutputRoot $timestamp
-New-Item -ItemType Directory -Path $script:RunRoot -Force | Out-Null
+$outputBase = Get-FullPath -Path $OutputRoot -BaseRoot $RepoRoot
+try {
+    Assert-PathUnderRoot `
+        -RootPath (Join-Path $RepoRoot ".tmp_tests") `
+        -Path $outputBase `
+        -Message "Live validation artifacts must stay under repository .tmp_tests: {0}"
+} catch {
+    Write-LiveUsageError -Domain "dvm" $_.Exception.Message
+}
+
+$runLayout = New-ValidationRunDirectory -BaseRoot $outputBase -Prefix "run"
+$script:RunDirectory = $runLayout.Root
+$script:RunRoot = $runLayout.Private
+$script:ShareableRoot = $runLayout.Shareable
 
 Write-Host "Scopes Tool DVM live validation"
-Write-Host "Artifacts: $($script:RunRoot)"
+Write-Host "[live][dvm] target: $($script:Target)"
+Write-Host "[live][dvm] connection: $($script:Connection)"
+Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
 Write-Host ""
 
 try {
@@ -663,8 +771,8 @@ try {
     Write-Host ""
     Write-Host "FAIL  DVM live validation"
     Write-Host "No live hardware was accessed."
-    Write-Host "Artifacts: $($script:RunRoot)"
-    Write-Summary -Result "FAIL"
+    Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
     exit 1
 }
 
@@ -680,8 +788,22 @@ try {
     Add-CaseResult -Name "identity" -Status "FAIL" -Detail $_.Exception.Message
     Write-Host ""
     Write-Host "FAIL  DVM live validation"
-    Write-Host "Artifacts: $($script:RunRoot)"
-    Write-Summary -Result "FAIL"
+    Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
+    exit 1
+}
+
+try {
+    Assert-TargetModelMatch -Identity $identity -ResolvedTarget $script:Target
+    Add-CaseResult -Name "target-model-match" -Status "PASS"
+} catch {
+    Add-CaseResult -Name "target-model-match" -Status "FAIL" `
+        -Detail $_.Exception.Message
+    Write-Host ""
+    Write-Host "FAIL  DVM live validation"
+    Write-Host "Functional cases were not run because the detected model does not match the requested target."
+    Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
     exit 1
 }
 
@@ -701,8 +823,8 @@ try {
     Write-Host ""
     Write-Host "FAIL  DVM live validation"
     Write-Host "No state-changing DVM cases were run."
-    Write-Host "Artifacts: $($script:RunRoot)"
-    Write-Summary -Result "FAIL"
+    Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
     exit 1
 }
 
@@ -932,24 +1054,35 @@ try {
 Write-Host ""
 Write-Host "Summary"
 foreach ($entry in $script:CaseResults.GetEnumerator()) {
-    Write-Host ("{0,-5} {1}" -f $entry.Value.Status, $entry.Key)
+    Write-Host ("{0,-5} [live][dvm] {1}" -f $entry.Value.Status, $entry.Key)
 }
-Write-Host "Artifacts: $($script:RunRoot)"
+Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
 Write-Host ""
 
 if ($script:FunctionalFailed) {
-    Write-Summary -Result "FAIL"
+        Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
     Write-Host "FAIL  DVM live validation"
+    if ($script:ShareableGenerationFailed) {
+        Write-Host "[live][dvm] run failed; see private report for the shareable generation error"
+    }
     exit 1
 }
 
 if ($script:DvmUnavailable) {
-    Write-Summary -Result "SKIP"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "SKIP"
     Write-Host "SKIP  DVM live validation"
     Write-Host "      DVM option/license is not available on this instrument."
+    if ($script:ShareableGenerationFailed) {
+        Write-Host "[live][dvm] skipped run failed; see private report for the shareable generation error"
+        exit 1
+    }
     exit 0
 }
 
-Write-Summary -Result "PASS"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
+if ($script:ShareableGenerationFailed) {
+    Write-Host "FAIL  DVM live validation (shareable artifact generation failed)"
+    exit 1
+}
 Write-Host "PASS  DVM live validation"
 exit 0

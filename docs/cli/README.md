@@ -2479,10 +2479,11 @@ explicit resource selected by the operator for the whole workflow.
 ### Live CLI Validation
 
 Run the maintained manual baseline for registered Keysight InfiniiVision
-oscilloscopes with an explicit VISA resource:
+oscilloscopes with an expected model target, transport, and explicit VISA
+resource:
 
 ```powershell
-.\scripts\live-cli-check.ps1 -Resource "<VISA_RESOURCE>"
+.\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource "<VISA_RESOURCE>"
 ```
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
@@ -2513,7 +2514,7 @@ Run this script on the prepared instrument before claiming a live PASS.
 Run the optional, license-dependent DVM validation separately from the baseline:
 
 ```powershell
-.\scripts\live-dvm-check.ps1 -Resource "<VISA_RESOURCE>"
+.\scripts\live-dvm-check.ps1 -Target keysight-dsox4024a -Connection usb -Resource "<VISA_RESOURCE>"
 ```
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
@@ -2539,7 +2540,7 @@ not live validation evidence.
 Run the optional, license-dependent Segmented Memory validation separately:
 
 ```powershell
-.\scripts\live-segmented-check.ps1 -Resource "<VISA_RESOURCE>"
+.\scripts\live-segmented-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource "<VISA_RESOURCE>"
 ```
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output,
@@ -2570,7 +2571,7 @@ evidence.
 Run the optional, license-dependent Serial validation separately:
 
 ```powershell
-.\scripts\live-serial-check.ps1 -Resource "<VISA_RESOURCE>"
+.\scripts\live-serial-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource "<VISA_RESOURCE>"
 ```
 
 The maintained runner intentionally uses UART as the representative Serial

@@ -307,3 +307,234 @@ function Write-CaseStatus {
         Write-Host "      failure reasons: ${reason}"
     }
 }
+
+function Write-LiveUsageError {
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [Parameter(Mandatory = $true)][string]$Domain
+    )
+
+    [Console]::Error.WriteLine("[live][$Domain] $Message")
+    exit 2
+}
+
+function Get-NormalizedModelToken {
+    param([AllowNull()][AllowEmptyString()][string]$Value)
+
+    return ([regex]::Replace([string]$Value, "[^A-Za-z0-9]", "")).ToUpperInvariant()
+}
+
+function Assert-TargetModelMatch {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Identity,
+
+        [Parameter(Mandatory = $true)]
+        [string] $ResolvedTarget
+    )
+
+    $profile = Get-ValidationTargetProfile -Target $ResolvedTarget
+    $expected = Get-NormalizedModelToken -Value ([string]$profile.model)
+
+    $detected = ""
+    $idnProperty = $Identity.PSObject.Properties["idn"]
+    if ($null -ne $idnProperty -and $null -ne $idnProperty.Value) {
+        $modelProperty = $idnProperty.Value.PSObject.Properties["model"]
+        if ($null -ne $modelProperty) {
+            $detected = [string]$modelProperty.Value
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($detected)) {
+        throw (
+            "Detected instrument model is unavailable; expected $expected " +
+            "for target '$ResolvedTarget'."
+        )
+    }
+    if ((Get-NormalizedModelToken -Value $detected) -ne $expected) {
+        throw (
+            "Detected instrument model '$detected' does not match validation " +
+            "target '$ResolvedTarget' (expected $expected). Connect the " +
+            "intended instrument or rerun with the matching -Target."
+        )
+    }
+}
+
+function Get-ArtifactRelativePath {
+    param(
+        [AllowNull()][AllowEmptyString()][string]$Path,
+        [Parameter(Mandatory = $true)][string]$BaseRoot
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+    try {
+        $full = [System.IO.Path]::GetFullPath($Path)
+        $rootFull = [System.IO.Path]::GetFullPath($BaseRoot).TrimEnd('\', '/')
+        $comparison = [System.StringComparison]::OrdinalIgnoreCase
+        $prefix = $rootFull + [System.IO.Path]::DirectorySeparatorChar
+        if ($full.StartsWith($prefix, $comparison)) {
+            return $full.Substring($rootFull.Length + 1).Replace('\', '/')
+        }
+    } catch {
+    }
+    return $Path
+}
+
+function Complete-LiveValidationRun {
+    # Finalizes a live validator run using the caller's script-scope state:
+    # $Resource, $RepoRoot, $script:Target/Connection/RunDirectory/RunRoot/
+    # ShareableRoot/CaseResults/Diagnostics/Invocations/HardwareTouched/
+    # ShareableGenerationFailed, plus a script-local Write-Summary.
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("PASS", "FAIL", "SKIP")]
+        [string] $Result,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Kind,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Domain
+    )
+
+    $status = switch ($Result) {
+        "PASS" { "passed" }
+        "FAIL" { "failed" }
+        "SKIP" { "skipped" }
+    }
+
+    $cases = @(
+        foreach ($entry in $script:CaseResults.GetEnumerator()) {
+            $caseStatus = if ($null -ne $entry.Value.Status) {
+                [string]$entry.Value.Status
+            } elseif ($entry.Value.Passed) {
+                "PASS"
+            } else {
+                "FAIL"
+            }
+            # Older validators store Status/Detail only; derive Passed for them.
+            $passedProperty = $entry.Value.PSObject.Properties["Passed"]
+            $casePassed = if ($null -ne $passedProperty) {
+                [bool]$passedProperty.Value
+            } else {
+                $caseStatus -eq "PASS"
+            }
+            [pscustomobject]@{
+                name = [string]$entry.Key
+                status = $caseStatus
+                passed = $casePassed
+                detail = [string]$entry.Value.Detail
+            }
+        }
+    )
+
+    $diagnostics = [ordered]@{}
+    foreach ($entry in $script:Diagnostics.GetEnumerator()) {
+        $messageValues = @()
+        foreach ($value in ($entry.Value)) {
+            $messageValues += [string]$value
+        }
+        $diagnostics[[string]$entry.Key] = $messageValues
+    }
+
+    $passedCaseCount = 0
+    $failedCaseCount = 0
+    $naCaseCount = 0
+    foreach ($caseEntry in $cases) {
+        switch ($caseEntry.status) {
+            "PASS" { $passedCaseCount += 1 }
+            "FAIL" { $failedCaseCount += 1 }
+            "N/A" { $naCaseCount += 1 }
+        }
+    }
+
+    $invocationArray = @($script:Invocations.ToArray())
+
+    # Values are resolved before the report literal: PowerShell 5.1 can raise
+    # ArgumentException ("argument types do not match") when array-binding
+    # expressions are compiled inside hashtable literals.
+    $packageVersionValue = Get-PackageVersion -ProjectRoot $RepoRoot
+    $gitHeadValue = Get-GitHead -ProjectRoot $RepoRoot
+    $generatedAtValue = (Get-Date).ToUniversalTime().ToString("o")
+    $runRootRelative = Get-ArtifactRelativePath `
+        -Path $script:RunDirectory `
+        -BaseRoot $RepoRoot
+
+    $privateReportPath = Join-Path $script:RunRoot "report.json"
+    $privateSummaryPath = Join-Path $script:RunRoot "summary.md"
+    $reportRelative = Get-ArtifactRelativePath `
+        -Path $privateReportPath `
+        -BaseRoot $RepoRoot
+    $summaryRelative = Get-ArtifactRelativePath `
+        -Path $privateSummaryPath `
+        -BaseRoot $RepoRoot
+
+    $report = [ordered]@{
+        schema_version = 1
+        kind = $Kind
+        status = $status
+        target = $script:Target
+        connection = $script:Connection
+        package_version = $packageVersionValue
+        git_head = $gitHeadValue
+        generated_at = $generatedAtValue
+        validation_mode = "live"
+        hardware_touched = $script:HardwareTouched
+        resource = $Resource
+        run_root = $runRootRelative
+        artifact_paths = [ordered]@{
+            output_dir = $runRootRelative
+            report = $reportRelative
+            summary = $summaryRelative
+        }
+        summary_counts = [ordered]@{
+            cases = $cases.Count
+            passed = $passedCaseCount
+            failed = $failedCaseCount
+            na = $naCaseCount
+            invocations = $invocationArray.Count
+        }
+        cases = $cases
+        diagnostics = $diagnostics
+        invocations = $invocationArray
+    }
+
+    Write-JsonReport -LiteralPath $privateReportPath -Report $report
+
+    Write-Summary -Result $Result
+
+    $shareableError = $null
+    try {
+        $null = New-ShareableArtifactSet `
+            -PrivateReport $report `
+            -PrivateSummaryPath $privateSummaryPath `
+            -RunRoot $script:RunDirectory `
+            -PrivateRoot $script:RunRoot `
+            -ShareableRoot $script:ShareableRoot `
+            -RepoRoot $RepoRoot `
+            -Resource $Resource
+    } catch {
+        $shareableError = $_.Exception.Message
+    }
+
+    if ($null -ne $shareableError) {
+        Write-Host "[live][$Domain] shareable artifact generation failed: ${shareableError}"
+        Write-Host "[live][$Domain] private artifacts retained: $($script:RunDirectory)"
+        $report["status"] = "failed"
+        $report["shareable_generation_error"] = $shareableError
+        Write-JsonReport -LiteralPath $privateReportPath -Report $report
+        $summaryText = ""
+        if (Test-Path -LiteralPath $privateSummaryPath -PathType Leaf) {
+            $summaryText = [System.IO.File]::ReadAllText($privateSummaryPath)
+        }
+        $updated = $summaryText.TrimEnd() +
+            [Environment]::NewLine +
+            "- Shareable artifact generation failed: ${shareableError}" +
+            [Environment]::NewLine
+        Write-Utf8NoBomText -LiteralPath $privateSummaryPath -Text $updated
+        $script:ShareableGenerationFailed = $true
+    }
+
+    Write-Host "[live][$Domain] report: private/report.json under $($script:RunDirectory)"
+}
