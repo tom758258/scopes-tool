@@ -72,6 +72,10 @@ it is not an operator guide.
 - Run focused WebUI tests first, then the complete no-hardware WebUI suite.
   Check modified JavaScript with `node --check`, compile modified Python, and
   run `git diff --check`.
+- WebUI index and static assets deliberately prevent stale browser caching:
+  entry CSS/JS URLs are versioned with the file mtime and all static responses
+  use `Cache-Control: no-store`. Keep this policy when adding or serving
+  assets.
 - Tests should protect durable ownership and behavior, not incidental prose,
   private helper names, or visual pixel details.
 

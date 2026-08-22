@@ -251,6 +251,7 @@ export class CommandForm {
         input = document.createElement("input");
         input.type = "checkbox";
         input.checked = Boolean(field.default);
+        wrapper.classList.add("field-boolean");
       } else {
         input = document.createElement("select");
         const required = field.required === true || Boolean(field.required_if);

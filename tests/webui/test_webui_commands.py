@@ -907,6 +907,16 @@ def test_command_catalog_exposes_required_field_contracts() -> None:
     ]
     assert "required" not in scale_fields["volts_per_division"]
 
+    measure_log_fields = {
+        field["name"]: field for field in commands["measure-log"]["fields"]
+    }
+    assert measure_log_fields["stop_on_error"]["default"] is False
+    capture_batch_fields = {
+        field["name"]: field for field in commands["capture-batch"]["fields"]
+    }
+    assert capture_batch_fields["channels"]["required"] is True
+    assert "default" not in capture_batch_fields["channels"]
+
 
 def test_command_catalog_group_metadata_contract() -> None:
     commands = {

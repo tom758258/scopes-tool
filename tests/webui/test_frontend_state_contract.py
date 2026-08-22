@@ -309,6 +309,14 @@ def test_generic_form_multi_choice_and_two_state_boolean_presentation() -> None:
         assert.equal(stopError.tagName, "INPUT");
         assert.equal(stopError.type, "checkbox");
         assert.equal(stopError.checked, false);
+        const booleanWrapper = collect(container).find((node) =>
+          node.classList?.contains("field-boolean"));
+        assert.ok(booleanWrapper, "plain two-state boolean should carry the compact class");
+        assert.equal(
+          booleanWrapper.children.find((node) => node.type === "checkbox"),
+          stopError,
+        );
+        assert.equal(booleanWrapper.children.some((node) => node.tagName === "SPAN"), true);
 
         const settingBoolean = byField("enabled_setting");
         assert.equal(settingBoolean.tagName, "SELECT");

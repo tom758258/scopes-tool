@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
+from starlette.types import Scope
 
 from . import __version__
 from .commands import command_catalog, model_catalog, validate_job_request
@@ -17,13 +19,37 @@ from .jobs import JobManagerShuttingDown, job_manager
 PACKAGE_NAME = "scopes-tool-webui"
 STATIC_DIR = Path(__file__).with_name("static")
 
+
+class NoStoreStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+
+def _asset_version(filename: str) -> str:
+    path = STATIC_DIR / filename
+    if not path.exists():
+        return "0"
+    return str(path.stat().st_mtime_ns)
+
+
 app = FastAPI(title="Scopes Tool WebUI")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/static", NoStoreStaticFiles(directory=STATIC_DIR), name="static")
 
 
-@app.get("/", response_class=FileResponse)
-async def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
+@app.get("/")
+async def index() -> HTMLResponse:
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    html = html.replace(
+        "/static/styles.css",
+        f"/static/styles.css?v={_asset_version('styles.css')}",
+    )
+    html = html.replace(
+        "/static/app.js",
+        f"/static/app.js?v={_asset_version('app.js')}",
+    )
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/health")
