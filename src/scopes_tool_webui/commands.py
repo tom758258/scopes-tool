@@ -1166,7 +1166,7 @@ P3C_COMMANDS = (
     {
         "id": "measure-log", "category": "Workflow", "label": "Measurement log", "modes": ("live", "simulate"),
         "group": "measurement",
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("interval_seconds", "number", minimum=0, default=1), _p3c_field("count", "integer", minimum=1), _p3c_field("duration_seconds", "number", minimum=0), _p3c_field("stop_on_error", "boolean")),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("interval_seconds", "number", minimum=0, default=1), _p3c_field("count", "integer", minimum=1), _p3c_field("duration_seconds", "number", minimum=0), _p3c_field("stop_on_error", "boolean", default=False)),
     },
     {
         "id": "measure-until", "category": "Workflow", "label": "Measure until", "modes": ("live", "simulate", "dry-run"),

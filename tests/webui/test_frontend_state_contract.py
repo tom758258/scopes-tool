@@ -159,6 +159,207 @@ def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_generic_form_multi_choice_and_two_state_boolean_presentation() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+
+        class FakeElement {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.attributes = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.required = false;
+            this.multiple = false;
+            this.tabIndex = 0;
+            this.type = "";
+            this.value = "";
+            this.checked = false;
+            this.textContent = "";
+            this.className = "";
+            this.options = [];
+            this.validity = { badInput: false };
+            if (tag === "select") {
+              const owner = this;
+              Object.defineProperty(this, "value", {
+                get() {
+                  return owner.options.find((option) => option.selected)?.value ?? "";
+                },
+                set(next) {
+                  owner.options.forEach((option) => {
+                    option.selected = option.value === String(next);
+                  });
+                },
+              });
+            } else {
+              this.value = "";
+            }
+            const self = this;
+            this.classList = {
+              add: (...names) => {
+                const set = new Set(self.className.split(/\s+/).filter(Boolean));
+                names.forEach((name) => set.add(name));
+                self.className = [...set].join(" ");
+              },
+              contains: (name) => self.className.split(/\s+/).includes(name),
+            };
+          }
+          get classListContains() { return null; }
+          append(...nodes) {
+            for (const node of nodes) {
+              this.children.push(node);
+              if (this.tagName === "SELECT" && node.selected !== undefined) this.options.push(node);
+            }
+          }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          setAttribute(name, value) { this.attributes[name] = String(value); }
+          getAttribute(name) { return this.attributes[name]; }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatchEvent(event) { for (const handler of this.listeners[event.type] || []) handler(event); return true; }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          get selectedOptions() { return this.options.filter((option) => option.selected); }
+          closest() { return null; }
+          setCustomValidity() {}
+          reportValidity() {}
+          checkValidity() { return true; }
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeElement(tag) };
+        globalThis.Option = function Option(text, value) {
+          return { textContent: text, value: String(value), selected: false };
+        };
+
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.CommandForm = CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const matches = (element, selector) => {
+          const match = selector.match(/^\[data-([a-zA-Z-]+)(?:="([^"]*)")?\]$/);
+          if (!match || !element.dataset) return false;
+          const property = match[1].replace(/-([a-z])/g, (_all, char) => char.toUpperCase());
+          if (match[2] === undefined) return element.dataset[property] !== undefined;
+          return element.dataset[property] === match[2];
+        };
+        const collect = (node, out = []) => {
+          for (const child of node.children || []) {
+            out.push(child);
+            collect(child, out);
+          }
+          return out;
+        };
+        const container = new FakeElement("div");
+        container.querySelectorAll = (selector) => collect(container).filter((node) => matches(node, selector));
+        container.querySelector = (selector) => container.querySelectorAll(selector)[0] || null;
+
+        const catalog = { fieldsFor: (command) => command.fields, optionsFor: (field) => field.options };
+        const command = {
+          id: "measure-log",
+          presentation: null,
+          fields: [
+            { name: "channels", type: "multi-enum", options: ["1", "2", "3", "4"], serialize: "csv" },
+            { name: "items", type: "multi-enum", options: ["vpp", "frequency", "period"], serialize: "csv", default: ["vpp", "frequency"] },
+            { name: "pairs", type: "string" },
+            { name: "stop_on_error", type: "boolean", default: false },
+            { name: "enabled_setting", type: "boolean" },
+          ],
+        };
+        const form = new globalThis.CommandForm(container, catalog);
+        form.render(command);
+
+        const byField = (name) => collect(container).find((node) => node.dataset?.field === name);
+        const boxesFor = (name) => collect(container).filter((node) => node.dataset?.multiFor === name);
+        const toggleChip = (box) => { box.checked = !box.checked; box.dispatchEvent({ type: "change" }); };
+
+        const channelsWrapper = container.children.find((node) => node.classList.contains("field-multi"));
+        assert.ok(channelsWrapper, "multi-enum wrapper should carry the full-width class");
+        assert.equal(channelsWrapper.tagName, "DIV");
+
+        const channelsSelect = byField("channels");
+        assert.equal(channelsSelect.multiple, true);
+        assert.equal(channelsSelect.dataset.multiSource, "true");
+        assert.equal(channelsSelect.getAttribute("aria-hidden"), "true");
+        assert.equal(channelsSelect.tabIndex, -1);
+        assert.equal(channelsSelect.className, "visually-hidden");
+
+        const channelBoxes = boxesFor("channels");
+        assert.deepEqual(channelBoxes.map((box) => box.value), ["1", "2", "3", "4"]);
+        assert.equal(channelBoxes.every((box) => box.checked === false), true);
+
+        const itemBoxes = boxesFor("items");
+        assert.deepEqual(
+          itemBoxes.filter((box) => box.checked).map((box) => box.value),
+          ["vpp", "frequency"],
+        );
+
+        const stopError = byField("stop_on_error");
+        assert.equal(stopError.tagName, "INPUT");
+        assert.equal(stopError.type, "checkbox");
+        assert.equal(stopError.checked, false);
+
+        const settingBoolean = byField("enabled_setting");
+        assert.equal(settingBoolean.tagName, "SELECT");
+        assert.deepEqual(settingBoolean.options.map((option) => option.value), ["", "true", "false"]);
+
+        toggleChip(channelBoxes[0]);
+        toggleChip(channelBoxes[2]);
+        toggleChip(itemBoxes[1]);
+        assert.equal(channelsSelect.dataset.dirty, "true");
+        assert.equal(form.isDirty(), true);
+        assert.deepEqual(form.values(), {
+          channels: "1,3",
+          items: "vpp",
+          stop_on_error: false,
+        });
+
+        stopError.checked = true;
+        stopError.dispatchEvent({ type: "change" });
+        assert.deepEqual(form.values().stop_on_error, true);
+        stopError.checked = false;
+        stopError.dispatchEvent({ type: "change" });
+
+        const snapshot = form.draft();
+        toggleChip(channelBoxes[0]);
+        form.restoreDraft(snapshot);
+        assert.deepEqual(
+          channelsSelect.selectedOptions.map((option) => option.value),
+          ["1", "3"],
+        );
+        assert.deepEqual(
+          boxesFor("channels").filter((box) => box.checked).map((box) => box.value),
+          ["1", "3"],
+        );
+
+        form.setDisabled(true);
+        assert.equal(channelsSelect.disabled, true);
+        assert.equal(channelBoxes.every((box) => box.disabled), true);
+        form.setDisabled(false);
+        assert.equal(channelBoxes.some((box) => box.disabled), false);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_live_command_gating_allows_identify_retry_until_identity_is_ready() -> None:
     app_source = read_static("app.js")
     command_available = extract_function_declaration(app_source, "function commandAvailable(command)")

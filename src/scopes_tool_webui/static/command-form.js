@@ -77,6 +77,9 @@ export class CommandForm {
     this.container.querySelectorAll("[data-field]").forEach((input) => {
       if (input.type !== "hidden") input.disabled = disabled;
     });
+    this.container.querySelectorAll("[data-multi-for]").forEach((box) => {
+      box.disabled = disabled;
+    });
   }
 
   values() {
@@ -139,7 +142,12 @@ export class CommandForm {
       if (!readbackField) return;
       const value = findResultValue(payload, readbackField, onlyWritableField);
       if (value === undefined || value === null || typeof value === "object") return;
-      input.value = input.dataset.type === "boolean" ? String(Boolean(value)) : String(value);
+      if (input.type === "checkbox") {
+        input.checked = Boolean(value);
+      } else {
+        input.value = input.dataset.type === "boolean" ? String(Boolean(value)) : String(value);
+        if (input.multiple) this.syncMultiChoices(input);
+      }
       delete input.dataset.dirty;
     });
     this.refreshVisibility();
@@ -154,9 +162,11 @@ export class CommandForm {
   draft() {
     return [...this.container.querySelectorAll("[data-field]")].map((input) => ({
       name: input.dataset.field,
-      value: input.multiple
-        ? [...input.selectedOptions].map((option) => option.value)
-        : input.value,
+      value: input.type === "checkbox"
+        ? input.checked
+        : input.multiple
+          ? [...input.selectedOptions].map((option) => option.value)
+          : input.value,
       dirty: input.dataset.dirty === "true",
     }));
   }
@@ -165,15 +175,28 @@ export class CommandForm {
     draft.forEach((entry) => {
       const input = this.container.querySelector(`[data-field="${entry.name}"]`);
       if (!input) return;
-      if (input.multiple) {
+      if (input.type === "checkbox") {
+        input.checked = Boolean(entry.value);
+      } else if (input.multiple) {
         const selected = new Set(Array.isArray(entry.value) ? entry.value.map(String) : []);
         [...input.options].forEach((option) => {
           option.selected = selected.has(option.value);
         });
+        this.syncMultiChoices(input);
       } else {
         input.value = entry.value;
       }
       if (entry.dirty) input.dataset.dirty = "true";
+    });
+  }
+
+  syncMultiChoices(select) {
+    const selected = new Set(
+      [...select.options].filter((option) => option.selected).map((option) => option.value),
+    );
+    this.container.querySelectorAll("[data-multi-for]").forEach((box) => {
+      if (box.dataset.multiFor !== select.dataset.field) return;
+      box.checked = selected.has(box.value);
     });
   }
 
@@ -193,8 +216,9 @@ export class CommandForm {
       return input;
     }
 
-    const wrapper = document.createElement("label");
-    wrapper.className = "field";
+    const isMultiEnum = field.type === "multi-enum";
+    const wrapper = document.createElement(isMultiEnum ? "div" : "label");
+    wrapper.className = isMultiEnum ? "field field-multi" : "field";
     if (field.visible_if) wrapper.dataset.visibleIf = JSON.stringify(field.visible_if);
     const label = document.createElement("span");
     label.textContent = translate(`field.${field.name}`);
@@ -214,16 +238,28 @@ export class CommandForm {
       options.forEach((option) => {
         input.append(new Option(translateEnum(option), String(option)));
       });
-      if (input.multiple) input.size = Math.min(Math.max(options.length, 2), 6);
+      if (input.multiple) {
+        input.size = Math.min(Math.max(options.length, 2), 6);
+        input.className = "visually-hidden";
+        input.tabIndex = -1;
+        input.setAttribute("aria-hidden", "true");
+        input.dataset.multiSource = "true";
+      }
       if (actionChoices?.length) input.value = String(actionChoices[0]);
     } else if (field.type === "boolean") {
-      input = document.createElement("select");
-      const required = field.required === true || Boolean(field.required_if);
-      input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
-      input.append(
-        new Option(translate("status.enabled"), "true"),
-        new Option(translate("status.disabled"), "false"),
-      );
+      if (field.default !== undefined) {
+        input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = Boolean(field.default);
+      } else {
+        input = document.createElement("select");
+        const required = field.required === true || Boolean(field.required_if);
+        input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
+        input.append(
+          new Option(translate("status.enabled"), "true"),
+          new Option(translate("status.disabled"), "false"),
+        );
+      }
     } else {
       input = document.createElement("input");
       input.type = ["integer", "number"].includes(field.type) ? "number" : "text";
@@ -252,6 +288,28 @@ export class CommandForm {
       } else {
         input.value = String(field.default);
       }
+    }
+    if (isMultiEnum) {
+      const choices = document.createElement("div");
+      choices.className = "multi-choice";
+      [...input.options].forEach((option) => {
+        const choice = document.createElement("label");
+        choice.className = "multi-choice-option";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.value = option.value;
+        box.checked = option.selected;
+        box.dataset.multiFor = field.name;
+        const text = document.createElement("span");
+        text.textContent = option.textContent;
+        choice.append(box, text);
+        box.addEventListener("change", () => {
+          option.selected = box.checked;
+          input.dispatchEvent(new Event("change"));
+        });
+        choices.append(choice);
+      });
+      wrapper.append(choices);
     }
     wrapper.append(input);
     if (field.help) {
