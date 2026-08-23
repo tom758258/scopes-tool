@@ -8,9 +8,10 @@
   English/Traditional Chinese UI text, and an English Launcher with automatic
   local port fallback and graceful shutdown of running jobs.
 - Expands the WebUI command workbench with Core-backed channel, display,
-  measurement, system/status, DVM, FFT/Math, Reference, Save/Export, Trigger,
-  Search, Serial, and Segmented Memory operations behind model-aware
-  capability gating and metadata-driven read-edit-Apply forms.
+  measurement, system/status, DVM, basic FFT/Math, Reference, Save/Export,
+  Trigger, Search, Serial, Segmented Memory, and finite Workflow operations
+  behind model-aware capability gating and metadata-driven read-edit-Apply
+  forms.
 - Adds a dedicated mode-aware WebUI Serial editor for UART/I2C/SPI/CAN
   configuration and triggering with bus/display controls and a Serial Lister
   section for display/reference settings and host-side CSV export.
