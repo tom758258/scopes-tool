@@ -2134,10 +2134,10 @@ def test_live_mode_badge_is_neutral_and_utility_glyphs_are_centered() -> None:
     assert ".execution-mode-badge.mode-live { border-color: var(--line-strong); background: transparent; color: var(--muted); }" in styles
 
 
-def test_hidden_conditional_fields_override_grid_layout() -> None:
+def test_hidden_elements_override_component_display_rules() -> None:
     styles = read_static("styles.css")
 
-    assert ".field[hidden] { display: none; }" in styles
+    assert "[hidden] { display: none !important; }" in styles
 
 
 def test_number_fields_allow_fractional_html_values() -> None:
