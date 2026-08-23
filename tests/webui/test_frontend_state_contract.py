@@ -2389,6 +2389,29 @@ def test_current_generic_form_still_syncs_refresh_and_apply() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_submission_without_form_revision_cannot_update_generic_form() -> None:
+    run_generic_form_ownership_behavior(
+        r'''
+        syncCommandSelection();
+        const apply = executeCommand("channel-scale", {
+          action: "set", channel: 1, volts_per_division: 0.5,
+        }, { intent: "apply" });
+        await Promise.resolve();
+        assert.deepEqual(commandForm.disabledCalls, []);
+
+        complete(0);
+        await apply;
+
+        assert.equal(commandForm.clearCalls, 0);
+        assert.deepEqual(commandForm.syncCalls, []);
+        assert.deepEqual(commandForm.disabledCalls, []);
+        assert.deepEqual(workspaceResults, ["job-1"]);
+        assert.deepEqual(completedResults, ["job-1"]);
+        '''
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -> None:
     source = read_static("app.js")
     executable_source = source.replace("options = {}", "options = null", 1)

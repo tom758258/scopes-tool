@@ -313,8 +313,9 @@ async function executeCommand(command, parameters, options = {}) {
   executing = true;
   const commandContext = { ...context };
   const submittedWorkspaceContext = currentWorkspaceContext(command);
-  const ownsCommandForm = () => isCurrentEditorJob(command, submittedWorkspaceContext)
-    && (options.formRevision === undefined || options.formRevision === genericFormRevision);
+  const ownsCommandForm = () => options.formRevision !== undefined
+    && options.formRevision === genericFormRevision
+    && isCurrentEditorJob(command, submittedWorkspaceContext);
   const lockEditor = options.intent === "apply"
     && ownsCommandForm();
   if (lockEditor) commandForm.setDisabled(true);
