@@ -66,7 +66,9 @@ export class TriggerEditor {
 
   async refresh(force = false) {
     if (this.busy) {
-      this.pendingRefresh = true;
+      if (force || this.currentStateKey() !== this.stateKey) {
+        this.pendingRefresh = true;
+      }
       return;
     }
     const definition = this.selectedDefinition();
@@ -152,6 +154,7 @@ export class TriggerEditor {
   async flushEntryReads() {
     if (!this.pendingEntryReads.size) return;
     if (this.busy) {
+      this.pendingEntryReads.clear();
       this.pendingRefresh = true;
       return;
     }

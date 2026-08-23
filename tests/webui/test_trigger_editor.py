@@ -540,7 +540,7 @@ def test_trigger_editor_serializes_readback_and_disables_actions_while_busy() ->
           queries += 1;
           return new Promise((resolve) => {
             releaseQuery = () => resolve({
-              job_id: `${command}-deferred`,
+              job_id: `${command}-deferred-${queries}`,
               status: "completed",
               result: { result: {} },
             });
@@ -557,8 +557,14 @@ def test_trigger_editor_serializes_readback_and_disables_actions_while_busy() ->
         assert.equal(runtEntry.form.disableCalls.at(-1), true);
         assert.equal(editor.refreshButton.disabled, true);
 
-        // A refresh requested during the readback is queued once, not overlapped.
+        // Same-state auto notifications during the readback are ignored.
         editor.scheduleRefresh();
+        await settle();
+        assert.equal(queries, 1);
+
+        // Forced refresh requests are queued exactly once.
+        editor.scheduleRefresh(true);
+        editor.scheduleRefresh(true);
         await settle();
         assert.equal(queries, 1);
 
@@ -579,6 +585,56 @@ def test_trigger_editor_serializes_readback_and_disables_actions_while_busy() ->
         assert.equal(editor.refreshButton.disabled, false);
         assert.deepEqual(submitted.map((entry) => entry.command), ["trigger-runt"]);
         assert.ok(submitted.every((entry) => entry.intent === "readback"));
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(TRIGGER_EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_trigger_editor_same_state_notifications_do_not_restart_group_readback() -> None:
+    script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        // Simulate the real app contract: every completed executeCommand ends
+        // with a plain unforced refresh notification (app-level
+        // scheduleEditorRead). The active-group readback must not restart.
+        env.selectedId = "trigger-edge-slope";
+        let editor;
+        hooks.executeCommand = async (command, parameters, options) => {
+          if (submitted.length > 4) {
+            throw new Error("Trigger readback refresh loop detected");
+          }
+          const job = {
+            job_id: `${command}-${submitted.length}`,
+            status: "completed",
+            result: { result: {} },
+          };
+          submitted.push({ command, parameters, intent: options?.intent });
+          editor.scheduleRefresh();
+          return job;
+        };
+        editor = buildEditor();
+        editor.scheduleRefresh();
+        await settle();
+
+        assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent}`), [
+          "trigger-edge-slope:readback",
+          "trigger-edge-coupling:readback",
+        ]);
+        assert.equal(editor.busy, false);
+        assert.equal(editor.pendingRefresh, false);
+
+        // A later genuine state change still triggers a fresh pass.
+        submitted.length = 0;
+        env.selectedId = "trigger-runt";
+        editor.scheduleRefresh();
+        await settle();
+        assert.deepEqual(submitted.map((entry) => entry.command), ["trigger-runt"]);
         '''
     )
     completed = subprocess.run(
