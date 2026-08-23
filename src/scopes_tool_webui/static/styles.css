@@ -272,6 +272,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .panel-title { align-items: flex-start; min-height: 70px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #fff 0%, #f8fafc 100%); }
 .command-title-group { flex: 1 1 auto; min-width: 0; }
 .workspace-header-actions { flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.workspace-header-actions #execute-button { order: 1; }
+.workspace-header-actions #cancel-button { order: 2; }
 .command-title-group h2 { margin: 0; overflow: hidden; font-size: 16px; line-height: 22px; text-overflow: ellipsis; white-space: nowrap; }
 .command-description,
 .command-support-reason { margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

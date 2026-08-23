@@ -92,7 +92,7 @@ def test_app_routes_editors_by_command_metadata() -> None:
     routing = extract_function(app_source, "function editorKindFor(command)")
     assert "EDITOR_RENDERERS[kind]" in routing
     assert 'elements.searchEditor.hidden = editorKind !== "search";' in app_source
-    assert "searchEditor?.scheduleRefresh();" in app_source
+    assert "searchEditor?.schedulePresentation();" in app_source
     assert "searchEditor?.rerender();" in app_source
 
 
@@ -268,20 +268,24 @@ def test_search_basic_view_reads_only_basic_commands_with_readonly_count() -> No
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         const editor = buildEditor();
-        editor.scheduleRefresh();
+        editor.schedulePresentation();
         await settle();
 
         assert.equal(editor.groupHeading.textContent, "basic");
-        assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
-          "search-state:readback",
-          "search-mode:readback",
-          "search-count:",
-        ]);
+        assert.deepEqual(submitted, []);
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
           "search-state",
           "search-mode",
         ]);
         assert.ok(editor.readouts.count);
+
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
+          "search-state:readback",
+          "search-mode:readback",
+          "search-count:",
+        ]);
         assert.equal(editor.readouts.count.textContent, "-");
 
         // Count becomes visible once the read result carries it.
@@ -527,23 +531,22 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
           ["bus", "mode"],
         );
 
-        // Protocol switch re-queries only the new protocol.
+        // Protocol switch only changes presentation.
         submitted.length = 0;
         editor.selectProtocol("uart");
         await settle();
         assert.equal(editor.protocol, "uart");
-        assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.parameters.bus}`), [
-          "serial-search-uart:1",
-        ]);
+        assert.deepEqual(submitted, []);
 
-        // Bus switch re-queries only the active protocol on the new bus.
-        submitted.length = 0;
+        // Bus switch is also passive; Refresh reads the selected view.
         editor.selectProtocol("i2c");
         await settle();
         editor.selectBus("2");
         await settle();
+        assert.deepEqual(submitted, []);
+        editor.refreshButton.dispatch("click");
+        await settle();
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.parameters.bus}`), [
-          "serial-search-i2c:1",
           "serial-search-i2c:2",
         ]);
         '''

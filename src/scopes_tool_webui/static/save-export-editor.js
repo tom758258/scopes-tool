@@ -27,6 +27,7 @@ export class SaveExportEditor {
     this.renderedKey = null;
     this.entries = [];
     this.pendingRefresh = false;
+    this.pendingPresentation = false;
     this.buildDom();
   }
 
@@ -83,7 +84,13 @@ export class SaveExportEditor {
 
   scheduleRefresh(force = false) {
     queueMicrotask(() => {
-      void this.refresh(force);
+      void this.refresh(force, true);
+    });
+  }
+
+  schedulePresentation() {
+    queueMicrotask(() => {
+      void this.refresh(false, false);
     });
   }
 
@@ -91,13 +98,15 @@ export class SaveExportEditor {
     this.buildDom();
     this.stateKey = null;
     this.renderedKey = null;
-    this.scheduleRefresh();
+    this.schedulePresentation();
   }
 
-  async refresh(force = false) {
+  async refresh(force = false, read = true) {
     if (this.busy) {
-      if (force || this.currentStateKey() !== this.stateKey) {
+      if (read && (force || this.currentStateKey() !== this.stateKey)) {
         this.pendingRefresh = true;
+      } else if (!read) {
+        this.pendingPresentation = true;
       }
       return;
     }
@@ -109,15 +118,15 @@ export class SaveExportEditor {
     }
     const key = this.currentStateKey();
     if (!force && key === this.stateKey) return;
-    this.setBusy(true);
+    if (read) this.setBusy(true);
     try {
       this.stateKey = key;
       this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
       if (this.renderedKey !== key) this.rebuildSections(key);
       this.applyBusyState();
-      await this.readActiveGroup();
+      if (read) await this.readActiveGroup();
     } finally {
-      this.setBusy(false);
+      if (read) this.setBusy(false);
     }
   }
 
@@ -135,6 +144,7 @@ export class SaveExportEditor {
     const epoch = this.epoch;
     this.renderedKey = key;
     this.entries = [];
+    this.readStatus.textContent = "";
     this.sectionsHost.replaceChildren();
     const definition = this.selectedDefinition();
     if (!definition) return;
@@ -271,6 +281,7 @@ export class SaveExportEditor {
   async submit(entry) {
     if (this.busy || !this.hooks.isAvailable()) return;
     if (!this.entries.includes(entry) || entry.kind === "readonly") return;
+    const submissionKey = this.currentStateKey();
     const parameters = entry.form.values();
     if (parameters === null) return;
     const isSetting = entry.kind === "setting";
@@ -281,7 +292,12 @@ export class SaveExportEditor {
         parameters,
         { intent: isSetting ? "apply" : "command" },
       );
-      if (!isSetting || job?.status !== "completed" || entry.epoch !== this.epoch) return;
+      if (
+        !isSetting
+        || job?.status !== "completed"
+        || entry.epoch !== this.epoch
+        || submissionKey !== this.currentStateKey()
+      ) return;
       entry.form.clearDirty();
       entry.form.syncResult(job, false);
       this.pendingRefresh = true;
@@ -295,7 +311,11 @@ export class SaveExportEditor {
     this.applyBusyState();
     if (!value && this.pendingRefresh) {
       this.pendingRefresh = false;
+      this.pendingPresentation = false;
       this.scheduleRefresh(true);
+    } else if (!value && this.pendingPresentation) {
+      this.pendingPresentation = false;
+      this.schedulePresentation();
     }
   }
 

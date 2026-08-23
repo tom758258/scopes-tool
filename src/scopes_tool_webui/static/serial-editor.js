@@ -243,7 +243,6 @@ export function createSerialEditorController({
       jobs.trigger = null;
       formEpoch += 1;
       notifyState();
-      scheduleRefresh();
     },
     selectProtocol(protocol) {
       if (busyCount > 0 || !protocols.includes(protocol)) return;
@@ -810,16 +809,23 @@ export class SerialEditor {
     }
   }
 
-  scheduleRefresh() {
+  scheduleRefresh(force = false) {
+    const changed = this.schedulePresentation();
+    if (!force && !changed) return;
+    const info = this.hooks.modelInfo();
+    if (info.supported) this.controller.scheduleRefresh();
+  }
+
+  schedulePresentation() {
     const key = `${this.hooks.contextKey()}|${this.hooks.isAvailable()}`;
-    if (key === this.lastAvailabilityKey) return;
+    if (key === this.lastAvailabilityKey) return false;
     this.lastAvailabilityKey = key;
     const info = this.hooks.modelInfo();
     this.controller.reset({
       maxBus: info.supported ? info.maxBus : 0,
       protocolChoices: info.protocols,
     });
-    if (info.supported) this.controller.scheduleRefresh();
+    return true;
   }
 
   rerender() {

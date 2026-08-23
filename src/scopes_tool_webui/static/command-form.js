@@ -122,10 +122,6 @@ export class CommandForm {
     return values;
   }
 
-  querySignature() {
-    return JSON.stringify(this.queryValues() || {});
-  }
-
   syncResult(job, preserveDirty = true) {
     const payload = job?.result?.result !== undefined ? job.result.result : job?.result;
     if (payload === null || payload === undefined) return;

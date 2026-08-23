@@ -50,6 +50,7 @@ export class SearchEditor {
     this.stateKey = null;
     this.renderedKey = null;
     this.pendingRefresh = false;
+    this.pendingPresentation = false;
     this.entries = [];
     this.readouts = {};
     this.bus = 1;
@@ -111,7 +112,13 @@ export class SearchEditor {
 
   scheduleRefresh(force = false) {
     queueMicrotask(() => {
-      void this.refresh(force);
+      void this.refresh(force, true);
+    });
+  }
+
+  schedulePresentation() {
+    queueMicrotask(() => {
+      void this.refresh(false, false);
     });
   }
 
@@ -119,7 +126,7 @@ export class SearchEditor {
     this.buildDom();
     this.stateKey = null;
     this.renderedKey = null;
-    this.scheduleRefresh();
+    this.schedulePresentation();
   }
 
   refreshSerialContext(definition) {
@@ -154,10 +161,12 @@ export class SearchEditor {
     this.selectedSerialCommandId = definition.id;
   }
 
-  async refresh(force = false) {
+  async refresh(force = false, read = true) {
     if (this.busy) {
-      if (force || this.currentStateKey() !== this.stateKey) {
+      if (read && (force || this.currentStateKey() !== this.stateKey)) {
         this.pendingRefresh = true;
+      } else if (!read) {
+        this.pendingPresentation = true;
       }
       return;
     }
@@ -189,15 +198,15 @@ export class SearchEditor {
       return;
     }
     if (!force && key === this.stateKey) return;
-    this.setBusy(true);
+    if (read) this.setBusy(true);
     try {
       this.stateKey = key;
       this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
       if (this.renderedKey !== key) this.rebuildView(definition);
       this.applyBusyState();
-      await this.readActiveView();
+      if (read) await this.readActiveView();
     } finally {
-      this.setBusy(false);
+      if (read) this.setBusy(false);
     }
   }
 
@@ -390,13 +399,13 @@ export class SearchEditor {
     if (!Number.isInteger(next) || next === this.bus) return;
     if (!buildBusOptions(this.maxBus).includes(next)) return;
     this.bus = next;
-    this.scheduleRefresh();
+    this.schedulePresentation();
   }
 
   selectProtocol(value) {
     if (this.busy || !this.protocols.includes(value) || value === this.protocol) return;
     this.protocol = value;
-    this.scheduleRefresh();
+    this.schedulePresentation();
   }
 
   async readEntry(entry) {
@@ -459,6 +468,7 @@ export class SearchEditor {
   async submit(entry) {
     if (this.busy || !this.hooks.isAvailable()) return;
     if (!this.entries.includes(entry)) return;
+    const submissionKey = this.currentStateKey();
     const values = entry.form.values();
     if (values === null) return;
     const parameters = entry.view === "serial"
@@ -474,6 +484,7 @@ export class SearchEditor {
       if (job?.status !== "completed" || !this.entries.includes(entry)) return;
       entry.form.clearDirty();
       entry.form.syncResult(job, false);
+      if (submissionKey !== this.currentStateKey()) return;
       if (entry.view === "serial") {
         await this.hooks.executeCommand("search-state", {}, { intent: "readback" });
         await this.hooks.executeCommand("search-mode", {}, { intent: "readback" });
@@ -491,7 +502,11 @@ export class SearchEditor {
     this.applyBusyState();
     if (!value && this.pendingRefresh) {
       this.pendingRefresh = false;
+      this.pendingPresentation = false;
       this.scheduleRefresh(true);
+    } else if (!value && this.pendingPresentation) {
+      this.pendingPresentation = false;
+      this.schedulePresentation();
     }
   }
 

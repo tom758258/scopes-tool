@@ -29,6 +29,9 @@ it is not an operator guide.
 
 ## State And Readback
 
+- Command selection and presentation-only navigation must not perform
+  instrument I/O. Reads require an explicit user action or execution
+  verification.
 - Stateful settings use read current state, edit, Apply, and verification
   readback. Keep the existing Core query/set contract behind that interaction.
 - Unapplied dirty input must not be overwritten by automatic readback. Keep
@@ -78,4 +81,3 @@ it is not an operator guide.
   assets.
 - Tests should protect durable ownership and behavior, not incidental prose,
   private helper names, or visual pixel details.
-

@@ -158,7 +158,7 @@ def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-def test_serial_editor_replaces_generic_form_and_auto_read_for_editor_commands() -> None:
+def test_serial_editor_replaces_generic_form_with_passive_selection() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
     editor_source = read_static("serial-editor.js")
@@ -172,13 +172,9 @@ def test_serial_editor_replaces_generic_form_and_auto_read_for_editor_commands()
     renderer_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
     assert 'serial: () => serialEditor,' in renderer_map
     assert 'trigger: () => triggerEditor,' in renderer_map
-    schedule_guard = extract_function(app_source, "function scheduleEditorRead()")
-    assert "editorKindFor(selected)" in schedule_guard
-    assert "serialEditor?.scheduleRefresh();" in schedule_guard
-    generic_readback = "if (selected.presentation?.kind !== \"setting\") return;"
-    assert schedule_guard.index(generic_readback) > schedule_guard.index(
-        "editorKindFor(selected)",
-    )
+    assert "function scheduleEditorRead()" not in app_source
+    presentation = extract_function(app_source, "function syncEditorPresentation(editorKind)")
+    assert "serialEditor?.schedulePresentation();" in presentation
     assert "elements.formHeading.hidden = editorOwned;" in app_source
     assert "elements.form.hidden = editorOwned;" in app_source
     assert 'elements.serialEditor.hidden = editorKind !== "serial";' in app_source
@@ -392,6 +388,9 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           dual.controller.selectBus(2);
           await settle();
           assert.equal(dual.controller.state.bus, 2);
+          assert.deepEqual(commandsOf(dual).slice(5), []);
+          dual.controller.scheduleRefresh();
+          await settle();
           assert.deepEqual(commandsOf(dual).slice(5), [
             "serial-mode:query",
             "serial-display:query",
@@ -540,6 +539,9 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.deepEqual(discarded.confirmations, ["asked"]);
           assert.equal(discarded.controller.state.bus, 2);
           assert.equal(discarded.controller.state.dirtyConfig, false);
+          assert.equal(discarded.submitted.length, 5);
+          discarded.controller.scheduleRefresh();
+          await settle();
           assert.equal(commandsOf(discarded)[5], "serial-mode:query");
         }
 
@@ -579,6 +581,9 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.equal(dualModes.controller.state.selectedProtocol, "can");
           dualModes.setCurrentMode("uart");
           dualModes.controller.selectBus(2);
+          await settle();
+          assert.equal(dualModes.controller.state.confirmedMode, null);
+          dualModes.controller.scheduleRefresh();
           await settle();
           assert.equal(dualModes.controller.state.confirmedMode, "uart");
           assert.equal(dualModes.controller.state.selectedProtocol, "uart");
@@ -739,6 +744,9 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.deepEqual(dirtyBusDiscard.confirmations, ["asked"]);
           assert.equal(dirtyBusDiscard.controller.state.bus, 2);
           assert.equal(dirtyBusDiscard.controller.state.dirtyTrigger, false);
+          assert.equal(dirtyBusDiscard.submitted.length, 5);
+          dirtyBusDiscard.controller.scheduleRefresh();
+          await settle();
           assert.equal(commandsOf(dirtyBusDiscard)[5], "serial-mode:query");
         }
 
@@ -999,6 +1007,7 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
         await settle();
         assert.equal(editor.controller.state.bus, 2);
         assert.equal(editor.protocolSelect.value, "can");
+        assert.equal(submitted.length, 5);
 
         const listerDirtyBefore = {
           display: editor.listerDisplayForm.dirty,
@@ -2117,6 +2126,7 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert "renderExecutionStatus" not in source
     assert 'id="command-state"' in html
     assert 'id="workspace-header-actions"' in panel_header
+    assert 'id="refresh-button"' in panel_header
     assert 'id="execute-button"' in panel_header
     assert 'id="cancel-button"' in panel_header
     assert 'id="execute-button"' not in workspace_body
@@ -2124,6 +2134,7 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert ".workspace-header-actions" in styles
 
     selection = extract_function(source, "function syncWorkspaceHeaderActions(editorKind)")
+    assert "elements.refresh.hidden = !selected || editorKind !== null || !commandForm?.isSettingEditor();" in selection
     assert "elements.execute.hidden = !selected || editorKind !== null;" in selection
     for kind, editor in (
         ("save-export", "saveExportEditor"),
@@ -2141,6 +2152,16 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert "const parameters = commandForm.values();" in execute_handler
     assert "executeCommand(selected.id, parameters" in execute_handler
     assert 'intent: commandForm.isSettingEditor() ? "apply" : "command"' in execute_handler
+
+    refresh_handler = source.split('elements.refresh.addEventListener("click"', 1)[1].split(
+        'elements.cancel.addEventListener("click"', 1,
+    )[0]
+    assert "commandForm.isSettingEditor()" in refresh_handler
+    assert "const parameters = commandForm.queryValues();" in refresh_handler
+    assert 'executeCommand(selected.id, parameters, { intent: "readback" })' in refresh_handler
+    assert "function scheduleEditorRead()" not in source
+    selection_handler = extract_function(source, "function syncCommandSelection(draft = null)")
+    assert "onQueryFieldChange" not in selection_handler
 
     cancel_handler = source.split('elements.cancel.addEventListener("click"', 1)[1].split(
         "\n  });", 1,

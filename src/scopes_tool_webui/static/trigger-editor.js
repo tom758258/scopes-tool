@@ -12,7 +12,7 @@ export class TriggerEditor {
     this.renderedKey = null;
     this.entries = [];
     this.pendingRefresh = false;
-    this.pendingEntryReads = new Map();
+    this.pendingPresentation = false;
     this.buildDom();
   }
 
@@ -59,7 +59,13 @@ export class TriggerEditor {
 
   scheduleRefresh(force = false) {
     queueMicrotask(() => {
-      void this.refresh(force);
+      void this.refresh(force, true);
+    });
+  }
+
+  schedulePresentation() {
+    queueMicrotask(() => {
+      void this.refresh(false, false);
     });
   }
 
@@ -67,14 +73,15 @@ export class TriggerEditor {
     this.buildDom();
     this.stateKey = null;
     this.renderedKey = null;
-    this.pendingEntryReads.clear();
-    this.scheduleRefresh();
+    this.schedulePresentation();
   }
 
-  async refresh(force = false) {
+  async refresh(force = false, read = true) {
     if (this.busy) {
-      if (force || this.currentStateKey() !== this.stateKey) {
+      if (read && (force || this.currentStateKey() !== this.stateKey)) {
         this.pendingRefresh = true;
+      } else if (!read) {
+        this.pendingPresentation = true;
       }
       return;
     }
@@ -86,15 +93,15 @@ export class TriggerEditor {
     }
     const key = this.currentStateKey();
     if (!force && key === this.stateKey) return;
-    this.setBusy(true);
+    if (read) this.setBusy(true);
     try {
       this.stateKey = key;
       this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
       if (this.renderedKey !== key) this.rebuildSections(key);
       this.applyBusyState();
-      await this.readActiveGroup();
+      if (read) await this.readActiveGroup();
     } finally {
-      this.setBusy(false);
+      if (read) this.setBusy(false);
     }
   }
 
@@ -140,43 +147,12 @@ export class TriggerEditor {
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
     const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch };
-    form.render(command, {
-      onQueryFieldChange: () => this.scheduleEntryRead(entry),
-    });
+    form.render(command, {});
     entry.form = form;
     actionButton.addEventListener("click", () => {
       void this.submit(entry);
     });
     return entry;
-  }
-
-  scheduleEntryRead(entry) {
-    if (entry.kind !== "setting") return;
-    this.pendingEntryReads.set(entry.id, entry);
-    queueMicrotask(() => {
-      void this.flushEntryReads();
-    });
-  }
-
-  async flushEntryReads() {
-    if (!this.pendingEntryReads.size) return;
-    if (this.busy) {
-      this.pendingEntryReads.clear();
-      this.pendingRefresh = true;
-      return;
-    }
-    const pending = [...this.pendingEntryReads.values()];
-    this.pendingEntryReads.clear();
-    const epoch = this.epoch;
-    this.setBusy(true);
-    try {
-      for (const entry of pending) {
-        if (epoch !== this.epoch) return;
-        await this.readEntry(entry);
-      }
-    } finally {
-      this.setBusy(false);
-    }
   }
 
   async readEntry(entry) {
@@ -201,6 +177,7 @@ export class TriggerEditor {
 
   async submit(entry) {
     if (this.busy || !this.hooks.isAvailable()) return;
+    const submissionKey = this.currentStateKey();
     const isSetting = entry.kind === "setting";
     let parameters = {};
     if (isSetting) {
@@ -215,7 +192,12 @@ export class TriggerEditor {
         parameters,
         isSetting ? { intent: "apply" } : {},
       );
-      if (isSetting && job?.status === "completed" && entry.epoch === this.epoch) {
+      if (
+        isSetting
+        && job?.status === "completed"
+        && entry.epoch === this.epoch
+        && submissionKey === this.currentStateKey()
+      ) {
         entry.form.clearDirty();
         entry.form.syncResult(job, false);
         this.pendingRefresh = true;
@@ -230,7 +212,11 @@ export class TriggerEditor {
     this.applyBusyState();
     if (!value && this.pendingRefresh) {
       this.pendingRefresh = false;
+      this.pendingPresentation = false;
       this.scheduleRefresh(true);
+    } else if (!value && this.pendingPresentation) {
+      this.pendingPresentation = false;
+      this.schedulePresentation();
     }
   }
 

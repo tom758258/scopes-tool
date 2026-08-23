@@ -139,12 +139,11 @@ example, selecting any Edge command shows Edge trigger, source, slope, level,
 coupling, and reject together; selecting Runt shows only Runt), and the group
 label above the sections names the group being edited. The editor presents the
 group's existing settings for editing; it does not report or change which
-trigger type the instrument currently uses. Readback is scoped to the active
-group: entering or refreshing a group queries only that group's setting
-commands, and switching groups reads the new group instead. Changing a
-command's channel or query selector re-reads that command, and a successful
-Apply is followed by an active-group readback so sibling forms do not go
-stale. Editor reads and applies are serialized; Apply and Refresh stay
+trigger type the instrument currently uses. Selection and query-selector
+changes are presentation-only. Explicit Refresh reads only the active group's
+setting commands, and a successful Apply is followed by an active-group
+readback so sibling forms do not go stale. Editor reads and applies are
+serialized; Apply and Refresh stay
 disabled until the current readback or write finishes. Each child command
 keeps its own metadata-driven form and its own independent Apply over the
 existing WebUI command; there is no Apply All, no transaction, and no merged
@@ -159,17 +158,18 @@ Selecting a Search command opens the dedicated Search editor instead of a
 plain command form. The Command Browser groups remain Basic, Event, and
 Serial; the editor adds no second tab layer. Basic shows Search State and
 Search Mode as independent read-edit-Apply settings plus a read-only Search
-Count that is refreshed with the group, and entering Basic queries only these
-three commands. Event exposes capability-gated event navigation: models
+Count that is refreshed with the group. Explicit Refresh in Basic reads only
+these three commands. Event exposes capability-gated event navigation: models
 without Search event navigation show an unavailable note instead of controls,
 a reported current event of 0 displays verbatim as readback, and Apply keeps
 the existing Core validation rather than turning a displayed 0 into an editable
 target. Selecting any Serial Search command opens the Serial Search view with
 a Bus selector projected from the model's serial bus count and a Protocol
 selector whose UART/I2C/SPI/CAN availability comes from the existing model
-projection; the clicked command chooses the initial protocol, and switching
-Bus or Protocol discards unapplied edits and re-queries only the active
-protocol. A Serial Search Apply submits exactly one existing `serial-search-*`
+projection; the clicked command chooses the initial protocol. Switching Bus or
+Protocol discards unapplied edits and changes presentation without querying;
+explicit Refresh reads only the active protocol. A Serial Search Apply submits
+exactly one existing `serial-search-*`
 write with the selected bus and the metadata-driven criteria form — no separate
 `search-state`/`search-mode` writes and no Serial decode mode recheck — then
 runs `search-state`, `search-mode`, and the active criteria query again for
@@ -193,7 +193,9 @@ Apply Trigger re-checks `serial-mode` first and skips stale writes the same
 way as configuration applies. Switching Bus asks for confirmation before
 discarding any unapplied Display/Configuration/Trigger edits, and applying a
 different protocol asks before discarding old-protocol Configuration or
-Trigger edits. A configuration Apply first re-checks `serial-mode` and skips
+Trigger edits. Bus and Protocol navigation does not query the instrument;
+explicit Refresh performs the existing mode, display, active-protocol, trigger,
+and lister read sequence. A configuration Apply first re-checks `serial-mode` and skips
 the write when the instrument no longer reports the expected protocol. The
 Serial Lister section is independent of protocol and Bus: its state is
 refreshed through the existing aggregate `serial-lister-query`, display and
@@ -204,9 +206,10 @@ Selecting a Save / Export command opens the dedicated Save / Export editor
 instead of a plain command form. The Command Browser remains the only
 navigation and keeps the Path / Filename, Image, and Waveform groups; the
 editor adds no second tab layer. Selecting any command shows its whole group.
-Path / Filename reads `save-pwd` and `save-filename`; Image reads its format,
-palette, ink-saver, and measurement-factor settings; Waveform reads its format
-and length settings plus the read-only maximum-length state. Each setting
+Selection is presentation-only. Explicit Refresh reads `save-pwd` and
+`save-filename` for Path / Filename; Image reads its format, palette, ink-saver,
+and measurement-factor settings; Waveform reads its format and length settings
+plus the read-only maximum-length state. Each setting
 keeps an independent Apply over its existing command, and a successful Apply
 is followed by an active-group readback that preserves unapplied sibling
 edits. The editor shows readback progress and identifies settings whose current
@@ -230,10 +233,11 @@ commands use only the conditional visibility needed by their existing Core
 parameter semantics.
 
 Commands that expose the existing Core `query` / `set` contract as an
-instrument setting use a read-edit-Apply workflow in the browser. Selecting
-the command reads its current state, Apply submits the existing set action,
-and the set result's Core readback refreshes the editor. Unsaved field edits
-are not overwritten by later readback. Information and diagnostic commands
+instrument setting use a read-edit-Apply workflow in the browser. Command
+selection and presentation-only navigation are passive. Refresh explicitly
+reads current state, Apply submits the existing set action, and the set result's
+Core readback refreshes the editor. Unsaved field edits are not overwritten by
+later readback. Information and diagnostic commands
 remain explicit Read or Run actions.
 
 Model-aware command availability and field limits are projected from Core

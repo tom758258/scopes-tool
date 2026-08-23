@@ -56,6 +56,7 @@ const elements = {
   triggerEditor: document.querySelector("#trigger-editor"),
   searchEditor: document.querySelector("#search-editor"),
   workspaceHeaderActions: document.querySelector("#workspace-header-actions"),
+  refresh: document.querySelector("#refresh-button"),
   execute: document.querySelector("#execute-button"),
   cancel: document.querySelector("#cancel-button"),
   identityWorkspace: document.querySelector("#identity-workspace-result"),
@@ -213,6 +214,15 @@ async function initialize() {
       intent: commandForm.isSettingEditor() ? "apply" : "command",
     });
   });
+  elements.refresh.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const selected = catalog.selected();
+    if (!selected || !commandForm.isSettingEditor()) return;
+    const parameters = commandForm.queryValues();
+    if (parameters !== null) {
+      await executeCommand(selected.id, parameters, { intent: "readback" });
+    }
+  });
   elements.cancel.addEventListener("click", async () => {
     if (!currentJobId) return;
     try {
@@ -291,7 +301,6 @@ async function executeCommand(command, parameters, options = {}) {
   executing = true;
   const commandContext = { ...context };
   const submittedWorkspaceContext = currentWorkspaceContext(command);
-  const editorKey = options.editorKey || currentEditorKey();
   const lockEditor = options.intent === "apply"
     && isCurrentEditorJob(command, submittedWorkspaceContext);
   if (lockEditor) commandForm.setDisabled(true);
@@ -316,7 +325,6 @@ async function executeCommand(command, parameters, options = {}) {
     if (job.status === "completed" && isCurrentEditorJob(command, submittedWorkspaceContext)) {
       if (options.intent === "apply") commandForm.clearDirty();
       commandForm.syncResult(job, options.intent !== "apply");
-      state.editorLoadedKey = editorKey || currentEditorKey();
     }
     return job;
   } catch (error) {
@@ -333,7 +341,6 @@ async function executeCommand(command, parameters, options = {}) {
     currentJobId = null;
     elements.cancel.classList.add("hidden");
     updateAvailability();
-    scheduleEditorRead();
   }
 }
 
@@ -357,7 +364,6 @@ function updateIdentity(job, commandContext) {
   renderWorkspace();
   renderLiveData();
   if (typeof updateAvailability === "function") updateAvailability();
-  scheduleEditorRead();
 }
 
 async function refreshSelectedResourceContext(selectedContext) {
@@ -521,10 +527,6 @@ function syncCommandSelection(draft = null) {
   commandForm.render(selected, {
     draft,
     onDirty: () => updateAvailability(),
-    onQueryFieldChange: () => {
-      state.editorLoadedKey = null;
-      scheduleEditorRead();
-    },
   });
   elements.formHeading.hidden = editorOwned;
   elements.form.hidden = editorOwned;
@@ -547,14 +549,9 @@ function syncCommandSelection(draft = null) {
   elements.commandSupportReason.hidden = !supportReason;
   elements.commandSupportReason.textContent = supportReason;
   elements.execute.textContent = translate(`actions.${commandAction(selected)}`);
-  const editorContext = currentEditorBaseKey();
-  if (state.editorContextKey !== editorContext) {
-    state.editorContextKey = editorContext;
-    state.editorLoadedKey = null;
-  }
   renderWorkspace();
   updateAvailability();
-  scheduleEditorRead();
+  syncEditorPresentation(editorKind);
 }
 
 function commandAvailable(command) {
@@ -576,11 +573,21 @@ function updateAvailability() {
   if (!catalog) return;
   const selected = catalog.selected();
   elements.execute.disabled = executing || !selected || !commandAvailable(selected.id);
+  elements.refresh.disabled = executing || !selected || !commandAvailable(selected.id);
+  for (const editor of [saveExportEditor, serialEditor, triggerEditor, searchEditor]) {
+    if (!editor?.refreshButton) continue;
+    const editorBusy = editor === serialEditor ? editor.controller.state.busy : editor.busy;
+    editor.refreshButton.disabled = executing
+      || editorBusy
+      || !selected
+      || !commandAvailable(selected.id);
+  }
   updateBasicAvailability();
 }
 
 function syncWorkspaceHeaderActions(editorKind) {
   const selected = catalog?.selected();
+  elements.refresh.hidden = !selected || editorKind !== null || !commandForm?.isSettingEditor();
   elements.execute.hidden = !selected || editorKind !== null;
   if (saveExportEditor?.refreshButton) {
     saveExportEditor.refreshButton.hidden = editorKind !== "save-export";
@@ -588,6 +595,13 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (serialEditor?.refreshButton) serialEditor.refreshButton.hidden = editorKind !== "serial";
   if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
   if (searchEditor?.refreshButton) searchEditor.refreshButton.hidden = editorKind !== "search";
+}
+
+function syncEditorPresentation(editorKind) {
+  if (editorKind === "save-export") saveExportEditor?.schedulePresentation();
+  if (editorKind === "serial") serialEditor?.schedulePresentation();
+  if (editorKind === "trigger") triggerEditor?.schedulePresentation();
+  if (editorKind === "search") searchEditor?.schedulePresentation();
 }
 
 function commandAction(command) {
@@ -653,52 +667,6 @@ function captureWorkspaceResult(job, submittedContext) {
 function isCurrentEditorJob(command, submittedContext) {
   return catalog?.selected()?.id === command
     && sameWorkspaceContext(currentWorkspaceContext(command), submittedContext);
-}
-
-function currentEditorBaseKey() {
-  const selected = catalog?.selected();
-  return selected ? workspaceContextKey(currentWorkspaceContext(selected.id)) : null;
-}
-
-function currentEditorKey() {
-  const base = currentEditorBaseKey();
-  return base ? `${base}:${commandForm?.querySignature() || "{}"}` : null;
-}
-
-function scheduleEditorRead() {
-  if (state.editorReadPending) return;
-  state.editorReadPending = true;
-  queueMicrotask(async () => {
-    state.editorReadPending = false;
-    const selected = catalog?.selected();
-    if (!selected) return;
-    const editorKind = editorKindFor(selected);
-    if (editorKind === "save-export") {
-      saveExportEditor?.scheduleRefresh();
-      return;
-    }
-    if (editorKind === "serial") {
-      serialEditor?.scheduleRefresh();
-      return;
-    }
-    if (editorKind === "trigger") {
-      triggerEditor?.scheduleRefresh();
-      return;
-    }
-    if (editorKind === "search") {
-      searchEditor?.scheduleRefresh();
-      return;
-    }
-    if (selected.presentation?.kind !== "setting") return;
-    if (!commandForm.isSettingEditor() || executing || !commandAvailable(selected.id)) return;
-    const editorKey = currentEditorKey();
-    if (!editorKey || state.editorLoadedKey === editorKey) return;
-    const parameters = commandForm.queryValues();
-    if (parameters === null) return;
-    state.editorLoadedKey = editorKey;
-    const job = await executeCommand(selected.id, parameters, { intent: "readback", editorKey });
-    if (!job || job.status !== "completed") state.editorLoadedKey = null;
-  });
 }
 
 function setExecutionStatus(state) {

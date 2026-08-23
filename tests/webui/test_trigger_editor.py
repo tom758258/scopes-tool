@@ -260,9 +260,9 @@ TRIGGER_EDITOR_HARNESS = r'''
 def test_trigger_editor_renders_active_group_and_scopes_readback_to_it() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        // Selecting an Edge command renders the whole Edge group and only reads it.
+        // Selecting an Edge command renders the whole group without reading it.
         const editor = buildEditor();
-        editor.scheduleRefresh();
+        editor.schedulePresentation();
         await settle();
 
         assert.equal(editor.groupHeading.textContent, "edge");
@@ -270,6 +270,11 @@ def test_trigger_editor_renders_active_group_and_scopes_readback_to_it() -> None
           "trigger-edge-slope",
           "trigger-edge-coupling",
         ]);
+        assert.deepEqual(submitted, []);
+
+        // Explicit Refresh reads only the active group.
+        editor.refreshButton.dispatch("click");
+        await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "trigger-edge-slope",
           "trigger-edge-coupling",
@@ -293,14 +298,14 @@ def test_trigger_editor_renders_active_group_and_scopes_readback_to_it() -> None
           "trigger-edge-coupling",
         ]);
 
-        // Switching to Runt replaces the section list and reads only Runt.
+        // Switching to Runt replaces the section list without reading it.
         submitted.length = 0;
         env.selectedId = "trigger-runt";
-        editor.scheduleRefresh();
+        editor.schedulePresentation();
         await settle();
         assert.equal(editor.groupHeading.textContent, "runt");
         assert.deepEqual(editor.entries.map((entry) => entry.id), ["trigger-runt"]);
-        assert.deepEqual(submitted.map((entry) => entry.command), ["trigger-runt"]);
+        assert.deepEqual(submitted, []);
         '''
     )
     completed = subprocess.run(
@@ -480,7 +485,7 @@ def test_trigger_editor_skips_unsupported_group_commands_and_keeps_projection_in
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_trigger_editor_rereads_only_the_changed_query_field_entry() -> None:
+def test_trigger_editor_query_field_change_is_passive_until_refresh() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         // trigger-edge-level defines source_channel as its query field.
@@ -501,19 +506,25 @@ def test_trigger_editor_rereads_only_the_changed_query_field_entry() -> None:
         ]);
         const levelEntry = editor.entries[0];
         const slopeEntry = editor.entries[1];
-        assert.equal(typeof levelEntry.form.renderOptions.onQueryFieldChange, "function");
+        assert.equal(levelEntry.form.renderOptions.onQueryFieldChange, undefined);
 
         submitted.length = 0;
         const slopeSyncCount = slopeEntry.form.syncCalls.length;
         levelEntry.form.queryValuesResult = { action: "query", source_channel: 2 };
-        levelEntry.form.renderOptions.onQueryFieldChange("source_channel");
         await settle();
 
-        // Only the changed entry is re-read; the sibling form is untouched.
-        assert.deepEqual(submitted.map((entry) => entry.command), ["trigger-edge-level"]);
+        assert.deepEqual(submitted, []);
+
+        // Explicit Refresh reads the group using the changed query selector.
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "trigger-edge-level",
+          "trigger-edge-slope",
+        ]);
         assert.equal(submitted[0].intent, "readback");
         assert.deepEqual(submitted[0].parameters, { action: "query", source_channel: 2 });
-        assert.equal(slopeEntry.form.syncCalls.length, slopeSyncCount);
+        assert.equal(slopeEntry.form.syncCalls.length, slopeSyncCount + 1);
         assert.deepEqual(levelEntry.form.syncCalls.at(-1), [submitted[0].job.job_id, true]);
         '''
     )

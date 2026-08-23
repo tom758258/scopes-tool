@@ -66,7 +66,7 @@ def test_save_export_editor_frontend_wiring_and_localization() -> None:
     assert "syncWorkspaceHeaderActions(editorKind);" in app_source
     assert "headerActions: elements.workspaceHeaderActions," in app_source
     assert "this.hooks.headerActions.append(this.refreshButton);" in editor_source
-    assert "saveExportEditor?.scheduleRefresh();" in app_source
+    assert "saveExportEditor?.schedulePresentation();" in app_source
     assert "saveExportEditor?.rerender();" in app_source
     assert "applyAll" not in editor_source
     assert "Apply All" not in editor_source
@@ -230,7 +230,14 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         const editor = buildEditor();
-        editor.scheduleRefresh();
+        editor.schedulePresentation();
+        await settle();
+        assert.deepEqual(submitted, []);
+        assert.deepEqual(editor.entries.map((entry) => entry.id), [
+          "save-pwd", "save-filename",
+        ]);
+
+        editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-pwd", "save-filename",
@@ -248,12 +255,15 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
 
         submitted.length = 0;
         env.selectedId = "save-image";
-        editor.scheduleRefresh();
+        editor.schedulePresentation();
         await settle();
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
           "save-image-format", "save-image-palette", "save-image-ink-saver",
           "save-image-factors", "save-image",
         ]);
+        assert.deepEqual(submitted, []);
+        editor.refreshButton.dispatch("click");
+        await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-image-format", "save-image-palette", "save-image-ink-saver",
           "save-image-factors",
@@ -262,12 +272,15 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
 
         submitted.length = 0;
         env.selectedId = "save-waveform";
-        editor.scheduleRefresh();
+        editor.schedulePresentation();
         await settle();
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
           "save-waveform-format", "save-waveform-length",
           "save-waveform-length-max", "save-waveform",
         ]);
+        assert.deepEqual(submitted, []);
+        editor.refreshButton.dispatch("click");
+        await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-waveform-format", "save-waveform-length", "save-waveform-length-max",
         ]);
@@ -279,7 +292,10 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
 
         submitted.length = 0;
         env.contextKey = "ctx-2";
-        editor.scheduleRefresh();
+        editor.schedulePresentation();
+        await settle();
+        assert.deepEqual(submitted, []);
+        editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-waveform-format", "save-waveform-length", "save-waveform-length-max",
