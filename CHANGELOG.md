@@ -15,6 +15,9 @@
 - Adds a dedicated mode-aware WebUI Serial editor for UART/I2C/SPI/CAN
   configuration and triggering with bus/display controls and a Serial Lister
   section for display/reference settings and host-side CSV export.
+- Adds a dedicated WebUI Trigger editor over the existing Trigger commands:
+  the Command Browser groups remain the only navigation, readback is scoped to
+  the active group, and each command keeps its own independent Apply.
 - Adds collapsible command groups to the WebUI Command Browser for dense
   categories while keeping the flat command list for ungrouped categories.
 - Adds the finite `measure-until`, `triggered-measure-loop`, and

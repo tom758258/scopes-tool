@@ -580,4 +580,6 @@ export const zhTW = {
   "serial.editor.unsupported": "儀器可辨識 {{protocol}}，但本編輯器不支援其詳細配置。請選擇 UART、I2C、SPI 或 CAN，再按「套用模式」進行設定。",
   "serial.editor.unavailable": "請先連接並識別支援的儀器，再設定串列。",
   "serial.editor.discardConfirm": "要捨棄未套用的串列變更嗎？",
+  "trigger.editor.title": "觸發編輯器",
+  "trigger.editor.description": "專屬觸發設定編輯器：選擇任一觸發命令會顯示整個所屬群組；每個命令仍保有獨立的讀取、編輯、套用流程。",
 };

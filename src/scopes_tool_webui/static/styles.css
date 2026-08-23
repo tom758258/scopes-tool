@@ -297,6 +297,15 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .serial-editor-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 .serial-editor-heading { font-size: 12px; font-weight: 700; }
 .serial-editor-section .command-form { padding-top: 0; }
+.trigger-editor { display: grid; gap: 14px; padding-top: 12px; }
+.trigger-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.trigger-editor-heading { font-size: 13px; font-weight: 700; }
+.trigger-editor-refresh { min-height: var(--control-h); }
+.trigger-editor-sections { display: grid; }
+.trigger-editor-section { display: grid; gap: 8px; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--line); }
+.trigger-editor-section:first-child { margin-top: 0; }
+.trigger-editor-section .command-form { padding-top: 0; }
+.trigger-editor-action { justify-self: start; min-height: var(--control-h); }
 .workspace-result { margin-top: 16px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); }
 .workspace-result > strong { display: block; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .workspace-result-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }

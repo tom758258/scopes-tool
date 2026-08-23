@@ -974,6 +974,7 @@ P3C_COMMANDS = (
             _p3c_field("slope", "enum", options=_P3C_TRIGGER_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
         ),
         group="edge",
+        editor="trigger",
     ),
     _p3c_action_command(
         "trigger-edge-source", "Trigger", "Edge trigger source", (
@@ -981,22 +982,24 @@ P3C_COMMANDS = (
             _p3c_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility({"field": "source", "equals": "analog-channel"}), required_if=_p3c_set_visibility({"field": "source", "equals": "analog-channel"})),
         ),
         group="edge",
+        editor="trigger",
     ),
-    _p3c_action_command("trigger-edge-slope", "Trigger", "Edge trigger slope", (_p3c_field("slope", "enum", options=_P3C_TRIGGER_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge"),
+    _p3c_action_command("trigger-edge-slope", "Trigger", "Edge trigger slope", (_p3c_field("slope", "enum", options=_P3C_TRIGGER_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge", editor="trigger"),
     _p3c_action_command(
         "trigger-edge-level", "Trigger", "Edge trigger level", (
             _p3c_field("source_channel", "integer", minimum=1, maximum=4),
             _p3c_field("level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
         ),
         group="edge",
+        editor="trigger",
     ),
-    _p3c_action_command("external-trigger-range", "Trigger", "External trigger range", (_p3c_field("range_volts", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external"),
-    _p3c_action_command("trigger-edge-external-level", "Trigger", "External trigger level", (_p3c_field("level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external"),
-    _p3c_action_command("external-trigger-probe", "Trigger", "External trigger probe", (_p3c_field("attenuation", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external"),
-    _p3c_action_command("external-trigger-units", "Trigger", "External trigger units", (_p3c_field("units", "enum", options=("volts", "amps"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external"),
-    {"id": "external-trigger-settings", "category": "Trigger", "label": "External trigger settings", "modes": ("live", "simulate"), "fields": (), "group": "external"},
-    _p3c_action_command("trigger-edge-coupling", "Trigger", "Edge trigger coupling", (_p3c_field("coupling", "enum", options=("ac", "dc", "lf-reject"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge"),
-    _p3c_action_command("trigger-edge-reject", "Trigger", "Edge trigger reject", (_p3c_field("reject", "enum", options=("off", "lf-reject", "hf-reject"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge"),
+    _p3c_action_command("external-trigger-range", "Trigger", "External trigger range", (_p3c_field("range_volts", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external", editor="trigger"),
+    _p3c_action_command("trigger-edge-external-level", "Trigger", "External trigger level", (_p3c_field("level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external", editor="trigger"),
+    _p3c_action_command("external-trigger-probe", "Trigger", "External trigger probe", (_p3c_field("attenuation", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external", editor="trigger"),
+    _p3c_action_command("external-trigger-units", "Trigger", "External trigger units", (_p3c_field("units", "enum", options=("volts", "amps"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external", editor="trigger"),
+    {"id": "external-trigger-settings", "category": "Trigger", "label": "External trigger settings", "modes": ("live", "simulate"), "fields": (), "group": "external", "editor": "trigger"},
+    _p3c_action_command("trigger-edge-coupling", "Trigger", "Edge trigger coupling", (_p3c_field("coupling", "enum", options=("ac", "dc", "lf-reject"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge", editor="trigger"),
+    _p3c_action_command("trigger-edge-reject", "Trigger", "Edge trigger reject", (_p3c_field("reject", "enum", options=("off", "lf-reject", "hf-reject"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge", editor="trigger"),
     _p3c_action_command(
         "trigger-pulse-width", "Trigger", "Glitch / pulse-width trigger", (
             _p3c_field("channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
@@ -1008,6 +1011,7 @@ P3C_COMMANDS = (
             _p3c_field("level", "number", visible_if=_p3c_set_visibility()),
         ),
         group="pulse-width",
+        editor="trigger",
     ),
     _p3c_action_command(
         "trigger-runt", "Trigger", "Runt trigger", (
@@ -1019,6 +1023,7 @@ P3C_COMMANDS = (
             _p3c_field("time_seconds", "number", visible_if=_p3c_set_visibility({"field": "qualifier", "in": ("greater-than", "less-than")}), required_if=_p3c_set_visibility({"field": "qualifier", "in": ("greater-than", "less-than")})),
         ),
         group="runt",
+        editor="trigger",
     ),
     _p3c_action_command(
         "trigger-transition", "Trigger", "Transition trigger", (
@@ -1030,6 +1035,7 @@ P3C_COMMANDS = (
             _p3c_field("time_seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
         ),
         group="transition",
+        editor="trigger",
     ),
     _p3c_action_command(
         "trigger-delay", "Trigger", "Delay trigger", (
@@ -1041,6 +1047,7 @@ P3C_COMMANDS = (
             _p3c_field("count", "integer", minimum=1, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
         ),
         group="delay",
+        editor="trigger",
     ),
     _p3c_action_command(
         "trigger-setup-hold", "Trigger", "Setup and hold trigger", (
@@ -1051,6 +1058,7 @@ P3C_COMMANDS = (
             _p3c_field("hold_time_seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
         ),
         group="setup-hold",
+        editor="trigger",
     ),
     _p3c_action_command(
         "trigger-edge-burst", "Trigger", "Nth edge burst trigger", (
@@ -1061,6 +1069,7 @@ P3C_COMMANDS = (
             _p3c_field("level", "number", visible_if=_p3c_set_visibility()),
         ),
         group="edge-burst",
+        editor="trigger",
     ),
     _p3c_action_command(
         "trigger-tv", "Trigger", "TV trigger", (
@@ -1071,13 +1080,14 @@ P3C_COMMANDS = (
             _p3c_field("line", "integer", minimum=1, visible_if=_p3c_set_visibility({"field": "mode", "in": _P3C_TV_LINE_MODES}), required_if=_p3c_set_visibility({"field": "mode", "in": _P3C_TV_LINE_MODES})),
         ),
         group="tv",
+        editor="trigger",
     ),
-    _p3c_action_command("trigger-pattern", "Trigger", "Pattern trigger", (_p3c_field("pattern", "string", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="pattern-or"),
-    _p3c_action_command("trigger-or", "Trigger", "OR trigger", (_p3c_field("pattern", "string", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="pattern-or"),
-    _p3c_action_command("trigger-sweep", "Trigger", "Trigger sweep", (_p3c_field("mode", "enum", options=("auto", "normal"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common"),
-    _p3c_action_command("trigger-noise-reject", "Trigger", "Noise reject", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common"),
-    _p3c_action_command("trigger-hf-reject", "Trigger", "HF reject", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common"),
-    _p3c_action_command("trigger-holdoff", "Trigger", "Trigger holdoff", (_p3c_field("seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common"),
+    _p3c_action_command("trigger-pattern", "Trigger", "Pattern trigger", (_p3c_field("pattern", "string", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="pattern-or", editor="trigger"),
+    _p3c_action_command("trigger-or", "Trigger", "OR trigger", (_p3c_field("pattern", "string", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="pattern-or", editor="trigger"),
+    _p3c_action_command("trigger-sweep", "Trigger", "Trigger sweep", (_p3c_field("mode", "enum", options=("auto", "normal"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
+    _p3c_action_command("trigger-noise-reject", "Trigger", "Noise reject", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
+    _p3c_action_command("trigger-hf-reject", "Trigger", "HF reject", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
+    _p3c_action_command("trigger-holdoff", "Trigger", "Trigger holdoff", (_p3c_field("seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
 
     _p3c_action_command("search-state", "Search", "Search state", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="basic"),
     _p3c_action_command("search-mode", "Search", "Search mode", (_p3c_field("mode", "enum", options=SEARCH_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="basic"),

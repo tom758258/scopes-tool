@@ -13,8 +13,9 @@ import {
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
-import { SerialEditor, SERIAL_EDITOR_COMMANDS } from "/static/serial-editor.js";
+import { SerialEditor } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
+import { TriggerEditor } from "/static/trigger-editor.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
 const elements = {
@@ -49,6 +50,7 @@ const elements = {
   form: document.querySelector("#command-form"),
   formHeading: document.querySelector("#form-heading"),
   serialEditor: document.querySelector("#serial-editor"),
+  triggerEditor: document.querySelector("#trigger-editor"),
   execute: document.querySelector("#execute-button"),
   cancel: document.querySelector("#cancel-button"),
   executionStatus: document.querySelector("#execution-status"),
@@ -72,6 +74,7 @@ let context = state.executionContext;
 let catalog;
 let commandForm;
 let serialEditor;
+let triggerEditor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -81,6 +84,16 @@ let workspaceExecutionState = { key: "device.ready" };
 let liveCommandState = { key: "device.ready" };
 let pendingResourceLiveSupport = null;
 let updateBasicAvailability = () => {};
+
+const EDITOR_RENDERERS = {
+  serial: () => serialEditor,
+  trigger: () => triggerEditor,
+};
+
+function editorKindFor(command) {
+  const kind = command?.editor;
+  return kind && EDITOR_RENDERERS[kind] ? kind : null;
+}
 
 initializeI18n();
 renderLocaleToggle();
@@ -114,6 +127,15 @@ async function initialize() {
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     modelInfo: serialEditorModelInfo,
+  });
+  triggerEditor = new TriggerEditor(elements.triggerEditor, catalog, {
+    executeCommand,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
   });
   catalog.render();
 
@@ -455,6 +477,7 @@ document.addEventListener("localechange", () => {
     syncCommandSelection(commandDraft);
   }
   serialEditor?.rerender();
+  triggerEditor?.rerender();
   renderCurrentResult();
 });
 
@@ -462,7 +485,8 @@ function syncCommandSelection(draft = null) {
   if (!catalog || !commandForm) return;
   const selected = catalog.selected();
   state.selectedCommand = selected?.id || null;
-  const editorOwned = SERIAL_EDITOR_COMMANDS.includes(selected?.id);
+  const editorKind = editorKindFor(selected);
+  const editorOwned = editorKind !== null;
   commandForm.render(selected, {
     draft,
     onDirty: () => updateAvailability(),
@@ -473,16 +497,17 @@ function syncCommandSelection(draft = null) {
   });
   elements.formHeading.hidden = editorOwned;
   elements.form.hidden = editorOwned;
-  elements.serialEditor.hidden = !editorOwned;
+  elements.serialEditor.hidden = editorKind !== "serial";
+  elements.triggerEditor.hidden = editorKind !== "trigger";
   elements.execute.hidden = editorOwned;
   elements.selectedCommand.textContent = selected
     ? editorOwned
-      ? translate("serial.editor.title")
+      ? translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
     : translate("commands.selectCommand");
   elements.commandDescription.textContent = selected
     ? editorOwned
-      ? translate("serial.editor.description")
+      ? translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
     : translate("commands.noDescription");
   const supportReason = selected ? catalog.supportReason(selected) : "";
@@ -603,8 +628,13 @@ function scheduleEditorRead() {
     state.editorReadPending = false;
     const selected = catalog?.selected();
     if (!selected) return;
-    if (SERIAL_EDITOR_COMMANDS.includes(selected.id)) {
+    const editorKind = editorKindFor(selected);
+    if (editorKind === "serial") {
       serialEditor?.scheduleRefresh();
+      return;
+    }
+    if (editorKind === "trigger") {
+      triggerEditor?.scheduleRefresh();
       return;
     }
     if (selected.presentation?.kind !== "setting") return;

@@ -584,4 +584,6 @@ export const en = {
   "serial.editor.unsupported": "{{protocol}} is recognized by the instrument, but detailed configuration is not available in this editor. Select UART, I2C, SPI, or CAN and choose Apply Mode to configure it.",
   "serial.editor.unavailable": "Identify a supported instrument to configure Serial.",
   "serial.editor.discardConfirm": "Discard unapplied Serial changes?",
+  "trigger.editor.title": "Trigger editor",
+  "trigger.editor.description": "Dedicated trigger settings editor: selecting any Trigger command shows its whole group; every command keeps its own independent read-edit-Apply workflow.",
 };

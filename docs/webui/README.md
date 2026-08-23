@@ -97,9 +97,9 @@ The Command workbench exposes:
   `dvm-current`, `dvm-query`
 - FFT / MATH: basic `fft`, `math-display`, `math-vertical`, `math-operator`,
   `math-composite-source`, `math-clear`
-- Trigger: Edge, external, glitch/pulse-width, runt, transition, delay,
-  setup/hold, edge-burst, TV, pattern, OR, sweep, reject, coupling, and
-  holdoff commands
+- Trigger: a dedicated Trigger editor over the existing Edge, external,
+  glitch/pulse-width, runt, transition, delay, setup/hold, edge-burst, TV,
+  pattern/OR, sweep, reject, coupling, and holdoff commands
 - Search: basic Search state/mode/event/count and UART/I2C/SPI/CAN serial
   Search commands
 - Serial: a dedicated mode-aware Serial editor covering bus selection, Serial
@@ -126,7 +126,27 @@ group first.
 
 Grouping is presentation only: it does not change Core command semantics,
 model or capability gating, or the metadata-driven forms, and it does not add
-dedicated Trigger, Search, Save/Export, or Workflow editors.
+dedicated Search, Save/Export, or Workflow editors.
+
+Selecting a Trigger command opens the dedicated Trigger editor instead of a
+plain command form. The Command Browser remains the only Trigger navigation:
+Category → Group → Commands. The editor does not add a second set of tabs.
+Selecting any command inside a group opens that whole group on the right (for
+example, selecting any Edge command shows Edge trigger, source, slope, level,
+coupling, and reject together; selecting Runt shows only Runt), and the group
+label above the sections names the group being edited. The editor presents the
+group's existing settings for editing; it does not report or change which
+trigger type the instrument currently uses. Readback is scoped to the active
+group: entering or refreshing a group queries only that group's setting
+commands, and switching groups reads the new group instead. Each child command
+keeps its own metadata-driven form and its own independent Apply over the
+existing WebUI command; there is no Apply All, no transaction, and no merged
+payload. Informational commands such as `external-trigger-settings` keep their
+explicit Read action. Switching commands or groups discards unapplied edits
+without confirmation, and manual Refresh re-reads the active group while
+keeping unapplied edits. Model capability presentation continues to come from
+the shared Core capability projection; unsupported commands stay disabled in
+the Command Browser and are omitted from the group view.
 
 Selecting a Serial bus/mode/display/configuration/trigger/lister command opens
 the dedicated Serial editor instead of a plain command form. The editor

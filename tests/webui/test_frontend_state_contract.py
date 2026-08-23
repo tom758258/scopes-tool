@@ -163,22 +163,30 @@ def test_serial_editor_replaces_generic_form_and_auto_read_for_editor_commands()
     html = read_static("index.html")
     editor_source = read_static("serial-editor.js")
 
-    assert 'import { SerialEditor, SERIAL_EDITOR_COMMANDS } from "/static/serial-editor.js";' in app_source
+    assert 'import { SerialEditor } from "/static/serial-editor.js";' in app_source
     assert 'id="form-heading"' in html
     assert 'id="serial-editor" class="serial-editor" hidden' in html
+    routing = extract_function(app_source, "function editorKindFor(command)")
+    assert "command?.editor" in routing
+    assert "EDITOR_RENDERERS[kind]" in routing
+    renderer_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
+    assert 'serial: () => serialEditor,' in renderer_map
+    assert 'trigger: () => triggerEditor,' in renderer_map
     schedule_guard = extract_function(app_source, "function scheduleEditorRead()")
-    assert "SERIAL_EDITOR_COMMANDS.includes(selected.id)" in schedule_guard
+    assert "editorKindFor(selected)" in schedule_guard
     assert "serialEditor?.scheduleRefresh();" in schedule_guard
     generic_readback = "if (selected.presentation?.kind !== \"setting\") return;"
     assert schedule_guard.index(generic_readback) > schedule_guard.index(
-        "SERIAL_EDITOR_COMMANDS.includes(selected.id)",
+        "editorKindFor(selected)",
     )
     assert "elements.formHeading.hidden = editorOwned;" in app_source
     assert "elements.form.hidden = editorOwned;" in app_source
-    assert "elements.serialEditor.hidden = !editorOwned;" in app_source
+    assert 'elements.serialEditor.hidden = editorKind !== "serial";' in app_source
     assert "elements.execute.hidden = editorOwned;" in app_source
+    assert "elements.serialEditor.hidden = !editorOwned;" not in app_source
+    assert "SERIAL_EDITOR_COMMANDS" not in app_source
     assert "serialEditor?.rerender();" in app_source
-    assert 'translate("serial.editor.title")' in app_source
+    assert 'translate(`${editorKind}.editor.title`)' in app_source
     for command_id in (
         "serial-mode",
         "serial-display",
