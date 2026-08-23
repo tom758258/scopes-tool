@@ -8,12 +8,24 @@ export const SERIAL_EDITOR_COMMANDS = Object.freeze([
   "serial-i2c",
   "serial-spi",
   "serial-can",
+  "serial-trigger-uart",
+  "serial-trigger-i2c",
+  "serial-trigger-spi",
+  "serial-trigger-can",
+  "serial-lister-query",
+  "serial-lister-display",
+  "serial-lister-reference",
+  "serial-lister-export",
 ]);
 
 const EDITOR_PROTOCOLS = ["uart", "i2c", "spi", "can"];
 
 export function configCommandFor(mode) {
   return EDITOR_PROTOCOLS.includes(mode) ? `serial-${mode}` : null;
+}
+
+export function triggerCommandFor(mode) {
+  return EDITOR_PROTOCOLS.includes(mode) ? `serial-trigger-${mode}` : null;
 }
 
 export function busOptions(maxBus) {
@@ -40,10 +52,22 @@ export function createSerialEditorController({
   let rawMode = null;
   let dirtyConfig = false;
   let dirtyDisplay = false;
+  let dirtyTrigger = false;
+  let dirtyListerDisplay = false;
+  let dirtyListerReference = false;
   let busyCount = 0;
   let refreshQueued = false;
   let formEpoch = 0;
-  const jobs = { mode: null, display: null, config: null };
+  let listerEpoch = 0;
+  let listerLoaded = false;
+  const jobs = {
+    mode: null,
+    display: null,
+    config: null,
+    trigger: null,
+    listerDisplay: null,
+    listerReference: null,
+  };
 
   const state = () => ({
     bus,
@@ -54,11 +78,16 @@ export function createSerialEditorController({
     rawMode,
     currentLabel: displayModeLabel(confirmedMode, rawMode),
     configCommand: configCommandFor(confirmedMode),
+    triggerCommand: triggerCommandFor(confirmedMode),
     supported: configCommandFor(confirmedMode) !== null,
     dirtyConfig,
     dirtyDisplay,
+    dirtyTrigger,
+    dirtyListerDisplay,
+    dirtyListerReference,
     busy: busyCount > 0,
     formEpoch,
+    listerEpoch,
     jobs: { ...jobs },
   });
 
@@ -84,17 +113,38 @@ export function createSerialEditorController({
     return isCompleted(job) ? job : null;
   }
 
+  async function readProtocolSections() {
+    const configCommand = configCommandFor(confirmedMode);
+    jobs.config = null;
+    jobs.trigger = null;
+    if (!configCommand) {
+      notifyState();
+      return;
+    }
+    const configJob = await runQuery(configCommand, { action: "query", bus });
+    jobs.config = configJob ? { job: configJob, applied: false } : null;
+    notifyState();
+    const triggerCommand = triggerCommandFor(confirmedMode);
+    const triggerJob = await runQuery(triggerCommand, { action: "query", bus });
+    jobs.trigger = triggerJob ? { job: triggerJob, applied: false } : null;
+    notifyState();
+  }
+
   async function readDisplayAndConfig() {
     const displayJob = await runQuery("serial-display", { action: "query", bus });
     jobs.display = displayJob ? { job: displayJob, applied: false } : null;
     notifyState();
-    const configCommand = configCommandFor(confirmedMode);
-    if (configCommand) {
-      const configJob = await runQuery(configCommand, { action: "query", bus });
-      jobs.config = configJob ? { job: configJob, applied: false } : null;
-    } else {
-      jobs.config = null;
-    }
+    await readProtocolSections();
+  }
+
+  async function loadListerOnce() {
+    if (listerLoaded) return;
+    const displayJob = await runQuery("serial-lister-display", { action: "query" });
+    jobs.listerDisplay = displayJob ? { job: displayJob, applied: false } : null;
+    notifyState();
+    const referenceJob = await runQuery("serial-lister-reference", { action: "query" });
+    jobs.listerReference = referenceJob ? { job: referenceJob, applied: false } : null;
+    listerLoaded = Boolean(displayJob && referenceJob);
     notifyState();
   }
 
@@ -107,6 +157,7 @@ export function createSerialEditorController({
     syncSelectedProtocol();
     notifyState();
     await readDisplayAndConfig();
+    await loadListerOnce();
   }
 
   async function refresh() {
@@ -160,10 +211,18 @@ export function createSerialEditorController({
       rawMode = null;
       dirtyConfig = false;
       dirtyDisplay = false;
+      dirtyTrigger = false;
+      dirtyListerDisplay = false;
+      dirtyListerReference = false;
       jobs.mode = null;
       jobs.display = null;
       jobs.config = null;
+      jobs.trigger = null;
+      jobs.listerDisplay = null;
+      jobs.listerReference = null;
+      listerLoaded = false;
       formEpoch += 1;
+      listerEpoch += 1;
       notifyState();
     },
     scheduleRefresh() {
@@ -173,7 +232,7 @@ export function createSerialEditorController({
       const candidate = Number(nextBus);
       if (busyCount > 0 || candidate === bus) return;
       if (!busOptions(maxBus).includes(candidate)) return;
-      if ((dirtyConfig || dirtyDisplay) && !confirmDiscard()) {
+      if ((dirtyConfig || dirtyDisplay || dirtyTrigger) && !confirmDiscard()) {
         notifyState();
         return;
       }
@@ -182,9 +241,11 @@ export function createSerialEditorController({
       rawMode = null;
       dirtyConfig = false;
       dirtyDisplay = false;
+      dirtyTrigger = false;
       jobs.mode = null;
       jobs.display = null;
       jobs.config = null;
+      jobs.trigger = null;
       formEpoch += 1;
       notifyState();
       scheduleRefresh();
@@ -197,15 +258,24 @@ export function createSerialEditorController({
     setDirty(kind, value) {
       if (kind === "config") dirtyConfig = Boolean(value);
       if (kind === "display") dirtyDisplay = Boolean(value);
+      if (kind === "trigger") dirtyTrigger = Boolean(value);
+      if (kind === "listerDisplay") dirtyListerDisplay = Boolean(value);
+      if (kind === "listerReference") dirtyListerReference = Boolean(value);
       notifyState();
     },
     isDirty() {
-      return dirtyConfig || dirtyDisplay;
+      return (
+        dirtyConfig
+        || dirtyDisplay
+        || dirtyTrigger
+        || dirtyListerDisplay
+        || dirtyListerReference
+      );
     },
     applyMode: async function applyMode() {
       if (busyCount > 0 || !available() || !selectedProtocol) return null;
       if (selectedProtocol === confirmedMode) return null;
-      if (dirtyConfig && !confirmDiscard()) return null;
+      if ((dirtyConfig || dirtyTrigger) && !confirmDiscard()) return null;
       const target = selectedProtocol;
       beginBusy();
       try {
@@ -220,11 +290,12 @@ export function createSerialEditorController({
             confirmedMode = target;
             rawMode = reported.rawMode;
             dirtyConfig = false;
+            dirtyTrigger = false;
             jobs.config = null;
+            jobs.trigger = null;
             jobs.mode = { job, applied: true };
             notifyState();
-            const configJob = await runQuery(`serial-${target}`, { action: "query", bus });
-            jobs.config = configJob ? { job: configJob, applied: false } : null;
+            await readProtocolSections();
           } else {
             await readBusState();
           }
@@ -269,7 +340,9 @@ export function createSerialEditorController({
           confirmedMode = reported.mode;
           rawMode = reported.rawMode;
           dirtyConfig = false;
+          dirtyTrigger = false;
           jobs.config = null;
+          jobs.trigger = null;
           syncSelectedProtocol();
           notifyState();
           await readDisplayAndConfig();
@@ -286,6 +359,86 @@ export function createSerialEditorController({
           notifyState();
         }
         return job;
+      } finally {
+        endBusy();
+      }
+    },
+    applyTrigger: async function applyTrigger(values) {
+      const command = triggerCommandFor(confirmedMode);
+      if (busyCount > 0 || !command || !available()) return null;
+      const payload = values || {};
+      if (!Object.keys(payload).length) return null;
+      beginBusy();
+      try {
+        const modeJob = await runQuery("serial-mode", { action: "query", bus });
+        if (!modeJob) return null;
+        const reported = modeFromJob(modeJob);
+        if (reported.mode !== confirmedMode) {
+          confirmedMode = reported.mode;
+          rawMode = reported.rawMode;
+          dirtyConfig = false;
+          dirtyTrigger = false;
+          jobs.config = null;
+          jobs.trigger = null;
+          syncSelectedProtocol();
+          notifyState();
+          await readDisplayAndConfig();
+          return modeJob;
+        }
+        const job = await execute(
+          command,
+          { action: "set", bus, ...payload },
+          { intent: "apply" },
+        );
+        if (isCompleted(job)) {
+          dirtyTrigger = false;
+          jobs.trigger = { job, applied: true };
+          notifyState();
+        }
+        return job;
+      } finally {
+        endBusy();
+      }
+    },
+    applyListerSetting: async function applyListerSetting(kind, values) {
+      const command = kind === "reference"
+        ? "serial-lister-reference"
+        : "serial-lister-display";
+      const dirtyFlag = kind === "reference"
+        ? () => { dirtyListerReference = false; }
+        : () => { dirtyListerDisplay = false; };
+      const slot = kind === "reference" ? "listerReference" : "listerDisplay";
+      if (busyCount > 0 || !available()) return null;
+      const payload = values || {};
+      if (!Object.keys(payload).length) return null;
+      beginBusy();
+      try {
+        const job = await execute(
+          command,
+          { action: "set", ...payload },
+          { intent: "apply" },
+        );
+        if (isCompleted(job)) {
+          dirtyFlag();
+          jobs[slot] = { job, applied: true };
+          notifyState();
+        }
+        return job;
+      } finally {
+        endBusy();
+      }
+    },
+    exportLister: async function exportLister(output) {
+      if (busyCount > 0 || !available()) return null;
+      const filename = typeof output === "string" ? output.trim() : "";
+      if (!filename) return null;
+      beginBusy();
+      try {
+        return await execute(
+          "serial-lister-export",
+          { output: filename },
+          {},
+        );
       } finally {
         endBusy();
       }
@@ -314,11 +467,19 @@ export class SerialEditor {
       available: () => hooks.isAvailable(),
     });
     this.controller.onStateChange((stateSnapshot) => this.render(stateSnapshot));
-    this.syncedJobs = { display: null, config: null };
+    this.syncedJobs = {
+      display: null,
+      config: null,
+      trigger: null,
+      listerDisplay: null,
+      listerReference: null,
+    };
     this.renderedBusLimit = null;
     this.renderedProtocols = null;
     this.renderedConfigCommand = undefined;
+    this.renderedTriggerCommand = undefined;
     this.renderedFormEpoch = null;
+    this.renderedListerEpoch = null;
     this.buildDom();
   }
 
@@ -327,6 +488,7 @@ export class SerialEditor {
     this.displayForm = new CommandForm(this.displayFormContainer, this.catalog);
     this.displayFormReady = false;
     this.clearConfigForm();
+    this.clearTriggerForm();
     this.syncedJobs.display = null;
   }
 
@@ -401,8 +563,80 @@ export class SerialEditor {
       this.applyConfigButton,
     );
 
-    this.container.append(topRow, this.refreshButton, displaySection, configSection);
+    this.triggerFormContainer = document.createElement("div");
+    this.applyTriggerButton = this.actionButton(
+      translate("serial.editor.applyTrigger"),
+      () => void this.submitTrigger(),
+    );
+    this.triggerSection = this.section(
+      "serial.editor.triggerSection",
+      this.triggerFormContainer,
+      this.applyTriggerButton,
+    );
+
+    const listerSection = this.buildListerSection();
+
+    this.container.append(
+      topRow,
+      this.refreshButton,
+      displaySection,
+      configSection,
+      this.triggerSection,
+      listerSection,
+    );
     this.displayForm = new CommandForm(this.displayFormContainer, this.catalog);
+  }
+
+  actionButton(labelText, onClick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary serial-editor-action";
+    button.textContent = labelText;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  buildListerSection() {
+    const root = document.createElement("div");
+    root.className = "serial-editor-section";
+    const heading = document.createElement("strong");
+    heading.className = "serial-editor-heading";
+    heading.dataset.i18nKey = "serial.editor.listerSection";
+    heading.textContent = translate("serial.editor.listerSection");
+    root.append(heading);
+
+    const addRow = (container, button) => {
+      const row = document.createElement("div");
+      row.className = "serial-editor-row";
+      row.append(container, button);
+      root.append(row);
+    };
+
+    this.listerDisplayFormContainer = document.createElement("div");
+    this.applyListerDisplayButton = this.actionButton(
+      translate("actions.apply"),
+      () => void this.submitListerSetting("display"),
+    );
+    addRow(this.listerDisplayFormContainer, this.applyListerDisplayButton);
+
+    this.listerReferenceFormContainer = document.createElement("div");
+    this.applyListerReferenceButton = this.actionButton(
+      translate("actions.apply"),
+      () => void this.submitListerSetting("reference"),
+    );
+    addRow(this.listerReferenceFormContainer, this.applyListerReferenceButton);
+
+    this.exportFormContainer = document.createElement("div");
+    this.exportButton = this.actionButton(
+      translate("serial.editor.export"),
+      () => void this.submitExport(),
+    );
+    addRow(this.exportFormContainer, this.exportButton);
+
+    this.listerDisplayForm = new CommandForm(this.listerDisplayFormContainer, this.catalog);
+    this.listerReferenceForm = new CommandForm(this.listerReferenceFormContainer, this.catalog);
+    this.exportForm = new CommandForm(this.exportFormContainer, this.catalog);
+    return root;
   }
 
   labeledField(labelKey, input) {
@@ -461,6 +695,52 @@ export class SerialEditor {
     this.syncedJobs.config = null;
   }
 
+  ensureTriggerForm(commandId) {
+    if (this.renderedTriggerCommand === commandId) return;
+    this.renderedTriggerCommand = commandId;
+    this.triggerFormContainer.replaceChildren();
+    this.triggerForm = new CommandForm(this.triggerFormContainer, this.catalog);
+    const definition = this.editorDefinition(commandId);
+    if (!definition) return;
+    this.triggerForm.render(definition, {
+      onDirty: () => this.controller.setDirty("trigger", this.triggerForm.isDirty()),
+    });
+  }
+
+  clearTriggerForm() {
+    this.renderedTriggerCommand = null;
+    this.triggerFormContainer?.replaceChildren();
+    this.triggerForm = null;
+    this.syncedJobs.trigger = null;
+  }
+
+  rebuildListerForms() {
+    this.listerDisplayFormContainer.replaceChildren();
+    this.listerReferenceFormContainer.replaceChildren();
+    this.exportFormContainer.replaceChildren();
+    this.listerDisplayForm = new CommandForm(this.listerDisplayFormContainer, this.catalog);
+    this.listerReferenceForm = new CommandForm(this.listerReferenceFormContainer, this.catalog);
+    this.exportForm = new CommandForm(this.exportFormContainer, this.catalog);
+    const displayDefinition = this.editorDefinition("serial-lister-display");
+    if (displayDefinition) {
+      this.listerDisplayForm.render(displayDefinition, {
+        onDirty: () => this.controller.setDirty("listerDisplay", this.listerDisplayForm.isDirty()),
+      });
+    }
+    const referenceDefinition = this.editorDefinition("serial-lister-reference");
+    if (referenceDefinition) {
+      this.listerReferenceForm.render(referenceDefinition, {
+        onDirty: () => this.controller.setDirty("listerReference", this.listerReferenceForm.isDirty()),
+      });
+    }
+    const exportDefinition = this.editorDefinition("serial-lister-export");
+    if (exportDefinition) {
+      this.exportForm.render(exportDefinition, {});
+    }
+    this.syncedJobs.listerDisplay = null;
+    this.syncedJobs.listerReference = null;
+  }
+
   async submitDisplay() {
     if (!this.displayForm || this.controller.state.busy) return;
     const values = this.displayForm.values();
@@ -477,6 +757,34 @@ export class SerialEditor {
     delete values.action;
     if (!Object.keys(values).length) return;
     await this.controller.applyConfig(values);
+  }
+
+  async submitTrigger() {
+    if (!this.triggerForm || this.controller.state.busy) return;
+    const values = this.triggerForm.values();
+    if (values === null) return;
+    delete values.action;
+    if (!Object.keys(values).length) return;
+    await this.controller.applyTrigger(values);
+  }
+
+  async submitListerSetting(kind) {
+    const form = kind === "reference"
+      ? this.listerReferenceForm
+      : this.listerDisplayForm;
+    if (!form || this.controller.state.busy) return;
+    const values = form.values();
+    if (values === null) return;
+    delete values.action;
+    if (!Object.keys(values).length) return;
+    await this.controller.applyListerSetting(kind, values);
+  }
+
+  async submitExport() {
+    if (!this.exportForm || this.controller.state.busy) return;
+    const values = this.exportForm.values();
+    if (values === null) return;
+    await this.controller.exportLister(values.output);
   }
 
   syncFormSlot(form, slotName, entries) {
@@ -528,6 +836,10 @@ export class SerialEditor {
       this.renderedFormEpoch = stateSnapshot.formEpoch;
       this.rebuildForms();
     }
+    if (this.renderedListerEpoch !== stateSnapshot.listerEpoch) {
+      this.renderedListerEpoch = stateSnapshot.listerEpoch;
+      this.rebuildListerForms();
+    }
 
     this.container.querySelectorAll("[data-i18n-key]").forEach((node) => {
       node.textContent = translate(node.dataset.i18nKey);
@@ -536,6 +848,10 @@ export class SerialEditor {
     this.refreshButton.textContent = translate("serial.editor.refresh");
     this.applyDisplayButton.textContent = translate("serial.editor.applyDisplay");
     this.applyConfigButton.textContent = translate("serial.editor.applyConfiguration");
+    this.applyTriggerButton.textContent = translate("serial.editor.applyTrigger");
+    this.applyListerDisplayButton.textContent = translate("actions.apply");
+    this.applyListerReferenceButton.textContent = translate("actions.apply");
+    this.exportButton.textContent = translate("serial.editor.export");
 
     if (this.renderedBusLimit !== stateSnapshot.maxBus) {
       this.renderedBusLimit = stateSnapshot.maxBus;
@@ -597,10 +913,29 @@ export class SerialEditor {
 
     this.applyDisplayButton.disabled = disabled;
     this.applyConfigButton.disabled = disabled || !stateSnapshot.supported;
+    this.applyTriggerButton.disabled = disabled || !stateSnapshot.supported;
+    this.applyListerDisplayButton.disabled = disabled;
+    this.applyListerReferenceButton.disabled = disabled;
+    this.exportButton.disabled = disabled;
 
     this.syncFormSlot(this.displayForm, "display", stateSnapshot.jobs);
     if (!showUnsupported) {
       this.syncFormSlot(this.configForm, "config", stateSnapshot.jobs);
     }
+    if (stateSnapshot.supported) {
+      this.triggerSection.hidden = false;
+      this.ensureTriggerForm(stateSnapshot.triggerCommand);
+      this.triggerForm?.setDisabled(disabled);
+      this.syncFormSlot(this.triggerForm, "trigger", stateSnapshot.jobs);
+    } else {
+      this.triggerSection.hidden = true;
+      this.clearTriggerForm();
+    }
+
+    this.listerDisplayForm?.setDisabled(disabled);
+    this.listerReferenceForm?.setDisabled(disabled);
+    this.exportForm?.setDisabled(disabled);
+    this.syncFormSlot(this.listerDisplayForm, "listerDisplay", stateSnapshot.jobs);
+    this.syncFormSlot(this.listerReferenceForm, "listerReference", stateSnapshot.jobs);
   }
 }

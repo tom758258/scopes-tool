@@ -102,10 +102,10 @@ The Command workbench exposes:
   holdoff commands
 - Search: basic Search state/mode/event/count and UART/I2C/SPI/CAN serial
   Search commands
-- Serial: a dedicated mode-aware Serial editor for bus selection, Serial Mode,
-  Serial Display, and UART/I2C/SPI/CAN configuration, plus `serial-query`,
-  UART/I2C/SPI/CAN serial triggers, and Serial Lister query/display/reference/
-  export commands
+- Serial: a dedicated mode-aware Serial editor covering bus selection, Serial
+  Mode, Serial Display, UART/I2C/SPI/CAN configuration and triggers, and a
+  protocol-independent Serial Lister section (display, reference, and
+  host-side export), plus `serial-query`
 - Segmented Memory: `segmented-memory` and `segmented-capture`
 - Workflow: `capture-batch`, `measure-log`, `measure-until`,
   `triggered-measure-loop`, and `triggered-capture-series`
@@ -128,21 +128,27 @@ Grouping is presentation only: it does not change Core command semantics,
 model or capability gating, or the metadata-driven forms, and it does not add
 dedicated Trigger, Search, Save/Export, or Workflow editors.
 
-Selecting a Serial bus/mode/display/configuration command opens the dedicated
-Serial editor instead of a plain command form. The editor projects the model's
-serial bus count and available protocols from Core capabilities, shows the
-current protocol reported by the instrument, and offers only UART, I2C, SPI,
-and CAN with an explicit Apply Mode action. Configuration queries run only
-after `serial-mode` readback confirms the bus is in that protocol; when the
-bus reports another recognized protocol such as LIN, FlexRay, or A429, the
-editor shows the current protocol with an unsupported-configuration note
-instead of issuing protocol-specific reads. The Protocol selector follows the
-protocol confirmed by the latest readback. Mode, Display, and each protocol
-configuration remain separate Apply operations over the existing commands.
-Switching Bus asks for confirmation before discarding any unapplied edits,
-and applying a different protocol asks before discarding unapplied
-Configuration edits. A configuration Apply first re-checks `serial-mode` and
-skips the write when the instrument no longer reports the expected protocol.
+Selecting a Serial bus/mode/display/configuration/trigger/lister command opens
+the dedicated Serial editor instead of a plain command form. The editor
+projects the model's serial bus count and available protocols from Core
+capabilities, shows the current protocol reported by the instrument, and
+offers only UART, I2C, SPI, and CAN with an explicit Apply Mode action.
+Configuration and Trigger queries run only after `serial-mode` readback
+confirms the bus is in that protocol; when the bus reports another recognized
+protocol such as LIN, FlexRay, or A429, the editor shows the current protocol
+with an unsupported-configuration note instead of issuing protocol-specific
+reads. The Protocol selector follows the protocol confirmed by the latest
+readback. Mode, Display, each protocol Configuration, and the matching
+Trigger remain separate Apply operations over the existing commands; an
+Apply Trigger re-checks `serial-mode` first and skips stale writes the same
+way as configuration applies. Switching Bus asks for confirmation before
+discarding any unapplied Display/Configuration/Trigger edits, and applying a
+different protocol asks before discarding old-protocol Configuration or
+Trigger edits. A configuration Apply first re-checks `serial-mode` and skips
+the write when the instrument no longer reports the expected protocol. The
+Serial Lister section is independent of protocol and Bus: Lister display and
+reference settings apply through their existing commands, and Export performs
+the existing host-side raw CSV retrieval with its registered job artifact.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field

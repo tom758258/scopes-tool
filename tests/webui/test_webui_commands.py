@@ -962,7 +962,7 @@ def test_command_catalog_group_metadata_contract() -> None:
         assert "group" not in commands[command_id], command_id
 
 
-def test_serial_editor_marks_b1_configuration_commands() -> None:
+def test_serial_editor_marks_dedicated_editor_commands() -> None:
     commands = {
         entry["id"]: entry
         for entry in TestClient(app).get("/api/commands").json()
@@ -975,18 +975,27 @@ def test_serial_editor_marks_b1_configuration_commands() -> None:
         "serial-i2c",
         "serial-spi",
         "serial-can",
+        "serial-trigger-uart",
+        "serial-trigger-i2c",
+        "serial-trigger-spi",
+        "serial-trigger-can",
     ):
         entry = commands[command_id]
         assert entry["editor"] == "serial", command_id
         assert entry["presentation"]["kind"] == "setting", command_id
         assert entry["presentation"]["query_fields"] == ["bus"], command_id
 
-    for command_id in (
-        "serial-query",
-        "serial-search-uart",
-        "serial-trigger-uart",
-        "serial-lister-query",
-    ):
+    for command_id in ("serial-lister-display", "serial-lister-reference"):
+        entry = commands[command_id]
+        assert entry["editor"] == "serial", command_id
+        assert entry["presentation"]["kind"] == "setting", command_id
+        assert entry["presentation"]["query_fields"] == [], command_id
+
+    for command_id in ("serial-lister-query", "serial-lister-export"):
+        entry = commands[command_id]
+        assert entry["editor"] == "serial", command_id
+
+    for command_id in ("serial-query", "serial-search-uart"):
         assert "editor" not in commands[command_id], command_id
 
 
