@@ -948,6 +948,22 @@ def test_command_catalog_exposes_required_field_contracts() -> None:
     assert "default" not in capture_batch_fields["channels"]
 
 
+def test_workflow_timeout_catalog_uses_exclusive_lower_bounds() -> None:
+    commands = {
+        entry["id"]: entry
+        for entry in TestClient(app).get("/api/commands").json()
+    }
+
+    for command_id, field_name in (
+        ("measure-until", "timeout_seconds"),
+        ("triggered-measure-loop", "trigger_timeout_seconds"),
+        ("triggered-capture-series", "trigger_timeout_seconds"),
+    ):
+        fields = {field["name"]: field for field in commands[command_id]["fields"]}
+        assert fields[field_name]["exclusive_minimum"] == 0
+        assert "minimum" not in fields[field_name]
+
+
 def test_command_catalog_group_metadata_contract() -> None:
     commands = {
         entry["id"]: entry
@@ -1173,6 +1189,60 @@ def test_workflow_measurement_validation_matches_catalog_choices() -> None:
         }
     )
     assert accepted_tuple["parameters"]["items"] == "vpp,frequency"
+
+
+@pytest.mark.parametrize(
+    ("command", "timeout_name", "parameters"),
+    (
+        (
+            "measure-until",
+            "timeout_seconds",
+            {"channel": 1, "item": "vpp", "operator": "gt", "threshold": 0},
+        ),
+        (
+            "triggered-measure-loop",
+            "trigger_timeout_seconds",
+            {"count": 1},
+        ),
+        (
+            "triggered-capture-series",
+            "trigger_timeout_seconds",
+            {"channels": "1", "count": 1},
+        ),
+    ),
+)
+def test_workflow_timeout_zero_is_rejected_before_queueing_in_every_mode(
+    monkeypatch,
+    command: str,
+    timeout_name: str,
+    parameters: dict[str, object],
+) -> None:
+    client = TestClient(app)
+    monkeypatch.setattr(
+        app_module.job_manager,
+        "submit",
+        lambda _request: pytest.fail("invalid Workflow timeout was queued"),
+    )
+
+    for mode in ("live", "simulate", "dry-run"):
+        payload = {
+            "command": command,
+            "mode": mode,
+            "parameters": {**parameters, timeout_name: 0},
+        }
+        if mode == "live":
+            payload["resource"] = "USB::TEST::INSTR"
+        else:
+            payload["model_id"] = MODEL_ID
+
+        response = client.post("/api/jobs", json=payload)
+        assert response.status_code == 400
+        assert response.json()["detail"] == f"{timeout_name} must be greater than 0"
+
+        accepted = validate_job_request(
+            {**payload, "parameters": {**parameters, timeout_name: 1e-12}}
+        )
+        assert accepted["parameters"][timeout_name] == 1e-12
 
 
 def test_representative_p3c_simulated_commands_complete() -> None:

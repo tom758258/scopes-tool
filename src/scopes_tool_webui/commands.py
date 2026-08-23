@@ -1202,18 +1202,18 @@ P3C_COMMANDS = (
     {
         "id": "measure-until", "category": "Workflow", "label": "Measure until", "modes": ("live", "simulate", "dry-run"),
         "group": "measurement",
-        "fields": (_p3c_field("channel", "integer", minimum=1, maximum=4, default=1), _p3c_field("item", "enum", options=_DIRECT_MEASUREMENT_ITEMS, default="vpp"), _p3c_field("operator", "enum", options=("gt", "gte", "lt", "lte"), required=True), _p3c_field("threshold", "number", required=True), _p3c_field("timeout_seconds", "number", minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=1)),
+        "fields": (_p3c_field("channel", "integer", minimum=1, maximum=4, default=1), _p3c_field("item", "enum", options=_DIRECT_MEASUREMENT_ITEMS, default="vpp"), _p3c_field("operator", "enum", options=("gt", "gte", "lt", "lte"), required=True), _p3c_field("threshold", "number", required=True), _p3c_field("timeout_seconds", "number", exclusive_minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=1)),
     },
     {
         "id": "triggered-measure-loop", "category": "Workflow", "label": "Triggered measurement loop", "modes": ("live", "simulate", "dry-run"),
         "group": "triggered",
         "editor": "workflow",
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", options=PAIR_MEASUREMENT_ITEMS, default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", options=PAIR_MEASUREMENT_ITEMS, default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
         "id": "triggered-capture-series", "category": "Workflow", "label": "Triggered capture series", "modes": ("live", "simulate", "dry-run"),
         "group": "triggered",
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", minimum=0, required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
     },
 )
 
@@ -1541,6 +1541,7 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise WebUIRequestError("live execution requires an explicit VISA resource")
 
     normalized = dict(parameters)
+    _validate_exclusive_minimum_fields(command, normalized)
     if mode == "live" and command != "list-resources":
         _validate_parameter_shapes(command, normalized, mode)
     else:
@@ -2976,6 +2977,21 @@ def _validate_parameter_shapes(
             raise WebUIRequestError(f"{name} must be at least {field['minimum']}")
         if "maximum" in field and parsed > field["maximum"]:
             raise WebUIRequestError(f"{name} must be at most {field['maximum']}")
+
+
+def _validate_exclusive_minimum_fields(
+    command: str,
+    parameters: Mapping[str, Any],
+) -> None:
+    fields = {field["name"]: field for field in _COMMAND_BY_ID[command]["fields"]}
+    for name, value in parameters.items():
+        exclusive_minimum = fields[name].get("exclusive_minimum")
+        if exclusive_minimum is None:
+            continue
+        if _finite_number(value, name) <= exclusive_minimum:
+            raise WebUIRequestError(
+                f"{name} must be greater than {exclusive_minimum}"
+            )
 
 
 def _validate_parameters(

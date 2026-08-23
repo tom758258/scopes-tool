@@ -2630,6 +2630,39 @@ def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
           valuesFor(input("value", "number", "-1.25e2"), input("count", "integer", "19")),
           { value: -125, count: 19 },
         );
+
+        globalThis.document = {
+          createElement: (tag) => ({
+            tagName: tag.toUpperCase(),
+            children: [],
+            dataset: {},
+            value: "",
+            type: "",
+            required: false,
+            customValidity: "",
+            append(...nodes) { this.children.push(...nodes); },
+            setCustomValidity(message) { this.customValidity = message; },
+            checkValidity() { return this.customValidity === ""; },
+            reportValidity() { this.reported = true; return false; },
+            closest: () => null,
+          }),
+        };
+        const renderedForm = new globalThis.formApi.CommandForm({}, null);
+        const wrapper = renderedForm.field({
+          name: "timeout_seconds",
+          type: "number",
+          exclusive_minimum: 0,
+          required: true,
+        });
+        const timeout = wrapper.children[1];
+        assert.equal(timeout.dataset.exclusiveMinimum, "0");
+        timeout.value = "0";
+        assert.equal(valuesFor(timeout), null);
+        assert.equal(timeout.customValidity, "form.greaterThan");
+        assert.equal(timeout.reported, true);
+
+        timeout.value = "1e-12";
+        assert.deepEqual(valuesFor(timeout), { timeout_seconds: 1e-12 });
         '''
     )
     completed = subprocess.run(
@@ -2648,6 +2681,7 @@ def test_command_help_and_common_result_labels_are_localized() -> None:
     for key in (
         "description.action.apply",
         "description.timebase-scale",
+        "form.greaterThan",
         "help.pairs",
         "results.field.seconds_per_division",
         "results.field.planned_scpi",

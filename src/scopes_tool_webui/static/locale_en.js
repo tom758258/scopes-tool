@@ -162,6 +162,7 @@ export const en = {
   "form.selectValue": "Select a value",
   "form.invalidNumber": "Enter a complete finite number.",
   "form.invalidInteger": "Enter a complete integer.",
+  "form.greaterThan": "Enter a value greater than {{value}}.",
   "enum.query": "Query",
   "enum.set": "Set",
   "enum.enable": "Enable",

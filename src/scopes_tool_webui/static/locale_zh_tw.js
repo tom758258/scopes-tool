@@ -163,6 +163,7 @@ export const zhTW = {
   "form.selectValue": "請選擇值",
   "form.invalidNumber": "請輸入完整且有限的數字。",
   "form.invalidInteger": "請輸入完整的整數。",
+  "form.greaterThan": "請輸入大於 {{value}} 的數值。",
   "enum.query": "查詢",
   "enum.set": "設定",
   "enum.enable": "啟用",

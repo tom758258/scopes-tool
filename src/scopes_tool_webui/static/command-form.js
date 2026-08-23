@@ -263,6 +263,9 @@ export class CommandForm {
       if (field.type === "integer") input.step = "1";
       if (field.type === "number") input.step = "any";
       if (field.minimum !== undefined) input.min = field.minimum;
+      if (field.exclusive_minimum !== undefined) {
+        input.dataset.exclusiveMinimum = String(field.exclusive_minimum);
+      }
       if (field.maximum !== undefined) input.max = field.maximum;
     }
     input.dataset.field = field.name;
@@ -335,6 +338,16 @@ export class CommandForm {
           element.setCustomValidity?.(translate(
             element.dataset.type === "integer" ? "form.invalidInteger" : "form.invalidNumber",
           ));
+          element.reportValidity?.();
+        }
+        return null;
+      }
+      if (element.dataset.exclusiveMinimum !== undefined
+          && parsed <= Number(element.dataset.exclusiveMinimum)) {
+        if (report) {
+          element.setCustomValidity?.(translate("form.greaterThan", {
+            value: element.dataset.exclusiveMinimum,
+          }));
           element.reportValidity?.();
         }
         return null;

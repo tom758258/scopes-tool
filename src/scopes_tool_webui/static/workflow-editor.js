@@ -310,6 +310,9 @@ export class WorkflowEditor {
     input.type = "number";
     input.step = field.type === "integer" ? "1" : "any";
     if (field.minimum !== undefined) input.min = String(field.minimum);
+    if (field.exclusive_minimum !== undefined) {
+      input.dataset.exclusiveMinimum = String(field.exclusive_minimum);
+    }
     if (field.maximum !== undefined) input.max = String(field.maximum);
     input.required = field.required === true;
     input.value = value || "";
@@ -354,6 +357,12 @@ export class WorkflowEditor {
     ]) {
       const input = this.controls[name];
       input?.setCustomValidity?.("");
+      if (input && input.value !== "" && input.dataset.exclusiveMinimum !== undefined
+          && Number(input.value) <= Number(input.dataset.exclusiveMinimum)) {
+        input.setCustomValidity(translate("form.greaterThan", {
+          value: input.dataset.exclusiveMinimum,
+        }));
+      }
       if (input && !input.checkValidity()) {
         input.reportValidity?.();
         return null;

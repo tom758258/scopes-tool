@@ -172,7 +172,7 @@ WORKFLOW_EDITOR_HARNESS = r'''
     const triggeredFields = fields.filter((field) => !["duration_seconds", "stop_on_error"].includes(field.name)).map(
       (field) => field.name === "interval_seconds" ? { ...field, default: 0 } : field,
     ).concat([
-      { name: "trigger_timeout_seconds", type: "number", minimum: 0, required: true },
+      { name: "trigger_timeout_seconds", type: "number", exclusive_minimum: 0, required: true },
     ]).map((field) => field.name === "count" ? { ...field, required: true } : field);
     const definitions = [
       { id: "measure-log", editor: "workflow", fields },
@@ -261,8 +261,16 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
         await settle();
         assert.equal(submissions.length, 1);
         editor.controls.count.value = "3";
-        editor.controls.trigger_timeout_seconds.value = "4.5";
+        editor.controls.trigger_timeout_seconds.value = "0";
         editor.addPairButton.dispatch("click");
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.equal(
+          editor.controls.trigger_timeout_seconds.customValidity,
+          "form.greaterThan",
+        );
+
+        editor.controls.trigger_timeout_seconds.value = "4.5";
         await editor.submit();
         assert.equal(submissions.length, 2);
         assert.equal(submissions[1].command, "triggered-measure-loop");
