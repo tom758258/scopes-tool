@@ -940,8 +940,8 @@ def test_command_catalog_group_metadata_contract() -> None:
         "trigger-or": "pattern-or",
         "search-state": "basic",
         "search-event": "event",
-        "serial-search-uart": "uart",
-        "serial-search-can": "can",
+        "serial-search-uart": "serial",
+        "serial-search-can": "serial",
         "serial-mode": "bus",
         "serial-uart": "uart",
         "serial-trigger-i2c": "i2c",
@@ -995,8 +995,7 @@ def test_serial_editor_marks_dedicated_editor_commands() -> None:
         entry = commands[command_id]
         assert entry["editor"] == "serial", command_id
 
-    for command_id in ("serial-query", "serial-search-uart"):
-        assert "editor" not in commands[command_id], command_id
+    assert "editor" not in commands["serial-query"]
 
 
 def test_catalog_group_keys_stay_scoped_and_localized() -> None:
@@ -1010,7 +1009,8 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
     assert {entry["group"] for entry in grouped} == {
         "edge", "common", "external", "pulse-width", "runt", "transition",
         "delay", "setup-hold", "edge-burst", "tv", "pattern-or",
-        "basic", "event", "uart", "i2c", "spi", "can",
+        "basic", "event", "serial",
+        "uart", "i2c", "spi", "can",
         "bus", "lister",
         "path-filename", "image", "waveform",
         "measurement", "capture", "triggered",

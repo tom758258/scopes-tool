@@ -13,6 +13,7 @@ import {
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
+import { SearchEditor } from "/static/search-editor.js";
 import { SerialEditor } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
 import { TriggerEditor } from "/static/trigger-editor.js";
@@ -51,6 +52,7 @@ const elements = {
   formHeading: document.querySelector("#form-heading"),
   serialEditor: document.querySelector("#serial-editor"),
   triggerEditor: document.querySelector("#trigger-editor"),
+  searchEditor: document.querySelector("#search-editor"),
   execute: document.querySelector("#execute-button"),
   cancel: document.querySelector("#cancel-button"),
   executionStatus: document.querySelector("#execution-status"),
@@ -75,6 +77,7 @@ let catalog;
 let commandForm;
 let serialEditor;
 let triggerEditor;
+let searchEditor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -88,6 +91,7 @@ let updateBasicAvailability = () => {};
 const EDITOR_RENDERERS = {
   serial: () => serialEditor,
   trigger: () => triggerEditor,
+  search: () => searchEditor,
 };
 
 function editorKindFor(command) {
@@ -129,6 +133,15 @@ async function initialize() {
     modelInfo: serialEditorModelInfo,
   });
   triggerEditor = new TriggerEditor(elements.triggerEditor, catalog, {
+    executeCommand,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  searchEditor = new SearchEditor(elements.searchEditor, catalog, {
     executeCommand,
     isAvailable: () => {
       const selected = catalog.selected();
@@ -478,6 +491,7 @@ document.addEventListener("localechange", () => {
   }
   serialEditor?.rerender();
   triggerEditor?.rerender();
+  searchEditor?.rerender();
   renderCurrentResult();
 });
 
@@ -499,6 +513,7 @@ function syncCommandSelection(draft = null) {
   elements.form.hidden = editorOwned;
   elements.serialEditor.hidden = editorKind !== "serial";
   elements.triggerEditor.hidden = editorKind !== "trigger";
+  elements.searchEditor.hidden = editorKind !== "search";
   elements.execute.hidden = editorOwned;
   elements.selectedCommand.textContent = selected
     ? editorOwned
@@ -635,6 +650,10 @@ function scheduleEditorRead() {
     }
     if (editorKind === "trigger") {
       triggerEditor?.scheduleRefresh();
+      return;
+    }
+    if (editorKind === "search") {
+      searchEditor?.scheduleRefresh();
       return;
     }
     if (selected.presentation?.kind !== "setting") return;

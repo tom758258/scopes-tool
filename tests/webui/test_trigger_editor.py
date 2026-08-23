@@ -95,7 +95,6 @@ def test_command_catalog_exposes_editor_metadata_for_browser_routing() -> None:
     assert catalog["external-trigger-settings"]["editor"] == "trigger"
     assert catalog["serial-mode"]["editor"] == "serial"
     assert "editor" not in catalog["channel-scale"]
-    assert "editor" not in catalog["search-state"]
 
 
 def test_trigger_channel_fields_follow_the_existing_model_projection() -> None:
@@ -129,7 +128,6 @@ def test_app_routes_editors_by_command_metadata() -> None:
     routing_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
     assert 'serial: () => serialEditor,' in routing_map
     assert 'trigger: () => triggerEditor,' in routing_map
-    assert "search" not in routing_map
     routing = extract_function(app_source, "function editorKindFor(command)")
     assert "EDITOR_RENDERERS[kind]" in routing
     assert 'elements.triggerEditor.hidden = editorKind !== "trigger";' in app_source

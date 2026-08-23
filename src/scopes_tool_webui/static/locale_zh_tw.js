@@ -409,6 +409,7 @@ export const zhTW = {
   "group.i2c": "I2C",
   "group.spi": "SPI",
   "group.can": "CAN",
+  "group.serial": "串列",
   "group.bus": "匯流排",
   "group.lister": "Lister",
   "group.path-filename": "路徑與檔名",
@@ -582,4 +583,9 @@ export const zhTW = {
   "serial.editor.discardConfirm": "要捨棄未套用的串列變更嗎？",
   "trigger.editor.title": "觸發編輯器",
   "trigger.editor.description": "專屬觸發設定編輯器：選擇任一觸發命令會顯示整個所屬群組；每個命令仍保有獨立的讀取、編輯、套用流程。",
+  "search.editor.title": "搜尋編輯器",
+  "search.editor.description": "專屬搜尋編輯器：Basic 狀態／模式／計數、能力閘控的事件導覽，以及含匯流排與協定選擇的串列搜尋。",
+  "search.editor.protocol": "通訊協定",
+  "search.editor.eventUnavailable": "此儀器不支援搜尋事件導覽。",
+  "search.editor.serialUnavailable": "請先連接並識別具備串列搜尋匯流排的支援儀器，再設定串列搜尋。",
 };

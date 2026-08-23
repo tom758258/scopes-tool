@@ -100,8 +100,9 @@ The Command workbench exposes:
 - Trigger: a dedicated Trigger editor over the existing Edge, external,
   glitch/pulse-width, runt, transition, delay, setup/hold, edge-burst, TV,
   pattern/OR, sweep, reject, coupling, and holdoff commands
-- Search: basic Search state/mode/event/count and UART/I2C/SPI/CAN serial
-  Search commands
+- Search: a dedicated Search editor covering Basic Search state, mode, and
+  count, capability-gated Search event navigation, and Serial Search over
+  UART/I2C/SPI/CAN with Bus and Protocol selection
 - Serial: a dedicated mode-aware Serial editor covering bus selection, Serial
   Mode, Serial Display, UART/I2C/SPI/CAN configuration and triggers, and a
   protocol-independent Serial Lister section (display, reference, and
@@ -126,7 +127,7 @@ group first.
 
 Grouping is presentation only: it does not change Core command semantics,
 model or capability gating, or the metadata-driven forms, and it does not add
-dedicated Search, Save/Export, or Workflow editors.
+dedicated Save/Export or Workflow editors.
 
 Selecting a Trigger command opens the dedicated Trigger editor instead of a
 plain command form. The Command Browser remains the only Trigger navigation:
@@ -151,6 +152,28 @@ without confirmation, and manual Refresh re-reads the active group while
 keeping unapplied edits. Model capability presentation continues to come from
 the shared Core capability projection; unsupported commands stay disabled in
 the Command Browser and are omitted from the group view.
+
+Selecting a Search command opens the dedicated Search editor instead of a
+plain command form. The Command Browser groups remain Basic, Event, and
+Serial; the editor adds no second tab layer. Basic shows Search State and
+Search Mode as independent read-edit-Apply settings plus a read-only Search
+Count that is refreshed with the group, and entering Basic queries only these
+three commands. Event exposes capability-gated event navigation: models
+without Search event navigation show an unavailable note instead of controls,
+a reported current event of 0 displays verbatim as readback, and Apply keeps
+the existing Core validation rather than turning a displayed 0 into an editable
+target. Selecting any Serial Search command opens the Serial Search view with
+a Bus selector projected from the model's serial bus count and a Protocol
+selector whose UART/I2C/SPI/CAN availability comes from the existing model
+projection; the clicked command chooses the initial protocol, and switching
+Bus or Protocol discards unapplied edits and re-queries only the active
+protocol. A Serial Search Apply submits exactly one existing `serial-search-*`
+write with the selected bus and the metadata-driven criteria form — no separate
+`search-state`/`search-mode` writes and no Serial decode mode recheck — then
+runs `search-state`, `search-mode`, and the active criteria query again for
+reconciliation. There is no Apply All, transaction, frontend capability
+database, or SCPI generation in the editor, and non-Serial Search criteria
+editors remain out of scope.
 
 Selecting a Serial bus/mode/display/configuration/trigger/lister command opens
 the dedicated Serial editor instead of a plain command form. The editor

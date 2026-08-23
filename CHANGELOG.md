@@ -19,6 +19,10 @@
   the Command Browser groups remain the only navigation, readback is scoped to
   the active group, each command keeps its own independent Apply, and applies
   are followed by an active-group readback.
+- Adds a dedicated WebUI Search editor over the existing Search commands with
+  Basic state/mode/count, capability-gated event navigation, and Serial Search
+  Bus/Protocol selection where each Apply stays a single existing
+  `serial-search-*` command followed by query-only reconciliation.
 - Adds collapsible command groups to the WebUI Command Browser for dense
   categories while keeping the flat command list for ungrouped categories.
 - Adds the finite `measure-until`, `triggered-measure-loop`, and

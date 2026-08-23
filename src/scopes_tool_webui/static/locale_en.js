@@ -409,6 +409,7 @@ export const en = {
   "group.i2c": "I2C",
   "group.spi": "SPI",
   "group.can": "CAN",
+  "group.serial": "Serial",
   "group.bus": "Bus",
   "group.lister": "Lister",
   "group.path-filename": "Path / Filename",
@@ -586,4 +587,9 @@ export const en = {
   "serial.editor.discardConfirm": "Discard unapplied Serial changes?",
   "trigger.editor.title": "Trigger editor",
   "trigger.editor.description": "Dedicated trigger settings editor: selecting any Trigger command shows its whole group; every command keeps its own independent read-edit-Apply workflow.",
+  "search.editor.title": "Search editor",
+  "search.editor.description": "Dedicated Search editor: Basic state, mode, and count, capability-gated event navigation, and Serial Search with bus and protocol selection.",
+  "search.editor.protocol": "Protocol",
+  "search.editor.eventUnavailable": "Search event navigation is not available for this instrument.",
+  "search.editor.serialUnavailable": "Identify a supported instrument with Serial Search buses to configure Serial Search.",
 };

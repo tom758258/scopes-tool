@@ -1089,10 +1089,10 @@ P3C_COMMANDS = (
     _p3c_action_command("trigger-hf-reject", "Trigger", "HF reject", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
     _p3c_action_command("trigger-holdoff", "Trigger", "Trigger holdoff", (_p3c_field("seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
 
-    _p3c_action_command("search-state", "Search", "Search state", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="basic"),
-    _p3c_action_command("search-mode", "Search", "Search mode", (_p3c_field("mode", "enum", options=SEARCH_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="basic"),
-    {"id": "search-count", "category": "Search", "label": "Search count", "modes": ("live", "simulate"), "fields": (), "group": "basic"},
-    _p3c_action_command("search-event", "Search", "Search event", (_p3c_field("event", "integer", minimum=1, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="event"),
+    _p3c_action_command("search-state", "Search", "Search state", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="basic", editor="search"),
+    _p3c_action_command("search-mode", "Search", "Search mode", (_p3c_field("mode", "enum", options=SEARCH_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="basic", editor="search"),
+    {"id": "search-count", "category": "Search", "label": "Search count", "modes": ("live", "simulate"), "fields": (), "group": "basic", "editor": "search"},
+    _p3c_action_command("search-event", "Search", "Search event", (_p3c_field("event", "integer", minimum=1, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="event", editor="search"),
     _p3c_action_command(
         "serial-search-uart", "Search", "UART serial search", (
             _p3c_field("bus", "integer", minimum=1),
@@ -1100,7 +1100,8 @@ P3C_COMMANDS = (
             _p3c_field("data", "integer", visible_if=_p3c_set_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
             _p3c_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_p3c_set_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
         ),
-        group="uart",
+        group="serial",
+        editor="search",
     ),
     _p3c_action_command(
         "serial-search-i2c", "Search", "I2C serial search", (
@@ -1111,7 +1112,8 @@ P3C_COMMANDS = (
             _p3c_field("data2", "integer", visible_if=_p3c_set_visibility({"field": "mode", "in": ("read7-data2", "write7-data2")})),
             _p3c_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_p3c_set_visibility({"field": "mode", "equals": "eeprom-read"})),
         ),
-        group="i2c",
+        group="serial",
+        editor="search",
     ),
     _p3c_action_command(
         "serial-search-spi", "Search", "SPI serial search", (
@@ -1120,7 +1122,8 @@ P3C_COMMANDS = (
             _p3c_field("data", "string", visible_if=_p3c_set_visibility()),
             _p3c_field("width", "integer", minimum=1, visible_if=_p3c_set_visibility()),
         ),
-        group="spi",
+        group="serial",
+        editor="search",
     ),
     _p3c_action_command(
         "serial-search-can", "Search", "CAN serial search", (
@@ -1131,7 +1134,8 @@ P3C_COMMANDS = (
             _p3c_field("id", "string", visible_if=_p3c_set_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
             _p3c_field("id_mode", "enum", options=CAN_SEARCH_ID_MODES, visible_if=_p3c_set_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
         ),
-        group="can",
+        group="serial",
+        editor="search",
     ),
 
     {
