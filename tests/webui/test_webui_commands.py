@@ -543,12 +543,25 @@ def test_job_submission_returns_503_during_manager_shutdown(monkeypatch) -> None
 def test_running_cancel_api_stays_running_until_cleanup(monkeypatch) -> None:
     manager = JobManager()
     started = threading.Event()
+    cancellation_observed = threading.Event()
     release = threading.Event()
 
-    def blocking_execute(*_args, **_kwargs):
+    def blocking_execute(*_args, artifact_dir, stop_requested, **_kwargs):
         started.set()
+        deadline = time.monotonic() + 2
+        while not stop_requested():
+            if time.monotonic() >= deadline:
+                raise AssertionError("cancellation was not observed")
+            time.sleep(0.01)
+        artifact_path = artifact_dir / "waveform_0001.csv"
+        artifact_path.write_text("time,CH1\n0,0\n", encoding="utf-8")
+        cancellation_observed.set()
         release.wait(timeout=2)
-        return {"exit_code": 0, "result": {"ok": True}, "artifacts": []}
+        return {
+            "exit_code": 130,
+            "result": {"status": "cancelled", "completed_count": 1},
+            "artifacts": [{"kind": "csv", "path": str(artifact_path)}],
+        }
 
     monkeypatch.setattr("scopes_tool_webui.jobs.execute_command", blocking_execute)
     monkeypatch.setattr(app_module, "job_manager", manager)
@@ -556,10 +569,16 @@ def test_running_cancel_api_stays_running_until_cleanup(monkeypatch) -> None:
     response = client.post(
         "/api/jobs",
         json={
-            "command": "identify",
+            "command": "capture-batch",
             "mode": "simulate",
             "model_id": MODEL_ID,
-            "parameters": {},
+            "parameters": {
+                "channels": "1",
+                "points": 1000,
+                "format": "byte",
+                "count": 2,
+                "interval_seconds": 0,
+            },
         },
     )
     job_id = response.json()["job_id"]
@@ -568,11 +587,22 @@ def test_running_cancel_api_stays_running_until_cleanup(monkeypatch) -> None:
         cancelled = client.post(f"/api/jobs/{job_id}/cancel")
         assert cancelled.status_code == 200
         assert cancelled.json()["status"] == "running"
+        assert cancellation_observed.wait(timeout=2)
         assert client.get(f"/api/jobs/{job_id}").json()["status"] == "running"
 
         release.set()
         terminal = wait_for_job(client, job_id)
         assert terminal["status"] == "cancelled"
+        assert terminal["result"]["result"] == {
+            "status": "cancelled",
+            "completed_count": 1,
+        }
+        assert [artifact["name"] for artifact in terminal["artifacts"]] == [
+            "waveform_0001.csv"
+        ]
+        artifact = client.get(terminal["artifacts"][0]["url"])
+        assert artifact.status_code == 200
+        assert artifact.text.splitlines() == ["time,CH1", "0,0"]
     finally:
         release.set()
         asyncio.run(manager.shutdown(timeout_s=2))
