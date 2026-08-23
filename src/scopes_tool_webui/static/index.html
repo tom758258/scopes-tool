@@ -137,7 +137,10 @@
               <p id="command-description" class="command-description"></p>
               <p id="command-support-reason" class="command-support-reason" hidden></p>
             </div>
-            <span id="execution-status" class="badge badge-idle" data-i18n="device.ready">Ready</span>
+            <div id="workspace-header-actions" class="workspace-header-actions">
+              <button id="execute-button" class="primary" type="button" data-i18n="actions.run" hidden>Run</button>
+              <button id="cancel-button" class="secondary hidden" type="button" data-i18n="commands.cancel">Cancel job</button>
+            </div>
           </div>
           <div class="workspace-content">
             <div class="form-heading" id="form-heading"><h3 data-i18n="commands.parameters">Parameters</h3></div>
@@ -146,10 +149,6 @@
             <div id="serial-editor" class="serial-editor" hidden></div>
             <div id="trigger-editor" class="trigger-editor" hidden></div>
             <div id="search-editor" class="search-editor" hidden></div>
-            <div class="command-actions">
-              <button id="execute-button" class="primary" type="button" data-i18n="actions.run">Run</button>
-              <button id="cancel-button" class="secondary hidden" type="button" data-i18n="commands.cancel">Cancel job</button>
-            </div>
             <section id="identity-workspace-result" class="workspace-result" hidden>
               <strong data-i18n="workspace.latestSuccessfulResult">Latest successful result</strong>
               <div id="identity-workspace-result-content" class="workspace-result-content" aria-live="polite"></div>

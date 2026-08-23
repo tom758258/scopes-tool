@@ -182,7 +182,7 @@ def test_serial_editor_replaces_generic_form_and_auto_read_for_editor_commands()
     assert "elements.formHeading.hidden = editorOwned;" in app_source
     assert "elements.form.hidden = editorOwned;" in app_source
     assert 'elements.serialEditor.hidden = editorKind !== "serial";' in app_source
-    assert "elements.execute.hidden = editorOwned;" in app_source
+    assert "syncWorkspaceHeaderActions(editorKind);" in app_source
     assert "elements.serialEditor.hidden = !editorOwned;" not in app_source
     assert "SERIAL_EDITOR_COMMANDS" not in app_source
     assert "serialEditor?.rerender();" in app_source
@@ -2101,18 +2101,94 @@ def test_scan_failure_is_included_in_the_compact_device_presentation() -> None:
     assert "this.elements.summary.title = summary;" in source
 
 
-def test_workspace_and_live_command_states_have_separate_owners() -> None:
+def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
+    source = read_static("app.js")
+    html = read_static("index.html")
+    styles = read_static("styles.css")
+
+    panel_header = html.split('<div class="panel-title">', 1)[1].split(
+        '<div class="workspace-content">', 1,
+    )[0]
+    workspace_body = html.split('<div class="workspace-content">', 1)[1].split(
+        '</section>\n      </div>', 1,
+    )[0]
+    assert 'id="execution-status"' not in html
+    assert "workspaceExecutionState" not in source
+    assert "renderExecutionStatus" not in source
+    assert 'id="command-state"' in html
+    assert 'id="workspace-header-actions"' in panel_header
+    assert 'id="execute-button"' in panel_header
+    assert 'id="cancel-button"' in panel_header
+    assert 'id="execute-button"' not in workspace_body
+    assert 'id="cancel-button"' not in workspace_body
+    assert ".workspace-header-actions" in styles
+
+    selection = extract_function(source, "function syncWorkspaceHeaderActions(editorKind)")
+    assert "elements.execute.hidden = !selected || editorKind !== null;" in selection
+    for kind, editor in (
+        ("save-export", "saveExportEditor"),
+        ("serial", "serialEditor"),
+        ("trigger", "triggerEditor"),
+        ("search", "searchEditor"),
+    ):
+        assert f'{editor}.refreshButton.hidden = editorKind !== "{kind}";' in selection
+
+    availability = extract_function(source, "function updateAvailability()")
+    assert "elements.execute.disabled = executing || !selected || !commandAvailable(selected.id);" in availability
+    execute_handler = source.split('elements.execute.addEventListener("click"', 1)[1].split(
+        'elements.cancel.addEventListener("click"', 1,
+    )[0]
+    assert "const parameters = commandForm.values();" in execute_handler
+    assert "executeCommand(selected.id, parameters" in execute_handler
+    assert 'intent: commandForm.isSettingEditor() ? "apply" : "command"' in execute_handler
+
+    cancel_handler = source.split('elements.cancel.addEventListener("click"', 1)[1].split(
+        "\n  });", 1,
+    )[0]
+    assert "await requestCancel(currentJobId);" in cancel_handler
+    assert 'elements.cancel.classList.remove("hidden");' in source
+    assert 'elements.cancel.classList.add("hidden");' in source
+
+
+def test_global_command_state_keeps_the_existing_execution_lifecycle() -> None:
     source = read_static("app.js")
 
-    assert "let workspaceExecutionState = { key: \"device.ready\" };" in source
     assert "let liveCommandState = { key: \"device.ready\" };" in source
-    assert "workspaceExecutionState = { ...state };" in source
-    assert "liveCommandState = { ...state };" in source
-    command_state_handler = source.split("function setCommandState(state) {", 1)[1].split("\n}", 1)[0]
-    assert "liveCommandState = { ...state };" in command_state_handler
-    assert "workspaceExecutionState =" not in command_state_handler
-    assert "renderExecutionStatus();" in source
+    execution_state_handler = source.split("function setExecutionStatus(state) {", 1)[1].split(
+        "\n}", 1,
+    )[0]
+    assert "liveCommandState = { ...state };" in execution_state_handler
+    assert "renderLiveData();" in execution_state_handler
+    assert 'setExecutionStatus({ status: "queued" });' in source
+    assert "setExecutionStatus({ status: updated.status });" in source
+    assert "setExecutionStatus({ status: job.status });" in source
+    assert 'setExecutionStatus({ status: "failed" });' in source
     assert "const commandStatus = liveCommandState.status;" in source
+
+
+def test_dedicated_editor_refresh_actions_use_the_workspace_header() -> None:
+    app_source = read_static("app.js")
+    editor_sources = {
+        "save-export": read_static("save-export-editor.js"),
+        "serial": read_static("serial-editor.js"),
+        "trigger": read_static("trigger-editor.js"),
+        "search": read_static("search-editor.js"),
+    }
+
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 4
+    for editor_source in editor_sources.values():
+        assert "this.hooks.headerActions.append(this.refreshButton);" in editor_source
+        assert "this.refreshButton.hidden = true;" in editor_source
+    assert "this.headRow.append(this.groupHeading, this.refreshButton);" not in editor_sources["trigger"]
+    assert "this.headRow.append(this.groupHeading, this.refreshButton);" not in editor_sources["search"]
+    assert "this.headRow.append(this.groupHeading, this.refreshButton);" not in editor_sources["save-export"]
+    assert "...(this.hooks.headerActions ? [] : [this.refreshButton])," in editor_sources["serial"]
+
+    # Child actions remain editor-owned and next to their forms.
+    assert "section.append(formContainer, actionButton);" in editor_sources["save-export"]
+    assert "this.applyModeButton," in editor_sources["serial"]
+    assert "section.append(heading, formContainer, actionButton);" in editor_sources["trigger"]
+    assert "section.append(heading, formContainer, applyButton);" in editor_sources["search"]
 
 
 def test_live_mode_badge_is_neutral_and_utility_glyphs_are_centered() -> None:

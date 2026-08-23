@@ -61,6 +61,7 @@ export class SearchEditor {
   }
 
   buildDom() {
+    this.refreshButton?.remove?.();
     this.container.replaceChildren();
     this.headRow = document.createElement("div");
     this.headRow.className = "search-editor-head";
@@ -73,7 +74,13 @@ export class SearchEditor {
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
-    this.headRow.append(this.groupHeading, this.refreshButton);
+    this.headRow.append(this.groupHeading);
+    if (this.hooks.headerActions) {
+      this.refreshButton.hidden = true;
+      this.hooks.headerActions.append(this.refreshButton);
+    } else {
+      this.headRow.append(this.refreshButton);
+    }
     this.bodyHost = document.createElement("div");
     this.bodyHost.className = "search-editor-sections";
     this.container.append(this.headRow, this.bodyHost);

@@ -63,7 +63,9 @@ def test_save_export_editor_frontend_wiring_and_localization() -> None:
     assert "saveExportEditor = new SaveExportEditor(elements.saveExportEditor, catalog, {" in app_source
     assert 'elements.saveExportEditor.hidden = editorKind !== "save-export";' in app_source
     assert "elements.form.hidden = editorOwned;" in app_source
-    assert "elements.execute.hidden = editorOwned;" in app_source
+    assert "syncWorkspaceHeaderActions(editorKind);" in app_source
+    assert "headerActions: elements.workspaceHeaderActions," in app_source
+    assert "this.hooks.headerActions.append(this.refreshButton);" in editor_source
     assert "saveExportEditor?.scheduleRefresh();" in app_source
     assert "saveExportEditor?.rerender();" in app_source
     assert "applyAll" not in editor_source

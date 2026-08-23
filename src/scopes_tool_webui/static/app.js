@@ -55,9 +55,9 @@ const elements = {
   serialEditor: document.querySelector("#serial-editor"),
   triggerEditor: document.querySelector("#trigger-editor"),
   searchEditor: document.querySelector("#search-editor"),
+  workspaceHeaderActions: document.querySelector("#workspace-header-actions"),
   execute: document.querySelector("#execute-button"),
   cancel: document.querySelector("#cancel-button"),
-  executionStatus: document.querySelector("#execution-status"),
   identityWorkspace: document.querySelector("#identity-workspace-result"),
   identityWorkspaceContent: document.querySelector("#identity-workspace-result-content"),
   resultsPanel: document.querySelector("#job-result-panel"),
@@ -86,7 +86,6 @@ let executing = false;
 let advancedVisible = false;
 let resultPresentation = { kind: "empty", job: null, message: null };
 let healthState = { status: "checking", version: null, error: null };
-let workspaceExecutionState = { key: "device.ready" };
 let liveCommandState = { key: "device.ready" };
 let pendingResourceLiveSupport = null;
 let updateBasicAvailability = () => {};
@@ -129,6 +128,7 @@ async function initialize() {
   commandForm = new CommandForm(elements.form, catalog);
   saveExportEditor = new SaveExportEditor(elements.saveExportEditor, catalog, {
     executeCommand,
+    headerActions: elements.workspaceHeaderActions,
     isAvailable: () => {
       const selected = catalog.selected();
       return Boolean(selected && commandAvailable(selected.id));
@@ -138,6 +138,7 @@ async function initialize() {
   });
   serialEditor = new SerialEditor(elements.serialEditor, catalog, {
     executeCommand,
+    headerActions: elements.workspaceHeaderActions,
     isAvailable: () => {
       const selected = catalog.selected();
       return Boolean(selected && commandAvailable(selected.id));
@@ -147,6 +148,7 @@ async function initialize() {
   });
   triggerEditor = new TriggerEditor(elements.triggerEditor, catalog, {
     executeCommand,
+    headerActions: elements.workspaceHeaderActions,
     isAvailable: () => {
       const selected = catalog.selected();
       return Boolean(selected && commandAvailable(selected.id));
@@ -156,6 +158,7 @@ async function initialize() {
   });
   searchEditor = new SearchEditor(elements.searchEditor, catalog, {
     executeCommand,
+    headerActions: elements.workspaceHeaderActions,
     isAvailable: () => {
       const selected = catalog.selected();
       return Boolean(selected && commandAvailable(selected.id));
@@ -495,7 +498,6 @@ document.addEventListener("localechange", () => {
   renderLocaleToggle();
   renderVersion();
   renderLiveData();
-  renderExecutionStatus();
   renderCollapseLabels();
   if (deviceResource) deviceResource.refresh();
   if (catalog) {
@@ -506,6 +508,7 @@ document.addEventListener("localechange", () => {
   serialEditor?.rerender();
   triggerEditor?.rerender();
   searchEditor?.rerender();
+  syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
 });
 
@@ -529,7 +532,7 @@ function syncCommandSelection(draft = null) {
   elements.serialEditor.hidden = editorKind !== "serial";
   elements.triggerEditor.hidden = editorKind !== "trigger";
   elements.searchEditor.hidden = editorKind !== "search";
-  elements.execute.hidden = editorOwned;
+  syncWorkspaceHeaderActions(editorKind);
   elements.selectedCommand.textContent = selected
     ? editorOwned
       ? translate(`${editorKind}.editor.title`)
@@ -574,6 +577,17 @@ function updateAvailability() {
   const selected = catalog.selected();
   elements.execute.disabled = executing || !selected || !commandAvailable(selected.id);
   updateBasicAvailability();
+}
+
+function syncWorkspaceHeaderActions(editorKind) {
+  const selected = catalog?.selected();
+  elements.execute.hidden = !selected || editorKind !== null;
+  if (saveExportEditor?.refreshButton) {
+    saveExportEditor.refreshButton.hidden = editorKind !== "save-export";
+  }
+  if (serialEditor?.refreshButton) serialEditor.refreshButton.hidden = editorKind !== "serial";
+  if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
+  if (searchEditor?.refreshButton) searchEditor.refreshButton.hidden = editorKind !== "search";
 }
 
 function commandAction(command) {
@@ -688,23 +702,13 @@ function scheduleEditorRead() {
 }
 
 function setExecutionStatus(state) {
-  workspaceExecutionState = { ...state };
   liveCommandState = { ...state };
-  renderExecutionStatus();
   renderLiveData();
 }
 
 function setCommandState(state) {
   liveCommandState = { ...state };
   renderLiveData();
-}
-
-function renderExecutionStatus() {
-  const statusClass = workspaceExecutionState.status ? `badge-${workspaceExecutionState.status}` : "badge-idle";
-  elements.executionStatus.className = `badge ${statusClass}`;
-  elements.executionStatus.textContent = workspaceExecutionState.status
-    ? translateJobStatus(workspaceExecutionState.status)
-    : translate(workspaceExecutionState.key);
 }
 
 function renderCurrentResult() {

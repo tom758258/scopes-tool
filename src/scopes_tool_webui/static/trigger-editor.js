@@ -17,6 +17,7 @@ export class TriggerEditor {
   }
 
   buildDom() {
+    this.refreshButton?.remove?.();
     this.container.replaceChildren();
     this.headRow = document.createElement("div");
     this.headRow.className = "trigger-editor-head";
@@ -29,7 +30,13 @@ export class TriggerEditor {
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
-    this.headRow.append(this.groupHeading, this.refreshButton);
+    this.headRow.append(this.groupHeading);
+    if (this.hooks.headerActions) {
+      this.refreshButton.hidden = true;
+      this.hooks.headerActions.append(this.refreshButton);
+    } else {
+      this.headRow.append(this.refreshButton);
+    }
     this.sectionsHost = document.createElement("div");
     this.sectionsHost.className = "trigger-editor-sections";
     this.container.append(this.headRow, this.sectionsHost);

@@ -73,7 +73,7 @@ button:disabled { cursor: default; opacity: .55; }
 
 .brand h1 { font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -.5px; }
 .brand-subtitle { margin-top: 2px; color: var(--muted); font-size: 13px; font-weight: 500; }
-.page-head-actions, .button-row, .device-resource-actions, .mode-options, .basic-controls, .command-actions { align-items: center; display: flex; }
+.page-head-actions, .button-row, .device-resource-actions, .mode-options, .basic-controls, .workspace-header-actions { align-items: center; display: flex; }
 .page-head-actions, .button-row { gap: 6px; }
 
 .secondary,
@@ -270,7 +270,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 
 .workspace-panel { display: flex; flex-direction: column; }
 .panel-title { align-items: flex-start; min-height: 70px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #fff 0%, #f8fafc 100%); }
-.command-title-group { min-width: 0; }
+.command-title-group { flex: 1 1 auto; min-width: 0; }
+.workspace-header-actions { flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .command-title-group h2 { margin: 0; overflow: hidden; font-size: 16px; line-height: 22px; text-overflow: ellipsis; white-space: nowrap; }
 .command-description,
 .command-support-reason { margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
@@ -289,7 +290,6 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .multi-choice-option:hover { border-color: var(--accent); color: var(--accent); }
 .multi-choice-option input[type="checkbox"] { width: auto; min-width: 0; height: auto; min-height: 0; margin: 0; accent-color: var(--accent); }
 .multi-choice-option input[type="checkbox"]:disabled { opacity: .55; }
-.command-actions { justify-content: flex-end; gap: 7px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .serial-editor { display: grid; gap: 14px; padding-top: 12px; }
 .serial-editor-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 12px; }
 .serial-editor-field select { min-width: 120px; }
@@ -419,6 +419,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .workspace-result-content { grid-template-columns: 1fr; }
   .panel-title { flex-wrap: wrap; }
   .command-title-group { flex: 1 1 100%; }
+  .workspace-header-actions { justify-content: flex-start; }
   .command-description { overflow: visible; text-overflow: clip; white-space: normal; }
   .section-head { align-items: flex-start; }
   .basic-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

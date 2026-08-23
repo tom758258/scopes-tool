@@ -488,6 +488,7 @@ export class SerialEditor {
   }
 
   buildDom() {
+    this.refreshButton?.remove?.();
     this.container.replaceChildren();
 
     this.busSelect = document.createElement("select");
@@ -527,6 +528,10 @@ export class SerialEditor {
     this.refreshButton.addEventListener("click", () => {
       this.controller.scheduleRefresh();
     });
+    if (this.hooks.headerActions) {
+      this.refreshButton.hidden = true;
+      this.hooks.headerActions.append(this.refreshButton);
+    }
 
     this.displayFormContainer = document.createElement("div");
     this.applyDisplayButton = document.createElement("button");
@@ -573,7 +578,7 @@ export class SerialEditor {
 
     this.container.append(
       topRow,
-      this.refreshButton,
+      ...(this.hooks.headerActions ? [] : [this.refreshButton]),
       displaySection,
       configSection,
       this.triggerSection,

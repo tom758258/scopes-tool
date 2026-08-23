@@ -31,6 +31,7 @@ export class SaveExportEditor {
   }
 
   buildDom() {
+    this.refreshButton?.remove?.();
     this.container.replaceChildren();
     this.storageNote = document.createElement("p");
     this.storageNote.className = "muted compact-note";
@@ -46,7 +47,13 @@ export class SaveExportEditor {
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
-    this.headRow.append(this.groupHeading, this.refreshButton);
+    this.headRow.append(this.groupHeading);
+    if (this.hooks.headerActions) {
+      this.refreshButton.hidden = true;
+      this.hooks.headerActions.append(this.refreshButton);
+    } else {
+      this.headRow.append(this.refreshButton);
+    }
     this.readStatus = document.createElement("output");
     this.readStatus.className = "muted compact-note";
     this.sectionsHost = document.createElement("div");
