@@ -592,4 +592,7 @@ export const en = {
   "search.editor.protocol": "Protocol",
   "search.editor.eventUnavailable": "Search event navigation is not available for this instrument.",
   "search.editor.serialUnavailable": "Identify a supported instrument with Serial Search buses to configure Serial Search.",
+  "save-export.editor.title": "Save / Export editor",
+  "save-export.editor.description": "Dedicated instrument-side Save / Export editor: each setting keeps its own read-edit-Apply workflow, and Save image and Save waveform use explicit filenames.",
+  "save-export.editor.storageNote": "Saves are written to instrument-side storage. They do not create WebUI download artifacts.",
 };

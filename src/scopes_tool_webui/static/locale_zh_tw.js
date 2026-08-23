@@ -588,4 +588,7 @@ export const zhTW = {
   "search.editor.protocol": "通訊協定",
   "search.editor.eventUnavailable": "此儀器不支援搜尋事件導覽。",
   "search.editor.serialUnavailable": "請先連接並識別具備串列搜尋匯流排的支援儀器，再設定串列搜尋。",
+  "save-export.editor.title": "儲存 / 匯出編輯器",
+  "save-export.editor.description": "專屬儀器端儲存 / 匯出編輯器：每個設定保有獨立的讀取、編輯、套用流程，儲存影像與儲存波形使用各自明確的檔名。",
+  "save-export.editor.storageNote": "儲存至儀器端儲存裝置，不會建立 WebUI 下載檔案。",
 };

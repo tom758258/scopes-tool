@@ -13,6 +13,7 @@ import {
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
+import { SaveExportEditor } from "/static/save-export-editor.js";
 import { SearchEditor } from "/static/search-editor.js";
 import { SerialEditor } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
@@ -50,6 +51,7 @@ const elements = {
   advancedToggle: document.querySelector("#advanced-command-toggle"),
   form: document.querySelector("#command-form"),
   formHeading: document.querySelector("#form-heading"),
+  saveExportEditor: document.querySelector("#save-export-editor"),
   serialEditor: document.querySelector("#serial-editor"),
   triggerEditor: document.querySelector("#trigger-editor"),
   searchEditor: document.querySelector("#search-editor"),
@@ -75,6 +77,7 @@ const state = createInitialState();
 let context = state.executionContext;
 let catalog;
 let commandForm;
+let saveExportEditor;
 let serialEditor;
 let triggerEditor;
 let searchEditor;
@@ -89,6 +92,7 @@ let pendingResourceLiveSupport = null;
 let updateBasicAvailability = () => {};
 
 const EDITOR_RENDERERS = {
+  "save-export": () => saveExportEditor,
   serial: () => serialEditor,
   trigger: () => triggerEditor,
   search: () => searchEditor,
@@ -123,6 +127,15 @@ async function initialize() {
     list: elements.commandList,
   }, () => syncCommandSelection());
   commandForm = new CommandForm(elements.form, catalog);
+  saveExportEditor = new SaveExportEditor(elements.saveExportEditor, catalog, {
+    executeCommand,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
   serialEditor = new SerialEditor(elements.serialEditor, catalog, {
     executeCommand,
     isAvailable: () => {
@@ -489,6 +502,7 @@ document.addEventListener("localechange", () => {
     catalog.render();
     syncCommandSelection(commandDraft);
   }
+  saveExportEditor?.rerender();
   serialEditor?.rerender();
   triggerEditor?.rerender();
   searchEditor?.rerender();
@@ -511,6 +525,7 @@ function syncCommandSelection(draft = null) {
   });
   elements.formHeading.hidden = editorOwned;
   elements.form.hidden = editorOwned;
+  elements.saveExportEditor.hidden = editorKind !== "save-export";
   elements.serialEditor.hidden = editorKind !== "serial";
   elements.triggerEditor.hidden = editorKind !== "trigger";
   elements.searchEditor.hidden = editorKind !== "search";
@@ -644,6 +659,10 @@ function scheduleEditorRead() {
     const selected = catalog?.selected();
     if (!selected) return;
     const editorKind = editorKindFor(selected);
+    if (editorKind === "save-export") {
+      saveExportEditor?.scheduleRefresh();
+      return;
+    }
     if (editorKind === "serial") {
       serialEditor?.scheduleRefresh();
       return;

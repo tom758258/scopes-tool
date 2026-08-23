@@ -86,10 +86,11 @@ The Command workbench exposes:
 - Capture: `screenshot`, `capture`
 - Reference: `reference-save`, `reference-display`, `reference-label`,
   `reference-clear`, `reference-query`
-- Save / Export: `save-pwd`, `save-filename`, `save-image-format`,
+- Save / Export: a dedicated editor with Path / Filename, Image, and Waveform
+  groups over `save-pwd`, `save-filename`, `save-image-format`,
   `save-image-palette`, `save-image-ink-saver`, `save-image-factors`,
   `save-image`, `save-waveform-format`, `save-waveform-length`,
-  `save-waveform-length-max`, `save-waveform`
+  `save-waveform-length-max`, and `save-waveform`
 - System: `check-error`, `system-status-byte`, `system-operation-status`,
   `system-clear-status`, `system-opc`, `system-standard-event`,
   `system-options`
@@ -126,8 +127,9 @@ collapse state. Selecting a command inside a collapsed group expands that
 group first.
 
 Grouping is presentation only: it does not change Core command semantics,
-model or capability gating, or the metadata-driven forms, and it does not add
-dedicated Save/Export or Workflow editors.
+model or capability gating, or the metadata-driven forms. Dedicated editors
+use the existing groups where described below; Workflow keeps its grouped
+command forms.
 
 Selecting a Trigger command opens the dedicated Trigger editor instead of a
 plain command form. The Command Browser remains the only Trigger navigation:
@@ -197,6 +199,23 @@ Serial Lister section is independent of protocol and Bus: its state is
 refreshed through the existing aggregate `serial-lister-query`, display and
 reference settings apply through their existing commands, and Export performs
 the existing host-side raw CSV retrieval with its registered job artifact.
+
+Selecting a Save / Export command opens the dedicated Save / Export editor
+instead of a plain command form. The Command Browser remains the only
+navigation and keeps the Path / Filename, Image, and Waveform groups; the
+editor adds no second tab layer. Selecting any command shows its whole group.
+Path / Filename reads `save-pwd` and `save-filename`; Image reads its format,
+palette, ink-saver, and measurement-factor settings; Waveform reads its format
+and length settings plus the read-only maximum-length state. Each setting
+keeps an independent Apply over its existing command, and a successful Apply
+is followed by an active-group readback that preserves unapplied sibling
+edits. There is no Apply All, merged payload, transaction, or rollback.
+
+Save Image and Save Waveform each require their own explicit filename and
+submit only their existing instrument-side Save command. They do not inherit
+or update `save-filename`, add filename extensions, refresh unrelated settings,
+or create WebUI download artifacts. Screenshot and Capture remain separate
+host-side retrieval paths that register downloadable artifacts.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field

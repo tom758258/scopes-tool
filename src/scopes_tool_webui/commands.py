@@ -617,6 +617,7 @@ COMMANDS = (
         "label": "Save path",
         "modes": ("live", "simulate"),
         "group": "path-filename",
+        "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "path", "type": "string", "required_if": [{"field": "action", "equals": "set"}]},
@@ -628,6 +629,7 @@ COMMANDS = (
         "label": "Save filename",
         "modes": ("live", "simulate"),
         "group": "path-filename",
+        "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "name", "type": "string", "required_if": [{"field": "action", "equals": "set"}]},
@@ -639,6 +641,7 @@ COMMANDS = (
         "label": "Image save format",
         "modes": ("live", "simulate"),
         "group": "image",
+        "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "format", "type": "enum", "options": SAVE_IMAGE_FORMATS, "required_if": [{"field": "action", "equals": "set"}]},
@@ -650,6 +653,7 @@ COMMANDS = (
         "label": "Image save palette",
         "modes": ("live", "simulate"),
         "group": "image",
+        "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "palette", "type": "enum", "options": SAVE_IMAGE_PALETTES, "required_if": [{"field": "action", "equals": "set"}]},
@@ -661,6 +665,7 @@ COMMANDS = (
         "label": "Image ink saver",
         "modes": ("live", "simulate"),
         "group": "image",
+        "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
@@ -672,6 +677,7 @@ COMMANDS = (
         "label": "Image measurement factors",
         "modes": ("live", "simulate"),
         "group": "image",
+        "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
@@ -683,6 +689,7 @@ COMMANDS = (
         "label": "Save image",
         "modes": ("live", "simulate"),
         "group": "image",
+        "editor": "save-export",
         "fields": (
             {"name": "filename", "type": "string", "required": True},
         ),
@@ -693,6 +700,7 @@ COMMANDS = (
         "label": "Waveform save format",
         "modes": ("live", "simulate"),
         "group": "waveform",
+        "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "format", "type": "enum", "options": SAVE_WAVEFORM_FORMATS, "required_if": [{"field": "action", "equals": "set"}]},
@@ -704,6 +712,7 @@ COMMANDS = (
         "label": "Waveform save length",
         "modes": ("live", "simulate"),
         "group": "waveform",
+        "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "points", "type": "integer", "minimum": 100, "required_if": [{"field": "action", "equals": "set"}]},
@@ -715,6 +724,7 @@ COMMANDS = (
         "label": "Maximum waveform save length",
         "modes": ("live", "simulate"),
         "group": "waveform",
+        "editor": "save-export",
         "fields": (),
     },
     {
@@ -723,6 +733,7 @@ COMMANDS = (
         "label": "Save waveform",
         "modes": ("live", "simulate"),
         "group": "waveform",
+        "editor": "save-export",
         "fields": (
             {"name": "filename", "type": "string", "required": True},
         ),
