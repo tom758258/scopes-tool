@@ -146,7 +146,8 @@ discarding any unapplied Display/Configuration/Trigger edits, and applying a
 different protocol asks before discarding old-protocol Configuration or
 Trigger edits. A configuration Apply first re-checks `serial-mode` and skips
 the write when the instrument no longer reports the expected protocol. The
-Serial Lister section is independent of protocol and Bus: Lister display and
+Serial Lister section is independent of protocol and Bus: its state is
+refreshed through the existing aggregate `serial-lister-query`, display and
 reference settings apply through their existing commands, and Export performs
 the existing host-side raw CSV retrieval with its registered job artifact.
 

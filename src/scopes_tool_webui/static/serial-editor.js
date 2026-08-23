@@ -59,7 +59,6 @@ export function createSerialEditorController({
   let refreshQueued = false;
   let formEpoch = 0;
   let listerEpoch = 0;
-  let listerLoaded = false;
   const jobs = {
     mode: null,
     display: null,
@@ -137,14 +136,11 @@ export function createSerialEditorController({
     await readProtocolSections();
   }
 
-  async function loadListerOnce() {
-    if (listerLoaded) return;
-    const displayJob = await runQuery("serial-lister-display", { action: "query" });
-    jobs.listerDisplay = displayJob ? { job: displayJob, applied: false } : null;
-    notifyState();
-    const referenceJob = await runQuery("serial-lister-reference", { action: "query" });
-    jobs.listerReference = referenceJob ? { job: referenceJob, applied: false } : null;
-    listerLoaded = Boolean(displayJob && referenceJob);
+  async function readListerState() {
+    const listerJob = await runQuery("serial-lister-query", {});
+    const entry = listerJob ? { job: listerJob, applied: false } : null;
+    jobs.listerDisplay = entry;
+    jobs.listerReference = entry;
     notifyState();
   }
 
@@ -157,7 +153,7 @@ export function createSerialEditorController({
     syncSelectedProtocol();
     notifyState();
     await readDisplayAndConfig();
-    await loadListerOnce();
+    await readListerState();
   }
 
   async function refresh() {
@@ -220,7 +216,6 @@ export function createSerialEditorController({
       jobs.trigger = null;
       jobs.listerDisplay = null;
       jobs.listerReference = null;
-      listerLoaded = false;
       formEpoch += 1;
       listerEpoch += 1;
       notifyState();

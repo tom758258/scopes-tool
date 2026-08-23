@@ -5,7 +5,9 @@
 - Extends the dedicated WebUI Serial editor with confirmed-protocol
   UART/I2C/SPI/CAN trigger editing behind an explicit Apply Trigger that
   re-checks the active serial mode, plus a protocol-independent Serial Lister
-  section covering display and reference settings and host-side CSV export.
+  section whose state refreshes through the existing aggregate Serial Lister
+  query and which covers display and reference settings and host-side CSV
+  export.
 - Adds a mode-aware Serial editor to the WebUI that coordinates bus selection,
   Serial Mode with explicit Apply Mode and readback verification, Serial
   Display, and UART/I2C/SPI/CAN configuration over the existing commands while
