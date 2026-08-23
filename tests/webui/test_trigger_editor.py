@@ -174,13 +174,17 @@ TRIGGER_EDITOR_HARNESS = r'''
           constructor(container) {
             this.container = container;
             this.renderedCommand = null;
+            this.renderOptions = {};
             this.queryValuesResult = {};
             this.valuesResult = {};
             this.syncCalls = [];
             this.clearedDirty = 0;
             this.disableCalls = [];
           }
-          render(command) { this.renderedCommand = command; }
+          render(command, options = {}) {
+            this.renderedCommand = command;
+            this.renderOptions = options;
+          }
           values() { return this.valuesResult; }
           queryValues() { return this.queryValuesResult; }
           setDisabled(value) { this.disableCalls.push(value); }
@@ -247,7 +251,7 @@ TRIGGER_EDITOR_HARNESS = r'''
           },
           isAvailable: () => env.available,
           contextKey: () => env.contextKey,
-          selectedCommand: () => commands.find((command) => command.id === env.selectedId),
+          selectedCommand: () => catalog.commands.find((command) => command.id === env.selectedId),
         };
         const buildEditor = () =>
           new globalThis.triggerApi.TriggerEditor(new FakeNode(), catalog, hooks);
@@ -327,22 +331,33 @@ def test_trigger_editor_applies_each_command_individually() -> None:
         await settle();
         assert.deepEqual(submitted, []);
 
-        // Apply submits exactly this one existing command with action=set.
+        // Apply submits exactly this one existing command with action=set,
+        // then a forced active-group readback reconciles the group.
         submitted.length = 0;
         runtEntry.form.valuesResult = { action: "set", channel: 1 };
         runtEntry.button.dispatch("click");
         await settle();
-        assert.deepEqual(submitted.map((entry) => entry.command), ["trigger-runt"]);
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "trigger-runt",
+          "trigger-runt",
+        ]);
         assert.equal(submitted[0].intent, "apply");
         assert.deepEqual(submitted[0].parameters, { action: "set", channel: 1 });
+        assert.equal(submitted[1].intent, "readback");
         assert.equal(runtEntry.form.clearedDirty, 1);
-        assert.deepEqual(runtEntry.form.syncCalls.at(-1), [submitted[0].job.job_id, false]);
+        assert.deepEqual(runtEntry.form.syncCalls.at(-2), [submitted[0].job.job_id, false]);
+        assert.deepEqual(runtEntry.form.syncCalls.at(-1), [submitted[1].job.job_id, true]);
 
-        // No aggregate transaction: a second Apply runs the same single command again.
+        // No aggregate transaction: a second Apply still runs only this command
+        // (plus its follow-up group readback).
         submitted.length = 0;
         runtEntry.button.dispatch("click");
         await settle();
-        assert.deepEqual(submitted.map((entry) => entry.command), ["trigger-runt"]);
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "trigger-runt",
+          "trigger-runt",
+        ]);
+        assert.equal(submitted[0].intent, "apply");
         '''
     )
     completed = subprocess.run(
@@ -379,11 +394,11 @@ def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> N
         assert.equal(runtEntry.button.disabled, true);
         assert.equal(editor.refreshButton.disabled, true);
         releaseApply();
+        hooks.executeCommand = recordingExecute;
         await settle();
         assert.equal(editor.busy, false);
         assert.equal(runtEntry.button.disabled, false);
         assert.equal(editor.refreshButton.disabled, false);
-        hooks.executeCommand = recordingExecute;
 
         // Informational commands keep explicit Read semantics and are not auto-queried.
         submitted.length = 0;
@@ -455,6 +470,177 @@ def test_trigger_editor_skips_unsupported_group_commands_and_keeps_projection_in
         editor.scheduleRefresh();
         await settle();
         assert.deepEqual(editor.entries.map((entry) => entry.id), ["trigger-edge-slope"]);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(TRIGGER_EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_trigger_editor_rereads_only_the_changed_query_field_entry() -> None:
+    script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        // trigger-edge-level defines source_channel as its query field.
+        catalog.commands = [
+          def("trigger-edge-level", "edge", {
+            kind: "setting", action_field: "action", apply_value: "set",
+            query_value: "query", query_fields: ["source_channel"],
+          }),
+          def("trigger-edge-slope", "edge"),
+        ];
+        env.selectedId = "trigger-edge-level";
+        const editor = buildEditor();
+        editor.scheduleRefresh();
+        await settle();
+        assert.deepEqual(editor.entries.map((entry) => entry.id), [
+          "trigger-edge-level",
+          "trigger-edge-slope",
+        ]);
+        const levelEntry = editor.entries[0];
+        const slopeEntry = editor.entries[1];
+        assert.equal(typeof levelEntry.form.renderOptions.onQueryFieldChange, "function");
+
+        submitted.length = 0;
+        const slopeSyncCount = slopeEntry.form.syncCalls.length;
+        levelEntry.form.queryValuesResult = { action: "query", source_channel: 2 };
+        levelEntry.form.renderOptions.onQueryFieldChange("source_channel");
+        await settle();
+
+        // Only the changed entry is re-read; the sibling form is untouched.
+        assert.deepEqual(submitted.map((entry) => entry.command), ["trigger-edge-level"]);
+        assert.equal(submitted[0].intent, "readback");
+        assert.deepEqual(submitted[0].parameters, { action: "query", source_channel: 2 });
+        assert.equal(slopeEntry.form.syncCalls.length, slopeSyncCount);
+        assert.deepEqual(levelEntry.form.syncCalls.at(-1), [submitted[0].job.job_id, true]);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(TRIGGER_EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_trigger_editor_serializes_readback_and_disables_actions_while_busy() -> None:
+    script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.selectedId = "trigger-runt";
+        const editor = buildEditor();
+        let queries = 0;
+        let releaseQuery;
+        hooks.executeCommand = (command) => {
+          queries += 1;
+          return new Promise((resolve) => {
+            releaseQuery = () => resolve({
+              job_id: `${command}-deferred`,
+              status: "completed",
+              result: { result: {} },
+            });
+          });
+        };
+        editor.scheduleRefresh();
+        await settle();
+
+        // The active-group readback itself holds the busy gate.
+        const runtEntry = editor.entries[0];
+        assert.equal(queries, 1);
+        assert.equal(editor.busy, true);
+        assert.equal(runtEntry.button.disabled, true);
+        assert.equal(runtEntry.form.disableCalls.at(-1), true);
+        assert.equal(editor.refreshButton.disabled, true);
+
+        // A refresh requested during the readback is queued once, not overlapped.
+        editor.scheduleRefresh();
+        await settle();
+        assert.equal(queries, 1);
+
+        releaseQuery();
+        hooks.executeCommand = async (command, parameters, options) => {
+          const job = {
+            job_id: `${command}-${submitted.length}`,
+            status: "completed",
+            result: { result: {} },
+          };
+          submitted.push({ command, parameters, intent: options?.intent });
+          return job;
+        };
+        await settle();
+        assert.equal(queries, 1);
+        assert.equal(editor.busy, false);
+        assert.equal(runtEntry.button.disabled, false);
+        assert.equal(editor.refreshButton.disabled, false);
+        assert.deepEqual(submitted.map((entry) => entry.command), ["trigger-runt"]);
+        assert.ok(submitted.every((entry) => entry.intent === "readback"));
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(TRIGGER_EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_trigger_editor_apply_reconciles_sibling_forms_in_active_group() -> None:
+    script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        catalog.commands = [
+          def("trigger-edge", "edge"),
+          def("trigger-edge-source", "edge"),
+        ];
+        env.selectedId = "trigger-edge-source";
+        let deferApply = true;
+        let releaseApply;
+        hooks.executeCommand = async (command, parameters, options) => {
+          const job = {
+            job_id: `${command}-${submitted.length}`,
+            status: "completed",
+            result: { result: {} },
+          };
+          submitted.push({ command, parameters, intent: options?.intent });
+          if (options?.intent === "apply" && deferApply) {
+            deferApply = false;
+            return new Promise((resolve) => { releaseApply = () => resolve(job); });
+          }
+          return job;
+        };
+        const editor = buildEditor();
+        editor.scheduleRefresh();
+        await settle();
+        const aggregateEntry = editor.entries.find((entry) => entry.id === "trigger-edge");
+        const sourceEntry = editor.entries.find((entry) => entry.id === "trigger-edge-source");
+        sourceEntry.form.valuesResult = { action: "set", source_channel: 2 };
+
+        submitted.length = 0;
+        sourceEntry.button.dispatch("click");
+        await settle();
+        assert.equal(editor.busy, true);
+        releaseApply();
+        await settle();
+
+        // Exactly one write, then a forced active-group readback so the
+        // aggregate sibling form does not stay stale.
+        assert.equal(editor.busy, false);
+        assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent}`), [
+          "trigger-edge-source:apply",
+          "trigger-edge:readback",
+          "trigger-edge-source:readback",
+        ]);
+        assert.deepEqual(
+          sourceEntry.form.syncCalls.slice(-2).map((call) => call[1]),
+          [false, true],
+        );
+        assert.equal(aggregateEntry.form.syncCalls.at(-1)[1], true);
         '''
     )
     completed = subprocess.run(

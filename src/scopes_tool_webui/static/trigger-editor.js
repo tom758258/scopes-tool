@@ -11,6 +11,8 @@ export class TriggerEditor {
     this.stateKey = null;
     this.renderedKey = null;
     this.entries = [];
+    this.pendingRefresh = false;
+    this.pendingEntryReads = new Map();
     this.buildDom();
   }
 
@@ -58,10 +60,15 @@ export class TriggerEditor {
     this.buildDom();
     this.stateKey = null;
     this.renderedKey = null;
+    this.pendingEntryReads.clear();
     this.scheduleRefresh();
   }
 
   async refresh(force = false) {
+    if (this.busy) {
+      this.pendingRefresh = true;
+      return;
+    }
     const definition = this.selectedDefinition();
     if (!definition || !this.hooks.isAvailable()) {
       this.stateKey = null;
@@ -70,10 +77,16 @@ export class TriggerEditor {
     }
     const key = this.currentStateKey();
     if (!force && key === this.stateKey) return;
-    this.stateKey = key;
-    this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
-    if (this.renderedKey !== key) this.rebuildSections(key);
-    await this.readActiveGroup();
+    this.setBusy(true);
+    try {
+      this.stateKey = key;
+      this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
+      if (this.renderedKey !== key) this.rebuildSections(key);
+      this.applyBusyState();
+      await this.readActiveGroup();
+    } finally {
+      this.setBusy(false);
+    }
   }
 
   clearSections() {
@@ -117,12 +130,54 @@ export class TriggerEditor {
     section.append(heading, formContainer, actionButton);
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
-    form.render(command, {});
-    const entry = { id: command.id, kind, action, form, button: actionButton, epoch };
+    const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch };
+    form.render(command, {
+      onQueryFieldChange: () => this.scheduleEntryRead(entry),
+    });
+    entry.form = form;
     actionButton.addEventListener("click", () => {
       void this.submit(entry);
     });
     return entry;
+  }
+
+  scheduleEntryRead(entry) {
+    if (entry.kind !== "setting") return;
+    this.pendingEntryReads.set(entry.id, entry);
+    queueMicrotask(() => {
+      void this.flushEntryReads();
+    });
+  }
+
+  async flushEntryReads() {
+    if (!this.pendingEntryReads.size) return;
+    if (this.busy) {
+      this.pendingRefresh = true;
+      return;
+    }
+    const pending = [...this.pendingEntryReads.values()];
+    this.pendingEntryReads.clear();
+    const epoch = this.epoch;
+    this.setBusy(true);
+    try {
+      for (const entry of pending) {
+        if (epoch !== this.epoch) return;
+        await this.readEntry(entry);
+      }
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  async readEntry(entry) {
+    const parameters = entry.form.queryValues();
+    if (parameters === null) return;
+    const job = await this.hooks.executeCommand(
+      entry.id,
+      parameters,
+      { intent: "readback" },
+    );
+    if (job?.status === "completed") entry.form.syncResult(job, true);
   }
 
   async readActiveGroup() {
@@ -130,15 +185,7 @@ export class TriggerEditor {
     for (const entry of this.entries) {
       if (epoch !== this.epoch) return;
       if (entry.kind !== "setting") continue;
-      const parameters = entry.form.queryValues();
-      if (parameters === null) continue;
-      const job = await this.hooks.executeCommand(
-        entry.id,
-        parameters,
-        { intent: "readback" },
-      );
-      if (epoch !== this.epoch) return;
-      if (job?.status === "completed") entry.form.syncResult(job, true);
+      await this.readEntry(entry);
     }
   }
 
@@ -161,6 +208,7 @@ export class TriggerEditor {
       if (isSetting && job?.status === "completed" && entry.epoch === this.epoch) {
         entry.form.clearDirty();
         entry.form.syncResult(job, false);
+        this.pendingRefresh = true;
       }
     } finally {
       this.setBusy(false);
@@ -169,10 +217,18 @@ export class TriggerEditor {
 
   setBusy(value) {
     this.busy = value;
-    this.refreshButton.disabled = value || !this.hooks.isAvailable();
+    this.applyBusyState();
+    if (!value && this.pendingRefresh) {
+      this.pendingRefresh = false;
+      this.scheduleRefresh(true);
+    }
+  }
+
+  applyBusyState() {
+    this.refreshButton.disabled = this.busy || !this.hooks.isAvailable();
     for (const entry of this.entries) {
-      entry.button.disabled = value;
-      entry.form.setDisabled(value);
+      entry.button.disabled = this.busy;
+      entry.form?.setDisabled(this.busy);
     }
   }
 }

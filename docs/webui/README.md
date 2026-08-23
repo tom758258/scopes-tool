@@ -138,7 +138,11 @@ label above the sections names the group being edited. The editor presents the
 group's existing settings for editing; it does not report or change which
 trigger type the instrument currently uses. Readback is scoped to the active
 group: entering or refreshing a group queries only that group's setting
-commands, and switching groups reads the new group instead. Each child command
+commands, and switching groups reads the new group instead. Changing a
+command's channel or query selector re-reads that command, and a successful
+Apply is followed by an active-group readback so sibling forms do not go
+stale. Editor reads and applies are serialized; Apply and Refresh stay
+disabled until the current readback or write finishes. Each child command
 keeps its own metadata-driven form and its own independent Apply over the
 existing WebUI command; there is no Apply All, no transaction, and no merged
 payload. Informational commands such as `external-trigger-settings` keep their
