@@ -43,6 +43,118 @@ def extract_css_rule(source: str, selector: str) -> str:
     return source[body_start:end + 1]
 
 
+def run_generic_form_ownership_behavior(assertions: str) -> None:
+    source = read_static("app.js").replace("options = {}", "options = null", 1)
+    declarations = "\n".join(
+        extract_function_declaration(source, signature)
+        for signature in (
+            "async function executeCommand(command, parameters, options = null)",
+            "function isExecutionBusy()",
+            "function invalidateGenericFormOwnership()",
+            "function syncCommandSelection(draft = null)",
+        )
+    )
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+
+        let genericFormRevision = 0;
+        let executing = false;
+        let currentJobId = null;
+        let pendingResourceLiveSupport = null;
+        let deviceResource = null;
+        let resultPresentation = { kind: "empty", job: null, message: null };
+        const context = { mode: "simulate", resource: null, model_id: "model" };
+        const channelScale = { id: "channel-scale", modes: ["simulate"] };
+        const otherCommand = { id: "channel-offset", modes: ["simulate"] };
+        const commands = [channelScale, otherCommand];
+        const elements = {
+          deviceStatus: { textContent: "" },
+          execute: { disabled: false },
+          formHeading: {},
+          form: {},
+          saveExportEditor: {},
+          serialEditor: {},
+          triggerEditor: {},
+          searchEditor: {},
+          selectedCommand: {},
+          commandDescription: {},
+          commandSupportReason: {},
+          cancel: { classList: { add() {}, remove() {} } },
+        };
+        const state = { selectedCommand: null };
+        let selectedCommand = channelScale;
+        const catalog = {
+          selected: () => selectedCommand,
+          commandLabel: (command) => command.id,
+          description: (command) => `${command.id} description`,
+          supportReason: () => "",
+        };
+        const completedResults = [];
+        const workspaceResults = [];
+        const submissions = [];
+        const controllers = [];
+        const translate = (key) => key;
+        const commandAvailable = () => true;
+        const currentWorkspaceContext = () => ({ command: "channel-scale", mode: "simulate" });
+        const isCurrentEditorJob = () => true;
+        const editorKindFor = () => null;
+        const syncWorkspaceHeaderActions = () => {};
+        const renderWorkspace = () => {};
+        const syncEditorPresentation = () => {};
+        const commandAction = () => "apply";
+        const updateAvailability = () => {};
+        const setExecutionStatus = () => {};
+        const renderCurrentResult = () => {
+          if (resultPresentation.job?.status === "completed") {
+            completedResults.push(resultPresentation.job.job_id);
+          }
+        };
+        const updateIdentity = () => {};
+        const captureWorkspaceResult = (job) => workspaceResults.push(job.job_id);
+        const makeForm = () => ({
+          disabledCalls: [],
+          clearCalls: 0,
+          syncCalls: [],
+          dirty: false,
+          render(_command, options) {
+            this.renderOptions = options;
+            this.disabledCalls = [];
+            this.clearCalls = 0;
+            this.syncCalls = [];
+            this.dirty = true;
+          },
+          setDisabled(value) { this.disabledCalls.push(value); },
+          clearDirty() { this.clearCalls += 1; },
+          syncResult(job, preserveDirty) { this.syncCalls.push([job.job_id, preserveDirty]); },
+        });
+        let commandForm = makeForm();
+        const runJob = (command, parameters, commandContext, onUpdate) => {
+          const jobId = `job-${submissions.length + 1}`;
+          submissions.push({ command, parameters, commandContext, jobId });
+          onUpdate({ job_id: jobId, command, status: "queued" });
+          return new Promise((resolve) => controllers.push({ jobId, resolve }));
+        };
+        const complete = (index) => {
+          const controller = controllers[index];
+          controller.resolve({
+            job_id: controller.jobId,
+            command: "channel-scale",
+            status: "completed",
+            result: { result: { channel: 1, volts_per_division: 0.5 } },
+          });
+        };
+        '''
+    ) + declarations + textwrap.dedent(assertions)
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def test_identity_is_bound_to_the_current_execution_context() -> None:
     source = read_static("device-resource.js")
 
@@ -2182,7 +2294,8 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     )[0]
     assert "commandForm.isSettingEditor()" in refresh_handler
     assert "const parameters = commandForm.queryValues();" in refresh_handler
-    assert 'executeCommand(selected.id, parameters, { intent: "readback" })' in refresh_handler
+    assert 'intent: "readback"' in refresh_handler
+    assert "formRevision: genericFormRevision" in refresh_handler
     assert "function scheduleEditorRead()" not in source
 
     cancel_handler = source.split('elements.cancel.addEventListener("click"', 1)[1].split(
@@ -2191,6 +2304,88 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert "await requestCancel(currentJobId);" in cancel_handler
     assert 'elements.cancel.classList.remove("hidden");' in source
     assert 'elements.cancel.classList.add("hidden");' in source
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
+    run_generic_form_ownership_behavior(
+        r'''
+        syncCommandSelection();
+        const submittedRevision = genericFormRevision;
+        const refresh = executeCommand("channel-scale", { action: "query", channel: 1 }, {
+          intent: "readback",
+          formRevision: submittedRevision,
+        });
+        await Promise.resolve();
+        commandForm.renderOptions.onQueryFieldChange("channel");
+        assert.equal(submissions.length, 1);
+
+        complete(0);
+        await refresh;
+
+        assert.deepEqual(commandForm.syncCalls, []);
+        assert.deepEqual(workspaceResults, ["job-1"]);
+        assert.deepEqual(completedResults, ["job-1"]);
+        '''
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_generic_rerender_rejects_stale_apply_form_updates() -> None:
+    run_generic_form_ownership_behavior(
+        r'''
+        syncCommandSelection();
+        const apply = executeCommand("channel-scale", {
+          action: "set", channel: 1, volts_per_division: 0.5,
+        }, { intent: "apply", formRevision: genericFormRevision });
+        await Promise.resolve();
+        assert.deepEqual(commandForm.disabledCalls, [true]);
+
+        selectedCommand = otherCommand;
+        syncCommandSelection();
+        selectedCommand = channelScale;
+        syncCommandSelection();
+        complete(0);
+        await apply;
+
+        assert.equal(commandForm.clearCalls, 0);
+        assert.deepEqual(commandForm.syncCalls, []);
+        assert.deepEqual(commandForm.disabledCalls, []);
+        assert.equal(commandForm.dirty, true);
+        assert.deepEqual(workspaceResults, ["job-1"]);
+        assert.deepEqual(completedResults, ["job-1"]);
+        '''
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_current_generic_form_still_syncs_refresh_and_apply() -> None:
+    run_generic_form_ownership_behavior(
+        r'''
+        syncCommandSelection();
+        const refresh = executeCommand("channel-scale", { action: "query", channel: 1 }, {
+          intent: "readback",
+          formRevision: genericFormRevision,
+        });
+        await Promise.resolve();
+        complete(0);
+        await refresh;
+        assert.deepEqual(commandForm.syncCalls, [["job-1", true]]);
+        assert.equal(commandForm.clearCalls, 0);
+
+        const apply = executeCommand("channel-scale", {
+          action: "set", channel: 1, volts_per_division: 0.5,
+        }, { intent: "apply", formRevision: genericFormRevision });
+        await Promise.resolve();
+        complete(1);
+        await apply;
+        assert.deepEqual(commandForm.syncCalls, [["job-1", true], ["job-2", false]]);
+        assert.equal(commandForm.clearCalls, 1);
+        assert.deepEqual(commandForm.disabledCalls, [true, false]);
+        assert.deepEqual(workspaceResults, ["job-1", "job-2"]);
+        assert.deepEqual(completedResults, ["job-1", "job-2"]);
+        '''
+    )
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
@@ -2209,6 +2404,7 @@ def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -
         import assert from "node:assert/strict";
 
         let executing = false;
+        let genericFormRevision = 0;
         let currentJobId = null;
         let pendingResourceLiveSupport = null;
         let deviceResource = null;

@@ -39,6 +39,8 @@ it is not an operator guide.
 - Unapplied dirty input must not be overwritten by automatic readback. Keep
   workspace state and results scoped to command, execution mode, resource,
   detected Live model, and planning model as applicable.
+- Readback results may update an editor only while the originating presentation
+  context is still current.
 - Prefer existing aggregate Core queries. Do not create one hardware job per
   field when Core already returns a coherent state object.
 

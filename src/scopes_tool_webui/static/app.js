@@ -78,6 +78,7 @@ const state = createInitialState();
 let context = state.executionContext;
 let catalog;
 let commandForm;
+let genericFormRevision = 0;
 let saveExportEditor;
 let serialEditor;
 let triggerEditor;
@@ -218,6 +219,7 @@ async function initialize() {
     const parameters = commandForm.values();
     if (selected && parameters !== null) executeCommand(selected.id, parameters, {
       intent: commandForm.isSettingEditor() ? "apply" : "command",
+      formRevision: genericFormRevision,
     });
   });
   elements.refresh.addEventListener("click", async (event) => {
@@ -226,7 +228,10 @@ async function initialize() {
     if (!selected || !commandForm.isSettingEditor()) return;
     const parameters = commandForm.queryValues();
     if (parameters !== null) {
-      await executeCommand(selected.id, parameters, { intent: "readback" });
+      await executeCommand(selected.id, parameters, {
+        intent: "readback",
+        formRevision: genericFormRevision,
+      });
     }
   });
   elements.cancel.addEventListener("click", async () => {
@@ -308,8 +313,10 @@ async function executeCommand(command, parameters, options = {}) {
   executing = true;
   const commandContext = { ...context };
   const submittedWorkspaceContext = currentWorkspaceContext(command);
+  const ownsCommandForm = () => isCurrentEditorJob(command, submittedWorkspaceContext)
+    && (options.formRevision === undefined || options.formRevision === genericFormRevision);
   const lockEditor = options.intent === "apply"
-    && isCurrentEditorJob(command, submittedWorkspaceContext);
+    && ownsCommandForm();
   if (lockEditor) commandForm.setDisabled(true);
   if (command === "identify") deviceResource?.setIdentityPending?.(commandContext);
   updateAvailability();
@@ -329,7 +336,7 @@ async function executeCommand(command, parameters, options = {}) {
     renderCurrentResult();
     updateIdentity(job, commandContext);
     captureWorkspaceResult(job, submittedWorkspaceContext);
-    if (job.status === "completed" && isCurrentEditorJob(command, submittedWorkspaceContext)) {
+    if (job.status === "completed" && ownsCommandForm()) {
       if (options.intent === "apply") commandForm.clearDirty();
       commandForm.syncResult(job, options.intent !== "apply");
     }
@@ -341,7 +348,7 @@ async function executeCommand(command, parameters, options = {}) {
     renderCurrentResult();
     return null;
   } finally {
-    if (lockEditor && isCurrentEditorJob(command, submittedWorkspaceContext)) {
+    if (lockEditor && ownsCommandForm()) {
       commandForm.setDisabled(false);
     }
     executing = false;
@@ -534,9 +541,11 @@ function syncCommandSelection(draft = null) {
   state.selectedCommand = selected?.id || null;
   const editorKind = editorKindFor(selected);
   const editorOwned = editorKind !== null;
+  invalidateGenericFormOwnership();
   commandForm.render(selected, {
     draft,
     onDirty: () => updateAvailability(),
+    onQueryFieldChange: invalidateGenericFormOwnership,
   });
   elements.formHeading.hidden = editorOwned;
   elements.form.hidden = editorOwned;
@@ -562,6 +571,10 @@ function syncCommandSelection(draft = null) {
   renderWorkspace();
   updateAvailability();
   syncEditorPresentation(editorKind);
+}
+
+function invalidateGenericFormOwnership() {
+  genericFormRevision += 1;
 }
 
 function commandAvailable(command) {
