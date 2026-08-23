@@ -372,7 +372,16 @@ export class WorkflowEditor {
         return null;
       }
     }
-    if (!draft.items.length || (draft.pairs.length && !draft.pair_items.length)) return null;
+    if (!draft.items.length) return null;
+    const pairItemControl = this.controls.pair_items[0];
+    pairItemControl?.setCustomValidity?.("");
+    if (!draft.pair_items.length) {
+      pairItemControl?.setCustomValidity?.(
+        translate("workflow.editor.pairMeasurementRequired"),
+      );
+      pairItemControl?.reportValidity?.();
+      return null;
+    }
     const parameters = {
       items: draft.items.join(","),
       pair_items: draft.pair_items.join(","),

@@ -606,5 +606,6 @@ export const zhTW = {
   "workflow.editor.addPair": "新增配對",
   "workflow.editor.removePair": "移除配對",
   "workflow.editor.distinctPair": "來源與參考通道必須不同。",
+  "workflow.editor.pairMeasurementRequired": "請至少選擇一個配對量測項目。",
   "workflow.editor.limitRequired": "請輸入次數、持續時間，或兩者皆輸入。",
 };

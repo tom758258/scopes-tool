@@ -233,11 +233,12 @@ retrieval paths that register downloadable artifacts.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field
-groups. Workflow channel and measurement-item lists use model-aware
-multi-select controls; channel-pair specifications remain text fields with a
-short example. Trigger, Search, Serial, Segmented Memory, and Workflow
-commands use only the conditional visibility needed by their existing Core
-parameter semantics.
+groups. For `measure-log` and `triggered-measure-loop`, the dedicated Workflow
+editor provides structured Source and Reference pair rows and shared
+pair-measurement choices. `capture-batch`, `measure-until`, and
+`triggered-capture-series` remain metadata-driven Generic Forms. Trigger,
+Search, Serial, Segmented Memory, and Workflow commands use only the
+conditional visibility needed by their existing Core parameter semantics.
 
 Commands that expose the existing Core `query` / `set` contract as an
 instrument setting use a read-edit-Apply workflow in the browser. Command

@@ -279,6 +279,36 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_run_requires_pair_measurements_without_pair_rows() -> None:
+    run_editor_behavior(
+        r'''
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        editor.controls.count.value = "1";
+        for (const input of editor.controls.pair_items) input.checked = false;
+        assert.equal(editor.pairRows.length, 0);
+        assert.equal(editor.checkedValues("items").length > 0, true);
+
+        await editor.submit();
+        assert.equal(submissions.length, 0);
+
+        env.selectedId = "triggered-measure-loop";
+        editor.schedulePresentation();
+        await settle();
+        editor.controls.count.value = "1";
+        editor.controls.trigger_timeout_seconds.value = "1";
+        for (const input of editor.controls.pair_items) input.checked = false;
+        assert.equal(editor.pairRows.length, 0);
+        assert.equal(editor.checkedValues("items").length > 0, true);
+
+        await editor.submit();
+        assert.equal(submissions.length, 0);
+        ''',
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_workflow_drafts_survive_locale_rerender_but_not_context_switch_or_stale_completion() -> None:
     run_editor_behavior(
         r'''

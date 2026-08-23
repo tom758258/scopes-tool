@@ -610,5 +610,6 @@ export const en = {
   "workflow.editor.addPair": "Add pair",
   "workflow.editor.removePair": "Remove pair",
   "workflow.editor.distinctPair": "Source and reference channels must be different.",
+  "workflow.editor.pairMeasurementRequired": "Select at least one pair measurement.",
   "workflow.editor.limitRequired": "Enter a count, a duration, or both.",
 };
