@@ -246,13 +246,17 @@ SEARCH_EDITOR_HARNESS = r'''
         };
         const makeRecordingExecute = () => async (command, parameters, options) =>
           recordJob(command, parameters, options);
+        const selectedCommand = () => catalog.commands.find(
+          (command) => command.id === env.selectedId,
+        );
         const hooks = {
           executeCommand: makeRecordingExecute(),
-          isAvailable: () => env.available,
+          isAvailable: () => {
+            const selected = selectedCommand();
+            return Boolean(env.available && selected && catalog.supported(selected));
+          },
           contextKey: () => env.contextKey,
-          selectedCommand: () => catalog.commands.find(
-            (command) => command.id === env.selectedId,
-          ),
+          selectedCommand,
         };
         const buildEditor = () =>
           new globalThis.searchApi.SearchEditor(new FakeNode(), catalog, hooks);
@@ -424,6 +428,53 @@ def test_real_command_form_displays_zero_event_readback() -> None:
     )
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(COMMAND_FORM_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_search_event_capability_loss_shows_unavailable_state_and_recovers() -> None:
+    script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        // The harness isAvailable mirrors the real app contract: it folds
+        // catalog.supported into availability, exactly like commandAvailable.
+        env.selectedId = "search-event";
+        const editor = buildEditor();
+        editor.scheduleRefresh();
+        await settle();
+        assert.deepEqual(submitted.map((entry) => entry.command), ["search-event"]);
+        assert.equal(editor.entries.length, 1);
+        assert.equal(editor.refreshButton.disabled, false);
+
+        // Capability loss on model switch: the view stays presentable with an
+        // explicit unavailable note, disabled controls, and no new jobs.
+        submitted.length = 0;
+        catalog.supported = (command) => command.id !== "search-event";
+        env.contextKey = "ctx-3000x";
+        editor.scheduleRefresh();
+        await settle();
+        assert.deepEqual(editor.entries, []);
+        assert.deepEqual(submitted, []);
+        const note = editor.bodyHost.children.find((node) => node.tagName === "P");
+        assert.equal(note.textContent, "search.editor.eventUnavailable");
+        assert.equal(editor.groupHeading.textContent, "event");
+        assert.equal(editor.refreshButton.disabled, true);
+
+        // Recovery re-renders the form and re-reads the event.
+        catalog.supported = () => true;
+        env.contextKey = "ctx-back-4000x";
+        editor.scheduleRefresh();
+        await settle();
+        assert.equal(editor.entries.length, 1);
+        assert.deepEqual(submitted.map((entry) => entry.command), ["search-event"]);
+        assert.equal(editor.refreshButton.disabled, false);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(SEARCH_EDITOR_SOURCE)],
         capture_output=True,
         text=True,
         check=False,

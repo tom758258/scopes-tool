@@ -155,13 +155,32 @@ export class SearchEditor {
       return;
     }
     const definition = this.selectedDefinition();
-    if (!definition || !this.hooks.isAvailable()) {
+    if (!definition) {
       this.stateKey = null;
       this.clearView();
       return;
     }
     this.refreshSerialContext(definition);
     const key = this.currentStateKey();
+
+    // Capability-unsupported selections stay presentable: the view renders
+    // its own unavailable state with disabled controls instead of going
+    // blank. Runtime unavailability (mode, resource, identity) keeps
+    // clearing the view.
+    if (!this.catalog.supported(definition)) {
+      if (!force && key === this.stateKey) return;
+      this.stateKey = key;
+      this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
+      if (this.renderedKey !== key) this.rebuildView(definition);
+      this.applyBusyState();
+      return;
+    }
+
+    if (!this.hooks.isAvailable()) {
+      this.stateKey = null;
+      this.clearView();
+      return;
+    }
     if (!force && key === this.stateKey) return;
     this.setBusy(true);
     try {
