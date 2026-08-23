@@ -278,12 +278,14 @@ Command submission returns a job ID. The browser polls job status through the
 WebUI API. Jobs report `queued`, `running`, `completed`, `failed`, or
 `cancelled` and expose structured Core results, errors, and diagnostic lines.
 
-Only queued jobs can be cancelled. Running VISA I/O is not forcibly
-interrupted. When the Launcher is closed, it first stops accepting jobs,
-cancels queued jobs, and waits for running jobs to finish and close their own
-sessions before stopping Uvicorn. This shutdown has a timeout; if jobs do not
-finish or a session close fails, the Launcher displays **Shutdown incomplete**
-and remains available so Quit can be retried. No implicit Safe Cleanup is run.
+Queued jobs can be cancelled immediately. Running jobs accept a cooperative
+cancellation request and remain running until Core execution and session
+cleanup finish; blocking VISA I/O is not forcibly interrupted. When the
+Launcher is closed, it first stops accepting jobs, requests cancellation, and
+waits for running jobs to finish and close their own sessions before stopping
+Uvicorn. This shutdown has a timeout; if jobs do not finish or a session close
+fails, the Launcher displays **Shutdown incomplete** and remains available so
+Quit can be retried. No implicit Safe Cleanup is run.
 Screenshot and waveform capture jobs register their generated artifacts, which
 can be downloaded through the job result. Instrument-side `save-image` and
 `save-waveform` commands return the Core save result but do not create host
