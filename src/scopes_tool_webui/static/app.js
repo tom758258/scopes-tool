@@ -18,6 +18,7 @@ import { SearchEditor } from "/static/search-editor.js";
 import { SerialEditor } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
 import { TriggerEditor } from "/static/trigger-editor.js";
+import { WorkflowEditor } from "/static/workflow-editor.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
 const elements = {
@@ -55,6 +56,7 @@ const elements = {
   serialEditor: document.querySelector("#serial-editor"),
   triggerEditor: document.querySelector("#trigger-editor"),
   searchEditor: document.querySelector("#search-editor"),
+  workflowEditor: document.querySelector("#workflow-editor"),
   workspaceHeaderActions: document.querySelector("#workspace-header-actions"),
   refresh: document.querySelector("#refresh-button"),
   execute: document.querySelector("#execute-button"),
@@ -83,6 +85,7 @@ let saveExportEditor;
 let serialEditor;
 let triggerEditor;
 let searchEditor;
+let workflowEditor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -97,6 +100,7 @@ const EDITOR_RENDERERS = {
   serial: () => serialEditor,
   trigger: () => triggerEditor,
   search: () => searchEditor,
+  workflow: () => workflowEditor,
 };
 
 function editorKindFor(command) {
@@ -162,6 +166,17 @@ async function initialize() {
     selectedCommand: () => catalog.selected(),
   });
   searchEditor = new SearchEditor(elements.searchEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  workflowEditor = new WorkflowEditor(elements.workflowEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
@@ -532,6 +547,7 @@ document.addEventListener("localechange", () => {
   serialEditor?.rerender();
   triggerEditor?.rerender();
   searchEditor?.rerender();
+  workflowEditor?.rerender();
   syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
 });
@@ -554,6 +570,7 @@ function syncCommandSelection(draft = null) {
   elements.serialEditor.hidden = editorKind !== "serial";
   elements.triggerEditor.hidden = editorKind !== "trigger";
   elements.searchEditor.hidden = editorKind !== "search";
+  elements.workflowEditor.hidden = editorKind !== "workflow";
   syncWorkspaceHeaderActions(editorKind);
   elements.selectedCommand.textContent = selected
     ? editorOwned
@@ -603,6 +620,7 @@ function updateAvailability() {
   searchEditor?.applyBusyState();
   saveExportEditor?.applyBusyState();
   serialEditor?.render(serialEditor.controller.state);
+  workflowEditor?.applyBusyState();
   deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
   updateBasicAvailability();
 }
@@ -623,6 +641,7 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (serialEditor?.refreshButton) serialEditor.refreshButton.hidden = editorKind !== "serial";
   if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
   if (searchEditor?.refreshButton) searchEditor.refreshButton.hidden = editorKind !== "search";
+  if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
 }
 
 function syncEditorPresentation(editorKind) {
@@ -630,6 +649,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "serial") serialEditor?.schedulePresentation();
   if (editorKind === "trigger") triggerEditor?.schedulePresentation();
   if (editorKind === "search") searchEditor?.schedulePresentation();
+  if (editorKind === "workflow") workflowEditor?.schedulePresentation();
 }
 
 function commandAction(command) {

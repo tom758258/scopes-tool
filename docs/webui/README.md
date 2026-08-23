@@ -128,8 +128,15 @@ group first.
 
 Grouping is presentation only: it does not change Core command semantics,
 model or capability gating, or the metadata-driven forms. Dedicated editors
-use the existing groups where described below; Workflow keeps its grouped
-command forms.
+use the existing groups where described below.
+
+Selecting `measure-log` or `triggered-measure-loop` opens the dedicated
+Workflow editor. It provides model-projected analog channel and measurement
+choices, channel-pair rows, shared pair measurements, and the command's
+existing run limits. Selection and editing are browser-local and passive;
+Run submits one job through the shared foreground execution admission. The
+`capture-batch`, `measure-until`, and `triggered-capture-series` commands keep
+their metadata-driven Generic Form.
 
 Selecting a Trigger command opens the dedicated Trigger editor instead of a
 plain command form. The Command Browser remains the only Trigger navigation:

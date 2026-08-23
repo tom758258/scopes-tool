@@ -77,6 +77,7 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
           serialEditor: {},
           triggerEditor: {},
           searchEditor: {},
+          workflowEditor: {},
           selectedCommand: {},
           commandDescription: {},
           commandSupportReason: {},
@@ -2523,11 +2524,11 @@ def test_global_command_state_keeps_the_existing_execution_lifecycle() -> None:
     assert "const commandStatus = liveCommandState.status;" in source
 
 
-def test_dedicated_editor_refresh_actions_use_the_workspace_header() -> None:
+def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 4
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 5
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
 
