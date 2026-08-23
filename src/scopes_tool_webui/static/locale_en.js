@@ -595,4 +595,9 @@ export const en = {
   "save-export.editor.title": "Save / Export editor",
   "save-export.editor.description": "Dedicated instrument-side Save / Export editor: each setting keeps its own read-edit-Apply workflow, and Save image and Save waveform use explicit filenames.",
   "save-export.editor.storageNote": "Saves are written to instrument-side storage. They do not create WebUI download artifacts.",
+  "save-export.editor.readingCurrent": "Reading current {{group}} settings... ({{current}} of {{total}})",
+  "save-export.editor.currentLoaded": "Current {{group}} settings loaded.",
+  "save-export.editor.currentReadFailed": "Could not read {{failed}} of {{total}} {{group}} settings. You can refresh again or set new values manually.",
+  "save-export.editor.currentValueUnavailable": "Current value could not be read.",
+  "save-export.editor.filenameHelp": "Enter the instrument-side filename for this save operation. This does not use or modify Save filename.",
 };

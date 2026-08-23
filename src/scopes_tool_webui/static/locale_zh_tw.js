@@ -591,4 +591,9 @@ export const zhTW = {
   "save-export.editor.title": "儲存 / 匯出編輯器",
   "save-export.editor.description": "專屬儀器端儲存 / 匯出編輯器：每個設定保有獨立的讀取、編輯、套用流程，儲存影像與儲存波形使用各自明確的檔名。",
   "save-export.editor.storageNote": "儲存至儀器端儲存裝置，不會建立 WebUI 下載檔案。",
+  "save-export.editor.readingCurrent": "正在讀取目前的{{group}}設定…（{{current}} / {{total}}）",
+  "save-export.editor.currentLoaded": "已載入目前的{{group}}設定。",
+  "save-export.editor.currentReadFailed": "有 {{failed}} / {{total}} 個{{group}}設定無法讀取。你可以重新整理，或手動指定新值後套用。",
+  "save-export.editor.currentValueUnavailable": "無法讀取目前值。",
+  "save-export.editor.filenameHelp": "輸入本次儲存使用的儀器端檔名。此欄位不會使用或修改「儲存檔名」。",
 };

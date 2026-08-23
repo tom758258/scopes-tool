@@ -72,6 +72,11 @@ def test_save_export_editor_frontend_wiring_and_localization() -> None:
         "save-export.editor.title",
         "save-export.editor.description",
         "save-export.editor.storageNote",
+        "save-export.editor.readingCurrent",
+        "save-export.editor.currentLoaded",
+        "save-export.editor.currentReadFailed",
+        "save-export.editor.currentValueUnavailable",
+        "save-export.editor.filenameHelp",
     ):
         assert f'"{key}":' in english
         assert f'"{key}":' in chinese
@@ -97,9 +102,27 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           append(...nodes) { this.children.push(...nodes); }
+          insertBefore(node, reference) {
+            const index = this.children.indexOf(reference);
+            if (index < 0) this.children.push(node);
+            else this.children.splice(index, 0, node);
+          }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
-        globalThis.translate = (key) => key;
+        const translations = {
+          "save-export.editor.readingCurrent": "reading:{{group}}:{{current}}/{{total}}",
+          "save-export.editor.currentLoaded": "loaded:{{group}}",
+          "save-export.editor.currentReadFailed": "failed:{{group}}:{{failed}}/{{total}}",
+          "save-export.editor.currentValueUnavailable": "current-value-unavailable",
+          "save-export.editor.filenameHelp": "filename-help",
+        };
+        globalThis.translate = (key, values = {}) => {
+          let text = translations[key] || key;
+          for (const [name, value] of Object.entries(values)) {
+            text = text.replaceAll(`{{${name}}}`, String(value));
+          }
+          return text;
+        };
         globalThis.CommandForm = class CommandForm {
           constructor(container) {
             this.container = container;
@@ -212,6 +235,7 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
         ]);
         assert.ok(submitted.every((entry) => entry.intent === "readback"));
         assert.ok(editor.entries.every((entry) => entry.form.syncCalls.at(-1)[1] === true));
+        assert.equal(editor.readStatus.textContent, "loaded:path-filename");
 
         submitted.length = 0;
         editor.refreshButton.dispatch("click");
@@ -232,6 +256,7 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
           "save-image-format", "save-image-palette", "save-image-ink-saver",
           "save-image-factors",
         ]);
+        assert.equal(editor.readStatus.textContent, "loaded:image");
 
         submitted.length = 0;
         env.selectedId = "save-waveform";
@@ -248,6 +273,7 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
         assert.equal(maximum.kind, "readonly");
         assert.equal(maximum.button, undefined);
         assert.equal(maximum.output.textContent, "status.enabled");
+        assert.equal(editor.readStatus.textContent, "loaded:waveform");
 
         submitted.length = 0;
         env.contextKey = "ctx-2";
@@ -256,6 +282,133 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-waveform-format", "save-waveform-length", "save-waveform-length-max",
         ]);
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_reports_sequential_readback_progress_without_recursion() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.selectedId = "save-image-format";
+        const editor = buildEditor();
+        const pending = [];
+        hooks.executeCommand = (command, parameters, options) => {
+          submitted.push({ command, parameters, intent: options?.intent });
+          editor.scheduleRefresh();
+          return new Promise((resolve) => pending.push({ command, resolve }));
+        };
+
+        editor.scheduleRefresh();
+        await settle();
+        assert.equal(editor.busy, true);
+        assert.equal(editor.readStatus.textContent, "reading:image:1/4");
+        assert.equal(pending.length, 1);
+        assert.equal(editor.refreshButton.disabled, true);
+        assert.ok(editor.entries.filter((entry) => entry.button).every(
+          (entry) => entry.button.disabled,
+        ));
+        assert.ok(editor.entries.filter((entry) => entry.form).every(
+          (entry) => entry.form.disableCalls.at(-1) === true,
+        ));
+
+        for (let index = 0; index < 4; index += 1) {
+          pending[index].resolve({
+            job_id: `read-${index}`,
+            status: "completed",
+            result: { result: {} },
+          });
+          await settle();
+          if (index < 3) {
+            assert.equal(editor.readStatus.textContent, `reading:image:${index + 2}/4`);
+          }
+        }
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors",
+        ]);
+        assert.equal(editor.readStatus.textContent, "loaded:image");
+        assert.equal(editor.busy, false);
+        assert.equal(editor.refreshButton.disabled, false);
+        assert.equal(editor.pendingRefresh, false);
+        assert.ok(editor.entries.filter((entry) => entry.button).every(
+          (entry) => !entry.button.disabled,
+        ));
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_surfaces_partial_failure_and_allows_retry_and_apply() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.selectedId = "save-image-format";
+        let paletteFailures = 1;
+        hooks.executeCommand = async (command, parameters, options) => {
+          submitted.push({ command, parameters, intent: options?.intent });
+          if (
+            options?.intent === "readback"
+            && command === "save-image-palette"
+            && paletteFailures > 0
+          ) {
+            paletteFailures -= 1;
+            return null;
+          }
+          return {
+            job_id: `${command}-${submitted.length}`,
+            status: "completed",
+            result: { result: {} },
+          };
+        };
+        const editor = buildEditor();
+        editor.scheduleRefresh();
+        await settle();
+
+        const palette = editor.entries.find((entry) => entry.id === "save-image-palette");
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors",
+        ]);
+        assert.equal(palette.readError.hidden, false);
+        assert.equal(palette.readError.textContent, "current-value-unavailable");
+        assert.equal(editor.readStatus.textContent, "failed:image:1/4");
+        assert.equal(editor.busy, false);
+        assert.equal(palette.button.disabled, false);
+
+        submitted.length = 0;
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors",
+        ]);
+        assert.equal(submitted.some((entry) => entry.command === "save-image"), false);
+        assert.equal(palette.readError.hidden, true);
+        assert.equal(editor.readStatus.textContent, "loaded:image");
+        assert.ok(editor.entries.filter((entry) => entry.kind === "setting").every(
+          (entry) => entry.form.syncCalls.at(-1)[1] === true,
+        ));
+
+        paletteFailures = 1;
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(palette.readError.hidden, false);
+        palette.form.valuesResult = { action: "set", palette: "grayscale" };
+        submitted.length = 0;
+        palette.button.dispatch("click");
+        await settle();
+        assert.equal(submitted[0].command, "save-image-palette");
+        assert.equal(submitted[0].intent, "apply");
+        assert.deepEqual(submitted[0].parameters, {
+          action: "set", palette: "grayscale",
+        });
+        assert.equal(palette.form.clearedDirty, 1);
+        assert.equal(palette.readError.hidden, true);
+        assert.equal(editor.readStatus.textContent, "loaded:image");
         '''
     )
     completed = run_node(script)
@@ -309,6 +462,7 @@ def test_save_actions_submit_once_without_group_refresh_and_busy_gates_controls(
         editor.scheduleRefresh();
         await settle();
         const imageEntry = editor.entries.find((entry) => entry.id === "save-image");
+        assert.equal(imageEntry.help.textContent, "filename-help");
         imageEntry.form.valuesResult = { filename: "scope-screen" };
 
         submitted.length = 0;
@@ -340,6 +494,7 @@ def test_save_actions_submit_once_without_group_refresh_and_busy_gates_controls(
         editor.scheduleRefresh();
         await settle();
         const waveformEntry = editor.entries.find((entry) => entry.id === "save-waveform");
+        assert.equal(waveformEntry.help.textContent, "filename-help");
         waveformEntry.form.valuesResult = { filename: "wave-data" };
         submitted.length = 0;
         waveformEntry.button.dispatch("click");

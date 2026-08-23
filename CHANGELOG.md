@@ -24,8 +24,9 @@
   Bus/Protocol selection where each Apply stays a single existing
   `serial-search-*` command followed by query-only reconciliation.
 - Adds a dedicated WebUI Save / Export editor with Path / Filename, Image, and
-  Waveform groups, independent setting applies, and explicit instrument-side
-  Save Image and Save Waveform actions that do not create download artifacts.
+  Waveform groups, visible readback progress and failure guidance, independent
+  setting applies, and explicit instrument-side Save Image and Save Waveform
+  actions that do not create download artifacts.
 - Adds collapsible command groups to the WebUI Command Browser for dense
   categories while keeping the flat command list for ungrouped categories.
 - Adds the finite `measure-until`, `triggered-measure-loop`, and

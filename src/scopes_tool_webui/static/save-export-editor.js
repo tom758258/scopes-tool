@@ -47,9 +47,16 @@ export class SaveExportEditor {
       this.scheduleRefresh(true);
     });
     this.headRow.append(this.groupHeading, this.refreshButton);
+    this.readStatus = document.createElement("output");
+    this.readStatus.className = "muted compact-note";
     this.sectionsHost = document.createElement("div");
     this.sectionsHost.className = "trigger-editor-sections";
-    this.container.append(this.storageNote, this.headRow, this.sectionsHost);
+    this.container.append(
+      this.storageNote,
+      this.headRow,
+      this.readStatus,
+      this.sectionsHost,
+    );
   }
 
   selectedDefinition() {
@@ -112,6 +119,7 @@ export class SaveExportEditor {
     this.entries = [];
     this.sectionsHost.replaceChildren();
     this.groupHeading.textContent = "";
+    this.readStatus.textContent = "";
     this.refreshButton.disabled = true;
   }
 
@@ -143,8 +151,9 @@ export class SaveExportEditor {
       const output = document.createElement("output");
       output.className = "readonly-value";
       output.textContent = "-";
-      section.append(output);
-      return { id: command.id, kind: "readonly", output, epoch };
+      const readError = this.buildReadError();
+      section.append(output, readError);
+      return { id: command.id, kind: "readonly", output, readError, epoch };
     }
 
     const formContainer = document.createElement("div");
@@ -167,38 +176,89 @@ export class SaveExportEditor {
       button: actionButton,
       epoch,
     };
+    if (kind === "setting") {
+      entry.readError = this.buildReadError();
+      section.append(entry.readError);
+    } else if (action === "save") {
+      const help = document.createElement("p");
+      help.className = "muted compact-note";
+      help.textContent = translate("save-export.editor.filenameHelp");
+      section.insertBefore(help, actionButton);
+      entry.help = help;
+    }
     actionButton.addEventListener("click", () => {
       void this.submit(entry);
     });
     return entry;
   }
 
+  buildReadError() {
+    const error = document.createElement("p");
+    error.className = "error-summary";
+    error.textContent = translate("save-export.editor.currentValueUnavailable");
+    error.hidden = true;
+    return error;
+  }
+
+  setReadError(entry, failed) {
+    if (!entry.readError) return;
+    entry.readError.hidden = !failed;
+  }
+
+  setReadStatus(kind, values = {}) {
+    const key = {
+      reading: "save-export.editor.readingCurrent",
+      loaded: "save-export.editor.currentLoaded",
+      failed: "save-export.editor.currentReadFailed",
+    }[kind];
+    this.readStatus.className = kind === "failed" ? "error-summary" : "muted compact-note";
+    this.readStatus.textContent = translate(key, values);
+  }
+
   async readEntry(entry) {
     const parameters = entry.kind === "readonly" ? {} : entry.form.queryValues();
-    if (parameters === null) return;
+    if (parameters === null) return false;
     const job = await this.hooks.executeCommand(
       entry.id,
       parameters,
       { intent: "readback" },
     );
-    if (job?.status !== "completed" || entry.epoch !== this.epoch) return;
+    if (job?.status !== "completed" || entry.epoch !== this.epoch) return false;
     if (entry.kind === "readonly") {
       const enabled = resultValue(job.result, "enabled");
-      entry.output.textContent = enabled === undefined
-        ? "-"
-        : translate(enabled ? "status.enabled" : "status.disabled");
-      return;
+      if (enabled === undefined) return false;
+      entry.output.textContent = translate(enabled ? "status.enabled" : "status.disabled");
+      return true;
     }
     entry.form.syncResult(job, true);
+    return true;
   }
 
   async readActiveGroup() {
     const epoch = this.epoch;
-    for (const entry of this.entries) {
+    const readable = this.entries.filter(
+      (entry) => ["setting", "readonly"].includes(entry.kind),
+    );
+    const group = this.catalog.groupLabel(this.selectedDefinition()?.group || "");
+    readable.forEach((entry) => this.setReadError(entry, false));
+    let failed = 0;
+    for (const [index, entry] of readable.entries()) {
       if (epoch !== this.epoch) return;
-      if (!["setting", "readonly"].includes(entry.kind)) continue;
-      await this.readEntry(entry);
+      this.setReadStatus("reading", {
+        group,
+        current: index + 1,
+        total: readable.length,
+      });
+      const succeeded = await this.readEntry(entry);
+      if (epoch !== this.epoch) return;
+      this.setReadError(entry, !succeeded);
+      if (!succeeded) failed += 1;
     }
+    this.setReadStatus(failed ? "failed" : "loaded", {
+      group,
+      failed,
+      total: readable.length,
+    });
   }
 
   async submit(entry) {

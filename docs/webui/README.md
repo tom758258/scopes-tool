@@ -209,13 +209,17 @@ palette, ink-saver, and measurement-factor settings; Waveform reads its format
 and length settings plus the read-only maximum-length state. Each setting
 keeps an independent Apply over its existing command, and a successful Apply
 is followed by an active-group readback that preserves unapplied sibling
-edits. There is no Apply All, merged payload, transaction, or rollback.
+edits. The editor shows readback progress and identifies settings whose current
+value could not be read; after a failed read, an operator can retry the group
+or enter and apply a new value manually. There is no Apply All, merged payload,
+transaction, or rollback.
 
 Save Image and Save Waveform each require their own explicit filename and
 submit only their existing instrument-side Save command. They do not inherit
-or update `save-filename`, add filename extensions, refresh unrelated settings,
-or create WebUI download artifacts. Screenshot and Capture remain separate
-host-side retrieval paths that register downloadable artifacts.
+or update `save-filename`; the editor makes this filename separation explicit.
+They do not add filename extensions, refresh unrelated settings, or create
+WebUI download artifacts. Screenshot and Capture remain separate host-side
+retrieval paths that register downloadable artifacts.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field
