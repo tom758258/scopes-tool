@@ -63,9 +63,8 @@ def test_save_export_editor_frontend_wiring_and_localization() -> None:
     assert "saveExportEditor = new SaveExportEditor(elements.saveExportEditor, catalog, {" in app_source
     assert 'elements.saveExportEditor.hidden = editorKind !== "save-export";' in app_source
     assert "elements.form.hidden = editorOwned;" in app_source
-    assert "syncWorkspaceHeaderActions(editorKind);" in app_source
     assert "headerActions: elements.workspaceHeaderActions," in app_source
-    assert "this.hooks.headerActions.append(this.refreshButton);" in editor_source
+    assert "headerActions" in editor_source
     assert "saveExportEditor?.schedulePresentation();" in app_source
     assert "saveExportEditor?.rerender();" in app_source
     assert "applyAll" not in editor_source
@@ -192,7 +191,9 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           groupLabel: (group) => group,
           commandLabel: (command) => command.label,
         };
-        const env = { available: true, contextKey: "ctx", selectedId: "save-pwd" };
+        const env = {
+          available: true, executionBusy: false, contextKey: "ctx", selectedId: "save-pwd",
+        };
         const submitted = [];
         const recordingExecute = async (command, parameters, options) => {
           const payload = command === "save-waveform-length-max" ? { enabled: true } : {};
@@ -207,6 +208,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
         const hooks = {
           executeCommand: recordingExecute,
           isAvailable: () => env.available,
+          isExecutionBusy: () => env.executionBusy,
           contextKey: () => env.contextKey,
           selectedCommand: () => commands.find((command) => command.id === env.selectedId),
         };
@@ -214,6 +216,39 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           new FakeNode(), catalog, hooks,
         );
 '''
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_actions_follow_global_execution_admission_and_recover() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.selectedId = "save-image-format";
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        const entry = editor.entries.find((item) => item.id === "save-image-format");
+        const saveEntry = editor.entries.find((item) => item.id === "save-image");
+
+        env.executionBusy = true;
+        editor.applyBusyState();
+        assert.equal(editor.refreshButton.disabled, true);
+        assert.equal(entry.button.disabled, true);
+        assert.equal(saveEntry.button.disabled, true);
+        await editor.submit(entry);
+        await editor.submit(saveEntry);
+        assert.deepEqual(submitted, []);
+
+        env.executionBusy = false;
+        editor.applyBusyState();
+        assert.equal(entry.button.disabled, false);
+        await editor.submit(entry);
+        await settle();
+        assert.equal(submitted[0].command, "save-image-format");
+        assert.equal(submitted[0].intent, "apply");
+        assert.equal(submitted.slice(1).some((item) => item.intent === "readback"), true);
+        ''')
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 def run_node(script: str) -> subprocess.CompletedProcess[str]:

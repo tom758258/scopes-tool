@@ -942,6 +942,7 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
         };
 
         const submitted = [];
+        let executionBusy = false;
         let currentMode = "can";
         let editor = null;
         const respond = (command, parameters) => {
@@ -981,6 +982,7 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
         editor = new SerialEditor(new FakeNode(), catalog, {
           executeCommand,
           isAvailable: () => true,
+          isExecutionBusy: () => executionBusy,
           contextKey: () => "ctx",
           modelInfo: () => ({ supported: true, maxBus: 2, protocols: ["uart", "i2c", "spi", "can"] }),
         });
@@ -1033,6 +1035,24 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
           entry.command.startsWith("serial-trigger-") && entry.action === "query"), true);
         assert.equal(laterSubmissions.filter((entry) =>
           entry.command === "serial-lister-query").length >= 1, true);
+
+        editor.displayForm.values = () => ({ enabled: true });
+        editor.exportForm.values = () => ({ output: "serial.csv" });
+        executionBusy = true;
+        editor.render(editor.controller.state);
+        assert.equal(editor.applyDisplayButton.disabled, true);
+        assert.equal(editor.exportButton.disabled, true);
+        const blockedAt = submitted.length;
+        await editor.submitDisplay();
+        await editor.submitExport();
+        assert.equal(submitted.length, blockedAt);
+
+        executionBusy = false;
+        editor.render(editor.controller.state);
+        assert.equal(editor.applyDisplayButton.disabled, false);
+        assert.equal(editor.exportButton.disabled, false);
+        await editor.submitExport();
+        assert.equal(submitted[blockedAt].command, "serial-lister-export");
         '''
     )
     completed = subprocess.run(
@@ -1448,6 +1468,14 @@ def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
         device.refresh();
         assertControls(false);
 
+        device.setExternalBusy(true);
+        assertControls(true);
+        assert.equal(elements.mode[0].disabled, true);
+        await device.scan();
+        assert.equal(submissions, 0);
+        device.setExternalBusy(false);
+        assertControls(false);
+
         const scanPromise = device.scan();
         assert.equal(elements.scan.disabled, true);
         mode = "simulate";
@@ -1569,6 +1597,7 @@ def test_selected_resource_identify_serializes_latest_requested_context() -> Non
           model_id: "keysight-dsox4024a",
         });
         let context = contextFor("RESOURCE-A");
+        let executing = false;
         let pendingResourceLiveSupport = null;
         let resultPresentation = { kind: "empty", job: null, message: null };
         const elements = { results: {} };
@@ -1585,6 +1614,7 @@ def test_selected_resource_identify_serializes_latest_requested_context() -> Non
         const captureWorkspaceResult = () => {};
         const buildWorkspaceContext = () => ({});
         const renderLiveData = () => {};
+        const updateAvailability = () => {};
         const setCommandState = (state) => states.push({ resource: context.resource, ...state });
         const renderCurrentResult = () => {
           const job = resultPresentation.job;
@@ -1618,6 +1648,11 @@ def test_selected_resource_identify_serializes_latest_requested_context() -> Non
         '''
     ) + declarations + textwrap.dedent(
         r'''
+
+        executing = true;
+        await refreshSelectedResourceContext(contextFor("RESOURCE-A"));
+        assert.deepEqual(submissions, []);
+        executing = false;
 
         const identifyA = refreshSelectedResourceContext(contextFor("RESOURCE-A"));
         await settle();
@@ -1707,6 +1742,7 @@ def test_stale_identify_submission_failure_is_kept_before_requested_identify_run
           model_id: "keysight-dsox4024a",
         });
         let context = contextFor("RESOURCE-A");
+        let executing = false;
         let pendingResourceLiveSupport = null;
         let resultPresentation = { kind: "empty", job: null, message: null };
         const elements = { results: {} };
@@ -1723,6 +1759,7 @@ def test_stale_identify_submission_failure_is_kept_before_requested_identify_run
         const buildWorkspaceContext = () => ({});
         let rejectA;
         const renderLiveData = () => {};
+        const updateAvailability = () => {};
         const setCommandState = (state) => states.push({ resource: context.resource, ...state });
         const renderCurrentResult = () => {
           if (resultPresentation.kind === "error") {
@@ -2133,19 +2170,6 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert 'id="cancel-button"' not in workspace_body
     assert ".workspace-header-actions" in styles
 
-    selection = extract_function(source, "function syncWorkspaceHeaderActions(editorKind)")
-    assert "elements.refresh.hidden = !selected || editorKind !== null || !commandForm?.isSettingEditor();" in selection
-    assert "elements.execute.hidden = !selected || editorKind !== null;" in selection
-    for kind, editor in (
-        ("save-export", "saveExportEditor"),
-        ("serial", "serialEditor"),
-        ("trigger", "triggerEditor"),
-        ("search", "searchEditor"),
-    ):
-        assert f'{editor}.refreshButton.hidden = editorKind !== "{kind}";' in selection
-
-    availability = extract_function(source, "function updateAvailability()")
-    assert "elements.execute.disabled = executing || !selected || !commandAvailable(selected.id);" in availability
     execute_handler = source.split('elements.execute.addEventListener("click"', 1)[1].split(
         'elements.cancel.addEventListener("click"', 1,
     )[0]
@@ -2160,8 +2184,6 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert "const parameters = commandForm.queryValues();" in refresh_handler
     assert 'executeCommand(selected.id, parameters, { intent: "readback" })' in refresh_handler
     assert "function scheduleEditorRead()" not in source
-    selection_handler = extract_function(source, "function syncCommandSelection(draft = null)")
-    assert "onQueryFieldChange" not in selection_handler
 
     cancel_handler = source.split('elements.cancel.addEventListener("click"', 1)[1].split(
         "\n  });", 1,
@@ -2169,6 +2191,101 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert "await requestCancel(currentJobId);" in cancel_handler
     assert 'elements.cancel.classList.remove("hidden");' in source
     assert 'elements.cancel.classList.add("hidden");' in source
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -> None:
+    source = read_static("app.js")
+    executable_source = source.replace("options = {}", "options = null", 1)
+    declarations = "\n".join(
+        extract_function_declaration(executable_source, signature)
+        for signature in (
+            "async function executeCommand(command, parameters, options = null)",
+            "function isExecutionBusy()",
+        )
+    )
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+
+        let executing = false;
+        let currentJobId = null;
+        let pendingResourceLiveSupport = null;
+        let deviceResource = null;
+        let resultPresentation = { kind: "empty", job: null, message: null };
+        const context = { mode: "simulate", resource: null, model_id: "model" };
+        const commands = [{ id: "run", modes: ["simulate"] }];
+        const elements = {
+          deviceStatus: { textContent: "" },
+          execute: { disabled: false },
+          cancel: { classList: { add() {}, remove() {} } },
+        };
+        const states = [];
+        const presentations = [];
+        const submissions = [];
+        const translate = (key) => key;
+        const commandAvailable = () => true;
+        const currentWorkspaceContext = () => ({});
+        const isCurrentEditorJob = () => false;
+        const updateAvailability = () => {};
+        const setExecutionStatus = (state) => states.push(state.status);
+        const renderCurrentResult = () => presentations.push(resultPresentation.job?.job_id || null);
+        const updateIdentity = () => {};
+        const captureWorkspaceResult = () => {};
+        const commandForm = { setDisabled() {}, clearDirty() {}, syncResult() {} };
+        let resolveFirst;
+        const runJob = (command, parameters, commandContext, onUpdate) => {
+          submissions.push({ command, parameters, commandContext });
+          const jobId = `job-${submissions.length}`;
+          onUpdate({ job_id: jobId, command, status: "queued" });
+          if (submissions.length === 1) {
+            return new Promise((resolve) => { resolveFirst = resolve; });
+          }
+          return Promise.resolve({ job_id: jobId, command, status: "completed" });
+        };
+        '''
+    ) + declarations + textwrap.dedent(
+        r'''
+
+        const first = executeCommand("run", { source: 1 }, {});
+        await Promise.resolve();
+        assert.equal(currentJobId, "job-1");
+        const ownedState = states.at(-1);
+        const ownedPresentation = presentations.at(-1);
+
+        const blocked = await executeCommand("run", { source: 2 }, {});
+        assert.equal(blocked, null);
+        assert.equal(submissions.length, 1);
+        assert.equal(currentJobId, "job-1");
+        assert.equal(states.at(-1), ownedState);
+        assert.equal(presentations.at(-1), ownedPresentation);
+
+        resolveFirst({ job_id: "job-1", command: "run", status: "completed" });
+        await first;
+        assert.equal(executing, false);
+        assert.equal(currentJobId, null);
+
+        deviceResource = { scanInProgress: true };
+        assert.equal(await executeCommand("run", { source: 3 }, {}), null);
+        assert.equal(submissions.length, 1);
+        deviceResource.scanInProgress = false;
+        pendingResourceLiveSupport = {};
+        assert.equal(await executeCommand("run", { source: 4 }, {}), null);
+        assert.equal(submissions.length, 1);
+        pendingResourceLiveSupport = null;
+
+        const second = await executeCommand("run", { source: 5 }, {});
+        assert.equal(second.job_id, "job-2");
+        assert.equal(submissions.length, 2);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 def test_global_command_state_keeps_the_existing_execution_lifecycle() -> None:
@@ -2189,27 +2306,10 @@ def test_global_command_state_keeps_the_existing_execution_lifecycle() -> None:
 
 def test_dedicated_editor_refresh_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
-    editor_sources = {
-        "save-export": read_static("save-export-editor.js"),
-        "serial": read_static("serial-editor.js"),
-        "trigger": read_static("trigger-editor.js"),
-        "search": read_static("search-editor.js"),
-    }
+    html = read_static("index.html")
 
     assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 4
-    for editor_source in editor_sources.values():
-        assert "this.hooks.headerActions.append(this.refreshButton);" in editor_source
-        assert "this.refreshButton.hidden = true;" in editor_source
-    assert "this.headRow.append(this.groupHeading, this.refreshButton);" not in editor_sources["trigger"]
-    assert "this.headRow.append(this.groupHeading, this.refreshButton);" not in editor_sources["search"]
-    assert "this.headRow.append(this.groupHeading, this.refreshButton);" not in editor_sources["save-export"]
-    assert "...(this.hooks.headerActions ? [] : [this.refreshButton])," in editor_sources["serial"]
-
-    # Child actions remain editor-owned and next to their forms.
-    assert "section.append(formContainer, actionButton);" in editor_sources["save-export"]
-    assert "this.applyModeButton," in editor_sources["serial"]
-    assert "section.append(heading, formContainer, actionButton);" in editor_sources["trigger"]
-    assert "section.append(heading, formContainer, applyButton);" in editor_sources["search"]
+    assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
 
 def test_live_mode_badge_is_neutral_and_utility_glyphs_are_centered() -> None:

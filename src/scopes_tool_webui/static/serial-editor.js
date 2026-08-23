@@ -458,7 +458,7 @@ export class SerialEditor {
     this.controller = createSerialEditorController({
       execute: (command, parameters, options) => hooks.executeCommand(command, parameters, options),
       confirmDiscard: () => window.confirm(translate("serial.editor.discardConfirm")),
-      available: () => hooks.isAvailable(),
+      available: () => hooks.isAvailable() && !hooks.isExecutionBusy?.(),
     });
     this.controller.onStateChange((stateSnapshot) => this.render(stateSnapshot));
     this.syncedJobs = {
@@ -741,7 +741,7 @@ export class SerialEditor {
   }
 
   async submitDisplay() {
-    if (!this.displayForm || this.controller.state.busy) return;
+    if (!this.displayForm || this.controller.state.busy || this.hooks.isExecutionBusy?.()) return;
     const values = this.displayForm.values();
     if (values === null) return;
     delete values.action;
@@ -750,7 +750,7 @@ export class SerialEditor {
   }
 
   async submitConfig() {
-    if (!this.configForm || this.controller.state.busy) return;
+    if (!this.configForm || this.controller.state.busy || this.hooks.isExecutionBusy?.()) return;
     const values = this.configForm.values();
     if (values === null) return;
     delete values.action;
@@ -759,7 +759,7 @@ export class SerialEditor {
   }
 
   async submitTrigger() {
-    if (!this.triggerForm || this.controller.state.busy) return;
+    if (!this.triggerForm || this.controller.state.busy || this.hooks.isExecutionBusy?.()) return;
     const values = this.triggerForm.values();
     if (values === null) return;
     delete values.action;
@@ -771,7 +771,7 @@ export class SerialEditor {
     const form = kind === "reference"
       ? this.listerReferenceForm
       : this.listerDisplayForm;
-    if (!form || this.controller.state.busy) return;
+    if (!form || this.controller.state.busy || this.hooks.isExecutionBusy?.()) return;
     const values = form.values();
     if (values === null) return;
     delete values.action;
@@ -780,7 +780,7 @@ export class SerialEditor {
   }
 
   async submitExport() {
-    if (!this.exportForm || this.controller.state.busy) return;
+    if (!this.exportForm || this.controller.state.busy || this.hooks.isExecutionBusy?.()) return;
     const values = this.exportForm.values();
     if (values === null) return;
     await this.controller.exportLister(values.output);
@@ -813,7 +813,7 @@ export class SerialEditor {
     const changed = this.schedulePresentation();
     if (!force && !changed) return;
     const info = this.hooks.modelInfo();
-    if (info.supported) this.controller.scheduleRefresh();
+    if (info.supported && !this.hooks.isExecutionBusy?.()) this.controller.scheduleRefresh();
   }
 
   schedulePresentation() {
@@ -836,7 +836,7 @@ export class SerialEditor {
 
   render(stateSnapshot) {
     const unavailable = !this.hooks.isAvailable();
-    const disabled = stateSnapshot.busy || unavailable;
+    const disabled = stateSnapshot.busy || this.hooks.isExecutionBusy?.() || unavailable;
 
     if (this.renderedFormEpoch !== stateSnapshot.formEpoch) {
       this.renderedFormEpoch = stateSnapshot.formEpoch;

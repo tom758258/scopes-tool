@@ -42,6 +42,7 @@ export class DeviceResource {
     onJobUpdate = () => {},
     onScanError = () => {},
     onSelectedResourceChange = () => {},
+    onBusyChange = () => {},
   ) {
     this.elements = elements;
     this.onContextChange = onContextChange;
@@ -49,6 +50,7 @@ export class DeviceResource {
     this.onJobUpdate = onJobUpdate;
     this.onScanError = onScanError;
     this.onSelectedResourceChange = onSelectedResourceChange;
+    this.onBusyChange = onBusyChange;
     this.resourceCount = null;
     this.statusKey = "device.ready";
     this.statusError = null;
@@ -57,6 +59,7 @@ export class DeviceResource {
     this.lastContext = null;
     this.scanStatus = "not-scanned";
     this.scanInProgress = false;
+    this.externalBusy = false;
     elements.settings.addEventListener("click", (event) => {
       event.stopPropagation();
       this.setSettingsExpanded(elements.settingsPanel.hidden);
@@ -105,10 +108,7 @@ export class DeviceResource {
         this.statusError = null;
       }
     }
-    this.elements.model.disabled = live;
-    this.elements.resource.disabled = !live;
-    this.elements.resourceList.disabled = !live;
-    this.elements.scan.disabled = !live || this.scanInProgress;
+    this.syncControlAvailability(context);
     if (this.elements.modelField) this.elements.modelField.hidden = live;
     if (this.elements.detectedModelField) this.elements.detectedModelField.hidden = !live;
     this.renderMode(context);
@@ -119,6 +119,21 @@ export class DeviceResource {
 
   refresh() {
     this.changed();
+  }
+
+  setExternalBusy(value) {
+    this.externalBusy = Boolean(value);
+    this.syncControlAvailability(this.context());
+  }
+
+  syncControlAvailability(context = this.context()) {
+    const live = context.mode === "live";
+    const busy = this.scanInProgress || this.externalBusy;
+    this.elements.mode.forEach((input) => { input.disabled = busy; });
+    this.elements.model.disabled = live || busy;
+    this.elements.resource.disabled = !live || busy;
+    this.elements.resourceList.disabled = !live || busy;
+    this.elements.scan.disabled = !live || busy;
   }
 
   setSettingsExpanded(expanded) {
@@ -249,9 +264,10 @@ export class DeviceResource {
 
   async scan() {
     const context = this.context();
-    if (context.mode !== "live") return;
-    this.elements.scan.disabled = true;
+    if (context.mode !== "live" || this.scanInProgress || this.externalBusy) return;
     this.scanInProgress = true;
+    this.syncControlAvailability(context);
+    this.onBusyChange(true);
     this.clearIdentity();
     this.resourceCount = null;
     this.scanStatus = "scanning";
@@ -279,7 +295,7 @@ export class DeviceResource {
       this.scanStatus = resources.length ? "scanned" : "empty";
       this.statusKey = "device.ready";
       this.changed();
-      if (resources.length) this.onSelectedResourceChange(this.context());
+      if (resources.length) await this.onSelectedResourceChange(this.context());
     } catch (error) {
       this.onCommandStateChange({ status: "failed" });
       this.resourceCount = null;
@@ -290,7 +306,8 @@ export class DeviceResource {
       if (!backendJobReceived) this.onScanError(error.message || String(error));
     } finally {
       this.scanInProgress = false;
-      this.elements.scan.disabled = this.context().mode !== "live" || this.scanInProgress;
+      this.syncControlAvailability(this.context());
+      this.onBusyChange(false);
     }
   }
 

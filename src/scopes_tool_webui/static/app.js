@@ -130,6 +130,7 @@ async function initialize() {
   saveExportEditor = new SaveExportEditor(elements.saveExportEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
       return Boolean(selected && commandAvailable(selected.id));
@@ -140,6 +141,7 @@ async function initialize() {
   serialEditor = new SerialEditor(elements.serialEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
       return Boolean(selected && commandAvailable(selected.id));
@@ -150,6 +152,7 @@ async function initialize() {
   triggerEditor = new TriggerEditor(elements.triggerEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
       return Boolean(selected && commandAvailable(selected.id));
@@ -160,6 +163,7 @@ async function initialize() {
   searchEditor = new SearchEditor(elements.searchEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
       return Boolean(selected && commandAvailable(selected.id));
@@ -202,7 +206,9 @@ async function initialize() {
     };
     renderCurrentResult();
   }, (selectedContext) => {
-    refreshSelectedResourceContext(selectedContext);
+    return refreshSelectedResourceContext(selectedContext);
+  }, () => {
+    updateAvailability();
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   updateAvailability();
@@ -285,6 +291,7 @@ function renderCollapseLabels() {
 }
 
 async function executeCommand(command, parameters, options = {}) {
+  if (isExecutionBusy()) return null;
   const definition = commands.find((item) => item.id === command);
   if (!definition || !definition.modes.includes(context.mode)) {
     elements.deviceStatus.textContent = translate("status.noCommands");
@@ -368,6 +375,7 @@ function updateIdentity(job, commandContext) {
 
 async function refreshSelectedResourceContext(selectedContext) {
   if (selectedContext?.mode !== "live" || !selectedContext.resource) return;
+  if (executing) return;
   const commandContext = { ...selectedContext };
   if (pendingResourceLiveSupport) {
     pendingResourceLiveSupport.requestedContext = sameExecutionContext(
@@ -394,6 +402,7 @@ async function evaluateResourceLiveSupport(commandContext) {
     requestedContext: null,
   };
   pendingResourceLiveSupport = pending;
+  updateAvailability();
   deviceResource?.setIdentityPending?.(commandContext);
   setCommandState({ status: pending.status });
   try {
@@ -434,6 +443,7 @@ async function finishResourceLiveSupportEvaluation(jobId) {
   if (pendingResourceLiveSupport?.jobId !== jobId) return false;
   const completed = pendingResourceLiveSupport;
   pendingResourceLiveSupport = null;
+  updateAvailability();
   await refreshRequestedResourceLiveSupport(completed);
   return true;
 }
@@ -566,23 +576,27 @@ function commandAvailable(command) {
 }
 
 function basicAvailable(command) {
-  return !executing && commandAvailable(command);
+  return !isExecutionBusy() && commandAvailable(command);
 }
 
 function updateAvailability() {
   if (!catalog) return;
   const selected = catalog.selected();
-  elements.execute.disabled = executing || !selected || !commandAvailable(selected.id);
-  elements.refresh.disabled = executing || !selected || !commandAvailable(selected.id);
-  for (const editor of [saveExportEditor, serialEditor, triggerEditor, searchEditor]) {
-    if (!editor?.refreshButton) continue;
-    const editorBusy = editor === serialEditor ? editor.controller.state.busy : editor.busy;
-    editor.refreshButton.disabled = executing
-      || editorBusy
-      || !selected
-      || !commandAvailable(selected.id);
-  }
+  const busy = isExecutionBusy();
+  elements.execute.disabled = busy || !selected || !commandAvailable(selected.id);
+  elements.refresh.disabled = busy || !selected || !commandAvailable(selected.id);
+  triggerEditor?.applyBusyState();
+  searchEditor?.applyBusyState();
+  saveExportEditor?.applyBusyState();
+  serialEditor?.render(serialEditor.controller.state);
+  deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
   updateBasicAvailability();
+}
+
+function isExecutionBusy() {
+  return executing
+    || Boolean(pendingResourceLiveSupport)
+    || Boolean(deviceResource?.scanInProgress);
 }
 
 function syncWorkspaceHeaderActions(editorKind) {

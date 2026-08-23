@@ -85,6 +85,7 @@ export class TriggerEditor {
       }
       return;
     }
+    if (read && this.hooks.isExecutionBusy?.()) return;
     const definition = this.selectedDefinition();
     if (!definition || !this.hooks.isAvailable()) {
       this.stateKey = null;
@@ -176,7 +177,7 @@ export class TriggerEditor {
   }
 
   async submit(entry) {
-    if (this.busy || !this.hooks.isAvailable()) return;
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     const submissionKey = this.currentStateKey();
     const isSetting = entry.kind === "setting";
     let parameters = {};
@@ -221,10 +222,11 @@ export class TriggerEditor {
   }
 
   applyBusyState() {
-    this.refreshButton.disabled = this.busy || !this.hooks.isAvailable();
+    const disabled = this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable();
+    this.refreshButton.disabled = disabled;
     for (const entry of this.entries) {
-      entry.button.disabled = this.busy;
-      entry.form?.setDisabled(this.busy);
+      entry.button.disabled = disabled;
+      entry.form?.setDisabled(disabled);
     }
   }
 }

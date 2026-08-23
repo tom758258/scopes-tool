@@ -170,6 +170,7 @@ export class SearchEditor {
       }
       return;
     }
+    if (read && this.hooks.isExecutionBusy?.()) return;
     const definition = this.selectedDefinition();
     if (!definition) {
       this.stateKey = null;
@@ -466,7 +467,7 @@ export class SearchEditor {
   }
 
   async submit(entry) {
-    if (this.busy || !this.hooks.isAvailable()) return;
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     if (!this.entries.includes(entry)) return;
     const submissionKey = this.currentStateKey();
     const values = entry.form.values();
@@ -512,16 +513,17 @@ export class SearchEditor {
 
   applyBusyState() {
     const unavailable = !this.hooks.isAvailable();
-    this.refreshButton.disabled = this.busy || unavailable;
+    const disabled = this.busy || this.hooks.isExecutionBusy?.() || unavailable;
+    this.refreshButton.disabled = disabled;
     for (const entry of this.entries) {
-      entry.button.disabled = this.busy;
-      entry.form?.setDisabled(this.busy);
+      entry.button.disabled = disabled;
+      entry.form?.setDisabled(disabled);
     }
     if (this.busSelect) {
-      this.busSelect.disabled = this.busy || unavailable;
+      this.busSelect.disabled = disabled;
     }
     if (this.protocolSelect) {
-      this.protocolSelect.disabled = this.busy || unavailable;
+      this.protocolSelect.disabled = disabled;
     }
   }
 }

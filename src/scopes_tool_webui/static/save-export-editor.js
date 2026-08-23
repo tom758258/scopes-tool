@@ -110,6 +110,7 @@ export class SaveExportEditor {
       }
       return;
     }
+    if (read && this.hooks.isExecutionBusy?.()) return;
     const definition = this.selectedDefinition();
     if (!definition || !this.hooks.isAvailable()) {
       this.stateKey = null;
@@ -279,7 +280,7 @@ export class SaveExportEditor {
   }
 
   async submit(entry) {
-    if (this.busy || !this.hooks.isAvailable()) return;
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     if (!this.entries.includes(entry) || entry.kind === "readonly") return;
     const submissionKey = this.currentStateKey();
     const parameters = entry.form.values();
@@ -320,10 +321,11 @@ export class SaveExportEditor {
   }
 
   applyBusyState() {
-    this.refreshButton.disabled = this.busy || !this.hooks.isAvailable();
+    const disabled = this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable();
+    this.refreshButton.disabled = disabled;
     for (const entry of this.entries) {
-      if (entry.button) entry.button.disabled = this.busy;
-      entry.form?.setDisabled(this.busy);
+      if (entry.button) entry.button.disabled = disabled;
+      entry.form?.setDisabled(disabled);
     }
   }
 }

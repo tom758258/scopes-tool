@@ -231,6 +231,7 @@ SEARCH_EDITOR_HARNESS = r'''
         };
         const env = {
           available: true,
+          executionBusy: false,
           contextKey: "ctx",
           selectedId: "search-state",
         };
@@ -255,12 +256,47 @@ SEARCH_EDITOR_HARNESS = r'''
             const selected = selectedCommand();
             return Boolean(env.available && selected && catalog.supported(selected));
           },
+          isExecutionBusy: () => env.executionBusy,
           contextKey: () => env.contextKey,
           selectedCommand,
         };
         const buildEditor = () =>
           new globalThis.searchApi.SearchEditor(new FakeNode(), catalog, hooks);
 '''
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_search_actions_follow_global_execution_admission_and_recover() -> None:
+    script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        const entry = editor.entries[0];
+
+        env.executionBusy = true;
+        editor.applyBusyState();
+        assert.equal(editor.refreshButton.disabled, true);
+        assert.equal(entry.button.disabled, true);
+        await editor.submit(entry);
+        assert.deepEqual(submitted, []);
+
+        env.executionBusy = false;
+        editor.applyBusyState();
+        assert.equal(entry.button.disabled, false);
+        await editor.submit(entry);
+        await settle();
+        assert.equal(submitted[0].command, entry.id);
+        assert.equal(submitted[0].intent, "apply");
+        assert.equal(submitted.slice(1).some((item) => item.intent === "readback"), true);
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(SEARCH_EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

@@ -29,6 +29,8 @@ it is not an operator guide.
 
 ## State And Readback
 
+- Operator command and resource-management surfaces share foreground execution
+  admission; do not start a second foreground job while one is active.
 - Command selection and presentation-only navigation must not perform
   instrument I/O. Reads require an explicit user action or execution
   verification.
