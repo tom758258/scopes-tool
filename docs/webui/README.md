@@ -306,12 +306,16 @@ Screenshot and waveform capture jobs register their generated artifacts, which
 can be downloaded through the job result. Instrument-side `save-image` and
 `save-waveform` commands return the Core save result but do not create host
 WebUI artifacts. Artifact downloads are limited to files registered by that
-job. The submitted PC output folder is the base for WebUI job artifact storage;
-the JobManager still creates a unique artifact directory beneath that base for
-every job. Artifact registration and download containment remain scoped to that
-job directory, so jobs cannot overwrite or download one another's files. Both
-absolute and relative base folders are accepted and created when needed;
-creation or write failures are reported instead of falling back elsewhere.
+job. The submitted PC output folder is the actual host-side output root.
+Single-file outputs and waveform captures write directly under that root using
+the existing Core/CLI timestamp naming convention. Multi-file workflows retain
+their existing command-specific and timestamped output directories beneath the
+root. Jobs that do not create host-side artifacts do not create or validate the
+PC output folder, and Dry-run only plans paths without creating them. Download
+URLs remain job-scoped and resolve only exact files registered by that job;
+resolved artifacts must also remain inside its submitted output root. Both
+absolute and relative roots are accepted and created when an output command
+needs them; creation or write failures are reported instead of falling back.
 
 ## Core coverage boundary
 

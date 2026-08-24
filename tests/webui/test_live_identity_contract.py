@@ -44,7 +44,7 @@ def test_live_request_discards_browser_model_and_job_payload_is_nullable(tmp_pat
     request = live_impedance_request("not-a-registered-model")
 
     assert request["model_id"] is None
-    job = Job(job_id="job", artifact_dir=tmp_path, **request)
+    job = Job(job_id="job", pc_output_root=tmp_path, **request)
     assert job.to_payload()["model_id"] is None
 
 

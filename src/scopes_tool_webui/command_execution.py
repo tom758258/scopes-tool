@@ -33,17 +33,30 @@ from scopes_tool_core import (
     run_triggered_capture_series,
     run_triggered_measure_loop,
 )
+from scopes_tool_core.batch import BATCH_DEFAULT_BASE_DIR, default_batch_output_dir
 from scopes_tool_core.discovery import discover_visa_resources
-from scopes_tool_core.output_files import write_serial_lister_csv, write_screenshot_png_file
+from scopes_tool_core.measure_logger import (
+    LOGGER_DEFAULT_BASE_DIR,
+    default_measure_log_output_dir,
+)
+from scopes_tool_core.measure_until import MEASURE_UNTIL_DEFAULT_BASE_DIR
+from scopes_tool_core.output_files import (
+    default_capture_csv_path,
+    write_serial_lister_csv,
+    write_screenshot_png_file,
+)
 from scopes_tool_core.planning import (
     AcquisitionCheckPlanRequest,
     CapturePlanRequest,
     MeasurePlanRequest,
 )
 from scopes_tool_core.segmented_capture import (
+    SEGMENTED_CAPTURE_DEFAULT_BASE_DIR,
     plan_segmented_capture,
     run_segmented_capture,
 )
+from scopes_tool_core.triggered_capture import TRIGGERED_CAPTURE_SERIES_DEFAULT_BASE_DIR
+from scopes_tool_core.triggered_measurement import TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR
 
 from .command_catalog import _P3C_COMMAND_IDS
 from .command_validation import (
@@ -133,8 +146,7 @@ def _execute_dry_run(
             capabilities,
         )
     elif command == "capture":
-        csv_path = artifact_dir / "capture.csv"
-        meta_path = artifact_dir / "capture_meta.json"
+        csv_path, meta_path = _capture_output_paths(artifact_dir)
         plan = plan_capture(
             CapturePlanRequest(
                 channels=(parameters["channel"],),
@@ -153,16 +165,28 @@ def _execute_dry_run(
             )
         )
     elif command == "measure-until":
-        request = _measure_until_request(parameters, artifact_dir)
+        request = _measure_until_request(
+            parameters,
+            _workflow_output_dir(command, artifact_dir),
+        )
         plan = plan_measure_until(request, capabilities)
     elif command == "triggered-measure-loop":
-        request = _triggered_measure_loop_request(parameters, artifact_dir)
+        request = _triggered_measure_loop_request(
+            parameters,
+            _workflow_output_dir(command, artifact_dir),
+        )
         plan = plan_triggered_measure_loop(request, capabilities)
     elif command == "triggered-capture-series":
-        request = _triggered_capture_series_request(parameters, artifact_dir)
+        request = _triggered_capture_series_request(
+            parameters,
+            _workflow_output_dir(command, artifact_dir),
+        )
         plan = plan_triggered_capture_series(request, capabilities)
     elif command == "segmented-capture":
-        request = _segmented_capture_request(parameters, artifact_dir)
+        request = _segmented_capture_request(
+            parameters,
+            _workflow_output_dir(command, artifact_dir),
+        )
         planned_scpi, files, result = plan_segmented_capture(request, capabilities)
         return {
             "exit_code": 0,
@@ -178,7 +202,7 @@ def _execute_dry_run(
             "model_id": model_id,
             "planned_scpi": list(plan.planned_scpi),
             "files": [
-                {"kind": file["kind"], "name": Path(file["path"]).name}
+                {"kind": file["kind"], "path": str(file["path"])}
                 for file in plan.files
             ],
             **{
@@ -404,6 +428,7 @@ def _execute_scope_command(
             scope.configure_measurement_window(parameters["window"])
         return _state_scope_result("window", scope.query_measurement_window())
     if command == "capture":
+        csv_path, meta_path = _capture_output_paths(artifact_dir)
         result = run_capture(
             scope,
             resource,
@@ -411,14 +436,17 @@ def _execute_scope_command(
                 channels=(parameters["channel"],),
                 points=parameters["points"],
                 waveform_format=parameters["format"],
-                csv_path=artifact_dir / "capture.csv",
-                meta_path=artifact_dir / "capture_meta.json",
+                csv_path=csv_path,
+                meta_path=meta_path,
             ),
         )
         return _operation_payload(result)
     if command == "screenshot":
         capture = scope.capture_screenshot_png(background=parameters["background"])
-        path = write_screenshot_png_file(capture, artifact_dir / "screenshot.png")
+        path = write_screenshot_png_file(
+            capture,
+            _next_output_file(artifact_dir, ".png"),
+        )
         return {
             "exit_code": 0,
             "result": {
@@ -763,17 +791,64 @@ def _execute_p3c_scope_command(
             scope.disable_segmented_memory()
         return _state_scope_result("segmented", scope.query_segmented_memory())
     if command == "segmented-capture":
-        return _operation_payload(run_segmented_capture(scope, resource, _segmented_capture_request(parameters, artifact_dir)))
+        output_dir = _workflow_output_dir(command, artifact_dir)
+        return _operation_payload(
+            run_segmented_capture(
+                scope,
+                resource,
+                _segmented_capture_request(parameters, output_dir),
+            )
+        )
     if command == "capture-batch":
-        return _operation_payload(run_capture_batch(scope, resource, _capture_batch_request(parameters, artifact_dir), stop_requested=stop_requested))
+        output_dir = _workflow_output_dir(command, artifact_dir)
+        return _operation_payload(
+            run_capture_batch(
+                scope,
+                resource,
+                _capture_batch_request(parameters, output_dir),
+                stop_requested=stop_requested,
+            )
+        )
     if command == "measure-log":
-        return _operation_payload(run_measure_log(scope, resource, _measure_log_request(parameters, artifact_dir), stop_requested=stop_requested))
+        output_dir = _workflow_output_dir(command, artifact_dir)
+        return _operation_payload(
+            run_measure_log(
+                scope,
+                resource,
+                _measure_log_request(parameters, output_dir),
+                stop_requested=stop_requested,
+            )
+        )
     if command == "measure-until":
-        return _operation_payload(run_measure_until(scope, resource, _measure_until_request(parameters, artifact_dir), stop_requested=stop_requested))
+        output_dir = _workflow_output_dir(command, artifact_dir)
+        return _operation_payload(
+            run_measure_until(
+                scope,
+                resource,
+                _measure_until_request(parameters, output_dir),
+                stop_requested=stop_requested,
+            )
+        )
     if command == "triggered-measure-loop":
-        return _operation_payload(run_triggered_measure_loop(scope, resource, _triggered_measure_loop_request(parameters, artifact_dir), stop_requested=stop_requested))
+        output_dir = _workflow_output_dir(command, artifact_dir)
+        return _operation_payload(
+            run_triggered_measure_loop(
+                scope,
+                resource,
+                _triggered_measure_loop_request(parameters, output_dir),
+                stop_requested=stop_requested,
+            )
+        )
     if command == "triggered-capture-series":
-        return _operation_payload(run_triggered_capture_series(scope, resource, _triggered_capture_series_request(parameters, artifact_dir), stop_requested=stop_requested))
+        output_dir = _workflow_output_dir(command, artifact_dir)
+        return _operation_payload(
+            run_triggered_capture_series(
+                scope,
+                resource,
+                _triggered_capture_series_request(parameters, output_dir),
+                stop_requested=stop_requested,
+            )
+        )
     raise WebUIRequestError(f"command is not supported by the Scopes Tool WebUI: {command}")
 
 
@@ -977,6 +1052,52 @@ def _measure_request(parameters: Mapping[str, Any]) -> MeasureRequest:
         level=parameters.get("level"),
         slope=parameters.get("slope"),
         occurrence=parameters.get("occurrence"),
+    )
+
+
+def _next_output_file(
+    output_root: Path,
+    suffix: str,
+    *,
+    companion_suffixes: tuple[str, ...] = (),
+) -> Path:
+    stem = default_capture_csv_path().stem
+    index = 1
+    while True:
+        candidate_stem = stem if index == 1 else f"{stem}-{index}"
+        candidate = output_root / f"{candidate_stem}{suffix}"
+        companions = tuple(
+            output_root / f"{candidate_stem}{companion_suffix}"
+            for companion_suffix in companion_suffixes
+        )
+        if not candidate.exists() and not any(path.exists() for path in companions):
+            return candidate
+        index += 1
+
+
+def _capture_output_paths(output_root: Path) -> tuple[Path, Path]:
+    csv_path = _next_output_file(
+        output_root,
+        ".csv",
+        companion_suffixes=("_meta.json",),
+    )
+    return csv_path, csv_path.with_name(f"{csv_path.stem}_meta.json")
+
+
+def _workflow_output_dir(command: str, output_root: Path) -> Path:
+    if command == "measure-log":
+        return default_measure_log_output_dir(
+            base_dir=output_root / LOGGER_DEFAULT_BASE_DIR.name,
+        )
+    base_dirs = {
+        "capture-batch": BATCH_DEFAULT_BASE_DIR,
+        "measure-until": MEASURE_UNTIL_DEFAULT_BASE_DIR,
+        "triggered-measure-loop": TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR,
+        "triggered-capture-series": TRIGGERED_CAPTURE_SERIES_DEFAULT_BASE_DIR,
+        "segmented-capture": SEGMENTED_CAPTURE_DEFAULT_BASE_DIR,
+    }
+    return default_batch_output_dir(
+        base_dir=output_root / base_dirs[command].name,
     )
 
 

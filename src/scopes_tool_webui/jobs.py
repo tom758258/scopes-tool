@@ -7,7 +7,6 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-import tempfile
 import threading
 import time
 from typing import Any, Mapping
@@ -24,10 +23,6 @@ class JobManagerShuttingDown(RuntimeError):
     """Raised when a job is submitted after shutdown has started."""
 
 
-class JobArtifactDirectoryError(RuntimeError):
-    """Raised when a WebUI job artifact directory cannot be created."""
-
-
 @dataclass
 class Job:
     job_id: str
@@ -37,7 +32,7 @@ class Job:
     model_id: str | None
     pc_output_dir: str
     parameters: dict[str, Any]
-    artifact_dir: Path
+    pc_output_root: Path
     status: str = "queued"
     created_at: str = field(default_factory=lambda: _timestamp())
     started_at: str | None = None
@@ -45,6 +40,7 @@ class Job:
     result: dict[str, Any] | None = None
     error: str | None = None
     artifacts: list[dict[str, Any]] = field(default_factory=list)
+    artifact_paths: dict[str, Path] = field(default_factory=dict, repr=False)
     cancel_requested: bool = field(default=False, repr=False)
     cleanup_failed: bool = field(default=False, repr=False)
     future: Future[Any] | None = field(default=None, repr=False)
@@ -95,16 +91,7 @@ class JobManager:
                     "WebUI job manager is shutting down; new jobs are not accepted."
                 )
             job_id = uuid.uuid4().hex
-            output_root = Path(request.get("pc_output_dir", "data"))
-            try:
-                output_root.mkdir(parents=True, exist_ok=True)
-                artifact_dir = Path(
-                    tempfile.mkdtemp(prefix=f"scopes-tool-webui-{job_id}-", dir=output_root)
-                )
-            except OSError as exc:
-                raise JobArtifactDirectoryError(
-                    f"Cannot create or write the PC output folder {str(output_root)!r}: {exc}"
-                ) from exc
+            output_root = Path(request.get("pc_output_dir", "data")).resolve()
             job = Job(
                 job_id=job_id,
                 command=request["command"],
@@ -113,7 +100,7 @@ class JobManager:
                 model_id=request["model_id"],
                 pc_output_dir=request.get("pc_output_dir", "data"),
                 parameters=dict(request["parameters"]),
-                artifact_dir=artifact_dir,
+                pc_output_root=output_root,
             )
             self._jobs[job.job_id] = job
             job.future = self._executor.submit(self._run, job.job_id)
@@ -211,7 +198,7 @@ class JobManager:
                     resource=job.resource,
                     model_id=job.model_id,
                     parameters=job.parameters,
-                    artifact_dir=job.artifact_dir,
+                    artifact_dir=job.pc_output_root,
                     stop_requested=lambda: job.cancel_requested,
                 )
             artifacts = self._register_artifacts(job, execution.get("artifacts", []))
@@ -250,7 +237,8 @@ class JobManager:
         if not isinstance(artifacts, list):
             return []
         registered: list[dict[str, Any]] = []
-        root = job.artifact_dir.resolve()
+        registered_paths: dict[str, Path] = {}
+        root = job.pc_output_root
         for item in artifacts:
             if not isinstance(item, Mapping):
                 continue
@@ -264,13 +252,19 @@ class JobManager:
                 continue
             if not path.is_file():
                 continue
+            name = path.name
+            if name in registered_paths:
+                continue
             registered.append(
                 {
-                    "name": path.name,
+                    "name": name,
                     "kind": item.get("kind", "file"),
                     "size": path.stat().st_size,
                 }
             )
+            registered_paths[name] = path
+        with job.lock:
+            job.artifact_paths = registered_paths
         return registered
 
     def artifact_path(self, job_id: str, name: str) -> tuple[Job, Path] | None:
@@ -278,15 +272,12 @@ class JobManager:
         if job is None:
             return None
         with job.lock:
-            registered = next(
-                (item for item in job.artifacts if item.get("name") == name),
-                None,
-            )
-        if registered is None:
+            registered_path = job.artifact_paths.get(name)
+        if registered_path is None:
             return None
-        path = (job.artifact_dir / name).resolve()
+        path = registered_path.resolve()
         try:
-            path.relative_to(job.artifact_dir.resolve())
+            path.relative_to(job.pc_output_root)
         except ValueError:
             return None
         if not path.is_file():

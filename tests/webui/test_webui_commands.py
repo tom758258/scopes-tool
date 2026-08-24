@@ -620,7 +620,7 @@ def test_simulated_capture_artifact_is_registered_and_downloadable() -> None:
     )
 
     assert job["status"] == "completed"
-    artifact = next(item for item in job["artifacts"] if item["name"] == "capture.csv")
+    artifact = next(item for item in job["artifacts"] if item["kind"] == "csv")
     response = client.get(artifact["url"])
     assert response.status_code == 200
     assert response.content

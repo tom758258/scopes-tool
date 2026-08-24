@@ -14,7 +14,7 @@ from starlette.types import Scope
 from . import __version__
 from .commands import command_catalog, model_catalog, validate_job_request
 from .desktop import FolderSelectionUnavailable, select_directory_with_dialog
-from .jobs import JobArtifactDirectoryError, JobManagerShuttingDown, job_manager
+from .jobs import JobManagerShuttingDown, job_manager
 
 
 PACKAGE_NAME = "scopes-tool-webui"
@@ -96,8 +96,6 @@ async def submit_job(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         job = job_manager.submit(request)
     except JobManagerShuttingDown as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except JobArtifactDirectoryError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, "job_id": job.job_id, "status": job.status}
 
 
