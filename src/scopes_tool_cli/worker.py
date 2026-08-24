@@ -299,8 +299,6 @@ def _make_handler(runtime: WorkerRuntime):
                 accepted_time=_now(),
             )
             try:
-                artifact_path.mkdir(parents=True, exist_ok=False)
-                _atomic_json(artifact_path / "request.json", body)
                 with runtime.lock:
                     runtime.jobs[worker_job_id] = job
                 runtime.queue.put_nowait(job)
@@ -368,11 +366,15 @@ def _job_loop(runtime: WorkerRuntime) -> None:
             runtime.active_job_id = job.worker_job_id
         runtime.emit("job_started", worker_job_id=job.worker_job_id, command=job.command)
         try:
-            parsed = parse_domain_command(job.command, job.arguments, runtime)
             parsed = parse_domain_command(
                 job.command, job.arguments, runtime, job.artifact_path
             )
             _guard_no_overwrite(parsed, job.artifact_path)
+            if any(
+                path.is_relative_to(job.artifact_path)
+                for path in _planned_artifact_paths(parsed)
+            ):
+                job.artifact_path.mkdir(parents=True, exist_ok=True)
             payload, exit_code = scope_cli._execute_json_command(
                 parsed,
                 stop_requested=lambda: job.cancel_requested or runtime.stopping,
@@ -404,7 +406,6 @@ def _job_loop(runtime: WorkerRuntime) -> None:
             job.error = {"type": type(exc).__name__, "message": str(exc)}
         finally:
             job.finished_time = _now()
-            _write_result(runtime, job)
             with runtime.lock:
                 runtime.active_job_id = None
                 runtime.last_job_id = job.worker_job_id
@@ -423,7 +424,6 @@ def _job_loop(runtime: WorkerRuntime) -> None:
                 exit_code=job.exit_code,
                 job_id=job.job_id,
                 artifact_path=str(job.artifact_path),
-                result_path=str(job.artifact_path / "result.json"),
                 error=job.error,
             )
             runtime.queue.task_done()
@@ -442,33 +442,6 @@ def _core_workflow_result_status(
     if status in _CORE_WORKFLOW_TERMINAL_STATUSES:
         return str(status)
     return None
-
-
-def _write_result(runtime: WorkerRuntime, job: WorkerJob) -> None:
-    files: list[Any] = []
-    result: Any = None
-    if isinstance(job.result, dict):
-        files_value = job.result.get("files")
-        if isinstance(files_value, list):
-            files = _existing_files(files_value)
-        result = job.result.get("result")
-    payload = {
-        "schema_version": WORKER_SCHEMA_VERSION,
-        "run_id": runtime.run_id,
-        "worker_job_id": job.worker_job_id,
-        "job_id": job.job_id,
-        "command": job.command,
-        "state": job.state,
-        "ok": job.state == "succeeded",
-        "accepted_at": job.accepted_time,
-        "started_at": job.started_time,
-        "finished_at": job.finished_time,
-        "result": result,
-        "files": files,
-        "error": job.error,
-        "exit_code": job.exit_code,
-    }
-    _atomic_json(job.artifact_path / "result.json", payload)
 
 
 def _event_payload(runtime: WorkerRuntime, event: str, **values: Any) -> dict[str, Any]:
@@ -526,7 +499,6 @@ def _finish_cancelled_job(
     job.finished_time = _now()
     job.exit_code = 3
     job.error = {"type": "cancelled", "message": "cancelled by stop"}
-    _write_result(runtime, job)
     runtime.cancelled += 1
     runtime.last_job_id = job.worker_job_id
     runtime.emit(
@@ -538,15 +510,12 @@ def _finish_cancelled_job(
         ok=False,
         exit_code=job.exit_code,
         artifact_path=str(job.artifact_path),
-        result_path=str(job.artifact_path / "result.json"),
         error=job.error,
     )
 
 
 def _guard_no_overwrite(args: argparse.Namespace, job_dir: Path) -> None:
     for path in _planned_artifact_paths(args):
-        if path == job_dir / "request.json" or path == job_dir / "result.json":
-            continue
         if path.exists():
             raise OscilloscopeError(f"output path already exists: {path}")
 
@@ -671,13 +640,6 @@ def _command_rejected_envelope(
         "job_id": job_id,
         "reason": reason,
     }
-
-
-def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp_path.replace(path)
 
 
 def _now() -> str:

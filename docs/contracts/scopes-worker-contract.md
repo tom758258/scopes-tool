@@ -10,8 +10,8 @@ defines the Scopes-specific command model, queue behavior, and artifacts.
 
 The current Scopes Worker implementation enforces Common schema 2. `/command`
 requests are v2-only: missing schema versions, schema 1, and non-integer schema
-values are rejected. Worker HTTP responses, status responses, JSONL events,
-`request.json`, and `result.json` use schema 2. Scopes execution context remains
+values are rejected. Worker HTTP responses, status responses, and JSONL events
+use schema 2. Scopes execution context remains
 startup-bound; top-level `/command` `context` is forbidden, and the Worker does
 not provide v1 fallback or version negotiation.
 
@@ -141,8 +141,8 @@ Validation failures use HTTP `400`, `status: "error"`, the Common
 ```
 
 `POST /stop` does not enter the normal command queue. It sets cooperative stop,
-rejects new commands, cancels queued jobs, writes terminal `result.json` for
-cancelled jobs, and emits `job_finished` for each cancelled job. Running jobs
+rejects new commands, cancels queued jobs, and emits `job_finished` for each
+cancelled job. Running jobs
 pass the existing cancellation state into Core workflows. `measure-log` checks
 between completed measurement queries and at persisted-row boundaries;
 `measure-until` checks before each query and during relative interval waits;
@@ -480,25 +480,21 @@ or aliases. Unknown keys and invalid values are rejected before enqueue,
 artifact creation, backend open, or SCPI.
 
 The worker reuses the existing one-shot CLI/Core segmented-capture workflow.
-Its job directory contains the original submitted `request.json` and the
-terminal `result.json`; domain artifacts are written below the fixed child
-directory `segmented_capture/`:
+Its job directory contains only the segmented-capture domain artifacts, written
+below the fixed child directory `segmented_capture/`:
 
 ```text
 data/worker/<run_id>/<worker_job_id>/
-  request.json
-  result.json
   segmented_capture/
     manifest.json
     scpi.log
     segment_0001.csv
 ```
 
-The child directory is required because the job root already contains
-`request.json`, while the Core workflow requires a new or empty output
+The child directory keeps the Core workflow requirement for a new or empty output
 directory. The domain status `completed` maps to Worker `succeeded`; domain
 `partial` or `failed` maps to Worker `failed` while preserving existing files
-and the domain status in `result.json`. Worker cancellation keeps the existing
+and the domain status in the job's in-memory result. Worker cancellation keeps the existing
 cooperative queued/running semantics. The worker accepts no firmware argument;
 Core uses the detected IDN firmware for waveform segmented command gating.
 
@@ -2217,7 +2213,7 @@ contain double quotes or control characters.
 Validation errors must reject before enqueue and before any artifact, VISA, or
 SCPI side effect.
 
-Triggered capture `result.json.result.trigger` records raw operation-condition
+Triggered capture results record raw operation-condition
 poll values and the classified outcome. Only `natural` and `forced` outcomes
 write capture artifacts. `timeout` and `unknown` outcomes return non-zero and
 write no command artifacts. Unsupported live operation-condition values remain
@@ -2225,40 +2221,19 @@ unclassified and do not allow capture.
 
 ## Artifacts
 
-Each accepted job creates:
+Plain accepted jobs create no files. The Worker does not persist `request.json`
+or `result.json` bookkeeping artifacts: job state, command results, and errors
+are kept in Worker memory, and the JSONL event stream (`job_started`,
+`job_finished`, `summary`) is the machine-readable interface that carries
+terminal outcomes to the caller.
 
-```text
-data/worker/<run_id>/<worker_job_id>/request.json
-data/worker/<run_id>/<worker_job_id>/result.json
-```
-
-Worker job `request.json` and terminal `result.json` are Common Worker machine
-artifacts and target exact integer `schema_version: 2`. Their Common envelope
-and request fields remain unchanged; command result fields follow the
-corresponding domain contract.
-
-`request.json` is written before the `202` response. `result.json` is written
-only for terminal states using a temp file and atomic replace.
-
-`result.json` contains:
-
-- `schema_version`
-- `run_id`
-- `worker_job_id`
-- client `job_id`
-- `command`
-- terminal `state`: `succeeded`, `failed`, or `cancelled`
-- `ok`
-- accepted/started/finished timestamps
-- command `result`
-- `files`
-- `error`
-- `exit_code`
+Commands that produce domain artifacts create them under
+`data/worker/<run_id>/<worker_job_id>/`; that directory is created lazily and
+only for such jobs.
 
 Command artifacts keep existing Scopes meanings: CSV waveform data, PNG plots
 or screenshots, metadata JSON, manifests, reports, and `scpi.log` files.
-Worker `result.json` is the orchestrator machine source of truth; human output
-is diagnostic only.
+Human output is diagnostic only.
 
 Workflow `scpi.log` files cover SCPI activity produced while the Core operation
 is executing. Worker resource opening, live identity validation, driver
@@ -2313,20 +2288,19 @@ The `measure-clear`, `measure-show`, `measure-source`, `measure-window`,
 `serial-search-can`
 commands also do not create command artifacts.
 `serial-lister-export` creates one CSV command artifact at the requested output
-path and otherwise uses the standard worker `request.json` and `result.json`.
+path and otherwise follows the standard worker in-memory job lifecycle.
 The `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
 `save-image-ink-saver`, `save-image-factors`, `save-image`,
 `save-waveform-format`, `save-waveform-length`,
 `save-waveform-length-max`, and `save-waveform` commands likewise create no
-command artifacts; standard worker `request.json` and terminal `result.json`
-still apply.
-Their terminal `result.json.result` contains the existing one-shot structured
+command artifacts; plain jobs create no files.
+Their command results contain the existing one-shot structured
 `result` fields for that command. For `sample-rate` maximum queries, that
 includes `query_kind: "maximum"` and `maximum_sample_rate_hz`.
 
-Directory-output commands may use the worker job directory even though
-`request.json` already exists there. Other pre-existing command artifact paths
-are rejected before simulator/VISA open or SCPI execution. `result.json.files`
+Directory-output commands may use the worker job directory. Other pre-existing
+command artifact paths
+are rejected before simulator/VISA open or SCPI execution. Command `files`
 lists only command artifact paths that actually exist.
 
 Live worker jobs validate identity before command-specific SCPI. The worker

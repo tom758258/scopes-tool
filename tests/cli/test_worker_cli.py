@@ -450,7 +450,7 @@ def test_worker_request_accepts_trigger_and_acquisition_queries(command, argumen
     ) == (command, arguments, "job-1")
 
 
-def test_command_acceptance_returns_common_envelope_and_artifact(tmp_path):
+def test_command_acceptance_returns_common_envelope_without_bookkeeping_files(tmp_path):
     runtime = _runtime(tmp_path)
     with _worker_server(runtime):
         status, payload = _post_command(
@@ -464,13 +464,8 @@ def test_command_acceptance_returns_common_envelope_and_artifact(tmp_path):
     assert payload["command"] == "identify"
     assert payload["job_id"] == "job-1"
     assert payload["worker_job_id"]
-    request_path = Path(payload["artifact_path"]) / "request.json"
-    assert json.loads(request_path.read_text(encoding="utf-8")) == {
-        "schema_version": worker.WORKER_SCHEMA_VERSION,
-        "command": "identify",
-        "arguments": {},
-        "job_id": "job-1",
-    }
+    assert not list(tmp_path.rglob("request.json"))
+    assert not list(tmp_path.rglob("result.json"))
 
 
 def test_command_acceptance_validates_sample_rate_maximum_before_enqueue(tmp_path):
@@ -489,13 +484,8 @@ def test_command_acceptance_validates_sample_rate_maximum_before_enqueue(tmp_pat
     assert payload["status"] == "accepted"
     assert payload["command"] == "sample-rate"
     assert payload["job_id"] == "job-maximum"
-    request_path = Path(payload["artifact_path"]) / "request.json"
-    assert json.loads(request_path.read_text(encoding="utf-8")) == {
-        "schema_version": worker.WORKER_SCHEMA_VERSION,
-        "command": "sample-rate",
-        "arguments": {"query": True, "maximum": True},
-        "job_id": "job-maximum",
-    }
+    assert not list(tmp_path.rglob("request.json"))
+    assert not list(tmp_path.rglob("result.json"))
 
 
 def test_command_acceptance_rejects_sample_rate_maximum_without_query_before_artifact(tmp_path):
@@ -605,13 +595,8 @@ def test_command_acceptance_validates_points_queries_before_enqueue(tmp_path, co
     assert payload["status"] == "accepted"
     assert payload["command"] == command
     assert payload["job_id"] == "job-query"
-    request_path = Path(payload["artifact_path"]) / "request.json"
-    assert json.loads(request_path.read_text(encoding="utf-8")) == {
-        "schema_version": worker.WORKER_SCHEMA_VERSION,
-        "command": command,
-        "arguments": {"query": True},
-        "job_id": "job-query",
-    }
+    assert not list(tmp_path.rglob("request.json"))
+    assert not list(tmp_path.rglob("result.json"))
 
 
 @pytest.mark.parametrize("command", ("acquisition-points", "record-length"))
@@ -657,7 +642,7 @@ def test_command_acceptance_rejects_memory_depth_before_artifact(tmp_path):
     assert not (tmp_path / runtime.run_id).exists()
 
 
-def test_worker_correlation_flows_through_events_and_artifacts(tmp_path):
+def test_worker_correlation_flows_through_events_and_memory(tmp_path):
     runtime = _runtime(tmp_path)
     client_job_id = "client-job-1"
     with _worker_server(runtime):
@@ -686,7 +671,6 @@ def test_worker_correlation_flows_through_events_and_artifacts(tmp_path):
     started = worker._event_payload(
         runtime, "job_started", worker_job_id=worker_job_id, command="identify"
     )
-    worker._write_result(runtime, job)
     finished = worker._event_payload(
         runtime,
         "job_finished",
@@ -697,15 +681,7 @@ def test_worker_correlation_flows_through_events_and_artifacts(tmp_path):
         ok=True,
         exit_code=0,
         artifact_path=accepted["artifact_path"],
-        result_path=str(Path(accepted["artifact_path"]) / "result.json"),
         error=None,
-    )
-
-    request_payload = json.loads(
-        (Path(accepted["artifact_path"]) / "request.json").read_text(encoding="utf-8")
-    )
-    result_payload = json.loads(
-        (Path(accepted["artifact_path"]) / "result.json").read_text(encoding="utf-8")
     )
 
     assert started["job_id"] == client_job_id
@@ -714,17 +690,12 @@ def test_worker_correlation_flows_through_events_and_artifacts(tmp_path):
     assert finished["job_id"] == client_job_id
     assert finished["worker_job_id"] == worker_job_id
     assert finished["command"] == "identify"
-    assert request_payload["job_id"] == client_job_id
-    assert request_payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
-    assert request_payload["command"] == "identify"
-    assert result_payload["run_id"] == runtime.run_id
-    assert result_payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
-    assert result_payload["worker_job_id"] == worker_job_id
-    assert result_payload["job_id"] == client_job_id
-    assert result_payload["command"] == "identify"
-    assert result_payload["state"] == "succeeded"
-    assert result_payload["ok"] is True
-    assert result_payload["exit_code"] == 0
+    assert finished["state"] == "succeeded"
+    assert finished["ok"] is True
+    assert finished["exit_code"] == 0
+    assert finished["run_id"] == runtime.run_id
+    assert not list(Path(accepted["artifact_path"]).rglob("request.json"))
+    assert not list(Path(accepted["artifact_path"]).rglob("result.json"))
 
 
 @pytest.mark.parametrize(
@@ -1597,7 +1568,6 @@ def test_worker_event_payloads_have_required_fields(tmp_path):
         state="failed",
         ok=False,
         artifact_path=str(job.artifact_path),
-        result_path=str(job.artifact_path / "result.json"),
         error={"type": "x", "message": "y"},
     )
     summary = worker._event_payload(runtime, "summary", ok=True, fatal_error=None)
@@ -1831,7 +1801,6 @@ def test_worker_job_paths_default_under_job_dir(tmp_path):
 def test_worker_segmented_capture_uses_child_output_and_overwrite_guard(tmp_path):
     job_dir = tmp_path / "run" / "job"
     job_dir.mkdir(parents=True)
-    (job_dir / "request.json").write_text("{}", encoding="utf-8")
 
     parsed = worker.parse_domain_command(
         "segmented-capture",
@@ -1863,21 +1832,9 @@ def test_worker_no_overwrite_guard_rejects_existing_artifact(tmp_path):
         worker._guard_no_overwrite(parsed, job_dir)
 
 
-def test_stop_cancels_queued_job_with_terminal_result(tmp_path):
+def test_stop_cancels_queued_job_without_bookkeeping_artifacts(tmp_path):
     runtime = _runtime(tmp_path)
     job_dir = tmp_path / "run" / "queued"
-    job_dir.mkdir(parents=True)
-    (job_dir / "request.json").write_text(
-        json.dumps(
-            {
-                "schema_version": worker.WORKER_SCHEMA_VERSION,
-                "command": "identify",
-                "arguments": {},
-                "job_id": "client-job",
-            }
-        ),
-        encoding="utf-8",
-    )
     job = worker.WorkerJob(
         command="identify",
         arguments={},
@@ -1889,12 +1846,13 @@ def test_stop_cancels_queued_job_with_terminal_result(tmp_path):
     runtime.jobs[job.worker_job_id] = job
 
     worker._finish_cancelled_job(runtime, job, started=False)
-    result = json.loads((job_dir / "result.json").read_text(encoding="utf-8"))
 
-    assert result["state"] == "cancelled"
-    assert result["ok"] is False
-    assert result["exit_code"] == 3
+    assert job.state == "cancelled"
+    assert job.exit_code == 3
+    assert job.error == {"type": "cancelled", "message": "cancelled by stop"}
     assert runtime.cancelled == 1
+    assert not job.artifact_path.exists()
+    assert not (job.artifact_path / "result.json").exists()
 
 
 def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
@@ -1946,7 +1904,7 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
             time.sleep(0.01)
         assert job.state == "cancelled"
 
-    result = json.loads((artifact_path / "result.json").read_text(encoding="utf-8"))
+    result = _terminal_view(job)
     manifest = json.loads((artifact_path / "manifest.json").read_text(encoding="utf-8"))
     assert result["state"] == "cancelled"
     assert result["exit_code"] == 3
@@ -1956,6 +1914,7 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
     assert result["result"]["completed_count"] == 1
     assert manifest["status"] == "cancelled"
     assert not (artifact_path / "waveform_0002.csv").exists()
+    assert not (artifact_path / "result.json").exists()
 
 
 @pytest.mark.parametrize(
@@ -2012,19 +1971,20 @@ def test_worker_preserves_core_workflow_result_after_late_cancellation(
         assert result["error"]["type"] == "OscilloscopeError"
 
 
+def _terminal_view(job):
+    payload = job.result if isinstance(job.result, dict) else {}
+    files = payload.get("files")
+    return {
+        "state": job.state,
+        "ok": job.state == "succeeded",
+        "exit_code": job.exit_code,
+        "result": payload.get("result"),
+        "files": worker._existing_files(files) if isinstance(files, list) else [],
+        "error": job.error if job.error is not None else payload.get("error"),
+    }
+
+
 def _execute_worker_job(runtime, command, arguments, artifact_path):
-    artifact_path.mkdir(parents=True)
-    (artifact_path / "request.json").write_text(
-        json.dumps(
-            {
-                "schema_version": worker.WORKER_SCHEMA_VERSION,
-                "command": command,
-                "arguments": arguments,
-                "job_id": "client-job",
-            }
-        ),
-        encoding="utf-8",
-    )
     job = worker.WorkerJob(
         command=command,
         arguments=arguments,
@@ -2039,12 +1999,13 @@ def _execute_worker_job(runtime, command, arguments, artifact_path):
     thread.start()
     runtime.queue.put(job)
     runtime.queue.join()
-    return job, json.loads((artifact_path / "result.json").read_text(encoding="utf-8"))
+    return job, _terminal_view(job)
 
 
 def test_worker_measure_results_preserves_statistics_items(tmp_path):
+    artifact_path = tmp_path / "measure_results"
     job, result = _execute_worker_job(
-        _runtime(tmp_path), "measure-results", {}, tmp_path / "measure_results"
+        _runtime(tmp_path), "measure-results", {}, artifact_path
     )
 
     assert result["state"] == "succeeded"
@@ -2052,6 +2013,9 @@ def test_worker_measure_results_preserves_statistics_items(tmp_path):
     assert result["result"]["items"] == []
     assert result["result"]["statistics_items"]
     assert job.result["scpi"]["sent"] == ["*IDN?", ":MEASure:RESults?"]
+    assert not artifact_path.exists()
+    assert not (artifact_path / "request.json").exists()
+    assert not (artifact_path / "result.json").exists()
 
 
 def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
@@ -2085,6 +2049,8 @@ def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
         {"kind": "metadata", "path": str(artifact_path / "capture_meta.json")},
     ]
     assert (artifact_path / "capture.csv").exists()
+    assert not (artifact_path / "request.json").exists()
+    assert not (artifact_path / "result.json").exists()
     assert job.result["scpi"]["sent"][:4] == [
         "*IDN?",
         single_command(),
@@ -2115,19 +2081,12 @@ def test_worker_executes_segmented_capture_with_domain_child_artifacts(tmp_path)
         runtime.queue.join()
 
     artifact_path = Path(accepted["artifact_path"])
-    request_payload = json.loads(
-        (artifact_path / "request.json").read_text(encoding="utf-8")
-    )
-    result = json.loads(
-        (artifact_path / "result.json").read_text(encoding="utf-8")
-    )
+    result = _terminal_view(runtime.jobs[accepted["worker_job_id"]])
     domain_dir = artifact_path / "segmented_capture"
     scpi_log = (domain_dir / "scpi.log").read_text(encoding="utf-8")
 
-    assert request_payload == {
-        **original_body,
-        "schema_version": worker.WORKER_SCHEMA_VERSION,
-    }
+    assert not (artifact_path / "request.json").exists()
+    assert not (artifact_path / "result.json").exists()
     assert result["state"] == "succeeded"
     assert result["ok"] is True
     assert result["result"]["operation"] == "segmented-capture"
@@ -3031,10 +2990,11 @@ def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
                     "worker job did not finish after cleanup cancellation"
                 )
 
-    result = json.loads((artifact_path / "result.json").read_text(encoding="utf-8"))
+    result = _terminal_view(job)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert result["state"] == "cancelled"
     assert result["exit_code"] == 3
     assert result["result"]["status"] == "cancelled"
     assert result["result"]["completed_count"] == 1
     assert manifest["status"] == "cancelled"
+    assert not (artifact_path / "result.json").exists()

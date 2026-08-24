@@ -29,7 +29,7 @@ Human diagnostics belong on stderr or in text mode. The worker emits:
 
 - `ready`: emitted after `/command`, `/status`, and `/stop` are reachable.
 - `job_started`: emitted when a queued job begins execution.
-- `job_finished`: emitted after terminal `result.json` is written.
+- `job_finished`: emitted when a queued job reaches a terminal state.
 - `summary`: emitted when the worker process exits normally or fatally.
 
 All runtime events include `schema_version: 2`, `timestamp_utc`, and the same
@@ -83,7 +83,8 @@ Worker HTTP `400` is a validation failure and exits `2`. Runtime errors,
 connection errors, timeouts, invalid responses, HTTP request failures, worker
 HTTP `409`/`429`, and fatal worker failures exit `3`.
 Accepted `/command` responses exit `0`, but accepted does not mean the Scopes
-job succeeded; read worker `result.json` for the terminal result.
+job succeeded; consume the worker's `job_finished` JSONL event for the terminal
+state.
 
 Worker execution context is startup-bound. Startup `--model` maps to
 `expected_model_id` in live mode and `planning_model_id` in simulate mode;
@@ -670,10 +671,9 @@ and the model's `wgen_scpi_root`.
 Scopes artifact JSON is machine-readable and should be preferred over human
 text:
 
-- Worker job `request.json` and terminal `result.json` are Common Worker
-  artifacts targeting exact integer `schema_version: 2`; their Common envelope
-  and request fields remain unchanged, while command result fields follow the
-  corresponding domain contract.
+- Worker JSONL runtime events are Common Worker machine data targeting exact
+  integer `schema_version: 2`; their Common envelope fields remain unchanged,
+  while command result fields follow the corresponding domain contract.
 - Capture metadata JSON records resource, IDN, waveform format, preamble, point
   counts, and `vertical_unit`; multi-channel metadata records the unit in each
   ordered channel entry. CSV waveform columns use `ch<n>_v` for volts and

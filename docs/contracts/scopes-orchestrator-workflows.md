@@ -194,18 +194,17 @@ scopes-tool send-command --port 8765 --command channel-vernier --arguments-json 
 
 The accepted response only means the Common envelope was accepted and the
 Scopes job was enqueued. It is not command success, trigger success, or query
-success. Poll status or read the job artifact:
+success. Poll status or consume the worker JSONL events:
 
 ```text
 scopes-tool status --port 8765 --json
 ```
 
-Then read `data/worker/<run_id>/<worker_job_id>/result.json`. Use
-`result.json` state, `ok`, `exit_code`, `error`, and command artifact files for
-pass/fail decisions.
+Use the `job_finished` event's state, `ok`, `exit_code`, `error`, and command
+artifact files for pass/fail decisions.
 
-For `capture` jobs with `wait_trigger`, use
-`result.json.result.trigger.outcome` and `capture_allowed` to distinguish
+For `capture` jobs with `wait_trigger`, use the job's captured trigger outcome
+and `capture_allowed` to distinguish
 natural trigger completion, forced trigger completion, timeout, and unknown
 poll state. `timeout` and `unknown` outcomes do not produce capture artifacts.
 
@@ -392,20 +391,9 @@ try:
     assert finished["worker_job_id"] == worker_job_id
     assert finished["job_id"] == client_job_id
     assert finished["command"] == "identify"
-
-    artifact_path = Path(accepted["artifact_path"])
-    request_payload = json.loads((artifact_path / "request.json").read_text())
-    result_payload = json.loads((artifact_path / "result.json").read_text())
-    assert request_payload["job_id"] == client_job_id
-    assert request_payload["command"] == "identify"
-    assert result_payload["run_id"] == ready["run_id"]
-    assert result_payload["worker_job_id"] == worker_job_id
-    assert result_payload["job_id"] == client_job_id
-    assert result_payload["command"] == "identify"
-    assert result_payload["state"] == "succeeded"
-    assert result_payload["ok"] is True
-    assert result_payload["exit_code"] == 0
-    assert finished["result_path"] == str(artifact_path / "result.json")
+    assert finished["state"] == "succeeded"
+    assert finished["ok"] is True
+    assert finished["exit_code"] == 0
 except Exception as exc:
     workflow_error = exc
 finally:
@@ -465,8 +453,8 @@ if workflow_failed:
     )
 ```
 
-If a process is force-terminated, it may not write terminal `result.json`,
-`job_finished`, or final `summary`. Treat missing terminal artifacts or missing
+If a process is force-terminated, it may not emit the terminal `job_finished`
+or final `summary` events. Treat missing terminal events or missing
 summary as incomplete or failed.
 
 ## One-Shot JSON Helper
@@ -539,7 +527,7 @@ still requires `--live --resource <RESOURCE>`.
 2. Optionally save setup with `setup-save --resource <RESOURCE> --slot N --json`.
 3. Start a live worker with that same resource, or run a one-shot command with
    explicit artifact paths.
-4. Require accepted worker jobs to reach terminal `result.json` with
+4. Require accepted worker jobs to emit a terminal `job_finished` event with
    `ok: true`, or require one-shot JSON `ok: true`.
 5. Restore state explicitly when setup-changing commands were used.
 6. Run `check-error --resource <RESOURCE> --json` when a final error
