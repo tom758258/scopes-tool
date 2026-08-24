@@ -13,7 +13,8 @@ from starlette.types import Scope
 
 from . import __version__
 from .commands import command_catalog, model_catalog, validate_job_request
-from .jobs import JobManagerShuttingDown, job_manager
+from .desktop import FolderSelectionUnavailable, select_directory_with_dialog
+from .jobs import JobArtifactDirectoryError, JobManagerShuttingDown, job_manager
 
 
 PACKAGE_NAME = "scopes-tool-webui"
@@ -71,6 +72,20 @@ async def models() -> list[dict[str, str]]:
     return model_catalog()
 
 
+@app.post("/api/pc-output/select-folder")
+def select_pc_output_folder() -> dict[str, Any]:
+    try:
+        selected = select_directory_with_dialog()
+    except FolderSelectionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = str(exc) or "folder selection dialog is unavailable"
+        raise HTTPException(status_code=503, detail=detail) from exc
+    if selected is None or not str(selected).strip():
+        return {"selected": False, "folder_path": None}
+    return {"selected": True, "folder_path": str(selected)}
+
+
 @app.post("/api/jobs", status_code=202)
 async def submit_job(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     try:
@@ -81,6 +96,8 @@ async def submit_job(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         job = job_manager.submit(request)
     except JobManagerShuttingDown as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except JobArtifactDirectoryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, "job_id": job.job_id, "status": job.status}
 
 

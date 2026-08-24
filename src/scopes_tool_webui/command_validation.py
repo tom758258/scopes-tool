@@ -141,6 +141,7 @@ from .command_catalog import (
 )
 
 DEFAULT_MODEL_ID = "keysight-dsox4024a"
+DEFAULT_PC_OUTPUT_DIR = "data"
 
 
 class WebUIRequestError(ValueError):
@@ -168,6 +169,9 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
     resource = payload.get("resource")
     if resource is not None and (not isinstance(resource, str) or not resource.strip()):
         raise WebUIRequestError("resource must be a non-empty string when provided")
+    pc_output_dir = payload.get("pc_output_dir", DEFAULT_PC_OUTPUT_DIR)
+    if not isinstance(pc_output_dir, str) or not pc_output_dir.strip():
+        raise WebUIRequestError("pc_output_dir must be a non-empty string")
     model_id = None if mode == "live" else payload.get("model_id", DEFAULT_MODEL_ID)
     if mode != "live":
         if not isinstance(model_id, str) or not model_id.strip():
@@ -190,6 +194,7 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
         "mode": mode,
         "resource": resource.strip() if isinstance(resource, str) else None,
         "model_id": model_id,
+        "pc_output_dir": pc_output_dir.strip(),
         "parameters": normalized,
     }
 
@@ -526,11 +531,14 @@ def _validate_p3c_trigger(command: str, parameters: dict[str, Any], capabilities
 
 def _validate_p3c_serial(command: str, parameters: dict[str, Any], capabilities: Any) -> None:
     if command == "serial-lister-export":
-        _require_parameter(parameters, "output", command)
+        _require_parameter(parameters, "filename", command)
         try:
-            parameters["output"] = validate_save_filename_base(parameters["output"])
+            filename = validate_save_filename_base(parameters["filename"])
         except Exception as exc:
             raise WebUIRequestError(str(exc)) from exc
+        if filename in {".", ".."}:
+            raise WebUIRequestError("serial-lister-export filename must not be . or ..")
+        parameters["filename"] = filename
         return
     if command == "serial-lister-query":
         return

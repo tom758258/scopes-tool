@@ -24,6 +24,10 @@ class JobManagerShuttingDown(RuntimeError):
     """Raised when a job is submitted after shutdown has started."""
 
 
+class JobArtifactDirectoryError(RuntimeError):
+    """Raised when a WebUI job artifact directory cannot be created."""
+
+
 @dataclass
 class Job:
     job_id: str
@@ -31,6 +35,7 @@ class Job:
     mode: str
     resource: str | None
     model_id: str | None
+    pc_output_dir: str
     parameters: dict[str, Any]
     artifact_dir: Path
     status: str = "queued"
@@ -56,6 +61,7 @@ class Job:
                 "mode": self.mode,
                 "resource": self.resource,
                 "model_id": self.model_id,
+                "pc_output_dir": self.pc_output_dir,
                 "parameters": dict(self.parameters),
                 "status": self.status,
                 "created_at": self.created_at,
@@ -88,14 +94,26 @@ class JobManager:
                 raise JobManagerShuttingDown(
                     "WebUI job manager is shutting down; new jobs are not accepted."
                 )
+            job_id = uuid.uuid4().hex
+            output_root = Path(request.get("pc_output_dir", "data"))
+            try:
+                output_root.mkdir(parents=True, exist_ok=True)
+                artifact_dir = Path(
+                    tempfile.mkdtemp(prefix=f"scopes-tool-webui-{job_id}-", dir=output_root)
+                )
+            except OSError as exc:
+                raise JobArtifactDirectoryError(
+                    f"Cannot create or write the PC output folder {str(output_root)!r}: {exc}"
+                ) from exc
             job = Job(
-                job_id=uuid.uuid4().hex,
+                job_id=job_id,
                 command=request["command"],
                 mode=request["mode"],
                 resource=request.get("resource"),
                 model_id=request["model_id"],
+                pc_output_dir=request.get("pc_output_dir", "data"),
                 parameters=dict(request["parameters"]),
-                artifact_dir=Path(tempfile.mkdtemp(prefix="scopes-tool-webui-")),
+                artifact_dir=artifact_dir,
             )
             self._jobs[job.job_id] = job
             job.future = self._executor.submit(self._run, job.job_id)

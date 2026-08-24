@@ -422,15 +422,15 @@ export function createSerialEditorController({
         endBusy();
       }
     },
-    exportLister: async function exportLister(output) {
+    exportLister: async function exportLister(filenameValue) {
       if (busyCount > 0 || !available()) return null;
-      const filename = typeof output === "string" ? output.trim() : "";
+      const filename = typeof filenameValue === "string" ? filenameValue.trim() : "";
       if (!filename) return null;
       beginBusy();
       try {
         return await execute(
           "serial-lister-export",
-          { output: filename },
+          { filename },
           {},
         );
       } finally {
@@ -783,7 +783,7 @@ export class SerialEditor {
     if (!this.exportForm || this.controller.state.busy || this.hooks.isExecutionBusy?.()) return;
     const values = this.exportForm.values();
     if (values === null) return;
-    await this.controller.exportLister(values.output);
+    await this.controller.exportLister(values.filename);
   }
 
   syncFormSlot(form, slotName, entries) {

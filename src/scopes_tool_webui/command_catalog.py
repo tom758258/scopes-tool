@@ -1031,7 +1031,7 @@ P3C_COMMANDS = (
     {"id": "serial-lister-query", "category": "Serial", "label": "Serial Lister state", "modes": ("live", "simulate"), "fields": (), "group": "lister", "editor": "serial"},
     _p3c_action_command("serial-lister-display", "Serial", "Serial Lister display", (_p3c_field("display", "enum", options=SERIAL_LISTER_DISPLAYS, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="lister", editor="serial"),
     _p3c_action_command("serial-lister-reference", "Serial", "Serial Lister reference", (_p3c_field("reference", "enum", options=SERIAL_LISTER_REFERENCES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="lister", editor="serial"),
-    {"id": "serial-lister-export", "category": "Serial", "label": "Export Serial Lister", "modes": ("live", "simulate"), "fields": (_p3c_field("output", "string", required=True),), "group": "lister", "editor": "serial"},
+    {"id": "serial-lister-export", "category": "Serial", "label": "Export Serial Lister", "modes": ("live", "simulate"), "fields": (_p3c_field("filename", "string", required=True),), "group": "lister", "editor": "serial"},
 
     {
         "id": "segmented-memory", "category": "Segmented Memory", "label": "Segmented memory", "modes": ("live", "simulate"),
@@ -1072,6 +1072,20 @@ P3C_COMMANDS = (
 
 COMMANDS = COMMANDS + P3C_COMMANDS
 _P3C_COMMAND_IDS = frozenset(entry["id"] for entry in P3C_COMMANDS)
+
+PC_OUTPUT_COMMAND_IDS = frozenset(
+    {
+        "screenshot",
+        "capture",
+        "serial-lister-export",
+        "segmented-capture",
+        "capture-batch",
+        "measure-log",
+        "measure-until",
+        "triggered-measure-loop",
+        "triggered-capture-series",
+    }
+)
 
 _COMMAND_BY_ID = {entry["id"]: entry for entry in COMMANDS}
 _COMMAND_FIELDS = {
@@ -1220,6 +1234,7 @@ def model_catalog() -> list[dict[str, str]]:
 
 def _command_catalog_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
     catalog_entry = dict(entry)
+    catalog_entry["pc_output"] = entry["id"] in PC_OUTPUT_COMMAND_IDS
     presentation = _command_presentation(entry)
     presentation["models"] = {
         model.model_id: _model_command_presentation(entry, model.model_id)

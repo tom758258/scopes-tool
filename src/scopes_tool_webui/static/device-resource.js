@@ -93,6 +93,7 @@ export class DeviceResource {
       mode: this.elements.mode.find((input) => input.checked),
       resource: this.elements.resource,
       model: this.elements.model,
+      pcOutput: this.elements.pcOutput,
     });
   }
 

@@ -1,4 +1,4 @@
-import { getCommands, getHealth } from "/static/api.js";
+import { getCommands, getHealth, selectPcOutputFolder } from "/static/api.js";
 import { bindBasicControls } from "/static/basic-controls.js";
 import { CommandCatalog } from "/static/command-catalog.js";
 import { CommandForm } from "/static/command-form.js";
@@ -12,6 +12,11 @@ import {
 } from "/static/execution-context.js";
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
+import {
+  pcOutputContext,
+  renderPcOutputCommandNote,
+  resetPcOutputDirectory,
+} from "/static/pc-output.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
 import { SaveExportEditor } from "/static/save-export-editor.js";
 import { SearchEditor } from "/static/search-editor.js";
@@ -71,6 +76,11 @@ const elements = {
   resultDetail: document.querySelector("#result-detail-content"),
   resultDetailToggle: document.querySelector("#result-toggle"),
   basic: document.querySelector("#basic-controls"),
+  pcOutput: document.querySelector("#pc-output-dir"),
+  pcOutputSelect: document.querySelector("#pc-output-select"),
+  pcOutputDefault: document.querySelector("#pc-output-default"),
+  pcOutputStatus: document.querySelector("#pc-output-status"),
+  pcOutputCommandNote: document.querySelector("#pc-output-command-note"),
 };
 
 let commands = [];
@@ -94,6 +104,7 @@ let healthState = { status: "checking", version: null, error: null };
 let liveCommandState = { key: "device.ready" };
 let pendingResourceLiveSupport = null;
 let updateBasicAvailability = () => {};
+let pcOutputSelectionStatus = null;
 
 const EDITOR_RENDERERS = {
   "save-export": () => saveExportEditor,
@@ -202,6 +213,7 @@ async function initialize() {
     modeBadge: elements.modeBadge,
     summary: elements.summary,
     status: elements.deviceStatus,
+    pcOutput: elements.pcOutput,
   }, (nextContext) => {
     context = nextContext;
     state.executionContext = nextContext;
@@ -227,6 +239,7 @@ async function initialize() {
     updateAvailability();
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
+  bindPcOutputControls();
   updateAvailability();
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
@@ -279,6 +292,63 @@ function bindPresentationControls() {
   });
 }
 
+function bindPcOutputControls() {
+  elements.pcOutput.addEventListener("input", () => renderPcOutputNote());
+  elements.pcOutputDefault.addEventListener("click", () => {
+    resetPcOutputDirectory(elements.pcOutput);
+    pcOutputSelectionStatus = null;
+    renderPcOutputStatus();
+    renderPcOutputNote();
+  });
+  elements.pcOutputSelect.addEventListener("click", async () => {
+    elements.pcOutputSelect.disabled = true;
+    pcOutputSelectionStatus = { key: "pcOutput.selecting", values: {}, error: false };
+    renderPcOutputStatus();
+    try {
+      const selection = await selectPcOutputFolder();
+      if (selection.selected && selection.folder_path) {
+        elements.pcOutput.value = selection.folder_path;
+        pcOutputSelectionStatus = {
+          key: "pcOutput.selected",
+          values: { path: selection.folder_path },
+          error: false,
+        };
+        renderPcOutputNote();
+      } else {
+        pcOutputSelectionStatus = { key: "pcOutput.cancelled", values: {}, error: false };
+      }
+    } catch (error) {
+      pcOutputSelectionStatus = {
+        key: "pcOutput.selectionFailed",
+        values: { error: error.message || String(error) },
+        error: true,
+      };
+    } finally {
+      elements.pcOutputSelect.disabled = false;
+      renderPcOutputStatus();
+    }
+  });
+}
+
+function renderPcOutputStatus() {
+  elements.pcOutputStatus.hidden = !pcOutputSelectionStatus;
+  elements.pcOutputStatus.classList.toggle(
+    "error-summary",
+    Boolean(pcOutputSelectionStatus?.error),
+  );
+  elements.pcOutputStatus.textContent = pcOutputSelectionStatus
+    ? translate(pcOutputSelectionStatus.key, pcOutputSelectionStatus.values)
+    : "";
+}
+
+function renderPcOutputNote() {
+  renderPcOutputCommandNote(
+    elements.pcOutputCommandNote,
+    catalog?.selected(),
+    elements.pcOutput,
+  );
+}
+
 function togglePanel(panel, content, button, labelKey) {
   const expanded = panel.classList.toggle("collapsed") === false;
   content.hidden = !expanded;
@@ -326,7 +396,7 @@ async function executeCommand(command, parameters, options = {}) {
     return;
   }
   executing = true;
-  const commandContext = { ...context };
+  const commandContext = pcOutputContext(context, elements.pcOutput);
   const submittedWorkspaceContext = currentWorkspaceContext(command);
   const ownsCommandForm = () => options.formRevision !== undefined
     && options.formRevision === genericFormRevision
@@ -538,6 +608,8 @@ document.addEventListener("localechange", () => {
   renderVersion();
   renderLiveData();
   renderCollapseLabels();
+  renderPcOutputStatus();
+  renderPcOutputNote();
   if (deviceResource) deviceResource.refresh();
   if (catalog) {
     catalog.render();
@@ -585,6 +657,7 @@ function syncCommandSelection(draft = null) {
   const supportReason = selected ? catalog.supportReason(selected) : "";
   elements.commandSupportReason.hidden = !supportReason;
   elements.commandSupportReason.textContent = supportReason;
+  renderPcOutputNote();
   elements.execute.textContent = translate(`actions.${commandAction(selected)}`);
   renderWorkspace();
   updateAvailability();

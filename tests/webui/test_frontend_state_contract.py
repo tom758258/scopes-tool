@@ -96,6 +96,8 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
         const submissions = [];
         const controllers = [];
         const translate = (key) => key;
+        const pcOutputContext = (value) => ({ ...value, pc_output_dir: "data" });
+        const renderPcOutputNote = () => {};
         const commandAvailable = () => true;
         const currentWorkspaceContext = () => ({ command: "channel-scale", mode: "simulate" });
         const isCurrentEditorJob = () => true;
@@ -1150,7 +1152,7 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
           entry.command === "serial-lister-query").length >= 1, true);
 
         editor.displayForm.values = () => ({ enabled: true });
-        editor.exportForm.values = () => ({ output: "serial.csv" });
+        editor.exportForm.values = () => ({ filename: "serial.csv" });
         executionBusy = true;
         editor.render(editor.controller.state);
         assert.equal(editor.applyDisplayButton.disabled, true);
@@ -2453,6 +2455,7 @@ def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -
         const presentations = [];
         const submissions = [];
         const translate = (key) => key;
+        const pcOutputContext = (value) => ({ ...value, pc_output_dir: "data" });
         const commandAvailable = () => true;
         const currentWorkspaceContext = () => ({});
         const isCurrentEditorJob = () => false;

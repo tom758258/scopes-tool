@@ -113,6 +113,18 @@
           <button data-command="single" class="command-pill-button" type="button" data-i18n="basic.single">Single</button>
           <button data-command="screenshot" class="command-pill-button" type="button" data-i18n="basic.screenshot">Screenshot</button>
         </div>
+        <div class="pc-output-setting">
+          <label class="field" for="pc-output-dir">
+            <span data-i18n="pcOutput.label">PC output folder</span>
+          </label>
+          <div class="pc-output-row">
+            <input id="pc-output-dir" value="data" autocomplete="off" spellcheck="false">
+            <button id="pc-output-select" class="secondary" type="button" data-i18n="actions.select">Select</button>
+            <button id="pc-output-default" class="secondary" type="button" data-i18n="actions.default">Default</button>
+          </div>
+          <p class="compact-note" data-i18n="pcOutput.helper">This is the only WebUI setting for PC-side output. All commands that create files on this computer use this folder.</p>
+          <p id="pc-output-status" class="compact-note" aria-live="polite" hidden></p>
+        </div>
       </section>
 
       <div id="advanced-commands" class="command-workbench collapsed" hidden>
@@ -144,6 +156,7 @@
             </div>
           </div>
           <div class="workspace-content">
+            <p id="pc-output-command-note" class="compact-note pc-output-command-note" hidden></p>
             <div class="form-heading" id="form-heading"><h3 data-i18n="commands.parameters">Parameters</h3></div>
             <form id="command-form" class="command-form"></form>
             <div id="save-export-editor" class="save-export-editor trigger-editor" hidden></div>

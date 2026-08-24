@@ -1286,7 +1286,7 @@ def test_p3c_dry_run_planners_and_conditional_validation() -> None:
 
 def test_p3c_serial_lister_export_registers_only_its_host_artifact() -> None:
     client = TestClient(app)
-    job = submit(client, "serial-lister-export", "simulate", {"output": "lister.csv"})
+    job = submit(client, "serial-lister-export", "simulate", {"filename": "lister.csv"})
     assert job["status"] == "completed"
     assert [artifact["name"] for artifact in job["artifacts"]] == ["lister.csv"]
     artifact = client.get(job["artifacts"][0]["url"])

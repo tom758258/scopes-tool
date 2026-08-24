@@ -4,6 +4,7 @@ export function getExecutionContext(elements) {
     mode,
     resource: elements.resource.value.trim() || null,
     model_id: mode === "live" ? null : elements.model.value,
+    pc_output_dir: elements.pcOutput?.value.trim() ?? "data",
   };
 }
 

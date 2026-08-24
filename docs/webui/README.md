@@ -69,6 +69,18 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 
 Basic Controls provides Run, Stop, Single, and Screenshot. These are
 shortcuts that submit the same command jobs used by the Command workbench.
+It also owns the WebUI's single **PC output folder** setting. The input contains
+the real default value `data`; **Select** opens the Windows folder picker and
+leaves the current value unchanged when cancelled, while **Default** resets the
+input to `data` without a backend request. The value is browser-session state
+only and is snapshotted when each job is submitted.
+
+The setting applies to host-side artifacts created by `screenshot`, `capture`,
+`serial-lister-export`, `segmented-capture`, `capture-batch`, `measure-log`,
+`measure-until`, `triggered-measure-loop`, and `triggered-capture-series`.
+Their command workspaces show the current shared folder but do not add another
+path control. Serial Lister Export accepts a filename only; its WebUI field
+cannot select or escape the shared folder.
 
 The Command workbench exposes:
 
@@ -207,7 +219,9 @@ the write when the instrument no longer reports the expected protocol. The
 Serial Lister section is independent of protocol and Bus: its state is
 refreshed through the existing aggregate `serial-lister-query`, display and
 reference settings apply through their existing commands, and Export performs
-the existing host-side raw CSV retrieval with its registered job artifact.
+the existing host-side raw CSV retrieval with its registered job artifact. Its
+filename-only field writes under the PC output folder selected in Basic
+Controls.
 
 Selecting a Save / Export command opens the dedicated Save / Export editor
 instead of a plain command form. The Command Browser remains the only
@@ -229,7 +243,9 @@ submit only their existing instrument-side Save command. They do not inherit
 or update `save-filename`; the editor makes this filename separation explicit.
 They do not add filename extensions, refresh unrelated settings, or create
 WebUI download artifacts. Screenshot and Capture remain separate host-side
-retrieval paths that register downloadable artifacts.
+retrieval paths that register downloadable artifacts. The Basic Controls PC
+output folder does not change `save-pwd`, `save-filename`, or any other
+instrument-side `:SAVE:*` behavior.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field
@@ -290,7 +306,12 @@ Screenshot and waveform capture jobs register their generated artifacts, which
 can be downloaded through the job result. Instrument-side `save-image` and
 `save-waveform` commands return the Core save result but do not create host
 WebUI artifacts. Artifact downloads are limited to files registered by that
-job.
+job. The submitted PC output folder is the base for WebUI job artifact storage;
+the JobManager still creates a unique artifact directory beneath that base for
+every job. Artifact registration and download containment remain scoped to that
+job directory, so jobs cannot overwrite or download one another's files. Both
+absolute and relative base folders are accepted and created when needed;
+creation or write failures are reported instead of falling back elsewhere.
 
 ## Core coverage boundary
 
