@@ -781,7 +781,10 @@ def _execute_p3c_scope_command(
             scope.configure_serial_lister_reference(parameters["reference"])
         return _state_scope_result("reference", scope.query_serial_lister_reference())
     if command == "serial-lister-export":
-        path = write_serial_lister_csv(scope.query_serial_lister_data(), artifact_dir / parameters["filename"])
+        target = artifact_dir / parameters["filename"]
+        if target.exists() or target.is_symlink():
+            raise FileExistsError(f"Serial Lister output file already exists: {target}")
+        path = write_serial_lister_csv(scope.query_serial_lister_data(), target)
         return {"exit_code": 0, "result": {"output": path.name}, "artifacts": [{"kind": "serial-lister", "path": str(path)}]}
 
     if command == "segmented-memory":

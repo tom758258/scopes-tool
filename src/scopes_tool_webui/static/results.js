@@ -1,4 +1,3 @@
-import { artifactUrl } from "/static/api.js";
 import { hasTranslation, translate, translateJobStatus } from "/static/i18n.js";
 
 const RESULT_HISTORY_LIMIT = 20;
@@ -46,25 +45,6 @@ export function renderJob(summaryContainer, job, detailContainer) {
     result.className = "result-block";
     result.textContent = JSON.stringify(job.result, null, 2);
     detailContainer.append(result);
-  }
-  if (job.artifacts?.length) {
-    const heading = document.createElement("h3");
-    heading.textContent = translate("results.artifacts");
-    detailContainer.append(heading);
-    const list = document.createElement("ul");
-    job.artifacts.forEach((artifact) => {
-      const item = document.createElement("li");
-      const link = document.createElement("a");
-      link.href = artifactUrl(job.job_id, artifact.name);
-      link.textContent = translate("results.artifactSize", {
-        name: artifact.name,
-        size: artifact.size,
-      });
-      link.download = artifact.name;
-      item.append(link);
-      list.append(item);
-    });
-    detailContainer.append(list);
   }
   if (!detailContainer.childElementCount) detailContainer.append(emptyMessage());
 }
@@ -201,7 +181,6 @@ export function renderWorkspaceResult(container, job, context = {}) {
     const fields = Object.entries(display).filter(([name]) => !isRawDiagnosticField(name));
     if (fields.length) {
       appendWorkspaceFields(container, fields);
-      appendWorkspaceArtifacts(container, job);
       return;
     }
   }
@@ -210,7 +189,6 @@ export function renderWorkspaceResult(container, job, context = {}) {
     ["execution_mode", context.mode || ""],
     ["summary", successfulJobSummary(job)],
   ]);
-  appendWorkspaceArtifacts(container, job);
 }
 
 function unwrapStructuredResult(result) {
@@ -232,21 +210,6 @@ function appendWorkspaceFields(container, fields) {
     const content = document.createElement("span");
     content.textContent = formatWorkspaceValue(value);
     field.append(content, label);
-    container.append(field);
-  });
-}
-
-function appendWorkspaceArtifacts(container, job) {
-  (job.artifacts || []).forEach((artifact) => {
-    const field = document.createElement("div");
-    field.className = "workspace-result-field workspace-result-field-wide";
-    const link = document.createElement("a");
-    link.href = artifactUrl(job.job_id, artifact.name);
-    link.download = artifact.name;
-    link.textContent = artifact.name;
-    const label = document.createElement("small");
-    label.textContent = translate("results.artifacts");
-    field.append(link, label);
     container.append(field);
   });
 }

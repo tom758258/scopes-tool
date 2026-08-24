@@ -41,15 +41,25 @@ def wait_for_job(client: TestClient, job_id: str) -> dict:
     raise AssertionError("WebUI job did not reach a terminal state")
 
 
-def submit(client: TestClient, command: str, mode: str, parameters: dict) -> dict:
+def submit(
+    client: TestClient,
+    command: str,
+    mode: str,
+    parameters: dict,
+    *,
+    pc_output_dir: Path | None = None,
+) -> dict:
+    payload = {
+        "command": command,
+        "mode": mode,
+        "model_id": MODEL_ID,
+        "parameters": parameters,
+    }
+    if pc_output_dir is not None:
+        payload["pc_output_dir"] = str(pc_output_dir)
     response = client.post(
         "/api/jobs",
-        json={
-            "command": command,
-            "mode": mode,
-            "model_id": MODEL_ID,
-            "parameters": parameters,
-        },
+        json=payload,
     )
     assert response.status_code == 202
     return wait_for_job(client, response.json()["job_id"])
@@ -541,7 +551,7 @@ def test_job_submission_returns_503_during_manager_shutdown(monkeypatch) -> None
     assert "not accepted" in response.json()["detail"]
 
 
-def test_running_cancel_api_stays_running_until_cleanup(monkeypatch) -> None:
+def test_running_cancel_api_stays_running_until_cleanup(monkeypatch, tmp_path) -> None:
     manager = JobManager()
     started = threading.Event()
     cancellation_observed = threading.Event()
@@ -566,6 +576,8 @@ def test_running_cancel_api_stays_running_until_cleanup(monkeypatch) -> None:
 
     monkeypatch.setattr("scopes_tool_webui.jobs.execute_command", blocking_execute)
     monkeypatch.setattr(app_module, "job_manager", manager)
+    output_root = tmp_path / "cancel-output"
+    output_root.mkdir()
     client = TestClient(app)
     response = client.post(
         "/api/jobs",
@@ -573,6 +585,7 @@ def test_running_cancel_api_stays_running_until_cleanup(monkeypatch) -> None:
             "command": "capture-batch",
             "mode": "simulate",
             "model_id": MODEL_ID,
+            "pc_output_dir": str(output_root),
             "parameters": {
                 "channels": "1",
                 "points": 1000,
@@ -609,7 +622,7 @@ def test_running_cancel_api_stays_running_until_cleanup(monkeypatch) -> None:
         asyncio.run(manager.shutdown(timeout_s=2))
 
 
-def test_simulated_capture_artifact_is_registered_and_downloadable() -> None:
+def test_simulated_capture_artifact_is_registered_and_downloadable(tmp_path) -> None:
     client = TestClient(app)
 
     job = submit(
@@ -617,6 +630,7 @@ def test_simulated_capture_artifact_is_registered_and_downloadable() -> None:
         "capture",
         "simulate",
         {"channel": 1, "points": 1000, "format": "byte"},
+        pc_output_dir=tmp_path / "capture-output",
     )
 
     assert job["status"] == "completed"
@@ -1246,7 +1260,7 @@ def test_workflow_timeout_zero_is_rejected_before_queueing_in_every_mode(
         assert accepted["parameters"][timeout_name] == 1e-12
 
 
-def test_representative_p3c_simulated_commands_complete() -> None:
+def test_representative_p3c_simulated_commands_complete(tmp_path) -> None:
     client = TestClient(app)
     for command, parameters in (
         ("trigger-edge", {"action": "set", "source_channel": 1, "level": 0.1, "slope": "positive"}),
@@ -1256,7 +1270,13 @@ def test_representative_p3c_simulated_commands_complete() -> None:
         ("segmented-memory", {"action": "enable", "segments": 2}),
         ("capture-batch", {"channels": "1", "points": 1000, "format": "byte", "count": 1, "interval_seconds": 0}),
     ):
-        job = submit(client, command, "simulate", parameters)
+        job = submit(
+            client,
+            command,
+            "simulate",
+            parameters,
+            pc_output_dir=(tmp_path / "batch-output") if command == "capture-batch" else None,
+        )
         assert job["status"] == "completed", (command, job)
 
 
@@ -1284,9 +1304,15 @@ def test_p3c_dry_run_planners_and_conditional_validation() -> None:
     assert "query" in rejected.json()["detail"].lower()
 
 
-def test_p3c_serial_lister_export_registers_only_its_host_artifact() -> None:
+def test_p3c_serial_lister_export_registers_only_its_host_artifact(tmp_path) -> None:
     client = TestClient(app)
-    job = submit(client, "serial-lister-export", "simulate", {"filename": "lister.csv"})
+    job = submit(
+        client,
+        "serial-lister-export",
+        "simulate",
+        {"filename": "lister.csv"},
+        pc_output_dir=tmp_path / "lister-output",
+    )
     assert job["status"] == "completed"
     assert [artifact["name"] for artifact in job["artifacts"]] == ["lister.csv"]
     artifact = client.get(job["artifacts"][0]["url"])

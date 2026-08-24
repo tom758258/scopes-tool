@@ -1,4 +1,4 @@
-import { getCommands, getHealth, selectPcOutputFolder } from "/static/api.js";
+import { getCommands, getHealth, openPcOutputFolder, selectPcOutputFolder } from "/static/api.js";
 import { bindBasicControls } from "/static/basic-controls.js";
 import { CommandCatalog } from "/static/command-catalog.js";
 import { CommandForm } from "/static/command-form.js";
@@ -14,8 +14,8 @@ import { initializeI18n, locale, setLocale, translate, translateJobStatus } from
 import { requestCancel, runJob } from "/static/jobs.js";
 import {
   pcOutputContext,
+  pcOutputDirectory,
   renderPcOutputCommandNote,
-  resetPcOutputDirectory,
 } from "/static/pc-output.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
 import { SaveExportEditor } from "/static/save-export-editor.js";
@@ -78,7 +78,7 @@ const elements = {
   basic: document.querySelector("#basic-controls"),
   pcOutput: document.querySelector("#pc-output-dir"),
   pcOutputSelect: document.querySelector("#pc-output-select"),
-  pcOutputDefault: document.querySelector("#pc-output-default"),
+  pcOutputOpen: document.querySelector("#pc-output-open"),
   pcOutputStatus: document.querySelector("#pc-output-status"),
   pcOutputCommandNote: document.querySelector("#pc-output-command-note"),
 };
@@ -294,12 +294,6 @@ function bindPresentationControls() {
 
 function bindPcOutputControls() {
   elements.pcOutput.addEventListener("input", () => renderPcOutputNote());
-  elements.pcOutputDefault.addEventListener("click", () => {
-    resetPcOutputDirectory(elements.pcOutput);
-    pcOutputSelectionStatus = null;
-    renderPcOutputStatus();
-    renderPcOutputNote();
-  });
   elements.pcOutputSelect.addEventListener("click", async () => {
     elements.pcOutputSelect.disabled = true;
     pcOutputSelectionStatus = { key: "pcOutput.selecting", values: {}, error: false };
@@ -325,6 +319,25 @@ function bindPcOutputControls() {
       };
     } finally {
       elements.pcOutputSelect.disabled = false;
+      renderPcOutputStatus();
+    }
+  });
+  elements.pcOutputOpen.addEventListener("click", async () => {
+    elements.pcOutputOpen.disabled = true;
+    pcOutputSelectionStatus = { key: "pcOutput.opening", values: {}, error: false };
+    renderPcOutputStatus();
+    try {
+      const path = pcOutputDirectory(elements.pcOutput);
+      await openPcOutputFolder(path);
+      pcOutputSelectionStatus = { key: "pcOutput.opened", values: { path }, error: false };
+    } catch (error) {
+      pcOutputSelectionStatus = {
+        key: "pcOutput.openFailed",
+        values: { error: error.message || String(error) },
+        error: true,
+      };
+    } finally {
+      elements.pcOutputOpen.disabled = false;
       renderPcOutputStatus();
     }
   });

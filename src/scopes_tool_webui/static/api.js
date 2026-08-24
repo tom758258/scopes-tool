@@ -2,6 +2,7 @@ const HEALTH_PATH = "/api/health";
 const COMMANDS_PATH = "/api/commands";
 const JOBS_PATH = "/api/jobs";
 const PC_OUTPUT_FOLDER_PATH = "/api/pc-output/select-folder";
+const PC_OUTPUT_OPEN_FOLDER_PATH = "/api/pc-output/open-folder";
 
 export async function getHealth() {
   return getJson(HEALTH_PATH);
@@ -17,6 +18,10 @@ export async function submitJob(payload) {
 
 export async function selectPcOutputFolder() {
   return requestJson(PC_OUTPUT_FOLDER_PATH, "POST", {});
+}
+
+export async function openPcOutputFolder(pcOutputDir) {
+  return requestJson(PC_OUTPUT_OPEN_FOLDER_PATH, "POST", { pc_output_dir: pcOutputDir });
 }
 
 export async function getJob(jobId) {

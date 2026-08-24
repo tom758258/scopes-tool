@@ -118,11 +118,11 @@
             <span data-i18n="pcOutput.label">PC output folder</span>
           </label>
           <div class="pc-output-row">
-            <input id="pc-output-dir" value="data" autocomplete="off" spellcheck="false">
-            <button id="pc-output-select" class="secondary" type="button" data-i18n="actions.select">Select</button>
-            <button id="pc-output-default" class="secondary" type="button" data-i18n="actions.default">Default</button>
+            <input id="pc-output-dir" data-i18n-placeholder="pcOutput.defaultPlaceholder" placeholder="Default" autocomplete="off" spellcheck="false">
+            <button id="pc-output-select" class="secondary" type="button" data-i18n="actions.selectFolder">Select Folder</button>
+            <button id="pc-output-open" class="secondary" type="button" data-i18n="actions.openFolder">Open Folder</button>
           </div>
-          <p class="compact-note" data-i18n="pcOutput.helper">This is the only WebUI setting for PC-side output. All commands that create files on this computer use this folder.</p>
+          <p class="compact-note" data-i18n="pcOutput.helper">This is the only WebUI setting for PC-side output. All commands that create files on this computer use this folder. Leave it blank to use the `data` folder.</p>
           <p id="pc-output-status" class="compact-note" aria-live="polite" hidden></p>
         </div>
       </section>

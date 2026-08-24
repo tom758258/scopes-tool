@@ -69,11 +69,12 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 
 Basic Controls provides Run, Stop, Single, and Screenshot. These are
 shortcuts that submit the same command jobs used by the Command workbench.
-It also owns the WebUI's single **PC output folder** setting. The input contains
-the real default value `data`; **Select** opens the Windows folder picker and
-leaves the current value unchanged when cancelled, while **Default** resets the
-input to `data` without a backend request. The value is browser-session state
-only and is snapshotted when each job is submitted.
+It also owns the WebUI's single **PC output folder** setting. A blank input uses
+the default `data` root. **Select Folder** opens the Windows folder picker and
+leaves the current value unchanged when cancelled. **Open Folder** creates the
+effective folder when needed and opens it through the Windows shell; this is the
+primary WebUI entry point for viewing host-side outputs. The value is
+browser-session state only and is snapshotted when each job is submitted.
 
 The setting applies to host-side artifacts created by `screenshot`, `capture`,
 `serial-lister-export`, `segmented-capture`, `capture-batch`, `measure-log`,
@@ -221,7 +222,7 @@ refreshed through the existing aggregate `serial-lister-query`, display and
 reference settings apply through their existing commands, and Export performs
 the existing host-side raw CSV retrieval with its registered job artifact. Its
 filename-only field writes under the PC output folder selected in Basic
-Controls.
+Controls and fails rather than overwriting an existing file with that name.
 
 Selecting a Save / Export command opens the dedicated Save / Export editor
 instead of a plain command form. The Command Browser remains the only
@@ -302,20 +303,24 @@ waits for running jobs to finish and close their own sessions before stopping
 Uvicorn. This shutdown has a timeout; if jobs do not finish or a session close
 fails, the Launcher displays **Shutdown incomplete** and remains available so
 Quit can be retried. No implicit Safe Cleanup is run.
-Screenshot and waveform capture jobs register their generated artifacts, which
-can be downloaded through the job result. Instrument-side `save-image` and
-`save-waveform` commands return the Core save result but do not create host
-WebUI artifacts. Artifact downloads are limited to files registered by that
-job. The submitted PC output folder is the actual host-side output root.
-Single-file outputs and waveform captures write directly under that root using
-the existing Core/CLI timestamp naming convention. Multi-file workflows retain
-their existing command-specific and timestamped output directories beneath the
-root. Jobs that do not create host-side artifacts do not create or validate the
-PC output folder, and Dry-run only plans paths without creating them. Download
-URLs remain job-scoped and resolve only exact files registered by that job;
-resolved artifacts must also remain inside its submitted output root. Both
-absolute and relative roots are accepted and created when an output command
-needs them; creation or write failures are reported instead of falling back.
+Screenshot and waveform capture jobs register their generated artifacts.
+Instrument-side `save-image` and `save-waveform` commands return the Core save
+result but do not create host WebUI artifacts. The Result UI keeps structured
+result details but does not add artifact download links; use **Open Folder** in
+Basic Controls to view host-side files. Backend artifact registration and the
+job-scoped download API remain available, and downloads resolve only exact files
+registered by that job. Resolved artifacts must also remain inside its submitted
+output root.
+
+The submitted PC output folder is the actual host-side output root. Screenshots
+and waveform captures write directly under that root using the existing Core/CLI
+timestamp naming convention. Serial Lister Export uses its explicit filename.
+Multi-file workflows retain their existing command-specific and timestamped
+output directories beneath the root. Jobs that do not create host-side artifacts
+do not create or validate the PC output folder, and Dry-run only plans paths
+without creating them. Both absolute and relative roots are accepted and created
+when an output command needs them; creation or write failures are reported
+instead of falling back.
 
 ## Core coverage boundary
 

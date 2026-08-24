@@ -13,7 +13,12 @@ from starlette.types import Scope
 
 from . import __version__
 from .commands import command_catalog, model_catalog, validate_job_request
-from .desktop import FolderSelectionUnavailable, select_directory_with_dialog
+from .desktop import (
+    FolderOpenUnavailable,
+    FolderSelectionUnavailable,
+    open_directory_in_shell,
+    select_directory_with_dialog,
+)
 from .jobs import JobManagerShuttingDown, job_manager
 
 
@@ -84,6 +89,22 @@ def select_pc_output_folder() -> dict[str, Any]:
     if selected is None or not str(selected).strip():
         return {"selected": False, "folder_path": None}
     return {"selected": True, "folder_path": str(selected)}
+
+
+@app.post("/api/pc-output/open-folder")
+def open_pc_output_folder(payload: dict[str, Any] = Body(...)) -> dict[str, bool]:
+    raw_path = payload.get("pc_output_dir", "data")
+    if not isinstance(raw_path, str):
+        raise HTTPException(status_code=400, detail="pc_output_dir must be a string")
+    effective_path = raw_path.strip() or "data"
+    try:
+        open_directory_in_shell(Path(effective_path))
+    except FolderOpenUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = str(exc) or "folder opening is unavailable"
+        raise HTTPException(status_code=503, detail=detail) from exc
+    return {"ok": True}
 
 
 @app.post("/api/jobs", status_code=202)

@@ -62,6 +62,15 @@ def test_identify_detail_is_localized_and_keeps_raw_json() -> None:
     assert '"results.identity.resource": "資源"' in chinese
 
 
+def test_result_ui_does_not_render_artifact_download_entries() -> None:
+    source = RESULTS_JS.read_text(encoding="utf-8")
+
+    assert "artifactUrl" not in source
+    assert "job.artifacts?.length" not in source
+    assert "appendWorkspaceArtifacts" not in source
+    assert 'result.textContent = JSON.stringify(job.result, null, 2);' in source
+
+
 def test_result_history_has_powers_like_viewport_and_item_presentation() -> None:
     source = STYLES_CSS.read_text(encoding="utf-8")
     viewport = source.split(".results-content {", 1)[1].split("}", 1)[0]
@@ -130,13 +139,11 @@ def test_result_history_runtime_behaviour() -> None:
         };
         const hasTranslation = (key) => ["command.identify", "command.run", "command.list-resources"].includes(key);
         const translateJobStatus = (status) => translate(`status.${status}`);
-        globalThis.testArtifactUrl = () => "";
         globalThis.testTranslate = translate;
         globalThis.testHasTranslation = hasTranslation;
         globalThis.testTranslateJobStatus = translateJobStatus;
 
         const source = [
-          "const artifactUrl = globalThis.testArtifactUrl;",
           "const translate = globalThis.testTranslate;",
           "const hasTranslation = globalThis.testHasTranslation;",
           "const translateJobStatus = globalThis.testTranslateJobStatus;",
@@ -215,6 +222,18 @@ def test_result_history_runtime_behaviour() -> None:
         assert.match(detail.children[0].textContent, /raw_value/);
         assert.match(detail.children[0].textContent, /operation_raw/);
 
+        const artifactJob = makeJob("artifact-job", "screenshot", "completed", {
+          result: { result: { artifact: "capture.png" } },
+          artifacts: [{ name: "capture.png", kind: "screenshot", size: 10 }],
+        });
+        api.renderJob(summary, artifactJob, detail);
+        assert.equal(detail.children.length, 1);
+        assert.equal(detail.children[0].tagName, "PRE");
+        const artifactWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(artifactWorkspace, artifactJob);
+        assert.equal(artifactWorkspace.children.length, 1);
+        assert.equal(artifactWorkspace.children[0].children[0].tagName, "SPAN");
+
         api.renderJob(summary, makeJob("run-job", "run", "completed", { result: { result: { action: "run" } } }), detail);
         assert.equal(rowTexts()[0][2], "Command completed successfully");
         api.renderJob(summary, makeJob("empty-resource-job", "list-resources", "completed", {
@@ -229,7 +248,7 @@ def test_result_history_runtime_behaviour() -> None:
         api.renderJob(summary, makeJob("resource-job", "list-resources", "completed", {
           result: { result: { resources: ["USB0::1", "USB0::2", "USB0::3", "USB0::4"] } },
         }), detail);
-        assert.equal(summary.children.length, 5);
+        assert.equal(summary.children.length, 6);
         assert.equal(rowTexts()[0][2], "\u627e\u5230 4 \u500b\u8cc7\u6e90");
         assert(rowTexts().some((row) => row[2] === "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210"));
         assert(rowTexts().some((row) => row[2] === "DSO-X 4034A - \u5e8f\u865f SYNTH12345 - \u97cc\u9ad4 0.0"));

@@ -12,6 +12,7 @@ import time
 from typing import Any, Mapping
 import uuid
 
+from .command_catalog import PC_OUTPUT_COMMAND_IDS
 from .commands import ScopeSessionCloseError, execute_command
 
 
@@ -76,6 +77,7 @@ class JobManager:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.RLock()
         self._hardware_lock = threading.Lock()
+        self._pc_output_lock = threading.Lock()
         self._executor = ThreadPoolExecutor(
             max_workers=4,
             thread_name_prefix="scopes-tool-webui-job",
@@ -185,23 +187,33 @@ class JobManager:
             job.started_at = _timestamp()
 
         try:
-            lock = self._hardware_lock if job.mode == "live" and job.command != "list-resources" else _NullLock()
-            with lock:
-                with job.lock:
-                    if job.cancel_requested:
-                        job.status = "cancelled"
-                        job.finished_at = _timestamp()
-                        return
-                execution = execute_command(
-                    job.command,
-                    mode=job.mode,
-                    resource=job.resource,
-                    model_id=job.model_id,
-                    parameters=job.parameters,
-                    artifact_dir=job.pc_output_root,
-                    stop_requested=lambda: job.cancel_requested,
-                )
-            artifacts = self._register_artifacts(job, execution.get("artifacts", []))
+            output_lock = (
+                self._pc_output_lock
+                if job.mode != "dry-run" and job.command in PC_OUTPUT_COMMAND_IDS
+                else _NullLock()
+            )
+            hardware_lock = (
+                self._hardware_lock
+                if job.mode == "live" and job.command != "list-resources"
+                else _NullLock()
+            )
+            with output_lock:
+                with hardware_lock:
+                    with job.lock:
+                        if job.cancel_requested:
+                            job.status = "cancelled"
+                            job.finished_at = _timestamp()
+                            return
+                    execution = execute_command(
+                        job.command,
+                        mode=job.mode,
+                        resource=job.resource,
+                        model_id=job.model_id,
+                        parameters=job.parameters,
+                        artifact_dir=job.pc_output_root,
+                        stop_requested=lambda: job.cancel_requested,
+                    )
+                artifacts = self._register_artifacts(job, execution.get("artifacts", []))
             exit_code = execution.get("exit_code", 1)
             public_execution = dict(execution)
             public_execution["artifacts"] = [
