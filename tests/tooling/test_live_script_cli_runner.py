@@ -232,6 +232,38 @@ $resultOutput | ConvertTo-Json -Depth 8 -Compress
         assert result["cli_empty_stdout_path_set"] is True
 
 
+@requires_windows
+def test_live_cli_check_invoke_cli_raw_uses_native_invocation() -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    script_text = script_path.read_text(encoding="utf-8")
+
+    invoke_raw_start = script_text.index("function Invoke-CliRaw {")
+    invoke_raw_end = script_text.index("\nfunction Invoke-Cli {", invoke_raw_start)
+    invoke_raw = script_text[invoke_raw_start:invoke_raw_end]
+
+    # Hardware-proven execution boundary (baseline 239ea52a): launch the CLI
+    # through native PowerShell invocation and take the exit code from
+    # $LASTEXITCODE; never delegate live-cli-check to the shared
+    # ProcessStartInfo capture helper.
+    assert "& $Python -m scopes_tool_cli.cli @Arguments" in invoke_raw
+    assert "$LASTEXITCODE" in invoke_raw
+    assert '$ErrorActionPreference = "Continue"' in invoke_raw
+    assert "Invoke-CapturedCommand" not in invoke_raw
+    assert "ProcessStartInfo" not in invoke_raw
+    assert "System.Diagnostics.Process" not in invoke_raw
+
+    for validator_name in (
+        "live-dvm-check.ps1",
+        "live-segmented-check.ps1",
+        "live-serial-check.ps1",
+        "live-workflow-check.ps1",
+    ):
+        other_script = (REPO_ROOT / "scripts" / validator_name).read_text(
+            encoding="utf-8"
+        )
+        assert "Invoke-CapturedCommand" in other_script
+
+
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
 def test_get_error_drain_normalizes_entries_as_arrays(

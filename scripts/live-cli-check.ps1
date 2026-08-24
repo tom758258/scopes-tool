@@ -287,65 +287,79 @@ function Invoke-CliRaw {
     $stderrPath = Join-Path $script:RunRoot "${baseName}.stderr.txt"
     $jsonPath = Join-Path $script:RunRoot "${baseName}.json"
 
-    $record = Invoke-CapturedCommand `
-        -Name $Stage `
-        -FilePath $Python `
-        -Arguments (@("-m", "scopes_tool_cli.cli") + @($Arguments)) `
-        -StdOutPath $stdoutPath `
-        -StdErrPath $stderrPath `
-        -JsonPath $jsonPath `
-        -WorkingDirectory $RepoRoot
+    $startedAt = Get-Date
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $stdoutLines = @(& $Python -m scopes_tool_cli.cli @Arguments 2> $stderrPath)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    $finishedAt = Get-Date
+    $durationMs = [math]::Round(($finishedAt - $startedAt).TotalMilliseconds, 3)
 
-    $exitCode = [int]$record["exit_code"]
+    $stdoutText = ($stdoutLines -join [Environment]::NewLine).Trim()
+    Write-Utf8NoBomText -LiteralPath $stdoutPath `
+        -Text ($stdoutLines -join [Environment]::NewLine)
+
+    $stderrRecorded = $stderrPath
+    if ((Test-Path -LiteralPath $stderrRecorded) -and
+        [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $stderrRecorded -Raw))) {
+        Remove-Item -LiteralPath $stderrRecorded -Force
+        $stderrRecorded = ""
+    }
+    $stderrText = ""
+    if (-not [string]::IsNullOrWhiteSpace($stderrRecorded)) {
+        $stderrText = [System.Convert]::ToString(
+            (Get-Content -LiteralPath $stderrRecorded -Raw)
+        ).Trim()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($stdoutText)) {
+        throw (
+            "${Stage}: CLI returned no JSON (exit ${exitCode}). ${stderrText} " +
+            "[artifacts: stdout=${stdoutPath}; stderr=" +
+            "$(if ($stderrRecorded) { $stderrRecorded } else { '(empty)' })]"
+        )
+    }
+
+    try {
+        $payload = $stdoutText | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw (
+            "${Stage}: CLI returned invalid JSON (exit ${exitCode}). ${stderrText} " +
+            "[artifacts: stdout=${stdoutPath}; stderr=" +
+            "$(if ($stderrRecorded) { $stderrRecorded } else { '(empty)' })]"
+        )
+    }
+
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $jsonPath) | Out-Null
+    Write-JsonReport -LiteralPath $jsonPath -Report $payload
+
     $invocationRecord = [pscustomobject]@{
         index = $script:CliInvocationIndex
         stage = $Stage
         command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
         arguments = @($Arguments)
         exit_code = $exitCode
-        duration_ms = $record["duration_ms"]
+        duration_ms = $durationMs
         success = ($exitCode -eq 0)
-        stdout = Get-ArtifactRelativePath -Path ([string]$record["stdout"]) -BaseRoot $RepoRoot
-        stderr = Get-ArtifactRelativePath -Path ([string]$record["stderr"]) -BaseRoot $RepoRoot
-        json = Get-ArtifactRelativePath -Path ([string]$record["json"]) -BaseRoot $RepoRoot
+        stdout = Get-ArtifactRelativePath -Path $stdoutPath -BaseRoot $RepoRoot
+        stderr = Get-ArtifactRelativePath -Path $stderrRecorded -BaseRoot $RepoRoot
+        json = Get-ArtifactRelativePath -Path $jsonPath -BaseRoot $RepoRoot
     }
     $script:Invocations.Add($invocationRecord) | Out-Null
-
-    $stdoutText = ""
-    if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) {
-        $stdoutText = [System.Convert]::ToString((Get-Content -LiteralPath $stdoutPath -Raw)).Trim()
-    }
-    $stderrText = ""
-    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"]) -and
-        (Test-Path -LiteralPath ([string]$record["stderr"]) -PathType Leaf)) {
-        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath ([string]$record["stderr"]) -Raw)).Trim()
-    }
-    $artifactHint = "stdout=${stdoutPath}"
-    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"])) {
-        $artifactHint += "; stderr=$($record['stderr'])"
-    } else {
-        $artifactHint += "; stderr=(empty)"
-    }
-
-    if ([string]::IsNullOrWhiteSpace($stdoutText)) {
-        throw "${Stage}: CLI returned no JSON (exit ${exitCode}). ${stderrText} [artifacts: ${artifactHint}]"
-    }
-
-    try {
-        $payload = $stdoutText | ConvertFrom-Json -ErrorAction Stop
-    } catch {
-        throw "${Stage}: CLI returned invalid JSON (exit ${exitCode}). ${stderrText} [artifacts: ${artifactHint}]"
-    }
 
     return [pscustomobject]@{
         ExitCode = $exitCode
         Payload = $payload
         Stderr = $stderrText
         Command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
-        DurationMs = $record["duration_ms"]
+        DurationMs = $durationMs
         StdOutPath = $stdoutPath
-        StdErrPath = [string]$record["stderr"]
-        JsonPath = [string]$record["json"]
+        StdErrPath = $stderrRecorded
+        JsonPath = $jsonPath
     }
 }
 
