@@ -2242,15 +2242,23 @@ def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection(
 
 
 def test_list_resources_command_exposes_a_boolean_live_only_parameter() -> None:
-    catalog_source = (REPO_ROOT / "src" / "scopes_tool_webui" / "command_catalog.py").read_text(encoding="utf-8")
-    commands_source = (REPO_ROOT / "src" / "scopes_tool_webui" / "commands.py").read_text(encoding="utf-8")
+    from scopes_tool_webui.command_catalog import COMMANDS
+    from scopes_tool_webui.commands import WebUIRequestError, validate_job_request
 
-    assert '"id": "list-resources"' in catalog_source
-    assert '{"name": "live_only", "type": "boolean", "default": False}' in catalog_source
-    assert 'parameters.setdefault("live_only", False)' in commands_source
-    assert '_require_boolean(parameters["live_only"], "live_only")' in commands_source
-    assert "discover_visa_resources(live_only=live_only)" in commands_source
-    assert '"backend": listing.backend' in commands_source
+    list_resources = next(entry for entry in COMMANDS if entry["id"] == "list-resources")
+    assert list_resources["hidden"] is True
+    live_only_field = next(field for field in list_resources["fields"] if field["name"] == "live_only")
+    assert live_only_field["type"] == "boolean"
+    assert live_only_field["default"] is False
+
+    accepted_default = validate_job_request({"command": "list-resources", "mode": "live"})
+    assert accepted_default["parameters"]["live_only"] is False
+
+    accepted_true = validate_job_request({"command": "list-resources", "mode": "live", "parameters": {"live_only": True}})
+    assert accepted_true["parameters"]["live_only"] is True
+
+    with pytest.raises(WebUIRequestError, match="live_only must be a boolean"):
+        validate_job_request({"command": "list-resources", "mode": "live", "parameters": {"live_only": "false"}})
 
 
 def test_scan_failure_is_included_in_the_compact_device_presentation() -> None:
