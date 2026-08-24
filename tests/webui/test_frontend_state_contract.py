@@ -2242,14 +2242,15 @@ def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection(
 
 
 def test_list_resources_command_exposes_a_boolean_live_only_parameter() -> None:
-    source = (REPO_ROOT / "src" / "scopes_tool_webui" / "commands.py").read_text(encoding="utf-8")
+    catalog_source = (REPO_ROOT / "src" / "scopes_tool_webui" / "command_catalog.py").read_text(encoding="utf-8")
+    commands_source = (REPO_ROOT / "src" / "scopes_tool_webui" / "commands.py").read_text(encoding="utf-8")
 
-    assert '"id": "list-resources"' in source
-    assert '{"name": "live_only", "type": "boolean", "default": False}' in source
-    assert 'parameters.setdefault("live_only", False)' in source
-    assert '_require_boolean(parameters["live_only"], "live_only")' in source
-    assert "discover_visa_resources(live_only=live_only)" in source
-    assert '"backend": listing.backend' in source
+    assert '"id": "list-resources"' in catalog_source
+    assert '{"name": "live_only", "type": "boolean", "default": False}' in catalog_source
+    assert 'parameters.setdefault("live_only", False)' in commands_source
+    assert '_require_boolean(parameters["live_only"], "live_only")' in commands_source
+    assert "discover_visa_resources(live_only=live_only)" in commands_source
+    assert '"backend": listing.backend' in commands_source
 
 
 def test_scan_failure_is_included_in_the_compact_device_presentation() -> None:
