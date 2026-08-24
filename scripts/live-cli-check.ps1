@@ -2653,6 +2653,7 @@ if ($snapshotComplete) {
                         "the 1000-point CSV path was not executed."
                     )
                 }
+                $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
                 $imageFile = "\usb\scopes-tool-live-${timestamp}.png"
                 $waveformFile = "\usb\scopes-tool-live-${timestamp}.csv"
                 $restoreNeeded = $true
@@ -4552,6 +4553,7 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "setup-lifecycle" -Action {
+            $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
             $setupFile = "\usb\scopes-tool-live-${timestamp}.scp"
             $saved = Invoke-LiveCli -Stage "setup-save" -Command "setup-save" `
                 -Arguments @("--file", $setupFile)

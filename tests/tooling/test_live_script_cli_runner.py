@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -4522,6 +4523,7 @@ function Invoke-LiveCli {
         throw "waveform length restore failure"
     }
     if ($Stage -eq "save-image") {
+        $script:Filenames["save-image"] = [string]$Arguments[1]
         return [pscustomobject]@{ result = [pscustomobject]@{
             instrument_side = $true
             operation_complete = $true
@@ -4529,6 +4531,7 @@ function Invoke-LiveCli {
         } }
     }
     if ($Stage -eq "save-waveform") {
+        $script:Filenames["save-waveform"] = [string]$Arguments[1]
         return [pscustomobject]@{ result = [pscustomobject]@{
             instrument_side = $true
             operation_complete = $true
@@ -4547,13 +4550,13 @@ function Invoke-Scenario {
     $script:DrainCalls = 0
     $script:Invocations = New-Object System.Collections.Generic.List[string]
     $script:SleepCalls = New-Object System.Collections.Generic.List[object]
+    $script:Filenames = [ordered]@{ "save-image" = ""; "save-waveform" = "" }
     $snapshot = [pscustomobject]@{
         SaveImageFormat = "png"
         SaveWaveformFormat = "csv"
         SaveWaveformLength = 2000
         SaveWaveformLengthMax = $LengthMax
     }
-    $timestamp = "test"
     Invoke-Expression $caseBlock
     return [pscustomobject]@{
         passed = $script:CaseResults["save-export"].Passed
@@ -4567,10 +4570,13 @@ function Invoke-Scenario {
         sleep_calls = @($script:SleepCalls | ForEach-Object { $_ })
         functional_failed = $script:FunctionalFailed
         drain_calls = $script:DrainCalls
+        image_filename = [string]$script:Filenames["save-image"]
+        waveform_filename = [string]$script:Filenames["save-waveform"]
     }
 }
 
 [ordered]@{
+    pass = Invoke-Scenario -Name "pass" -LengthMax $false
     body_and_restore_fail = Invoke-Scenario `
         -Name "body-and-restore-fail" -LengthMax $false
     restore_only_fail = Invoke-Scenario `
@@ -4602,6 +4608,31 @@ function Invoke-Scenario {
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
+
+    # Regression: save-export must define its own run timestamp instead of
+    # depending on an undefined $timestamp under Set-StrictMode.
+    passing = result["pass"]
+    assert passing["passed"] is True
+    assert passing["detail"] == ""
+    assert passing["invocations"] == [
+        "save-image-format-png",
+        "save-image",
+        "save-waveform-format-csv",
+        "save-waveform-length-1000",
+        "save-waveform",
+        "save-waveform-length-restore",
+    ]
+    assert passing["drain_calls"] == 0
+    assert len(passing["sleep_calls"]) == 1
+    assert passing["sleep_calls"][0]["Seconds"] == 3
+    filename_pattern = re.compile(
+        r"^\\usb\\scopes-tool-live-(\d{8}-\d{6})\.(png|csv)$"
+    )
+    image_match = filename_pattern.match(passing["image_filename"])
+    waveform_match = filename_pattern.match(passing["waveform_filename"])
+    assert image_match is not None
+    assert waveform_match is not None
+    assert image_match.group(1) == waveform_match.group(1)
 
     combined = result["body_and_restore_fail"]
     assert combined["passed"] is False
@@ -4655,6 +4686,151 @@ function Invoke-Scenario {
         }
         for stage in max_enabled["invocations"]
     )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_baseline_setup_lifecycle_uses_concrete_timestamped_setup_file(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "baseline-setup-lifecycle-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+$functionAst = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Invoke-BaselineCase"
+    )
+}, $true)
+if ($null -eq $functionAst) { throw "Missing Invoke-BaselineCase." }
+Invoke-Expression $functionAst.Extent.Text
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"setup-lifecycle`"")
+    )
+}, $true))
+if ($matchingCommands.Count -ne 1) { throw "Expected one setup-lifecycle case." }
+$caseBlock = $matchingCommands[0].Extent.Text
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+function Assert-ScpiSentPrefix {
+    param([object] $Payload, [string] $ExpectedPrefix, [string] $Label)
+}
+
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:Filenames = [ordered]@{}
+$script:ChannelLabel = "Original"
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($Stage -in @("setup-save", "setup-recall")) {
+        $script:Filenames[$Stage] = [string]$Arguments[1]
+    }
+    switch ($Stage) {
+        "setup-label-change-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ text = "live recall" } }
+        }
+        "setup-label-restore-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ text = $script:ChannelLabel } }
+        }
+        default {
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
+    }
+}
+
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$snapshot = [pscustomobject]@{ ChannelLabel = $script:ChannelLabel }
+
+Invoke-Expression $caseBlock
+
+[ordered]@{
+    passed = $script:CaseResults["setup-lifecycle"].Passed
+    detail = $script:CaseResults["setup-lifecycle"].Detail
+    invocations = @($script:Invocations | ForEach-Object { $_ })
+    save_file = [string]$script:Filenames["setup-save"]
+    recall_file = [string]$script:Filenames["setup-recall"]
+    functional_failed = $script:FunctionalFailed
+} | ConvertTo-Json -Depth 8 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    # Regression: setup-lifecycle must define its own run timestamp instead of
+    # depending on an undefined $timestamp under Set-StrictMode.
+    assert result["passed"] is True
+    assert result["detail"] == ""
+    assert result["functional_failed"] is False
+    assert [entry["stage"] for entry in result["invocations"]] == [
+        "setup-save",
+        "setup-label-change",
+        "setup-label-change-query",
+        "setup-recall",
+        "setup-label-restore-query",
+    ]
+    filename_pattern = re.compile(
+        r"^\\usb\\scopes-tool-live-(\d{8}-\d{6})\.scp$"
+    )
+    assert filename_pattern.match(result["save_file"]) is not None
+    assert result["recall_file"] == result["save_file"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
