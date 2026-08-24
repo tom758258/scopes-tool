@@ -487,6 +487,19 @@ def _event_payload(runtime: WorkerRuntime, event: str, **values: Any) -> dict[st
     return payload
 
 
+def _retain_terminal_job(runtime: WorkerRuntime, job: WorkerJob) -> None:
+    previous_id = runtime.last_job_id
+    if previous_id is not None and previous_id != job.worker_job_id:
+        previous = runtime.jobs.get(previous_id)
+        if (
+            previous is not None
+            and previous.state in {"succeeded", "failed", "cancelled"}
+            and previous_id != runtime.active_job_id
+        ):
+            del runtime.jobs[previous_id]
+    runtime.last_job_id = job.worker_job_id
+
+
 def _finish_cancelled_job(
     runtime: WorkerRuntime, job: WorkerJob, *, started: bool
 ) -> None:
@@ -496,7 +509,7 @@ def _finish_cancelled_job(
     job.exit_code = 3
     job.error = {"type": "cancelled", "message": "cancelled by stop"}
     runtime.cancelled += 1
-    runtime.last_job_id = job.worker_job_id
+    _retain_terminal_job(runtime, job)
     runtime.emit(
         "job_finished",
         **_terminal_job_view(job),
