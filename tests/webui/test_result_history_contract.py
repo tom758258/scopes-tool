@@ -77,6 +77,10 @@ def test_result_ui_does_not_render_artifact_download_entries() -> None:
     for locale in locales:
         assert "results.summary.artifact_one" not in locale
         assert "results.summary.artifact_many" not in locale
+        assert "results.artifacts" not in locale
+        assert "results.download" not in locale
+        assert "results.artifactSize" not in locale
+        assert '"results.field.files":' in locale
     assert "appendWorkspaceArtifacts" not in source
     assert 'result.textContent = JSON.stringify(job.result, null, 2);' in source
 

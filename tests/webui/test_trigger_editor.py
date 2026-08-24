@@ -143,6 +143,14 @@ def test_trigger_editor_locale_keys_are_localized() -> None:
     assert '"trigger.editor.description"' in english
     assert '"trigger.editor.title": "觸發編輯器"' in chinese
     assert '"trigger.editor.description"' in chinese
+    for key, value in (
+        ("enum.ntsc", "NTSC"),
+        ("enum.pal", "PAL"),
+        ("enum.palm", "PAL-M"),
+        ("enum.secam", "SECAM"),
+    ):
+        assert f'"{key}": "{value}"' in english
+        assert f'"{key}": "{value}"' in chinese
 
 
 TRIGGER_EDITOR_HARNESS = r'''
