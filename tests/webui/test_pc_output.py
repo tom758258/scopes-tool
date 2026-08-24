@@ -517,6 +517,8 @@ def test_pc_output_frontend_controls_context_and_command_note() -> None:
     app_source = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
     jobs_source = (STATIC_ROOT / "jobs.js").read_text(encoding="utf-8")
     results_source = (STATIC_ROOT / "results.js").read_text(encoding="utf-8")
+    execution_context_source = (STATIC_ROOT / "execution-context.js").read_text(encoding="utf-8")
+    state_source = (STATIC_ROOT / "state.js").read_text(encoding="utf-8")
     module_path = STATIC_ROOT / "pc-output.js"
 
     assert 'id="pc-output-dir"' in html
@@ -531,21 +533,39 @@ def test_pc_output_frontend_controls_context_and_command_note() -> None:
     assert 'elements.pcOutputOpen.addEventListener("click"' in app_source
     assert "openPcOutputFolder(path)" in app_source
     assert "artifactUrl" not in results_source
-    assert "job.artifacts?.length" not in results_source
+    assert "job.artifacts" not in results_source
+    assert 'import { pcOutputDirectory } from "/static/pc-output.js";' in execution_context_source
+    assert "pc_output_dir: pcOutputDirectory(elements.pcOutput)" in execution_context_source
+    assert '"data"' not in execution_context_source
+    assert 'import { DEFAULT_PC_OUTPUT_DIR } from "/static/pc-output.js";' in state_source
+    assert "pc_output_dir: DEFAULT_PC_OUTPUT_DIR" in state_source
+    assert '"data"' not in state_source
 
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
         import fs from "node:fs";
         globalThis.translate = (key, values = {}) => `${key}:${values.path ?? ""}`;
-        const source = fs.readFileSync(process.argv[1], "utf8")
+        const source = [
+          fs.readFileSync(process.argv[1], "utf8"),
+          fs.readFileSync(process.argv[2], "utf8"),
+          fs.readFileSync(process.argv[3], "utf8"),
+        ].join("\n")
           .replace(/^import[^\n]*\r?\n/gm, "")
           .replace(/^export /gm, "")
-          + "\nglobalThis.pcOutput = { pcOutputContext, pcOutputDirectory, renderPcOutputCommandNote };";
+          + "\nglobalThis.pcOutput = { createInitialState, getExecutionContext, pcOutputContext, pcOutputDirectory, renderPcOutputCommandNote };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
         const input = { value: "" };
+        assert.equal(pcOutput.createInitialState().executionContext.pc_output_dir, "data");
         assert.equal(pcOutput.pcOutputContext({ mode: "simulate" }, input).pc_output_dir, "data");
+        const elements = {
+          mode: { value: "simulate" },
+          resource: { value: "" },
+          model: { value: "keysight-dsox4024a" },
+          pcOutput: input,
+        };
+        assert.equal(pcOutput.getExecutionContext(elements).pc_output_dir, "data");
         const note = { hidden: true, textContent: "" };
         pcOutput.renderPcOutputCommandNote(note, { pc_output: true }, input);
         assert.equal(note.textContent, "pcOutput.commandNote:pcOutput.defaultDisplay:");
@@ -553,6 +573,7 @@ def test_pc_output_frontend_controls_context_and_command_note() -> None:
         input.value = "  D:\\ScopeData  ";
         const context = pcOutput.pcOutputContext({ mode: "simulate" }, input);
         assert.equal(context.pc_output_dir, "D:\\ScopeData");
+        assert.equal(pcOutput.getExecutionContext(elements).pc_output_dir, "D:\\ScopeData");
         pcOutput.renderPcOutputCommandNote(note, { pc_output: true }, input);
         assert.equal(note.hidden, false);
         assert.equal(note.textContent, "pcOutput.commandNote:D:\\ScopeData");
@@ -561,12 +582,29 @@ def test_pc_output_frontend_controls_context_and_command_note() -> None:
         assert.equal(note.textContent, "");
         ''')
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(module_path)],
+        [
+            "node", "--input-type=module", "--eval", script,
+            str(module_path), str(STATIC_ROOT / "execution-context.js"),
+            str(STATIC_ROOT / "state.js"),
+        ],
         capture_output=True,
         text=True,
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_pc_output_helper_text_is_plain_localized_text() -> None:
+    html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+
+    assert "Leave it blank to use the data folder." in html
+    assert "Leave it blank to use the data folder." in english
+    assert "留空時預設使用 data 資料夾。" in chinese
+    for source in (html, english, chinese):
+        helper_text = source.split("pcOutput.helper", 1)[1].split("\n", 1)[0]
+        assert "`" not in helper_text
 
 
 def test_pc_output_catalog_and_locale_keys_are_centralized() -> None:

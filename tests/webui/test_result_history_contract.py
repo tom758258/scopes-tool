@@ -64,9 +64,19 @@ def test_identify_detail_is_localized_and_keeps_raw_json() -> None:
 
 def test_result_ui_does_not_render_artifact_download_entries() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
+    locales = (
+        LOCALE_EN_JS.read_text(encoding="utf-8"),
+        LOCALE_ZH_TW_JS.read_text(encoding="utf-8"),
+    )
 
     assert "artifactUrl" not in source
-    assert "job.artifacts?.length" not in source
+    assert "job.artifacts" not in source
+    assert "job.result?.artifacts" not in source
+    assert "results.summary.artifact_one" not in source
+    assert "results.summary.artifact_many" not in source
+    for locale in locales:
+        assert "results.summary.artifact_one" not in locale
+        assert "results.summary.artifact_many" not in locale
     assert "appendWorkspaceArtifacts" not in source
     assert 'result.textContent = JSON.stringify(job.result, null, 2);' in source
 
@@ -104,13 +114,13 @@ def test_result_history_runtime_behaviour() -> None:
         globalThis.testLocale = "en";
         const labels = {
           en: {
-            identify: "Read device information", run: "Run", listResources: "List resources", completed: "Completed", failed: "Failed", queued: "Queued", running: "Running",
-            queuedSummary: "Waiting to run...", runningSummary: "Executing command...", completedSummary: "Command completed successfully", resourceNone: "No resources found", resourceMany: "4 resources found",
+            identify: "Read device information", run: "Run", screenshot: "Screenshot", capture: "Capture", listResources: "List resources", completed: "Completed", failed: "Failed", queued: "Queued", running: "Running",
+            queuedSummary: "Waiting to run...", runningSummary: "Executing command...", completedSummary: "Command completed successfully", screenshotCaptured: "Screenshot captured", resourceNone: "No resources found", resourceMany: "4 resources found",
             serial: "serial {{serial}}", firmware: "firmware {{firmware}}", empty: "No command has been run yet.",
           },
           "zh-TW": {
-            identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d",
-            queuedSummary: "\u7b49\u5f85\u57f7\u884c", runningSummary: "\u6b63\u5728\u57f7\u884c\u6307\u4ee4", completedSummary: "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210", resourceNone: "\u627e\u4e0d\u5230\u8cc7\u6e90", resourceMany: "\u627e\u5230 4 \u500b\u8cc7\u6e90",
+            identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d",
+            queuedSummary: "\u7b49\u5f85\u57f7\u884c", runningSummary: "\u6b63\u5728\u57f7\u884c\u6307\u4ee4", completedSummary: "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210", screenshotCaptured: "\u756b\u9762\u5df2\u64f7\u53d6", resourceNone: "\u627e\u4e0d\u5230\u8cc7\u6e90", resourceMany: "\u627e\u5230 4 \u500b\u8cc7\u6e90",
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
           },
         };
@@ -118,26 +128,29 @@ def test_result_history_runtime_behaviour() -> None:
           const locale = labels[globalThis.testLocale];
           const text = key === "command.identify" ? locale.identify
             : key === "command.run" ? locale.run
-              : key === "command.list-resources" ? locale.listResources
-                : key === "status.completed" ? locale.completed
-                  : key === "status.failed" ? locale.failed
-                    : key === "status.queued" ? locale.queued
-                      : key === "status.running" ? locale.running
-                        : key === "results.summary.queued" ? locale.queuedSummary
-                          : key === "results.summary.running" ? locale.runningSummary
-                            : key === "results.summary.completed" ? locale.completedSummary
-                              : key === "results.summary.resource_none" ? locale.resourceNone
-                                : key === "results.summary.resource_many" ? locale.resourceMany
-                                  : key === "results.summary.serial" ? locale.serial
-                                    : key === "results.summary.firmware" ? locale.firmware
-                                      : key === "results.empty" ? locale.empty
-                                        : key;
+              : key === "command.screenshot" ? locale.screenshot
+                : key === "command.capture" ? locale.capture
+                  : key === "command.list-resources" ? locale.listResources
+                    : key === "status.completed" ? locale.completed
+                      : key === "status.failed" ? locale.failed
+                        : key === "status.queued" ? locale.queued
+                          : key === "status.running" ? locale.running
+                            : key === "results.summary.queued" ? locale.queuedSummary
+                              : key === "results.summary.running" ? locale.runningSummary
+                                : key === "results.summary.completed" ? locale.completedSummary
+                                  : key === "results.summary.screenshotCaptured" ? locale.screenshotCaptured
+                                    : key === "results.summary.resource_none" ? locale.resourceNone
+                                      : key === "results.summary.resource_many" ? locale.resourceMany
+                                        : key === "results.summary.serial" ? locale.serial
+                                          : key === "results.summary.firmware" ? locale.firmware
+                                            : key === "results.empty" ? locale.empty
+                                              : key;
           return Object.entries(values).reduce(
             (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
             text,
           );
         };
-        const hasTranslation = (key) => ["command.identify", "command.run", "command.list-resources"].includes(key);
+        const hasTranslation = (key) => ["command.identify", "command.run", "command.screenshot", "command.capture", "command.list-resources"].includes(key);
         const translateJobStatus = (status) => translate(`status.${status}`);
         globalThis.testTranslate = translate;
         globalThis.testHasTranslation = hasTranslation;
@@ -227,12 +240,23 @@ def test_result_history_runtime_behaviour() -> None:
           artifacts: [{ name: "capture.png", kind: "screenshot", size: 10 }],
         });
         api.renderJob(summary, artifactJob, detail);
+        assert.equal(rowTexts()[0][2], "Screenshot captured");
         assert.equal(detail.children.length, 1);
         assert.equal(detail.children[0].tagName, "PRE");
         const artifactWorkspace = new FakeNode("div");
         api.renderWorkspaceResult(artifactWorkspace, artifactJob);
         assert.equal(artifactWorkspace.children.length, 1);
         assert.equal(artifactWorkspace.children[0].children[0].tagName, "SPAN");
+
+        const captureJob = makeJob("capture-job", "capture", "completed", {
+          result: { result: { artifact: "capture.csv", metadata_artifact: "capture_meta.json" } },
+          artifacts: [
+            { name: "capture.csv", kind: "waveform", size: 10 },
+            { name: "capture_meta.json", kind: "metadata", size: 20 },
+          ],
+        });
+        api.renderJob(summary, captureJob, detail);
+        assert.equal(rowTexts()[0][2], "Command completed successfully");
 
         api.renderJob(summary, makeJob("run-job", "run", "completed", { result: { result: { action: "run" } } }), detail);
         assert.equal(rowTexts()[0][2], "Command completed successfully");
@@ -248,7 +272,7 @@ def test_result_history_runtime_behaviour() -> None:
         api.renderJob(summary, makeJob("resource-job", "list-resources", "completed", {
           result: { result: { resources: ["USB0::1", "USB0::2", "USB0::3", "USB0::4"] } },
         }), detail);
-        assert.equal(summary.children.length, 6);
+        assert.equal(summary.children.length, 7);
         assert.equal(rowTexts()[0][2], "\u627e\u5230 4 \u500b\u8cc7\u6e90");
         assert(rowTexts().some((row) => row[2] === "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210"));
         assert(rowTexts().some((row) => row[2] === "DSO-X 4034A - \u5e8f\u865f SYNTH12345 - \u97cc\u9ad4 0.0"));

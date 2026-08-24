@@ -1,10 +1,12 @@
+import { pcOutputDirectory } from "/static/pc-output.js";
+
 export function getExecutionContext(elements) {
   const mode = elements.mode.value;
   return {
     mode,
     resource: elements.resource.value.trim() || null,
     model_id: mode === "live" ? null : elements.model.value,
-    pc_output_dir: elements.pcOutput?.value.trim() || "data",
+    pc_output_dir: pcOutputDirectory(elements.pcOutput),
   };
 }
 

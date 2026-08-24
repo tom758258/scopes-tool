@@ -111,17 +111,6 @@ function successfulJobSummary(job) {
   if (job.command === "list-resources") return resourceSummary(result);
   if (job.command === "screenshot") return translate("results.summary.screenshotCaptured");
 
-  const artifactCount = Math.max(
-    Array.isArray(job.artifacts) ? job.artifacts.length : 0,
-    Array.isArray(job.result?.artifacts) ? job.result.artifacts.length : 0,
-  );
-  if (artifactCount) {
-    return translate(
-      artifactCount === 1 ? "results.summary.artifact_one" : "results.summary.artifact_many",
-      { count: artifactCount },
-    );
-  }
-
   return scalarResultSummary(result) || translate("results.summary.completed");
 }
 

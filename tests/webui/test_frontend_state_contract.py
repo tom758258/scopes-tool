@@ -220,7 +220,9 @@ def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None
         r'''
         import assert from "node:assert/strict";
         import fs from "node:fs";
+        const pcOutputDirectory = (input) => input?.value.trim() || "data";
         const source = fs.readFileSync(process.argv[1], "utf8")
+          .replace(/^import[^\n]*\r?\n/gm, "")
           .replaceAll("export function ", "function ")
           + "\nglobalThis.contextApi = { buildWorkspaceContext, workspaceContextForCompletedJob, workspaceContextKey, findWorkspaceResult };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
