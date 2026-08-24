@@ -200,11 +200,12 @@ success. Poll status or consume the worker JSONL events:
 scopes-tool status --port 8765 --json
 ```
 
-Use the `job_finished` event's state, `ok`, `exit_code`, `error`, and command
-artifact files for pass/fail decisions.
+Use the `job_finished` event's state, `ok`, `exit_code`, `result`, `files`,
+and `error` for pass/fail decisions. `GET /status.last_job` exposes the same
+in-memory terminal view for the most recent finished job.
 
-For `capture` jobs with `wait_trigger`, use the job's captured trigger outcome
-and `capture_allowed` to distinguish
+For `capture` jobs with `wait_trigger`, use `result.trigger.outcome` and
+`result.trigger.capture_allowed` to distinguish
 natural trigger completion, forced trigger completion, timeout, and unknown
 poll state. `timeout` and `unknown` outcomes do not produce capture artifacts.
 

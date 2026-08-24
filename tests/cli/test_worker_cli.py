@@ -674,14 +674,8 @@ def test_worker_correlation_flows_through_events_and_memory(tmp_path):
     finished = worker._event_payload(
         runtime,
         "job_finished",
-        worker_job_id=worker_job_id,
-        job_id=client_job_id,
-        command="identify",
-        state="succeeded",
-        ok=True,
-        exit_code=0,
+        **worker._terminal_job_view(job),
         artifact_path=accepted["artifact_path"],
-        error=None,
     )
 
     assert started["job_id"] == client_job_id
@@ -693,9 +687,104 @@ def test_worker_correlation_flows_through_events_and_memory(tmp_path):
     assert finished["state"] == "succeeded"
     assert finished["ok"] is True
     assert finished["exit_code"] == 0
+    assert finished["result"] == {"idn": {}}
+    assert finished["files"] == []
+    assert finished["error"] is None
     assert finished["run_id"] == runtime.run_id
     assert not list(Path(accepted["artifact_path"]).rglob("request.json"))
     assert not list(Path(accepted["artifact_path"]).rglob("result.json"))
+
+
+def test_worker_terminal_result_flows_to_job_finished_and_status_last_job(tmp_path):
+    runtime = _runtime(tmp_path)
+    emitted = []
+
+    def record_emit(event, **values):
+        emitted.append(worker._event_payload(runtime, event, **values))
+
+    runtime.emit = record_emit
+    client_job_id = "terminal-result"
+    worker_thread = threading.Thread(
+        target=worker._job_loop, args=(runtime,), daemon=True
+    )
+    worker_thread.start()
+
+    with _worker_server(runtime):
+        status, accepted = _post_command(
+            runtime,
+            {"command": "identify", "arguments": {}, "job_id": client_job_id},
+        )
+        assert status == 202
+        runtime.queue.join()
+        with urlrequest.urlopen(
+            f"http://127.0.0.1:{runtime.port}/status", timeout=2
+        ) as response:
+            status_payload = json.loads(response.read().decode("utf-8"))
+
+    finished = next(
+        event
+        for event in emitted
+        if event["event"] == "job_finished"
+        and event["worker_job_id"] == accepted["worker_job_id"]
+    )
+
+    assert finished["schema_version"] == worker.WORKER_SCHEMA_VERSION
+    assert finished["command"] == "identify"
+    assert finished["state"] == "succeeded"
+    assert finished["ok"] is True
+    assert finished["exit_code"] == 0
+    assert isinstance(finished["result"], dict)
+    assert finished["result"]["idn"]
+    assert finished["result"]["capabilities"]
+    assert finished["files"] == []
+    assert finished["error"] is None
+
+    last_job = status_payload["last_job"]
+    for field in (
+        "worker_job_id",
+        "job_id",
+        "command",
+        "state",
+        "ok",
+        "exit_code",
+        "result",
+        "files",
+        "error",
+    ):
+        assert last_job[field] == finished[field]
+
+    assert not list(tmp_path.rglob("request.json"))
+    assert not list(tmp_path.rglob("result.json"))
+
+
+def test_worker_failed_job_exposes_terminal_error_in_status_last_job(
+    tmp_path, monkeypatch
+):
+    runtime = _runtime(tmp_path)
+
+    def failing_execute(_parsed, *, stop_requested=None):
+        del stop_requested
+        raise OscilloscopeError("simulated instrument failure")
+
+    monkeypatch.setattr(worker.scope_cli, "_execute_json_command", failing_execute)
+    _, result = _execute_worker_job(runtime, "identify", {}, tmp_path / "failed")
+
+    assert result["state"] == "failed"
+    assert result["ok"] is False
+    assert result["exit_code"] == 3
+    assert result["result"] is None
+    assert result["files"] == []
+
+    last_job = runtime.status_payload()["last_job"]
+    assert last_job["state"] == "failed"
+    assert last_job["ok"] is False
+    assert last_job["exit_code"] == 3
+    assert last_job["result"] is None
+    assert last_job["files"] == []
+    assert last_job["error"] == {
+        "type": "OscilloscopeError",
+        "message": "simulated instrument failure",
+    }
 
 
 @pytest.mark.parametrize(
@@ -1567,6 +1656,9 @@ def test_worker_event_payloads_have_required_fields(tmp_path):
         command=job.command,
         state="failed",
         ok=False,
+        exit_code=3,
+        result=None,
+        files=[],
         artifact_path=str(job.artifact_path),
         error={"type": "x", "message": "y"},
     )
@@ -1588,7 +1680,35 @@ def test_worker_event_payloads_have_required_fields(tmp_path):
     assert started["artifact_path"] == str(job.artifact_path)
     assert finished["state"] == "failed"
     assert finished["ok"] is False
+    assert finished["result"] is None
+    assert finished["files"] == []
     assert summary["accepted"] == 0
+
+
+def test_worker_event_payload_rejects_job_finished_without_result_and_files(tmp_path):
+    runtime = _runtime(tmp_path)
+    job = worker.WorkerJob(
+        command="identify",
+        arguments={},
+        job_id="client-job",
+        worker_job_id="worker-job",
+        artifact_path=tmp_path / "worker-job",
+        request_time="now",
+    )
+    runtime.jobs[job.worker_job_id] = job
+
+    with pytest.raises(ValueError, match="require result and files"):
+        worker._event_payload(
+            runtime,
+            "job_finished",
+            worker_job_id=job.worker_job_id,
+            job_id=job.job_id,
+            command=job.command,
+            state="succeeded",
+            ok=True,
+            exit_code=0,
+            error=None,
+        )
 
 
 def _assert_status_payload_matches_ready(payload, ready):
@@ -1904,7 +2024,7 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
             time.sleep(0.01)
         assert job.state == "cancelled"
 
-    result = _terminal_view(job)
+    result = worker._terminal_job_view(job)
     manifest = json.loads((artifact_path / "manifest.json").read_text(encoding="utf-8"))
     assert result["state"] == "cancelled"
     assert result["exit_code"] == 3
@@ -1971,19 +2091,6 @@ def test_worker_preserves_core_workflow_result_after_late_cancellation(
         assert result["error"]["type"] == "OscilloscopeError"
 
 
-def _terminal_view(job):
-    payload = job.result if isinstance(job.result, dict) else {}
-    files = payload.get("files")
-    return {
-        "state": job.state,
-        "ok": job.state == "succeeded",
-        "exit_code": job.exit_code,
-        "result": payload.get("result"),
-        "files": worker._existing_files(files) if isinstance(files, list) else [],
-        "error": job.error if job.error is not None else payload.get("error"),
-    }
-
-
 def _execute_worker_job(runtime, command, arguments, artifact_path):
     job = worker.WorkerJob(
         command=command,
@@ -1999,7 +2106,7 @@ def _execute_worker_job(runtime, command, arguments, artifact_path):
     thread.start()
     runtime.queue.put(job)
     runtime.queue.join()
-    return job, _terminal_view(job)
+    return job, worker._terminal_job_view(job)
 
 
 def test_worker_measure_results_preserves_statistics_items(tmp_path):
@@ -2081,7 +2188,7 @@ def test_worker_executes_segmented_capture_with_domain_child_artifacts(tmp_path)
         runtime.queue.join()
 
     artifact_path = Path(accepted["artifact_path"])
-    result = _terminal_view(runtime.jobs[accepted["worker_job_id"]])
+    result = worker._terminal_job_view(runtime.jobs[accepted["worker_job_id"]])
     domain_dir = artifact_path / "segmented_capture"
     scpi_log = (domain_dir / "scpi.log").read_text(encoding="utf-8")
 
@@ -2990,7 +3097,7 @@ def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
                     "worker job did not finish after cleanup cancellation"
                 )
 
-    result = _terminal_view(job)
+    result = worker._terminal_job_view(job)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert result["state"] == "cancelled"
     assert result["exit_code"] == 3

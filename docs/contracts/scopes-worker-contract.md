@@ -69,7 +69,11 @@ resource.
 
 `GET /status` is non-mutating. It returns `run_id`, mode, model, resource,
 queue summary, active job, last job, command/status/stop URLs, `fatal_error`,
-and `timestamp_utc`. It must not create artifacts, mutate the queue, open VISA, or
+and `timestamp_utc`. For a terminal (`succeeded`, `failed`, or `cancelled`)
+most recent job, `last_job` carries the same terminal view as the
+`job_finished` event: `state`, `ok`, `exit_code`, `result`, `files`, and
+`error`. Active and queued jobs keep progress and identity information only.
+`GET /status` must not create artifacts, mutate the queue, open VISA, or
 send SCPI. It does not include `trigger_url`.
 
 `POST /command` is the Scopes worker-specific implementation of the Common
@@ -2223,9 +2227,10 @@ unclassified and do not allow capture.
 
 Plain accepted jobs create no files. The Worker does not persist `request.json`
 or `result.json` bookkeeping artifacts: job state, command results, and errors
-are kept in Worker memory, and the JSONL event stream (`job_started`,
-`job_finished`, `summary`) is the machine-readable interface that carries
-terminal outcomes to the caller.
+are kept in Worker memory. The JSONL `job_finished` event and the terminal
+`last_job` object of `GET /status` expose the same in-memory terminal view —
+`state`, `ok`, `exit_code`, `result`, `files`, and `error` — without disk
+persistence.
 
 Commands that produce domain artifacts create them under
 `data/worker/<run_id>/<worker_job_id>/`; that directory is created lazily and

@@ -417,14 +417,8 @@ def _job_loop(runtime: WorkerRuntime) -> None:
                     runtime.failed += 1
             runtime.emit(
                 "job_finished",
-                worker_job_id=job.worker_job_id,
-                command=job.command,
-                state=job.state,
-                ok=job.state == "succeeded",
-                exit_code=job.exit_code,
-                job_id=job.job_id,
+                **_terminal_job_view(job),
                 artifact_path=str(job.artifact_path),
-                error=job.error,
             )
             runtime.queue.task_done()
 
@@ -476,6 +470,8 @@ def _event_payload(runtime: WorkerRuntime, event: str, **values: Any) -> dict[st
             raise ValueError(f"invalid job_finished state: {state}")
         if payload.get("ok") is True and state != "succeeded":
             raise ValueError("only succeeded job_finished events may use ok=true")
+        if "result" not in payload or "files" not in payload:
+            raise ValueError("job_finished events require result and files")
         payload.setdefault("error", None)
     elif event == "summary":
         payload.setdefault("ok", runtime.fatal_error is None)
@@ -503,14 +499,8 @@ def _finish_cancelled_job(
     runtime.last_job_id = job.worker_job_id
     runtime.emit(
         "job_finished",
-        worker_job_id=job.worker_job_id,
-        job_id=job.job_id,
-        command=job.command,
-        state=job.state,
-        ok=False,
-        exit_code=job.exit_code,
+        **_terminal_job_view(job),
         artifact_path=str(job.artifact_path),
-        error=job.error,
     )
 
 
@@ -588,10 +578,26 @@ def _existing_files(files: list[Any]) -> list[Any]:
     return existing
 
 
+def _terminal_job_view(job: WorkerJob) -> dict[str, Any]:
+    payload = job.result if isinstance(job.result, dict) else {}
+    files = payload.get("files")
+    return {
+        "worker_job_id": job.worker_job_id,
+        "job_id": job.job_id,
+        "command": job.command,
+        "state": job.state,
+        "ok": job.state == "succeeded",
+        "exit_code": job.exit_code,
+        "result": payload.get("result"),
+        "files": _existing_files(files) if isinstance(files, list) else [],
+        "error": job.error if job.error is not None else payload.get("error"),
+    }
+
+
 def _job_summary(job: WorkerJob | None) -> dict[str, Any] | None:
     if job is None:
         return None
-    return {
+    summary: dict[str, Any] = {
         "worker_job_id": job.worker_job_id,
         "job_id": job.job_id,
         "command": job.command,
@@ -599,6 +605,9 @@ def _job_summary(job: WorkerJob | None) -> dict[str, Any] | None:
         "artifact_path": str(job.artifact_path),
         "exit_code": job.exit_code,
     }
+    if job.state in {"succeeded", "failed", "cancelled"}:
+        summary.update(_terminal_job_view(job))
+    return summary
 
 
 def _command_identity(body: Any) -> tuple[str | None, str | None]:

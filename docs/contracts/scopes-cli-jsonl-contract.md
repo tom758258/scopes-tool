@@ -40,10 +40,13 @@ not include `trigger_url`.
 
 `job_started` includes `job_id`, `worker_job_id`, `command`, and
 `artifact_path`. `job_finished` includes `job_id`, `worker_job_id`, `command`,
-`artifact_path`, `result_path`, `state`, `ok`, `exit_code`, and `error`.
+`artifact_path`, `state`, `ok`, `exit_code`, `result`, `files`, and `error`.
 `state` is one of `succeeded`, `failed`, or `cancelled`; only `succeeded` may
-use `ok: true`. `summary` includes `accepted`, `succeeded`, `failed`,
-`cancelled`, `ok`, `fatal_error`, and `exit_code`.
+use `ok: true`. `result` carries the command's structured domain result and is
+null when none exists, such as for queued jobs cancelled by `/stop`. `files`
+lists command artifact entries whose paths exist. `summary` includes
+`accepted`, `succeeded`, `failed`, `cancelled`, `ok`, `fatal_error`, and
+`exit_code`.
 
 ## Worker Client JSON
 
@@ -84,7 +87,8 @@ connection errors, timeouts, invalid responses, HTTP request failures, worker
 HTTP `409`/`429`, and fatal worker failures exit `3`.
 Accepted `/command` responses exit `0`, but accepted does not mean the Scopes
 job succeeded; consume the worker's `job_finished` JSONL event for the terminal
-state.
+outcome. `GET /status.last_job` exposes the same in-memory terminal view for
+the most recent finished job.
 
 Worker execution context is startup-bound. Startup `--model` maps to
 `expected_model_id` in live mode and `planning_model_id` in simulate mode;
