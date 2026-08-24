@@ -41,7 +41,6 @@ from scopes_tool_core.planning import (
     MeasurePlanRequest,
 )
 from scopes_tool_core.segmented_capture import (
-    SegmentedCaptureRequest,
     plan_segmented_capture,
     run_segmented_capture,
 )
@@ -59,6 +58,7 @@ from .command_validation import (
     DEFAULT_MODEL_ID,
     WebUIRequestError,
     validate_job_request,
+    _segmented_capture_request,
     _validate_parameters,
 )
 
@@ -1027,14 +1027,6 @@ def _triggered_capture_series_request(parameters: Mapping[str, Any], artifact_di
         channels=parameters["channels"], count=parameters["count"],
         trigger_timeout_seconds=parameters["trigger_timeout_seconds"], points=parameters["points"],
         waveform_format=parameters["format"], interval_seconds=parameters["interval_seconds"], output_dir=artifact_dir,
-    )
-
-
-def _segmented_capture_request(parameters: Mapping[str, Any], artifact_dir: Path) -> SegmentedCaptureRequest:
-    return SegmentedCaptureRequest(
-        channel=parameters["channel"], segments=parameters["segments"], points=parameters["points"],
-        waveform_format=parameters["format"], timeout_ms=parameters["timeout_ms"],
-        poll_interval_ms=parameters["poll_interval_ms"], output_dir=artifact_dir,
     )
 
 

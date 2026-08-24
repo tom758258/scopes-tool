@@ -732,33 +732,25 @@ def _validate_parameters(
                 raise WebUIRequestError(str(exc)) from exc
         else:
             _reject_query_parameters(parameters, ("position_seconds",), command)
-    elif command == "channel-display":
-        action = _action(parameters, command)
-        parameters["channel"] = validate_analog_channel(
-            _integer(parameters.get("channel", 1), "channel"), capabilities
-        )
+    elif command in {"channel-display", "channel-scale"}:
+        action = parameters.setdefault("action", "query")
+        if action not in {"query", "set"}:
+            raise WebUIRequestError(f"{command} action must be query or set")
+        channel = _integer(parameters.get("channel", 1), "channel")
+        parameters["channel"] = validate_analog_channel(channel, capabilities)
         if action == "set":
-            _require_parameter(parameters, "enabled", command)
-            _require_boolean(parameters["enabled"], "enabled")
-        else:
-            _reject_query_parameters(parameters, ("enabled",), command)
-    elif command == "channel-scale":
-        action = _action(parameters, command)
-        parameters["channel"] = validate_analog_channel(
-            _integer(parameters.get("channel", 1), "channel"), capabilities
-        )
-        if action == "set":
-            _require_parameter(parameters, "volts_per_division", command)
-            try:
-                parameters["volts_per_division"] = validate_channel_scale(
-                    _finite_number(
-                        parameters["volts_per_division"], "volts_per_division"
+            if command == "channel-display":
+                if not isinstance(parameters.get("enabled"), bool):
+                    raise WebUIRequestError("enabled must be a boolean for channel-display set")
+            else:
+                if "volts_per_division" not in parameters:
+                    raise WebUIRequestError("channel-scale set requires volts_per_division")
+                try:
+                    parameters["volts_per_division"] = validate_channel_scale(
+                        _finite_number(parameters["volts_per_division"], "volts_per_division")
                     )
-                )
-            except Exception as exc:
-                raise WebUIRequestError(str(exc)) from exc
-        else:
-            _reject_query_parameters(parameters, ("volts_per_division",), command)
+                except Exception as exc:
+                    raise WebUIRequestError(str(exc)) from exc
     elif command in {
         "channel-label",
         "channel-offset",

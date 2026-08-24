@@ -1291,3 +1291,56 @@ def test_p3c_serial_lister_export_registers_only_its_host_artifact() -> None:
     artifact = client.get(job["artifacts"][0]["url"])
     assert artifact.status_code == 200
     assert artifact.content
+
+
+def test_channel_display_and_scale_query_and_set_validation_semantics() -> None:
+    accepted_display_query = validate_job_request(
+        {
+            "command": "channel-display",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"channel": 1, "action": "query", "enabled": True},
+        }
+    )
+    assert accepted_display_query["parameters"]["channel"] == 1
+
+    accepted_scale_query = validate_job_request(
+        {
+            "command": "channel-scale",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"channel": 1, "action": "query", "volts_per_division": 1.0},
+        }
+    )
+    assert accepted_scale_query["parameters"]["channel"] == 1
+
+    client = TestClient(app)
+    missing_enabled = client.post(
+        "/api/jobs",
+        json={
+            "command": "channel-display",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"channel": 1, "action": "set"},
+        },
+    )
+    assert missing_enabled.status_code == 400
+    assert (
+        missing_enabled.json()["detail"]
+        == "enabled must be a boolean for channel-display set"
+    )
+
+    non_bool_enabled = client.post(
+        "/api/jobs",
+        json={
+            "command": "channel-display",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"channel": 1, "action": "set", "enabled": "true"},
+        },
+    )
+    assert non_bool_enabled.status_code == 400
+    assert (
+        non_bool_enabled.json()["detail"]
+        == "enabled must be a boolean for channel-display set"
+    )
