@@ -6,6 +6,7 @@ import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.idn import IDN
+import scopes_tool_webui.command_execution as command_execution
 import scopes_tool_webui.commands as commands
 from scopes_tool_webui.commands import WebUIRequestError
 from scopes_tool_webui.jobs import Job
@@ -50,9 +51,9 @@ def test_live_request_discards_browser_model_and_job_payload_is_nullable(tmp_pat
 def test_live_capability_validation_uses_detected_model(monkeypatch, tmp_path: Path) -> None:
     scope = FakeLiveScope("DSOX2004A")
     request = live_impedance_request("keysight-dsox4024a")
-    monkeypatch.setattr(commands, "open_scope_for_run", lambda config: scope)
+    monkeypatch.setattr(command_execution, "open_scope_for_run", lambda config: scope)
     monkeypatch.setattr(
-        commands,
+        command_execution,
         "_execute_scope_command",
         lambda *_args, **_kwargs: {"exit_code": 0, "result": {}, "artifacts": []},
     )
@@ -74,9 +75,9 @@ def test_live_detected_model_can_accept_capability_browser_model_lacks(monkeypat
     scope = FakeLiveScope("DSOX4024A")
     request = live_impedance_request("keysight-dsox2004a")
     configs = []
-    monkeypatch.setattr(commands, "open_scope_for_run", lambda config: configs.append(config) or scope)
+    monkeypatch.setattr(command_execution, "open_scope_for_run", lambda config: configs.append(config) or scope)
     monkeypatch.setattr(
-        commands,
+        command_execution,
         "_execute_scope_command",
         lambda *_args, **_kwargs: {"exit_code": 0, "result": {"ok": True}, "artifacts": []},
     )

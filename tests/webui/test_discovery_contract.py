@@ -141,8 +141,10 @@ def test_webui_list_resources_defaults_to_raw_mode(monkeypatch, tmp_path) -> Non
         resources = ("USB0::A::INSTR",)
         backend = "fake backend"
 
+    import scopes_tool_webui.command_execution as command_execution
+
     monkeypatch.setattr(
-        commands,
+        command_execution,
         "discover_visa_resources",
         lambda *, live_only: calls.append(live_only) or RawListing(),
     )

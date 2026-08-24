@@ -16,6 +16,7 @@ from scopes_tool_core.measurements import (
     validate_statistics_items,
 )
 import scopes_tool_webui.app as app_module
+import scopes_tool_webui.command_execution as command_execution_module
 import scopes_tool_webui.commands as commands_module
 from scopes_tool_webui.app import app
 from scopes_tool_webui.commands import (
@@ -870,11 +871,11 @@ def test_long_workflows_receive_existing_core_stop_callback(
 
     def fake_runner(_scope, _resource, _request, *, stop_requested=None):
         received.append(stop_requested)
-        return commands_module.OperationResult(exit_code=0, result={"status": "cancelled"})
+        return command_execution_module.OperationResult(exit_code=0, result={"status": "cancelled"})
 
-    monkeypatch.setattr(commands_module, runner_name, fake_runner)
+    monkeypatch.setattr(command_execution_module, runner_name, fake_runner)
 
-    commands_module._execute_p3c_scope_command(
+    command_execution_module._execute_p3c_scope_command(
         object(),
         command,
         "USB0::TEST::INSTR",
