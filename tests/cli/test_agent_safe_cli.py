@@ -128,6 +128,7 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         ],
         "math_function_count": 4,
         "supports_math_goft": False,
+        "supports_math_cascade": True,
         "math_filter_operations": [
             "average",
             "envelope",
@@ -145,10 +146,13 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
             "trend",
         ],
         "supports_advanced_fft": True,
+        "supports_wgen": True,
+        "wgen_scpi_root": ":WGEN1",
         "supports_screenshot": True,
         "supports_screenshot_format_pack": True,
         "supports_segmented_memory": True,
         "segmented_max_segments": 1000,
+        "supports_segmented_waveform_all": True,
         "supports_serial_decode": True,
         "serial_bus_count": 2,
         "serial_modes": [

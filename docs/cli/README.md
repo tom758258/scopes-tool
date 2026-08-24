@@ -318,6 +318,36 @@ resource for live commands.
 
 ## Commands
 
+Print static tool identity and Worker protocol compatibility without touching
+hardware:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe manifest --json
+```
+
+`manifest` is fully offline: it creates no VISA ResourceManager, performs no
+resource discovery, opens no instrument connection, starts no Worker or HTTP
+server, and writes no files. With `--json`, stdout carries exactly one
+machine-readable object reporting `tool_id`, `tool_version`, and the supported
+Worker protocol (`schema_versions` with `compatibility_policy`), so an
+orchestrator can identify this executable before any runtime session.
+
+Print registered model capability data from Core without touching hardware:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe capabilities --json
+.\.venv\Scripts\scopes-tool.exe capabilities --model keysight-dsox2004a --json
+```
+
+`capabilities` is also offline. It reads only the existing Core canonical model
+registry and reports canonical model identity plus the model's capability
+profile; it never detects live identity. Without `--model`, it follows the
+existing CLI planning-model default (`keysight-dsox4024a`). Unknown,
+unregistered, or ambiguous model IDs fail closed with usage exit code `2`
+instead of falling back to another model. See
+[Scopes CLI JSONL Contract](../contracts/scopes-cli-jsonl-contract.md) for the
+exact payload shapes.
+
 List VISA resource strings reported by the selected backend:
 
 ```powershell

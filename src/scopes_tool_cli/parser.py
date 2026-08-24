@@ -141,6 +141,44 @@ def _build_parser() -> argparse.ArgumentParser:
     wait_parser.add_argument("--format", choices=("text", "json"), default="text")
     wait_parser.add_argument("--json", dest="client_json", action="store_true")
 
+    manifest_parser = subparsers.add_parser(
+        "manifest",
+        allow_abbrev=False,
+        help=(
+            "print static tool identity and Worker protocol compatibility "
+            "without hardware access"
+        ),
+    )
+    manifest_parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="write a single machine-readable JSON object to stdout",
+    )
+
+    capabilities_parser = subparsers.add_parser(
+        "capabilities",
+        allow_abbrev=False,
+        help=(
+            "print registered model capability data from Core without "
+            "hardware access"
+        ),
+    )
+    capabilities_parser.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "canonical physical model ID; defaults to keysight-dsox4024a "
+            "following the existing CLI planning-model policy"
+        ),
+    )
+    capabilities_parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="write a single machine-readable JSON object to stdout",
+    )
+
     list_resources_parser = subparsers.add_parser(
         "list-resources",
         help="list VISA resource strings reported by the selected backend",

@@ -207,15 +207,19 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "demo_functions": sorted(capabilities.demo_functions),
         "math_function_count": capabilities.math_function_count,
         "supports_math_goft": capabilities.supports_math_goft,
+        "supports_math_cascade": capabilities.supports_math_cascade,
         "math_filter_operations": sorted(capabilities.math_filter_operations),
         "math_visualization_operations": sorted(
             capabilities.math_visualization_operations
         ),
         "supports_advanced_fft": capabilities.supports_advanced_fft,
+        "supports_wgen": capabilities.supports_wgen,
+        "wgen_scpi_root": capabilities.wgen_scpi_root,
         "supports_screenshot": capabilities.supports_screenshot,
         "supports_screenshot_format_pack": capabilities.supports_screenshot_format_pack,
         "supports_segmented_memory": capabilities.supports_segmented_memory,
         "segmented_max_segments": capabilities.segmented_max_segments,
+        "supports_segmented_waveform_all": capabilities.supports_segmented_waveform_all,
         "supports_serial_decode": capabilities.supports_serial_decode,
         "serial_bus_count": capabilities.serial_bus_count,
         "serial_modes": [

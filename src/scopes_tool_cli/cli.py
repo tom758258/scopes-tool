@@ -361,7 +361,16 @@ from scopes_tool_core.waveform import (
 from . import dispatch as cli_dispatch
 from . import parser as cli_parser
 from . import preflight, runtime
-from .commands import acquisition, channel_display, measurement_analysis, serial, system, trigger_search, workflows
+from .commands import (
+    acquisition,
+    channel_display,
+    measurement_analysis,
+    introspection,
+    serial,
+    system,
+    trigger_search,
+    workflows,
+)
 CLI_SCHEMA_VERSION = 2
 
 
@@ -401,6 +410,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             else:
                 print(f"error: {exc}", file=sys.stderr)
             return 2
+
+    if args.command == "manifest":
+        return introspection.cmd_manifest(args)
+
+    if args.command == "capabilities":
+        return introspection.cmd_capabilities(args)
 
     if getattr(args, "json_output", False):
         return _run_json_command(args)

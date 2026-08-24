@@ -123,6 +123,47 @@ Single-response one-shot JSON does not include worker-only fields such as
 command explicitly documents them. Consumers should use process return code
 plus `ok` and command-specific status fields.
 
+## Offline Tool Introspection
+
+`scopes-tool manifest --json` and `scopes-tool capabilities --json` are offline
+introspection commands for orchestrators. They create no VISA ResourceManager,
+perform no resource discovery, open no instrument connection, start no Worker
+or HTTP server, write no files, and never detect live identity. Success emits
+exactly one JSON object on stdout with exit code `0`.
+
+`manifest --json` reports static tool identity and Worker protocol support:
+
+- `event`: `"tool_manifest"`.
+- `schema_version`: exact integer `2`.
+- `tool_id`: `"scopes"`.
+- `tool_version`: installed distribution version.
+- `worker_protocol`: object with the supported Worker protocol
+  `schema_versions` (from the existing Worker schema version source) and the
+  fixed `compatibility_policy: "v2-only"`.
+
+It does not report per-model capabilities; use `capabilities` for that.
+
+`capabilities --json` reports registered-model capability data read from the
+Core canonical model registry:
+
+- `event`: `"capabilities"`.
+- `schema_version`: exact integer `2`.
+- `timestamp_utc`: UTC ISO 8601 timestamp.
+- `selection`: `requested_model` (null when omitted) and `source`
+  (`requested_model` or `default_policy`). Without `--model`, the command uses
+  the existing CLI planning-model default.
+- `runtime_identity`: `detection_performed` is always `false`; this payload is
+  registry planning data, not detected instrument identity.
+- `model`: canonical identity fields (`model_id`, `vendor_id`,
+  `canonical_model`, `display_name`, `series`, `driver_id`).
+- `capabilities`: the same documented Capability JSON object used by other
+  single-response commands.
+
+Unknown, unregistered, or mismatched model IDs fail closed with no fallback to
+another model: text mode reports the error on stderr and JSON mode emits one
+structured error object (`event: "error"`, `ok: false`, typed `error`, and
+`exit_code: 2`), both exiting `2` per the Common usage-failure exit code.
+
 ## One-Shot Live Selection
 
 For one-shot commands, an explicit `--resource` or
@@ -138,6 +179,10 @@ Scopes Worker Contract and still requires `--live --resource`.
 
 Discovery and identification:
 
+- `manifest`: offline `tool_manifest` identity object; see
+  [Offline Tool Introspection](#offline-tool-introspection).
+- `capabilities`: offline registered-model capability object; see
+  [Offline Tool Introspection](#offline-tool-introspection).
 - `list-resources`: `backend`, `resources`, `live_only`, `live_resources`.
 - `identify`: `idn`, `capabilities`, `backend`, `timeout_ms`.
 - `check-error`: `drain`, `max_reads`, `entries`; top-level `system_error`
@@ -607,7 +652,8 @@ Capability JSON currently includes `series`, `analog_channels`,
 `supports_delay_measurement`, `supports_measure_results_dump`,
 `supports_screenshot`,
 `supports_screenshot_format_pack`,
-  `supports_segmented_memory`, `segmented_max_segments`, `supports_serial_decode`, `serial_bus_count`,
+  `supports_segmented_memory`, `segmented_max_segments`,
+  `supports_segmented_waveform_all`, `supports_serial_decode`, `serial_bus_count`,
 and ordered canonical `serial_modes`,
 `supports_channel_label`, `channel_label_max_length`,
 `supports_display_label`, `supports_annotation`,
@@ -615,6 +661,9 @@ and ordered canonical `serial_modes`,
 `supports_indexed_annotation`. Consumers must ignore unknown future capability
 fields under schema version `2`. Search additionally reports
 `supports_search_basic` and ordered canonical `search_modes`.
+Math additionally reports `supports_math_goft`, `supports_math_cascade`, and
+ordered canonical operation lists. WGEN additionally reports `supports_wgen`
+and the model's `wgen_scpi_root`.
 
 ## Artifact JSON
 
