@@ -21,6 +21,7 @@ SAVE_IMAGE_PALETTES = ("color", "grayscale")
 SAVE_WAVEFORM_FORMATS = ("ascii-xy", "csv", "binary")
 
 _SAVE_COMPLETION_TIMEOUT_MS = 15000
+_SAVE_FORMAT_COMPLETION_TIMEOUT_MS = 5000
 _SAVE_READINESS_POLL_INTERVAL_SECONDS = 0.1
 
 _SAVE_IMAGE_FORMAT_COMMANDS = {
@@ -204,6 +205,13 @@ class SaveExportController:
 
     def configure_image_format(self, format: str) -> None:
         self.scpi.write(save_image_format_command(format))
+        if self.capabilities is not None and self.capabilities.series == "4000X":
+            original_timeout = self.scpi.timeout
+            self.scpi.set_timeout(_SAVE_FORMAT_COMPLETION_TIMEOUT_MS)
+            try:
+                parse_operation_complete(self.scpi.query(system_opc_query()))
+            finally:
+                self.scpi.set_timeout(original_timeout)
 
     def query_image_format(self) -> SaveImageFormatState:
         raw = self.scpi.query(save_image_format_query()).strip()

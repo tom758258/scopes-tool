@@ -157,6 +157,50 @@ def test_save_image_restores_original_timeout_when_opc_query_raises():
     assert backend.timeout == 2000
 
 
+def test_4000x_configure_image_format_waits_for_context_transition(monkeypatch):
+    backend = FakeBackend(responses={"*OPC?": "1"}, timeout=2000)
+    opc_query_timeouts = []
+    query = backend.query
+
+    def record_query_timeout(command):
+        opc_query_timeouts.append(backend.timeout)
+        return query(command)
+
+    monkeypatch.setattr(backend, "query", record_query_timeout)
+    SaveExportController(
+        SCPIClient(backend), capabilities_for_model_id("keysight-dsox4034a")
+    ).configure_image_format("png")
+
+    assert backend.history == [":SAVE:IMAGe:FORMat PNG", "*OPC?"]
+    assert opc_query_timeouts == [5000]
+    assert backend.timeout_history == [5000, 2000]
+    assert backend.timeout == 2000
+
+
+def test_4000x_configure_image_format_restores_timeout_when_opc_query_raises():
+    backend = FakeBackend(responses={}, timeout=2000)
+
+    with pytest.raises(FakeBackendError):
+        SaveExportController(
+            SCPIClient(backend), capabilities_for_model_id("keysight-dsox4034a")
+        ).configure_image_format("png")
+
+    assert backend.history == [":SAVE:IMAGe:FORMat PNG", "*OPC?"]
+    assert backend.timeout_history == [5000, 2000]
+    assert backend.timeout == 2000
+
+
+def test_non_4000x_configure_image_format_does_not_add_opc_barrier():
+    backend = FakeBackend(timeout=2000)
+    SaveExportController(
+        SCPIClient(backend), capabilities_for_model_id("keysight-dsox3024a")
+    ).configure_image_format("png")
+
+    assert backend.history == [":SAVE:IMAGe:FORMat PNG"]
+    assert backend.timeout_history == []
+    assert backend.timeout == 2000
+
+
 def test_save_waveform_temporarily_uses_bounded_opc_timeout_and_restores_original(
     monkeypatch,
 ):
