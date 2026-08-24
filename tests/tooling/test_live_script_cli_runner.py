@@ -39,6 +39,9 @@ import sys
 
 mode = sys.argv[1]
 print(json.dumps({"ok": True, "result": {"mode": mode}}))
+if mode == "invalid-json":
+    print("this is not valid json")
+    sys.exit(3)
 if mode in {"nonempty-stderr", "failure-stderr"}:
     print(f"known diagnostic: {mode}", file=sys.stderr)
 if mode == "failure-stderr":
@@ -122,6 +125,14 @@ $failure = Invoke-CliRaw -Stage "failure-stderr" -Arguments @("failure-stderr")
 $failurePath = Join-Path $RunRoot "cli-003-failure-stderr.stderr.txt"
 $failurePreference = [string]$ErrorActionPreference
 
+$invalidDetail = ""
+try {
+    Invoke-CliRaw -Stage "invalid-json" -Arguments @("invalid-json") | Out-Null
+} catch {
+    $invalidDetail = [string]$_.Exception.Message
+}
+$invalidStdoutPath = Join-Path $RunRoot "cli-004-invalid-json.stdout.txt"
+
 $resultOutput = [ordered]@{
     empty_exit_code = $empty.ExitCode
     empty_ok = $empty.Payload.ok
@@ -156,6 +167,23 @@ if ((Split-Path -Leaf $ScriptPath) -in $migratedCliRawScripts) {
     $resultOutput["cli_record_relative_stdout"] = [string]$firstRecord.stdout
     $resultOutput["cli_empty_stdout_path_set"] =
         (-not [string]::IsNullOrWhiteSpace([string]$empty.StdOutPath))
+
+    # Evidence ordering regression: an attempted invocation with unparseable
+    # stdout must remain recorded even though Invoke-CliRaw threw.
+    $fourthRecord = $script:Invocations[3]
+    $resultOutput["cli_invalid_threw"] =
+        (-not [string]::IsNullOrWhiteSpace($invalidDetail))
+    $resultOutput["cli_invalid_threw_invalid_json"] =
+        $invalidDetail.Contains("CLI returned invalid JSON")
+    $resultOutput["cli_invocation_count_with_invalid"] = $script:Invocations.Count
+    $resultOutput["cli_invalid_recorded_stage"] = [string]$fourthRecord.stage
+    $resultOutput["cli_invalid_recorded_exit"] = [int]$fourthRecord.exit_code
+    $resultOutput["cli_invalid_recorded_success"] = [bool]$fourthRecord.success
+    $resultOutput["cli_invalid_recorded_stdout"] = [string]$fourthRecord.stdout
+    $resultOutput["cli_invalid_recorded_stderr"] = [string]$fourthRecord.stderr
+    $resultOutput["cli_invalid_recorded_json"] = [string]$fourthRecord.json
+    $resultOutput["cli_invalid_stdout_artifact_exists"] =
+        Test-Path -LiteralPath $invalidStdoutPath
 }
 $resultOutput | ConvertTo-Json -Depth 8 -Compress
 """,
@@ -221,7 +249,7 @@ $resultOutput | ConvertTo-Json -Depth 8 -Compress
         assert result["cli_stdout_artifact_exists"] is True
         assert result["cli_json_artifact_exists"] is True
         assert result["cli_duration_gt_zero"] is True
-        assert result["cli_invocation_count"] == 3
+        assert result["cli_invocation_count"] == 4
         assert result["cli_record_stage0"] == "empty-stderr"
         assert result["cli_record_index0"] == 1
         assert result["cli_record_exit0"] == 0
@@ -230,6 +258,16 @@ $resultOutput | ConvertTo-Json -Depth 8 -Compress
             "cli-001-empty-stderr.stdout.txt"
         )
         assert result["cli_empty_stdout_path_set"] is True
+        assert result["cli_invalid_threw"] is True
+        assert result["cli_invalid_threw_invalid_json"] is True
+        assert result["cli_invocation_count_with_invalid"] == 4
+        assert result["cli_invalid_recorded_stage"] == "invalid-json"
+        assert result["cli_invalid_recorded_exit"] == 3
+        assert result["cli_invalid_recorded_success"] is False
+        assert result["cli_invalid_recorded_stdout"] != ""
+        assert result["cli_invalid_recorded_stderr"] == ""
+        assert result["cli_invalid_recorded_json"] == ""
+        assert result["cli_invalid_stdout_artifact_exists"] is True
 
 
 @requires_windows

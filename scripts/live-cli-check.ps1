@@ -316,6 +316,20 @@ function Invoke-CliRaw {
         ).Trim()
     }
 
+    $invocationRecord = [pscustomobject]@{
+        index = $script:CliInvocationIndex
+        stage = $Stage
+        command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
+        arguments = @($Arguments)
+        exit_code = $exitCode
+        duration_ms = $durationMs
+        success = ($exitCode -eq 0)
+        stdout = Get-ArtifactRelativePath -Path $stdoutPath -BaseRoot $RepoRoot
+        stderr = Get-ArtifactRelativePath -Path $stderrRecorded -BaseRoot $RepoRoot
+        json = ""
+    }
+    $script:Invocations.Add($invocationRecord) | Out-Null
+
     if ([string]::IsNullOrWhiteSpace($stdoutText)) {
         throw (
             "${Stage}: CLI returned no JSON (exit ${exitCode}). ${stderrText} " +
@@ -336,20 +350,7 @@ function Invoke-CliRaw {
 
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $jsonPath) | Out-Null
     Write-JsonReport -LiteralPath $jsonPath -Report $payload
-
-    $invocationRecord = [pscustomobject]@{
-        index = $script:CliInvocationIndex
-        stage = $Stage
-        command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
-        arguments = @($Arguments)
-        exit_code = $exitCode
-        duration_ms = $durationMs
-        success = ($exitCode -eq 0)
-        stdout = Get-ArtifactRelativePath -Path $stdoutPath -BaseRoot $RepoRoot
-        stderr = Get-ArtifactRelativePath -Path $stderrRecorded -BaseRoot $RepoRoot
-        json = Get-ArtifactRelativePath -Path $jsonPath -BaseRoot $RepoRoot
-    }
-    $script:Invocations.Add($invocationRecord) | Out-Null
+    $invocationRecord.json = Get-ArtifactRelativePath -Path $jsonPath -BaseRoot $RepoRoot
 
     return [pscustomobject]@{
         ExitCode = $exitCode
