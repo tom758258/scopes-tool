@@ -811,8 +811,11 @@ def _build_parser() -> argparse.ArgumentParser:
     serial_lister_export_parser.add_argument(
         "--output",
         dest="output_path",
-        required=True,
-        help="host CSV output path for :LISTer:DATA? payload",
+        default=None,
+        help=(
+            "host CSV output path for :LISTer:DATA? payload; defaults to "
+            "data/<UTC+8 timestamp>-lister.csv"
+        ),
     )
 
     serial_uart_parser = subparsers.add_parser(

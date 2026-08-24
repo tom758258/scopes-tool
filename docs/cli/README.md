@@ -1754,8 +1754,12 @@ and 4000X support it.
 .\.venv\Scripts\scopes-tool.exe serial-lister-display --selection bus1 --simulate --json
 .\.venv\Scripts\scopes-tool.exe serial-lister-display --query --simulate --json
 .\.venv\Scripts\scopes-tool.exe serial-lister-reference --reference previous --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-lister-export --simulate --json
 .\.venv\Scripts\scopes-tool.exe serial-lister-export --output data\lister.csv --simulate --json
 ```
+
+`--output` is optional. When omitted, the export path defaults to
+`data/<UTC+8 timestamp>-lister.csv`.
 
 The export preserves the CSV payload bytes and line endings without
 protocol-specific parsing. Query both Serial buses when diagnosing a source or

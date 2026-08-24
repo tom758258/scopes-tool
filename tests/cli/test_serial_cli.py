@@ -1,10 +1,12 @@
 import json
 from contextlib import nullcontext
+from pathlib import Path
 
 import pytest
 
 from scopes_tool_cli import cli
 from scopes_tool_cli import parser as cli_parser, runtime
+from scopes_tool_cli.commands import serial
 from tests.cli.support import install_scope
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
@@ -308,6 +310,55 @@ def test_serial_lister_export_simulator_preserves_file_and_metadata(tmp_path, ca
     assert payload["files"] == [{"kind": "csv", "path": str(output)}]
     assert payload["scpi"]["sent"].count(":LISTer:DATA?") == 1
     assert "bus,time,value" not in json.dumps(payload)
+
+
+def test_serial_lister_export_simulator_uses_default_output(
+    tmp_path, capsys, monkeypatch
+):
+    default_output = Path("data/2026-08-24-15-35-10-lister.csv")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        serial,
+        "default_capture_csv_path",
+        lambda: Path("data/2026-08-24-15-35-10.csv"),
+    )
+
+    assert (
+        cli.main(
+            [
+                "serial-lister-export",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 0
+    )
+
+    payload = _payload(capsys)
+    assert (tmp_path / default_output).is_file()
+    assert payload["result"]["output_path"] == str(default_output)
+    assert payload["files"] == [{"kind": "csv", "path": str(default_output)}]
+
+
+def test_serial_lister_export_dry_run_uses_default_output_without_writing(
+    tmp_path, capsys, monkeypatch
+):
+    default_output = Path("data/2026-08-24-15-35-10-lister.csv")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        serial,
+        "default_capture_csv_path",
+        lambda: Path("data/2026-08-24-15-35-10.csv"),
+    )
+
+    assert cli.main(["serial-lister-export", "--dry-run", "--json"]) == 0
+
+    payload = _payload(capsys)
+    assert not (tmp_path / "data").exists()
+    assert payload["result"]["output_path"] == str(default_output)
+    assert payload["files"] == [{"kind": "csv", "path": str(default_output)}]
 
 
 def test_serial_simulator_mode_and_display_round_trip():

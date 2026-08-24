@@ -5,7 +5,10 @@ from pathlib import Path
 
 from .. import preflight, runtime
 from scopes_tool_core.capabilities import ScopeCapabilities
-from scopes_tool_core.output_files import write_serial_lister_csv
+from scopes_tool_core.output_files import (
+    default_capture_csv_path,
+    write_serial_lister_csv,
+)
 from scopes_tool_core.serial import (
     serial_bus_query,
     serial_can_configure_commands,
@@ -398,6 +401,13 @@ def _cmd_serial(args: argparse.Namespace) -> int:
         return 1 if entry.is_error else 0
 
 
+def _serial_lister_output_path(args: argparse.Namespace) -> Path:
+    if args.output_path is not None:
+        return Path(args.output_path)
+    timestamp_path = default_capture_csv_path()
+    return timestamp_path.with_name(f"{timestamp_path.stem}-lister.csv")
+
+
 def _cmd_serial_lister(args: argparse.Namespace) -> int:
     resource = runtime._require_resource(args)
     if resource is None:
@@ -463,7 +473,7 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
         else:
             command = serial_lister_data_query()
             payload = scope.query_serial_lister_data()
-            output_path = Path(args.output_path)
+            output_path = _serial_lister_output_path(args)
             written_path = write_serial_lister_csv(payload, output_path)
             runtime._json_update_result(
                 operation="export",

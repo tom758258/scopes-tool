@@ -1173,7 +1173,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             result.update(reference=args.reference, state_changing=True)
         return [target, ":SYSTem:ERRor?"], [], result
     if command == "serial-lister-export":
-        output_path = Path(args.output_path)
+        output_path = serial._serial_lister_output_path(args)
         target = serial_lister_data_query()
         return [target, ":SYSTem:ERRor?"], [
             {"kind": "csv", "path": str(output_path)}
