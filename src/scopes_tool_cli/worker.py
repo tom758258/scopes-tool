@@ -414,7 +414,7 @@ def _job_loop(runtime: WorkerRuntime) -> None:
                     runtime.cancelled += 1
                 else:
                     runtime.failed += 1
-            _retain_terminal_job(runtime, job)
+                _retain_terminal_job(runtime, job)
             runtime.emit(
                 "job_finished",
                 **_terminal_job_view(job),
