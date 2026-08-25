@@ -1887,72 +1887,53 @@ function Restore-InstrumentState {
             }
         )
     }
-    $saveImageFormatProperty = $Snapshot.PSObject.Properties["SaveImageFormat"]
-    $saveWaveformFormatProperty = $Snapshot.PSObject.Properties["SaveWaveformFormat"]
     $saveWaveformLengthProperty = $Snapshot.PSObject.Properties["SaveWaveformLength"]
     $saveFilenameProperty = $Snapshot.PSObject.Properties["SaveFilename"]
     $saveImagePaletteProperty = $Snapshot.PSObject.Properties["SaveImagePalette"]
     $saveImageInkSaverProperty = $Snapshot.PSObject.Properties["SaveImageInkSaver"]
     $saveImageFactorsProperty = $Snapshot.PSObject.Properties["SaveImageFactors"]
-    if ($null -ne $saveFilenameProperty -and
-        $null -ne $saveImageFormatProperty -and
-        $null -ne $saveWaveformFormatProperty -and
+    if ($script:SaveFixtureEstablished -and
+        $null -ne $saveFilenameProperty -and
         $null -ne $saveImagePaletteProperty -and
         $null -ne $saveImageInkSaverProperty -and
         $null -ne $saveImageFactorsProperty) {
-        $imageFormat = [string]$saveImageFormatProperty.Value
-        $waveformFormat = [string]$saveWaveformFormatProperty.Value
-        if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24") -or
-            $waveformFormat -in @("ascii-xy", "csv", "binary")) {
-            $restoreSteps += [pscustomobject]@{
-                Name = "image save format context"
-                Command = "save-image-format"
-                Arguments = @("--format", "png")
+        # Establish PNG context for image-specific settings, then normalize to CSV.
+        $restoreSteps += [pscustomobject]@{
+            Name = "image save format context"
+            Command = "save-image-format"
+            Arguments = @("--format", "png")
+        }
+        $restoreSteps += @(
+            [pscustomobject]@{
+                Name = "image factors"
+                Command = "save-image-factors"
+                Arguments = @("--enabled", ([string][bool]$saveImageFactorsProperty.Value).ToLowerInvariant())
+            },
+            [pscustomobject]@{
+                Name = "image ink saver"
+                Command = "save-image-ink-saver"
+                Arguments = @("--enabled", ([string][bool]$saveImageInkSaverProperty.Value).ToLowerInvariant())
+            },
+            [pscustomobject]@{
+                Name = "image save palette"
+                Command = "save-image-palette"
+                Arguments = @("--palette", [string]$saveImagePaletteProperty.Value)
+            },
+            [pscustomobject]@{
+                Name = "save filename"
+                Command = "save-filename"
+                Arguments = @("--name", [string]$saveFilenameProperty.Value)
             }
-            $restoreSteps += @(
-                [pscustomobject]@{
-                    Name = "image factors"
-                    Command = "save-image-factors"
-                    Arguments = @("--enabled", ([string][bool]$saveImageFactorsProperty.Value).ToLowerInvariant())
-                },
-                [pscustomobject]@{
-                    Name = "image ink saver"
-                    Command = "save-image-ink-saver"
-                    Arguments = @("--enabled", ([string][bool]$saveImageInkSaverProperty.Value).ToLowerInvariant())
-                },
-                [pscustomobject]@{
-                    Name = "image save palette"
-                    Command = "save-image-palette"
-                    Arguments = @("--palette", [string]$saveImagePaletteProperty.Value)
-                },
-                [pscustomobject]@{
-                    Name = "save filename"
-                    Command = "save-filename"
-                    Arguments = @("--name", [string]$saveFilenameProperty.Value)
-                },
-                [pscustomobject]@{
-                    Name = "save directory"
-                    Command = "save-pwd"
-                    Arguments = @("--path", "\usb")
-                }
-            )
-            if ($imageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
-                $restoreSteps += [pscustomobject]@{
-                    Name = "image save format"
-                    Command = "save-image-format"
-                    Arguments = @("--format", $imageFormat)
-                }
-            } else {
-                $restoreSteps += [pscustomobject]@{
-                    Name = "waveform save format"
-                    Command = "save-waveform-format"
-                    Arguments = @("--format", $waveformFormat)
-                }
-            }
-        } else {
-            $restoreErrors.Add(
-                "save settings restore context is unavailable; no save format was restored."
-            )
+        )
+        $restoreSteps += [pscustomobject]@{
+            Name = "save directory fixture"
+            Command = "save-pwd"
+            Arguments = @("--path", "\usb")
+        }
+        $restoreSteps += [pscustomobject]@{
+            Name = "waveform save format fixture"
+            Command = "save-waveform-format"
+            Arguments = @("--format", "csv")
         }
     }
     if ($null -ne $saveWaveformLengthProperty -and
@@ -2207,7 +2188,6 @@ Write-Host "  [6] Disconnect unknown DUT signals"
 Write-Host "  [7] WGEN output OFF and disconnected from unknown DUT"
 Write-Host "  [8] DEMO output OFF"
 Write-Host "  [9] External trigger input disconnected from unknown/sensitive DUT"
-Write-Host "  [10] Set the instrument Save directory / PWD to the writable USB root (\usb)"
 Write-Host ""
 Write-Host "THE VALIDATOR WILL CONFIGURE"
 Write-Host ""
@@ -2215,6 +2195,8 @@ Write-Host "  - CH1 display ON"
 Write-Host "  - CH1 vertical scale = 2 V/div"
 Write-Host "  - acquisition type = Normal"
 Write-Host "  - trigger = Edge / CH1 / Positive / 1 V"
+Write-Host "  - Save directory / PWD = \usb"
+Write-Host "  - Save waveform format = CSV"
 Write-Host "  - additional settings required by individual validation cases"
 Write-Host ""
 Write-Host "FIXTURE POLICY"
@@ -2223,7 +2205,9 @@ Write-Host "  - This is a fixed laboratory validation fixture."
 Write-Host "  - Incorrect physical connection, attenuation, or Probe Comp signal is"
 Write-Host "    a setup failure."
 Write-Host "  - The validator does not adapt an incorrect physical fixture."
-Write-Host "  - The Save PWD must already be the writable USB root (\usb)."
+Write-Host "  - Save PWD and active Save image/waveform format context are validator-owned"
+Write-Host "    fixture state. The validator overwrites their original values and does not"
+Write-Host "    restore them."
 Write-Host "  - If the fixed instrument baseline cannot be configured or read back,"
 Write-Host "    validation stops with FAIL."
 Write-Host ""
@@ -2231,6 +2215,8 @@ Write-Host "STATE / CLEANUP NOTES"
 Write-Host ""
 Write-Host "  - Original public instrument state is snapshotted before validation."
 Write-Host "  - Restorable settings are restored where practical."
+Write-Host "  - Cleanup leaves Save PWD at \usb and waveform save format CSV after the"
+Write-Host "    validator-owned SAVE fixture has been established."
 Write-Host "  - Math Function 1 is disposable acceptance state and will finish OFF."
 Write-Host "  - Safe Cleanup clears the display; DVM and DEMO may finish OFF rather"
 Write-Host "    than return to a pre-test ON state."
@@ -2244,6 +2230,7 @@ Write-Host "Ctrl+C to cancel."
 $snapshot = $null
 $snapshotComplete = $false
 $stateChangeStarted = $false
+$script:SaveFixtureEstablished = $false
 
 try {
     $acquisition = Invoke-LiveCli -Stage "snapshot-acquisition" -Command "acquisition" `
@@ -2448,16 +2435,27 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "save-pwd-fixture" -Action {
-            $pwdFixture = Invoke-LiveCli -Stage "save-pwd-fixture-query" `
+            $pwdSet = Invoke-LiveCli -Stage "save-pwd-fixture-set" `
+                -Command "save-pwd" -Arguments @("--path", "\usb")
+            Assert-ScpiSent -Payload $pwdSet -Label "Save PWD fixture" `
+                -ExpectedCommands @(':SAVE:PWD "\usb"')
+            $pwdQuery = Invoke-LiveCli -Stage "save-pwd-fixture-query" `
                 -Command "save-pwd" -Arguments @("--query")
             if (-not (Test-SavePathEquivalent `
-                    -Actual ([string]$pwdFixture.result.path) -Expected "\usb")) {
-                throw (
-                    "Save PWD fixture is `"$([string]$pwdFixture.result.path)`"; " +
-                    "expected writable USB root \usb. Set the instrument Save " +
-                    "directory to \usb before validation."
-                )
+                    -Actual ([string]$pwdQuery.result.path) -Expected "\usb")) {
+                throw "Save PWD fixture readback is not \usb."
             }
+            $waveformFormatSet = Invoke-LiveCli `
+                -Stage "save-waveform-format-fixture-set" `
+                -Command "save-waveform-format"`
+                -Arguments @("--format", "csv") | Out-Null
+            $waveformFormatQuery = Invoke-LiveCli `
+                -Stage "save-waveform-format-fixture-query" `
+                -Command "save-waveform-format" -Arguments @("--query")
+            if ([string]$waveformFormatQuery.result.format -ne "csv") {
+                throw "Save waveform format fixture did not report csv."
+            }
+            $script:SaveFixtureEstablished = $true
         }
     }
 
@@ -2480,15 +2478,13 @@ if ($snapshotComplete) {
         Invoke-BaselineCase -Name "save-settings" -Action {
             $primaryException = $null
             $firstRestoreException = $null
-            $imageFormatChanged = $false
             $filenameChanged = $false
             $paletteChanged = $false
             $inkSaverChanged = $false
-            $factorsChanged = $false
             try {
+            $factorsChanged = $false
                 $imageFormat = Invoke-LiveCli -Stage "save-image-format-png" -Command "save-image-format" `
                     -Arguments @("--format", "png")
-                $imageFormatChanged = $true
                 Assert-ScpiSent -Payload $imageFormat -Label "Image save format context" `
                     -ExpectedCommands @(':SAVE:IMAGe:FORMat PNG')
 
@@ -2621,30 +2617,6 @@ if ($snapshotComplete) {
                     }
                 }
 
-                if ($imageFormatChanged) {
-                    try {
-                        if ([string]$snapshot.SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")) {
-                            Invoke-LiveCli -Stage "save-image-format-restore" `
-                                -Command "save-image-format" `
-                                -Arguments @("--format", [string]$snapshot.SaveImageFormat) | Out-Null
-                        } elseif ([string]$snapshot.SaveWaveformFormat -in @("ascii-xy", "csv", "binary")) {
-                            Invoke-LiveCli -Stage "save-waveform-format-restore" `
-                                -Command "save-waveform-format" `
-                                -Arguments @("--format", [string]$snapshot.SaveWaveformFormat) | Out-Null
-                        } else {
-                            throw "Original save format context is not restorable."
-                        }
-                    } catch {
-                        if ($null -eq $firstRestoreException) {
-                            $firstRestoreException = $_.Exception
-                        }
-                        Add-Diagnostic -Name "save-settings" -Message (
-                            "save format restore failed: $($_.Exception.Message)"
-                        )
-                        Drain-AfterFailure -Stage "save-settings-format-restore-error-drain" `
-                            -CaseName "save-settings"
-                    }
-                }
             }
             if ($null -ne $primaryException) {
                 throw $primaryException

@@ -3277,7 +3277,8 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert '":DEMO:OUTPut OFF"' in script
     assert '"disable_wgen"' in script
     assert '"wgen_not_implemented"' in script
-    assert 'SaveImageFormat -in @("png", "bmp", "bmp8", "bmp24")' in script
+    assert "Original save format context is not restorable." not in script
+    assert "SaveFixtureEstablished" in script
     assert 'Stage "preflight-p3-save-waveform-length-max-query"' in preflight
     assert '-Command "save-waveform-length-max"' in preflight
     assert '-Arguments @("--query")' in preflight
@@ -3406,10 +3407,6 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         "save-image-factors-restore-query",
     ):
         assert f'Stage "{stage}"' in save_settings_case
-    save_format_restore = save_settings_case.index(
-        'Stage "save-image-format-restore"'
-    )
-    assert restore_order[-1] < save_format_restore
     assert "$identity.capabilities.supports_advanced_fft" in script
     assert "$identity.capabilities.supports_math_goft" in script
     assert "$identity.capabilities.demo_functions" in script
@@ -3454,10 +3451,10 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
         "\nif ([string]::IsNullOrWhiteSpace($Resource))", restore_start
     )
     restore = script[restore_start:restore_end]
-    assert 'Name = "image save format context"' in restore
+    assert 'Name = "save directory fixture"' in restore
+    assert 'Name = "waveform save format fixture"' in restore
+    assert "SaveFixtureEstablished" in restore
     assert 'Command = "save-image-format"' in restore
-    assert 'Name = "image save format"' in restore
-    assert 'Name = "waveform save format"' in restore
     assert 'Command = "save-waveform-format"' in restore
     assert 'Name = "waveform save length"' in restore
     assert 'Command = "save-waveform-length"' in restore
@@ -3944,213 +3941,37 @@ def test_save_pwd_validation_uses_fixed_usb_fixture_without_obsolete_logic() -> 
     assert ':SAVE:PWD "\\usb"' in save_pwd_case
     assert "Test-SavePathEquivalent" in save_pwd_case
 
-    assert (
-        "[10] Set the instrument Save directory / PWD to the writable "
-        "USB root (\\usb)"
-    ) in script
-    assert "The Save PWD must already be the writable USB root (\\usb)." in script
-
+    assert "[10] Set the instrument Save directory" not in script
+    assert "Save PWD and active Save image/waveform format context are validator-owned" in script
+    assert "Cleanup leaves Save PWD at \\usb and waveform save format CSV after the" in script
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_save_pwd_fixture_and_historical_flow_executable_regression(
-    tmp_path: Path,
-) -> None:
-    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
-    harness_path = tmp_path / "save-pwd-fixture-harness.ps1"
-    harness_path.write_text(
-        r'''
-param([Parameter(Mandatory = $true)][string] $ScriptPath)
-
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    $ScriptPath, [ref] $tokens, [ref] $parseErrors
-)
-if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
-
-foreach ($functionName in @(
-    "Test-SavePathEquivalent", "Assert-ScpiSent", "Invoke-BaselineCase"
-)) {
-    $functionAst = $ast.Find({
-        param($node)
-        return (
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -eq $functionName
-        )
-    }, $true)
-    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
-    Invoke-Expression $functionAst.Extent.Text
-}
-
-$fixtureCase = $ast.Find({
-    param($node)
-    return (
-        $node -is [System.Management.Automation.Language.CommandAst] -and
-        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
-        $node.Extent.Text.Contains('-Name "save-pwd-fixture"')
-    )
-}, $true).Extent.Text
-
-$savePwdGate = $ast.Find({
-    param($node)
-    return (
-        $node -is [System.Management.Automation.Language.IfStatementAst] -and
-        $node.Extent.Text.TrimStart().StartsWith('if (-not $script:FunctionalFailed)') -and
-        $node.Extent.Text.Contains('Stage "save-pwd-set"') -and
-        $node.Extent.Text.Contains('Invoke-BaselineCase -Name "save-pwd"')
-    )
-}, $true).Extent.Text
-
-function Add-CaseResult {
-    param([string] $Name, [bool] $Passed, [string] $Detail = "")
-    $script:CaseResults[$Name] = [pscustomobject]@{
-        Passed = $Passed
-        Status = if ($Passed) { "PASS" } else { "FAIL" }
-        Detail = $Detail
-    }
-}
-
-function Drain-AfterFailure {
-    param([string] $Stage, [string] $CaseName)
-    $script:Drains.Add($Stage)
-}
-
-function Invoke-LiveCli {
-    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
-    $script:Stages.Add($Stage)
-    if ($Stage -eq "save-pwd-fixture-query") {
-        return [pscustomobject]@{
-            result = [pscustomobject]@{ path = $script:FixturePath }
-        }
-    }
-    if ($Stage -eq "save-pwd-set") {
-        if ($script:SetFails) {
-            throw '-310,"System error"'
-        }
-        return [pscustomobject]@{
-            scpi = [pscustomobject]@{ sent = @(':SAVE:PWD "\usb"') }
-            result = [pscustomobject]@{}
-        }
-    }
-    if ($Stage -eq "save-pwd-query") {
-        return [pscustomobject]@{
-            result = [pscustomobject]@{ path = $script:QueryPath }
-        }
-    }
-    throw "Unexpected stage ${Stage}."
-}
-
-function Invoke-Scenario {
-    param(
-        [ValidateSet(
-            "pass-usb", "pass-usb-slash", "wrong-flash", "wrong-temp",
-            "setter-failure"
-        )]
-        [string] $Name
-    )
-    $script:FixturePath = switch ($Name) {
-        "pass-usb" { "\usb" }
-        "pass-usb-slash" { "\usb\" }
-        "wrong-flash" { "\Agilent Flash\setups\" }
-        "wrong-temp" { "\Temp\" }
-        "setter-failure" { "\usb" }
-    }
-    $script:QueryPath = $script:FixturePath
-    $script:SetFails = ($Name -eq "setter-failure")
-    $script:CaseResults = [ordered]@{}
-    $script:FunctionalFailed = $false
-    $script:Stages = New-Object System.Collections.Generic.List[string]
-    $script:Drains = New-Object System.Collections.Generic.List[string]
-
-    Invoke-Expression $fixtureCase
-    if (-not $script:FunctionalFailed) {
-        Invoke-Expression $savePwdGate
-    }
-
-    return [pscustomobject]@{
-        fixture_status = if ($script:CaseResults.Contains("save-pwd-fixture")) {
-            [string]$script:CaseResults["save-pwd-fixture"].Status
-        } else { "" }
-        fixture_detail = if ($script:CaseResults.Contains("save-pwd-fixture")) {
-            [string]$script:CaseResults["save-pwd-fixture"].Detail
-        } else { "" }
-        save_pwd_status = if ($script:CaseResults.Contains("save-pwd")) {
-            [string]$script:CaseResults["save-pwd"].Status
-        } else { "" }
-        functional_failed = $script:FunctionalFailed
-        stages = @($script:Stages | ForEach-Object { $_ })
-        drains = @($script:Drains | ForEach-Object { $_ })
-    }
-}
-
-[ordered]@{
-    pass_usb = Invoke-Scenario -Name "pass-usb"
-    pass_usb_slash = Invoke-Scenario -Name "pass-usb-slash"
-    wrong_flash = Invoke-Scenario -Name "wrong-flash"
-    wrong_temp = Invoke-Scenario -Name "wrong-temp"
-    setter_failure = Invoke-Scenario -Name "setter-failure"
-} | ConvertTo-Json -Depth 8 -Compress
-''',
-        encoding="utf-8",
+def test_save_pwd_fixture_establishes_usb_and_csv() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
+        encoding="utf-8"
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
+    fixture_start = script.index(
+        'Invoke-BaselineCase -Name "save-pwd-fixture"'
     )
+    save_pwd_start = script.index('Invoke-BaselineCase -Name "save-pwd"')
+    fixture_case = script[fixture_start:save_pwd_start]
 
-    assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
+    pwd_set = fixture_case.index('Stage "save-pwd-fixture-set"')
+    pwd_query = fixture_case.index('Stage "save-pwd-fixture-query"')
+    format_set = fixture_case.index(
+        'Stage "save-waveform-format-fixture-set"'
+    )
+    format_query = fixture_case.index(
+        'Stage "save-waveform-format-fixture-query"'
+    )
+    established = fixture_case.index("$script:SaveFixtureEstablished")
+    assert pwd_set < pwd_query < format_set < format_query < established
 
-    pass_usb = result["pass_usb"]
-    assert pass_usb["fixture_status"] == "PASS"
-    assert pass_usb["save_pwd_status"] == "PASS"
-    assert pass_usb["functional_failed"] is False
-    assert pass_usb["stages"] == [
-        "save-pwd-fixture-query",
-        "save-pwd-set",
-        "save-pwd-query",
-    ]
-
-    pass_usb_slash = result["pass_usb_slash"]
-    assert pass_usb_slash["fixture_status"] == "PASS"
-    assert pass_usb_slash["save_pwd_status"] == "PASS"
-    assert pass_usb_slash["functional_failed"] is False
-
-    for name, path in (("wrong_flash", "\\Agilent Flash\\setups\\"), ("wrong_temp", "\\Temp\\")):
-        wrong = result[name]
-        assert wrong["fixture_status"] == "FAIL"
-        assert f'Save PWD fixture is "{path}"' in wrong["fixture_detail"]
-        assert "expected writable USB root \\usb" in wrong["fixture_detail"]
-        assert wrong["functional_failed"] is True
-        assert wrong["stages"] == ["save-pwd-fixture-query"]
-        assert wrong["save_pwd_status"] == ""
-
-    setter_failure = result["setter_failure"]
-    assert setter_failure["fixture_status"] == "PASS"
-    assert setter_failure["save_pwd_status"] == "FAIL"
-    assert setter_failure["functional_failed"] is True
-    assert setter_failure["stages"] == [
-        "save-pwd-fixture-query",
-        "save-pwd-set",
-    ]
-    assert setter_failure["drains"] == ["save-pwd-error-drain"]
+    assert r'"--path", "\usb"' in fixture_case
+    assert '"--format", "csv"' in fixture_case
+    assert "Test-SavePathEquivalent" in fixture_case
+    assert 'result.format -ne "csv"' in fixture_case
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
@@ -4233,8 +4054,6 @@ function Invoke-LiveCli {
     $result = [ordered]@{}
     switch ($Stage) {
         "save-image-format-png" { $sent = @(':SAVE:IMAGe:FORMat PNG') }
-        "save-image-format-restore" { $sent = @(':SAVE:IMAGe:FORMat PNG') }
-        "save-waveform-format-restore" { $sent = @(':SAVE:WAVeform:FORMat CSV') }
         "save-filename-set" { $sent = @(':SAVE:FILename "live_validation"') }
         "save-filename-query" { $result.name = "live_validation" }
         "save-filename-restore" { $sent = @(':SAVE:FILename "scope"') }
@@ -4316,7 +4135,7 @@ function Invoke-Scenario {
     result = json.loads(completed.stdout)
 
     passing = result["pass"]
-    assert passing["passed"] is True
+    assert passing["passed"] is True, passing["detail"]
     assert passing["stages"][:9] == [
         "save-image-format-png",
         "save-filename-set",
@@ -4343,11 +4162,8 @@ function Invoke-Scenario {
         "save-image-ink-saver-restore",
         "save-image-palette-restore",
         "save-filename-restore",
-        "save-waveform-format-restore",
     ]
-    assert "save-waveform-format-restore" in passing["stages"]
-    assert "save-image-format-restore" not in passing["stages"]
-    assert passing["stages"][-1] == "save-waveform-format-restore"
+    assert passing["stages"][-1] == "save-image-factors-restore-query"
     assert [
         stage for stage in passing["stages"]
         if stage.endswith("-restore-query")
@@ -4367,7 +4183,6 @@ function Invoke-Scenario {
         "save-filename-query",
         "save-filename-restore",
         "save-filename-restore-query",
-        "save-waveform-format-restore",
     ]
     assert not any(command == "save-pwd" for command in passing["commands"])
     assert not any(command == "save-pwd" for command in failure["commands"])
@@ -5911,6 +5726,7 @@ $snapshot = [pscustomobject]@{
     SaveWaveformLength = 1000
 }
 
+$script:SaveFixtureEstablished = $true
 $script:CaseResults = [ordered]@{}
 $script:FunctionalFailed = $false
 Invoke-Expression $autoscaleBlock
@@ -6556,6 +6372,7 @@ function Drain-AfterFailure {
     $script:DrainCalls += 1
 }
 
+$script:SaveFixtureEstablished = $false
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:DrainCalls = 0
 $script:SimulateFailure = $false
