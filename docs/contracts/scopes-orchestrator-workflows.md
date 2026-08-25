@@ -137,8 +137,8 @@ through `scopes-tool send-command`:
 
 ```text
 scopes-tool send-command --port 8765 --command identify --arguments-json "{}" --json
-scopes-tool send-command --port 8765 --command capture --arguments-json "{\"channel\":[1],\"points\":1000}" --json
-scopes-tool send-command --port 8765 --command capture --arguments-json "{\"channel\":[1],\"points\":1000,\"wait_trigger\":true,\"trigger_timeout_ms\":5000,\"trigger_poll_interval_ms\":100}" --json
+scopes-tool send-command --port 8765 --command capture --arguments-json "{\"channel\":[1],\"points\":1000,\"csv\":\"C:/results/capture.csv\",\"meta\":\"C:/results/capture_meta.json\"}" --json
+scopes-tool send-command --port 8765 --command capture --arguments-json "{\"channel\":[1],\"points\":1000,\"csv\":\"C:/results/capture.csv\",\"meta\":\"C:/results/capture_meta.json\",\"wait_trigger\":true,\"trigger_timeout_ms\":5000,\"trigger_poll_interval_ms\":100}" --json
 scopes-tool send-command --port 8765 --command sample-rate --arguments-json "{\"query\":true}" --json
 scopes-tool send-command --port 8765 --command sample-rate --arguments-json "{\"query\":true,\"maximum\":true}" --json
 scopes-tool send-command --port 8765 --command acquisition-points --arguments-json "{\"query\":true}" --json
@@ -220,8 +220,9 @@ scopes-tool stop --port 8765 --json
 
 ## Subprocess Example
 
-This simulator example treats worker stdout events and terminal artifacts as
-the source of truth. It does not rely on the subprocess return code alone.
+This simulator example treats worker stdout events as the source of truth for
+terminal outcomes. `GET /status.last_job` is the recovery and query path for the
+latest terminal job. It does not rely on the subprocess return code alone.
 
 ```python
 import json

@@ -388,6 +388,8 @@ worker command:
   "arguments": {
     "channel": [1],
     "points": 1000,
+    "csv": "C:/results/capture.csv",
+    "meta": "C:/results/capture_meta.json",
     "wait_trigger": true,
     "trigger_timeout_ms": 5000,
     "trigger_poll_interval_ms": 100,
@@ -2003,7 +2005,7 @@ The worker accepts these exact Lister request shapes:
 ```
 
 ```json
-{"command": "serial-lister-export", "arguments": {"output": "lister.csv"}}
+{"command": "serial-lister-export", "arguments": {"output": "C:/results/lister.csv"}}
 ```
 
 Display selections are canonical `off`, `bus1`, `bus2`, and `all`; references
