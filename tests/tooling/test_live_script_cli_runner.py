@@ -3946,35 +3946,193 @@ def test_save_pwd_validation_uses_fixed_usb_fixture_without_obsolete_logic() -> 
     assert "Cleanup leaves Save PWD at \\usb and waveform save format CSV after the" in script
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_save_pwd_fixture_establishes_usb_and_csv() -> None:
-    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
-        encoding="utf-8"
+def test_save_pwd_fixture_establishes_usb_and_csv(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "save-pwd-fixture-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @(
+    "Test-SavePathEquivalent", "Assert-ScpiSent", "Invoke-BaselineCase"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$fixtureCase = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains('-Name "save-pwd-fixture"')
+    )
+}, $true).Extent.Text
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Status = if ($Passed) { "PASS" } else { "FAIL" }
+        Detail = $Detail
+    }
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:Drains.Add($Stage)
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Stages.Add($Stage)
+    switch ($Stage) {
+        "save-pwd-fixture-set" {
+            if ($script:SetFails) { throw '-310,"System error"' }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(':SAVE:PWD "\usb"') }
+                result = [pscustomobject]@{}
+            }
+        }
+        "save-pwd-fixture-query" {
+            return [pscustomobject]@{
+                result = [pscustomobject]@{ path = $script:QueryPath }
+            }
+        }
+        "save-waveform-format-fixture-set" {
+            if ($script:FormatFails) { throw '-310,"Format error"' }
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
+        "save-waveform-format-fixture-query" {
+            return [pscustomobject]@{
+                result = [pscustomobject]@{ format = $script:WaveformFormat }
+            }
+        }
+        default { throw "Unexpected stage ${Stage}." }
+    }
+}
+
+function Invoke-Scenario {
+    param(
+        [ValidateSet("success", "pwd-mismatch", "csv-mismatch")]
+        [string] $Name
+    )
+    $script:SetFails = $false
+    $script:FormatFails = $false
+    $script:QueryPath = "\usb"
+    $script:WaveformFormat = "csv"
+    if ($Name -eq "pwd-mismatch") { $script:QueryPath = "\Temp" }
+    if ($Name -eq "csv-mismatch") { $script:WaveformFormat = "binary" }
+    $script:SaveFixtureEstablished = $false
+    $script:DownstreamRan = $false
+    $script:CaseResults = [ordered]@{}
+    $script:FunctionalFailed = $false
+    $script:Stages = New-Object System.Collections.Generic.List[string]
+    $script:Drains = New-Object System.Collections.Generic.List[string]
+
+    Invoke-Expression $fixtureCase
+    if (-not $script:FunctionalFailed) {
+        $script:DownstreamRan = $true
+    }
+
+    return [pscustomobject]@{
+        fixture_status = if ($script:CaseResults.Contains("save-pwd-fixture")) {
+            [string]$script:CaseResults["save-pwd-fixture"].Status
+        } else { "" }
+        functional_failed = $script:FunctionalFailed
+        established = $script:SaveFixtureEstablished
+        downstream_ran = $script:DownstreamRan
+        stages = @($script:Stages | ForEach-Object { $_ })
+        drains = @($script:Drains | ForEach-Object { $_ })
+    }
+}
+
+[ordered]@{
+    success = Invoke-Scenario -Name "success"
+    pwd_mismatch = Invoke-Scenario -Name "pwd-mismatch"
+    csv_mismatch = Invoke-Scenario -Name "csv-mismatch"
+} | ConvertTo-Json -Depth 8 -Compress
+''',
+        encoding="utf-8",
     )
 
-    fixture_start = script.index(
-        'Invoke-BaselineCase -Name "save-pwd-fixture"'
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
     )
-    save_pwd_start = script.index('Invoke-BaselineCase -Name "save-pwd"')
-    fixture_case = script[fixture_start:save_pwd_start]
 
-    pwd_set = fixture_case.index('Stage "save-pwd-fixture-set"')
-    pwd_query = fixture_case.index('Stage "save-pwd-fixture-query"')
-    format_set = fixture_case.index(
-        'Stage "save-waveform-format-fixture-set"'
-    )
-    format_query = fixture_case.index(
-        'Stage "save-waveform-format-fixture-query"'
-    )
-    established = fixture_case.index("$script:SaveFixtureEstablished")
-    assert pwd_set < pwd_query < format_set < format_query < established
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
 
-    assert r'"--path", "\usb"' in fixture_case
-    assert '"--format", "csv"' in fixture_case
-    assert "Test-SavePathEquivalent" in fixture_case
-    assert 'result.format -ne "csv"' in fixture_case
+    success = result["success"]
+    assert success["fixture_status"] == "PASS"
+    assert success["functional_failed"] is False
+    assert success["established"] is True
+    assert success["downstream_ran"] is True
+    assert success["stages"] == [
+        "save-pwd-fixture-set",
+        "save-pwd-fixture-query",
+        "save-waveform-format-fixture-set",
+        "save-waveform-format-fixture-query",
+    ]
+    assert success["drains"] == []
+
+    pwd_mismatch = result["pwd_mismatch"]
+    assert pwd_mismatch["fixture_status"] == "FAIL"
+    assert pwd_mismatch["functional_failed"] is True
+    assert pwd_mismatch["established"] is False
+    assert pwd_mismatch["downstream_ran"] is False
+    assert pwd_mismatch["stages"] == [
+        "save-pwd-fixture-set",
+        "save-pwd-fixture-query",
+    ]
+
+    csv_mismatch = result["csv_mismatch"]
+    assert csv_mismatch["fixture_status"] == "FAIL"
+    assert csv_mismatch["functional_failed"] is True
+    assert csv_mismatch["established"] is False
+    assert csv_mismatch["downstream_ran"] is False
+    assert csv_mismatch["stages"] == [
+        "save-pwd-fixture-set",
+        "save-pwd-fixture-query",
+        "save-waveform-format-fixture-set",
+        "save-waveform-format-fixture-query",
+    ]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+
+
 def test_baseline_save_settings_owns_mutations_and_partial_rollback(
     tmp_path: Path,
 ) -> None:
@@ -4100,6 +4258,15 @@ function Invoke-Scenario {
         detail = $script:CaseResults["save-settings"].Detail
         stages = @($script:Invocations | ForEach-Object { $_.stage })
         commands = @($script:Invocations | ForEach-Object { $_.command })
+        invocations = @(
+            $script:Invocations | ForEach-Object {
+                [pscustomobject]@{
+                    stage = $_.stage
+                    command = $_.command
+                    arguments = @($_.arguments)
+                }
+            }
+        )
         drain_calls = $script:DrainCalls
     }
 }
@@ -4192,6 +4359,18 @@ function Invoke-Scenario {
         "save-image-ink-saver-restore",
         "save-image-palette-restore",
     ]
+
+    filename_set = next(
+        entry for entry in empty["invocations"]
+        if entry["stage"] == "save-filename-set"
+    )
+    assert filename_set["arguments"] == ["--name", "live_validation"]
+
+    assert not any(
+        arg == ""
+        for entry in empty["invocations"]
+        for arg in entry["arguments"]
+    )
 
     failure = result["filename_query_failure"]
     assert failure["passed"] is False
@@ -5970,11 +6149,37 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         if entry["command"] == "save-filename"
     ]
     assert len(empty_save_entries) == 0
-    empty_commands = [
+
+    empty_save_commands = [
         entry["command"] for entry in result["empty_filename_invocations"]
+        if entry["command"].startswith("save-")
     ]
-    assert "save-pwd" in empty_commands
-    assert "save-waveform-format" in empty_commands
+    assert empty_save_commands == [
+        "save-image-format",
+        "save-image-factors",
+        "save-image-ink-saver",
+        "save-image-palette",
+        "save-pwd",
+        "save-waveform-format",
+        "save-waveform-length",
+    ]
+
+    empty_save_lookup = {
+        entry["command"]: entry["arguments"]
+        for entry in result["empty_filename_invocations"]
+        if entry["command"] in (
+            "save-image-format", "save-pwd", "save-waveform-format",
+        )
+    }
+    assert empty_save_lookup["save-image-format"] == ["--format", "png"]
+    assert empty_save_lookup["save-pwd"] == ["--path", "\\usb"]
+    assert empty_save_lookup["save-waveform-format"] == ["--format", "csv"]
+
+    assert not any(
+        arg == ""
+        for entry in result["empty_filename_invocations"]
+        for arg in entry["arguments"]
+    )
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_diagnostic_drain_ignores_empty_error_collection(
