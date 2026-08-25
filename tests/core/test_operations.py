@@ -1,6 +1,9 @@
 import json
 
+import pytest
+
 from scopes_tool_core.capabilities import capabilities_for_model
+from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.operations import (
     AcquisitionCheckRequest,
     CaptureRequest,
@@ -8,6 +11,7 @@ from scopes_tool_core.operations import (
     MeasureRequest,
     MeasureSweepRequest,
     SmokeRequest,
+    _prepare_output_dir,
     _trigger_wait_classifier_profile,
     run_acquisition_check,
     run_capture,
@@ -370,3 +374,12 @@ def test_run_acquisition_check_check_only_and_restore(tmp_path):
 
     assert restored.result["restore"]["requested"] is True
     assert restored.result["restore"]["attempted"] is True
+
+
+def test_prepare_output_dir_rejects_request_json_only_directory(tmp_path):
+    output_dir = tmp_path / "request-json-output"
+    output_dir.mkdir()
+    (output_dir / "request.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(OscilloscopeError, match="must be empty"):
+        _prepare_output_dir(output_dir)

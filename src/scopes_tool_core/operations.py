@@ -1705,7 +1705,7 @@ def _prepare_output_dir(output_dir: Path) -> Path:
         existing = {item.name for item in output_dir.iterdir()}
     else:
         existing = set()
-    if existing and existing != {"request.json"}:
+    if existing:
         raise OscilloscopeError(f"output directory must be empty: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir

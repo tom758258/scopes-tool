@@ -45,6 +45,17 @@ def test_prepare_specified_measure_log_output_dir_rejects_non_empty_directory(tm
         measure_logger.prepare_measure_log_output_dir(output_dir)
 
 
+def test_prepare_specified_measure_log_output_dir_rejects_request_json_only_directory(
+    tmp_path,
+):
+    output_dir = tmp_path / "request-json-measure-log"
+    output_dir.mkdir()
+    (output_dir / "request.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(OscilloscopeError, match="must be empty"):
+        measure_logger.prepare_measure_log_output_dir(output_dir)
+
+
 def test_write_measure_log_manifest_json(tmp_path):
     manifest = measure_logger.MeasureLogManifest(
         start_time="2026-05-16T12:00:00+08:00",

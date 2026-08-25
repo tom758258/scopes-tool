@@ -128,7 +128,7 @@ def prepare_batch_output_dir(
             raise OscilloscopeError(
                 _format_directory_error("could not inspect output directory", path, exc)
             ) from exc
-        if has_existing_files and {item.name for item in path.iterdir()} != {"request.json"}:
+        if has_existing_files:
             raise OscilloscopeError(f"output directory must be empty: {path}")
     try:
         path.mkdir(parents=True, exist_ok=True)

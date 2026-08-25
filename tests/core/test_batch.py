@@ -52,6 +52,17 @@ def test_prepare_specified_batch_output_dir_rejects_non_empty_directory(tmp_path
         batch.prepare_batch_output_dir(output_dir)
 
 
+def test_prepare_specified_batch_output_dir_rejects_request_json_only_directory(
+    tmp_path,
+):
+    output_dir = tmp_path / "request-json-batch"
+    output_dir.mkdir()
+    (output_dir / "request.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(OscilloscopeError, match="must be empty"):
+        batch.prepare_batch_output_dir(output_dir)
+
+
 def test_batch_capture_paths_use_minimum_four_digit_width(tmp_path):
     csv_path, meta_path = batch.batch_capture_paths(tmp_path, 3, 12)
 
