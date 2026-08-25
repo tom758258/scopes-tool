@@ -325,7 +325,7 @@ def _make_handler(runtime: WorkerRuntime):
             runtime.stopping = True
             cancelled = []
             with runtime.lock:
-                for job in runtime.jobs.values():
+                for job in list(runtime.jobs.values()):
                     if job.state == "queued":
                         _finish_cancelled_job(runtime, job, started=False)
                         cancelled.append(job.worker_job_id)
@@ -408,13 +408,13 @@ def _job_loop(runtime: WorkerRuntime) -> None:
             job.finished_time = _now()
             with runtime.lock:
                 runtime.active_job_id = None
-                runtime.last_job_id = job.worker_job_id
                 if job.state == "succeeded":
                     runtime.succeeded += 1
                 elif job.state == "cancelled":
                     runtime.cancelled += 1
                 else:
                     runtime.failed += 1
+            _retain_terminal_job(runtime, job)
             runtime.emit(
                 "job_finished",
                 **_terminal_job_view(job),

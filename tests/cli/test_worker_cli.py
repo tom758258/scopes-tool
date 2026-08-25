@@ -468,6 +468,91 @@ def test_command_acceptance_returns_common_envelope_without_bookkeeping_files(tm
     assert not list(tmp_path.rglob("result.json"))
 
 
+def test_worker_normal_terminal_completion_retains_only_latest_job(tmp_path):
+    runtime = _runtime(tmp_path)
+    worker_thread = threading.Thread(
+        target=worker._job_loop, args=(runtime,), daemon=True
+    )
+    worker_thread.start()
+
+    with _worker_server(runtime):
+        _, first = _post_command(
+            runtime, {"command": "identify", "arguments": {}, "job_id": "one"},
+        )
+        runtime.queue.join()
+        _, second = _post_command(
+            runtime, {"command": "identify", "arguments": {}, "job_id": "two"},
+        )
+        runtime.queue.join()
+        with urlrequest.urlopen(
+            f"http://127.0.0.1:{runtime.port}/status", timeout=2
+        ) as response:
+            status_payload = json.loads(response.read().decode("utf-8"))
+
+    first_id = first["worker_job_id"]
+    second_id = second["worker_job_id"]
+    assert runtime.last_job_id == second_id
+    assert second_id in runtime.jobs
+    assert first_id not in runtime.jobs
+    last_job = status_payload["last_job"]
+    assert last_job["worker_job_id"] == second_id
+    assert last_job["state"] == "succeeded"
+    assert last_job["ok"] is True
+    assert last_job["result"]["idn"]
+
+
+def test_worker_stop_cancels_multiple_queued_jobs_safely(tmp_path):
+    runtime = _runtime(tmp_path)
+    emitted = []
+
+    def record_emit(event, **values):
+        emitted.append(worker._event_payload(runtime, event, **values))
+
+    runtime.emit = record_emit
+    jobs = []
+    for name in ("queued-a", "queued-b"):
+        job = worker.WorkerJob(
+            command="identify",
+            arguments={},
+            job_id=name,
+            worker_job_id=name,
+            artifact_path=tmp_path / "run" / name,
+            request_time="now",
+        )
+        runtime.jobs[name] = job
+        jobs.append(job)
+
+    try:
+        with _worker_server(runtime):
+            request = urlrequest.Request(
+                f"http://127.0.0.1:{runtime.port}/stop",
+                data=b"{}",
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urlrequest.urlopen(request, timeout=2) as response:
+                assert response.status == 202
+                payload = json.loads(response.read().decode("utf-8"))
+    except RuntimeError as exc:
+        if "dictionary changed size during iteration" not in str(exc):
+            raise
+        pytest.fail("/stop mutated runtime.jobs during iteration")
+
+    assert [job for job in jobs if job.state == "cancelled"] == jobs
+    assert payload["cancelled_jobs"] == ["queued-a", "queued-b"]
+    assert runtime.cancelled == 2
+    assert runtime.last_job_id == "queued-b"
+    assert "queued-b" in runtime.jobs
+    assert "queued-a" not in runtime.jobs
+    finished_events = [event for event in emitted if event["event"] == "job_finished"]
+    assert len(finished_events) == 2
+    for job, event in zip(jobs, finished_events):
+        assert event["worker_job_id"] == job.worker_job_id
+        assert event["state"] == "cancelled"
+        assert event["exit_code"] == 3
+        assert event["error"] == {"type": "cancelled", "message": "cancelled by stop"}
+
+
 def test_command_acceptance_validates_sample_rate_maximum_before_enqueue(tmp_path):
     runtime = _runtime(tmp_path)
     with _worker_server(runtime):
