@@ -1473,6 +1473,7 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
     if (-not $script:FunctionalFailed) {
         $listerChangeStarted = $true
         Invoke-SerialCase -Name "UART Lister export" -Action {
+            $listerCsvPath = Join-Path $script:RunRoot "uart-lister.csv"
             if (-not [bool]$snapshot.SerialDisplayEnabled) {
                 Invoke-LiveCli -Stage "serial-display-enable" `
                     -Command "serial-display" `

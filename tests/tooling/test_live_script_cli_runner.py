@@ -1705,7 +1705,6 @@ $script:ListerAcquisitionTimeoutMilliseconds = 500
 $script:ListerAcquisitionPollIntervalMilliseconds = 1
 $script:OperationConditionRunMask = 8
 $Resource = "TEST::INSTR"
-$listerCsvPath = $OutputPath
 $script:RunRoot = Split-Path -Parent $OutputPath
 $snapshot = [pscustomobject]@{
     SerialDisplayEnabled = $SerialDisplayEnabledValue -eq 1
@@ -1831,8 +1830,10 @@ function Invoke-CliRaw {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes(
         "bus,time,value`r`nSBUS1,0,1`r`n"
     )
-    [System.IO.File]::WriteAllBytes($listerCsvPath, $bytes)
-    $reportedPath = (Get-Item -LiteralPath $listerCsvPath).FullName.ToUpperInvariant()
+    $outputIndex = [array]::IndexOf($Arguments, "--output")
+    $actualOutputPath = $Arguments[$outputIndex + 1]
+    [System.IO.File]::WriteAllBytes($actualOutputPath, $bytes)
+    $reportedPath = (Get-Item -LiteralPath $actualOutputPath).FullName.ToUpperInvariant()
     return [pscustomobject]@{
         ExitCode = 0
         Payload = [pscustomobject]@{
@@ -1855,9 +1856,9 @@ Invoke-Expression $listerCommands[0].Extent.Text
 $exportInvocations = @($script:Invocations | Where-Object {
     $_.command -eq "serial-lister-export"
 })
-$outputExists = Test-Path -LiteralPath $listerCsvPath -PathType Leaf
+$outputExists = Test-Path -LiteralPath $OutputPath -PathType Leaf
 $outputBytes = if ($outputExists) {
-    (Get-Item -LiteralPath $listerCsvPath).Length
+    (Get-Item -LiteralPath $OutputPath).Length
 } else {
     0
 }
@@ -1989,6 +1990,10 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
         assert result["detail"] == ""
         assert result["export_count"] == 1
         assert commands[-1] == "serial-lister-export"
+        assert result["invocations"][-1]["arguments"][-2:] == [
+            "--output",
+            str(output_path),
+        ]
         assert result["operation_status"]["result"] == {
             "operation": "query",
             "command": ":OPERegister:CONDition?",
