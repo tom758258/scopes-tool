@@ -7499,37 +7499,59 @@ def test_live_cli_check_recommends_restart_before_validation() -> None:
     assert 'Write-Host "  [11]' not in script
 
 
-@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def _extract_brace_block(script: str, start: int) -> str:
+    depth = 0
+    for index in range(start, len(script)):
+        if script[index] == "{":
+            depth += 1
+        elif script[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return script[start : index + 1]
+    raise AssertionError("unbalanced braces starting at offset %d" % start)
+
+
 def test_live_cli_check_warns_4034a_about_autoscale_save_destination() -> None:
     script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
         encoding="utf-8"
     )
 
-    gate = '$script:Target -eq "keysight-dsox4034a"'
-
-    # Pre-validation note.
-    known_start = script.index(
-        'Write-Host "KNOWN DSO-X 4034A FRONT-PANEL BEHAVIOR"'
+    gate = 'if ([string]$script:Target -eq "keysight-dsox4034a") {'
+    gate_positions = []
+    search_from = 0
+    while True:
+        position = script.find(gate, search_from)
+        if position < 0:
+            break
+        gate_positions.append(position)
+        search_from = position + 1
+    assert len(gate_positions) == 2, (
+        "expected exactly two 4034A gates, found %d" % len(gate_positions)
     )
-    prompt = script.index(
-        'Write-Host "Press Enter only after the PHYSICAL SETUP above is ready."'
-    )
-    assert known_start < prompt
 
-    pre_block = script[script.rfind("if (", 0, known_start):prompt]
-    assert gate in pre_block
-    assert "Please Select" in pre_block
+    recommended_start = script.index(
+        'Write-Host "RECOMMENDED BEFORE VALIDATION"'
+    )
+    physical_setup = script.index(
+        'Write-Host "PHYSICAL SETUP  operator must prepare"'
+    )
+    pass_line = script.index('Write-Host "PASS  baseline live validation"')
+    exit_zero = script.index("exit 0", pass_line)
+
+    first_gate, second_gate = gate_positions
+    pre_block = _extract_brace_block(script, first_gate)
+    post_block = _extract_brace_block(script, second_gate)
+
+    assert recommended_start < first_gate < physical_setup
+    assert "KNOWN DSO-X 4034A FRONT-PANEL BEHAVIOR" in pre_block
+    assert '`"Please Select`"' in pre_block
     assert "not a Scopes Tool SAVE" in pre_block
     assert "reselect the USB destination under Save To" in pre_block
 
-    # Post-PASS recovery reminder.
-    pass_line = script.index('Write-Host "PASS  baseline live validation"')
-    exit_line = script.index("exit 0", pass_line)
-    post_pass = script[pass_line:exit_line]
-
-    assert gate in post_pass
-    assert "Please Select" in post_pass
-    assert "Reselect the USB destination" in post_pass
+    assert pass_line < second_gate < exit_zero
+    assert "NOTE  DSO-X 4034A Autoscale" in post_block
+    assert '`"Please Select`"' in post_block
+    assert "Reselect the USB destination" in post_block
 
 
 P2_HELPERS = REPO_ROOT / "scripts" / "_validation_helpers.ps1"
