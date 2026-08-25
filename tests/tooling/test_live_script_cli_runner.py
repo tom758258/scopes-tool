@@ -4078,7 +4078,7 @@ function Invoke-LiveCli {
 }
 
 function Invoke-Scenario {
-    param([ValidateSet("pass", "filename-query-failure")][string] $Name)
+    param([ValidateSet("pass", "filename-query-failure", "empty-filename")][string] $Name)
     $script:Scenario = $Name
     $script:CaseResults = [ordered]@{}
     $script:Diagnostics = [ordered]@{}
@@ -4088,7 +4088,7 @@ function Invoke-Scenario {
     $snapshot = [pscustomobject]@{
         SaveImageFormat = "none"
         SavePwd = "\usb"
-        SaveFilename = "scope"
+        SaveFilename = if ($Name -eq "empty-filename") { "" } else { "scope" }
         SaveImagePalette = "color"
         SaveImageInkSaver = $true
         SaveImageFactors = $false
@@ -4106,6 +4106,7 @@ function Invoke-Scenario {
 
 [ordered]@{
     pass = Invoke-Scenario -Name "pass"
+    empty_filename = Invoke-Scenario -Name "empty-filename"
     filename_query_failure = Invoke-Scenario -Name "filename-query-failure"
 } | ConvertTo-Json -Depth 10 -Compress
 ''',
@@ -4172,6 +4173,24 @@ function Invoke-Scenario {
         "save-image-palette-restore-query",
         "save-image-ink-saver-restore-query",
         "save-image-factors-restore-query",
+    ]
+
+    empty = result["empty_filename"]
+    assert empty["passed"] is True, empty["detail"]
+    assert empty["stages"][0:3] == [
+        "save-image-format-png",
+        "save-filename-set",
+        "save-filename-query",
+    ]
+    assert "save-filename-restore" not in empty["stages"]
+    assert "save-filename-restore-query" not in empty["stages"]
+    image_restores = [
+        stage for stage in empty["stages"] if stage.endswith("-restore")
+    ]
+    assert image_restores == [
+        "save-image-factors-restore",
+        "save-image-ink-saver-restore",
+        "save-image-palette-restore",
     ]
 
     failure = result["filename_query_failure"]
@@ -5740,6 +5759,14 @@ $snapshot.WgenApplicable = $false
 $script:Invocations.Clear()
 Restore-InstrumentState -Snapshot $snapshot
 $absentInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+$emptySnapshot = $snapshot.PSObject.Copy()
+$emptySnapshot.SaveFilename = ""
+$script:Invocations.Clear()
+$script:SaveFixtureEstablished = $true
+Restore-InstrumentState -Snapshot $emptySnapshot
+$emptyFilenameInvocations = @($script:Invocations | ForEach-Object { $_ })
+
 $snapshot.WgenApplicable = $null
 $script:Invocations.Clear()
 Restore-InstrumentState -Snapshot $snapshot
@@ -5752,6 +5779,7 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     absent_invocations = $absentInvocations
     unknown_invocations = $unknownInvocations
     drain_calls = $script:DrainCalls
+    empty_filename_invocations = $emptyFilenameInvocations
 } | ConvertTo-Json -Depth 10 -Compress
 ''',
         encoding="utf-8",
@@ -5925,6 +5953,28 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     unknown_commands = [entry["command"] for entry in result["unknown_invocations"]]
     assert not any(command.startswith("wgen-") for command in unknown_commands)
 
+    save_filename_entries = [
+        entry for entry in result["invocations"]
+        if entry["command"] == "save-filename"
+    ]
+    assert len(save_filename_entries) == 1
+    assert save_filename_entries[0]["arguments"] == ["--name", "scope"]
+    assert not any(
+        "--name" in entry["arguments"] and "" in entry["arguments"]
+        for entry in result["invocations"]
+    )
+
+
+    empty_save_entries = [
+        entry for entry in result["empty_filename_invocations"]
+        if entry["command"] == "save-filename"
+    ]
+    assert len(empty_save_entries) == 0
+    empty_commands = [
+        entry["command"] for entry in result["empty_filename_invocations"]
+    ]
+    assert "save-pwd" in empty_commands
+    assert "save-waveform-format" in empty_commands
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_diagnostic_drain_ignores_empty_error_collection(

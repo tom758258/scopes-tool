@@ -1918,13 +1918,16 @@ function Restore-InstrumentState {
                 Name = "image save palette"
                 Command = "save-image-palette"
                 Arguments = @("--palette", [string]$saveImagePaletteProperty.Value)
-            },
-            [pscustomobject]@{
+            }
+        )
+        if (-not [string]::IsNullOrWhiteSpace(
+                [string]$saveFilenameProperty.Value)) {
+            $restoreSteps += [pscustomobject]@{
                 Name = "save filename"
                 Command = "save-filename"
                 Arguments = @("--name", [string]$saveFilenameProperty.Value)
             }
-        )
+        }
         $restoreSteps += [pscustomobject]@{
             Name = "save directory fixture"
             Command = "save-pwd"
@@ -2551,7 +2554,9 @@ if ($snapshotComplete) {
                         Arguments = @("--palette", [string]$snapshot.SaveImagePalette)
                     }
                 }
-                if ($filenameChanged) {
+                if ($filenameChanged -and
+                        -not [string]::IsNullOrWhiteSpace(
+                            [string]$snapshot.SaveFilename)) {
                     $restoreSteps += [pscustomobject]@{
                         Stage = "save-filename-restore"
                         Name = "save filename"
@@ -2577,7 +2582,9 @@ if ($snapshotComplete) {
                     }
 
                     try {
-                        if ($filenameChanged) {
+                        if ($filenameChanged -and
+                            -not [string]::IsNullOrWhiteSpace(
+                                [string]$snapshot.SaveFilename)) {
                             $restoredFilename = Invoke-LiveCli -Stage "save-filename-restore-query" `
                                 -Command "save-filename" -Arguments @("--query")
                             if ([string]$restoredFilename.result.name -ne [string]$snapshot.SaveFilename) {
