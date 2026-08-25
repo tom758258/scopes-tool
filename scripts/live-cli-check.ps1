@@ -2178,6 +2178,18 @@ Write-Host "    validator."
 Write-Host "  - This is recommended, not required."
 Write-Host "  - A restart can clear transient instrument-side state left by prior"
 Write-Host "    sessions."
+if ([string]$script:Target -eq "keysight-dsox4034a") {
+    Write-Host ""
+    Write-Host "KNOWN DSO-X 4034A FRONT-PANEL BEHAVIOR"
+    Write-Host ""
+    Write-Host "  - Autoscale may reset the front-panel Save/Recall destination"
+    Write-Host "    selection to `"Please Select`"."
+    Write-Host "  - The same behavior occurs when Auto Scale is used directly from"
+    Write-Host "    the oscilloscope front panel; it is not a Scopes Tool SAVE"
+    Write-Host "    failure."
+    Write-Host "  - After validation, reselect the USB destination under Save To if"
+    Write-Host "    front-panel saving is unavailable."
+}
 Write-Host ""
 Write-Host "PHYSICAL SETUP  operator must prepare"
 Write-Host ""
@@ -4766,4 +4778,10 @@ if ($script:ShareableGenerationFailed) {
     exit 1
 }
 Write-Host "PASS  baseline live validation"
+if ([string]$script:Target -eq "keysight-dsox4034a") {
+    Write-Host ""
+    Write-Host ("NOTE  DSO-X 4034A Autoscale may leave the front-panel Save To")
+    Write-Host ("      selection at `"Please Select`".")
+    Write-Host ("      Reselect the USB destination if front-panel saving is needed.")
+}
 exit 0

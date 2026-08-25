@@ -7499,6 +7499,39 @@ def test_live_cli_check_recommends_restart_before_validation() -> None:
     assert 'Write-Host "  [11]' not in script
 
 
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_live_cli_check_warns_4034a_about_autoscale_save_destination() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    gate = '$script:Target -eq "keysight-dsox4034a"'
+
+    # Pre-validation note.
+    known_start = script.index(
+        'Write-Host "KNOWN DSO-X 4034A FRONT-PANEL BEHAVIOR"'
+    )
+    prompt = script.index(
+        'Write-Host "Press Enter only after the PHYSICAL SETUP above is ready."'
+    )
+    assert known_start < prompt
+
+    pre_block = script[script.rfind("if (", 0, known_start):prompt]
+    assert gate in pre_block
+    assert "Please Select" in pre_block
+    assert "not a Scopes Tool SAVE" in pre_block
+    assert "reselect the USB destination under Save To" in pre_block
+
+    # Post-PASS recovery reminder.
+    pass_line = script.index('Write-Host "PASS  baseline live validation"')
+    exit_line = script.index("exit 0", pass_line)
+    post_pass = script[pass_line:exit_line]
+
+    assert gate in post_pass
+    assert "Please Select" in post_pass
+    assert "Reselect the USB destination" in post_pass
+
+
 P2_HELPERS = REPO_ROOT / "scripts" / "_validation_helpers.ps1"
 P2_PRIVACY = REPO_ROOT / "scripts" / "_artifact_privacy.ps1"
 LIVE_CLI_SCRIPT = REPO_ROOT / "scripts" / "live-cli-check.ps1"
