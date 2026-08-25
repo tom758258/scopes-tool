@@ -60,7 +60,6 @@ from scopes_tool_core.trigger import (
 
 
 def _runtime(
-    artifact_root=Path("data/worker"),
     queue_max=32,
     model="keysight-dsox4024a",
 ):
@@ -70,20 +69,18 @@ def _runtime(
         mode="simulate",
         model=model,
         resource=None,
-        artifact_root=Path(artifact_root),
         queue_max=queue_max,
         output_format="jsonl",
     )
 
 
-def _live_runtime(artifact_root=Path("data/worker")):
+def _live_runtime():
     return worker.WorkerRuntime(
         host="127.0.0.1",
         port=0,
         mode="live",
         model="keysight-dsox4024a",
         resource="USB0::FAKE::INSTR",
-        artifact_root=Path(artifact_root),
         queue_max=32,
         output_format="jsonl",
     )
@@ -96,7 +93,6 @@ def test_live_worker_requires_explicit_resource():
         port=0,
         model="keysight-dsox4024a",
         resource=None,
-        artifact_root="data/worker",
         queue_max=32,
         format="jsonl",
     )
@@ -112,7 +108,6 @@ def test_worker_startup_rejects_unregistered_canonical_model_id():
         port=0,
         model="keysight-dsox4054a",
         resource=None,
-        artifact_root="data/worker",
         queue_max=32,
         format="jsonl",
     )
@@ -301,7 +296,7 @@ def test_worker_request_rejects_unknown_command():
     ),
 )
 def test_worker_http_rejects_non_v2_requests_before_side_effects(tmp_path, body):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(runtime, body, add_schema=False)
 
@@ -313,16 +308,17 @@ def test_worker_http_rejects_non_v2_requests_before_side_effects(tmp_path, body)
     assert not any(tmp_path.iterdir())
 
 
-def test_worker_screenshot_accepts_canonical_format_pack_arguments(tmp_path):
+def test_worker_screenshot_accepts_canonical_format_pack_arguments():
     parsed = worker.parse_domain_command(
         "screenshot",
         {
+            "output": "screen.bmp",
             "format": "bmp8bit",
             "ink_saver": False,
             "palette": "grayscale",
             "layout": "landscape",
         },
-        _runtime(tmp_path),
+        _runtime(),
     )
 
     assert parsed.format == "bmp8bit"
@@ -344,7 +340,7 @@ def test_worker_screenshot_accepts_canonical_format_pack_arguments(tmp_path):
 def test_worker_screenshot_rejects_noncanonical_arguments_before_artifacts(
     tmp_path, arguments
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
     with pytest.raises(OscilloscopeError):
         worker.parse_domain_command("screenshot", arguments, runtime)
@@ -352,13 +348,11 @@ def test_worker_screenshot_rejects_noncanonical_arguments_before_artifacts(
     assert not any(tmp_path.iterdir())
 
 
-def test_worker_screenshot_query_has_no_artifact_path(tmp_path):
-    job_dir = tmp_path / "job"
+def test_worker_screenshot_query_has_no_artifact_path():
     parsed = worker.parse_domain_command(
         "screenshot",
         {"query_hardcopy": True},
-        _runtime(tmp_path),
-        job_dir,
+        _runtime(),
     )
 
     assert parsed.query_hardcopy is True
@@ -451,7 +445,7 @@ def test_worker_request_accepts_trigger_and_acquisition_queries(command, argumen
 
 
 def test_command_acceptance_returns_common_envelope_without_bookkeeping_files(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(
             runtime,
@@ -469,7 +463,7 @@ def test_command_acceptance_returns_common_envelope_without_bookkeeping_files(tm
 
 
 def test_worker_normal_terminal_completion_retains_only_latest_job(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     worker_thread = threading.Thread(
         target=worker._job_loop, args=(runtime,), daemon=True
     )
@@ -502,7 +496,7 @@ def test_worker_normal_terminal_completion_retains_only_latest_job(tmp_path):
 
 
 def test_worker_stop_cancels_multiple_queued_jobs_safely(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     emitted = []
 
     def record_emit(event, **values):
@@ -516,7 +510,6 @@ def test_worker_stop_cancels_multiple_queued_jobs_safely(tmp_path):
             arguments={},
             job_id=name,
             worker_job_id=name,
-            artifact_path=tmp_path / "run" / name,
             request_time="now",
         )
         runtime.jobs[name] = job
@@ -554,7 +547,7 @@ def test_worker_stop_cancels_multiple_queued_jobs_safely(tmp_path):
 
 
 def test_command_acceptance_validates_sample_rate_maximum_before_enqueue(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(
             runtime,
@@ -574,7 +567,7 @@ def test_command_acceptance_validates_sample_rate_maximum_before_enqueue(tmp_pat
 
 
 def test_command_acceptance_rejects_sample_rate_maximum_without_query_before_artifact(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(
             runtime,
@@ -593,14 +586,16 @@ def test_command_acceptance_rejects_sample_rate_maximum_without_query_before_art
     assert not (tmp_path / runtime.run_id).exists()
 
 
-def test_worker_accepts_capture_batch_and_injects_job_output_dir(tmp_path):
-    runtime = _runtime(tmp_path)
+def test_worker_accepts_capture_batch_with_caller_output_dir(tmp_path):
+    runtime = _runtime()
+    caller_output = tmp_path / "caller-output"
     arguments = {
         "channel": [1],
         "points": 1000,
         "format": "byte",
         "count": 3,
         "interval_seconds": 1,
+        "output_dir": str(caller_output),
     }
 
     with _worker_server(runtime):
@@ -616,32 +611,26 @@ def test_worker_accepts_capture_batch_and_injects_job_output_dir(tmp_path):
     assert status == 202
     assert payload["status"] == "accepted"
     job = runtime.jobs[payload["worker_job_id"]]
-    parsed = worker.parse_domain_command(
-        job.command,
-        job.arguments,
-        runtime,
-        job.artifact_path,
-    )
+    parsed = worker.parse_domain_command(job.command, job.arguments, runtime)
     assert parsed.channel == [1]
     assert parsed.points == 1000
     assert parsed.waveform_format == "byte"
     assert parsed.count == 3
     assert parsed.interval_seconds == 1
-    assert Path(parsed.output_dir) == job.artifact_path
+    assert Path(parsed.output_dir) == caller_output
     assert parsed.log_scpi is False
 
 
 @pytest.mark.parametrize(
     "arguments",
     (
-        {"channel": [1], "count": 3, "output_dir": "foo"},
         {"channel": [1], "count": 3, "log_scpi": True},
     ),
 )
 def test_worker_rejects_capture_batch_cli_only_arguments_before_artifact(
     tmp_path, arguments
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
     with _worker_server(runtime):
         status, payload = _post_command(
@@ -665,7 +654,7 @@ def test_worker_rejects_capture_batch_cli_only_arguments_before_artifact(
 
 @pytest.mark.parametrize("command", ("acquisition-points", "record-length"))
 def test_command_acceptance_validates_points_queries_before_enqueue(tmp_path, command):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(
             runtime,
@@ -688,7 +677,7 @@ def test_command_acceptance_validates_points_queries_before_enqueue(tmp_path, co
 def test_command_acceptance_rejects_points_queries_without_query_before_artifact(
     tmp_path, command
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(
             runtime,
@@ -708,7 +697,7 @@ def test_command_acceptance_rejects_points_queries_without_query_before_artifact
 
 
 def test_command_acceptance_rejects_memory_depth_before_artifact(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(
             runtime,
@@ -728,7 +717,7 @@ def test_command_acceptance_rejects_memory_depth_before_artifact(tmp_path):
 
 
 def test_worker_correlation_flows_through_events_and_memory(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     client_job_id = "client-job-1"
     with _worker_server(runtime):
         status, accepted = _post_command(
@@ -742,7 +731,7 @@ def test_worker_correlation_flows_through_events_and_memory(tmp_path):
     assert accepted["status"] == "accepted"
     assert accepted["command"] == "identify"
     assert accepted["job_id"] == client_job_id
-    assert accepted["artifact_path"]
+    assert "artifact_path" not in accepted
     assert worker_job_id
     assert worker_job_id != client_job_id
     assert runtime.run_id != worker_job_id
@@ -760,12 +749,12 @@ def test_worker_correlation_flows_through_events_and_memory(tmp_path):
         runtime,
         "job_finished",
         **worker._terminal_job_view(job),
-        artifact_path=accepted["artifact_path"],
     )
 
     assert started["job_id"] == client_job_id
     assert started["worker_job_id"] == worker_job_id
     assert started["command"] == "identify"
+    assert "artifact_path" not in started
     assert finished["job_id"] == client_job_id
     assert finished["worker_job_id"] == worker_job_id
     assert finished["command"] == "identify"
@@ -776,12 +765,11 @@ def test_worker_correlation_flows_through_events_and_memory(tmp_path):
     assert finished["files"] == []
     assert finished["error"] is None
     assert finished["run_id"] == runtime.run_id
-    assert not list(Path(accepted["artifact_path"]).rglob("request.json"))
-    assert not list(Path(accepted["artifact_path"]).rglob("result.json"))
+    assert "artifact_path" not in finished
 
 
 def test_worker_terminal_result_flows_to_job_finished_and_status_last_job(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     emitted = []
 
     def record_emit(event, **values):
@@ -823,6 +811,7 @@ def test_worker_terminal_result_flows_to_job_finished_and_status_last_job(tmp_pa
     assert finished["result"]["capabilities"]
     assert finished["files"] == []
     assert finished["error"] is None
+    assert "artifact_path" not in finished
 
     last_job = status_payload["last_job"]
     for field in (
@@ -837,7 +826,9 @@ def test_worker_terminal_result_flows_to_job_finished_and_status_last_job(tmp_pa
         "error",
     ):
         assert last_job[field] == finished[field]
+    assert "artifact_path" not in last_job
 
+    assert not any(tmp_path.iterdir())
     assert not list(tmp_path.rglob("request.json"))
     assert not list(tmp_path.rglob("result.json"))
 
@@ -845,14 +836,14 @@ def test_worker_terminal_result_flows_to_job_finished_and_status_last_job(tmp_pa
 def test_worker_failed_job_exposes_terminal_error_in_status_last_job(
     tmp_path, monkeypatch
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
     def failing_execute(_parsed, *, stop_requested=None):
         del stop_requested
         raise OscilloscopeError("simulated instrument failure")
 
     monkeypatch.setattr(worker.scope_cli, "_execute_json_command", failing_execute)
-    _, result = _execute_worker_job(runtime, "identify", {}, tmp_path / "failed")
+    _, result = _execute_worker_job(runtime, "identify", {})
 
     assert result["state"] == "failed"
     assert result["ok"] is False
@@ -873,6 +864,50 @@ def test_worker_failed_job_exposes_terminal_error_in_status_last_job(
 
 
 @pytest.mark.parametrize(
+    ("command", "arguments", "missing_key"),
+    (
+        ("screenshot", {"format": "png"}, "output"),
+        ("capture-batch", {"channel": [1], "count": 1}, "output_dir"),
+        ("capture", {"channel": [1], "csv": "out/capture.csv"}, "meta"),
+        ("capture", {"channel": [1]}, "csv"),
+    ),
+)
+def test_worker_rejects_missing_output_before_enqueue(
+    tmp_path, command, arguments, missing_key
+):
+    runtime = _runtime()
+
+    with _worker_server(runtime):
+        status, payload = _post_command(
+            runtime,
+            {"command": command, "arguments": arguments, "job_id": "missing-output"},
+        )
+
+    assert status == 400
+    assert payload["status"] == "error"
+    assert payload["command"] == command
+    assert payload["error"] == "validation_error"
+    assert f"requires argument {missing_key}" in payload["message"]
+    assert runtime.accepted == 0
+    assert runtime.jobs == {}
+    assert not any(tmp_path.iterdir())
+
+
+def test_worker_executes_screenshot_with_caller_output(tmp_path):
+    output_path = tmp_path / "caller" / "screen.png"
+    job, result = _execute_worker_job(
+        _runtime(), "screenshot", {"output": str(output_path)}
+    )
+
+    assert job.state == "succeeded"
+    assert result["state"] == "succeeded"
+    assert result["files"] == [{"kind": "png", "path": str(output_path)}]
+    assert output_path.exists()
+    assert not list(tmp_path.rglob("request.json"))
+    assert not list(tmp_path.rglob("result.json"))
+
+
+@pytest.mark.parametrize(
     ("body", "expected_command", "expected_job_id"),
     (
         (b"{", None, None),
@@ -885,7 +920,7 @@ def test_worker_failed_job_exposes_terminal_error_in_status_last_job(
 def test_command_validation_errors_use_common_echo_rules(
     tmp_path, body, expected_command, expected_job_id
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(runtime, body, raw=isinstance(body, bytes))
 
@@ -899,14 +934,13 @@ def test_command_validation_errors_use_common_echo_rules(
 
 
 def test_queue_full_rejection_uses_rejected_reason(tmp_path):
-    runtime = _runtime(tmp_path, queue_max=1)
+    runtime = _runtime(queue_max=1)
     runtime.queue.put_nowait(
         worker.WorkerJob(
             command="identify",
             arguments={},
             job_id=None,
             worker_job_id="queued",
-            artifact_path=tmp_path / "queued",
             request_time="now",
         )
     )
@@ -928,14 +962,19 @@ def test_queue_full_rejection_uses_rejected_reason(tmp_path):
 
 
 def test_worker_http_rejects_invalid_capture_wait_trigger_before_artifacts(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
     with _worker_server(runtime):
         status, payload = _post_command(
             runtime,
             {
                 "command": "capture",
-                "arguments": {"channel": [1], "wait_trigger": True},
+                "arguments": {
+                    "channel": [1],
+                    "wait_trigger": True,
+                    "csv": "out/capture.csv",
+                    "meta": "out/capture_meta.json",
+                },
                 "job_id": "bad-wait",
             },
         )
@@ -960,7 +999,6 @@ def test_worker_http_rejects_invalid_capture_wait_trigger_before_artifacts(tmp_p
         {"channel": 1, "segments": 2, "format": 1},
         {"channel": 1, "segments": 2, "timeout_ms": 0},
         {"channel": 1, "segments": 2, "poll_interval_ms": False},
-        {"channel": 1, "segments": 2, "output_dir": "out"},
         {"channel": 1, "segments": 2, "resource": "USB0::FAKE::INSTR"},
         {"channel": 1, "segments": 2, "firmware": "07.30"},
     ),
@@ -968,7 +1006,7 @@ def test_worker_http_rejects_invalid_capture_wait_trigger_before_artifacts(tmp_p
 def test_worker_http_rejects_invalid_segmented_capture_before_artifacts(
     tmp_path, arguments
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
     with _worker_server(runtime):
         status, payload = _post_command(
@@ -990,7 +1028,7 @@ def test_worker_http_rejects_invalid_segmented_capture_before_artifacts(
 
 
 def test_worker_http_rejects_fifty_ohm_without_allow_before_artifacts(tmp_path):
-    runtime = _runtime(tmp_path, model="keysight-dsox3024a")
+    runtime = _runtime(model="keysight-dsox3024a")
 
     with _worker_server(runtime):
         status, payload = _post_command(
@@ -1043,7 +1081,7 @@ def test_worker_http_rejects_fifty_ohm_without_allow_before_artifacts(tmp_path):
 def test_worker_http_rejects_invalid_label_and_annotation_before_artifacts(
     tmp_path, command, arguments, model, expected_message
 ):
-    runtime = _runtime(tmp_path, model=model)
+    runtime = _runtime(model=model)
 
     with _worker_server(runtime):
         status, payload = _post_command(
@@ -1061,7 +1099,7 @@ def test_worker_http_rejects_invalid_label_and_annotation_before_artifacts(
 
 
 def test_worker_http_rejects_invalid_display_common_before_artifacts(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
     with _worker_server(runtime):
         status, payload = _post_command(
@@ -1099,7 +1137,7 @@ def test_worker_parses_domain_arguments_without_opening_backend():
 def test_worker_segmented_capture_minimal_request_uses_cli_defaults(tmp_path):
     original = {"channel": 1, "segments": 2}
     normalized = worker._normalize_segmented_capture_worker_arguments(
-        "segmented-capture", original, _runtime(tmp_path)
+        "segmented-capture", original, _runtime()
     )
 
     assert normalized == {
@@ -1109,14 +1147,18 @@ def test_worker_segmented_capture_minimal_request_uses_cli_defaults(tmp_path):
         "format": "byte",
         "timeout_ms": 30000,
         "poll_interval_ms": 100,
+        "output_dir": None,
     }
     assert original == {"channel": 1, "segments": 2}
     assert worker._normalize_segmented_capture_worker_arguments(
-        "segmented-capture", normalized, _runtime(tmp_path)
+        "segmented-capture", normalized, _runtime()
     ) == normalized
 
+    caller_output = tmp_path / "caller-output"
     parsed = worker.parse_domain_command(
-        "segmented-capture", original, _runtime(tmp_path)
+        "segmented-capture",
+        {**original, "output_dir": str(caller_output)},
+        _runtime(),
     )
     assert parsed.channel == 1
     assert parsed.segments == 2
@@ -1127,6 +1169,7 @@ def test_worker_segmented_capture_minimal_request_uses_cli_defaults(tmp_path):
 
 
 def test_worker_segmented_capture_full_request_maps_to_cli_namespace(tmp_path):
+    caller_output = tmp_path / "caller-output"
     parsed = worker.parse_domain_command(
         "segmented-capture",
         {
@@ -1136,8 +1179,9 @@ def test_worker_segmented_capture_full_request_maps_to_cli_namespace(tmp_path):
             "format": "word",
             "timeout_ms": 5000,
             "poll_interval_ms": 50,
+            "output_dir": str(caller_output),
         },
-        _runtime(tmp_path),
+        _runtime(),
     )
 
     assert parsed.channel == 1
@@ -1146,7 +1190,7 @@ def test_worker_segmented_capture_full_request_maps_to_cli_namespace(tmp_path):
     assert parsed.waveform_format == "word"
     assert parsed.timeout_ms == 5000
     assert parsed.poll_interval_ms == 50
-    assert parsed.output_dir is None
+    assert Path(parsed.output_dir) == caller_output
 
 
 def test_worker_parses_sample_rate_query_without_opening_backend():
@@ -1413,6 +1457,8 @@ def test_worker_parses_capture_wait_trigger_without_opening_backend():
             "trigger_timeout_ms": 5000,
             "trigger_poll_interval_ms": 100,
             "force_trigger_on_timeout": True,
+            "csv": "out/capture.csv",
+            "meta": "out/capture_meta.json",
         },
         _runtime(),
     )
@@ -1558,7 +1604,7 @@ def test_worker_parse_rejects_invalid_trigger_holdoff_arguments(arguments):
     ),
 )
 def test_worker_trigger_holdoff_rejects_before_enqueue_or_artifacts(tmp_path, body):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
     with _worker_server(runtime):
         status, payload = _post_command(runtime, body)
@@ -1717,14 +1763,13 @@ def test_direct_json_envelope_has_schema_and_timestamp(capsys):
     assert payload["ok"] is True
 
 
-def test_worker_event_payloads_have_required_fields(tmp_path):
-    runtime = _runtime(tmp_path)
+def test_worker_event_payloads_have_required_fields():
+    runtime = _runtime()
     job = worker.WorkerJob(
         command="identify",
         arguments={},
         job_id="client-job",
         worker_job_id="worker-job",
-        artifact_path=tmp_path / "worker-job",
         request_time="now",
     )
     runtime.jobs[job.worker_job_id] = job
@@ -1744,7 +1789,6 @@ def test_worker_event_payloads_have_required_fields(tmp_path):
         exit_code=3,
         result=None,
         files=[],
-        artifact_path=str(job.artifact_path),
         error={"type": "x", "message": "y"},
     )
     summary = worker._event_payload(runtime, "summary", ok=True, fatal_error=None)
@@ -1762,7 +1806,7 @@ def test_worker_event_payloads_have_required_fields(tmp_path):
     assert ready["resource"] is None
     assert "trigger_url" not in ready
     assert started["job_id"] == "client-job"
-    assert started["artifact_path"] == str(job.artifact_path)
+    assert "artifact_path" not in started
     assert finished["state"] == "failed"
     assert finished["ok"] is False
     assert finished["result"] is None
@@ -1770,14 +1814,13 @@ def test_worker_event_payloads_have_required_fields(tmp_path):
     assert summary["accepted"] == 0
 
 
-def test_worker_event_payload_rejects_job_finished_without_result_and_files(tmp_path):
-    runtime = _runtime(tmp_path)
+def test_worker_event_payload_rejects_job_finished_without_result_and_files():
+    runtime = _runtime()
     job = worker.WorkerJob(
         command="identify",
         arguments={},
         job_id="client-job",
         worker_job_id="worker-job",
-        artifact_path=tmp_path / "worker-job",
         request_time="now",
     )
     runtime.jobs[job.worker_job_id] = job
@@ -1813,7 +1856,7 @@ def _assert_status_payload_matches_ready(payload, ready):
 
 
 def test_status_and_wait_ready_match_ready_session_and_status_urls(tmp_path, capsys):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         ready = worker._event_payload(
             runtime,
@@ -1989,63 +2032,63 @@ def test_event_backlog_preserves_non_target_events_and_predicate_selects_job():
     assert message["text"] == "kept"
 
 
-def test_worker_job_paths_default_under_job_dir(tmp_path):
-    job_dir = tmp_path / "run" / "job"
+def test_worker_capture_uses_caller_supplied_paths(tmp_path):
+    csv_path = tmp_path / "wave.csv"
+    meta_path = tmp_path / "wave_meta.json"
+    plot_path = tmp_path / "plot.png"
     parsed = worker.parse_domain_command(
         "capture",
-        {"channel": [1], "points": 1000, "plot": "plot.png"},
-        _runtime(tmp_path),
-        job_dir,
+        {
+            "channel": [1],
+            "points": 1000,
+            "csv": str(csv_path),
+            "meta": str(meta_path),
+            "plot": str(plot_path),
+        },
+        _runtime(),
     )
 
-    assert Path(parsed.csv_path) == job_dir / "capture.csv"
-    assert Path(parsed.meta_path) == job_dir / "capture_meta.json"
-    assert Path(parsed.plot_path) == job_dir / "plot.png"
+    assert Path(parsed.csv_path) == csv_path
+    assert Path(parsed.meta_path) == meta_path
+    assert Path(parsed.plot_path) == plot_path
 
 
-def test_worker_segmented_capture_uses_child_output_and_overwrite_guard(tmp_path):
-    job_dir = tmp_path / "run" / "job"
-    job_dir.mkdir(parents=True)
-
+def test_worker_segmented_capture_overwrite_guard(tmp_path):
+    output_dir = tmp_path / "caller-output"
     parsed = worker.parse_domain_command(
         "segmented-capture",
-        {"channel": 1, "segments": 2},
-        _runtime(tmp_path),
-        job_dir,
+        {"channel": 1, "segments": 2, "output_dir": str(output_dir)},
+        _runtime(),
     )
 
-    assert Path(parsed.output_dir) == job_dir / "segmented_capture"
-    worker._guard_no_overwrite(parsed, job_dir)
+    assert Path(parsed.output_dir) == output_dir
+    worker._guard_no_overwrite(parsed)
 
-    Path(parsed.output_dir).mkdir()
+    output_dir.mkdir()
     with pytest.raises(OscilloscopeError, match="already exists"):
-        worker._guard_no_overwrite(parsed, job_dir)
+        worker._guard_no_overwrite(parsed)
 
 
 def test_worker_no_overwrite_guard_rejects_existing_artifact(tmp_path):
-    job_dir = tmp_path / "job"
-    job_dir.mkdir()
-    (job_dir / "capture.csv").write_text("existing", encoding="utf-8")
+    csv_path = tmp_path / "capture.csv"
+    csv_path.write_text("existing", encoding="utf-8")
     parsed = worker.parse_domain_command(
         "capture",
-        {"channel": [1]},
-        _runtime(tmp_path),
-        job_dir,
+        {"channel": [1], "csv": str(csv_path), "meta": str(tmp_path / "capture_meta.json")},
+        _runtime(),
     )
 
     with pytest.raises(OscilloscopeError, match="already exists"):
-        worker._guard_no_overwrite(parsed, job_dir)
+        worker._guard_no_overwrite(parsed)
 
 
 def test_stop_cancels_queued_job_without_bookkeeping_artifacts(tmp_path):
-    runtime = _runtime(tmp_path)
-    job_dir = tmp_path / "run" / "queued"
+    runtime = _runtime()
     job = worker.WorkerJob(
         command="identify",
         arguments={},
         job_id="client-job",
         worker_job_id="queued",
-        artifact_path=job_dir,
         request_time="now",
     )
     runtime.jobs[job.worker_job_id] = job
@@ -2056,8 +2099,7 @@ def test_stop_cancels_queued_job_without_bookkeeping_artifacts(tmp_path):
     assert job.exit_code == 3
     assert job.error == {"type": "cancelled", "message": "cancelled by stop"}
     assert runtime.cancelled == 1
-    assert not job.artifact_path.exists()
-    assert not (job.artifact_path / "result.json").exists()
+    assert not any(tmp_path.iterdir())
 
 
 def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
@@ -2065,7 +2107,8 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
 ):
     import time
 
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
+    output_dir = tmp_path / "caller-output"
     worker_thread = threading.Thread(
         target=worker._job_loop,
         args=(runtime,),
@@ -2082,13 +2125,13 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
                     "channel": [1],
                     "count": 3,
                     "interval_seconds": 30,
+                    "output_dir": str(output_dir),
                 },
                 "job_id": "cancel-running",
             },
         )
         assert status == 202
-        artifact_path = Path(accepted["artifact_path"])
-        first_capture = artifact_path / "waveform_0001.csv"
+        first_capture = output_dir / "waveform_0001.csv"
         deadline = time.monotonic() + 2
         while not first_capture.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
@@ -2110,7 +2153,7 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
         assert job.state == "cancelled"
 
     result = worker._terminal_job_view(job)
-    manifest = json.loads((artifact_path / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert result["state"] == "cancelled"
     assert result["exit_code"] == 3
     assert result["error"]["type"] == "cancelled"
@@ -2118,8 +2161,8 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
     assert result["result"]["error"] is None
     assert result["result"]["completed_count"] == 1
     assert manifest["status"] == "cancelled"
-    assert not (artifact_path / "waveform_0002.csv").exists()
-    assert not (artifact_path / "result.json").exists()
+    assert not (output_dir / "waveform_0002.csv").exists()
+    assert not list(tmp_path.rglob("result.json"))
 
 
 @pytest.mark.parametrize(
@@ -2137,8 +2180,8 @@ def test_worker_preserves_core_workflow_result_after_late_cancellation(
     exit_code,
     expected_state,
 ):
-    runtime = _runtime(tmp_path)
-    artifact_path = tmp_path / status
+    runtime = _runtime()
+    output_dir = tmp_path / "caller-output"
 
     def fake_execute(_parsed, *, stop_requested=None):
         del stop_requested
@@ -2162,8 +2205,7 @@ def test_worker_preserves_core_workflow_result_after_late_cancellation(
     _, result = _execute_worker_job(
         runtime,
         "capture-batch",
-        {"channel": [1], "count": 1},
-        artifact_path,
+        {"channel": [1], "count": 1, "output_dir": str(output_dir)},
     )
 
     assert result["state"] == expected_state
@@ -2176,13 +2218,12 @@ def test_worker_preserves_core_workflow_result_after_late_cancellation(
         assert result["error"]["type"] == "OscilloscopeError"
 
 
-def _execute_worker_job(runtime, command, arguments, artifact_path):
+def _execute_worker_job(runtime, command, arguments):
     job = worker.WorkerJob(
         command=command,
         arguments=arguments,
         job_id="client-job",
         worker_job_id=command.replace("-", "_"),
-        artifact_path=artifact_path,
         request_time="requested",
         accepted_time="accepted",
     )
@@ -2195,24 +2236,22 @@ def _execute_worker_job(runtime, command, arguments, artifact_path):
 
 
 def test_worker_measure_results_preserves_statistics_items(tmp_path):
-    artifact_path = tmp_path / "measure_results"
-    job, result = _execute_worker_job(
-        _runtime(tmp_path), "measure-results", {}, artifact_path
-    )
+    job, result = _execute_worker_job(_runtime(), "measure-results", {})
 
     assert result["state"] == "succeeded"
     assert result["result"]["raw"]
     assert result["result"]["items"] == []
     assert result["result"]["statistics_items"]
+    assert result["files"] == []
     assert job.result["scpi"]["sent"] == ["*IDN?", ":MEASure:RESults?"]
-    assert not artifact_path.exists()
-    assert not (artifact_path / "request.json").exists()
-    assert not (artifact_path / "result.json").exists()
+    assert not list(tmp_path.rglob("request.json"))
+    assert not list(tmp_path.rglob("result.json"))
 
 
 def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
-    runtime = _runtime(tmp_path)
-    artifact_path = tmp_path / "capture_wait"
+    runtime = _runtime()
+    csv_path = tmp_path / "capture.csv"
+    meta_path = tmp_path / "capture_meta.json"
 
     job, result = _execute_worker_job(
         runtime,
@@ -2222,8 +2261,9 @@ def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
             "wait_trigger": True,
             "trigger_timeout_ms": 1,
             "trigger_poll_interval_ms": 1,
+            "csv": str(csv_path),
+            "meta": str(meta_path),
         },
-        artifact_path,
     )
 
     assert result["state"] == "succeeded"
@@ -2237,12 +2277,13 @@ def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
     assert trigger_values[0] & OPERATION_CONDITION_RUN_MASK
     assert not trigger_values[1] & OPERATION_CONDITION_RUN_MASK
     assert result["files"] == [
-        {"kind": "csv", "path": str(artifact_path / "capture.csv")},
-        {"kind": "metadata", "path": str(artifact_path / "capture_meta.json")},
+        {"kind": "csv", "path": str(csv_path)},
+        {"kind": "metadata", "path": str(meta_path)},
     ]
-    assert (artifact_path / "capture.csv").exists()
-    assert not (artifact_path / "request.json").exists()
-    assert not (artifact_path / "result.json").exists()
+    assert csv_path.exists()
+    assert meta_path.exists()
+    assert not list(tmp_path.rglob("request.json"))
+    assert not list(tmp_path.rglob("result.json"))
     assert job.result["scpi"]["sent"][:4] == [
         "*IDN?",
         single_command(),
@@ -2251,14 +2292,16 @@ def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
     ]
 
 
-def test_worker_executes_segmented_capture_with_domain_child_artifacts(tmp_path):
-    runtime = _runtime(tmp_path)
+def test_worker_executes_segmented_capture_with_caller_output_dir(tmp_path):
+    runtime = _runtime()
+    output_dir = tmp_path / "caller-output"
     original_body = {
         "command": "segmented-capture",
         "arguments": {
             "channel": 1,
             "segments": 2,
             "poll_interval_ms": 1,
+            "output_dir": str(output_dir),
         },
         "job_id": "segmented-job",
     }
@@ -2272,13 +2315,12 @@ def test_worker_executes_segmented_capture_with_domain_child_artifacts(tmp_path)
         assert status == 202
         runtime.queue.join()
 
-    artifact_path = Path(accepted["artifact_path"])
     result = worker._terminal_job_view(runtime.jobs[accepted["worker_job_id"]])
-    domain_dir = artifact_path / "segmented_capture"
+    domain_dir = output_dir
     scpi_log = (domain_dir / "scpi.log").read_text(encoding="utf-8")
 
-    assert not (artifact_path / "request.json").exists()
-    assert not (artifact_path / "result.json").exists()
+    assert not list(tmp_path.rglob("request.json"))
+    assert not list(tmp_path.rglob("result.json"))
     assert result["state"] == "succeeded"
     assert result["ok"] is True
     assert result["result"]["operation"] == "segmented-capture"
@@ -2305,8 +2347,8 @@ def test_worker_executes_segmented_capture_with_domain_child_artifacts(tmp_path)
 def test_worker_maps_segmented_capture_partial_result_and_existing_files(
     tmp_path, monkeypatch
 ):
-    runtime = _runtime(tmp_path)
-    artifact_path = tmp_path / "partial"
+    runtime = _runtime()
+    output_dir = tmp_path / "partial"
 
     def fake_execute(parsed, *, stop_requested=None):
         del stop_requested
@@ -2330,11 +2372,10 @@ def test_worker_maps_segmented_capture_partial_result_and_existing_files(
     _, result = _execute_worker_job(
         runtime,
         "segmented-capture",
-        {"channel": 1, "segments": 2},
-        artifact_path,
+        {"channel": 1, "segments": 2, "output_dir": str(output_dir)},
     )
 
-    csv_path = artifact_path / "segmented_capture" / "segment_0001.csv"
+    csv_path = output_dir / "segment_0001.csv"
     assert result["state"] == "failed"
     assert result["ok"] is False
     assert result["result"]["status"] == "partial"
@@ -2374,9 +2415,9 @@ def test_worker_maps_segmented_capture_partial_result_and_existing_files(
 def test_worker_executes_trigger_and_acquisition_queries_in_simulator(
     tmp_path, command, arguments, scpi_command, field, expected_value
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
-    job, result = _execute_worker_job(runtime, command, arguments, tmp_path / command)
+    job, result = _execute_worker_job(runtime, command, arguments)
 
     assert result["state"] == "succeeded"
     assert result["ok"] is True
@@ -2412,11 +2453,9 @@ def test_worker_executes_trigger_and_acquisition_queries_in_simulator(
 def test_worker_executes_trigger_holdoff_in_simulator(
     tmp_path, arguments, expected_sent, expected_result
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
-    job, result = _execute_worker_job(
-        runtime, "trigger-holdoff", arguments, tmp_path / "trigger_holdoff"
-    )
+    job, result = _execute_worker_job(runtime, "trigger-holdoff", arguments)
 
     assert result["state"] == "succeeded"
     assert result["ok"] is True
@@ -2477,9 +2516,9 @@ def test_worker_executes_trigger_holdoff_in_simulator(
 def test_worker_executes_display_common_in_simulator(
     tmp_path, command, arguments, scpi_command, expected_fields
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
-    job, result = _execute_worker_job(runtime, command, arguments, tmp_path / command)
+    job, result = _execute_worker_job(runtime, command, arguments)
 
     assert result["state"] == "succeeded"
     assert result["ok"] is True
@@ -2541,9 +2580,9 @@ def test_worker_executes_display_common_in_simulator(
 def test_worker_executes_channel_advanced_settings_in_simulator(
     tmp_path, command, arguments, scpi_command, field, expected_value
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
-    job, result = _execute_worker_job(runtime, command, arguments, tmp_path / command)
+    job, result = _execute_worker_job(runtime, command, arguments)
 
     assert result["state"] == "succeeded"
     assert result["ok"] is True
@@ -2556,13 +2595,12 @@ def test_worker_executes_channel_advanced_settings_in_simulator(
 
 
 def test_worker_2000x_rejects_fifty_ohm_with_allow_before_impedance_scpi(tmp_path):
-    runtime = _runtime(tmp_path, model="keysight-dsox2004a")
+    runtime = _runtime(model="keysight-dsox2004a")
 
     job, result = _execute_worker_job(
         runtime,
         "channel-impedance",
         {"channel": 1, "impedance": "fifty", "allow_50_ohm": True},
-        tmp_path / "channel_impedance_2000x",
     )
 
     assert result["state"] == "failed"
@@ -2576,7 +2614,7 @@ def test_worker_2000x_rejects_fifty_ohm_with_allow_before_impedance_scpi(tmp_pat
 
 
 def test_worker_executes_annotation_set_in_simulator(tmp_path):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
 
     job, result = _execute_worker_job(
         runtime,
@@ -2590,7 +2628,6 @@ def test_worker_executes_annotation_set_in_simulator(tmp_path):
             "x": 10,
             "y": 20,
         },
-        tmp_path / "annotation",
     )
 
     assert result["state"] == "succeeded"
@@ -2620,12 +2657,11 @@ def test_worker_executes_annotation_set_in_simulator(tmp_path):
     assert sent_commands[1:-1] == expected_commands
     assert sent_commands[-1] == ":SYSTem:ERRor?"
 
-    off_runtime = _runtime(tmp_path)
+    off_runtime = _runtime()
     off_job, off_result = _execute_worker_job(
         off_runtime,
         "annotation",
         {"slot": 2, "off": True, "clear": True, "x": 10, "y": 20},
-        tmp_path / "annotation_off",
     )
     expected_off_commands = [
         ':DISPlay:ANNotation2:TEXT ""',
@@ -2688,14 +2724,13 @@ class _FakeScope:
         return idn
 
 
-def test_live_worker_identity_mismatch_fails_before_domain_scpi(monkeypatch, tmp_path):
+def test_live_worker_identity_mismatch_fails_before_domain_scpi(monkeypatch):
     fake_scope = _FakeScope("KEYSIGHT,DSOX3024A,MY0000,1.0")
     monkeypatch.setattr(cli_runtime.Oscilloscope, "open", lambda *args, **kwargs: fake_scope)
     parsed = worker.parse_domain_command(
         "capture",
-        {"channel": [1]},
-        _live_runtime(tmp_path),
-        tmp_path / "job",
+        {"channel": [1], "csv": "out/capture.csv", "meta": "out/capture_meta.json"},
+        _live_runtime(),
     )
 
     payload, exit_code = cli._execute_json_command(parsed)
@@ -2721,7 +2756,6 @@ def test_live_worker_identity_mismatch_fails_before_domain_scpi(monkeypatch, tmp
 )
 def test_live_worker_unknown_identity_fails_before_domain_scpi(
     monkeypatch,
-    tmp_path,
     raw_idn,
 ):
     fake_scope = _FakeScope(raw_idn)
@@ -2732,9 +2766,8 @@ def test_live_worker_unknown_identity_fails_before_domain_scpi(
     )
     parsed = worker.parse_domain_command(
         "capture",
-        {"channel": [1]},
-        _live_runtime(tmp_path),
-        tmp_path / "job",
+        {"channel": [1], "csv": "out/capture.csv", "meta": "out/capture_meta.json"},
+        _live_runtime(),
     )
 
     payload, exit_code = cli._execute_json_command(parsed)
@@ -2744,9 +2777,11 @@ def test_live_worker_unknown_identity_fails_before_domain_scpi(
     assert fake_scope.backend.history == ["*IDN?"]
 
 
-def test_worker_triggered_measure_loop_is_allowlisted_and_uses_job_directory(tmp_path):
-    runtime = _runtime(tmp_path)
-    job_dir = tmp_path / "triggered-job"
+def test_worker_triggered_measure_loop_is_allowlisted_and_uses_caller_output_dir(
+    tmp_path,
+):
+    runtime = _runtime()
+    caller_output = tmp_path / "caller-output"
     arguments = {
         "channel": [1, 2],
         "items": "vpp,frequency",
@@ -2755,24 +2790,22 @@ def test_worker_triggered_measure_loop_is_allowlisted_and_uses_job_directory(tmp
         "count": 2,
         "trigger_timeout_seconds": 1,
         "interval_seconds": 0,
+        "output_dir": str(caller_output),
     }
 
     assert "triggered-measure-loop" in worker.DOMAIN_COMMANDS
-    parsed = worker.parse_domain_command(
-        "triggered-measure-loop",
-        arguments,
-        runtime,
-        job_dir,
-    )
+    parsed = worker.parse_domain_command("triggered-measure-loop", arguments, runtime)
 
-    assert Path(parsed.output_dir) == job_dir
+    assert Path(parsed.output_dir) == caller_output
     assert parsed.count == 2
     assert parsed.trigger_timeout_seconds == 1
 
 
-def test_worker_triggered_capture_series_is_strict_and_uses_job_directory(tmp_path):
-    runtime = _runtime(tmp_path)
-    job_dir = tmp_path / "triggered-capture-job"
+def test_worker_triggered_capture_series_is_strict_and_uses_caller_output_dir(
+    tmp_path,
+):
+    runtime = _runtime()
+    caller_output = tmp_path / "caller-output"
     arguments = {
         "channel": [1, 2],
         "points": 1000,
@@ -2780,6 +2813,7 @@ def test_worker_triggered_capture_series_is_strict_and_uses_job_directory(tmp_pa
         "count": 2,
         "trigger_timeout_seconds": 1,
         "interval_seconds": 0,
+        "output_dir": str(caller_output),
     }
 
     assert "triggered-capture-series" in worker.DOMAIN_COMMANDS
@@ -2793,12 +2827,7 @@ def test_worker_triggered_capture_series_is_strict_and_uses_job_directory(tmp_pa
     assert command == "triggered-capture-series"
     assert normalized == arguments
     assert job_id is None
-    parsed = worker.parse_domain_command(
-        command,
-        normalized,
-        runtime,
-        job_dir,
-    )
+    parsed = worker.parse_domain_command(command, normalized, runtime)
 
     assert parsed.channel == [1, 2]
     assert parsed.points == 1000
@@ -2806,7 +2835,7 @@ def test_worker_triggered_capture_series_is_strict_and_uses_job_directory(tmp_pa
     assert parsed.count == 2
     assert parsed.trigger_timeout_seconds == 1
     assert parsed.interval_seconds == 0
-    assert Path(parsed.output_dir) == job_dir
+    assert Path(parsed.output_dir) == caller_output
     assert parsed.log_scpi is False
 
 
@@ -2844,12 +2873,6 @@ def test_worker_triggered_capture_series_rejects_invalid_arguments(arguments, me
             "channel": [1],
             "count": 1,
             "trigger_timeout_seconds": 1,
-            "output_dir": "escape",
-        },
-        {
-            "channel": [1],
-            "count": 1,
-            "trigger_timeout_seconds": 1,
             "log_scpi": True,
         },
     ],
@@ -2857,7 +2880,7 @@ def test_worker_triggered_capture_series_rejects_invalid_arguments(arguments, me
 def test_worker_triggered_capture_series_rejects_cli_paths_before_artifacts(
     monkeypatch, tmp_path, arguments
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     monkeypatch.setattr(
         cli_runtime.Oscilloscope,
         "open",
@@ -2893,9 +2916,9 @@ def test_worker_triggered_capture_series_uses_core_terminal_status_mapping():
     )
 
 
-def test_worker_measure_until_is_strict_and_uses_job_directory(tmp_path):
-    runtime = _runtime(tmp_path)
-    job_dir = tmp_path / "measure-until-job"
+def test_worker_measure_until_is_strict_and_uses_caller_output_dir(tmp_path):
+    runtime = _runtime()
+    caller_output = tmp_path / "caller-output"
     arguments = {
         "channel": 1,
         "item": "vpp",
@@ -2903,6 +2926,7 @@ def test_worker_measure_until_is_strict_and_uses_job_directory(tmp_path):
         "threshold": 3.3,
         "timeout_seconds": 600,
         "interval_seconds": 1,
+        "output_dir": str(caller_output),
     }
 
     assert "measure-until" in worker.DOMAIN_COMMANDS
@@ -2917,7 +2941,7 @@ def test_worker_measure_until_is_strict_and_uses_job_directory(tmp_path):
     assert normalized == arguments
     assert job_id is None
 
-    parsed = worker.parse_domain_command(command, normalized, runtime, job_dir)
+    parsed = worker.parse_domain_command(command, normalized, runtime)
 
     assert parsed.channel == 1
     assert parsed.item == "vpp"
@@ -2925,7 +2949,7 @@ def test_worker_measure_until_is_strict_and_uses_job_directory(tmp_path):
     assert parsed.threshold == 3.3
     assert parsed.timeout_seconds == 600
     assert parsed.interval_seconds == 1
-    assert Path(parsed.output_dir) == job_dir
+    assert Path(parsed.output_dir) == caller_output
     assert parsed.log_scpi is False
 
 
@@ -2960,7 +2984,6 @@ def test_worker_measure_until_rejects_invalid_arguments(arguments, message):
 @pytest.mark.parametrize(
     "extra_arguments",
     [
-        {"output_dir": "escape"},
         {"log_scpi": True},
         {"item": "phase"},
         {"item": "y_at_x"},
@@ -2970,7 +2993,7 @@ def test_worker_measure_until_rejects_invalid_arguments(arguments, message):
 def test_worker_measure_until_rejects_invalid_public_contract_before_artifacts(
     monkeypatch, tmp_path, extra_arguments
 ):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     monkeypatch.setattr(
         cli_runtime.Oscilloscope,
         "open",
@@ -3006,9 +3029,9 @@ def test_worker_measure_until_rejects_invalid_public_contract_before_artifacts(
 
 
 def test_worker_executes_measure_until_with_owned_artifacts(tmp_path):
-    artifact_path = tmp_path / "measure-until-execution"
+    output_dir = tmp_path / "caller-output"
     job, result = _execute_worker_job(
-        _runtime(tmp_path),
+        _runtime(),
         "measure-until",
         {
             "channel": 1,
@@ -3017,17 +3040,17 @@ def test_worker_executes_measure_until_with_owned_artifacts(tmp_path):
             "threshold": 0,
             "timeout_seconds": 1,
             "interval_seconds": 0,
+            "output_dir": str(output_dir),
         },
-        artifact_path,
     )
 
     assert job.state == "succeeded"
     assert result["state"] == "succeeded"
     assert result["result"]["status"] == "completed"
     assert result["result"]["termination_reason"] == "condition_met"
-    assert (artifact_path / "measurements.csv").exists()
-    assert (artifact_path / "manifest.json").exists()
-    assert (artifact_path / "scpi.log").exists()
+    assert (output_dir / "measurements.csv").exists()
+    assert (output_dir / "manifest.json").exists()
+    assert (output_dir / "scpi.log").exists()
 
 
 @pytest.mark.parametrize(
@@ -3047,14 +3070,13 @@ def test_worker_measure_until_uses_core_terminal_status_mapping(status, expected
 
 @pytest.mark.parametrize(
     "arguments, message",
-    [
-        ({"count": 1, "trigger_timeout_seconds": 1, "output_dir": "escape"}, "unknown argument"),
-        ({"count": True, "trigger_timeout_seconds": 1}, "count must be an integer"),
-        ({"count": 1, "trigger_timeout_seconds": "1"}, "must be a finite number"),
-        ({"count": 1, "trigger_timeout_seconds": 1, "channel": 1}, "non-empty array"),
-        ({"count": 1, "trigger_timeout_seconds": 1, "pair": [1]}, "array of strings"),
-        ({"count": 1, "trigger_timeout_seconds": 1, "interval_seconds": -1}, "must be non-negative"),
-    ],
+        [
+            ({"count": True, "trigger_timeout_seconds": 1}, "count must be an integer"),
+            ({"count": 1, "trigger_timeout_seconds": "1"}, "must be a finite number"),
+            ({"count": 1, "trigger_timeout_seconds": 1, "channel": 1}, "non-empty array"),
+            ({"count": 1, "trigger_timeout_seconds": 1, "pair": [1]}, "array of strings"),
+            ({"count": 1, "trigger_timeout_seconds": 1, "interval_seconds": -1}, "must be non-negative"),
+        ],
 )
 def test_worker_triggered_measure_loop_rejects_invalid_arguments(arguments, message):
     with pytest.raises(OscilloscopeError, match=message):
@@ -3068,9 +3090,9 @@ def test_worker_triggered_measure_loop_rejects_invalid_arguments(arguments, mess
 
 
 def test_worker_executes_triggered_measure_loop_with_domain_artifacts(tmp_path):
-    artifact_path = tmp_path / "triggered-execution"
+    output_dir = tmp_path / "caller-output"
     job, result = _execute_worker_job(
-        _runtime(tmp_path),
+        _runtime(),
         "triggered-measure-loop",
         {
             "channel": [1],
@@ -3078,23 +3100,24 @@ def test_worker_executes_triggered_measure_loop_with_domain_artifacts(tmp_path):
             "count": 2,
             "trigger_timeout_seconds": 1,
             "interval_seconds": 0,
+            "output_dir": str(output_dir),
         },
-        artifact_path,
     )
 
     assert job.state == "succeeded"
     assert result["state"] == "succeeded"
     assert result["result"]["status"] == "completed"
     assert result["result"]["completed_count"] == 2
-    assert (artifact_path / "measurements.csv").exists()
-    assert (artifact_path / "manifest.json").exists()
-    assert (artifact_path / "scpi.log").exists()
+    assert (output_dir / "measurements.csv").exists()
+    assert (output_dir / "manifest.json").exists()
+    assert (output_dir / "scpi.log").exists()
 
 
 def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
     import time
 
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
+    output_dir = tmp_path / "caller-output"
     worker_thread = threading.Thread(target=worker._job_loop, args=(runtime,), daemon=True)
     worker_thread.start()
     job = None
@@ -3111,14 +3134,14 @@ def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
                         "count": 3,
                         "trigger_timeout_seconds": 1,
                         "interval_seconds": 30,
+                        "output_dir": str(output_dir),
                     },
                     "job_id": "cancel-triggered-loop",
                 },
             )
             assert status == 202
             job = runtime.jobs[accepted["worker_job_id"]]
-            artifact_path = Path(accepted["artifact_path"])
-            manifest_path = artifact_path / "manifest.json"
+            manifest_path = output_dir / "manifest.json"
             deadline = time.monotonic() + 2
             completed_count = None
             last_observation = "manifest was not created"
@@ -3189,4 +3212,4 @@ def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
     assert result["result"]["status"] == "cancelled"
     assert result["result"]["completed_count"] == 1
     assert manifest["status"] == "cancelled"
-    assert not (artifact_path / "result.json").exists()
+    assert not list(tmp_path.rglob("result.json"))

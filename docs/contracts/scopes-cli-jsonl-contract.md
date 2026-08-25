@@ -38,9 +38,9 @@ All runtime events include `schema_version: 2`, `timestamp_utc`, and the same
 `stop_url`; it means `/command`, `/status`, and `/stop` are reachable. It does
 not include `trigger_url`.
 
-`job_started` includes `job_id`, `worker_job_id`, `command`, and
-`artifact_path`. `job_finished` includes `job_id`, `worker_job_id`, `command`,
-`artifact_path`, `state`, `ok`, `exit_code`, `result`, `files`, and `error`.
+`job_started` includes `job_id`, `worker_job_id`, and `command`. `job_finished`
+includes `job_id`, `worker_job_id`, `command`, `state`, `ok`, `exit_code`,
+`result`, `files`, and `error`.
 `state` is one of `succeeded`, `failed`, or `cancelled`; only `succeeded` may
 use `ok: true`. `result` carries the command's structured domain result and is
 null when none exists, such as for queued jobs cancelled by `/stop`. `files`
@@ -66,7 +66,7 @@ when knowable, including `client_command`, `method`, `url`, `endpoint`,
 `send-command` sends the Common `/command` envelope with Scopes command names
 from [Scopes Worker Contract](scopes-worker-contract.md). Successful responses
 include the worker response fields, including `status`, `command`, `job_id`,
-`worker_job_id`, and `artifact_path` when accepted. Validation and admission
+and `worker_job_id` when accepted. Validation and admission
 failures merge the worker response envelope into client JSON, including
 `command`, `job_id`, `reason`, `error`, and `message` when present.
 

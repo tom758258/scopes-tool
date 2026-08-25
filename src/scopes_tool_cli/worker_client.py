@@ -120,7 +120,7 @@ def _client_print(args: argparse.Namespace, payload: dict[str, Any]) -> None:
         return
     status = payload.get("status", "ok")
     print(f"status: {status}")
-    for key in ("command", "job_id", "worker_job_id", "artifact_path", "run_id"):
+    for key in ("command", "job_id", "worker_job_id", "run_id"):
         if key in payload and payload[key] is not None:
             print(f"{key}: {payload[key]}")
 

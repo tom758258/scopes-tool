@@ -47,7 +47,6 @@ Arguments:
   Unknown IDs, raw model names, and unregistered values are rejected during
   validation.
 - `--resource`: live resource string, required with `--live`.
-- `--artifact-root`: default `data/worker`.
 - `--queue-max`: accepted queued-job limit, default `32`.
 - `--format`: `jsonl` or `text`, default `jsonl`.
 
@@ -109,13 +108,13 @@ Accepted responses use HTTP `202` and contain:
   "status": "accepted",
   "command": "identify",
   "job_id": "client-id",
-  "worker_job_id": "worker-generated-id",
-  "artifact_path": "data/worker/<run_id>/<worker_job_id>"
+  "worker_job_id": "worker-generated-id"
 }
 ```
 
-`202 accepted` means the job was validated, assigned an artifact directory, and
-enqueued. It does not mean the oscilloscope action succeeded.
+`202 accepted` means the job was validated and enqueued. It does not mean the
+oscilloscope action succeeded. The Worker allocates no artifact directory;
+commands that write host files require caller-supplied destinations.
 
 Queue, stopping, rate, or other Scopes admission failures use
 `status: "rejected"` and a Scopes-specific `reason`, for example:
@@ -240,9 +239,9 @@ Unsupported command names include `snapshot`, `restore`, `diff`, generic
 Periodic Capture is the product-facing name for the existing Worker
 `capture-batch` command. Its arguments are limited to `channel` (an array of
 channel integers or `"all"`), `points`, `format`, required positive integer
-`count`, and optional non-negative finite `interval_seconds`. Caller-supplied
-`output_dir` and `log_scpi` are rejected before enqueue; the Worker injects and
-owns the job artifact directory. `periodic-capture` is not a Worker command or
+`count`, optional non-negative finite `interval_seconds`, and required
+caller-supplied `output_dir`. `log_scpi` is rejected before enqueue.
+`periodic-capture` is not a Worker command or
 alias.
 
 ```json
@@ -262,10 +261,9 @@ alias.
 `triggered-capture-series` accepts only required `channel` (a non-empty array
 of positive channel integers or the single value `"all"`), optional `points`,
 optional `format` (`"byte"` or `"word"`), required positive integer `count`,
-required positive finite `trigger_timeout_seconds`, and optional non-negative
-finite `interval_seconds`. Unknown fields and wrong JSON types are rejected
-before enqueue. Caller-supplied `output_dir` and `log_scpi` are rejected; the
-Worker injects and owns the job artifact directory.
+required positive finite `trigger_timeout_seconds`, optional non-negative
+finite `interval_seconds`, and required caller-supplied `output_dir`. Unknown
+fields and wrong JSON types are rejected before enqueue. `log_scpi` is rejected.
 
 ```json
 {
@@ -285,10 +283,9 @@ Worker injects and owns the job artifact directory.
 `triggered-measure-loop` accepts only `channel` (an array of channel integers
 or `"all"`), `items` (string), `pair` (an array of `SRC:REF` strings),
 `pair_items` (string), required positive integer `count`, required positive
-finite number `trigger_timeout_seconds`, and optional non-negative finite
-number `interval_seconds`. Unknown fields and wrong JSON types are rejected
-before enqueue. In particular, caller-supplied `output_dir` is rejected; the
-Worker injects and owns the job directory.
+finite number `trigger_timeout_seconds`, optional non-negative finite
+number `interval_seconds`, and required caller-supplied `output_dir`. Unknown
+fields and wrong JSON types are rejected before enqueue.
 
 ```json
 {
@@ -309,11 +306,11 @@ Worker injects and owns the job directory.
 `measure-until` accepts only required positive integer `channel`, required
 non-parameterized single-channel `item`, required `operator` (`"gt"`,
 `"gte"`, `"lt"`, or `"lte"`), required finite `threshold`, required positive
-finite `timeout_seconds`, and optional non-negative finite
-`interval_seconds`. Arrays, `"all"`, pair or parameterized measurement items,
-unknown fields, and wrong JSON types are rejected before enqueue. The Worker
-rejects caller-supplied `output_dir` and `log_scpi` and injects its owned job
-artifact directory.
+finite `timeout_seconds`, optional non-negative finite
+`interval_seconds`, and required caller-supplied `output_dir`. Arrays, `"all"`,
+pair or parameterized measurement items,
+unknown fields, and wrong JSON types are rejected before enqueue. `log_scpi` is
+rejected.
 
 ```json
 {
@@ -339,11 +336,15 @@ accepted as JSON keys, for example:
   "arguments": {
     "channel": [1, 2],
     "points": 1000,
-    "csv": "capture.csv",
-    "plot": "plot.png"
+    "csv": "C:/results/capture.csv",
+    "meta": "C:/results/capture_meta.json",
+    "plot": "C:/results/plot.png"
   }
 }
 ```
+
+`csv` and `meta` are required for worker `capture`; `plot` is optional and
+creates a PNG plot only when supplied.
 
 The existing `screenshot` worker command accepts only canonical `output`,
 `background`, `format`, `ink_saver`, `palette`, `layout`, and
@@ -460,7 +461,8 @@ or export arguments and does not create a domain artifact for this command.
     "points": 1000,
     "format": "byte",
     "timeout_ms": 30000,
-    "poll_interval_ms": 100
+    "poll_interval_ms": 100,
+    "output_dir": "/results/run-001/segments"
   },
   "job_id": "client-job-id"
 }
@@ -476,26 +478,24 @@ on 3000X/4000X. `timeout_ms` and `poll_interval_ms` must be positive. The worker
 uses the same Core overall timeout, operation-condition-first polling, two-sample
 RUN-clear and remote-interface-enabled readiness requirement, one post-readiness
 acquired-count query, and segmented-capture read-timeout semantics; the request
-schema and defaults remain unchanged. The worker does not accept `output_dir`,
-`output`, `path`,
+schema and defaults remain unchanged. The worker requires a caller-supplied
+`output_dir` and does not accept `output`, `path`,
 `resource`, `model`,
 `firmware`, `simulate`, `live`, `dry_run`, `json`, `log_scpi`, operation flags,
 or aliases. Unknown keys and invalid values are rejected before enqueue,
-artifact creation, backend open, or SCPI.
+backend open, or SCPI.
 
 The worker reuses the existing one-shot CLI/Core segmented-capture workflow.
-Its job directory contains only the segmented-capture domain artifacts, written
-below the fixed child directory `segmented_capture/`:
+The caller-supplied `output_dir` is the segmented-capture output directory:
 
 ```text
-data/worker/<run_id>/<worker_job_id>/
-  segmented_capture/
-    manifest.json
-    scpi.log
-    segment_0001.csv
+<caller output_dir>/
+  manifest.json
+  scpi.log
+  segment_0001.csv
 ```
 
-The child directory keeps the Core workflow requirement for a new or empty output
+The Core workflow keeps its requirement for a new or empty output
 directory. The domain status `completed` maps to Worker `succeeded`; domain
 `partial` or `failed` maps to Worker `failed` while preserving existing files
 and the domain status in the job's in-memory result. Worker cancellation keeps the existing
@@ -2087,7 +2087,7 @@ not support LIN, advanced protocols, symbolic CAN, or Search export.
 Instrument-side save commands send `:SAVE...` SCPI
 so the oscilloscope writes to its current save directory, internal storage, or
 attached USB storage. It does not create host-side image or waveform files,
-does not resolve instrument filenames under the worker job directory, and does
+does not resolve instrument filenames against host filesystem paths, and does
 not replace the PC-side `capture`, `capture-batch`, or `screenshot` workflows.
 
 The only accepted request shapes are:
@@ -2232,9 +2232,22 @@ are kept in Worker memory. The JSONL `job_finished` event and the terminal
 `state`, `ok`, `exit_code`, `result`, `files`, and `error` — without disk
 persistence.
 
-Commands that produce domain artifacts create them under
-`data/worker/<run_id>/<worker_job_id>/`; that directory is created lazily and
-only for such jobs.
+Commands that write host files require explicit caller-supplied destinations in
+the `/command` arguments; the Worker never chooses a host destination and
+allocates no job artifact directory. Missing destinations are rejected with
+HTTP `400` before enqueue, backend open, or SCPI:
+
+- `capture`: requires `csv` and `meta` output paths; an optional `plot` path
+  creates a PNG plot only when supplied. With `wait_trigger`, these artifacts
+  are written only when the trigger outcome allows capture.
+- `screenshot`: requires an `output` image path. Query-only `query_hardcopy`
+  creates no screenshot artifact and needs no output.
+- `capture-batch`, `measure-log`, `measure-until`, `triggered-measure-loop`,
+  `triggered-capture-series`, `segmented-capture`, `smoke`, and
+  `acquisition-check`: require a caller-supplied `output_dir`; domain artifacts
+  such as manifests, SCPI logs, measurement CSVs, report files, and segment
+  CSVs are written inside that directory under the existing Core contracts.
+- `serial-lister-export`: requires an `output` CSV path.
 
 Command artifacts keep existing Scopes meanings: CSV waveform data, PNG plots
 or screenshots, metadata JSON, manifests, reports, and `scpi.log` files.
@@ -2246,28 +2259,10 @@ selection, and other pre-operation adapter activity are outside this boundary
 and are not guaranteed to appear. The Worker does not maintain a parallel
 logging lifecycle, and the artifact is not a complete process or session trace.
 
-Worker path resolution applies only inside worker job execution. Direct
-one-shot CLI commands keep their normal path semantics. For worker jobs,
-relative output paths are resolved under
-`data/worker/<run_id>/<worker_job_id>/`; absolute output paths are allowed and
-recorded as absolute paths when the command-specific schema accepts a path.
-Default worker outputs are:
-
-- `capture`: `capture.csv` and `capture_meta.json` in the job directory; a
-  plot is created only when a path string is supplied. With `wait_trigger`,
-  these artifacts are written only when the trigger outcome allows capture.
-- `screenshot`: `screen.png` in the job directory for default or PNG capture,
-  and `screen.bmp` for BMP or BMP8bit capture. Query-only `query_hardcopy`
-  creates no screenshot artifact.
-- `capture-batch`, `measure-log`, `measure-until`, `triggered-measure-loop`,
-  `triggered-capture-series`, `smoke`, and `acquisition-check`: the job
-  directory is the default `output_dir`. `capture-batch`,
-  `measure-until`, `triggered-measure-loop`, and `triggered-capture-series` do
-  not accept a caller-supplied `output_dir`; `measure-until` and capture
-  workflows also reject `log_scpi`.
-- `segmented-capture`: the fixed `segmented_capture` child directory below the
-  job directory is the `output_dir`; its manifest, SCPI log, and successfully
-  written per-segment CSV files are domain artifacts.
+Worker paths follow normal process filesystem semantics: relative output paths
+resolve against the worker process working directory, and orchestrators should
+provide absolute paths. Direct one-shot CLI commands keep their friendly
+defaults; only worker jobs require explicit destinations.
 
 `sample-rate`, `acquisition-points`, `record-length`, `force-trigger`,
 `system-clear-status`, `system-opc`, `system-status-byte`,
@@ -2303,7 +2298,8 @@ Their command results contain the existing one-shot structured
 `result` fields for that command. For `sample-rate` maximum queries, that
 includes `query_kind: "maximum"` and `maximum_sample_rate_hz`.
 
-Directory-output commands may use the worker job directory. Other pre-existing
+Directory-output commands write domain artifacts only inside the
+caller-supplied `output_dir`. Other pre-existing
 command artifact paths
 are rejected before simulator/VISA open or SCPI execution. Command `files`
 lists only command artifact paths that actually exist.

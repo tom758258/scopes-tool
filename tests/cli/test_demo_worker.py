@@ -13,8 +13,7 @@ def _runtime(tmp_path, model="keysight-dsox4024a"):
         mode="simulate",
         model=model,
         resource=None,
-        artifact_root=tmp_path,
-        queue_max=1,
+                queue_max=1,
         output_format="jsonl",
     )
 

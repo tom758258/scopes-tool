@@ -11,10 +11,10 @@ from scopes_tool_cli import cli, worker
 from scopes_tool_core.errors import OscilloscopeError
 
 
-def _runtime(tmp_path, model="keysight-dsox4024a"):
+def _runtime(model="keysight-dsox4024a"):
     return worker.WorkerRuntime(
         host="127.0.0.1", port=0, mode="simulate", model=model, resource=None,
-        artifact_root=tmp_path, queue_max=1, output_format="jsonl",
+        queue_max=1, output_format="jsonl",
     )
 
 
@@ -57,7 +57,7 @@ def _post_command(runtime, body):
     ],
 )
 def test_worker_trigger_edge_slope_accepts_canonical_json_and_maps_argv(tmp_path, arguments, argv):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     parsed = worker.parse_domain_command("trigger-edge-slope", arguments, runtime)
 
     assert parsed.command == "trigger-edge-slope"
@@ -84,7 +84,7 @@ def test_worker_trigger_edge_slope_accepts_canonical_json_and_maps_argv(tmp_path
 )
 def test_worker_trigger_edge_slope_rejects_invalid_forms(tmp_path, command, arguments):
     with pytest.raises(OscilloscopeError):
-        worker.parse_domain_command(command, arguments, _runtime(tmp_path))
+        worker.parse_domain_command(command, arguments, _runtime())
 
 
 @pytest.mark.parametrize(
@@ -95,7 +95,7 @@ def test_worker_trigger_edge_slope_rejects_invalid_forms(tmp_path, command, argu
     ],
 )
 def test_worker_trigger_edge_level_accepts_canonical_json_and_maps_argv(tmp_path, arguments, argv):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     parsed = worker.parse_domain_command("trigger-edge-level", arguments, runtime)
 
     assert parsed.command == "trigger-edge-level"
@@ -131,7 +131,7 @@ def test_worker_trigger_edge_level_accepts_canonical_json_and_maps_argv(tmp_path
 )
 def test_worker_trigger_edge_level_rejects_invalid_forms(tmp_path, command, arguments):
     with pytest.raises(OscilloscopeError):
-        worker.parse_domain_command(command, arguments, _runtime(tmp_path, "keysight-dsox2004a"))
+        worker.parse_domain_command(command, arguments, _runtime("keysight-dsox2004a"))
 
 
 @pytest.mark.parametrize(
@@ -143,7 +143,7 @@ def test_worker_trigger_edge_level_rejects_invalid_forms(tmp_path, command, argu
     ],
 )
 def test_worker_atomic_trigger_validation_happens_before_enqueue_or_artifacts(tmp_path, body):
-    runtime = _runtime(tmp_path, "keysight-dsox2004a")
+    runtime = _runtime("keysight-dsox2004a")
     with _worker_server(runtime):
         status, payload = _post_command(runtime, body)
 
@@ -156,7 +156,7 @@ def test_worker_atomic_trigger_validation_happens_before_enqueue_or_artifacts(tm
 
 
 def test_worker_atomic_trigger_simulator_execution_isolated(tmp_path):
-    runtime = _runtime(tmp_path, "keysight-dsox4034a")
+    runtime = _runtime("keysight-dsox4034a")
     parsed = worker.parse_domain_command("trigger-edge-slope", {"slope": "either"}, runtime)
     payload, exit_code = cli._execute_json_command(parsed)
     assert exit_code == 0
@@ -176,7 +176,7 @@ def test_worker_atomic_trigger_simulator_execution_isolated(tmp_path):
 
 
 def test_worker_trigger_edge_slope_query_executes_in_simulator(tmp_path):
-    runtime = _runtime(tmp_path, "keysight-dsox4034a")
+    runtime = _runtime("keysight-dsox4034a")
     parsed = worker.parse_domain_command("trigger-edge-slope", {"query": True}, runtime)
 
     payload, exit_code = cli._execute_json_command(parsed)
@@ -196,7 +196,7 @@ def test_worker_trigger_edge_slope_query_executes_in_simulator(tmp_path):
 
 
 def test_worker_trigger_edge_level_query_executes_in_simulator(tmp_path):
-    runtime = _runtime(tmp_path, "keysight-dsox4034a")
+    runtime = _runtime("keysight-dsox4034a")
     parsed = worker.parse_domain_command(
         "trigger-edge-level", {"query": True, "source_channel": 1}, runtime
     )

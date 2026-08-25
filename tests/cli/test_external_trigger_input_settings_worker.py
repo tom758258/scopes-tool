@@ -11,10 +11,10 @@ from scopes_tool_cli import cli, worker
 from scopes_tool_core.errors import OscilloscopeError
 
 
-def _runtime(tmp_path):
+def _runtime():
     return worker.WorkerRuntime(
         host="127.0.0.1", port=0, mode="simulate", model="keysight-dsox4034a", resource=None,
-        artifact_root=tmp_path, queue_max=1, output_format="jsonl",
+        queue_max=1, output_format="jsonl",
     )
 
 
@@ -57,7 +57,7 @@ def _post_command(runtime, body):
     ],
 )
 def test_worker_external_trigger_input_commands_accept_canonical_json_and_map_argv(tmp_path, command, arguments, argv):
-    parsed = worker.parse_domain_command(command, arguments, _runtime(tmp_path))
+    parsed = worker.parse_domain_command(command, arguments, _runtime())
     assert parsed.command == command
     if command == "external-trigger-probe":
         normalized = worker._normalize_external_trigger_probe_worker_arguments(command, arguments)
@@ -91,7 +91,7 @@ def test_worker_external_trigger_input_commands_accept_canonical_json_and_map_ar
 )
 def test_worker_external_trigger_input_commands_reject_invalid_forms_before_execution(tmp_path, command, arguments):
     with pytest.raises(OscilloscopeError):
-        worker.parse_domain_command(command, arguments, _runtime(tmp_path))
+        worker.parse_domain_command(command, arguments, _runtime())
 
 
 @pytest.mark.parametrize(
@@ -104,7 +104,7 @@ def test_worker_external_trigger_input_commands_reject_invalid_forms_before_exec
     ],
 )
 def test_worker_external_trigger_input_validation_happens_before_enqueue_or_artifacts(tmp_path, body):
-    runtime = _runtime(tmp_path)
+    runtime = _runtime()
     with _worker_server(runtime):
         status, payload = _post_command(runtime, body)
     assert status == 400
@@ -127,7 +127,7 @@ def test_worker_external_trigger_input_validation_happens_before_enqueue_or_arti
     ],
 )
 def test_worker_external_trigger_input_commands_execute_in_simulator(tmp_path, command, arguments, result, sent):
-    parsed = worker.parse_domain_command(command, arguments, _runtime(tmp_path))
+    parsed = worker.parse_domain_command(command, arguments, _runtime())
     payload, exit_code = cli._execute_json_command(parsed)
     assert exit_code == 0
     assert {key: payload["result"][key] for key in result} == result

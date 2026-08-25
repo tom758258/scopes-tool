@@ -77,7 +77,6 @@ class WorkerJob:
     arguments: dict[str, Any]
     job_id: str | None
     worker_job_id: str
-    artifact_path: Path
     request_time: str
     state: str = "queued"
     accepted_time: str | None = None
@@ -96,7 +95,6 @@ class WorkerRuntime:
     mode: str
     model: str
     resource: str | None
-    artifact_root: Path
     queue_max: int
     output_format: str
     run_id: str = field(default_factory=lambda: uuid4().hex)
@@ -190,7 +188,6 @@ def run_worker(args: argparse.Namespace) -> int:
         mode=mode,
         model=args.model,
         resource=args.resource,
-        artifact_root=Path(args.artifact_root),
         queue_max=args.queue_max,
         output_format=args.format,
     )
@@ -288,13 +285,11 @@ def _make_handler(runtime: WorkerRuntime):
                 )
                 return
             worker_job_id = uuid4().hex
-            artifact_path = runtime.artifact_root / runtime.run_id / worker_job_id
             job = WorkerJob(
                 command=command,
                 arguments=arguments,
                 job_id=job_id,
                 worker_job_id=worker_job_id,
-                artifact_path=artifact_path,
                 request_time=_now(),
                 accepted_time=_now(),
             )
@@ -317,7 +312,6 @@ def _make_handler(runtime: WorkerRuntime):
                 "command": command,
                 "job_id": job_id,
                 "worker_job_id": worker_job_id,
-                "artifact_path": str(artifact_path),
             }
             self._send(202, response)
 
@@ -366,15 +360,8 @@ def _job_loop(runtime: WorkerRuntime) -> None:
             runtime.active_job_id = job.worker_job_id
         runtime.emit("job_started", worker_job_id=job.worker_job_id, command=job.command)
         try:
-            parsed = parse_domain_command(
-                job.command, job.arguments, runtime, job.artifact_path
-            )
-            _guard_no_overwrite(parsed, job.artifact_path)
-            if any(
-                path.is_relative_to(job.artifact_path)
-                for path in _planned_artifact_paths(parsed)
-            ):
-                job.artifact_path.mkdir(parents=True, exist_ok=True)
+            parsed = parse_domain_command(job.command, job.arguments, runtime)
+            _guard_no_overwrite(parsed)
             payload, exit_code = scope_cli._execute_json_command(
                 parsed,
                 stop_requested=lambda: job.cancel_requested or runtime.stopping,
@@ -418,7 +405,6 @@ def _job_loop(runtime: WorkerRuntime) -> None:
             runtime.emit(
                 "job_finished",
                 **_terminal_job_view(job),
-                artifact_path=str(job.artifact_path),
             )
             runtime.queue.task_done()
 
@@ -461,9 +447,6 @@ def _event_payload(runtime: WorkerRuntime, event: str, **values: Any) -> dict[st
     elif event == "job_started":
         job = runtime.jobs.get(str(payload.get("worker_job_id")))
         payload.setdefault("job_id", None if job is None else job.job_id)
-        payload.setdefault(
-            "artifact_path", None if job is None else str(job.artifact_path)
-        )
     elif event == "job_finished":
         state = payload.get("state")
         if state not in {"succeeded", "failed", "cancelled"}:
@@ -513,11 +496,10 @@ def _finish_cancelled_job(
     runtime.emit(
         "job_finished",
         **_terminal_job_view(job),
-        artifact_path=str(job.artifact_path),
     )
 
 
-def _guard_no_overwrite(args: argparse.Namespace, job_dir: Path) -> None:
+def _guard_no_overwrite(args: argparse.Namespace) -> None:
     for path in _planned_artifact_paths(args):
         if path.exists():
             raise OscilloscopeError(f"output path already exists: {path}")
@@ -615,7 +597,6 @@ def _job_summary(job: WorkerJob | None) -> dict[str, Any] | None:
         "job_id": job.job_id,
         "command": job.command,
         "state": job.state,
-        "artifact_path": str(job.artifact_path),
         "exit_code": job.exit_code,
     }
     if job.state in {"succeeded", "failed", "cancelled"}:

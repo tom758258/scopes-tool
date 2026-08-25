@@ -17,8 +17,7 @@ def _runtime(
         mode=mode,
         model=model,
         resource=resource,
-        artifact_root=tmp_path,
-        queue_max=1,
+                queue_max=1,
         output_format="jsonl",
     )
 
@@ -185,18 +184,17 @@ def test_worker_serial_i2c_trigger_rejects_cross_field_request(tmp_path):
         )
 
 
-def test_worker_serial_lister_export_uses_job_artifact_policy(tmp_path):
+def test_worker_serial_lister_export_uses_caller_supplied_output(tmp_path):
+    output = tmp_path / "exports" / "lister.csv"
     parsed = worker.parse_domain_command(
         "serial-lister-export",
-        {"output": "exports/lister.csv"},
+        {"output": str(output)},
         _runtime(tmp_path),
-        tmp_path / "job",
     )
 
     payload, exit_code = cli._execute_json_command(parsed)
 
     assert exit_code == 0
-    output = tmp_path / "job" / "exports" / "lister.csv"
     assert output.read_bytes() == b"bus,time,value\r\nSBUS1,0,0\r\n"
     assert payload["files"] == [{"kind": "csv", "path": str(output)}]
 

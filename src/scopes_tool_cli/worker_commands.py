@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import math
-from pathlib import Path
 from typing import Any
 
 from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
@@ -347,11 +346,38 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     return command, arguments, job_id
 
 
+_REQUIRED_WORKER_OUTPUT_ARGUMENTS = {
+    "capture": ("csv", "meta"),
+    "screenshot": ("output",),
+    "capture-batch": ("output_dir",),
+    "measure-log": ("output_dir",),
+    "measure-until": ("output_dir",),
+    "triggered-measure-loop": ("output_dir",),
+    "triggered-capture-series": ("output_dir",),
+    "segmented-capture": ("output_dir",),
+    "smoke": ("output_dir",),
+    "acquisition-check": ("output_dir",),
+}
+
+
+def _validate_required_worker_outputs(
+    command: str, arguments: dict[str, Any]
+) -> None:
+    required = _REQUIRED_WORKER_OUTPUT_ARGUMENTS.get(command)
+    if required is None:
+        return
+    if command == "screenshot" and arguments.get("query_hardcopy") is True:
+        return
+    for key in required:
+        value = arguments.get(key)
+        if not isinstance(value, str) or not value:
+            raise OscilloscopeError(f"{command} requires argument {key}")
+
+
 def parse_domain_command(
     command: str,
     arguments: dict[str, Any],
     runtime: WorkerRuntime,
-    job_dir: Path | None = None,
 ) -> argparse.Namespace:
     arguments = _normalize_capture_batch_worker_arguments(command, arguments)
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
@@ -375,7 +401,7 @@ def parse_domain_command(
         "serial-trigger-uart", "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"
     }:
         arguments = {"command": command, **arguments}
-        return _serial_uart_trigger_worker_namespace(arguments, runtime, job_dir)
+        return _serial_uart_trigger_worker_namespace(arguments, runtime)
     arguments = _normalize_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_serial_search_worker_arguments(command, arguments, runtime)
     arguments = _normalize_save_export_worker_arguments(command, arguments)
@@ -406,6 +432,7 @@ def parse_domain_command(
     arguments = _normalize_trigger_or_worker_arguments(command, arguments)
     arguments = _normalize_trigger_holdoff_worker_arguments(command, arguments)
     arguments = _normalize_trigger_common_worker_arguments(command, arguments)
+    _validate_required_worker_outputs(command, arguments)
     argv = [command, *arguments_to_argv(arguments)]
     if runtime.mode == "simulate":
         argv += ["--simulate", "--model", runtime.model]
@@ -421,8 +448,6 @@ def parse_domain_command(
         setattr(parsed, "_worker_live_validation", True)
     cli_runtime._resolve_cli_mode(parsed)
     preflight.validate_pre_open_args(parsed)
-    if job_dir is not None:
-        _apply_worker_job_paths(parsed, job_dir)
     dry_args = argparse.Namespace(
         **{**vars(parsed), "dry_run": True, "simulate": False, "live": False}
     )
@@ -443,6 +468,7 @@ def _normalize_capture_batch_worker_arguments(
         "format",
         "count",
         "interval_seconds",
+        "output_dir",
     }
     unknown = set(arguments) - allowed
     if unknown:
@@ -488,6 +514,7 @@ def _normalize_segmented_capture_worker_arguments(
         "format",
         "timeout_ms",
         "poll_interval_ms",
+        "output_dir",
     }
     unknown = set(arguments) - allowed
     if unknown:
@@ -508,6 +535,7 @@ def _normalize_segmented_capture_worker_arguments(
         "format": arguments.get("format", "byte"),
         "timeout_ms": arguments.get("timeout_ms", 30000),
         "poll_interval_ms": arguments.get("poll_interval_ms", 100),
+        "output_dir": arguments.get("output_dir"),
     }
     for name in ("channel", "segments", "points", "timeout_ms", "poll_interval_ms"):
         value = values[name]
@@ -548,6 +576,7 @@ def _normalize_triggered_measure_loop_worker_arguments(
         "count",
         "trigger_timeout_seconds",
         "interval_seconds",
+        "output_dir",
     }
     unknown = set(arguments) - allowed
     if unknown:
@@ -641,6 +670,7 @@ def _normalize_triggered_capture_series_worker_arguments(
         "count",
         "trigger_timeout_seconds",
         "interval_seconds",
+        "output_dir",
     }
     unknown = set(arguments) - allowed
     if unknown:
@@ -739,6 +769,7 @@ def _normalize_measure_until_worker_arguments(
         "threshold",
         "timeout_seconds",
         "interval_seconds",
+        "output_dir",
     }
     unknown = set(arguments) - allowed
     if unknown:
@@ -2355,7 +2386,7 @@ def _normalize_save_export_worker_arguments(
 
 
 def _serial_uart_trigger_worker_namespace(
-    arguments: dict[str, Any], runtime: WorkerRuntime, job_dir: Path | None
+    arguments: dict[str, Any], runtime: WorkerRuntime
 ) -> argparse.Namespace:
     """Build a serial trigger runtime namespace without CLI parsing."""
 
@@ -2381,8 +2412,6 @@ def _serial_uart_trigger_worker_namespace(
         log_scpi=False,
         visa_library=None,
     )
-    if job_dir is not None:
-        _apply_worker_job_paths(namespace, job_dir)
     return namespace
 
 
@@ -2728,48 +2757,3 @@ def arguments_to_argv(arguments: dict[str, Any]) -> list[str]:
             continue
         argv.extend([option, str(value)])
     return argv
-
-
-def _apply_worker_job_paths(args: argparse.Namespace, job_dir: Path) -> None:
-    command = args.command
-    if command == "capture":
-        csv_path = _worker_path(job_dir, getattr(args, "csv_path", None), "capture.csv")
-        meta_value = getattr(args, "meta_path", None)
-        meta_path = _worker_path(job_dir, meta_value, "capture_meta.json")
-        setattr(args, "csv_path", str(csv_path))
-        setattr(args, "meta_path", str(meta_path))
-        plot_value = getattr(args, "plot_path", None)
-        if plot_value is not None:
-            setattr(args, "plot_path", str(_worker_path(job_dir, plot_value, None)))
-    elif command == "screenshot":
-        if not getattr(args, "query_hardcopy", False):
-            default_name = "screen.png" if getattr(args, "format", None) in {None, "png"} else "screen.bmp"
-            output_path = _worker_path(
-                job_dir, getattr(args, "output_path", None), default_name
-            )
-            setattr(args, "output_path", str(output_path))
-    elif command in {
-        "capture-batch",
-        "measure-log",
-        "measure-until",
-        "triggered-measure-loop",
-        "triggered-capture-series",
-        "smoke",
-        "acquisition-check",
-    }:
-        output_dir = _worker_path(job_dir, getattr(args, "output_dir", None), ".")
-        setattr(args, "output_dir", str(output_dir))
-    elif command == "segmented-capture":
-        setattr(args, "output_dir", str(job_dir / "segmented_capture"))
-    elif command == "serial-lister-export":
-        output_path = _worker_path(job_dir, args.output_path, None)
-        setattr(args, "output_path", str(output_path))
-
-
-def _worker_path(job_dir: Path, value: Any, default_name: str | None) -> Path:
-    if value is None:
-        if default_name is None:
-            raise OscilloscopeError("worker output path default is unavailable")
-        return job_dir if default_name == "." else job_dir / default_name
-    path = Path(str(value))
-    return path if path.is_absolute() else job_dir / path

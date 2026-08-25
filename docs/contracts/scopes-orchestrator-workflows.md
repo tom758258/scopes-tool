@@ -38,13 +38,14 @@ Submit a Worker job with the existing schema 2 envelope:
     "points": 1000,
     "format": "byte",
     "count": 10,
-    "interval_seconds": 3
+    "interval_seconds": 3,
+    "output_dir": "/results/run-001/captures"
   }
 }
 ```
 
-The Worker owns the job artifact directory. Orchestrators must not send
-`output_dir` or `log_scpi` for `capture-batch`.
+The Worker never chooses a host destination. Orchestrators must send a
+caller-owned `output_dir` for `capture-batch` and must not send `log_scpi`.
 
 ## Triggered Capture Series
 
@@ -64,13 +65,14 @@ configure or force a trigger.
     "format": "byte",
     "count": 10,
     "trigger_timeout_seconds": 5,
-    "interval_seconds": 0
+    "interval_seconds": 0,
+    "output_dir": "/results/run-001/series"
   }
 }
 ```
 
-The Worker owns the job artifact directory. Orchestrators must not send
-`output_dir` or `log_scpi`. A cycle is committed only after waveform artifacts,
+The Worker never chooses a host destination. Orchestrators must send a
+caller-owned `output_dir` and must not send `log_scpi`. A cycle is committed only after waveform artifacts,
 the post-capture system-error check, and the manifest update succeed.
 
 ## Measure Until Condition
@@ -90,13 +92,14 @@ single-channel measurement without controlling acquisition or trigger state.
     "operator": "gt",
     "threshold": 3.3,
     "timeout_seconds": 600,
-    "interval_seconds": 1
+    "interval_seconds": 1,
+    "output_dir": "/results/run-001/measure-until"
   }
 }
 ```
 
-The Worker owns the job artifact directory. Orchestrators must not send
-`output_dir` or `log_scpi`. A matching committed sample succeeds with
+The Worker never chooses a host destination. Orchestrators must send a
+caller-owned `output_dir` and must not send `log_scpi`. A matching committed sample succeeds with
 `condition_met`; an unmet timeout fails with `condition_timeout`.
 
 ## Worker Workflow
@@ -373,7 +376,7 @@ try:
     assert accepted["command"] == "identify"
     assert accepted["job_id"] == client_job_id
     assert accepted["worker_job_id"]
-    assert accepted["artifact_path"]
+    assert "artifact_path" not in accepted
 
     worker_job_id = accepted["worker_job_id"]
 
@@ -527,7 +530,7 @@ still requires `--live --resource <RESOURCE>`.
 1. Optionally run `identify --resource <RESOURCE> --json`.
 2. Optionally save setup with `setup-save --resource <RESOURCE> --slot N --json`.
 3. Start a live worker with that same resource, or run a one-shot command with
-   explicit artifact paths.
+   explicit output paths.
 4. Require accepted worker jobs to emit a terminal `job_finished` event with
    `ok: true`, or require one-shot JSON `ok: true`.
 5. Restore state explicitly when setup-changing commands were used.

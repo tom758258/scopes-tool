@@ -11,8 +11,7 @@ def _runtime(tmp_path, *, mode="simulate"):
         mode=mode,
         model="keysight-dsox4024a",
         resource="USB0::SIM::INSTR" if mode == "live" else None,
-        artifact_root=tmp_path,
-        queue_max=1,
+                queue_max=1,
         output_format="jsonl",
     )
 
