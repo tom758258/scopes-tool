@@ -519,8 +519,6 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
     if command == "capture-batch":
         output_dir = Path(args.output_dir)
         return [output_dir / "manifest.json", output_dir / "scpi.log"]
-    if command == "segmented-capture":
-        return [Path(args.output_dir)]
     if command == "measure-log":
         output_dir = Path(args.output_dir)
         return [

@@ -2053,20 +2053,65 @@ def test_worker_capture_uses_caller_supplied_paths(tmp_path):
     assert Path(parsed.plot_path) == plot_path
 
 
-def test_worker_segmented_capture_overwrite_guard(tmp_path):
-    output_dir = tmp_path / "caller-output"
+def test_worker_segmented_capture_allows_new_or_empty_output_dir(tmp_path):
+    runtime = _runtime()
+    missing_dir = tmp_path / "missing"
     parsed = worker.parse_domain_command(
         "segmented-capture",
-        {"channel": 1, "segments": 2, "output_dir": str(output_dir)},
-        _runtime(),
+        {"channel": 1, "segments": 2, "output_dir": str(missing_dir)},
+        runtime,
     )
 
-    assert Path(parsed.output_dir) == output_dir
+    assert Path(parsed.output_dir) == missing_dir
     worker._guard_no_overwrite(parsed)
+    assert not missing_dir.exists()
 
-    output_dir.mkdir()
-    with pytest.raises(OscilloscopeError, match="already exists"):
-        worker._guard_no_overwrite(parsed)
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    parsed_empty = worker.parse_domain_command(
+        "segmented-capture",
+        {"channel": 1, "segments": 2, "output_dir": str(empty_dir)},
+        runtime,
+    )
+
+    worker._guard_no_overwrite(parsed_empty)
+    assert not any(empty_dir.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("prepare_destination", "expected_error"),
+    (
+        (
+            lambda d: (
+                d.mkdir(),
+                (d / "existing.txt").write_text("keep", encoding="utf-8"),
+            ),
+            "output directory must be empty",
+        ),
+        (
+            lambda d: d.write_text("not a directory", encoding="utf-8"),
+            "output directory path is not a directory",
+        ),
+    ),
+)
+def test_worker_rejects_invalid_segmented_capture_destinations_before_artifacts(
+    tmp_path, prepare_destination, expected_error
+):
+    output_dir = tmp_path / "destination"
+    prepare_destination(output_dir)
+    job, result = _execute_worker_job(
+        _runtime(),
+        "segmented-capture",
+        {"channel": 1, "segments": 2, "output_dir": str(output_dir)},
+    )
+
+    assert result["state"] == "failed"
+    assert result["files"] == []
+    assert expected_error in result["error"]["message"]
+    if output_dir.is_dir():
+        assert sorted(path.name for path in output_dir.iterdir()) == ["existing.txt"]
+    else:
+        assert output_dir.read_text(encoding="utf-8") == "not a directory"
 
 
 def test_worker_no_overwrite_guard_rejects_existing_artifact(tmp_path):
