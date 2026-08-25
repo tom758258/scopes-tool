@@ -1299,6 +1299,142 @@ if ($script:Diagnostics.Contains("segmented configuration roundtrip")) {
         assert result["diagnostics"] == ""
 
 
+@requires_windows
+def test_segmented_finite_capture_uses_run_root_output_dir(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-segmented-check.ps1"
+    harness_path = tmp_path / "segmented-finite-capture-harness.ps1"
+    run_root = tmp_path / "run-root"
+    run_root.mkdir()
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [string] $RunRoot
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse Segmented live script: $($parseErrors[0].Message)"
+}
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:RunRoot = $RunRoot
+$configurationPassed = $true
+
+function Add-CaseResult {
+    param([string] $Name, [string] $Status, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Status = $Status
+        Detail = $Detail
+    }
+}
+
+function Assert-SegmentedCapture {
+    param([object] $Payload)
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+}
+
+function Invoke-LiveCli {
+    param(
+        [string] $Stage,
+        [string] $Command,
+        [string[]] $Arguments = @()
+    )
+    $script:CaptureInvocation = [pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    }
+    return [pscustomobject]@{ ok = $true }
+}
+
+$finiteBlocks = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.TryStatementAst] -and
+        $node.Extent.Text.Contains('Stage "segmented-finite-capture"')
+    )
+}, $true))
+if ($finiteBlocks.Count -ne 1) {
+    throw "Expected one production finite capture try block."
+}
+Invoke-Expression $finiteBlocks[0].Extent.Text
+
+if ($null -eq $script:CaptureInvocation) {
+    throw "segmented-finite-capture was not invoked."
+}
+$outputDirIndex = [array]::IndexOf(
+    $script:CaptureInvocation.arguments,
+    "--output-dir"
+)
+if ($outputDirIndex -lt 0 -or
+    $outputDirIndex + 1 -ge $script:CaptureInvocation.arguments.Count) {
+    throw "--output-dir is missing or has no value."
+}
+$outputDir = $script:CaptureInvocation.arguments[$outputDirIndex + 1]
+
+[ordered]@{
+    status = $script:CaseResults["segmented finite capture"].Status
+    detail = $script:CaseResults["segmented finite capture"].Detail
+    functional_failed = $script:FunctionalFailed
+    stage = $script:CaptureInvocation.stage
+    command = $script:CaptureInvocation.command
+    arguments = @($script:CaptureInvocation.arguments)
+    output_dir = $outputDir
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-RunRoot",
+            str(run_root),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.splitlines()[-1])
+    assert result["status"] == "PASS", result["detail"]
+    assert result["functional_failed"] is False
+    assert result["stage"] == "segmented-finite-capture"
+    assert result["command"] == "segmented-capture"
+    assert "--output-dir" in result["arguments"]
+    assert result["output_dir"]
+    assert Path(result["output_dir"]).resolve() == (
+        run_root / "segmented-capture"
+    ).resolve()
+
 def test_serial_lister_acquisition_safety_structure() -> None:
     script = (REPO_ROOT / "scripts" / "live-serial-check.ps1").read_text(
         encoding="utf-8"

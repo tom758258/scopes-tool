@@ -969,6 +969,7 @@ if ($realtimePreconditionPassed -and -not $script:FunctionalFailed) {
 
 if ($configurationPassed -and -not $script:FunctionalFailed) {
     try {
+        $liveCaptureRoot = Join-Path $script:RunRoot "segmented-capture"
         $capture = Invoke-LiveCli -Stage "segmented-finite-capture" `
             -Command "segmented-capture" -Arguments @(
                 "--channel", "1", "--segments", "2", "--points", "1000",
