@@ -253,7 +253,8 @@ alias.
     "points": 1000,
     "format": "byte",
     "count": 10,
-    "interval_seconds": 3
+    "interval_seconds": 3,
+    "output_dir": "/results/run-001/captures"
   }
 }
 ```
@@ -275,7 +276,8 @@ fields and wrong JSON types are rejected before enqueue. `log_scpi` is rejected.
     "format": "byte",
     "count": 10,
     "trigger_timeout_seconds": 5,
-    "interval_seconds": 0
+    "interval_seconds": 0,
+    "output_dir": "/results/run-001/triggered-captures"
   }
 }
 ```
@@ -298,7 +300,8 @@ fields and wrong JSON types are rejected before enqueue.
     "pair_items": "phase",
     "count": 100,
     "trigger_timeout_seconds": 5,
-    "interval_seconds": 0
+    "interval_seconds": 0,
+    "output_dir": "/results/run-001/triggered-measurements"
   }
 }
 ```
@@ -322,7 +325,8 @@ rejected.
     "operator": "gt",
     "threshold": 3.3,
     "timeout_seconds": 600,
-    "interval_seconds": 1
+    "interval_seconds": 1,
+    "output_dir": "/results/run-001/measure-until"
   }
 }
 ```
