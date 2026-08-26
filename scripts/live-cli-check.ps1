@@ -1709,7 +1709,7 @@ function Restore-InstrumentState {
             Name = "timebase position"
             Command = "timebase-position"
             Arguments = @(
-                "--seconds", (ConvertTo-InvariantString -Value ([double]$Snapshot.TimebasePosition))
+                "--seconds=$(ConvertTo-InvariantString -Value ([double]$Snapshot.TimebasePosition))"
             )
         },
         [pscustomobject]@{

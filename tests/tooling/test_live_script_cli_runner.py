@@ -6026,7 +6026,7 @@ $snapshot = [pscustomobject]@{
     TriggerSlope = "negative"
     TriggerSource = "analog-channel"
     TriggerSourceChannel = 2
-    TimebasePosition = 0.0
+    TimebasePosition = -4E-05
     TimebaseScale = 0.001
     ChannelCoupling = "dc"
     ChannelDisplay = $true
@@ -6255,6 +6255,12 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         entry for entry in result["invocations"] if entry["stage"] == "restore-trigger-edge-level"
     )
     assert float(trigger_level_restore["arguments"][-1]) == 0.0
+    timebase_position_restore = next(
+        entry
+        for entry in result["invocations"]
+        if entry["stage"] == "restore-timebase-position"
+    )
+    assert timebase_position_restore["arguments"] == ["--seconds=-4E-05"]
     absent_commands = [entry["command"] for entry in result["absent_invocations"]]
     assert "wgen-output" not in absent_commands
     for command in (
