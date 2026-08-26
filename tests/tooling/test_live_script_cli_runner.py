@@ -8,6 +8,8 @@ import subprocess
 import sys
 
 import pytest
+from scopes_tool_core.capabilities import capabilities_for_model_id
+from scopes_tool_core.channel import validate_channel_label
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -4985,7 +4987,7 @@ function Invoke-LiveCli {
     }
     switch ($Stage) {
         "setup-label-change-query" {
-            return [pscustomobject]@{ result = [pscustomobject]@{ text = "live recall" } }
+            return [pscustomobject]@{ result = [pscustomobject]@{ text = "live edit" } }
         }
         "setup-label-restore-query" {
             return [pscustomobject]@{ result = [pscustomobject]@{ text = $script:ChannelLabel } }
@@ -5055,6 +5057,205 @@ Invoke-Expression $caseBlock
     )
     assert filename_pattern.match(result["save_file"]) is not None
     assert result["recall_file"] == result["save_file"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_setup_lifecycle_channel_label_fixtures_fit_3000x_profile(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "setup-lifecycle-channel-label-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+$functionAst = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Invoke-BaselineCase"
+    )
+}, $true)
+if ($null -eq $functionAst) { throw "Missing Invoke-BaselineCase." }
+Invoke-Expression $functionAst.Extent.Text
+
+$setupCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"setup-lifecycle`"")
+    )
+}, $true))
+if ($setupCommands.Count -ne 1) { throw "Expected one setup-lifecycle case." }
+$setupCaseBlock = $setupCommands[0].Extent.Text
+
+$slotCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"setup-slot-lifecycle`"")
+    )
+}, $true))
+if ($slotCommands.Count -ne 1) { throw "Expected one setup-slot-lifecycle case." }
+$slotCaseBlock = $slotCommands[0].Extent.Text
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:DrainCalls += 1
+}
+
+function Assert-ScpiSentPrefix {
+    param([object] $Payload, [string] $ExpectedPrefix, [string] $Label)
+}
+
+function Assert-ScpiSent {
+    param([object] $Payload, [string[]] $ExpectedCommands, [string] $Label)
+}
+
+$script:CapturedLabels = New-Object System.Collections.Generic.List[string]
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:CurrentLabel = "Original"
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+
+    if ($Command -eq "channel-label" -and $Arguments -contains "--text") {
+        $textIndex = [Array]::IndexOf($Arguments, "--text")
+        if ($textIndex -lt 0 -or $textIndex + 1 -ge $Arguments.Count) {
+            throw "channel-label mutation is missing its text argument."
+        }
+        $script:CurrentLabel = [string]$Arguments[$textIndex + 1]
+        $script:CapturedLabels.Add($script:CurrentLabel)
+    }
+
+    switch ($Stage) {
+        "setup-label-change-query" {
+            return [pscustomobject]@{
+                result = [pscustomobject]@{ text = $script:CurrentLabel }
+            }
+        }
+        "setup-label-restore-query" {
+            return [pscustomobject]@{
+                result = [pscustomobject]@{ text = [string]$snapshot.ChannelLabel }
+            }
+        }
+        "setup-slot-label-query" {
+            return [pscustomobject]@{
+                result = [pscustomobject]@{ text = [string]$snapshot.ChannelLabel }
+            }
+        }
+        default {
+            return [pscustomobject]@{}
+        }
+    }
+}
+
+$snapshot = [pscustomobject]@{ ChannelLabel = "Original" }
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+
+Invoke-Expression $setupCaseBlock
+$setupResult = $script:CaseResults["setup-lifecycle"]
+$setupFunctionalFailed = $script:FunctionalFailed
+$setupInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:Invocations.Clear()
+$script:CurrentLabel = [string]$snapshot.ChannelLabel
+
+Invoke-Expression $slotCaseBlock
+$slotResult = $script:CaseResults["setup-slot-lifecycle"]
+$slotInvocations = @($script:Invocations | ForEach-Object { $_ })
+
+[ordered]@{
+    captured_labels = @($script:CapturedLabels)
+    setup_passed = [bool]$setupResult.Passed
+    setup_detail = [string]$setupResult.Detail
+    setup_functional_failed = $setupFunctionalFailed
+    setup_invocations = $setupInvocations
+    slot_passed = [bool]$slotResult.Passed
+    slot_detail = [string]$slotResult.Detail
+    slot_functional_failed = $script:FunctionalFailed
+    slot_invocations = $slotInvocations
+} | ConvertTo-Json -Depth 8 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["setup_passed"] is True
+    assert result["setup_detail"] == ""
+    assert result["setup_functional_failed"] is False
+    assert [entry["stage"] for entry in result["setup_invocations"]] == [
+        "setup-save",
+        "setup-label-change",
+        "setup-label-change-query",
+        "setup-recall",
+        "setup-label-restore-query",
+    ]
+    assert result["slot_passed"] is True
+    assert result["slot_detail"] == ""
+    assert result["slot_functional_failed"] is False
+    assert [entry["stage"] for entry in result["slot_invocations"]] == [
+        "setup-slot-save",
+        "setup-slot-label-change",
+        "setup-slot-recall",
+        "setup-slot-label-query",
+    ]
+
+    captured_labels = result["captured_labels"]
+    assert captured_labels == ["live edit", "slot edit"]
+    capabilities = capabilities_for_model_id("keysight-dsox3024a")
+    assert [validate_channel_label(value, capabilities) for value in captured_labels] == (
+        captured_labels
+    )
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")

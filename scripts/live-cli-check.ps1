@@ -4573,10 +4573,10 @@ if ($snapshotComplete) {
             Assert-ScpiSentPrefix -Payload $saved -ExpectedPrefix ':SAVE:SETup "\usb\scopes-tool-live-' `
                 -Label "Setup save"
             Invoke-LiveCli -Stage "setup-label-change" -Command "channel-label" `
-                    -Arguments @("--channel", "1", "--text", "live recall") | Out-Null
+                    -Arguments @("--channel", "1", "--text", "live edit") | Out-Null
             $changed = Invoke-LiveCli -Stage "setup-label-change-query" `
                 -Command "channel-label" -Arguments @("--channel", "1", "--query")
-            if ([string]$changed.result.text -ne "live recall") {
+            if ([string]$changed.result.text -ne "live edit") {
                 throw "Setup lifecycle change was not applied."
             }
             $recalled = Invoke-LiveCli -Stage "setup-recall" -Command "setup-recall" `
@@ -4676,7 +4676,7 @@ if ($snapshotComplete) {
                 ":SAVE:SETup 1"
             )
             Invoke-LiveCli -Stage "setup-slot-label-change" -Command "channel-label" `
-                -Arguments @("--channel", "1", "--text", "slot recall") | Out-Null
+                -Arguments @("--channel", "1", "--text", "slot edit") | Out-Null
             $recalled = Invoke-LiveCli -Stage "setup-slot-recall" -Command "setup-recall" `
                 -Arguments @("--slot", "1")
             Assert-ScpiSent -Payload $recalled -Label "Setup slot recall" -ExpectedCommands @(
