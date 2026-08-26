@@ -2005,7 +2005,7 @@ class Oscilloscope:
             raise ParameterValidationError(
                 "Trigger holdoff operations require known capabilities; call query_idn() first."
             )
-        return TriggerHoldoffController(self.scpi)
+        return TriggerHoldoffController(self.scpi, series=self.capabilities.series)
 
     def _setup_controller(self) -> SetupController:
         if self.capabilities is None:

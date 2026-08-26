@@ -1880,7 +1880,9 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         if args.holdoff_query:
             return [trigger_holdoff_query(), ":SYSTem:ERRor?"], [], {"operation": "query", "command": trigger_holdoff_query()}
         seconds = validate_trigger_holdoff(args.holdoff_seconds)
-        planned = trigger_holdoff_commands(seconds)
+        planned = trigger_holdoff_commands(
+            seconds, series=capabilities.series
+        )
         return planned + [":SYSTem:ERRor?"], [], {"operation": "set", "command": planned[-1], "commands": planned, "seconds": seconds}
     if command == "measure":
         item = normalize_measurement_item(args.item)
@@ -2164,6 +2166,10 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "unit": "points",
         }
     if command == "record-length":
+        if capabilities.series != "4000X":
+            raise ParameterValidationError(
+                "record-length requires a 4000X capability profile."
+            )
         planned = ["*IDN?", record_length_query(), ":SYSTem:ERRor?"]
         return planned, [], {
             "operation": "query",

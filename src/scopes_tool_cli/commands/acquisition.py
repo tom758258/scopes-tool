@@ -17,7 +17,7 @@ from scopes_tool_core.acquisition import (
     sample_rate_query,
     validate_acquisition_count,
 )
-from scopes_tool_core.errors import OscilloscopeError
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 
 from .. import runtime
 
@@ -174,6 +174,11 @@ def _cmd_record_length(args: argparse.Namespace) -> int:
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
             return 1
+
+        if scope.capabilities.series != "4000X":
+            raise ParameterValidationError(
+                "record-length requires a 4000X capability profile."
+            )
 
         print("Planned query: analog acquisition record length")
         raw = scope.scpi.query(record_length_query())

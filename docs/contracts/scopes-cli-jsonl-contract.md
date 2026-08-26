@@ -445,10 +445,10 @@ Control and setup:
   on 4-channel DSO models and CH2, CH1 on 2-channel DSO models. MSO/digital OR
   trigger mapping is not implemented.
 - `trigger-holdoff`: query results include `operation: "query"`, `command:
-  ":TRIGger:HOLDoff?"`, and `seconds`. Configure results include `operation:
-  "set"`, final fixed-holdoff `command`, `commands` with
+  ":TRIGger:HOLDoff?"`, and `:TRIGger:HOLDoff <seconds>`. Configure results include `operation:
+  "set"`, final fixed-holdoff `command`, ordered `commands`, and `:TRIGger:HOLDoff <seconds>`. On 4000X profiles `commands` contain `:TRIGger:HOLDoff:RANDom OFF` followed by `:TRIGger:HOLDoff <seconds>`; on 2000X/3000X profiles `commands` contain only
   `:TRIGger:HOLDoff:RANDom OFF` followed by `:TRIGger:HOLDoff <seconds>`, and
-  `seconds`.
+  `:TRIGger:HOLDoff <seconds>`.
 - `cursor`: `operation`, `commands`, `source_channel`, `x1_seconds`,
   `x2_seconds`, optional `y1_volts`, `y2_volts`, `auto_timebase`,
   `auto_vertical`, and `diagnostic`.
@@ -459,7 +459,7 @@ Control and setup:
 - `acquisition-points`: `operation`, `acquisition_points`, `raw_value`,
   `unit`, `scpi_command`, and `human_output`.
 - `record-length`: `operation`, `record_length_points`, `raw_value`, `unit`,
-  `scpi_command`, and `human_output`.
+  `scpi_command`, and `human_output`. Available only for 4000X profiles.
 - `segmented-memory`: query results retain `operation: "query"`, normalized
   `mode`, nullable `configured_segments`, `acquired_segments`,
   `selected_segment`, and `time_tag_s`, plus preserved raw readbacks.

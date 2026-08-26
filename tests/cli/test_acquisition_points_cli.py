@@ -193,6 +193,20 @@ def test_acquisition_points_command_order_with_fake_backend():
     assert backend.history == [acquisition_points_query()]
 
 
+
+@pytest.mark.parametrize("model", ("keysight-dsox2004a", "keysight-dsox3024a"))
+def test_record_length_unsupported_on_non_4000x_series(model, capsys):
+    exit_code = cli.main(
+        ["record-length", "--query", "--simulate", "--json", "--model", model]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 1
+    assert payload["ok"] is False
+    assert payload["scpi"]["sent"] == ["*IDN?"]
+
+
 def test_record_length_command_order_with_fake_backend():
     backend = FakeBackend(responses={":ACQuire:RLENgth?": "65536"})
     client = SCPIClient(backend)

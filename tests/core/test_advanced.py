@@ -114,6 +114,50 @@ def test_advanced_command_formatting():
         ':RECall:SETup "\\usb\\setup.scp"'
     )
 
+
+def test_trigger_holdoff_commands_series_gating():
+    assert trigger_holdoff_commands(1e-6) == [
+        ":TRIGger:HOLDoff:RANDom OFF",
+        ":TRIGger:HOLDoff 1e-6",
+    ]
+    assert trigger_holdoff_commands(1e-6, series="4000X") == [
+        ":TRIGger:HOLDoff:RANDom OFF",
+        ":TRIGger:HOLDoff 1e-6",
+    ]
+    assert trigger_holdoff_commands(1e-6, series="3000X") == [
+        ":TRIGger:HOLDoff 1e-6",
+    ]
+    assert trigger_holdoff_commands(1e-6, series="2000X") == [
+        ":TRIGger:HOLDoff 1e-6",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("physical_model_id", "expected"),
+    (
+        (
+            "keysight-dsox4024a",
+            [":TRIGger:HOLDoff:RANDom OFF", ":TRIGger:HOLDoff 1e-6"],
+        ),
+        ("keysight-dsox3024a", [":TRIGger:HOLDoff 1e-6"]),
+        ("keysight-dsox2004a", [":TRIGger:HOLDoff 1e-6"]),
+    ),
+)
+def test_trigger_holdoff_series_execution(physical_model_id, expected):
+    backend = SimulatorBackend(physical_model_id=physical_model_id)
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.set_trigger_holdoff(1e-6)
+
+    holdoff_writes = [
+        command
+        for command in backend.history
+        if command.startswith(":TRIGger:HOLDoff")
+    ]
+    assert holdoff_writes == expected
+
+
 def test_simulator_advanced_state_round_trip():
     backend = SimulatorBackend()
     scope = Oscilloscope(backend)

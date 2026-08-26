@@ -49,7 +49,7 @@ from scopes_tool_core.display import (
     display_vectors_command,
     display_vectors_query,
 )
-from scopes_tool_core.errors import OscilloscopeError
+from scopes_tool_core.errors import ParameterValidationError, OscilloscopeError
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.trigger import (
     OPERATION_CONDITION_RUN_MASK,
@@ -84,6 +84,17 @@ def _live_runtime():
         queue_max=32,
         output_format="jsonl",
     )
+
+
+
+@pytest.mark.parametrize("model", ("keysight-dsox2004a", "keysight-dsox3024a"))
+def test_worker_rejects_record_length_on_unsupported_series(model):
+    with pytest.raises(ParameterValidationError, match="4000X"):
+        worker.parse_domain_command(
+            "record-length",
+            {"query": True},
+            _runtime(model=model),
+        )
 
 
 def test_live_worker_requires_explicit_resource():

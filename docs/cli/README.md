@@ -73,7 +73,8 @@ Current implemented scope:
   controlled by `capture --points`.
 - Query the current analog acquisition record length with `:ACQuire:RLENgth?`.
   This command is read-only and separate from acquisition points and waveform
-  transfer point count controlled by `capture --points`.
+  transfer point count controlled by `capture --points`. Available on 4000X
+  profiles only; unsupported on 2000X and 3000X.
 - Enable, disable, or query analog channel display state with
   `:CHANnel<n>:DISPlay`.
 - Set or query analog channel labels with `:CHANnel<n>:LABel`. 2000X/3000X
@@ -593,9 +594,11 @@ Query the current analog acquisition record length:
 .\.venv\Scripts\scopes-tool.exe record-length --query --resource "$env:SCOPES_TOOL_RESOURCE" --log-scpi
 ```
 
-The `record-length` command is query-only and requires `--query`. It first
-queries `*IDN?`, then sends `:ACQuire:RLENgth?` and performs one
-`:SYSTem:ERRor?` post-check. The response is parsed as an integer
+The `record-length` command is query-only, requires `--query`, and is
+available only for 4000X profiles. It first queries `*IDN?`, then sends
+`:ACQuire:RLENgth?` and performs one `:SYSTem:ERRor?` post-check. On 2000X
+and 3000X profiles the command reports unsupported before sending any
+record-length SCPI. The response is parsed as an integer
 representing the current analog acquisition record length, together with the
 raw readback. It does not configure record length, acquisition points,
 acquisition mode, timebase, sample-rate, trigger settings, waveform format,
@@ -1149,8 +1152,9 @@ Set or query fixed trigger holdoff:
 .\.venv\Scripts\scopes-tool.exe trigger-holdoff --simulate --json --model keysight-dsox4024a --query
 ```
 
-`trigger-holdoff --seconds` is an explicit state-changing command. It disables
-random holdoff with `:TRIGger:HOLDoff:RANDom OFF`, then sends
+`trigger-holdoff --seconds` is an explicit state-changing command. On 4000X
+profiles it disables random holdoff with `:TRIGger:HOLDoff:RANDom OFF`, then
+sends `:TRIGger:HOLDoff <seconds>`. On 2000X/3000X profiles it sends only
 `:TRIGger:HOLDoff <seconds>`. Query mode sends `:TRIGger:HOLDoff?`. The
 supported range is `40e-9` through `10.0` seconds. `doctor`, `smoke`, and
 `acquisition-check` never run `trigger-holdoff`.

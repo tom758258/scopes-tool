@@ -2838,14 +2838,16 @@ if ($snapshotComplete) {
                 throw "Acquisition points must be positive."
             }
 
-            $recordLength = Invoke-LiveCli -Stage "record-length-query" `
-                -Command "record-length" -Arguments @("--query")
-            Assert-ScpiSent -Payload $recordLength -Label "Record length query" `
-                -ExpectedCommands @(
-                    ":ACQuire:RLENgth?"
-                )
-            if ([int64]$recordLength.result.record_length_points -le 0) {
-                throw "Record length must be positive."
+            if ($p3Enabled) {
+                $recordLength = Invoke-LiveCli -Stage "record-length-query" `
+                    -Command "record-length" -Arguments @("--query")
+                Assert-ScpiSent -Payload $recordLength -Label "Record length query" `
+                    -ExpectedCommands @(
+                        ":ACQuire:RLENgth?"
+                    )
+                if ([int64]$recordLength.result.record_length_points -le 0) {
+                    throw "Record length must be positive."
+                }
             }
         }
     }
@@ -2963,9 +2965,14 @@ if ($snapshotComplete) {
             try {
                 $configured = Invoke-LiveCli -Stage "trigger-holdoff-set" -Command "trigger-holdoff" `
                     -Arguments @("--seconds", "0.000001")
-                Assert-ScpiSent -Payload $configured -Label "Trigger holdoff configure" -ExpectedCommands @(
+                $expectedHoldoffCommands = @(
                     ":TRIGger:HOLDoff:RANDom OFF", ":TRIGger:HOLDoff 1e-6"
                 )
+                if (-not $p3Enabled) {
+                    $expectedHoldoffCommands = @(":TRIGger:HOLDoff 1e-6")
+                }
+                Assert-ScpiSent -Payload $configured -Label "Trigger holdoff configure" `
+                    -ExpectedCommands $expectedHoldoffCommands
                 $readback = Invoke-LiveCli -Stage "trigger-holdoff-query" -Command "trigger-holdoff" `
                     -Arguments @("--query")
                 Assert-ScpiSent -Payload $readback -Label "Trigger holdoff query" -ExpectedCommands @(

@@ -12,11 +12,20 @@ TRIGGER_HOLDOFF_MIN_SECONDS = 40e-9
 TRIGGER_HOLDOFF_MAX_SECONDS = 10.0
 
 class TriggerHoldoffController:
-    def __init__(self, scpi: SCPIClient) -> None:
+    def __init__(
+        self,
+        scpi: SCPIClient,
+        *,
+        series: str | None = None,
+    ) -> None:
         self.scpi = scpi
+        self._series = series
 
     def set_seconds(self, seconds: float) -> None:
-        for command in trigger_holdoff_commands(seconds):
+        for command in trigger_holdoff_commands(
+            seconds,
+            series=self._series,
+        ):
             self.scpi.write(command)
 
     def query_seconds(self) -> float:
@@ -26,8 +35,18 @@ def trigger_holdoff_command(seconds: float) -> str:
     seconds = validate_trigger_holdoff(seconds)
     return f":TRIGger:HOLDoff {_format_scpi_number(seconds)}"
 
-def trigger_holdoff_commands(seconds: float) -> list[str]:
-    return [":TRIGger:HOLDoff:RANDom OFF", trigger_holdoff_command(seconds)]
+def trigger_holdoff_commands(
+    seconds: float,
+    *,
+    series: str | None = None,
+) -> list[str]:
+    command = trigger_holdoff_command(seconds)
+    if series in {"2000X", "3000X"}:
+        return [command]
+    return [
+        ":TRIGger:HOLDoff:RANDom OFF",
+        command,
+    ]
 
 def trigger_holdoff_query() -> str:
     return ":TRIGger:HOLDoff?"

@@ -1493,7 +1493,9 @@ def _cmd_trigger_holdoff(args: argparse.Namespace) -> int:
         else:
             seconds = validate_trigger_holdoff(args.holdoff_seconds)
             scope.set_trigger_holdoff(seconds)
-            commands = trigger_holdoff_commands(seconds)
+            commands = trigger_holdoff_commands(
+                seconds, series=scope.capabilities.series
+            )
             runtime._json_update_result(operation="set", command=commands[-1], commands=commands, seconds=seconds)
             for command in commands:
                 print(f"Command: {command}")
