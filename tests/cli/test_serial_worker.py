@@ -75,7 +75,7 @@ def test_worker_serial_uart_configure_arguments_mapping(tmp_path):
     assert parsed.baud_rate == 115200
 
 
-def test_worker_serial_uart_configure_execution_preserves_p1_result(tmp_path):
+def test_worker_serial_uart_configure_execution_preserves_command_result(tmp_path):
     parsed = worker.parse_domain_command(
         "serial-uart",
         {"bus": 1, "rx_source": "channel1", "baud_rate": 115200},

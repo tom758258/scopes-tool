@@ -474,7 +474,7 @@ class SerialSearchCanState:
 
 
 class SearchController:
-    """Controller for Search Basic Pack v1 and Serial Search P3."""
+    """Controller for search and serial-search controls."""
 
     def __init__(self, scpi: SCPIClient, capabilities: ScopeCapabilities) -> None:
         self.scpi = scpi
@@ -899,7 +899,7 @@ def validate_search_mode(mode: str, capabilities: ScopeCapabilities) -> str:
 def require_search_basic(capabilities: ScopeCapabilities) -> None:
     if not capabilities.supports_search_basic:
         raise ParameterValidationError(
-            "Search Basic Pack v1 is not supported by the selected model profile."
+            "Search is not supported by the selected model profile."
         )
 
 

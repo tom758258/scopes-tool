@@ -29,7 +29,7 @@ def test_scope_capabilities_preserves_existing_optional_positional_order():
         2,
     )
 
-    assert capabilities.supports_screenshot_format_pack is True
+    assert capabilities.supports_screenshot_hardcopy_controls is True
     assert capabilities.reference_waveforms == 2
     assert capabilities.math_function_count == 0
     assert capabilities.math_visualization_operations == frozenset()

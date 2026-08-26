@@ -319,7 +319,7 @@ def test_worker_http_rejects_non_v2_requests_before_side_effects(tmp_path, body)
     assert not any(tmp_path.iterdir())
 
 
-def test_worker_screenshot_accepts_canonical_format_pack_arguments():
+def test_worker_screenshot_accepts_canonical_hardcopy_arguments():
     parsed = worker.parse_domain_command(
         "screenshot",
         {

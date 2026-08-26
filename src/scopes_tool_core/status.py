@@ -72,7 +72,7 @@ class SystemOptionsState:
 
 
 class StatusController:
-    """Narrow controller for System/Status Pack v1 primitives."""
+    """Controller for system and status controls."""
 
     def __init__(self, scpi: SCPIClient) -> None:
         self.scpi = scpi

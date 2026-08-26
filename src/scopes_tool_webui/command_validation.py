@@ -137,7 +137,7 @@ from scopes_tool_core.trigger import (
 from .command_catalog import (
     _COMMAND_BY_ID,
     _COMMAND_FIELDS,
-    _P3C_COMMAND_IDS,
+    _TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS,
 )
 
 DEFAULT_MODEL_ID = "keysight-dsox4024a"
@@ -251,7 +251,7 @@ def _validate_action_fields(parameters: dict[str, Any], command: str, names: tup
     return action
 
 
-def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str, model_id: str) -> None:
+def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, parameters: dict[str, Any], mode: str, model_id: str) -> None:
     capabilities = capabilities_for_model_id(model_id)
     if command == "segmented-memory":
         action = parameters.setdefault("action", "query")
@@ -383,14 +383,14 @@ def _validate_p3c_parameters(command: str, parameters: dict[str, Any], mode: str
     if command == "search-count":
         return
     if command.startswith("trigger-") or command.startswith("external-trigger-"):
-        _validate_p3c_trigger(command, parameters, capabilities)
+        _validate_trigger_parameters(command, parameters, capabilities)
         return
     if command.startswith("serial-"):
-        _validate_p3c_serial(command, parameters, capabilities)
+        _validate_serial_parameters(command, parameters, capabilities)
         return
 
 
-def _validate_p3c_trigger(command: str, parameters: dict[str, Any], capabilities: Any) -> None:
+def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capabilities: Any) -> None:
     if command == "external-trigger-settings":
         return
     action = _action(parameters, command)
@@ -529,7 +529,7 @@ def _validate_p3c_trigger(command: str, parameters: dict[str, Any], capabilities
         parameters["seconds"] = _finite_number(parameters["seconds"], "seconds")
 
 
-def _validate_p3c_serial(command: str, parameters: dict[str, Any], capabilities: Any) -> None:
+def _validate_serial_parameters(command: str, parameters: dict[str, Any], capabilities: Any) -> None:
     if command == "serial-lister-export":
         _require_parameter(parameters, "filename", command)
         try:
@@ -691,8 +691,8 @@ def _validate_parameters(
     if model_id is None:
         raise WebUIRequestError("detected model identity is required for live validation")
     capabilities = capabilities_for_model_id(model_id)
-    if command in _P3C_COMMAND_IDS:
-        _validate_p3c_parameters(command, parameters, mode, model_id)
+    if command in _TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS:
+        _validate_trigger_search_serial_segmented_workflow_parameters(command, parameters, mode, model_id)
         return
     if command == "acquisition":
         action = parameters.setdefault("action", "query")

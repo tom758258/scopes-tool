@@ -51,7 +51,7 @@ from scopes_tool_core.simulator_backend import (
         ("DSOX4024A", ":FUNCtion1"),
     ],
 )
-def test_math_p1_commands_use_series_appropriate_function_prefix(model, prefix):
+def test_math_display_and_vertical_commands_use_series_appropriate_function_prefix(model, prefix):
     capabilities = capabilities_for_model(model)
 
     assert math_display_command(1, True, capabilities=capabilities) == (
@@ -73,7 +73,7 @@ def test_math_p1_commands_use_series_appropriate_function_prefix(model, prefix):
         f"{prefix}:OFFSet?",
     ]
 
-def test_math_p1_validation_rejects_invalid_functions_and_vertical_values():
+def test_math_display_and_vertical_validation_rejects_invalid_functions_and_values():
     single_function = capabilities_for_model("DSOX2004A")
     unsupported = replace(single_function, math_function_count=0)
 
@@ -104,7 +104,7 @@ def test_math_p1_validation_rejects_invalid_functions_and_vertical_values():
     with pytest.raises(ChannelResponseError, match="Math display"):
         parse_math_display("UNKNOWN")
 
-def test_math_p1_simulator_round_trip_in_one_session():
+def test_math_display_and_vertical_simulator_round_trip_in_one_session():
     backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
     scope = Oscilloscope(backend)
     scope.query_idn()
@@ -138,7 +138,7 @@ def test_math_p1_simulator_round_trip_in_one_session():
         ("divide", "DIVide"),
     ],
 )
-def test_math_p2_operation_mapping(operation, token):
+def test_math_operator_mapping(operation, token):
     capabilities = capabilities_for_model("DSOX4024A")
 
     assert math_operator_commands(
@@ -157,7 +157,7 @@ def test_math_p2_operation_mapping(operation, token):
         ("DSOX4024A", 2, ":FUNCtion2"),
     ],
 )
-def test_math_p2_operator_commands_use_series_dialect(model, function, prefix):
+def test_math_operator_commands_use_series_dialect(model, function, prefix):
     capabilities = capabilities_for_model(model)
 
     assert math_operator_commands(
@@ -179,7 +179,7 @@ def test_math_p2_operator_commands_use_series_dialect(model, function, prefix):
         f"{prefix}:SOURce2?",
     ]
 
-def test_math_p2_operator_validation_and_readback_parsing():
+def test_math_operator_validation_and_readback_parsing():
     single_function = capabilities_for_model("DSOX2004A")
     four_functions = capabilities_for_model("DSOX4024A")
 
@@ -204,7 +204,7 @@ def test_math_p2_operator_validation_and_readback_parsing():
     with pytest.raises(ChannelResponseError, match="UNKNOWN"):
         parse_math_operation(" UNKNOWN ")
 
-def test_math_p2_simulator_operator_round_trip():
+def test_math_operator_simulator_round_trip():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
     scope = Oscilloscope(backend)
     scope.query_idn()
@@ -243,7 +243,7 @@ def test_math_p2_simulator_operator_round_trip():
         ("linear", "LINear", ("LIN", "LINEAR")),
     ],
 )
-def test_math_p3_transform_mapping_and_readback(operation, token, readbacks):
+def test_math_transform_mapping_and_readback(operation, token, readbacks):
     capabilities = capabilities_for_model("DSOX4024A")
 
     assert math_transform_commands(
@@ -263,7 +263,7 @@ def test_math_p3_transform_mapping_and_readback(operation, token, readbacks):
         ("DSOX4024A", 2, ":FUNCtion2"),
     ],
 )
-def test_math_p3_transform_commands_use_series_dialect(model, function, prefix):
+def test_math_transform_commands_use_series_dialect(model, function, prefix):
     capabilities = capabilities_for_model(model)
 
     assert math_transform_commands(
@@ -282,7 +282,7 @@ def test_math_p3_transform_commands_use_series_dialect(model, function, prefix):
         f"{prefix}:SOURce1?",
     ]
 
-def test_math_p3_integrate_command_order_and_input_offset():
+def test_math_integrate_command_order_and_input_offset():
     capabilities = capabilities_for_model("DSOX2004A")
 
     assert math_transform_commands(
@@ -297,7 +297,7 @@ def test_math_p3_integrate_command_order_and_input_offset():
         ":FUNCtion:INTegrate:IOFFset 0",
     ]
 
-def test_math_p3_linear_command_order_gain_and_offset():
+def test_math_linear_command_order_gain_and_offset():
     capabilities = capabilities_for_model("DSOX4024A")
 
     assert math_transform_commands(
@@ -314,7 +314,7 @@ def test_math_p3_linear_command_order_gain_and_offset():
         ":FUNCtion2:LINear:OFFSet -1",
     ]
 
-def test_math_p3_transform_validation():
+def test_math_transform_validation():
     single_function = capabilities_for_model("DSOX2004A")
     four_functions = capabilities_for_model("DSOX4024A")
 
@@ -367,7 +367,7 @@ def test_math_p3_transform_validation():
     with pytest.raises(ChannelResponseError, match="ADD"):
         parse_math_transform(" ADD ")
 
-def test_math_p3_simulator_integrate_and_linear_round_trip():
+def test_math_integrate_and_linear_simulator_round_trip():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
     scope = Oscilloscope(backend)
     scope.query_idn()

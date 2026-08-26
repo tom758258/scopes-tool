@@ -120,12 +120,12 @@ class DemoState:
 
 
 class DemoController:
-    """Narrow controller for Demo Output Pack v1."""
+    """Controller for DEMO output controls."""
 
     def __init__(self, scpi: SCPIClient, capabilities: ScopeCapabilities) -> None:
         if not capabilities.supports_demo:
             raise ParameterValidationError(
-                "Demo Output Pack v1 is not supported by this model profile."
+                "DEMO output is not supported by this model profile."
             )
         self.scpi = scpi
         self.capabilities = capabilities

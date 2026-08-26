@@ -683,13 +683,13 @@ def _build_parser() -> argparse.ArgumentParser:
     dvm_current_parser.add_argument("--query", action="store_true", required=True)
 
     dvm_query_parser = subparsers.add_parser(
-        "dvm-query", allow_abbrev=False, help="query aggregate DVM Common Pack v1 state"
+        "dvm-query", allow_abbrev=False, help="query aggregate DVM state"
     )
     _add_scope_connection_args(dvm_query_parser)
     dvm_query_parser.add_argument("--query", action="store_true", required=True)
 
     demo_query_parser = subparsers.add_parser(
-        "demo-query", allow_abbrev=False, help="query aggregate Demo Output Pack v1 state"
+        "demo-query", allow_abbrev=False, help="query aggregate DEMO output state"
     )
     _add_scope_connection_args(demo_query_parser)
 
@@ -718,7 +718,7 @@ def _build_parser() -> argparse.ArgumentParser:
     demo_phase_action.add_argument("--degrees", type=float)
 
     wgen_query_parser = subparsers.add_parser(
-        "wgen-query", allow_abbrev=False, help="query aggregate WGEN Basic P1 state"
+        "wgen-query", allow_abbrev=False, help="query aggregate WGEN state"
     )
     _add_scope_connection_args(wgen_query_parser)
 

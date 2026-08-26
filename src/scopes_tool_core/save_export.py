@@ -1,4 +1,4 @@
-"""Instrument-side Save/Export Pack v1 controls."""
+"""Instrument-side save and export controls."""
 
 from __future__ import annotations
 

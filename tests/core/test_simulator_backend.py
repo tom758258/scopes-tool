@@ -690,7 +690,7 @@ def test_simulator_screenshot_png_reflects_model_label_deterministically():
     assert _png_dimensions(different_model) == (480, 272)
 
 
-def test_simulator_hardcopy_format_pack_state_and_binary_payloads():
+def test_simulator_hardcopy_controls_state_and_binary_payloads():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
 
     assert backend.query(":HARDcopy:AREA?") == "SCR"

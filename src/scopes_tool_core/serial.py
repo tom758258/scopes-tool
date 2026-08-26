@@ -2445,7 +2445,7 @@ def parse_serial_uart_trigger_data(raw: str) -> int:
 def require_serial_decode(capabilities: ScopeCapabilities) -> None:
     if not capabilities.supports_serial_decode:
         raise ParameterValidationError(
-            "Serial Basic P0 is not supported by the selected model profile."
+            "Serial bus controls are not supported by the selected model profile."
         )
 
 

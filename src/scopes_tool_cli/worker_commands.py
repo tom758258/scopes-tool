@@ -1807,7 +1807,7 @@ def _normalize_serial_search_worker_arguments(
     capabilities = capabilities_for_model_id(runtime.model)
     if not capabilities.supports_search_basic:
         raise OscilloscopeError(
-            f"Search Basic Pack v1 is not supported by the selected "
+            f"Search is not supported by the selected "
             f"{capabilities.series} model profile."
         )
 

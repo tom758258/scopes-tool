@@ -3064,7 +3064,7 @@ def test_command_support_consumes_backend_model_projection() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-def test_p1_command_editor_and_result_presentation_contract() -> None:
+def test_command_editor_and_result_presentation_contract() -> None:
     app_source = read_static("app.js")
     form_source = read_static("command-form.js")
     results_source = read_static("results.js")

@@ -58,7 +58,7 @@ from scopes_tool_core.segmented_capture import (
 from scopes_tool_core.triggered_capture import TRIGGERED_CAPTURE_SERIES_DEFAULT_BASE_DIR
 from scopes_tool_core.triggered_measurement import TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR
 
-from .command_catalog import _P3C_COMMAND_IDS
+from .command_catalog import _TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS
 from .command_validation import (
     WebUIRequestError,
     _segmented_capture_request,
@@ -229,8 +229,8 @@ def _execute_scope_command(
 ) -> dict[str, Any]:
     if scope.capabilities is None:
         scope.query_idn()
-    if command in _P3C_COMMAND_IDS:
-        return _execute_p3c_scope_command(
+    if command in _TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS:
+        return _execute_trigger_search_serial_segmented_workflow_command(
             scope,
             command,
             resource,
@@ -586,7 +586,7 @@ def _execute_scope_command(
     raise WebUIRequestError(f"command is not supported by the Scopes Tool WebUI: {command}")
 
 
-def _execute_p3c_scope_command(
+def _execute_trigger_search_serial_segmented_workflow_command(
     scope: Any,
     command: str,
     resource: str,

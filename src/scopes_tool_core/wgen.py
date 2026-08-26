@@ -157,7 +157,7 @@ class WgenState:
 
 
 class WgenController:
-    """Narrow controller for WGEN Basic P1."""
+    """Controller for waveform generator controls."""
 
     def __init__(self, scpi: SCPIClient, capabilities: ScopeCapabilities) -> None:
         _wgen_root(capabilities)
@@ -394,6 +394,6 @@ def _validate_wgen_numeric(value: float, field: str) -> float:
 def _wgen_root(capabilities: ScopeCapabilities) -> str:
     if not capabilities.supports_wgen or not capabilities.wgen_scpi_root:
         raise ParameterValidationError(
-            "WGEN Basic P1 is not supported by this model profile."
+            "WGEN is not supported by this model profile."
         )
     return capabilities.wgen_scpi_root

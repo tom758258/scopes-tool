@@ -2939,7 +2939,7 @@ sys.exit(9)
     assert all("--live" not in arguments for arguments in invocations)
 
 
-def test_baseline_live_script_contains_p1_case_wiring() -> None:
+def test_baseline_live_script_contains_acquisition_measurement_and_status_wiring() -> None:
     script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
         encoding="utf-8"
     )
@@ -3188,7 +3188,7 @@ def test_baseline_live_script_contains_p1_case_wiring() -> None:
     assert '"--log-scpi"' not in invoke_live_cli
 
 
-def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
+def test_baseline_live_script_contains_channel_display_search_and_restore_wiring() -> None:
     script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
         encoding="utf-8"
     )
@@ -3265,10 +3265,10 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
         '\n    if (-not $script:FunctionalFailed)', channel_vertical_start + 1
     )
     channel_vertical = script[channel_vertical_start:channel_vertical_end]
-    assert channel_vertical.index('Stage "channel-scale-set-p2"') < (
-        channel_vertical.index('Stage "channel-scale-query-p2"')
+    assert channel_vertical.index('Stage "channel-vertical-scale-set"') < (
+        channel_vertical.index('Stage "channel-vertical-scale-query"')
     )
-    assert channel_vertical.index('Stage "channel-scale-query-p2"') < (
+    assert channel_vertical.index('Stage "channel-vertical-scale-query"') < (
         channel_vertical.index('Stage "channel-range-set"')
     )
     assert channel_vertical.index('Stage "channel-range-set"') < (
@@ -3278,7 +3278,7 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
     assert "-Expected 2.0" in channel_vertical
     assert "$snapshot.ChannelScale" not in channel_vertical
 
-    assert '$identity.capabilities.supports_screenshot_format_pack' in script
+    assert '$identity.capabilities.supports_screenshot_hardcopy_controls' in script
     assert '$identity.capabilities.supports_search_event_navigation' in script
     assert '"edge" -in @($identity.capabilities.search_modes)' in script
     assert 'Stage "waveform-amp-unit-restore"' in script
@@ -3323,7 +3323,7 @@ def test_baseline_live_script_contains_p2_case_and_restore_wiring() -> None:
         assert f'Command = "{command}"' in restore
 
 
-def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
+def test_baseline_live_script_contains_trigger_math_generator_save_and_safety_wiring() -> None:
     script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
         encoding="utf-8"
     )
@@ -3392,7 +3392,7 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     ):
         assert f'Command = "{command}"' in preflight
 
-    assert '$snapshot.P3Enabled' in script
+    assert '$snapshot.Is4000XSeries' in script
     assert '$snapshot.InstalledOptions = @($options.result.options)' in script
     assert '$snapshot.WgenApplicable = "WAVEGEN" -in @($snapshot.InstalledOptions)' in script
     assert '$snapshot.WgenApplicable' in script
@@ -3420,7 +3420,7 @@ def test_baseline_live_script_contains_p3_case_and_safety_wiring() -> None:
     assert '"wgen_not_implemented"' in script
     assert "Original save format context is not restorable." not in script
     assert "SaveFixtureEstablished" in script
-    assert 'Stage "preflight-p3-save-waveform-length-max-query"' in preflight
+    assert 'Stage "preflight-cli-save-waveform-length-max-query"' in preflight
     assert '-Command "save-waveform-length-max"' in preflight
     assert '-Arguments @("--query")' in preflight
     assert '-Stage "snapshot-save-waveform-length-max"' in script
@@ -3721,7 +3721,7 @@ function New-ProductionIdentity {
             math_visualization_operations = @()
             supports_advanced_fft = $true
             supports_screenshot = $true
-            supports_screenshot_format_pack = $true
+            supports_screenshot_hardcopy_controls = $true
             supports_segmented_memory = $true
             segmented_max_segments = 1000
             supports_serial_decode = $true
@@ -3772,7 +3772,7 @@ function Initialize-ProductionSnapshot {
     $triggerSlope = New-QueryPayload @{ slope = "negative" }
     $triggerLevel = New-QueryPayload @{ level_volts = 0.0 }
     $triggerHoldoff = New-QueryPayload @{ seconds = 0.000001 }
-    $p3Enabled = $false
+    $is4000XSeries = $false
     $triggerEdgeCoupling = $null
     $triggerEdgeReject = $null
     $triggerSweep = $null
@@ -5058,11 +5058,11 @@ Invoke-Expression $caseBlock
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_p3_fft_accepts_documented_hann_readback_and_rejects_other_window(
+def test_baseline_fft_accepts_documented_hann_readback_and_rejects_other_window(
     tmp_path: Path,
 ) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
-    harness_path = tmp_path / "baseline-p3-fft-harness.ps1"
+    harness_path = tmp_path / "baseline-fft-harness.ps1"
     harness_path.write_text(
         r'''
 param([Parameter(Mandatory = $true)][string] $ScriptPath)
@@ -5276,7 +5276,7 @@ $script:ConfigureScpi = @(
     ":TRIGger:HOLDoff:RANDom OFF",
     ":TRIGger:HOLDoff 1e-6"
 )
-$p3Enabled = $true
+$is4000XSeries = $true
 
 function Add-CaseResult {
     param(
@@ -5342,24 +5342,24 @@ function Invoke-LiveCli {
 }
 
 Invoke-Expression $caseBlock
-$p3Result = $script:CaseResults["trigger-holdoff"].Passed
-$p3FunctionalFailed = $script:FunctionalFailed
-$p3DrainCalls = $script:DrainCalls
+$series4000XResult = $script:CaseResults["trigger-holdoff"].Passed
+$series4000XFunctionalFailed = $script:FunctionalFailed
+$series4000XDrainCalls = $script:DrainCalls
 
 $script:CaseResults = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:DrainCalls = 0
 $script:ConfigureScpi = @(":TRIGger:HOLDoff 1e-6")
-$p3Enabled = $false
+$is4000XSeries = $false
 Invoke-Expression $caseBlock
 
 [ordered]@{
-    p3_result = $p3Result
-    p3_functional_failed = $p3FunctionalFailed
-    p3_drain_calls = $p3DrainCalls
-    non_p3_result = $script:CaseResults["trigger-holdoff"].Passed
-    non_p3_functional_failed = $script:FunctionalFailed
-    non_p3_drain_calls = $script:DrainCalls
+    series_4000x_result = $series4000XResult
+    series_4000x_functional_failed = $series4000XFunctionalFailed
+    series_4000x_drain_calls = $series4000XDrainCalls
+    non_4000x_result = $script:CaseResults["trigger-holdoff"].Passed
+    non_4000x_functional_failed = $script:FunctionalFailed
+    non_4000x_drain_calls = $script:DrainCalls
 } | ConvertTo-Json -Compress
 ''',
         encoding="utf-8",
@@ -5386,19 +5386,19 @@ Invoke-Expression $caseBlock
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
-    assert result["p3_result"] is True
-    assert result["p3_functional_failed"] is False
-    assert result["p3_drain_calls"] == 0
-    assert result["non_p3_result"] is True
-    assert result["non_p3_functional_failed"] is False
-    assert result["non_p3_drain_calls"] == 0
+    assert result["series_4000x_result"] is True
+    assert result["series_4000x_functional_failed"] is False
+    assert result["series_4000x_drain_calls"] == 0
+    assert result["non_4000x_result"] is True
+    assert result["non_4000x_functional_failed"] is False
+    assert result["non_4000x_drain_calls"] == 0
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_p2_channel_vertical_rejects_payload_self_oracle(
+def test_baseline_channel_vertical_rejects_payload_self_oracle(
     tmp_path: Path,
 ) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
-    harness_path = tmp_path / "baseline-p2-channel-vertical-harness.ps1"
+    harness_path = tmp_path / "baseline-channel-vertical-harness.ps1"
     harness_path.write_text(
         r'''
 param(
@@ -5497,7 +5497,7 @@ function Invoke-LiveCli {
                 result = [pscustomobject]@{ text = "Input a" }
             }
         }
-        "channel-scale-set-p2" {
+        "channel-vertical-scale-set" {
             $commandText = if ($script:WrongScalePath) {
                 ":CHANnel1:OFFSet 2"
             } else {
@@ -5508,7 +5508,7 @@ function Invoke-LiveCli {
                 result = [pscustomobject]@{ command = $commandText }
             }
         }
-        "channel-scale-query-p2" {
+        "channel-vertical-scale-query" {
             $scale = if ($script:WrongScalePath) { 0.5 } else { 2.0 }
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @(":CHANnel1:SCALe?") }
@@ -5527,13 +5527,13 @@ function Invoke-LiveCli {
                 result = [pscustomobject]@{ range_volts = 4.0 }
             }
         }
-        "channel-offset-set-p2" {
+        "channel-vertical-offset-set" {
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @(":CHANnel1:OFFSet 0") }
                 result = [pscustomobject]@{ command = ":CHANnel1:OFFSet 0" }
             }
         }
-        "channel-offset-query-p2" {
+        "channel-vertical-offset-query" {
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @(":CHANnel1:OFFSet?") }
                 result = [pscustomobject]@{ volts = 0.0 }
@@ -5599,13 +5599,13 @@ Invoke-Expression $caseBlock
     assert "CH1 scale SCPI path" in result["failure_detail"]
     assert result["failure_functional_failed"] is True
     assert result["failure_drain_calls"] == 1
-    assert "channel-scale-query-p2" in result["failure_stages"]
+    assert "channel-vertical-scale-query" in result["failure_stages"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_p1_cases_validate_payloads_and_scpi_history(tmp_path: Path) -> None:
+def test_baseline_acquisition_queries_validate_payloads_and_scpi_history(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
-    harness_path = tmp_path / "baseline-p1-harness.ps1"
+    harness_path = tmp_path / "baseline-acquisition-harness.ps1"
     harness_path.write_text(
         r'''
 param(
@@ -5659,7 +5659,7 @@ $script:FunctionalFailed = $false
 $script:DrainCalls = 0
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:EmptySampleRateHistory = $false
-$p3Enabled = $true
+$is4000XSeries = $true
 
 function Add-CaseResult {
     param(
@@ -5747,7 +5747,7 @@ $script:CaseResults = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:DrainCalls = 0
 $script:EmptySampleRateHistory = $true
-$p3Enabled = $true
+$is4000XSeries = $true
 Invoke-Expression $caseBlock
 $failurePassed = $script:CaseResults["acquisition-queries"].Passed
 $failureDetail = $script:CaseResults["acquisition-queries"].Detail
@@ -5759,7 +5759,7 @@ $script:FunctionalFailed = $false
 $script:DrainCalls = 0
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:EmptySampleRateHistory = $false
-$p3Enabled = $false
+$is4000XSeries = $false
 Invoke-Expression $caseBlock
 
 [ordered]@{
@@ -5770,9 +5770,9 @@ Invoke-Expression $caseBlock
     failure_detail = $failureDetail
     failure_functional_failed = $failureFunctionalFailed
     failure_drain_calls = $failureDrainCalls
-    non_p3_result = $script:CaseResults["acquisition-queries"].Passed
-    non_p3_functional_failed = $script:FunctionalFailed
-    non_p3_invocations = @($script:Invocations | ForEach-Object { $_ })
+    non_4000x_result = $script:CaseResults["acquisition-queries"].Passed
+    non_4000x_functional_failed = $script:FunctionalFailed
+    non_4000x_invocations = @($script:Invocations | ForEach-Object { $_ })
 } | ConvertTo-Json -Depth 12 -Compress
 ''',
         encoding="utf-8",
@@ -5812,29 +5812,29 @@ Invoke-Expression $caseBlock
     assert "empty SCPI history" in result["failure_detail"]
     assert result["failure_functional_failed"] is True
     assert result["failure_drain_calls"] == 1
-    assert result["non_p3_result"] is True
-    assert result["non_p3_functional_failed"] is False
-    non_p3_invocations = result["non_p3_invocations"]
-    assert [entry["command"] for entry in non_p3_invocations] == [
+    assert result["non_4000x_result"] is True
+    assert result["non_4000x_functional_failed"] is False
+    non_4000x_invocations = result["non_4000x_invocations"]
+    assert [entry["command"] for entry in non_4000x_invocations] == [
         "sample-rate",
         "acquisition-points",
     ]
     assert all(
-        entry["arguments"] == ["--query"] for entry in non_p3_invocations
+        entry["arguments"] == ["--query"] for entry in non_4000x_invocations
     )
     assert "record-length" not in {
-        entry["command"] for entry in non_p3_invocations
+        entry["command"] for entry in non_4000x_invocations
     }
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_p2_amp_case_validates_artifacts_and_restores_unit(
+def test_baseline_waveform_amp_case_validates_artifacts_and_restores_unit(
     tmp_path: Path,
 ) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
     artifact_root = tmp_path / "artifacts"
     artifact_root.mkdir()
-    harness_path = tmp_path / "baseline-p2-amp-harness.ps1"
+    harness_path = tmp_path / "baseline-waveform-amp-harness.ps1"
     harness_path.write_text(
         r'''
 param(
@@ -6061,11 +6061,11 @@ Invoke-Expression $caseBlock
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_baseline_p2_restore_carries_proven_save_context_with_fixed_usb_pwd(
+def test_baseline_restore_carries_proven_save_context_with_fixed_usb_pwd(
     tmp_path: Path,
 ) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
-    harness_path = tmp_path / "baseline-p2-restore-harness.ps1"
+    harness_path = tmp_path / "baseline-restore-harness.ps1"
     harness_path.write_text(
         r'''
 param([Parameter(Mandatory = $true)][string] $ScriptPath)
@@ -6255,7 +6255,7 @@ $snapshot = [pscustomobject]@{
     AnnotationX = 20
     AnnotationY = 30
         SearchSupported = $true
-        P3Enabled = $true
+        Is4000XSeries = $true
         WgenApplicable = $true
         MathFunctionCount = 4
         DemoSupported = $true
@@ -7001,7 +7001,7 @@ function Invoke-LiveCli {
     })
     switch -Regex ($Stage) {
         "^annotation-set$" {
-            $cmds = @(':DISPlay:ANNotation1:TEXT "P2 live"', ":DISPlay:ANNotation1 ON")
+            $cmds = @(':DISPlay:ANNotation1:TEXT "Live note"', ":DISPlay:ANNotation1 ON")
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = $cmds }
                 result = [pscustomobject]@{ commands = $cmds }
@@ -7024,7 +7024,7 @@ function Invoke-LiveCli {
             }
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = $cmds }
-                result = [pscustomobject]@{ commands = $cmds; enabled = $true; text = "P2 live"; slot = 1; color = "WHITE"; background = "OPAQ"; x = 20; y = 30 }
+                result = [pscustomobject]@{ commands = $cmds; enabled = $true; text = "Live note"; slot = 1; color = "WHITE"; background = "OPAQ"; x = 20; y = 30 }
             }
         }
         "^restore-channel-summary-query$" {
@@ -7914,8 +7914,8 @@ def test_live_cli_check_warns_4034a_about_autoscale_save_destination() -> None:
     assert "Reselect the USB destination" in post_block
 
 
-P2_HELPERS = REPO_ROOT / "scripts" / "_validation_helpers.ps1"
-P2_PRIVACY = REPO_ROOT / "scripts" / "_artifact_privacy.ps1"
+VALIDATION_HELPERS_SCRIPT = REPO_ROOT / "scripts" / "_validation_helpers.ps1"
+ARTIFACT_PRIVACY_SCRIPT = REPO_ROOT / "scripts" / "_artifact_privacy.ps1"
 LIVE_CLI_SCRIPT = REPO_ROOT / "scripts" / "live-cli-check.ps1"
 CANONICAL_TARGETS = (
     "keysight-dsox2004a",
@@ -7925,7 +7925,7 @@ CANONICAL_TARGETS = (
 )
 
 
-def ps_quote_p2(value):
+def ps_quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
@@ -7955,9 +7955,9 @@ def run_live_cli_script(*args, timeout=180):
 def run_live_cli_harness(body, timeout=180):
     command = (
         ". "
-        + ps_quote_p2(P2_HELPERS)
+        + ps_quote(VALIDATION_HELPERS_SCRIPT)
         + "; . "
-        + ps_quote_p2(P2_PRIVACY)
+        + ps_quote(ARTIFACT_PRIVACY_SCRIPT)
         + "; "
         + body
     )
@@ -7981,7 +7981,7 @@ def run_live_cli_harness(body, timeout=180):
 
 
 def extract_live_cli_functions_ps(names):
-    name_list = ", ".join(ps_quote_p2(name) for name in names)
+    name_list = ", ".join(ps_quote(name) for name in names)
     return """
 $tokens = $null
 $parseErrors = $null
@@ -8155,7 +8155,7 @@ try {
     assert "unavailable" in payload["missing"]
 
 
-P3_VALIDATOR_SCRIPTS = (
+LIVE_VALIDATOR_SCRIPTS = (
     ("live-dvm-check.ps1", "dvm"),
     ("live-segmented-check.ps1", "segmented"),
     ("live-serial-check.ps1", "serial"),
@@ -8164,8 +8164,8 @@ P3_VALIDATOR_SCRIPTS = (
 
 
 @requires_windows
-@pytest.mark.parametrize(("script_name", "domain"), P3_VALIDATOR_SCRIPTS)
-def test_p3_validators_enforce_canonical_target_contract(tmp_path, script_name, domain):
+@pytest.mark.parametrize(("script_name", "domain"), LIVE_VALIDATOR_SCRIPTS)
+def test_live_validators_enforce_canonical_target_contract(tmp_path, script_name, domain):
     script = REPO_ROOT / "scripts" / script_name
     usb = "USB0::1::2::SYNTH12345::INSTR"
     tcpip = "TCPIP0::198.51.100.7::inst0::INSTR"
@@ -8216,8 +8216,8 @@ def test_p3_validators_enforce_canonical_target_contract(tmp_path, script_name, 
     assert f"does not match resource '{tcpip}'" in completed.stderr
 
 
-@pytest.mark.parametrize(("script_name", "domain"), P3_VALIDATOR_SCRIPTS)
-def test_p3_validators_wire_shared_framework(script_name, domain):
+@pytest.mark.parametrize(("script_name", "domain"), LIVE_VALIDATOR_SCRIPTS)
+def test_live_validators_wire_shared_framework(script_name, domain):
     text = (REPO_ROOT / "scripts" / script_name).read_text(encoding="utf-8")
     for marker in (
         "_validation_helpers.ps1",
@@ -8413,7 +8413,7 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     assert payload["s2_summary_reason"] is True
 
 
-P3_FINALIZE_CONTRACTS = (
+LIVE_VALIDATOR_FINALIZATION_CASES = (
     (
         "live-dvm-check.ps1",
         "scopes-tool-live-dvm-check",
@@ -8460,9 +8460,9 @@ def _extract_balanced_block(text: str, start_marker: str) -> str:
 
 @pytest.mark.parametrize(
     ("script_name", "kind", "domain", "fail_label", "pass_label"),
-    P3_FINALIZE_CONTRACTS,
+    LIVE_VALIDATOR_FINALIZATION_CASES,
 )
-def test_p3_finalization_control_flow(
+def test_live_validator_finalization_control_flow(
     script_name, kind, domain, fail_label, pass_label
 ):
     text = (REPO_ROOT / "scripts" / script_name).read_text(encoding="utf-8")

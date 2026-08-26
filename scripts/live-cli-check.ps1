@@ -1375,7 +1375,7 @@ function Invoke-HardwareFreePreflight {
             "--source-channel", "1", "--level", "0", "--slope", "positive"
         ) | Out-Null
     foreach ($item in @(
-        [pscustomobject]@{ Command = "channel-label"; Arguments = @("--channel", "1", "--text", "P2") },
+        [pscustomobject]@{ Command = "channel-label"; Arguments = @("--channel", "1", "--text", "Input A") },
         [pscustomobject]@{ Command = "channel-scale"; Arguments = @("--channel", "1", "--volts-per-division", "0.5") },
         [pscustomobject]@{ Command = "channel-offset"; Arguments = @("--channel", "1", "--volts", "0") },
         [pscustomobject]@{ Command = "channel-probe"; Arguments = @("--channel", "1", "--ratio", "10") },
@@ -1390,7 +1390,7 @@ function Invoke-HardwareFreePreflight {
         [pscustomobject]@{ Command = "display-persistence"; Arguments = @("--mode", "minimum") },
         [pscustomobject]@{ Command = "display-intensity"; Arguments = @("--value", "75") },
         [pscustomobject]@{ Command = "display-vectors"; Arguments = @("--on") },
-        [pscustomobject]@{ Command = "annotation"; Arguments = @("--slot", "1", "--on", "--text", "P2") },
+        [pscustomobject]@{ Command = "annotation"; Arguments = @("--slot", "1", "--on", "--text", "Input A") },
         [pscustomobject]@{ Command = "search-state"; Arguments = @("--enabled", "true") },
         [pscustomobject]@{ Command = "search-mode"; Arguments = @("--mode", "edge") }
     )) {
@@ -1429,22 +1429,22 @@ function Invoke-HardwareFreePreflight {
         [pscustomobject]@{ Command = "demo-function"; Arguments = @("--function", "sine") },
         [pscustomobject]@{ Command = "demo-output"; Arguments = @("--enabled", "true") },
         [pscustomobject]@{ Command = "autoscale"; Arguments = @("--source-channel", "1") },
-        [pscustomobject]@{ Command = "setup-save"; Arguments = @("--file", "\usb\scopes-tool-p3-preflight.scp") },
-        [pscustomobject]@{ Command = "setup-recall"; Arguments = @("--file", "\usb\scopes-tool-p3-preflight.scp") },
+        [pscustomobject]@{ Command = "setup-save"; Arguments = @("--file", "\usb\scopes-tool-cli-preflight.scp") },
+        [pscustomobject]@{ Command = "setup-recall"; Arguments = @("--file", "\usb\scopes-tool-cli-preflight.scp") },
         [pscustomobject]@{ Command = "save-image-format"; Arguments = @("--format", "png") },
-        [pscustomobject]@{ Command = "save-image"; Arguments = @("--filename", "\usb\scopes-tool-p3-preflight.png") },
+        [pscustomobject]@{ Command = "save-image"; Arguments = @("--filename", "\usb\scopes-tool-cli-preflight.png") },
         [pscustomobject]@{ Command = "save-waveform-format"; Arguments = @("--format", "csv") },
         [pscustomobject]@{ Command = "save-waveform-length"; Arguments = @("--points", "1000") },
-        [pscustomobject]@{ Command = "save-waveform"; Arguments = @("--filename", "\usb\scopes-tool-p3-preflight.csv") },
+        [pscustomobject]@{ Command = "save-waveform"; Arguments = @("--filename", "\usb\scopes-tool-cli-preflight.csv") },
         [pscustomobject]@{ Command = "cleanup"; Arguments = @("--profile", "safe") }
     )) {
-        Invoke-ModeCli -Stage "preflight-p3-$($item.Command)" -Command $item.Command `
+        Invoke-ModeCli -Stage "preflight-cli-$($item.Command)" -Command $item.Command `
             -ModeArguments $dryRun -Arguments $item.Arguments | Out-Null
     }
-    Invoke-ModeCli -Stage "preflight-p3-trigger-edge-external-level-query" `
+    Invoke-ModeCli -Stage "preflight-cli-trigger-edge-external-level-query" `
         -Command "trigger-edge-external-level" -ModeArguments $simulate `
         -Arguments @("--query") | Out-Null
-    Invoke-ModeCli -Stage "preflight-p3-save-waveform-length-max-query" `
+    Invoke-ModeCli -Stage "preflight-cli-save-waveform-length-max-query" `
         -Command "save-waveform-length-max" -ModeArguments $simulate `
         -Arguments @("--query") | Out-Null
 
@@ -1828,8 +1828,8 @@ function Restore-InstrumentState {
             Arguments = @("--enabled", "false")
         }
     }
-    $p3Property = $Snapshot.PSObject.Properties["P3Enabled"]
-    if ($null -ne $p3Property -and [bool]$p3Property.Value) {
+    $is4000XSeriesProperty = $Snapshot.PSObject.Properties["Is4000XSeries"]
+    if ($null -ne $is4000XSeriesProperty -and [bool]$is4000XSeriesProperty.Value) {
         $restoreSteps += @(
             [pscustomobject]@{
                 Name = "trigger sweep"
@@ -2297,7 +2297,7 @@ try {
     $triggerHoldoff = Invoke-LiveCli -Stage "snapshot-trigger-holdoff" `
         -Command "trigger-holdoff" -Arguments @("--query")
 
-    $p3Enabled = [string]$identity.idn.series -eq "4000X"
+    $is4000XSeries = [string]$identity.idn.series -eq "4000X"
     $triggerEdgeCoupling = $null
     $triggerEdgeReject = $null
     $triggerSweep = $null
@@ -2324,7 +2324,7 @@ try {
     $saveWaveformLengthMax = Invoke-LiveCli `
         -Stage "snapshot-save-waveform-length-max" `
         -Command "save-waveform-length-max" -Arguments @("--query")
-    if ($p3Enabled) {
+    if ($is4000XSeries) {
         $triggerEdgeCoupling = Invoke-LiveCli -Stage "snapshot-trigger-edge-coupling" `
             -Command "trigger-edge-coupling" -Arguments @("--query")
         $triggerEdgeReject = Invoke-LiveCli -Stage "snapshot-trigger-edge-reject" `
@@ -2409,7 +2409,7 @@ try {
             -Value $triggerLevel.result.level_volts -Label "CH1 Edge level"
         TriggerHoldoffSeconds = Assert-FiniteNumber `
             -Value $triggerHoldoff.result.seconds -Label "Trigger holdoff"
-        P3Enabled = $p3Enabled
+        Is4000XSeries = $is4000XSeries
         InstalledOptions = @()
         WgenApplicable = $null
         WgenApplicabilityDetail = ""
@@ -2838,7 +2838,7 @@ if ($snapshotComplete) {
                 throw "Acquisition points must be positive."
             }
 
-            if ($p3Enabled) {
+            if ($is4000XSeries) {
                 $recordLength = Invoke-LiveCli -Stage "record-length-query" `
                     -Command "record-length" -Arguments @("--query")
                 Assert-ScpiSent -Payload $recordLength -Label "Record length query" `
@@ -2968,7 +2968,7 @@ if ($snapshotComplete) {
                 $expectedHoldoffCommands = @(
                     ":TRIGger:HOLDoff:RANDom OFF", ":TRIGger:HOLDoff 1e-6"
                 )
-                if (-not $p3Enabled) {
+                if (-not $is4000XSeries) {
                     $expectedHoldoffCommands = @(":TRIGger:HOLDoff 1e-6")
                 }
                 Assert-ScpiSent -Payload $configured -Label "Trigger holdoff configure" `
@@ -3142,9 +3142,9 @@ if ($snapshotComplete) {
                 throw "CH1 label readback does not match the snapshot."
             }
 
-            $scaleSet = Invoke-LiveCli -Stage "channel-scale-set-p2" -Command "channel-scale" `
+            $scaleSet = Invoke-LiveCli -Stage "channel-vertical-scale-set" -Command "channel-scale" `
                 -Arguments @("--channel", "1", "--volts-per-division", "2")
-            $scale = Invoke-LiveCli -Stage "channel-scale-query-p2" -Command "channel-scale" `
+            $scale = Invoke-LiveCli -Stage "channel-vertical-scale-query" -Command "channel-scale" `
                 -Arguments @("--channel", "1", "--query")
             Assert-ScpiSent -Payload $scale -Label "CH1 scale query" `
                 -ExpectedCommands @(":CHANnel1:SCALe?")
@@ -3172,9 +3172,9 @@ if ($snapshotComplete) {
             }
 
             $offsetValue = ConvertTo-InvariantString -Value ([double]$snapshot.ChannelOffset)
-            $offsetSet = Invoke-LiveCli -Stage "channel-offset-set-p2" -Command "channel-offset" `
+            $offsetSet = Invoke-LiveCli -Stage "channel-vertical-offset-set" -Command "channel-offset" `
                 -Arguments @("--channel", "1", "--volts", $offsetValue)
-            $offset = Invoke-LiveCli -Stage "channel-offset-query-p2" -Command "channel-offset" `
+            $offset = Invoke-LiveCli -Stage "channel-vertical-offset-query" -Command "channel-offset" `
                 -Arguments @("--channel", "1", "--query")
             Assert-NearlyEqual -Actual ([double]$offset.result.volts) `
                 -Expected ([double]$snapshot.ChannelOffset) -Label "CH1 offset"
@@ -3365,7 +3365,7 @@ if ($snapshotComplete) {
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_annotation) {
         Invoke-BaselineCase -Name "display-annotation" -Action {
             $annotation = Invoke-LiveCli -Stage "annotation-set" -Command "annotation" `
-                -Arguments @("--slot", "1", "--on", "--text", "P2 live")
+                -Arguments @("--slot", "1", "--on", "--text", "Live note")
             Assert-ScpiSent -Payload $annotation -Label "Annotation configure" `
                 -ExpectedCommands @($annotation.result.commands)
             $readback = Invoke-LiveCli -Stage "annotation-query" -Command "annotation" `
@@ -3373,7 +3373,7 @@ if ($snapshotComplete) {
             Assert-ScpiSent -Payload $readback -Label "Annotation query" `
                 -ExpectedCommands @($readback.result.commands)
             if (-not [bool]$readback.result.enabled -or
-                [string]$readback.result.text -ne "P2 live" -or
+                [string]$readback.result.text -ne "Live note" -or
                 [int]$readback.result.slot -ne 1) {
                 throw "Annotation slot 1 readback does not match the representative state."
             }
@@ -3823,7 +3823,7 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed -and
-        [bool]$identity.capabilities.supports_screenshot_format_pack) {
+        [bool]$identity.capabilities.supports_screenshot_hardcopy_controls) {
         Invoke-BaselineCase -Name "screenshot-bmp" -Action {
             $screenshotPath = Join-Path $liveArtifactRoot "screenshot.bmp"
             $screenshot = Invoke-LiveCli -Stage "screenshot-bmp" -Command "screenshot" `
@@ -3838,7 +3838,7 @@ if ($snapshotComplete) {
             Assert-FileNonEmpty -Path $screenshotPath -Label "BMP screenshot"
         }
     } elseif (-not $script:FunctionalFailed) {
-        Add-NotApplicableCase -Name "screenshot-bmp" -Detail "Screenshot format pack is unsupported by the detected instrument."
+        Add-NotApplicableCase -Name "screenshot-bmp" -Detail "Screenshot hardcopy controls are unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed) {
@@ -3891,7 +3891,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-edge-settings" -Action {
             $couplingSet = Invoke-LiveCli -Stage "trigger-edge-coupling-set" `
                 -Command "trigger-edge-coupling" `
@@ -3914,7 +3914,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-common" -Action {
             $sweepSet = Invoke-LiveCli -Stage "trigger-sweep-set" -Command "trigger-sweep" `
                 -Arguments @("--mode", [string]$snapshot.TriggerSweep)
@@ -3946,7 +3946,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-external" -Action {
             $rangeSet = Invoke-LiveCli -Stage "external-trigger-range-set" `
                 -Command "external-trigger-range" -Arguments @(
@@ -4001,7 +4001,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-pulse-width" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-pulse-width-set" `
                 -Command "trigger-pulse-width" -Arguments @(
@@ -4024,7 +4024,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-runt" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-runt-set" -Command "trigger-runt" `
                 -Arguments @(
@@ -4047,7 +4047,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-transition" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-transition-set" `
                 -Command "trigger-transition" -Arguments @(
@@ -4071,7 +4071,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-delay" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-delay-set" -Command "trigger-delay" `
                 -Arguments @(
@@ -4096,7 +4096,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-setup-hold" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-setup-hold-set" -Command "trigger-setup-hold" `
                 -Arguments @(
@@ -4119,7 +4119,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-edge-burst" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-edge-burst-set" `
                 -Command "trigger-edge-burst" -Arguments @(
@@ -4142,7 +4142,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-tv" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-tv-set" -Command "trigger-tv" `
                 -Arguments @(
@@ -4166,7 +4166,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-pattern" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-pattern-set" `
                 -Command "trigger-pattern" -Arguments @("--pattern", "XXX1")
@@ -4185,7 +4185,7 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "trigger-or" -Action {
             $configured = Invoke-LiveCli -Stage "trigger-or-set" `
                 -Command "trigger-or" -Arguments @("--pattern", "XXXR")
@@ -4554,7 +4554,7 @@ if ($snapshotComplete) {
         Add-NotApplicableCase -Name "demo-phase" -Detail "DEMO phase is unsupported by the detected instrument."
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.P3Enabled) {
+    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
         Invoke-BaselineCase -Name "autoscale" -Action {
             $autoscale = Invoke-LiveCli -Stage "autoscale-ch1" -Command "autoscale" `
                 -Arguments @("--source-channel", "1")

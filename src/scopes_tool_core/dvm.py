@@ -114,7 +114,7 @@ class DvmState:
 
 
 class DvmController:
-    """Narrow controller for the DVM Common Pack v1 command family."""
+    """Controller for DVM controls."""
 
     def __init__(self, scpi: SCPIClient, capabilities: ScopeCapabilities) -> None:
         self.scpi = scpi

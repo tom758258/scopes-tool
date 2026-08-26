@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from .command_catalog import (
     COMMANDS,
-    P3C_COMMANDS,
+    TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS,
     _COMMAND_BY_ID,
     _COMMAND_FIELDS,
-    _P3C_COMMAND_IDS,
+    _TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS,
     command_catalog,
     model_catalog,
 )
@@ -15,7 +15,7 @@ from .command_execution import (
     ScopeSessionCloseError,
     _capture_batch_request,
     _execute_dry_run,
-    _execute_p3c_scope_command,
+    _execute_trigger_search_serial_segmented_workflow_command,
     _execute_scope_command,
     _jsonable,
     _measure_log_request,
@@ -39,10 +39,10 @@ from .command_validation import (
 
 __all__ = [
     "COMMANDS",
-    "P3C_COMMANDS",
+    "TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS",
     "_COMMAND_BY_ID",
     "_COMMAND_FIELDS",
-    "_P3C_COMMAND_IDS",
+    "_TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS",
     "command_catalog",
     "model_catalog",
     "DEFAULT_MODEL_ID",
@@ -54,7 +54,7 @@ __all__ = [
     "execute_command",
     "_execute_dry_run",
     "_execute_scope_command",
-    "_execute_p3c_scope_command",
+    "_execute_trigger_search_serial_segmented_workflow_command",
     "_run_config",
     "_operation_payload",
     "_state_scope_result",

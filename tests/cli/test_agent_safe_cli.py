@@ -149,7 +149,7 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         "supports_wgen": True,
         "wgen_scpi_root": ":WGEN1",
         "supports_screenshot": True,
-        "supports_screenshot_format_pack": True,
+        "supports_screenshot_hardcopy_controls": True,
         "supports_segmented_memory": True,
         "segmented_max_segments": 1000,
         "supports_segmented_waveform_all": True,
@@ -3020,7 +3020,7 @@ def test_screenshot_simulate_json_reports_png_metadata(capsys, tmp_path):
         ("bmp8bit", ".bmp", ":HCOPY:SDUMp:DATA? BMP8bit", b"BM"),
     ],
 )
-def test_screenshot_format_pack_simulate_uses_explicit_screen_dump_query(
+def test_screenshot_hardcopy_controls_simulate_uses_explicit_screen_dump_query(
     capsys, tmp_path, format_name, extension, query, signature
 ):
     output_path = tmp_path / f"screen{extension}"
@@ -3045,7 +3045,7 @@ def test_screenshot_format_pack_simulate_uses_explicit_screen_dump_query(
     assert output_path.read_bytes().startswith(signature)
 
 
-def test_screenshot_format_pack_appearance_controls_and_query_state(capsys, tmp_path):
+def test_screenshot_hardcopy_appearance_controls_and_query_state(capsys, tmp_path):
     output_path = tmp_path / "appearance.png"
     assert (
         cli.main(
@@ -3092,7 +3092,7 @@ def test_screenshot_format_pack_appearance_controls_and_query_state(capsys, tmp_
     }
 
 
-def test_screenshot_format_pack_dry_run_plans_without_backend(capsys, tmp_path):
+def test_screenshot_hardcopy_controls_dry_run_plans_without_backend(capsys, tmp_path):
     output_path = tmp_path / "screen.bmp"
     assert (
         cli.main(
@@ -3134,7 +3134,7 @@ def test_screenshot_format_pack_dry_run_plans_without_backend(capsys, tmp_path):
     assert not output_path.exists()
 
 
-def test_screenshot_format_pack_dry_run_explicit_ink_saver_has_no_restore(capsys):
+def test_screenshot_hardcopy_controls_dry_run_explicit_ink_saver_has_no_restore(capsys):
     assert (
         cli.main(
             [
@@ -3200,7 +3200,7 @@ def test_model_help_distinguishes_one_shot_planning_from_worker(capsys):
     assert "dry-run and simulation planning" not in worker_help_text
 
 
-def test_screenshot_format_pack_rejects_invalid_values_before_backend(monkeypatch):
+def test_screenshot_hardcopy_controls_reject_invalid_values_before_backend(monkeypatch):
     opened = False
 
     def fail_open(*args, **kwargs):

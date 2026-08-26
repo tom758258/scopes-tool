@@ -783,14 +783,14 @@ COMMANDS = (
 )
 
 
-def _p3c_field(name: str, field_type: str, *, visible_if: list[dict[str, Any]] | None = None, **kwargs: Any) -> dict[str, Any]:
+def _command_field(name: str, field_type: str, *, visible_if: list[dict[str, Any]] | None = None, **kwargs: Any) -> dict[str, Any]:
     field = {"name": name, "type": field_type, **kwargs}
     if visible_if is not None:
         field["visible_if"] = visible_if
     return field
 
 
-def _p3c_action() -> dict[str, Any]:
+def _action_field() -> dict[str, Any]:
     return {
         "name": "action",
         "type": "enum",
@@ -799,11 +799,11 @@ def _p3c_action() -> dict[str, Any]:
     }
 
 
-def _p3c_set_visibility(*conditions: dict[str, Any]) -> list[dict[str, Any]]:
+def _set_action_visibility(*conditions: dict[str, Any]) -> list[dict[str, Any]]:
     return [{"field": "action", "equals": "set"}, *conditions]
 
 
-def _p3c_action_command(
+def _action_command(
     command_id: str,
     category: str,
     label: str,
@@ -818,7 +818,7 @@ def _p3c_action_command(
         "category": category,
         "label": label,
         "modes": modes,
-        "fields": (_p3c_action(), *fields),
+        "fields": (_action_field(), *fields),
     }
     if group is not None:
         entry["group"] = group
@@ -827,177 +827,177 @@ def _p3c_action_command(
     return entry
 
 
-_P3C_TRIGGER_SLOPES = ("positive", "negative", "either", "alternate")
-_P3C_BINARY_SLOPES = ("positive", "negative")
-_P3C_TV_LINE_MODES = ("line-field1", "line-field2", "line-alternate")
+_TRIGGER_SLOPES = ("positive", "negative", "either", "alternate")
+_BINARY_SLOPES = ("positive", "negative")
+_TV_LINE_MODES = ("line-field1", "line-field2", "line-alternate")
 
-P3C_COMMANDS = (
-    _p3c_action_command(
+TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
+    _action_command(
         "trigger-edge", "Trigger", "Edge trigger", (
-            _p3c_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("slope", "enum", options=_P3C_TRIGGER_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("slope", "enum", options=_TRIGGER_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
         ),
         group="edge",
         editor="trigger",
     ),
-    _p3c_action_command(
+    _action_command(
         "trigger-edge-source", "Trigger", "Edge trigger source", (
-            _p3c_field("source", "enum", options=("analog-channel", "external", "line"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility({"field": "source", "equals": "analog-channel"}), required_if=_p3c_set_visibility({"field": "source", "equals": "analog-channel"})),
+            _command_field("source", "enum", options=("analog-channel", "external", "line"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility({"field": "source", "equals": "analog-channel"}), required_if=_set_action_visibility({"field": "source", "equals": "analog-channel"})),
         ),
         group="edge",
         editor="trigger",
     ),
-    _p3c_action_command("trigger-edge-slope", "Trigger", "Edge trigger slope", (_p3c_field("slope", "enum", options=_P3C_TRIGGER_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge", editor="trigger"),
-    _p3c_action_command(
+    _action_command("trigger-edge-slope", "Trigger", "Edge trigger slope", (_command_field("slope", "enum", options=_TRIGGER_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="edge", editor="trigger"),
+    _action_command(
         "trigger-edge-level", "Trigger", "Edge trigger level", (
-            _p3c_field("source_channel", "integer", minimum=1, maximum=4),
-            _p3c_field("level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
+            _command_field("source_channel", "integer", minimum=1, maximum=4),
+            _command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
         ),
         group="edge",
         editor="trigger",
     ),
-    _p3c_action_command("external-trigger-range", "Trigger", "External trigger range", (_p3c_field("range_volts", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external", editor="trigger"),
-    _p3c_action_command("trigger-edge-external-level", "Trigger", "External trigger level", (_p3c_field("level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external", editor="trigger"),
-    _p3c_action_command("external-trigger-probe", "Trigger", "External trigger probe", (_p3c_field("attenuation", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external", editor="trigger"),
-    _p3c_action_command("external-trigger-units", "Trigger", "External trigger units", (_p3c_field("units", "enum", options=("volts", "amps"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="external", editor="trigger"),
+    _action_command("external-trigger-range", "Trigger", "External trigger range", (_command_field("range_volts", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="external", editor="trigger"),
+    _action_command("trigger-edge-external-level", "Trigger", "External trigger level", (_command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="external", editor="trigger"),
+    _action_command("external-trigger-probe", "Trigger", "External trigger probe", (_command_field("attenuation", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="external", editor="trigger"),
+    _action_command("external-trigger-units", "Trigger", "External trigger units", (_command_field("units", "enum", options=("volts", "amps"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="external", editor="trigger"),
     {"id": "external-trigger-settings", "category": "Trigger", "label": "External trigger settings", "modes": ("live", "simulate"), "fields": (), "group": "external", "editor": "trigger"},
-    _p3c_action_command("trigger-edge-coupling", "Trigger", "Edge trigger coupling", (_p3c_field("coupling", "enum", options=("ac", "dc", "lf-reject"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge", editor="trigger"),
-    _p3c_action_command("trigger-edge-reject", "Trigger", "Edge trigger reject", (_p3c_field("reject", "enum", options=("off", "lf-reject", "hf-reject"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="edge", editor="trigger"),
-    _p3c_action_command(
+    _action_command("trigger-edge-coupling", "Trigger", "Edge trigger coupling", (_command_field("coupling", "enum", options=("ac", "dc", "lf-reject"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="edge", editor="trigger"),
+    _action_command("trigger-edge-reject", "Trigger", "Edge trigger reject", (_command_field("reject", "enum", options=("off", "lf-reject", "hf-reject"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="edge", editor="trigger"),
+    _action_command(
         "trigger-pulse-width", "Trigger", "Glitch / pulse-width trigger", (
-            _p3c_field("channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("polarity", "enum", options=("positive", "negative"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("qualifier", "enum", options=("greater-than", "less-than", "range"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("time_seconds", "number", visible_if=_p3c_set_visibility({"field": "qualifier", "in": ("greater-than", "less-than")}), required_if=_p3c_set_visibility({"field": "qualifier", "in": ("greater-than", "less-than")})),
-            _p3c_field("min_time_seconds", "number", visible_if=_p3c_set_visibility({"field": "qualifier", "equals": "range"}), required_if=_p3c_set_visibility({"field": "qualifier", "equals": "range"})),
-            _p3c_field("max_time_seconds", "number", visible_if=_p3c_set_visibility({"field": "qualifier", "equals": "range"}), required_if=_p3c_set_visibility({"field": "qualifier", "equals": "range"})),
-            _p3c_field("level", "number", visible_if=_p3c_set_visibility()),
+            _command_field("channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("polarity", "enum", options=("positive", "negative"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("qualifier", "enum", options=("greater-than", "less-than", "range"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("time_seconds", "number", visible_if=_set_action_visibility({"field": "qualifier", "in": ("greater-than", "less-than")}), required_if=_set_action_visibility({"field": "qualifier", "in": ("greater-than", "less-than")})),
+            _command_field("min_time_seconds", "number", visible_if=_set_action_visibility({"field": "qualifier", "equals": "range"}), required_if=_set_action_visibility({"field": "qualifier", "equals": "range"})),
+            _command_field("max_time_seconds", "number", visible_if=_set_action_visibility({"field": "qualifier", "equals": "range"}), required_if=_set_action_visibility({"field": "qualifier", "equals": "range"})),
+            _command_field("level", "number", visible_if=_set_action_visibility()),
         ),
         group="pulse-width",
         editor="trigger",
     ),
-    _p3c_action_command(
+    _action_command(
         "trigger-runt", "Trigger", "Runt trigger", (
-            _p3c_field("channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("polarity", "enum", options=("positive", "negative", "either"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("qualifier", "enum", options=("greater-than", "less-than", "none"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("low_level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("high_level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("time_seconds", "number", visible_if=_p3c_set_visibility({"field": "qualifier", "in": ("greater-than", "less-than")}), required_if=_p3c_set_visibility({"field": "qualifier", "in": ("greater-than", "less-than")})),
+            _command_field("channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("polarity", "enum", options=("positive", "negative", "either"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("qualifier", "enum", options=("greater-than", "less-than", "none"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("low_level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("high_level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("time_seconds", "number", visible_if=_set_action_visibility({"field": "qualifier", "in": ("greater-than", "less-than")}), required_if=_set_action_visibility({"field": "qualifier", "in": ("greater-than", "less-than")})),
         ),
         group="runt",
         editor="trigger",
     ),
-    _p3c_action_command(
+    _action_command(
         "trigger-transition", "Trigger", "Transition trigger", (
-            _p3c_field("channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("slope", "enum", options=_P3C_BINARY_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("qualifier", "enum", options=("greater-than", "less-than"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("low_level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("high_level", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("time_seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
+            _command_field("channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("slope", "enum", options=_BINARY_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("qualifier", "enum", options=("greater-than", "less-than"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("low_level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("high_level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("time_seconds", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
         ),
         group="transition",
         editor="trigger",
     ),
-    _p3c_action_command(
+    _action_command(
         "trigger-delay", "Trigger", "Delay trigger", (
-            _p3c_field("arm_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("arm_slope", "enum", options=_P3C_BINARY_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("trigger_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("trigger_slope", "enum", options=_P3C_BINARY_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("time_seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("count", "integer", minimum=1, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
+            _command_field("arm_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("arm_slope", "enum", options=_BINARY_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("trigger_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("trigger_slope", "enum", options=_BINARY_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("time_seconds", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("count", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
         ),
         group="delay",
         editor="trigger",
     ),
-    _p3c_action_command(
+    _action_command(
         "trigger-setup-hold", "Trigger", "Setup and hold trigger", (
-            _p3c_field("clock_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("data_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("slope", "enum", options=_P3C_BINARY_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("setup_time_seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("hold_time_seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
+            _command_field("clock_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("data_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("slope", "enum", options=_BINARY_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("setup_time_seconds", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("hold_time_seconds", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
         ),
         group="setup-hold",
         editor="trigger",
     ),
-    _p3c_action_command(
+    _action_command(
         "trigger-edge-burst", "Trigger", "Nth edge burst trigger", (
-            _p3c_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("slope", "enum", options=_P3C_BINARY_SLOPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("count", "integer", minimum=1, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("idle_time", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("level", "number", visible_if=_p3c_set_visibility()),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("slope", "enum", options=_BINARY_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("count", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("idle_time", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("level", "number", visible_if=_set_action_visibility()),
         ),
         group="edge-burst",
         editor="trigger",
     ),
-    _p3c_action_command(
+    _action_command(
         "trigger-tv", "Trigger", "TV trigger", (
-            _p3c_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("standard", "enum", options=("ntsc", "pal", "palm", "secam"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("mode", "enum", options=("field1", "field2", "all-fields", "all-lines", *_P3C_TV_LINE_MODES), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("polarity", "enum", options=("positive", "negative"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("line", "integer", minimum=1, visible_if=_p3c_set_visibility({"field": "mode", "in": _P3C_TV_LINE_MODES}), required_if=_p3c_set_visibility({"field": "mode", "in": _P3C_TV_LINE_MODES})),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("standard", "enum", options=("ntsc", "pal", "palm", "secam"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("mode", "enum", options=("field1", "field2", "all-fields", "all-lines", *_TV_LINE_MODES), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("polarity", "enum", options=("positive", "negative"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("line", "integer", minimum=1, visible_if=_set_action_visibility({"field": "mode", "in": _TV_LINE_MODES}), required_if=_set_action_visibility({"field": "mode", "in": _TV_LINE_MODES})),
         ),
         group="tv",
         editor="trigger",
     ),
-    _p3c_action_command("trigger-pattern", "Trigger", "Pattern trigger", (_p3c_field("pattern", "string", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="pattern-or", editor="trigger"),
-    _p3c_action_command("trigger-or", "Trigger", "OR trigger", (_p3c_field("pattern", "string", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="pattern-or", editor="trigger"),
-    _p3c_action_command("trigger-sweep", "Trigger", "Trigger sweep", (_p3c_field("mode", "enum", options=("auto", "normal"), visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
-    _p3c_action_command("trigger-noise-reject", "Trigger", "Noise reject", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
-    _p3c_action_command("trigger-hf-reject", "Trigger", "HF reject", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
-    _p3c_action_command("trigger-holdoff", "Trigger", "Trigger holdoff", (_p3c_field("seconds", "number", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="common", editor="trigger"),
+    _action_command("trigger-pattern", "Trigger", "Pattern trigger", (_command_field("pattern", "string", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="pattern-or", editor="trigger"),
+    _action_command("trigger-or", "Trigger", "OR trigger", (_command_field("pattern", "string", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="pattern-or", editor="trigger"),
+    _action_command("trigger-sweep", "Trigger", "Trigger sweep", (_command_field("mode", "enum", options=("auto", "normal"), visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="common", editor="trigger"),
+    _action_command("trigger-noise-reject", "Trigger", "Noise reject", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="common", editor="trigger"),
+    _action_command("trigger-hf-reject", "Trigger", "HF reject", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="common", editor="trigger"),
+    _action_command("trigger-holdoff", "Trigger", "Trigger holdoff", (_command_field("seconds", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="common", editor="trigger"),
 
-    _p3c_action_command("search-state", "Search", "Search state", (_p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="basic", editor="search"),
-    _p3c_action_command("search-mode", "Search", "Search mode", (_p3c_field("mode", "enum", options=SEARCH_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="basic", editor="search"),
+    _action_command("search-state", "Search", "Search state", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="basic", editor="search"),
+    _action_command("search-mode", "Search", "Search mode", (_command_field("mode", "enum", options=SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="basic", editor="search"),
     {"id": "search-count", "category": "Search", "label": "Search count", "modes": ("live", "simulate"), "fields": (), "group": "basic", "editor": "search"},
-    _p3c_action_command("search-event", "Search", "Search event", (_p3c_field("event", "integer", minimum=1, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="event", editor="search"),
-    _p3c_action_command(
+    _action_command("search-event", "Search", "Search event", (_command_field("event", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="event", editor="search"),
+    _action_command(
         "serial-search-uart", "Search", "UART serial search", (
-            _p3c_field("bus", "integer", minimum=1),
-            _p3c_field("mode", "enum", options=UART_SEARCH_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("data", "integer", visible_if=_p3c_set_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
-            _p3c_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_p3c_set_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
+            _command_field("bus", "integer", minimum=1),
+            _command_field("mode", "enum", options=UART_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("data", "integer", visible_if=_set_action_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
+            _command_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_set_action_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
         ),
         group="serial",
         editor="search",
     ),
-    _p3c_action_command(
+    _action_command(
         "serial-search-i2c", "Search", "I2C serial search", (
-            _p3c_field("bus", "integer", minimum=1),
-            _p3c_field("mode", "enum", options=I2C_SEARCH_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("address", "integer", visible_if=_p3c_set_visibility()),
-            _p3c_field("data", "integer", visible_if=_p3c_set_visibility()),
-            _p3c_field("data2", "integer", visible_if=_p3c_set_visibility({"field": "mode", "in": ("read7-data2", "write7-data2")})),
-            _p3c_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_p3c_set_visibility({"field": "mode", "equals": "eeprom-read"})),
+            _command_field("bus", "integer", minimum=1),
+            _command_field("mode", "enum", options=I2C_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("address", "integer", visible_if=_set_action_visibility()),
+            _command_field("data", "integer", visible_if=_set_action_visibility()),
+            _command_field("data2", "integer", visible_if=_set_action_visibility({"field": "mode", "in": ("read7-data2", "write7-data2")})),
+            _command_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_set_action_visibility({"field": "mode", "equals": "eeprom-read"})),
         ),
         group="serial",
         editor="search",
     ),
-    _p3c_action_command(
+    _action_command(
         "serial-search-spi", "Search", "SPI serial search", (
-            _p3c_field("bus", "integer", minimum=1),
-            _p3c_field("mode", "enum", options=SPI_SEARCH_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("data", "string", visible_if=_p3c_set_visibility()),
-            _p3c_field("width", "integer", minimum=1, visible_if=_p3c_set_visibility()),
+            _command_field("bus", "integer", minimum=1),
+            _command_field("mode", "enum", options=SPI_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("data", "string", visible_if=_set_action_visibility()),
+            _command_field("width", "integer", minimum=1, visible_if=_set_action_visibility()),
         ),
         group="serial",
         editor="search",
     ),
-    _p3c_action_command(
+    _action_command(
         "serial-search-can", "Search", "CAN serial search", (
-            _p3c_field("bus", "integer", minimum=1),
-            _p3c_field("mode", "enum", options=CAN_SEARCH_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),
-            _p3c_field("data", "string", visible_if=_p3c_set_visibility()),
-            _p3c_field("data_length", "integer", minimum=0, visible_if=_p3c_set_visibility()),
-            _p3c_field("id", "string", visible_if=_p3c_set_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
-            _p3c_field("id_mode", "enum", options=CAN_SEARCH_ID_MODES, visible_if=_p3c_set_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
+            _command_field("bus", "integer", minimum=1),
+            _command_field("mode", "enum", options=CAN_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("data", "string", visible_if=_set_action_visibility()),
+            _command_field("data_length", "integer", minimum=0, visible_if=_set_action_visibility()),
+            _command_field("id", "string", visible_if=_set_action_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
+            _command_field("id_mode", "enum", options=CAN_SEARCH_ID_MODES, visible_if=_set_action_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
         ),
         group="serial",
         editor="search",
@@ -1005,73 +1005,73 @@ P3C_COMMANDS = (
 
     {
         "id": "serial-query", "category": "Serial", "label": "Serial query",
-        "modes": ("live", "simulate"), "fields": (_p3c_field("bus", "integer", minimum=1),),
+        "modes": ("live", "simulate"), "fields": (_command_field("bus", "integer", minimum=1),),
         "group": "bus",
     },
-    _p3c_action_command("serial-mode", "Serial", "Serial mode", (_p3c_field("bus", "integer", minimum=1), _p3c_field("mode", "enum", options=SERIAL_MODES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility())), group="bus", editor="serial"),
-    _p3c_action_command("serial-display", "Serial", "Serial display", (_p3c_field("bus", "integer", minimum=1), _p3c_field("enabled", "boolean", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility())), group="bus", editor="serial"),
-    _p3c_action_command(
+    _action_command("serial-mode", "Serial", "Serial mode", (_command_field("bus", "integer", minimum=1), _command_field("mode", "enum", options=SERIAL_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility())), group="bus", editor="serial"),
+    _action_command("serial-display", "Serial", "Serial display", (_command_field("bus", "integer", minimum=1), _command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility())), group="bus", editor="serial"),
+    _action_command(
         "serial-uart", "Serial", "UART configuration", (
-            _p3c_field("bus", "integer", minimum=1),
-            _p3c_field("rx_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("tx_source", "string", visible_if=_p3c_set_visibility()),
-            _p3c_field("baud_rate", "integer", visible_if=_p3c_set_visibility()), _p3c_field("data_bits", "integer", minimum=5, maximum=9, visible_if=_p3c_set_visibility()),
-            _p3c_field("parity", "enum", options=UART_PARITIES, visible_if=_p3c_set_visibility()), _p3c_field("polarity", "enum", options=UART_POLARITIES, visible_if=_p3c_set_visibility()),
-            _p3c_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_p3c_set_visibility()),
+            _command_field("bus", "integer", minimum=1),
+            _command_field("rx_source", "string", visible_if=_set_action_visibility()), _command_field("tx_source", "string", visible_if=_set_action_visibility()),
+            _command_field("baud_rate", "integer", visible_if=_set_action_visibility()), _command_field("data_bits", "integer", minimum=5, maximum=9, visible_if=_set_action_visibility()),
+            _command_field("parity", "enum", options=UART_PARITIES, visible_if=_set_action_visibility()), _command_field("polarity", "enum", options=UART_POLARITIES, visible_if=_set_action_visibility()),
+            _command_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_set_action_visibility()),
         ),
         group="uart",
         editor="serial",
     ),
-    _p3c_action_command("serial-i2c", "Serial", "I2C configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("clock_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("data_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("address_size", "enum", options=I2C_ADDRESS_SIZES, visible_if=_p3c_set_visibility())), group="i2c", editor="serial"),
-    _p3c_action_command("serial-spi", "Serial", "SPI configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("clock_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("mosi_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("miso_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("frame_source", "string", visible_if=_p3c_set_visibility()), _p3c_field("clock_slope", "enum", options=SPI_CLOCK_SLOPES, visible_if=_p3c_set_visibility()), _p3c_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_p3c_set_visibility()), _p3c_field("word_width", "integer", minimum=4, maximum=16, visible_if=_p3c_set_visibility()), _p3c_field("framing", "enum", options=SPI_FRAMINGS, visible_if=_p3c_set_visibility()), _p3c_field("clock_timeout", "number", visible_if=_p3c_set_visibility())), group="spi", editor="serial"),
-    _p3c_action_command("serial-can", "Serial", "CAN configuration", (_p3c_field("bus", "integer", minimum=1), _p3c_field("source", "string", visible_if=_p3c_set_visibility()), _p3c_field("baud_rate", "integer", visible_if=_p3c_set_visibility()), _p3c_field("signal_definition", "enum", options=CAN_SIGNAL_DEFINITIONS, visible_if=_p3c_set_visibility()), _p3c_field("sample_point", "number", visible_if=_p3c_set_visibility())), group="can", editor="serial"),
-    _p3c_action_command("serial-trigger-uart", "Serial", "UART serial trigger", (_p3c_field("bus", "integer", minimum=1), _p3c_field("type", "enum", options=UART_TRIGGER_TYPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("data", "integer", visible_if=_p3c_set_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_p3c_set_visibility({"field": "type", "in": ("rx-data", "tx-data")})), _p3c_field("qualifier", "enum", options=UART_TRIGGER_QUALIFIERS, visible_if=_p3c_set_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_p3c_set_visibility({"field": "type", "in": ("rx-data", "tx-data")}))), group="uart", editor="serial"),
-    _p3c_action_command("serial-trigger-i2c", "Serial", "I2C serial trigger", (_p3c_field("bus", "integer", minimum=1), _p3c_field("type", "enum", options=I2C_TRIGGER_TYPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("address", "integer", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")})), _p3c_field("data", "integer", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility({"field": "type", "in": ("read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")})), _p3c_field("data2", "integer", visible_if=_p3c_set_visibility({"field": "type", "in": ("read7-data2", "write7-data2")}), required_if=_p3c_set_visibility({"field": "type", "in": ("read7-data2", "write7-data2")})), _p3c_field("qualifier", "enum", options=I2C_TRIGGER_QUALIFIERS, visible_if=_p3c_set_visibility({"field": "type", "equals": "read-eeprom"}), required_if=_p3c_set_visibility({"field": "type", "equals": "read-eeprom"}))), group="i2c", editor="serial"),
-    _p3c_action_command("serial-trigger-spi", "Serial", "SPI serial trigger", (_p3c_field("bus", "integer", minimum=1), _p3c_field("type", "enum", options=SPI_TRIGGER_TYPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("width", "integer", minimum=1, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("data", "string", visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility())), group="spi", editor="serial"),
-    _p3c_action_command("serial-trigger-can", "Serial", "CAN serial trigger", (_p3c_field("bus", "integer", minimum=1), _p3c_field("type", "enum", options=CAN_TRIGGER_TYPES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()), _p3c_field("id", "string", visible_if=_p3c_set_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_p3c_set_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")})), _p3c_field("id_mode", "enum", options=CAN_TRIGGER_ID_MODES, visible_if=_p3c_set_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_p3c_set_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")})), _p3c_field("data", "string", visible_if=_p3c_set_visibility({"field": "type", "equals": "id-and-data"}), required_if=_p3c_set_visibility({"field": "type", "equals": "id-and-data"})), _p3c_field("data_length", "integer", minimum=0, visible_if=_p3c_set_visibility({"field": "type", "equals": "id-and-data"}), required_if=_p3c_set_visibility({"field": "type", "equals": "id-and-data"}))), group="can", editor="serial"),
+    _action_command("serial-i2c", "Serial", "I2C configuration", (_command_field("bus", "integer", minimum=1), _command_field("clock_source", "string", visible_if=_set_action_visibility()), _command_field("data_source", "string", visible_if=_set_action_visibility()), _command_field("address_size", "enum", options=I2C_ADDRESS_SIZES, visible_if=_set_action_visibility())), group="i2c", editor="serial"),
+    _action_command("serial-spi", "Serial", "SPI configuration", (_command_field("bus", "integer", minimum=1), _command_field("clock_source", "string", visible_if=_set_action_visibility()), _command_field("mosi_source", "string", visible_if=_set_action_visibility()), _command_field("miso_source", "string", visible_if=_set_action_visibility()), _command_field("frame_source", "string", visible_if=_set_action_visibility()), _command_field("clock_slope", "enum", options=SPI_CLOCK_SLOPES, visible_if=_set_action_visibility()), _command_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_set_action_visibility()), _command_field("word_width", "integer", minimum=4, maximum=16, visible_if=_set_action_visibility()), _command_field("framing", "enum", options=SPI_FRAMINGS, visible_if=_set_action_visibility()), _command_field("clock_timeout", "number", visible_if=_set_action_visibility())), group="spi", editor="serial"),
+    _action_command("serial-can", "Serial", "CAN configuration", (_command_field("bus", "integer", minimum=1), _command_field("source", "string", visible_if=_set_action_visibility()), _command_field("baud_rate", "integer", visible_if=_set_action_visibility()), _command_field("signal_definition", "enum", options=CAN_SIGNAL_DEFINITIONS, visible_if=_set_action_visibility()), _command_field("sample_point", "number", visible_if=_set_action_visibility())), group="can", editor="serial"),
+    _action_command("serial-trigger-uart", "Serial", "UART serial trigger", (_command_field("bus", "integer", minimum=1), _command_field("type", "enum", options=UART_TRIGGER_TYPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("data", "integer", visible_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")})), _command_field("qualifier", "enum", options=UART_TRIGGER_QUALIFIERS, visible_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}))), group="uart", editor="serial"),
+    _action_command("serial-trigger-i2c", "Serial", "I2C serial trigger", (_command_field("bus", "integer", minimum=1), _command_field("type", "enum", options=I2C_TRIGGER_TYPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("address", "integer", visible_if=_set_action_visibility(), required_if=_set_action_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")})), _command_field("data", "integer", visible_if=_set_action_visibility(), required_if=_set_action_visibility({"field": "type", "in": ("read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")})), _command_field("data2", "integer", visible_if=_set_action_visibility({"field": "type", "in": ("read7-data2", "write7-data2")}), required_if=_set_action_visibility({"field": "type", "in": ("read7-data2", "write7-data2")})), _command_field("qualifier", "enum", options=I2C_TRIGGER_QUALIFIERS, visible_if=_set_action_visibility({"field": "type", "equals": "read-eeprom"}), required_if=_set_action_visibility({"field": "type", "equals": "read-eeprom"}))), group="i2c", editor="serial"),
+    _action_command("serial-trigger-spi", "Serial", "SPI serial trigger", (_command_field("bus", "integer", minimum=1), _command_field("type", "enum", options=SPI_TRIGGER_TYPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("width", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("data", "string", visible_if=_set_action_visibility(), required_if=_set_action_visibility())), group="spi", editor="serial"),
+    _action_command("serial-trigger-can", "Serial", "CAN serial trigger", (_command_field("bus", "integer", minimum=1), _command_field("type", "enum", options=CAN_TRIGGER_TYPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("id", "string", visible_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")})), _command_field("id_mode", "enum", options=CAN_TRIGGER_ID_MODES, visible_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")})), _command_field("data", "string", visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"})), _command_field("data_length", "integer", minimum=0, visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}))), group="can", editor="serial"),
     {"id": "serial-lister-query", "category": "Serial", "label": "Serial Lister state", "modes": ("live", "simulate"), "fields": (), "group": "lister", "editor": "serial"},
-    _p3c_action_command("serial-lister-display", "Serial", "Serial Lister display", (_p3c_field("display", "enum", options=SERIAL_LISTER_DISPLAYS, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="lister", editor="serial"),
-    _p3c_action_command("serial-lister-reference", "Serial", "Serial Lister reference", (_p3c_field("reference", "enum", options=SERIAL_LISTER_REFERENCES, visible_if=_p3c_set_visibility(), required_if=_p3c_set_visibility()),), group="lister", editor="serial"),
-    {"id": "serial-lister-export", "category": "Serial", "label": "Export Serial Lister", "modes": ("live", "simulate"), "fields": (_p3c_field("filename", "string", required=True),), "group": "lister", "editor": "serial"},
+    _action_command("serial-lister-display", "Serial", "Serial Lister display", (_command_field("display", "enum", options=SERIAL_LISTER_DISPLAYS, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="lister", editor="serial"),
+    _action_command("serial-lister-reference", "Serial", "Serial Lister reference", (_command_field("reference", "enum", options=SERIAL_LISTER_REFERENCES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="lister", editor="serial"),
+    {"id": "serial-lister-export", "category": "Serial", "label": "Export Serial Lister", "modes": ("live", "simulate"), "fields": (_command_field("filename", "string", required=True),), "group": "lister", "editor": "serial"},
 
     {
         "id": "segmented-memory", "category": "Segmented Memory", "label": "Segmented memory", "modes": ("live", "simulate"),
-        "fields": ({"name": "action", "type": "enum", "options": ("query", "enable", "disable"), "default": "query"}, _p3c_field("segments", "integer", minimum=1, visible_if=[{"field": "action", "equals": "enable"}], required_if=[{"field": "action", "equals": "enable"}])),
+        "fields": ({"name": "action", "type": "enum", "options": ("query", "enable", "disable"), "default": "query"}, _command_field("segments", "integer", minimum=1, visible_if=[{"field": "action", "equals": "enable"}], required_if=[{"field": "action", "equals": "enable"}])),
     },
     {
         "id": "segmented-capture", "category": "Segmented Memory", "label": "Segmented capture", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_p3c_field("channel", "integer", minimum=1, maximum=4, default=1), _p3c_field("segments", "integer", minimum=1, required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("timeout_ms", "integer", minimum=1, default=30000), _p3c_field("poll_interval_ms", "integer", minimum=1, default=100)),
+        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1), _command_field("segments", "integer", minimum=1, required=True), _command_field("points", "integer", minimum=100, default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
     },
     {
         "id": "capture-batch", "category": "Workflow", "label": "Capture batch", "modes": ("live", "simulate"),
         "group": "capture",
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("count", "integer", minimum=1, default=1), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("points", "integer", minimum=100, default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("count", "integer", minimum=1, default=1), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
         "id": "measure-log", "category": "Workflow", "label": "Measurement log", "modes": ("live", "simulate"),
         "group": "measurement",
         "editor": "workflow",
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", options=PAIR_MEASUREMENT_ITEMS, default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("interval_seconds", "number", minimum=0, default=1), _p3c_field("count", "integer", minimum=1), _p3c_field("duration_seconds", "number", minimum=0), _p3c_field("stop_on_error", "boolean", default=False)),
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _command_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _command_field("pairs", "string", help="Example: 1:2, 3:4"), _command_field("pair_items", "string", options=PAIR_MEASUREMENT_ITEMS, default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _command_field("interval_seconds", "number", minimum=0, default=1), _command_field("count", "integer", minimum=1), _command_field("duration_seconds", "number", minimum=0), _command_field("stop_on_error", "boolean", default=False)),
     },
     {
         "id": "measure-until", "category": "Workflow", "label": "Measure until", "modes": ("live", "simulate", "dry-run"),
         "group": "measurement",
-        "fields": (_p3c_field("channel", "integer", minimum=1, maximum=4, default=1), _p3c_field("item", "enum", options=_DIRECT_MEASUREMENT_ITEMS, default="vpp"), _p3c_field("operator", "enum", options=("gt", "gte", "lt", "lte"), required=True), _p3c_field("threshold", "number", required=True), _p3c_field("timeout_seconds", "number", exclusive_minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=1)),
+        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1), _command_field("item", "enum", options=_DIRECT_MEASUREMENT_ITEMS, default="vpp"), _command_field("operator", "enum", options=("gt", "gte", "lt", "lte"), required=True), _command_field("threshold", "number", required=True), _command_field("timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("interval_seconds", "number", minimum=0, default=1)),
     },
     {
         "id": "triggered-measure-loop", "category": "Workflow", "label": "Triggered measurement loop", "modes": ("live", "simulate", "dry-run"),
         "group": "triggered",
         "editor": "workflow",
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _p3c_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _p3c_field("pairs", "string", help="Example: 1:2, 3:4"), _p3c_field("pair_items", "string", options=PAIR_MEASUREMENT_ITEMS, default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv"), _command_field("items", "multi-enum", options=_DIRECT_MEASUREMENT_ITEMS, serialize="csv", default=("vpp", "frequency")), _command_field("pairs", "string", help="Example: 1:2, 3:4"), _command_field("pair_items", "string", options=PAIR_MEASUREMENT_ITEMS, default="phase,delay", help="Comma-separated pair measurements, for example phase,delay"), _command_field("count", "integer", minimum=1, required=True), _command_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
         "id": "triggered-capture-series", "category": "Workflow", "label": "Triggered capture series", "modes": ("live", "simulate", "dry-run"),
         "group": "triggered",
-        "fields": (_p3c_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _p3c_field("count", "integer", minimum=1, required=True), _p3c_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _p3c_field("points", "integer", minimum=100, default=1000), _p3c_field("format", "enum", options=("byte", "word"), default="byte"), _p3c_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("count", "integer", minimum=1, required=True), _command_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("points", "integer", minimum=100, default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
 )
 
-COMMANDS = COMMANDS + P3C_COMMANDS
-_P3C_COMMAND_IDS = frozenset(entry["id"] for entry in P3C_COMMANDS)
+COMMANDS = COMMANDS + TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS
+_TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS = frozenset(entry["id"] for entry in TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS)
 
 PC_OUTPUT_COMMAND_IDS = frozenset(
     {

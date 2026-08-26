@@ -65,7 +65,7 @@ def submit(
     return wait_for_job(client, response.json()["job_id"])
 
 
-def test_commands_expose_the_p2_subset() -> None:
+def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> None:
     client = TestClient(app)
 
     response = client.get("/api/commands")
@@ -231,7 +231,7 @@ def test_simulated_timebase_and_display_persistence_use_setting_readback() -> No
     assert persistence["result"]["result"]["persistence"]["seconds"] == 2.5
 
 
-def test_commands_expose_the_p3a_flat_subset() -> None:
+def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> None:
     client = TestClient(app)
 
     response = client.get("/api/commands")
@@ -299,7 +299,7 @@ def test_commands_expose_the_p3a_flat_subset() -> None:
     )
 
 
-def test_commands_expose_the_p3b_reference_and_save_subset() -> None:
+def test_commands_expose_reference_and_save_subset() -> None:
     client = TestClient(app)
 
     response = client.get("/api/commands")
@@ -330,7 +330,7 @@ def test_commands_expose_the_p3b_reference_and_save_subset() -> None:
         assert commands[command]["modes"] == ["live", "simulate"]
 
 
-def test_representative_p3b_simulated_commands_complete_without_artifacts() -> None:
+def test_representative_reference_and_save_simulated_commands_complete_without_artifacts() -> None:
     client = TestClient(app)
 
     reference = submit(
@@ -357,7 +357,7 @@ def test_representative_p3b_simulated_commands_complete_without_artifacts() -> N
     assert save["result"]["result"]["save"]["instrument_side"] is True
 
 
-def test_p3b_save_filename_validation_is_preserved() -> None:
+def test_save_filename_validation_is_preserved() -> None:
     client = TestClient(app)
 
     response = client.post(
@@ -395,7 +395,7 @@ def test_measure_and_dvm_query_requests_complete_without_set_only_channels() -> 
         assert job["status"] == "completed", (command, job)
 
 
-def test_representative_p3a_simulated_commands_complete() -> None:
+def test_representative_channel_display_dvm_math_and_fft_simulated_commands_complete() -> None:
     client = TestClient(app)
 
     for command, parameters in (
@@ -429,7 +429,7 @@ def test_representative_p3a_simulated_commands_complete() -> None:
         assert job["status"] == "completed", (command, job)
 
 
-def test_p3a_invalid_and_unsupported_requests_are_rejected() -> None:
+def test_channel_display_dvm_math_and_fft_invalid_and_unsupported_requests_are_rejected() -> None:
     client = TestClient(app)
 
     invalid = client.post(
@@ -467,7 +467,7 @@ def test_p3a_invalid_and_unsupported_requests_are_rejected() -> None:
     assert deferred.status_code == 400
 
 
-def test_p3a_capability_rejection_remains_core_owned() -> None:
+def test_channel_display_dvm_math_and_fft_capability_rejection_remains_core_owned() -> None:
     client = TestClient(app)
 
     job = submit(
@@ -889,7 +889,7 @@ def test_long_workflows_receive_existing_core_stop_callback(
 
     monkeypatch.setattr(command_execution_module, runner_name, fake_runner)
 
-    command_execution_module._execute_p3c_scope_command(
+    command_execution_module._execute_trigger_search_serial_segmented_workflow_command(
         object(),
         command,
         "USB0::TEST::INSTR",
@@ -901,7 +901,7 @@ def test_long_workflows_receive_existing_core_stop_callback(
     assert received == [stop_requested]
 
 
-def test_commands_expose_p3c_families_and_conditional_fields() -> None:
+def test_commands_expose_trigger_search_serial_segmented_and_workflow_families() -> None:
     client = TestClient(app)
     response = client.get("/api/commands")
     assert response.status_code == 200
@@ -1086,7 +1086,7 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
         assert key in chinese, key
 
 
-def test_p3c_request_validation_regressions() -> None:
+def test_trigger_search_serial_and_workflow_request_validation_regressions() -> None:
     client = TestClient(app)
     commands = {entry["id"]: entry for entry in client.get("/api/commands").json()}
     assert [field["name"] for field in commands["serial-query"]["fields"]] == ["bus"]
@@ -1260,7 +1260,7 @@ def test_workflow_timeout_zero_is_rejected_before_queueing_in_every_mode(
         assert accepted["parameters"][timeout_name] == 1e-12
 
 
-def test_representative_p3c_simulated_commands_complete(tmp_path) -> None:
+def test_representative_trigger_search_serial_segmented_and_workflow_simulated_commands_complete(tmp_path) -> None:
     client = TestClient(app)
     for command, parameters in (
         ("trigger-edge", {"action": "set", "source_channel": 1, "level": 0.1, "slope": "positive"}),
@@ -1280,7 +1280,7 @@ def test_representative_p3c_simulated_commands_complete(tmp_path) -> None:
         assert job["status"] == "completed", (command, job)
 
 
-def test_p3c_dry_run_planners_and_conditional_validation() -> None:
+def test_trigger_search_serial_segmented_and_workflow_dry_run_planners_and_conditional_validation() -> None:
     client = TestClient(app)
     job = submit(
         client,
@@ -1304,7 +1304,7 @@ def test_p3c_dry_run_planners_and_conditional_validation() -> None:
     assert "query" in rejected.json()["detail"].lower()
 
 
-def test_p3c_serial_lister_export_registers_only_its_host_artifact(tmp_path) -> None:
+def test_serial_lister_export_registers_only_its_host_artifact(tmp_path) -> None:
     client = TestClient(app)
     job = submit(
         client,

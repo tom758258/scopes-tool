@@ -641,7 +641,7 @@ class Oscilloscope:
         return self._dvm_controller().query_source()
 
     def configure_dvm_mode(self, mode: str) -> None:
-        """Configure a DVM Common Pack v1 voltage mode."""
+        """Configure a DVM voltage mode."""
 
         self._dvm_controller().configure_mode(mode)
 
@@ -666,7 +666,7 @@ class Oscilloscope:
         return self._dvm_controller().query_current()
 
     def query_dvm(self) -> DvmState:
-        """Query aggregate DVM Common Pack v1 state."""
+        """Query aggregate DVM state."""
 
         return self._dvm_controller().query()
 
@@ -701,7 +701,7 @@ class Oscilloscope:
         return self._demo_controller().query_phase()
 
     def query_demo(self) -> DemoState:
-        """Query aggregate Demo Output Pack v1 state."""
+        """Query aggregate DEMO output state."""
 
         return self._demo_controller().query()
 
@@ -716,7 +716,7 @@ class Oscilloscope:
         return self._wgen_controller().query_output()
 
     def configure_wgen_function(self, function: str) -> None:
-        """Configure a WGEN Basic P1 function."""
+        """Configure a WGEN function."""
 
         self._wgen_controller().configure_function(function)
 
@@ -766,7 +766,7 @@ class Oscilloscope:
         return self._wgen_controller().query_load()
 
     def query_wgen(self) -> WgenState:
-        """Query aggregate WGEN Basic P1 state."""
+        """Query aggregate WGEN state."""
 
         return self._wgen_controller().query()
 

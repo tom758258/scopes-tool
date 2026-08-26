@@ -103,9 +103,9 @@ class ScreenshotController:
             )
         normalized = normalize_screenshot_options(options)
         background = normalize_screenshot_background(background)
-        if not self.capabilities.supports_screenshot_format_pack:
+        if not self.capabilities.supports_screenshot_hardcopy_controls:
             raise ParameterValidationError(
-                "Screenshot Format Pack v1 requires a 4000X capability profile."
+                "Screenshot hardcopy controls require a 4000X capability profile."
             )
 
         if normalized.ink_saver is not None:
@@ -139,9 +139,9 @@ class ScreenshotController:
     def query_hardcopy_state(self) -> HardcopyState:
         """Query the 4000X hardcopy and screen-dump settings."""
 
-        if not self.capabilities.supports_screenshot_format_pack:
+        if not self.capabilities.supports_screenshot_hardcopy_controls:
             raise ParameterValidationError(
-                "Screenshot Format Pack v1 requires a 4000X capability profile."
+                "Screenshot hardcopy controls require a 4000X capability profile."
             )
         raw_area = self.scpi.query(hardcopy_area_query()).strip()
         raw_ink_saver = self.scpi.query(hardcopy_inksaver_query()).strip()

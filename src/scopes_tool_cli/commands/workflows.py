@@ -694,7 +694,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             f"Planned capture: current screen {display_format} image with {background} background"
         )
         print(f"Screenshot timeout ms: {SCREENSHOT_TIMEOUT_MS} (temporary)")
-        if preflight._uses_screenshot_format_pack(args):
+        if preflight._uses_screenshot_hardcopy_controls(args):
             capture = scope.capture_screenshot(options=options, background=background)
             if options.ink_saver is not None:
                 print(f"Command: {hardcopy_inksaver_command(options.ink_saver)}")
@@ -723,7 +723,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         runtime._json_set_files(files)
         result = dict(
             format=capture.format_name,
-            palette=(options.palette if preflight._uses_screenshot_format_pack(args) else capture.palette),
+            palette=(options.palette if preflight._uses_screenshot_hardcopy_controls(args) else capture.palette),
             background=capture.background,
             ink_saver=options.ink_saver,
             layout=options.layout,

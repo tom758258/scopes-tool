@@ -147,7 +147,7 @@ def _screenshot_options(args: argparse.Namespace) -> ScreenshotOptions:
         )
     )
 
-def _uses_screenshot_format_pack(args: argparse.Namespace) -> bool:
+def _uses_screenshot_hardcopy_controls(args: argparse.Namespace) -> bool:
     options = _screenshot_options(args)
     return bool(
         getattr(args, "query_hardcopy", False)
@@ -185,14 +185,14 @@ def _validate_screenshot_args(args: argparse.Namespace) -> None:
             raise ParameterValidationError(
                 f"--format {options.format} requires an output path ending in {expected}."
             )
-    if _uses_screenshot_format_pack(args):
+    if _uses_screenshot_hardcopy_controls(args):
         capabilities = _pre_open_capabilities(args)
         if (
             capabilities is not None
-            and not capabilities.supports_screenshot_format_pack
+            and not capabilities.supports_screenshot_hardcopy_controls
         ):
             raise ParameterValidationError(
-                "Screenshot Format Pack v1 requires a 4000X model profile."
+                "Screenshot hardcopy controls require a 4000X model profile."
             )
 
 def _validate_fft_args(args: argparse.Namespace) -> None:
@@ -694,7 +694,7 @@ def _validate_demo_args(args: argparse.Namespace) -> None:
     capabilities = _pre_open_capabilities(args)
     if capabilities is not None and not capabilities.supports_demo:
         raise ParameterValidationError(
-            "Demo Output Pack v1 is not supported by the selected model profile."
+            "DEMO output is not supported by the selected model profile."
         )
     if (
         capabilities is not None
@@ -709,7 +709,7 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
     capabilities = _pre_open_capabilities(args)
     if capabilities is not None and not capabilities.supports_wgen:
         raise ParameterValidationError(
-            "WGEN Basic P1 is not supported by the selected model profile."
+            "WGEN is not supported by the selected model profile."
         )
     if args.command == "wgen-query" or args.query:
         return
@@ -935,7 +935,7 @@ def _validate_search_args(args: argparse.Namespace) -> None:
 
     if capabilities is not None and not capabilities.supports_search_basic:
         raise ParameterValidationError(
-            "Search Basic Pack v1 is not supported by the selected model profile."
+            "Search is not supported by the selected model profile."
         )
     if command == "search-count":
         return

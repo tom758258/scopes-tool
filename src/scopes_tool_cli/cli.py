@@ -1980,7 +1980,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         file_kind = "png" if format_name == "png" else "bmp"
         files = [{"kind": file_kind, "path": str(output_path)}]
         ink_saver_plan = None
-        if preflight._uses_screenshot_format_pack(args):
+        if preflight._uses_screenshot_hardcopy_controls(args):
             planned = []
             if options.ink_saver is not None:
                 planned.append(hardcopy_inksaver_command(options.ink_saver))

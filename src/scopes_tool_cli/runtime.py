@@ -216,7 +216,7 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "supports_wgen": capabilities.supports_wgen,
         "wgen_scpi_root": capabilities.wgen_scpi_root,
         "supports_screenshot": capabilities.supports_screenshot,
-        "supports_screenshot_format_pack": capabilities.supports_screenshot_format_pack,
+        "supports_screenshot_hardcopy_controls": capabilities.supports_screenshot_hardcopy_controls,
         "supports_segmented_memory": capabilities.supports_segmented_memory,
         "segmented_max_segments": capabilities.segmented_max_segments,
         "supports_segmented_waveform_all": capabilities.supports_segmented_waveform_all,
