@@ -5211,15 +5211,187 @@ Invoke-Expression $caseBlock
 
 
 
-def test_live_validator_holdoff_series_gating() -> None:
-    script = (REPO_ROOT / 'scripts/live-cli-check.ps1').read_text(
-        encoding='utf-8')
-    holdoff_start = script.index(
-        'Invoke-BaselineCase -Name "trigger-holdoff"',
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_live_validator_holdoff_series_gating(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "holdoff-series-gating-harness.ps1"
+    harness_path.write_text(
+        r'''
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @(
+    "ConvertTo-InvariantString",
+    "Assert-ScpiSent",
+    "Assert-NearlyEqual",
+    "Invoke-BaselineCase"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"trigger-holdoff`"")
     )
-    assert ':TRIGger:HOLDoff:RANDom OFF' in script[holdoff_start:]
-    assert ':TRIGger:HOLDoff 1e-6' in script[holdoff_start:]
-    assert "if (-not $p3Enabled)" in script[holdoff_start:]
+}, $true))
+if ($matchingCommands.Count -ne 1) {
+    throw "Expected one trigger-holdoff case in ${ScriptPath}."
+}
+$caseBlock = $matchingCommands[0].Extent.Text
+
+$snapshot = [pscustomobject]@{ TriggerHoldoffSeconds = 0.000002 }
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:ConfigureScpi = @(
+    ":TRIGger:HOLDoff:RANDom OFF",
+    ":TRIGger:HOLDoff 1e-6"
+)
+$p3Enabled = $true
+
+function Add-CaseResult {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Name,
+
+        [Parameter(Mandatory = $true)]
+        [bool] $Passed,
+
+        [string] $Detail = ""
+    )
+
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Drain-AfterFailure {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $CaseName
+    )
+
+    $script:DrainCalls += 1
+}
+
+function Invoke-LiveCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [string[]] $Arguments = @()
+    )
+
+    switch ($Stage) {
+        "trigger-holdoff-set" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = $script:ConfigureScpi }
+            }
+        }
+        "trigger-holdoff-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":TRIGger:HOLDoff?") }
+                result = [pscustomobject]@{ seconds = 0.000001 }
+            }
+        }
+        "trigger-holdoff-restore" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":TRIGger:HOLDoff 2e-6") }
+            }
+        }
+        default {
+            throw "Unexpected stage: ${Stage}"
+        }
+    }
+}
+
+Invoke-Expression $caseBlock
+$p3Result = $script:CaseResults["trigger-holdoff"].Passed
+$p3FunctionalFailed = $script:FunctionalFailed
+$p3DrainCalls = $script:DrainCalls
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:ConfigureScpi = @(":TRIGger:HOLDoff 1e-6")
+$p3Enabled = $false
+Invoke-Expression $caseBlock
+
+[ordered]@{
+    p3_result = $p3Result
+    p3_functional_failed = $p3FunctionalFailed
+    p3_drain_calls = $p3DrainCalls
+    non_p3_result = $script:CaseResults["trigger-holdoff"].Passed
+    non_p3_functional_failed = $script:FunctionalFailed
+    non_p3_drain_calls = $script:DrainCalls
+} | ConvertTo-Json -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["p3_result"] is True
+    assert result["p3_functional_failed"] is False
+    assert result["p3_drain_calls"] == 0
+    assert result["non_p3_result"] is True
+    assert result["non_p3_functional_failed"] is False
+    assert result["non_p3_drain_calls"] == 0
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_p2_channel_vertical_rejects_payload_self_oracle(
@@ -5577,15 +5749,30 @@ $script:DrainCalls = 0
 $script:EmptySampleRateHistory = $true
 $p3Enabled = $true
 Invoke-Expression $caseBlock
+$failurePassed = $script:CaseResults["acquisition-queries"].Passed
+$failureDetail = $script:CaseResults["acquisition-queries"].Detail
+$failureFunctionalFailed = $script:FunctionalFailed
+$failureDrainCalls = $script:DrainCalls
+
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:DrainCalls = 0
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:EmptySampleRateHistory = $false
+$p3Enabled = $false
+Invoke-Expression $caseBlock
 
 [ordered]@{
     pass_result = $passResult
     pass_functional_failed = $passFunctionalFailed
     pass_invocations = $passInvocations
-    failure_passed = $script:CaseResults["acquisition-queries"].Passed
-    failure_detail = $script:CaseResults["acquisition-queries"].Detail
-    failure_functional_failed = $script:FunctionalFailed
-    failure_drain_calls = $script:DrainCalls
+    failure_passed = $failurePassed
+    failure_detail = $failureDetail
+    failure_functional_failed = $failureFunctionalFailed
+    failure_drain_calls = $failureDrainCalls
+    non_p3_result = $script:CaseResults["acquisition-queries"].Passed
+    non_p3_functional_failed = $script:FunctionalFailed
+    non_p3_invocations = @($script:Invocations | ForEach-Object { $_ })
 } | ConvertTo-Json -Depth 12 -Compress
 ''',
         encoding="utf-8",
@@ -5625,6 +5812,19 @@ Invoke-Expression $caseBlock
     assert "empty SCPI history" in result["failure_detail"]
     assert result["failure_functional_failed"] is True
     assert result["failure_drain_calls"] == 1
+    assert result["non_p3_result"] is True
+    assert result["non_p3_functional_failed"] is False
+    non_p3_invocations = result["non_p3_invocations"]
+    assert [entry["command"] for entry in non_p3_invocations] == [
+        "sample-rate",
+        "acquisition-points",
+    ]
+    assert all(
+        entry["arguments"] == ["--query"] for entry in non_p3_invocations
+    )
+    assert "record-length" not in {
+        entry["command"] for entry in non_p3_invocations
+    }
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
