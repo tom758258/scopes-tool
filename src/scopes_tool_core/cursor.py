@@ -52,6 +52,21 @@ class CursorAutoVerticalResult:
     commands: tuple[str, ...]
     reason: str
 
+def cursor_query_commands(capabilities: ScopeCapabilities) -> list[str]:
+    commands = [
+        ":MARKer:MODE?",
+        ":MARKer:X1Position?",
+        ":MARKer:X2Position?",
+        ":MARKer:Y1Position?",
+        ":MARKer:Y2Position?",
+        ":MARKer:XDELTa?",
+        ":MARKer:YDELTa?",
+    ]
+    if capabilities.series not in {"2000X", "3000X"}:
+        commands.append(":MARKer:DYDX?")
+    return commands
+
+
 class CursorController:
     """Manual marker/cursor controls."""
 
@@ -126,7 +141,8 @@ class CursorController:
         self.scpi.write(":MARKer:MODE OFF")
 
     def query(self) -> CursorState:
-        mode = self.scpi.query(":MARKer:MODE?")
+        commands = cursor_query_commands(self.capabilities)
+        mode = self.scpi.query(commands[0])
         if mode.strip().lower() == "off":
             return CursorState(
                 mode=mode,
@@ -138,15 +154,19 @@ class CursorController:
                 y_delta_volts=None,
                 dydx=None,
             )
+        values = {
+            command: self.scpi.query_float(command)
+            for command in commands[1:]
+        }
         return CursorState(
             mode=mode,
-            x1_seconds=self.scpi.query_float(":MARKer:X1Position?"),
-            x2_seconds=self.scpi.query_float(":MARKer:X2Position?"),
-            y1_volts=self.scpi.query_float(":MARKer:Y1Position?"),
-            y2_volts=self.scpi.query_float(":MARKer:Y2Position?"),
-            x_delta_seconds=self.scpi.query_float(":MARKer:XDELta?"),
-            y_delta_volts=self.scpi.query_float(":MARKer:YDELta?"),
-            dydx=self.scpi.query_float(":MARKer:DYDX?"),
+            x1_seconds=values[":MARKer:X1Position?"],
+            x2_seconds=values[":MARKer:X2Position?"],
+            y1_volts=values[":MARKer:Y1Position?"],
+            y2_volts=values[":MARKer:Y2Position?"],
+            x_delta_seconds=values[":MARKer:XDELTa?"],
+            y_delta_volts=values[":MARKer:YDELTa?"],
+            dydx=values.get(":MARKer:DYDX?"),
         )
 
 def cursor_configure_commands(

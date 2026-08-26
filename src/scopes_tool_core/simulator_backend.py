@@ -1641,6 +1641,8 @@ class SimulatorBackend:
         if upper == ":MARKER:YDELTA?":
             return f"{(self.marker_y2 - self.marker_y1):.12g}"
         if upper == ":MARKER:DYDX?":
+            if self._capabilities.series in {"2000X", "3000X"}:
+                return self._handle_unknown("query", command)
             dx = self.marker_x2 - self.marker_x1
             return "9.9E+37" if dx == 0 else f"{((self.marker_y2 - self.marker_y1) / dx):.12g}"
         if upper == ":MEASURE:RESULTS?":

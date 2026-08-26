@@ -9,6 +9,7 @@ from scopes_tool_core.cursor import (
     cursor_auto_vertical_json,
     cursor_auto_vertical_plan,
     cursor_configure_commands,
+    cursor_query_commands,
 )
 from scopes_tool_core.fft import (
     fft_advanced_query_commands,
@@ -178,19 +179,6 @@ def _reference_waveform_plan(
         commands = list(reference_query_commands(slot, capabilities=capabilities))
         return commands, {"operation": "query", "commands": commands, "slot": slot, "displayed": None, "label": None}
     raise ParameterValidationError(f"unsupported reference waveform command: {args.command}")
-
-
-def _cursor_query_commands() -> list[str]:
-    return [
-        ":MARKer:MODE?",
-        ":MARKer:X1Position?",
-        ":MARKer:X2Position?",
-        ":MARKer:Y1Position?",
-        ":MARKer:Y2Position?",
-        ":MARKer:XDELta?",
-        ":MARKer:YDELta?",
-        ":MARKer:DYDX?",
-    ]
 
 
 def _cursor_range_diagnostic(args: argparse.Namespace, entry) -> str | None:
@@ -817,7 +805,7 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             commands = (
                 [":MARKer:MODE?"]
                 if state.mode.strip().lower() == "off"
-                else _cursor_query_commands()
+                else cursor_query_commands(scope.capabilities)
             )
             for command in commands:
                 print(f"Command: {command}")

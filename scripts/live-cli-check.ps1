@@ -3757,6 +3757,9 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "cursor-lifecycle" -Action {
+            $cursorConfigured = $false
+            $primaryException = $null
+            $firstCleanupException = $null
             try {
                 $configured = Invoke-LiveCli -Stage "cursor-set" -Command "cursor" -Arguments @(
                     "--source-channel", "1", "--x1", "0", "--x2", "0.001",
@@ -3766,6 +3769,7 @@ if ($snapshotComplete) {
                     ":MARKer:MODE MANual", ":MARKer:X1Position 0", ":MARKer:X2Position 0.001",
                     ":MARKer:Y1Position 0", ":MARKer:Y2Position 0.5"
                 )
+                $cursorConfigured = $true
                 $readback = Invoke-LiveCli -Stage "cursor-query" -Command "cursor" -Arguments @("--query")
                 Assert-ScpiSent -Payload $readback -Label "Cursor query" -ExpectedCommands @(
                     ":MARKer:MODE?", ":MARKer:XDELta?", ":MARKer:YDELta?"
@@ -3773,13 +3777,44 @@ if ($snapshotComplete) {
                 if ([string]$readback.result.mode -eq "off") {
                     throw "Cursor query reported OFF after configure."
                 }
+            } catch {
+                $primaryException = $_.Exception
             } finally {
-                $off = Invoke-LiveCli -Stage "cursor-off" -Command "cursor" -Arguments @("--off")
-                Assert-ScpiSent -Payload $off -Label "Cursor disable" -ExpectedCommands @(":MARKer:MODE OFF")
-                $offQuery = Invoke-LiveCli -Stage "cursor-off-query" -Command "cursor" -Arguments @("--query")
-                if ([string]$offQuery.result.mode -ne "off") {
-                    throw "Cursor cleanup did not leave cursor mode OFF."
+                if ($cursorConfigured) {
+                    if ($null -ne $primaryException) {
+                        Drain-AfterFailure -Stage "cursor-primary-error-drain" -CaseName "cursor-lifecycle"
+                    }
+                    try {
+                        $off = Invoke-LiveCli -Stage "cursor-off" -Command "cursor" -Arguments @("--off")
+                        Assert-ScpiSent -Payload $off -Label "Cursor disable" -ExpectedCommands @(":MARKer:MODE OFF")
+                    } catch {
+                        if ($null -eq $firstCleanupException) {
+                            $firstCleanupException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "cursor-lifecycle" -Message (
+                            "cursor cleanup disable failed: $($_.Exception.Message)"
+                        )
+                    }
+                    try {
+                        $offQuery = Invoke-LiveCli -Stage "cursor-off-query" -Command "cursor" -Arguments @("--query")
+                        if ([string]$offQuery.result.mode -ne "off") {
+                            throw "Cursor cleanup did not leave cursor mode OFF."
+                        }
+                    } catch {
+                        if ($null -eq $firstCleanupException) {
+                            $firstCleanupException = $_.Exception
+                        }
+                        Add-Diagnostic -Name "cursor-lifecycle" -Message (
+                            "cursor cleanup verification failed: $($_.Exception.Message)"
+                        )
+                    }
                 }
+            }
+            if ($null -ne $primaryException) {
+                throw $primaryException
+            }
+            if ($null -ne $firstCleanupException) {
+                throw $firstCleanupException
             }
         }
     }

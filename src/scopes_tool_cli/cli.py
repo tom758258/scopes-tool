@@ -38,6 +38,7 @@ from scopes_tool_core.cursor import (
     cursor_auto_timebase_dry_run_plan,
     cursor_auto_timebase_json,
     cursor_configure_commands,
+    cursor_query_commands,
 )
 from scopes_tool_core.fft import (
     fft_configure_commands,
@@ -1832,7 +1833,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         }
     if command == "cursor":
         if args.cursor_query:
-            commands = measurement_analysis._cursor_query_commands()
+            commands = cursor_query_commands(capabilities)
             return commands + [":SYSTem:ERRor?"], [], {"operation": "query", "commands": commands}
         if args.cursor_off:
             return [":MARKer:MODE OFF", ":SYSTem:ERRor?"], [], {"operation": "off", "command": ":MARKer:MODE OFF"}

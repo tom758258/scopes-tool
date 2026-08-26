@@ -173,3 +173,41 @@ def test_query_cursor_off_only_queries_mode():
     assert state.y_delta_volts is None
     assert state.dydx is None
     assert backend.history == ["*IDN?", ":MARKer:MODE?"]
+
+
+def test_query_cursor_active_3000x_omits_unsupported_dydx_query():
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox3024a",
+        marker_mode="MANual",
+    )
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    state = scope.query_cursor()
+
+    assert state.dydx is None
+    assert ":MARKer:DYDX?" not in backend.history
+    assert backend.history == [
+        "*IDN?",
+        ":MARKer:MODE?",
+        ":MARKer:X1Position?",
+        ":MARKer:X2Position?",
+        ":MARKer:Y1Position?",
+        ":MARKer:Y2Position?",
+        ":MARKer:XDELTa?",
+        ":MARKer:YDELTa?",
+    ]
+
+
+def test_query_cursor_active_4000x_includes_dydx_query():
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        marker_mode="MANual",
+    )
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    state = scope.query_cursor()
+
+    assert state.dydx == pytest.approx(500.0)
+    assert backend.history[-1] == ":MARKer:DYDX?"

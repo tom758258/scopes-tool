@@ -4664,6 +4664,176 @@ def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_cursor_lifecycle_preserves_primary_failure_during_cleanup(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "cursor-lifecycle-cleanup-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+$functionAst = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Invoke-BaselineCase"
+    )
+}, $true)
+if ($null -eq $functionAst) { throw "Missing Invoke-BaselineCase." }
+Invoke-Expression $functionAst.Extent.Text
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"cursor-lifecycle`"")
+    )
+}, $true))
+if ($matchingCommands.Count -ne 1) { throw "Expected one cursor-lifecycle case." }
+$caseBlock = $matchingCommands[0].Extent.Text
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Add-Diagnostic {
+    param([string] $Name, [string] $Message)
+    if (-not $script:Diagnostics.Contains($Name)) {
+        $script:Diagnostics[$Name] = New-Object System.Collections.Generic.List[string]
+    }
+    $script:Diagnostics[$Name].Add($Message)
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:Events.Add("drain:${Stage}")
+}
+
+function Assert-ScpiSent {
+    param([object] $Payload, [string[]] $ExpectedCommands, [string] $Label)
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Events.Add($Stage)
+    if ($script:Scenario -eq "configure-fail" -and $Stage -eq "cursor-set") {
+        throw "cursor configure primary failure"
+    }
+    if ($script:Scenario -eq "query-and-cleanup-fail" -and
+        $Stage -eq "cursor-query") {
+        throw "cursor query primary failure"
+    }
+    if ($script:Scenario -in @("query-and-cleanup-fail", "cleanup-only-fail") -and
+        $Stage -eq "cursor-off") {
+        throw "cursor cleanup failure"
+    }
+    $mode = if ($Stage -eq "cursor-off-query") { "off" } else { "manual" }
+    return [pscustomobject]@{
+        result = [pscustomobject]@{ mode = $mode }
+    }
+}
+
+function Invoke-Scenario {
+    param([string] $Name)
+    $script:Scenario = $Name
+    $script:CaseResults = [ordered]@{}
+    $script:Diagnostics = [ordered]@{}
+    $script:FunctionalFailed = $false
+    $script:Events = New-Object System.Collections.Generic.List[string]
+    Invoke-Expression $caseBlock
+    return [pscustomobject]@{
+        passed = $script:CaseResults["cursor-lifecycle"].Passed
+        detail = $script:CaseResults["cursor-lifecycle"].Detail
+        diagnostics = @(
+            if ($script:Diagnostics.Contains("cursor-lifecycle")) {
+                $script:Diagnostics["cursor-lifecycle"] | ForEach-Object { [string]$_ }
+            }
+        )
+        events = @($script:Events | ForEach-Object { $_ })
+    }
+}
+
+[ordered]@{
+    query_and_cleanup_fail = Invoke-Scenario -Name "query-and-cleanup-fail"
+    cleanup_only_fail = Invoke-Scenario -Name "cleanup-only-fail"
+    configure_fail = Invoke-Scenario -Name "configure-fail"
+} | ConvertTo-Json -Depth 10 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    combined = result["query_and_cleanup_fail"]
+    assert combined["passed"] is False
+    assert "cursor query primary failure" in combined["detail"]
+    assert "cursor cleanup failure" not in combined["detail"]
+    assert any("cursor cleanup failure" in item for item in combined["diagnostics"])
+    assert combined["events"] == [
+        "cursor-set",
+        "cursor-query",
+        "drain:cursor-primary-error-drain",
+        "cursor-off",
+        "cursor-off-query",
+        "drain:cursor-lifecycle-error-drain",
+    ]
+
+    cleanup_only = result["cleanup_only_fail"]
+    assert cleanup_only["passed"] is False
+    assert "cursor cleanup failure" in cleanup_only["detail"]
+    assert cleanup_only["events"] == [
+        "cursor-set",
+        "cursor-query",
+        "cursor-off",
+        "cursor-off-query",
+        "drain:cursor-lifecycle-error-drain",
+    ]
+
+    configure = result["configure_fail"]
+    assert configure["passed"] is False
+    assert "cursor configure primary failure" in configure["detail"]
+    assert configure["events"] == [
+        "cursor-set",
+        "drain:cursor-lifecycle-error-drain",
+    ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_save_export_preserves_primary_error_and_enforces_prerequisite(
     tmp_path: Path,
 ) -> None:
