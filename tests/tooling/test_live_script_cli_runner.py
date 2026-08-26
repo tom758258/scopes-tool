@@ -4726,6 +4726,10 @@ function Drain-AfterFailure {
 
 function Assert-ScpiSent {
     param([object] $Payload, [string[]] $ExpectedCommands, [string] $Label)
+    if ($script:Scenario -eq "configure-assert-and-cleanup-fail" -and
+        $Label -eq "Cursor configure") {
+        throw "cursor configure assertion failure"
+    }
 }
 
 function Invoke-LiveCli {
@@ -4738,7 +4742,11 @@ function Invoke-LiveCli {
         $Stage -eq "cursor-query") {
         throw "cursor query primary failure"
     }
-    if ($script:Scenario -in @("query-and-cleanup-fail", "cleanup-only-fail") -and
+    if ($script:Scenario -in @(
+            "query-and-cleanup-fail",
+            "cleanup-only-fail",
+            "configure-assert-and-cleanup-fail"
+        ) -and
         $Stage -eq "cursor-off") {
         throw "cursor cleanup failure"
     }
@@ -4772,6 +4780,8 @@ function Invoke-Scenario {
     query_and_cleanup_fail = Invoke-Scenario -Name "query-and-cleanup-fail"
     cleanup_only_fail = Invoke-Scenario -Name "cleanup-only-fail"
     configure_fail = Invoke-Scenario -Name "configure-fail"
+    configure_assert_and_cleanup_fail = Invoke-Scenario `
+        -Name "configure-assert-and-cleanup-fail"
 } | ConvertTo-Json -Depth 10 -Compress
 ''',
         encoding="utf-8",
@@ -4829,6 +4839,22 @@ function Invoke-Scenario {
     assert "cursor configure primary failure" in configure["detail"]
     assert configure["events"] == [
         "cursor-set",
+        "drain:cursor-lifecycle-error-drain",
+    ]
+
+    configure_assert = result["configure_assert_and_cleanup_fail"]
+    assert configure_assert["passed"] is False
+    assert "cursor configure assertion failure" in configure_assert["detail"]
+    assert "cursor cleanup failure" not in configure_assert["detail"]
+    assert any(
+        "cursor cleanup failure" in item
+        for item in configure_assert["diagnostics"]
+    )
+    assert configure_assert["events"] == [
+        "cursor-set",
+        "drain:cursor-primary-error-drain",
+        "cursor-off",
+        "cursor-off-query",
         "drain:cursor-lifecycle-error-drain",
     ]
 

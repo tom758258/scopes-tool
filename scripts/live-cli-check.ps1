@@ -3765,11 +3765,11 @@ if ($snapshotComplete) {
                     "--source-channel", "1", "--x1", "0", "--x2", "0.001",
                     "--y1", "0", "--y2", "0.5"
                 )
+                $cursorConfigured = $true
                 Assert-ScpiSent -Payload $configured -Label "Cursor configure" -ExpectedCommands @(
                     ":MARKer:MODE MANual", ":MARKer:X1Position 0", ":MARKer:X2Position 0.001",
                     ":MARKer:Y1Position 0", ":MARKer:Y2Position 0.5"
                 )
-                $cursorConfigured = $true
                 $readback = Invoke-LiveCli -Stage "cursor-query" -Command "cursor" -Arguments @("--query")
                 Assert-ScpiSent -Payload $readback -Label "Cursor query" -ExpectedCommands @(
                     ":MARKer:MODE?", ":MARKer:XDELta?", ":MARKer:YDELta?"
