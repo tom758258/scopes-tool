@@ -5210,6 +5210,17 @@ Invoke-Expression $caseBlock
     assert result["failure_drain_calls"] == 1
 
 
+
+def test_live_validator_holdoff_series_gating() -> None:
+    script = (REPO_ROOT / 'scripts/live-cli-check.ps1').read_text(
+        encoding='utf-8')
+    holdoff_start = script.index(
+        'Invoke-BaselineCase -Name "trigger-holdoff"',
+    )
+    assert ':TRIGger:HOLDoff:RANDom OFF' in script[holdoff_start:]
+    assert ':TRIGger:HOLDoff 1e-6' in script[holdoff_start:]
+    assert "if (-not $p3Enabled)" in script[holdoff_start:]
+
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_p2_channel_vertical_rejects_payload_self_oracle(
     tmp_path: Path,
@@ -5476,6 +5487,7 @@ $script:FunctionalFailed = $false
 $script:DrainCalls = 0
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:EmptySampleRateHistory = $false
+$p3Enabled = $true
 
 function Add-CaseResult {
     param(
@@ -5563,6 +5575,7 @@ $script:CaseResults = [ordered]@{}
 $script:FunctionalFailed = $false
 $script:DrainCalls = 0
 $script:EmptySampleRateHistory = $true
+$p3Enabled = $true
 Invoke-Expression $caseBlock
 
 [ordered]@{
