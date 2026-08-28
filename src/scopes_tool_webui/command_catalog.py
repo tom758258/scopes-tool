@@ -160,7 +160,7 @@ COMMANDS = (
             {
                 "name": "seconds_per_division",
                 "type": "number",
-                "minimum": 0,
+                "exclusive_minimum": 0,
                 "required_if": [{"field": "action", "equals": "set"}],
                 "help_key": "timebase.seconds_per_division",
             },
