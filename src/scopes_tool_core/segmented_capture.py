@@ -220,17 +220,30 @@ def plan_segmented_capture(
         {"kind": "manifest", "path": str(output_dir / "manifest.json")},
         {"kind": "scpi_log", "path": str(output_dir / "scpi.log")},
     ]
-    planned = [
-        "*IDN?",
-        segmented_mode_query(),
-        ":ACQuire:TYPE?",
-        channel_units_query(request.channel),
-        segmented_mode_command("segmented"),
-        segmented_count_command(request.segments),
-        ":SINGle",
-        operation_condition_query(),
-        segmented_waveform_count_query(),
-    ]
+    is_legacy_series = capabilities.series in ("2000X", "3000X")
+    if is_legacy_series:
+        planned = [
+            "*IDN?",
+            segmented_mode_query(),
+            ":ACQuire:TYPE?",
+            channel_units_query(request.channel),
+            segmented_mode_command("segmented"),
+            segmented_count_command(request.segments),
+            ":SINGle",
+            segmented_waveform_count_query(),
+        ]
+    else:
+        planned = [
+            "*IDN?",
+            segmented_mode_query(),
+            ":ACQuire:TYPE?",
+            channel_units_query(request.channel),
+            segmented_mode_command("segmented"),
+            segmented_count_command(request.segments),
+            ":SINGle",
+            operation_condition_query(),
+            segmented_waveform_count_query(),
+        ]
     if segmented_waveform_all_supported(capabilities, firmware):
         planned.append(segmented_waveform_all_command(False))
     for index in range(1, request.segments + 1):
@@ -245,6 +258,15 @@ def plan_segmented_capture(
             }
         )
     planned.extend([segmented_mode_query(), ":SYSTem:ERRor?"])
+    if capabilities.series in ("2000X", "3000X"):
+        polling_command = segmented_waveform_count_query()
+        polling_behavior = "poll :WAVeform:SEGMented:COUNt? until requested segment count is reached"
+    else:
+        polling_command = operation_condition_query()
+        polling_behavior = (
+            "require two consecutive RUN-clear and RUI-enabled samples, then "
+            "query :WAVeform:SEGMented:COUNt? once"
+        )
     result = {
         "operation": "segmented-capture",
         "status": "planned",
@@ -262,13 +284,10 @@ def plan_segmented_capture(
         "initial_mode": None,
         "final_mode": None,
         "polling": {
-            "command": operation_condition_query(),
+            "command": polling_command,
             "timeout_ms": request.timeout_ms,
             "poll_interval_ms": request.poll_interval_ms,
-            "runtime_behavior": (
-                "require two consecutive RUN-clear and RUI-enabled samples, then "
-                "query :WAVeform:SEGMented:COUNt? once"
-            ),
+            "runtime_behavior": polling_behavior,
         },
     }
     return planned, files, result
@@ -469,6 +488,7 @@ def run_segmented_capture(
         {"kind": "scpi_log", "path": str(scpi_log_path)},
     ]
     idn = None
+    capabilities: ScopeCapabilities | None = None
     system_error: dict[str, object] | None = None
     final_mode: str | None = None
     primary_error: Exception | None = None
@@ -550,79 +570,116 @@ def run_segmented_capture(
                 stable_ready = False
                 original_timeout = scope.scpi.timeout
                 polling_exception: Exception | None = None
-                try:
-                    while ready_streak < 2:
-                        remaining_seconds = deadline - time.monotonic()
-                        if remaining_seconds <= 0:
-                            primary_error = SegmentedCaptureTimeout(
-                                "segmented capture readiness timed out after "
-                                f"{request.timeout_ms} ms before two consecutive "
-                                "RUN-clear and RUI-enabled samples."
-                            )
-                            break
-
-                        remaining_ms = max(1, math.ceil(remaining_seconds * 1000))
-                        scope.scpi.set_timeout(remaining_ms)
-                        raw_operation_condition = guarded_read(
-                            lambda: scope.scpi.query(operation_condition_query()),
-                            "segmented capture operation-condition read timed out "
-                            "before stable readiness",
-                        )
-                        operation_condition = parse_operation_condition(
-                            raw_operation_condition
-                        )
-                        if _operation_condition_is_ready(operation_condition):
-                            ready_streak += 1
-                        else:
-                            ready_streak = 0
-                        if ready_streak < 2:
-                            time.sleep(request.poll_interval_ms / 1000.0)
-
-                    if ready_streak == 2:
-                        stable_ready = True
-                        remaining_seconds = deadline - time.monotonic()
-                        if remaining_seconds <= 0:
-                            primary_error = SegmentedCaptureTimeout(
-                                "segmented capture timed out after "
-                                f"{request.timeout_ms} ms before acquired-count "
-                                "verification."
-                            )
-                        else:
-                            remaining_ms = max(
-                                1, math.ceil(remaining_seconds * 1000)
-                            )
-                            count_timeout_ms = remaining_ms
-                            if original_timeout is not None:
-                                count_timeout_ms = max(
-                                    1, min(remaining_ms, original_timeout)
+                is_legacy_series = capabilities.series in ("2000X", "3000X")
+                if is_legacy_series:
+                    try:
+                        while True:
+                            remaining_seconds = deadline - time.monotonic()
+                            if remaining_seconds <= 0:
+                                primary_error = SegmentedCaptureTimeout(
+                                    "segmented capture did not reach requested segment "
+                                    f"count before timeout after {request.timeout_ms} ms"
                                 )
-                            scope.scpi.set_timeout(count_timeout_ms)
+                                break
+                            remaining_ms = max(1, math.ceil(remaining_seconds * 1000))
+                            scope.scpi.set_timeout(remaining_ms)
                             raw_acquired_count = guarded_read(
                                 lambda: scope.scpi.query(
                                     segmented_waveform_count_query()
                                 ),
-                                "segmented capture acquired-count read timed out after "
-                                "stable readiness",
+                                "segmented capture acquired-count read timed out",
                             )
                             acquired_segments = parse_segmented_acquired_count(
                                 raw_acquired_count
                             )
                             manifest["acquired_segments"] = acquired_segments
-                            if acquired_segments < request.segments:
-                                primary_error = OscilloscopeError(
-                                    "segmented capture acquired-count mismatch after "
-                                    "stable readiness: expected at least "
-                                    f"{request.segments}, got {acquired_segments}."
-                                )
-                except Exception as exc:
-                    polling_exception = exc
-                    raise
-                finally:
+                            if acquired_segments >= request.segments:
+                                stable_ready = True
+                                break
+                            time.sleep(request.poll_interval_ms / 1000.0)
+                    except Exception as exc:
+                        polling_exception = exc
+                        raise
+                    finally:
+                        try:
+                            scope.scpi.set_timeout(original_timeout)
+                        except Exception:
+                            if polling_exception is None:
+                                raise
+                else:
                     try:
-                        scope.scpi.set_timeout(original_timeout)
-                    except Exception:
-                        if polling_exception is None:
-                            raise
+                        while ready_streak < 2:
+                            remaining_seconds = deadline - time.monotonic()
+                            if remaining_seconds <= 0:
+                                primary_error = SegmentedCaptureTimeout(
+                                    "segmented capture readiness timed out after "
+                                    f"{request.timeout_ms} ms before two consecutive "
+                                    "RUN-clear and RUI-enabled samples."
+                                )
+                                break
+
+                            remaining_ms = max(1, math.ceil(remaining_seconds * 1000))
+                            scope.scpi.set_timeout(remaining_ms)
+                            raw_operation_condition = guarded_read(
+                                lambda: scope.scpi.query(operation_condition_query()),
+                                "segmented capture operation-condition read timed out "
+                                "before stable readiness",
+                            )
+                            operation_condition = parse_operation_condition(
+                                raw_operation_condition
+                            )
+                            if _operation_condition_is_ready(operation_condition):
+                                ready_streak += 1
+                            else:
+                                ready_streak = 0
+                            if ready_streak < 2:
+                                time.sleep(request.poll_interval_ms / 1000.0)
+
+                        if ready_streak == 2:
+                            stable_ready = True
+                            remaining_seconds = deadline - time.monotonic()
+                            if remaining_seconds <= 0:
+                                primary_error = SegmentedCaptureTimeout(
+                                    "segmented capture timed out after "
+                                    f"{request.timeout_ms} ms before acquired-count "
+                                    "verification."
+                                )
+                            else:
+                                remaining_ms = max(
+                                    1, math.ceil(remaining_seconds * 1000)
+                                )
+                                count_timeout_ms = remaining_ms
+                                if original_timeout is not None:
+                                    count_timeout_ms = max(
+                                        1, min(remaining_ms, original_timeout)
+                                    )
+                                scope.scpi.set_timeout(count_timeout_ms)
+                                raw_acquired_count = guarded_read(
+                                    lambda: scope.scpi.query(
+                                        segmented_waveform_count_query()
+                                    ),
+                                    "segmented capture acquired-count read timed out after "
+                                    "stable readiness",
+                                )
+                                acquired_segments = parse_segmented_acquired_count(
+                                    raw_acquired_count
+                                )
+                                manifest["acquired_segments"] = acquired_segments
+                                if acquired_segments < request.segments:
+                                    primary_error = OscilloscopeError(
+                                        "segmented capture acquired-count mismatch after "
+                                        "stable readiness: expected at least "
+                                        f"{request.segments}, got {acquired_segments}."
+                                    )
+                    except Exception as exc:
+                        polling_exception = exc
+                        raise
+                    finally:
+                        try:
+                            scope.scpi.set_timeout(original_timeout)
+                        except Exception:
+                            if polling_exception is None:
+                                raise
 
                 export_count = (
                     request.segments
@@ -738,6 +795,15 @@ def run_segmented_capture(
             f"Exported segments: {exported_segments}/{request.segments}",
         ]
     )
+    if capabilities is not None and capabilities.series in ("2000X", "3000X"):
+        polling_command = segmented_waveform_count_query()
+        polling_behavior = "poll :WAVeform:SEGMented:COUNt? until requested segment count is reached"
+    else:
+        polling_command = operation_condition_query()
+        polling_behavior = (
+            "require two consecutive RUN-clear and RUI-enabled samples, then "
+            "query :WAVeform:SEGMented:COUNt? once"
+        )
     result = {
         "operation": "segmented-capture",
         "status": manifest["status"],
@@ -756,13 +822,10 @@ def run_segmented_capture(
         "final_mode": final_mode,
         "error": manifest["error"],
         "polling": {
-            "command": operation_condition_query(),
+            "command": polling_command,
             "timeout_ms": request.timeout_ms,
             "poll_interval_ms": request.poll_interval_ms,
-            "runtime_behavior": (
-                "require two consecutive RUN-clear and RUI-enabled samples, then "
-                "query :WAVeform:SEGMented:COUNt? once"
-            ),
+            "runtime_behavior": polling_behavior,
         },
     }
     if system_error is not None:

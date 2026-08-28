@@ -814,3 +814,100 @@ def test_run_segmented_capture_rejects_invalid_static_request(tmp_path, segments
             "SIM::keysight-dsox4024a::INSTR",
             SegmentedCaptureRequest(1, segments, output_dir=tmp_path),
         )
+
+
+class _LegacyCountPollingBackend(SimulatorBackend):
+    def __init__(self, physical_model_id, acquired_counts, **kwargs):
+        super().__init__(physical_model_id=physical_model_id, **kwargs)
+        self.acquired_counts = list(acquired_counts)
+        self.last_acquired_count = 0
+
+    def query(self, command):
+        if command == ":WAVeform:SEGMented:COUNt?":
+            self._ensure_open()
+            self.history.append(command)
+            if self.acquired_counts:
+                self.last_acquired_count = self.acquired_counts.pop(0)
+            return str(self.last_acquired_count)
+        return super().query(command)
+
+
+@pytest.mark.parametrize(
+    "physical_model_id",
+    ["keysight-dsox2004a", "keysight-dsox3024a"],
+)
+def test_run_segmented_capture_legacy_series_polls_count_directly(
+    monkeypatch, tmp_path, physical_model_id
+):
+    backend = _LegacyCountPollingBackend(
+        physical_model_id, acquired_counts=[0, 1, 2]
+    )
+    clock = iter([0.0, 0.001, 0.002, 0.003, 0.004])
+    sleeps = []
+    monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(segmented_capture_module.time, "sleep", sleeps.append)
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            f"SIM::{physical_model_id}::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+        )
+
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["acquired_segments"] == 2
+    assert result.result["exported_segments"] == 2
+    assert ":SINGle" in backend.history
+    sing_idx = backend.history.index(":SINGle")
+    count_indexes = [
+        idx for idx, cmd in enumerate(backend.history) if cmd == ":WAVeform:SEGMented:COUNt?"
+    ]
+    assert len(count_indexes) >= 3
+    assert all(idx > sing_idx for idx in count_indexes)
+    assert ":OPERegister:CONDition?" not in backend.history[sing_idx:]
+    assert backend.history.count(":WAVeform:SEGMented:COUNt?") >= 3
+    assert (tmp_path / "segment_0001.csv").exists()
+    assert (tmp_path / "segment_0002.csv").exists()
+    # polling metadata must reflect count polling
+    assert result.result["polling"]["command"] == ":WAVeform:SEGMented:COUNt?"
+    assert "poll" in result.result["polling"]["runtime_behavior"].lower()
+    assert "requested segment count" in result.result["polling"]["runtime_behavior"].lower()
+    # plan must also be series-dependent
+    planned, _, plan_result = plan_segmented_capture(
+        SegmentedCaptureRequest(1, 2, output_dir=tmp_path / "plan"),
+        capabilities_for_model(physical_model_id.split("-")[-1]),
+    )
+    assert ":OPERegister:CONDition?" not in planned
+    assert ":WAVeform:SEGMented:COUNt?" in planned
+    assert plan_result["polling"]["command"] == ":WAVeform:SEGMented:COUNt?"
+    assert "poll" in plan_result["polling"]["runtime_behavior"].lower()
+
+
+def test_run_segmented_capture_legacy_series_count_timeout_fails_without_export(
+    monkeypatch, tmp_path
+):
+    backend = _LegacyCountPollingBackend(
+        "keysight-dsox3024a", acquired_counts=[0, 0, 0]
+    )
+    clock = iter([0.0, 0.005, 0.01, 0.03, 0.04])
+    monkeypatch.setattr(segmented_capture_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(segmented_capture_module.time, "sleep", lambda _: None)
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox3024a::INSTR",
+            SegmentedCaptureRequest(
+                1, 2, timeout_ms=20, poll_interval_ms=1, output_dir=tmp_path
+            ),
+        )
+
+    assert result.exit_code == 1
+    assert result.result["status"] == "failed"
+    assert result.result["acquired_segments"] == 0
+    assert result.result["exported_segments"] == 0
+    assert "did not reach requested segment count" in result.result["error"].lower()
+    assert ":OPERegister:CONDition?" not in backend.history
+    assert backend.history.count(":WAVeform:SEGMented:COUNt?") >= 1
+    assert not list(tmp_path.glob("segment_*.csv"))
