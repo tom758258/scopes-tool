@@ -3100,6 +3100,7 @@ def test_command_editor_and_result_presentation_contract() -> None:
     results_source = read_static("results.js")
 
     assert 'input.type = "hidden";' in form_source
+    assert 'field.help_key ? `help.${field.help_key}` : `help.${field.name}`' in form_source
     assert 'new Option(translate("status.enabled"), "true")' in form_source
     assert 'new Option(translate("status.disabled"), "false")' in form_source
     assert 'new Option(translate("enum.true")' not in form_source

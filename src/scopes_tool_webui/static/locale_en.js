@@ -578,6 +578,7 @@ export const en = {
   "field.position_seconds": "Position (s)",
   "help.pairs": "Example: 1:2, 3:4",
   "help.pair_items": "Comma-separated pair measurements, for example phase,delay",
+  "help.acquisition.average_count": "2–65536; higher values reduce noise but slow waveform updates.",
   "enum.external": "External",
   "enum.line": "Line",
   "enum.lf-reject": "LF reject",

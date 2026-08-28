@@ -312,10 +312,10 @@ export class CommandForm {
       wrapper.append(choices);
     }
     wrapper.append(input);
-    if (field.help) {
+    if (field.help || field.help_key) {
       const help = document.createElement("small");
       help.className = "field-help";
-      const helpKey = `help.${field.name}`;
+      const helpKey = field.help_key ? `help.${field.help_key}` : `help.${field.name}`;
       help.textContent = hasTranslation(helpKey) ? translate(helpKey) : field.help;
       wrapper.append(help);
     }

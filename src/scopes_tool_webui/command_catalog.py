@@ -146,6 +146,7 @@ COMMANDS = (
                 "minimum": 2,
                 "maximum": 65536,
                 "visible_if": [{"field": "type", "equals": "average"}],
+                "help_key": "acquisition.average_count",
             },
         ),
     },

@@ -578,6 +578,7 @@ export const zhTW = {
   "field.position_seconds": "位置（秒）",
   "help.pairs": "範例：1:2, 3:4",
   "help.pair_items": "以逗號分隔配對量測項目，例如 phase,delay",
+  "help.acquisition.average_count": "2–65536；數值越大，降噪效果越強，但波形更新越慢。",
   "enum.analog-channel": "類比通道",
   "enum.external": "外部",
   "enum.line": "線路",
