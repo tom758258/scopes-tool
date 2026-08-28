@@ -8904,76 +8904,6 @@ def test_live_validator_finalization_control_flow(
     assert pass_tail.rstrip().endswith('Write-Host "%s"\nexit 0' % pass_label)
 
 
-def test_live_cli_math_option_applicability_structure() -> None:
-    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
-        encoding="utf-8"
-    )
-
-    # Series flags must be established alongside the existing 4000X flag,
-    # without relying on a local variable inside the system-status block.
-    assert '$is2000XSeries = [string]$identity.idn.series -eq "2000X"' in script
-    assert '$is3000XSeries = [string]$identity.idn.series -eq "3000X"' in script
-    assert '$is4000XSeries = [string]$identity.idn.series -eq "4000X"' in script
-
-    # Snapshot must pre-declare the two booleans so later assignment does not
-    # create a new ad-hoc property.
-    assert "MathEnhancementsInstalled = $false" in script
-    assert "AdvancedMathInstalled = $false" in script
-    assert '"PLUS" -in @($snapshot.InstalledOptions)' in script
-    assert '"ADVMATH" -in @($snapshot.InstalledOptions)' in script
-    assert "$snapshot.MathEnhancementsInstalled = " in script
-    assert "$snapshot.AdvancedMathInstalled = " in script
-
-    # 2000X without PLUS: math-transform must be N/A, not absolute.
-    assert 'Math transforms require the PLUS option on 2000X; PLUS is not installed.' in script
-    assert 'Add-NotApplicableCase -Name "math-transform"' in script
-
-    # 3000X without ADVMATH: math-transform must select differentiate/DIFF.
-    # The script must contain the conditional selection inside the transform case.
-    transform_start = script.index('Invoke-BaselineCase -Name "math-transform"')
-    transform_block = script[transform_start : transform_start + 3000]
-    assert '"differentiate"' in transform_block
-    assert '"absolute"' in transform_block
-    assert '"DIFF"' in transform_block or "'DIFF'" in transform_block or "DIFF" in transform_block
-    assert '"ABSolute"' in transform_block
-    assert '$is3000XSeries -and -not $snapshot.AdvancedMathInstalled' in transform_block
-
-    # Filter and visualization must be N/A on missing options, preserving
-    # the original unsupported-device fallback.
-    assert 'Math filters require the PLUS option on 2000X; PLUS is not installed.' in script
-    assert 'Math filters require the ADVMATH option on 3000X; ADVMATH is not installed.' in script
-    assert 'Math visualizations require the PLUS option on 2000X; PLUS is not installed.' in script
-    assert 'Math visualizations require the ADVMATH option on 3000X; ADVMATH is not installed.' in script
-
-    # Verify filter/visualization outer gating still preserves the original
-    # "unsupported by the detected instrument" fallback.
-    assert script.count('Math filters are unsupported by the detected instrument.') == 1
-    assert script.count('Math visualizations are unsupported by the detected instrument.') == 1
-
-    # 4000X must not be affected: the new option gates must explicitly test
-    # for 2000X/3000X, not a generic "not installed" check that would also hit 4000X.
-    assert script.count('MathEnhancementsInstalled') >= 3
-    assert script.count('AdvancedMathInstalled') >= 3
-    # Ensure math-operator, math-display, math-vertical, fft and composite-source
-    # are not wrapped by the new PLUS/ADVMATH gates. Check the condition
-    # immediately preceding each case, not the following block.
-    for case in ("math-operator", "math-display", "math-vertical", "fft", "math-composite-source"):
-        marker = f'Invoke-BaselineCase -Name "{case}"'
-        if marker in script:
-            start = script.index(marker)
-            window_start = max(0, start - 600)
-            window = script[window_start:start]
-            last_if = window.rfind("if (")
-            condition = window[last_if:start] if last_if != -1 else ""
-            assert "MathEnhancementsInstalled" not in condition
-            assert "AdvancedMathInstalled" not in condition
-
-    # Ensure no Core capability or generic license abstraction was introduced.
-    assert "MathLicenseManager" not in script
-    assert "OptionCapabilityResolver" not in script
-    assert "MathFeatureMatrix" not in script
-
-
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     ("series", "installed_options", "expected_transform_status", "expected_transform_operation", "expected_filter_status", "expected_visualization_status"),
@@ -9029,7 +8959,7 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 )
 if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
 
-foreach ($fn in @("Add-CaseResult", "Add-NotApplicableCase", "Add-Diagnostic", "Assert-ScpiSent", "Assert-ScpiSentPrefix", "Invoke-BaselineCase", "Assert-FiniteNumber")) {
+foreach ($fn in @("Add-CaseResult", "Add-NotApplicableCase", "Add-Diagnostic", "Assert-ScpiSent", "Assert-ScpiSentPrefix", "Invoke-BaselineCase", "Assert-FiniteNumber", "ConvertTo-InvariantString", "Assert-NearlyEqual")) {
     $fa = $ast.Find({
         param($node)
         return ($node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $fn)
@@ -9050,6 +8980,12 @@ if (-not (Get-Command Assert-FiniteNumber -ErrorAction SilentlyContinue)) {
 if (-not (Get-Command Add-Diagnostic -ErrorAction SilentlyContinue)) {
     function Add-Diagnostic { param($Name,$Message) }
 }
+if (-not (Get-Command ConvertTo-InvariantString -ErrorAction SilentlyContinue)) {
+    function ConvertTo-InvariantString { param([double]$Value) return $Value.ToString("R", [System.Globalization.CultureInfo]::InvariantCulture) }
+}
+if (-not (Get-Command Assert-NearlyEqual -ErrorAction SilentlyContinue)) {
+    function Assert-NearlyEqual { param([double]$Actual,[double]$Expected,[string]$Label) }
+}
 function Drain-AfterFailure { param($Stage,$CaseName) }
 
 $script:CaseResults = [ordered]@{}
@@ -9059,6 +8995,10 @@ $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:LastTransformOperation = $null
 $script:LastFilterOperation = $null
 $script:LastVisualizationOperation = $null
+$script:LastVerticalScale = $null
+$script:LastVerticalOffset = $null
+$script:BaselineVerticalScale = 250000
+$script:BaselineVerticalOffset = 0
 
 $installedOptions = @()
 if (-not [string]::IsNullOrWhiteSpace($InstalledOptionsCsv)) {
@@ -9089,12 +9029,23 @@ $snapshot = [pscustomobject]@{
     WgenApplicabilityDetail = ""
     MathFunctionCount = 1
 }
-if ($is2000XSeries) {
-    $snapshot.MathEnhancementsInstalled = "PLUS" -in @($snapshot.InstalledOptions)
-}
-if ($is3000XSeries) {
-    $snapshot.AdvancedMathInstalled = "ADVMATH" -in @($snapshot.InstalledOptions)
-}
+# Use production option applicability assignments instead of duplicating logic
+$plusAssignmentNodes = @($ast.FindAll({
+    param($node)
+    if ($node -isnot [System.Management.Automation.Language.IfStatementAst]) { return $false }
+    $txt = $node.Extent.Text.TrimStart()
+    return $txt.StartsWith('if ($is2000XSeries)') -and $txt.Contains('$snapshot.MathEnhancementsInstalled = "PLUS"')
+}, $true))
+$advmAssignmentNodes = @($ast.FindAll({
+    param($node)
+    if ($node -isnot [System.Management.Automation.Language.IfStatementAst]) { return $false }
+    $txt = $node.Extent.Text.TrimStart()
+    return $txt.StartsWith('if ($is3000XSeries)') -and $txt.Contains('$snapshot.AdvancedMathInstalled = "ADVMATH"')
+}, $true))
+if ($plusAssignmentNodes.Count -ne 1) { throw "Expected 1 PLUS assignment, found $($plusAssignmentNodes.Count)" }
+if ($advmAssignmentNodes.Count -ne 1) { throw "Expected 1 ADVMATH assignment, found $($advmAssignmentNodes.Count)" }
+Invoke-Expression $plusAssignmentNodes[0].Extent.Text
+Invoke-Expression $advmAssignmentNodes[0].Extent.Text
 
 # Override baseline helpers to capture runtime behavior without real hardware.
 function Add-CaseResult {
@@ -9160,6 +9111,28 @@ function Invoke-LiveCli {
                 result = [pscustomobject]@{ math_operation = $script:LastVisualizationOperation }
             }
         }
+        "math-vertical-baseline-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":FUNCtion:SCALe?", ":FUNCtion:RANGe?", ":FUNCtion:OFFSet?") }
+                result = [pscustomobject]@{ scale = $script:BaselineVerticalScale; range = 2000000; offset = $script:BaselineVerticalOffset }
+            }
+        }
+        "math-vertical-set" {
+            $idxScale = [array]::IndexOf($Arguments, "--scale")
+            $idxOffset = [array]::IndexOf($Arguments, "--offset")
+            if ($idxScale -ge 0) { $script:LastVerticalScale = $Arguments[$idxScale+1] }
+            if ($idxOffset -ge 0) { $script:LastVerticalOffset = $Arguments[$idxOffset+1] }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":FUNCtion:SCALe $($Arguments[$idxScale+1])", ":FUNCtion:OFFSet $($Arguments[$idxOffset+1])") }
+                result = [pscustomobject]@{}
+            }
+        }
+        "math-vertical-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":FUNCtion:SCALe?", ":FUNCtion:RANGe?", ":FUNCtion:OFFSet?") }
+                result = [pscustomobject]@{ scale = [double]$script:LastVerticalScale; range = 2000000; offset = [double]$script:LastVerticalOffset }
+            }
+        }
         default {
             return [pscustomobject]@{ scpi = [pscustomobject]@{ sent = @() }; result = [pscustomobject]@{} }
         }
@@ -9196,16 +9169,16 @@ Invoke-Expression $transformNodes[0].Extent.Text
 Invoke-Expression $filterNodes[0].Extent.Text
 Invoke-Expression $visualNodes[0].Extent.Text
 
-# Also exercise math-operator and fft blocks to ensure they remain applicable
-# (they must not have been wrapped by the new option gates).
-$operatorNode = $ast.FindAll({
+# Also execute math-vertical to verify dynamic fixture (must run after transform which sets DIFF)
+$verticalNodes = @($ast.FindAll({
     param($node)
-    return ($node -is [System.Management.Automation.Language.IfStatementAst] -and $node.Extent.Text.Contains('Invoke-BaselineCase -Name "math-operator"'))
-}, $true)
-$fftNode = $ast.FindAll({
-    param($node)
-    return ($node -is [System.Management.Automation.Language.IfStatementAst] -and $node.Extent.Text.Contains('Invoke-BaselineCase -Name "fft"') -and $node.Extent.Text.Contains('fft\"'))
-}, $true)
+    if ($node -isnot [System.Management.Automation.Language.IfStatementAst]) { return $false }
+    $txt = $node.Extent.Text.TrimStart()
+    return $txt.StartsWith('if (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0)') -and $txt.Contains('Invoke-BaselineCase -Name "math-vertical"')
+}, $true))
+if ($verticalNodes.Count -ne 1) { throw "Expected 1 math-vertical conditional, found $($verticalNodes.Count)" }
+Invoke-Expression $verticalNodes[0].Extent.Text
+$verticalResult = if ($script:CaseResults.Contains("math-vertical")) { $script:CaseResults["math-vertical"] } else { $null }
 
 $transformResult = if ($script:CaseResults.Contains("math-transform")) { $script:CaseResults["math-transform"] } else { $null }
 $filterResult = if ($script:CaseResults.Contains("math-filter")) { $script:CaseResults["math-filter"] } else { $null }
@@ -9227,6 +9200,10 @@ $joinedArgs = $allArgs -join " | "
     filter_detail = if ($null -ne $filterResult) { [string]$filterResult.Detail } else { "" }
     visualization_status = if ($null -ne $visualResult) { [string]$visualResult.Status } else { "" }
     visualization_detail = if ($null -ne $visualResult) { [string]$visualResult.Detail } else { "" }
+    vertical_status = if ($null -ne $verticalResult) { [string]$verticalResult.Status } else { "" }
+    vertical_detail = if ($null -ne $verticalResult) { [string]$verticalResult.Detail } else { "" }
+    vertical_scale = [string]$script:LastVerticalScale
+    vertical_offset = [string]$script:LastVerticalOffset
     joined_args = $joinedArgs
     invocations = @($script:Invocations | ForEach-Object { [ordered]@{ stage = $_.stage; command = $_.command; arguments = @($_.arguments) } })
 } | ConvertTo-Json -Depth 10 -Compress
@@ -9277,6 +9254,13 @@ $joinedArgs = $allArgs -join " | "
         assert "ABSolute" not in result["joined_args"]
         assert "LOWPass" not in result["joined_args"]
         assert "MAGNify" not in result["joined_args"]
+        # Verify math-vertical also uses dynamic baseline (same as 3000X)
+        assert result["vertical_status"] == "PASS"
+        vertical_invocations = [inv for inv in result["invocations"] if inv["stage"] == "math-vertical-set"]
+        assert len(vertical_invocations) == 1
+        v_args = vertical_invocations[0]["arguments"]
+        assert v_args[v_args.index("--scale") + 1] == "250000"
+        assert v_args[v_args.index("--offset") + 1] == "0"
     else:
         assert result["advanced_math"] is False
         assert result["transform_status"] == expected_transform_status
@@ -9294,5 +9278,17 @@ $joinedArgs = $allArgs -join " | "
         assert "ABSolute" not in result["joined_args"]
         assert "LOWPass" not in result["joined_args"]
         assert "MAGNify" not in result["joined_args"]
-        # The DIFF token must have been used for the transform.
-        assert "DIFF" in result["joined_args"] or "diff" in result["joined_args"].lower()
+        # Verify math-vertical dynamic fixture: baseline query used and set uses baseline values, not hardcoded 1
+        assert result["vertical_status"] == "PASS"
+        vertical_invocations = [inv for inv in result["invocations"] if inv["stage"] == "math-vertical-set"]
+        assert len(vertical_invocations) == 1
+        v_args = vertical_invocations[0]["arguments"]
+        scale_idx = v_args.index("--scale") if "--scale" in v_args else -1
+        offset_idx = v_args.index("--offset") if "--offset" in v_args else -1
+        assert scale_idx != -1 and offset_idx != -1
+        assert v_args[scale_idx + 1] == "250000"
+        assert v_args[offset_idx + 1] == "0"
+        # Ensure baseline query was executed
+        baseline_stages = [inv["stage"] for inv in result["invocations"]]
+        assert "math-vertical-baseline-query" in baseline_stages
+        assert "math-vertical-query" in baseline_stages

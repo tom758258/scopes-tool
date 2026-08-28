@@ -4326,18 +4326,37 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
         Invoke-BaselineCase -Name "math-vertical" -Action {
-            $configured = Invoke-LiveCli -Stage "math-vertical-set" -Command "math-vertical" -Arguments @(
-                "--function", "1", "--scale", "1", "--offset", "0"
-            )
             $mathPrefix = if ([int]$identity.capabilities.math_function_count -eq 1) { ":FUNCtion" } else { ":FUNCtion1" }
+            $scale = 1.0
+            $offset = 0.0
+            if ($is2000XSeries -or $is3000XSeries) {
+                $baseline = Invoke-LiveCli -Stage "math-vertical-baseline-query" -Command "math-vertical" -Arguments @(
+                    "--function", "1", "--query"
+                )
+                Assert-ScpiSent -Payload $baseline -Label "Math vertical baseline query" -ExpectedCommands @(
+                    "${mathPrefix}:SCALe?", "${mathPrefix}:RANGe?", "${mathPrefix}:OFFSet?"
+                )
+                $scale = Assert-FiniteNumber -Value $baseline.result.scale -Label "Math vertical baseline scale"
+                if ($scale -le 0) {
+                    throw "Math vertical baseline scale must be positive: $scale."
+                }
+                $offset = Assert-FiniteNumber -Value $baseline.result.offset -Label "Math vertical baseline offset"
+            }
+            $scaleText = ConvertTo-InvariantString -Value $scale
+            $offsetText = ConvertTo-InvariantString -Value $offset
+            $configured = Invoke-LiveCli -Stage "math-vertical-set" -Command "math-vertical" -Arguments @(
+                "--function", "1", "--scale", $scaleText, "--offset", $offsetText
+            )
             Assert-ScpiSent -Payload $configured -Label "Math vertical" -ExpectedCommands @(
-                "${mathPrefix}:SCALe 1", "${mathPrefix}:OFFSet 0"
+                "${mathPrefix}:SCALe $scaleText", "${mathPrefix}:OFFSet $offsetText"
             )
             $query = Invoke-LiveCli -Stage "math-vertical-query" -Command "math-vertical" -Arguments @(
                 "--function", "1", "--query")
             Assert-ScpiSent -Payload $query -Label "Math vertical query" -ExpectedCommands @(
                 "${mathPrefix}:SCALe?", "${mathPrefix}:RANGe?", "${mathPrefix}:OFFSet?"
             )
+            Assert-NearlyEqual -Actual ([double]$query.result.scale) -Expected $scale -Label "Math vertical scale"
+            Assert-NearlyEqual -Actual ([double]$query.result.offset) -Expected $offset -Label "Math vertical offset"
         }
     } elseif (-not $script:FunctionalFailed) {
         Add-NotApplicableCase -Name "math-vertical" -Detail "Math functions are unsupported by the detected instrument."
