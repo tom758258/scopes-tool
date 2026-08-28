@@ -157,7 +157,13 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "seconds_per_division", "type": "number", "minimum": 0, "required_if": [{"field": "action", "equals": "set"}]},
+            {
+                "name": "seconds_per_division",
+                "type": "number",
+                "minimum": 0,
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "timebase.seconds_per_division",
+            },
         ),
     },
     {
@@ -167,7 +173,12 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "position_seconds", "type": "number", "required_if": [{"field": "action", "equals": "set"}]},
+            {
+                "name": "position_seconds",
+                "type": "number",
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "timebase.position_seconds",
+            },
         ),
     },
     {

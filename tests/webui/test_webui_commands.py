@@ -157,6 +157,9 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
         assert next(
             field for field in timebase["fields"] if field["name"] == value_name
         )["required_if"] == [{"field": "action", "equals": "set"}]
+        assert next(
+            field for field in timebase["fields"] if field["name"] == value_name
+        )["help_key"] == f"timebase.{value_name}"
 
     model_2000x = "keysight-dsox2004a"
     impedance = commands["channel-impedance"]["presentation"]["models"][model_2000x]

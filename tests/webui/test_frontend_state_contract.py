@@ -2727,11 +2727,17 @@ def test_command_help_and_common_result_labels_are_localized() -> None:
         "description.timebase-scale",
         "form.greaterThan",
         "help.pairs",
+        "help.timebase.seconds_per_division",
+        "help.timebase.position_seconds",
         "results.field.seconds_per_division",
         "results.field.planned_scpi",
     ):
         assert f'"{key}":' in english
         assert f'"{key}":' in chinese
+    assert '"help.timebase.seconds_per_division": "Seconds per division; for example, 0.001 = 1 ms/div."' in english
+    assert '"help.timebase.position_seconds": "Seconds; may be positive or negative. The valid range depends on the current time/div setting."' in english
+    assert '"help.timebase.seconds_per_division": "單位：秒/格，例如 0.001 = 1 ms/div。"' in chinese
+    assert '"help.timebase.position_seconds": "單位：秒；可正可負，可用範圍依目前每格時間而定。"' in chinese
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

@@ -579,6 +579,8 @@ export const en = {
   "help.pairs": "Example: 1:2, 3:4",
   "help.pair_items": "Comma-separated pair measurements, for example phase,delay",
   "help.acquisition.average_count": "2–65536; higher values reduce noise but slow waveform updates.",
+  "help.timebase.seconds_per_division": "Seconds per division; for example, 0.001 = 1 ms/div.",
+  "help.timebase.position_seconds": "Seconds; may be positive or negative. The valid range depends on the current time/div setting.",
   "enum.external": "External",
   "enum.line": "Line",
   "enum.lf-reject": "LF reject",
