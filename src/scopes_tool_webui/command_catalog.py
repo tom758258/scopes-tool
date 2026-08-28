@@ -200,7 +200,13 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "volts_per_division", "type": "number", "minimum": 0, "required_if": [{"field": "action", "equals": "set"}]},
+            {
+                "name": "volts_per_division",
+                "type": "number",
+                "exclusive_minimum": 0,
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "channel-scale.volts_per_division",
+            },
         ),
     },
     {
@@ -218,7 +224,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "text", "type": "string", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "text", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-label.text"},
         ),
     },
     {
@@ -229,7 +235,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "volts", "type": "number", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "volts", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-offset.volts"},
         ),
     },
     {
@@ -240,7 +246,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "coupling", "type": "enum", "options": ("ac", "dc"), "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "coupling", "type": "enum", "options": ("ac", "dc"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-coupling.coupling"},
         ),
     },
     {
@@ -251,7 +257,13 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "ratio", "type": "number", "minimum": 0, "required_if": [{"field": "action", "equals": "set"}]},
+            {
+                "name": "ratio",
+                "type": "number",
+                "exclusive_minimum": 0,
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "channel-probe.ratio",
+            },
         ),
     },
     {
@@ -262,7 +274,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-bandwidth-limit.enabled"},
         ),
     },
     {
@@ -273,7 +285,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "impedance", "type": "enum", "options": ("one_meg", "fifty"), "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "impedance", "type": "enum", "options": ("one_meg", "fifty"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-impedance.impedance"},
         ),
     },
     {
@@ -284,7 +296,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-invert.enabled"},
         ),
     },
     {
@@ -295,7 +307,13 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "volts", "type": "number", "minimum": 0, "required_if": [{"field": "action", "equals": "set"}]},
+            {
+                "name": "volts",
+                "type": "number",
+                "exclusive_minimum": 0,
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "channel-range.volts",
+            },
         ),
     },
     {
@@ -306,7 +324,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "units", "type": "enum", "options": ("volt", "amp"), "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "units", "type": "enum", "options": ("volt", "amp"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-units.units"},
         ),
     },
     {
@@ -317,7 +335,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-vernier.enabled"},
         ),
     },
     {
@@ -328,7 +346,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "seconds", "type": "number", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "seconds", "type": "number", "minimum": -100e-9, "maximum": 100e-9, "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-probe-skew.seconds"},
         ),
     },
     {
@@ -1347,6 +1365,7 @@ def _model_command_presentation(
         override: dict[str, Any] = {}
         if field.get("type") == "integer" and name in analog_fields:
             override["maximum"] = capabilities.analog_channels
+            override["options"] = tuple(range(1, capabilities.analog_channels + 1))
         if field.get("type") == "multi-enum" and name == "channels":
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
         if field.get("type") == "integer" and name == "function":

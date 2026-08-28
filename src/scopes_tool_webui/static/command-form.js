@@ -242,6 +242,18 @@ export class CommandForm {
         input.dataset.multiSource = "true";
       }
       if (actionChoices?.length) input.value = String(actionChoices[0]);
+    } else if (field.type === "integer" && this.catalog.optionsFor(field).length) {
+      input = document.createElement("select");
+      if (field.default === undefined) {
+        const required = field.required === true || Boolean(field.required_if);
+        input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
+      }
+      const options = this.catalog.optionsFor(field);
+      options.forEach((option) => {
+        const channelKey = `enum.channel${option}`;
+        const label = hasTranslation(channelKey) ? translate(channelKey) : translateEnum(option);
+        input.append(new Option(label, String(option)));
+      });
     } else if (field.type === "boolean") {
       if (field.default !== undefined) {
         input = document.createElement("input");
