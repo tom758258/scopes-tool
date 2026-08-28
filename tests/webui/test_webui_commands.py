@@ -127,6 +127,8 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     assert search_mode["fields"]["mode"]["options"] == ["serial1"]
     assert commands["segmented-capture"]["presentation"]["models"][model_2000x]["fields"]["segments"]["maximum"] == 250
     assert "delay" not in commands["measure"]["presentation"]["models"][model_2000x]["fields"]["item"]["options"]
+    assert "area" not in commands["measure"]["presentation"]["models"][model_2000x]["fields"]["item"]["options"]
+    assert "area" not in commands["measure-log"]["presentation"]["models"][model_2000x]["fields"]["items"]["options"]
     segmented = commands["segmented-memory"]["presentation"]
     assert segmented["kind"] == "setting"
     assert segmented["query_value"] == "query"

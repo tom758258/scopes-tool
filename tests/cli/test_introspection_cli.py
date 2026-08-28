@@ -139,6 +139,8 @@ def test_capabilities_json_explicit_model_reports_requested_selection(capsys):
     assert payload["capabilities"] == runtime._capabilities_json(
         capabilities_for_model_id("keysight-dsox2004a")
     )
+    assert payload["capabilities"]["supports_area_measurement"] is False
+    assert payload["capabilities"]["supports_measure_statistics"] is False
 
 
 def test_capabilities_json_unknown_model_fails_closed(capsys):

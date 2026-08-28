@@ -57,3 +57,48 @@ def test_measurement_window_invalid_value_rejected():
 def test_measurement_control_text_output_smoke(capsys):
     assert cli.main(["measure-show", "--query", "--simulate"]) == 0
     assert "Command: :MEASure:SHOW?" in capsys.readouterr().out
+
+
+def test_measure_stats_dry_run_rejects_unsupported_2000x(capsys, monkeypatch):
+    monkeypatch.setattr(
+        runtime.Oscilloscope, "open", staticmethod(lambda *args, **kwargs: pytest.fail("opened VISA"))
+    )
+    argv = [
+        "measure-stats",
+        "--dry-run",
+        "--json",
+        "--model",
+        "keysight-dsox2004a",
+        "--channel",
+        "1",
+        "--items",
+        "vpp,frequency",
+    ]
+    assert cli.main(argv) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert "capability profile" in payload["error"]["message"].lower()
+    assert "statistics" in payload["error"]["message"].lower()
+    planned = payload["scpi"]["planned"]
+    assert not any("STATistics" in cmd for cmd in planned)
+    assert not any("RESults" in cmd for cmd in planned)
+
+
+def test_measure_stats_dry_run_generates_planned_scpi_on_supported_model(capsys):
+    argv = [
+        "measure-stats",
+        "--dry-run",
+        "--json",
+        "--model",
+        "keysight-dsox4024a",
+        "--channel",
+        "1",
+        "--items",
+        "vpp,frequency",
+    ]
+    assert cli.main(argv) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    planned = payload["scpi"]["planned"]
+    assert any("CLEar" in cmd for cmd in planned)
+    assert any("RESults" in cmd for cmd in planned)

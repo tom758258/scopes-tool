@@ -184,6 +184,7 @@ from scopes_tool_core.measurements import (
     normalize_measurement_item,
     pair_measurement_query,
     validate_measure_results_dump_supported,
+    validate_measure_statistics_supported,
 )
 from scopes_tool_core.demo import (
     demo_function_command,
@@ -1901,6 +1902,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
     if command == "measure-stats":
         channel = validate_analog_channel(args.channel, capabilities)
         items = measurement_analysis._parse_stats_items(args.items)
+        validate_measure_statistics_supported(capabilities)
         commands = measurement_analysis._measure_stats_planned_scpi(channel, items, args.mode, reset=args.reset, max_count=args.max_count)
         return commands + [":SYSTem:ERRor?"], [], {"channel": channel, "items": list(items), "mode": args.mode, "reset": bool(args.reset), "max_count": args.max_count, "settle_seconds": args.settle_seconds, "records": []}
     if command == "doctor":

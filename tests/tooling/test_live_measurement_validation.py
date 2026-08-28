@@ -51,6 +51,7 @@ def test_measure_statistics_uses_capability_gate() -> None:
     stats = _case_block(script, "measure-stats", "measure-controls")
     assert "Add-NotApplicableCase" in script
     assert 'Add-NotApplicableCase -Name "measure-stats"' in script
+    assert "Measurement statistics are unsupported by the detected instrument." in script
     assert "measure-stats" in stats
 
 

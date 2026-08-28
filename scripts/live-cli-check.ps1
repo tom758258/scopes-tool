@@ -3665,7 +3665,7 @@ if ($snapshotComplete) {
             }
         }
     } elseif (-not $script:FunctionalFailed) {
-        Add-NotApplicableCase -Name "measure-stats" -Detail "Measurement subsystem is unsupported by the detected instrument."
+        Add-NotApplicableCase -Name "measure-stats" -Detail "Measurement statistics are unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {

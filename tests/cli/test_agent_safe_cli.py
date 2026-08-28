@@ -93,6 +93,8 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         "supports_measurements": True,
         "supports_delay_measurement": True,
         "supports_measure_results_dump": True,
+        "supports_area_measurement": True,
+        "supports_measure_statistics": True,
         "supports_demo": True,
         "demo_functions": [
             "am",
