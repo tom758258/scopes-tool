@@ -70,4 +70,3 @@ def test_instrument_summary_skips_unsafe_edge_queries(
         assert not any(command.startswith(":TRIGger:EDGE:") for command in backend.history)
     else:
         assert ":TRIGger:EDGE:LEVel? EXTernal" not in backend.history
-

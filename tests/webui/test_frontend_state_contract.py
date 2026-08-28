@@ -59,6 +59,8 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         assert.equal(formatEngineering(0.5, "V", { perDivision: true }), "500 mV/div");
         assert.equal(formatEngineering(2, "A", { perDivision: true }), "2.00 A/div");
         assert.equal(formatEngineering(-0.0024, "s", { signed: true }), "-2.40 ms");
+        assert.equal(formatEngineering(null, "V"), "—");
+        assert.equal(formatEngineering(undefined, "V"), "—");
         assert.equal(formatEngineering(0, "V", { signed: true }), "+0.00 V");
         '''
     )

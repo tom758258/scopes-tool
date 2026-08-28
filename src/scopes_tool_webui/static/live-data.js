@@ -10,8 +10,9 @@ const PREFIXES = new Map([
 ]);
 
 export function formatEngineering(value, unit, { signed = false, perDivision = false } = {}) {
+  if (value === null || value === undefined || !unit) return "—";
   const numeric = Number(value);
-  if (!Number.isFinite(numeric) || !unit) return "—";
+  if (!Number.isFinite(numeric)) return "—";
 
   const magnitude = Math.abs(numeric);
   const exponent = magnitude === 0

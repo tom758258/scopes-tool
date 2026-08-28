@@ -207,6 +207,7 @@ names are intended for package consumers and tests:
 - `plan_triggered_capture_series`
 - `plan_measure_until`
 - `plan_acquisition_check`
+- `query_instrument_summary`
 - `run_capture`
 - `run_capture_batch`
 - `run_doctor`
