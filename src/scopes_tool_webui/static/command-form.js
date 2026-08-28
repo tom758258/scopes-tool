@@ -180,13 +180,13 @@ export class CommandForm {
         });
         this.syncMultiChoices(input);
       } else {
-        input.value = entry.value;
         if (input.tagName === "SELECT" && !input.multiple) {
           const validValues = new Set([...input.options].map((o) => o.value));
           if (entry.value !== "" && !validValues.has(String(entry.value))) {
-            input.value = "";
+            return;
           }
         }
+        input.value = entry.value;
       }
       if (entry.dirty) input.dataset.dirty = "true";
     });

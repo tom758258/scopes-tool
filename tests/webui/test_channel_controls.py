@@ -191,12 +191,117 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         import assert from "node:assert/strict";
         import fs from "node:fs";
         import path from "node:path";
-        import { JSDOM } from "jsdom";
-        const dom = new JSDOM(`<!DOCTYPE html><div id="c"></div>`);
-        globalThis.document = dom.window.document;
-        globalThis.Option = dom.window.Option;
-        globalThis.Event = dom.window.Event;
-        globalThis.HTMLElement = dom.window.HTMLElement;
+
+        // Dependency-free minimal DOM stub
+        class FakeEl {
+          constructor(tag){
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.attributes = {};
+            this.style = {};
+            this.className = "";
+            this.textContent = "";
+            this.hidden = false;
+            this.disabled = false;
+            this.checked = false;
+            this.type = "";
+            this.multiple = false;
+            this.required = false;
+            this.validity = {};
+            this._value = "";
+            this.options = [];
+            this.selectedOptions = [];
+          }
+          get value(){ return this._value; }
+          set value(v){
+            this._value = String(v);
+            // emulate SELECT value selects matching option
+            if(this.tagName==="SELECT"){
+              for(const o of this.options) o.selected = (o.value===this._value);
+              this.selectedOptions = this.options.filter(o=>o.selected);
+            }
+          }
+          append(...nodes){
+            for(const n of nodes){
+              this.children.push(n);
+              if(n.tagName==="OPTION"){
+                this.options.push(n);
+                if(n.selected) this.selectedOptions.push(n);
+              }
+            }
+          }
+          replaceChildren(...nodes){
+            this.children = [];
+            this.options = [];
+            this.selectedOptions = [];
+            if(nodes.length) this.append(...nodes);
+          }
+          setAttribute(k,v){ this.attributes[k]=String(v); }
+          getAttribute(k){ return this.attributes[k]; }
+          addEventListener(){}
+          dispatchEvent(){ return true; }
+          closest(sel){
+            if(sel==='[data-visible-if-hidden="true"]') return null;
+            return null;
+          }
+          setCustomValidity(){}
+          checkValidity(){ return true; }
+          reportValidity(){}
+          querySelector(sel){ return this.querySelectorAll(sel)[0]||null; }
+          querySelectorAll(sel){
+            const out=[];
+            const isDataField = sel==="[data-field]" || sel.startsWith('[data-field="');
+            const isVisibleIf = sel==="[data-visible-if]";
+            const isMultiFor = sel==="[data-multi-for]";
+            const mField = sel.match(/^\[data-field="([^"]+)"\]$/);
+            const walk=(node)=>{
+              if(!node) return;
+              if(isDataField && node.dataset && "field" in node.dataset){
+                if(sel==="[data-field]") out.push(node);
+                else if(mField && node.dataset.field===mField[1]) out.push(node);
+              }
+              if(isVisibleIf && node.dataset && "visibleIf" in node.dataset) out.push(node);
+              if(isMultiFor && node.dataset && "multiFor" in node.dataset) out.push(node);
+              if(sel==="span" && node.tagName==="SPAN") out.push(node);
+              for(const c of node.children||[]) walk(c);
+              // also walk select options that may be queried directly
+              for(const o of node.options||[]) {
+                if(isDataField && o.dataset && "field" in o.dataset) {
+                  if(sel==="[data-field]") out.push(o);
+                  else if(mField && o.dataset.field===mField[1]) out.push(o);
+                }
+              }
+            };
+            for(const w of this.children) walk(w);
+            // direct children that are inputs with data-field
+            for(const w of this.children){
+              for(const c of w.children||[]){
+                if(c.dataset && "field" in c.dataset){
+                  if(sel==="[data-field]") {
+                    if(!out.includes(c)) out.push(c);
+                  } else if(mField && c.dataset.field===mField[1]){
+                    if(!out.includes(c)) out.push(c);
+                  }
+                }
+              }
+            }
+            // also consider this element itself if it matches (for container queries)
+            return out;
+          }
+        }
+        function makeContainer(){
+          const c=new FakeEl("div");
+          // Make container behave like FakeEl but with document-like query
+          return c;
+        }
+        globalThis.document = { createElement(tag){ return new FakeEl(tag); } };
+        globalThis.Option = function(text, value){
+          const o=new FakeEl("option");
+          o.textContent=text; o.value=String(value); o.selected=false; return o;
+        };
+        globalThis.Event = class Event { constructor(t){ this.type=t; } };
+        globalThis.HTMLElement = FakeEl;
 
         const translations = {
           "enum.channel1":"通道 1","enum.channel2":"通道 2","enum.channel3":"通道 3","enum.channel4":"通道 4",
@@ -217,10 +322,9 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
         const CommandForm = globalThis.CommandForm;
 
-        // 1. channel integer+options renders as SELECT with channel labels and values() returns integer
+        // A. channel integer+options with channel label -> SELECT and values() integer
         {
-          const cont = dom.window.document.getElementById("c");
-          cont.replaceChildren();
+          const cont = makeContainer();
           const form = new CommandForm(cont, catalog);
           const field = { name:"channel", type:"integer", options:[1,2,3,4], option_label:"channel", default:1 };
           const cmd = { id:"channel-scale", fields:[field], presentation:{ kind:"setting", action_field:"action", query_value:"query", apply_value:"set", query_fields:[] } };
@@ -237,9 +341,9 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           assert.equal(typeof vals.channel, "number");
         }
 
-        // 2. generic integer options without channel label renders numeric labels
+        // B. generic integer without channel label renders numeric
         {
-          const cont = dom.window.document.createElement("div");
+          const cont = makeContainer();
           const form = new CommandForm(cont, catalog);
           const field = { name:"bus", type:"integer", options:[1,2], default:1 };
           const cmd = { id:"generic", fields:[field], presentation:{ kind:"command", action:"run" } };
@@ -249,9 +353,9 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           assert.equal(sel.options[1].textContent, "2");
         }
 
-        // 3. enabled boolean without default renders 啟用/停用, other boolean renders 是/否
+        // C. boolean wording
         {
-          const cont = dom.window.document.createElement("div");
+          const cont = makeContainer();
           const form = new CommandForm(cont, catalog);
           const enabledField = { name:"enabled", type:"boolean" };
           const otherField = { name:"display", type:"boolean" };
@@ -265,26 +369,40 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           assert.equal(displaySel.options[2].textContent, "否");
         }
 
-        // 4. label_key renders correct field label
+        // D. label_key
         {
-          const dom2 = new JSDOM(`<!DOCTYPE html><div></div>`);
-          const cont = dom2.window.document.createElement("div");
-          // reuse same global document for CommandForm field creation (uses global document)
+          const cont = makeContainer();
           const form = new CommandForm(cont, catalog);
           const field = { name:"volts", type:"number", label_key:"channel-range.value" };
           const wrapper = form.field(field);
           assert.equal(wrapper.querySelector("span").textContent, "範圍值");
         }
 
-        // 5. restoreDraft with invalid channel is cleared after capability shrink
+        // E. invalid draft is ignored, keeps rendered default and no dirty
         {
-          const cont = dom.window.document.createElement("div");
+          const cont = makeContainer();
           const form = new CommandForm(cont, catalog);
           const field = { name:"channel", type:"integer", options:[1,2], option_label:"channel", default:1 };
           const cmd = { id:"channel-scale", fields:[field], presentation:{ kind:"setting", action_field:"action", query_value:"query", apply_value:"set", query_fields:[] } };
           form.render(cmd, { draft: [{ name:"channel", value:"4", dirty:true }] });
           const sel = cont.querySelector('[data-field="channel"]');
-          assert.equal(sel.value, "");
+          assert.equal(sel.value, "1");
+          assert.equal(sel.dataset.dirty, undefined);
+          const vals = form.values();
+          assert.deepEqual(vals, { channel: 1 });
+        }
+        // E2. valid draft is restored
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const field = { name:"channel", type:"integer", options:[1,2], option_label:"channel", default:1 };
+          const cmd = { id:"channel-scale", fields:[field], presentation:{ kind:"setting", action_field:"action", query_value:"query", apply_value:"set", query_fields:[] } };
+          form.render(cmd, { draft: [{ name:"channel", value:"2", dirty:true }] });
+          const sel = cont.querySelector('[data-field="channel"]');
+          assert.equal(sel.value, "2");
+          assert.equal(sel.dataset.dirty, "true");
+          const vals = form.values();
+          assert.deepEqual(vals, { channel: 2 });
         }
 
         console.log("all channel control frontend checks passed");
