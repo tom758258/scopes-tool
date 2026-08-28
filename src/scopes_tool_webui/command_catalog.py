@@ -134,8 +134,19 @@ COMMANDS = (
                 },
                 "default": "query",
             },
-            {"name": "type", "type": "enum", "options": ("normal", "average", "high_resolution", "peak")},
-            {"name": "count", "type": "integer", "minimum": 2, "maximum": 65536},
+            {
+                "name": "type",
+                "type": "enum",
+                "options": ("normal", "average", "high_resolution", "peak"),
+                "required_if": [{"field": "action", "equals": "set"}],
+            },
+            {
+                "name": "count",
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 65536,
+                "visible_if": [{"field": "type", "equals": "average"}],
+            },
         ),
     },
     {

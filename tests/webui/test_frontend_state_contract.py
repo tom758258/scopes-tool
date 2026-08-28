@@ -3118,6 +3118,70 @@ def test_command_editor_and_result_presentation_contract() -> None:
     assert "JSON.stringify(job.result, null, 2)" in results_source
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_acquisition_form_shows_average_count_only_after_readback() -> None:
+    form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        globalThis.Option = class {
+          constructor(text, value) { this.textContent = text; this.value = value; }
+        };
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.CommandForm = CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const type = {
+          dataset: { field: "type", type: "enum" },
+          type: "select-one", value: "", closest: () => null,
+        };
+        const count = {
+          dataset: { field: "count", type: "integer", queryField: "false" },
+          type: "number", value: "", closest: () => null,
+        };
+        const wrapper = {
+          dataset: { visibleIf: JSON.stringify([{ field: "type", equals: "average" }]) },
+          hidden: false,
+        };
+        const container = {
+          querySelectorAll(selector) {
+            if (selector === "[data-visible-if]") return [wrapper];
+            if (selector === "[data-field]") return [type, count];
+            return [];
+          },
+          querySelector(selector) {
+            return selector.includes('"type"') ? type : null;
+          },
+        };
+        const form = new globalThis.CommandForm(container, null);
+        form.presentation = { readback_fields: {} };
+        form.syncResult({ result: { type: "normal", count: 16 } });
+        assert.equal(type.value, "normal");
+        assert.equal(wrapper.hidden, true);
+        form.syncResult({ result: { type: "average", count: 16 } });
+        assert.equal(type.value, "average");
+        assert.equal(count.value, "16");
+        assert.equal(wrapper.hidden, false);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(form_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 COMMAND_CATALOG_HARNESS = r'''
         import assert from "node:assert/strict";
         import fs from "node:fs";

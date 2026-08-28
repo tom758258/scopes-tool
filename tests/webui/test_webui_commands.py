@@ -88,6 +88,13 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     acquisition = next(entry for entry in response.json() if entry["id"] == "acquisition")
     action = next(field for field in acquisition["fields"] if field["name"] == "action")
     assert action["mode_options"]["dry-run"] == ["query"]
+    acquisition_type = next(field for field in acquisition["fields"] if field["name"] == "type")
+    assert acquisition_type["options"] == ["normal", "average", "high_resolution", "peak"]
+    assert acquisition_type["required_if"] == [{"field": "action", "equals": "set"}]
+    average_count = next(field for field in acquisition["fields"] if field["name"] == "count")
+    assert average_count["visible_if"] == [{"field": "type", "equals": "average"}]
+    assert average_count["minimum"] == 2
+    assert average_count["maximum"] == 65536
     measure = next(entry for entry in response.json() if entry["id"] == "measure")
     item = next(field for field in measure["fields"] if field["name"] == "item")
     assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)

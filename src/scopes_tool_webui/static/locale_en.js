@@ -385,7 +385,7 @@ export const en = {
   "field.action": "Action",
   "field.live_only": "Live resources only",
   "field.type": "Type",
-  "field.count": "Count",
+  "field.count": "Average count",
   "field.channel": "Channel",
   "field.enabled": "Enabled",
   "field.volts_per_division": "Volts per division",
