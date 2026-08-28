@@ -2297,6 +2297,8 @@ try {
     $triggerHoldoff = Invoke-LiveCli -Stage "snapshot-trigger-holdoff" `
         -Command "trigger-holdoff" -Arguments @("--query")
 
+    $is2000XSeries = [string]$identity.idn.series -eq "2000X"
+    $is3000XSeries = [string]$identity.idn.series -eq "3000X"
     $is4000XSeries = [string]$identity.idn.series -eq "4000X"
     $triggerEdgeCoupling = $null
     $triggerEdgeReject = $null
@@ -2410,6 +2412,8 @@ try {
         TriggerHoldoffSeconds = Assert-FiniteNumber `
             -Value $triggerHoldoff.result.seconds -Label "Trigger holdoff"
         Is4000XSeries = $is4000XSeries
+        MathEnhancementsInstalled = $false
+        AdvancedMathInstalled = $false
         InstalledOptions = @()
         WgenApplicable = $null
         WgenApplicabilityDetail = ""
@@ -3047,6 +3051,12 @@ if ($snapshotComplete) {
                 "Waveform Generator option is installed on the detected instrument."
             } else {
                 "Waveform Generator option is not installed on the detected instrument."
+            }
+            if ($is2000XSeries) {
+                $snapshot.MathEnhancementsInstalled = "PLUS" -in @($snapshot.InstalledOptions)
+            }
+            if ($is3000XSeries) {
+                $snapshot.AdvancedMathInstalled = "ADVMATH" -in @($snapshot.InstalledOptions)
             }
         }
     }
@@ -4263,21 +4273,25 @@ if ($snapshotComplete) {
         }
     }
 
-    if (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
+    if ($is2000XSeries -and -not $snapshot.MathEnhancementsInstalled -and -not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
+        Add-NotApplicableCase -Name "math-transform" -Detail "Math transforms require the PLUS option on 2000X; PLUS is not installed."
+    } elseif (-not $script:FunctionalFailed -and [int]$identity.capabilities.math_function_count -gt 0) {
         Invoke-BaselineCase -Name "math-transform" -Action {
+            $operation = if ($is3000XSeries -and -not $snapshot.AdvancedMathInstalled) { "differentiate" } else { "absolute" }
+            $operationToken = if ($operation -eq "differentiate") { "DIFF" } else { "ABSolute" }
             $configured = Invoke-LiveCli -Stage "math-transform-set" `
                 -Command "math-transform" -Arguments @(
-                    "--function", "1", "--operation", "absolute", "--source", "channel1"
+                    "--function", "1", "--operation", $operation, "--source", "channel1"
                 )
             $mathPrefix = if ([int]$identity.capabilities.math_function_count -eq 1) { ":FUNCtion" } else { ":FUNCtion1" }
             Assert-ScpiSent -Payload $configured -Label "Math transform" `
                 -ExpectedCommands @(
-                    "${mathPrefix}:OPERation ABSolute",
+                    "${mathPrefix}:OPERation $operationToken",
                     "${mathPrefix}:SOURce1 CHANnel1"
                 )
             $readback = Invoke-LiveCli -Stage "math-transform-query" `
                 -Command "math-transform" -Arguments @("--function", "1", "--query")
-            if ([string]$readback.result.math_operation -ne "absolute" -or
+            if ([string]$readback.result.math_operation -ne $operation -or
                 [string]$readback.result.source -ne "channel1") {
                 throw "Math transform readback is invalid."
             }
@@ -4351,35 +4365,47 @@ if ($snapshotComplete) {
     }
 
     if (-not $script:FunctionalFailed -and @($identity.capabilities.math_filter_operations).Count -gt 0) {
-        Invoke-BaselineCase -Name "math-filter" -Action {
-            $operation = if ("low-pass" -in @($identity.capabilities.math_filter_operations)) { "low-pass" } else { @($identity.capabilities.math_filter_operations)[0] }
-            $arguments = @("--function", "1", "--operation", $operation, "--source", "channel1")
-            if ($operation -in @("low-pass", "high-pass")) {
-                $arguments += @("--cutoff-hz", "1000000")
+        if ($is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+            Add-NotApplicableCase -Name "math-filter" -Detail "Math filters require the PLUS option on 2000X; PLUS is not installed."
+        } elseif ($is3000XSeries -and -not $snapshot.AdvancedMathInstalled) {
+            Add-NotApplicableCase -Name "math-filter" -Detail "Math filters require the ADVMATH option on 3000X; ADVMATH is not installed."
+        } else {
+            Invoke-BaselineCase -Name "math-filter" -Action {
+                $operation = if ("low-pass" -in @($identity.capabilities.math_filter_operations)) { "low-pass" } else { @($identity.capabilities.math_filter_operations)[0] }
+                $arguments = @("--function", "1", "--operation", $operation, "--source", "channel1")
+                if ($operation -in @("low-pass", "high-pass")) {
+                    $arguments += @("--cutoff-hz", "1000000")
+                }
+                $configured = Invoke-LiveCli -Stage "math-filter-set" -Command "math-filter" -Arguments $arguments
+                $query = Invoke-LiveCli -Stage "math-filter-query" -Command "math-filter" -Arguments @("--function", "1", "--query")
+                if ([string]$query.result.math_operation -ne $operation -or
+                    [string]$query.result.source -ne "channel1") {
+                    throw "Math filter readback is invalid."
+                }
+                [void]$configured
             }
-            $configured = Invoke-LiveCli -Stage "math-filter-set" -Command "math-filter" -Arguments $arguments
-            $query = Invoke-LiveCli -Stage "math-filter-query" -Command "math-filter" -Arguments @("--function", "1", "--query")
-            if ([string]$query.result.math_operation -ne $operation -or
-                [string]$query.result.source -ne "channel1") {
-                throw "Math filter readback is invalid."
-            }
-            [void]$configured
         }
     } elseif (-not $script:FunctionalFailed) {
         Add-NotApplicableCase -Name "math-filter" -Detail "Math filters are unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed -and @($identity.capabilities.math_visualization_operations).Count -gt 0) {
-        Invoke-BaselineCase -Name "math-visualization" -Action {
-            $operation = if ("magnify" -in @($identity.capabilities.math_visualization_operations)) { "magnify" } else { @($identity.capabilities.math_visualization_operations)[0] }
-            $configured = Invoke-LiveCli -Stage "math-visualization-set" -Command "math-visualization" -Arguments @(
-                "--function", "1", "--operation", $operation, "--source", "channel1"
-            )
-            $query = Invoke-LiveCli -Stage "math-visualization-query" -Command "math-visualization" -Arguments @("--function", "1", "--query")
-            if ([string]$query.result.math_operation -ne $operation) {
-                throw "Math visualization readback is invalid."
+        if ($is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+            Add-NotApplicableCase -Name "math-visualization" -Detail "Math visualizations require the PLUS option on 2000X; PLUS is not installed."
+        } elseif ($is3000XSeries -and -not $snapshot.AdvancedMathInstalled) {
+            Add-NotApplicableCase -Name "math-visualization" -Detail "Math visualizations require the ADVMATH option on 3000X; ADVMATH is not installed."
+        } else {
+            Invoke-BaselineCase -Name "math-visualization" -Action {
+                $operation = if ("magnify" -in @($identity.capabilities.math_visualization_operations)) { "magnify" } else { @($identity.capabilities.math_visualization_operations)[0] }
+                $configured = Invoke-LiveCli -Stage "math-visualization-set" -Command "math-visualization" -Arguments @(
+                    "--function", "1", "--operation", $operation, "--source", "channel1"
+                )
+                $query = Invoke-LiveCli -Stage "math-visualization-query" -Command "math-visualization" -Arguments @("--function", "1", "--query")
+                if ([string]$query.result.math_operation -ne $operation) {
+                    throw "Math visualization readback is invalid."
+                }
+                [void]$configured
             }
-            [void]$configured
         }
     } elseif (-not $script:FunctionalFailed) {
         Add-NotApplicableCase -Name "math-visualization" -Detail "Math visualizations are unsupported by the detected instrument."

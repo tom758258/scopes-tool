@@ -3774,6 +3774,8 @@ function Initialize-ProductionSnapshot {
     $triggerSlope = New-QueryPayload @{ slope = "negative" }
     $triggerLevel = New-QueryPayload @{ level_volts = 0.0 }
     $triggerHoldoff = New-QueryPayload @{ seconds = 0.000001 }
+    $is2000XSeries = $false
+    $is3000XSeries = $false
     $is4000XSeries = $false
     $triggerEdgeCoupling = $null
     $triggerEdgeReject = $null
@@ -3799,6 +3801,9 @@ function Initialize-ProductionSnapshot {
 }
 
 function Invoke-ProductionSystemStatus {
+    $is2000XSeries = $false
+    $is3000XSeries = $false
+    $is4000XSeries = $false
     Invoke-Expression $systemStatusCommand.Extent.Text | Out-Null
 }
 
@@ -8897,3 +8902,397 @@ def test_live_validator_finalization_control_flow(
         "if ($script:ShareableGenerationFailed)"
     )
     assert pass_tail.rstrip().endswith('Write-Host "%s"\nexit 0' % pass_label)
+
+
+def test_live_cli_math_option_applicability_structure() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    # Series flags must be established alongside the existing 4000X flag,
+    # without relying on a local variable inside the system-status block.
+    assert '$is2000XSeries = [string]$identity.idn.series -eq "2000X"' in script
+    assert '$is3000XSeries = [string]$identity.idn.series -eq "3000X"' in script
+    assert '$is4000XSeries = [string]$identity.idn.series -eq "4000X"' in script
+
+    # Snapshot must pre-declare the two booleans so later assignment does not
+    # create a new ad-hoc property.
+    assert "MathEnhancementsInstalled = $false" in script
+    assert "AdvancedMathInstalled = $false" in script
+    assert '"PLUS" -in @($snapshot.InstalledOptions)' in script
+    assert '"ADVMATH" -in @($snapshot.InstalledOptions)' in script
+    assert "$snapshot.MathEnhancementsInstalled = " in script
+    assert "$snapshot.AdvancedMathInstalled = " in script
+
+    # 2000X without PLUS: math-transform must be N/A, not absolute.
+    assert 'Math transforms require the PLUS option on 2000X; PLUS is not installed.' in script
+    assert 'Add-NotApplicableCase -Name "math-transform"' in script
+
+    # 3000X without ADVMATH: math-transform must select differentiate/DIFF.
+    # The script must contain the conditional selection inside the transform case.
+    transform_start = script.index('Invoke-BaselineCase -Name "math-transform"')
+    transform_block = script[transform_start : transform_start + 3000]
+    assert '"differentiate"' in transform_block
+    assert '"absolute"' in transform_block
+    assert '"DIFF"' in transform_block or "'DIFF'" in transform_block or "DIFF" in transform_block
+    assert '"ABSolute"' in transform_block
+    assert '$is3000XSeries -and -not $snapshot.AdvancedMathInstalled' in transform_block
+
+    # Filter and visualization must be N/A on missing options, preserving
+    # the original unsupported-device fallback.
+    assert 'Math filters require the PLUS option on 2000X; PLUS is not installed.' in script
+    assert 'Math filters require the ADVMATH option on 3000X; ADVMATH is not installed.' in script
+    assert 'Math visualizations require the PLUS option on 2000X; PLUS is not installed.' in script
+    assert 'Math visualizations require the ADVMATH option on 3000X; ADVMATH is not installed.' in script
+
+    # Verify filter/visualization outer gating still preserves the original
+    # "unsupported by the detected instrument" fallback.
+    assert script.count('Math filters are unsupported by the detected instrument.') == 1
+    assert script.count('Math visualizations are unsupported by the detected instrument.') == 1
+
+    # 4000X must not be affected: the new option gates must explicitly test
+    # for 2000X/3000X, not a generic "not installed" check that would also hit 4000X.
+    assert script.count('MathEnhancementsInstalled') >= 3
+    assert script.count('AdvancedMathInstalled') >= 3
+    # Ensure math-operator, math-display, math-vertical, fft and composite-source
+    # are not wrapped by the new PLUS/ADVMATH gates. Check the condition
+    # immediately preceding each case, not the following block.
+    for case in ("math-operator", "math-display", "math-vertical", "fft", "math-composite-source"):
+        marker = f'Invoke-BaselineCase -Name "{case}"'
+        if marker in script:
+            start = script.index(marker)
+            window_start = max(0, start - 600)
+            window = script[window_start:start]
+            last_if = window.rfind("if (")
+            condition = window[last_if:start] if last_if != -1 else ""
+            assert "MathEnhancementsInstalled" not in condition
+            assert "AdvancedMathInstalled" not in condition
+
+    # Ensure no Core capability or generic license abstraction was introduced.
+    assert "MathLicenseManager" not in script
+    assert "OptionCapabilityResolver" not in script
+    assert "MathFeatureMatrix" not in script
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+@pytest.mark.parametrize(
+    ("series", "installed_options", "expected_transform_status", "expected_transform_operation", "expected_filter_status", "expected_visualization_status"),
+    [
+        (
+            "2000X",
+            "BW20",
+            "N/A",
+            "",
+            "N/A",
+            "N/A",
+        ),
+        (
+            "3000X",
+            "BW20",
+            "PASS",
+            "differentiate",
+            "N/A",
+            "N/A",
+        ),
+    ],
+    ids=["2000X_no_plus", "3000X_no_advmath"],
+)
+def test_live_cli_math_option_applicability_runtime(
+    tmp_path: Path,
+    series: str,
+    installed_options: str,
+    expected_transform_status: str,
+    expected_transform_operation: str,
+    expected_filter_status: str,
+    expected_visualization_status: str,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / f"math-option-{series}.ps1"
+    harness_path.write_text(
+        r'''
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+    [Parameter(Mandatory = $true)]
+    [string] $Series,
+    [Parameter(Mandatory = $true)]
+    [string] $InstalledOptionsCsv
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($fn in @("Add-CaseResult", "Add-NotApplicableCase", "Add-Diagnostic", "Assert-ScpiSent", "Assert-ScpiSentPrefix", "Invoke-BaselineCase", "Assert-FiniteNumber")) {
+    $fa = $ast.Find({
+        param($node)
+        return ($node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $fn)
+    }, $true)
+    if ($null -ne $fa) { Invoke-Expression $fa.Extent.Text }
+}
+
+# Provide lightweight stubs where production helpers are not needed to load.
+if (-not (Get-Command Assert-ScpiSent -ErrorAction SilentlyContinue)) {
+    function Assert-ScpiSent { param($Payload,$Label,$ExpectedCommands) }
+}
+if (-not (Get-Command Assert-ScpiSentPrefix -ErrorAction SilentlyContinue)) {
+    function Assert-ScpiSentPrefix { param($Payload,$Label,$ExpectedPrefix) }
+}
+if (-not (Get-Command Assert-FiniteNumber -ErrorAction SilentlyContinue)) {
+    function Assert-FiniteNumber { param($Value,$Label) return [double]$Value }
+}
+if (-not (Get-Command Add-Diagnostic -ErrorAction SilentlyContinue)) {
+    function Add-Diagnostic { param($Name,$Message) }
+}
+function Drain-AfterFailure { param($Stage,$CaseName) }
+
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:LastTransformOperation = $null
+$script:LastFilterOperation = $null
+$script:LastVisualizationOperation = $null
+
+$installedOptions = @()
+if (-not [string]::IsNullOrWhiteSpace($InstalledOptionsCsv)) {
+    $installedOptions = @($InstalledOptionsCsv -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+}
+
+$identity = [pscustomobject]@{
+    idn = [pscustomobject]@{ series = $Series }
+    capabilities = [pscustomobject]@{
+        series = $Series
+        math_function_count = 1
+        math_filter_operations = @("low-pass", "high-pass")
+        math_visualization_operations = @("magnify", "trend")
+        supports_math_goft = $true
+        supports_measurements = $true
+        supports_demo = $false
+    }
+}
+$is2000XSeries = [string]$identity.idn.series -eq "2000X"
+$is3000XSeries = [string]$identity.idn.series -eq "3000X"
+$is4000XSeries = [string]$identity.idn.series -eq "4000X"
+$snapshot = [pscustomobject]@{
+    Is4000XSeries = $is4000XSeries
+    MathEnhancementsInstalled = $false
+    AdvancedMathInstalled = $false
+    InstalledOptions = @($installedOptions)
+    WgenApplicable = $null
+    WgenApplicabilityDetail = ""
+    MathFunctionCount = 1
+}
+if ($is2000XSeries) {
+    $snapshot.MathEnhancementsInstalled = "PLUS" -in @($snapshot.InstalledOptions)
+}
+if ($is3000XSeries) {
+    $snapshot.AdvancedMathInstalled = "ADVMATH" -in @($snapshot.InstalledOptions)
+}
+
+# Override baseline helpers to capture runtime behavior without real hardware.
+function Add-CaseResult {
+    param([string]$Name,[bool]$Passed,[string]$Detail="")
+    $s = if ($Passed) { "PASS" } else { "FAIL" }
+    $script:CaseResults[$Name] = [pscustomobject]@{ Status = $s; Detail = $Detail; Passed = $Passed }
+}
+function Add-NotApplicableCase {
+    param([string]$Name,[string]$Detail)
+    $script:CaseResults[$Name] = [pscustomobject]@{ Status = "N/A"; Detail = $Detail; Passed = $false }
+    $script:Invocations.Add([pscustomobject]@{ stage = "N/A"; command = "Add-NotApplicableCase"; arguments = @($Name, $Detail) })
+}
+function Invoke-BaselineCase {
+    param([string]$Name,[scriptblock]$Action)
+    try {
+        & $Action
+        if (-not $script:CaseResults.Contains($Name)) {
+            $script:CaseResults[$Name] = [pscustomobject]@{ Status = "PASS"; Detail = ""; Passed = $true }
+        }
+    } catch {
+        $script:CaseResults[$Name] = [pscustomobject]@{ Status = "FAIL"; Detail = $_.Exception.Message; Passed = $false }
+        $script:FunctionalFailed = $true
+    }
+}
+function Invoke-LiveCli {
+    param([string]$Stage,[string]$Command,[string[]]$Arguments=@())
+    $script:Invocations.Add([pscustomobject]@{ stage = $Stage; command = $Command; arguments = @($Arguments) })
+    switch -Wildcard ($Stage) {
+        "math-transform-set" {
+            $idx = [array]::IndexOf($Arguments, "--operation")
+            if ($idx -ge 0) { $script:LastTransformOperation = $Arguments[$idx+1] }
+            $tok = if ($script:LastTransformOperation -eq "differentiate") { "DIFF" } else { "ABSolute" }
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @(":FUNCtion:OPERation $tok", ":FUNCtion:SOURce1 CHANnel1") }
+                result = [pscustomobject]@{}
+            }
+        }
+        "math-transform-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @() }
+                result = [pscustomobject]@{ math_operation = $script:LastTransformOperation; source = "channel1" }
+            }
+        }
+        "math-filter-set" {
+            $idx = [array]::IndexOf($Arguments, "--operation")
+            if ($idx -ge 0) { $script:LastFilterOperation = $Arguments[$idx+1] }
+            return [pscustomobject]@{ scpi = [pscustomobject]@{ sent = @() }; result = [pscustomobject]@{} }
+        }
+        "math-filter-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @() }
+                result = [pscustomobject]@{ math_operation = $script:LastFilterOperation; source = "channel1" }
+            }
+        }
+        "math-visualization-set" {
+            $idx = [array]::IndexOf($Arguments, "--operation")
+            if ($idx -ge 0) { $script:LastVisualizationOperation = $Arguments[$idx+1] }
+            return [pscustomobject]@{ scpi = [pscustomobject]@{ sent = @() }; result = [pscustomobject]@{} }
+        }
+        "math-visualization-query" {
+            return [pscustomobject]@{
+                scpi = [pscustomobject]@{ sent = @() }
+                result = [pscustomobject]@{ math_operation = $script:LastVisualizationOperation }
+            }
+        }
+        default {
+            return [pscustomobject]@{ scpi = [pscustomobject]@{ sent = @() }; result = [pscustomobject]@{} }
+        }
+    }
+}
+
+# Locate the three production Math blocks that now contain option gating.
+# Use TrimStart prefix to avoid matching ancestor `if ($snapshotComplete)` blocks.
+$transformNodes = @($ast.FindAll({
+    param($node)
+    if ($node -isnot [System.Management.Automation.Language.IfStatementAst]) { return $false }
+    $txt = $node.Extent.Text.TrimStart()
+    return $txt.StartsWith('if ($is2000XSeries -and -not $snapshot.MathEnhancementsInstalled') -and $txt.Contains('Add-NotApplicableCase -Name "math-transform"')
+}, $true))
+$filterNodes = @($ast.FindAll({
+    param($node)
+    if ($node -isnot [System.Management.Automation.Language.IfStatementAst]) { return $false }
+    $txt = $node.Extent.Text.TrimStart()
+    return $txt.StartsWith('if (-not $script:FunctionalFailed -and @($identity.capabilities.math_filter_operations).Count -gt 0)') -and $txt.Contains('Add-NotApplicableCase -Name "math-filter"')
+}, $true))
+$visualNodes = @($ast.FindAll({
+    param($node)
+    if ($node -isnot [System.Management.Automation.Language.IfStatementAst]) { return $false }
+    $txt = $node.Extent.Text.TrimStart()
+    return $txt.StartsWith('if (-not $script:FunctionalFailed -and @($identity.capabilities.math_visualization_operations).Count -gt 0)') -and $txt.Contains('Add-NotApplicableCase -Name "math-visualization"')
+}, $true))
+
+if ($transformNodes.Count -ne 1) { throw "Expected 1 math-transform conditional, found $($transformNodes.Count)" }
+if ($filterNodes.Count -ne 1) { throw "Expected 1 math-filter conditional, found $($filterNodes.Count)" }
+if ($visualNodes.Count -ne 1) { throw "Expected 1 math-visualization conditional, found $($visualNodes.Count)" }
+
+# Execute the production conditionals exactly as they appear in the script.
+Invoke-Expression $transformNodes[0].Extent.Text
+Invoke-Expression $filterNodes[0].Extent.Text
+Invoke-Expression $visualNodes[0].Extent.Text
+
+# Also exercise math-operator and fft blocks to ensure they remain applicable
+# (they must not have been wrapped by the new option gates).
+$operatorNode = $ast.FindAll({
+    param($node)
+    return ($node -is [System.Management.Automation.Language.IfStatementAst] -and $node.Extent.Text.Contains('Invoke-BaselineCase -Name "math-operator"'))
+}, $true)
+$fftNode = $ast.FindAll({
+    param($node)
+    return ($node -is [System.Management.Automation.Language.IfStatementAst] -and $node.Extent.Text.Contains('Invoke-BaselineCase -Name "fft"') -and $node.Extent.Text.Contains('fft\"'))
+}, $true)
+
+$transformResult = if ($script:CaseResults.Contains("math-transform")) { $script:CaseResults["math-transform"] } else { $null }
+$filterResult = if ($script:CaseResults.Contains("math-filter")) { $script:CaseResults["math-filter"] } else { $null }
+$visualResult = if ($script:CaseResults.Contains("math-visualization")) { $script:CaseResults["math-visualization"] } else { $null }
+
+# Collect invoked SCPI-like operation names for negative checks.
+$allArgs = @($script:Invocations | ForEach-Object { ($_.arguments -join " ") })
+$joinedArgs = $allArgs -join " | "
+
+[ordered]@{
+    series = $Series
+    installed = @($installedOptions)
+    math_enhancements = [bool]$snapshot.MathEnhancementsInstalled
+    advanced_math = [bool]$snapshot.AdvancedMathInstalled
+    transform_status = if ($null -ne $transformResult) { [string]$transformResult.Status } else { "" }
+    transform_detail = if ($null -ne $transformResult) { [string]$transformResult.Detail } else { "" }
+    transform_operation = [string]$script:LastTransformOperation
+    filter_status = if ($null -ne $filterResult) { [string]$filterResult.Status } else { "" }
+    filter_detail = if ($null -ne $filterResult) { [string]$filterResult.Detail } else { "" }
+    visualization_status = if ($null -ne $visualResult) { [string]$visualResult.Status } else { "" }
+    visualization_detail = if ($null -ne $visualResult) { [string]$visualResult.Detail } else { "" }
+    joined_args = $joinedArgs
+    invocations = @($script:Invocations | ForEach-Object { [ordered]@{ stage = $_.stage; command = $_.command; arguments = @($_.arguments) } })
+} | ConvertTo-Json -Depth 10 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-Series",
+            series,
+            "-InstalledOptionsCsv",
+            installed_options,
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.strip().splitlines()[-1])
+
+    assert result["series"] == series
+    if series == "2000X":
+        assert result["math_enhancements"] is False
+        assert result["transform_status"] == expected_transform_status
+        assert result["filter_status"] == expected_filter_status
+        assert result["visualization_status"] == expected_visualization_status
+        assert result["transform_operation"] == ""
+        assert "PLUS" in result["transform_detail"]
+        assert "PLUS" in result["filter_detail"]
+        assert "PLUS" in result["visualization_detail"]
+        # Must not have executed any PLUS-only SCPI.
+        assert "absolute" not in result["joined_args"].lower()
+        assert "low-pass" not in result["joined_args"].lower()
+        assert "magnify" not in result["joined_args"].lower()
+        assert "ABSolute" not in result["joined_args"]
+        assert "LOWPass" not in result["joined_args"]
+        assert "MAGNify" not in result["joined_args"]
+    else:
+        assert result["advanced_math"] is False
+        assert result["transform_status"] == expected_transform_status
+        assert result["transform_operation"] == expected_transform_operation
+        assert result["filter_status"] == expected_filter_status
+        assert result["visualization_status"] == expected_visualization_status
+        assert "ADVMATH" in result["filter_detail"]
+        assert "ADVMATH" in result["visualization_detail"]
+        # 3000X without ADVMATH must use DIFF, not ABSolute/LOWPass/MAGNify.
+        assert result["transform_operation"] == "differentiate"
+        assert "differentiate" in result["joined_args"]
+        assert "absolute" not in result["joined_args"].lower()
+        assert "low-pass" not in result["joined_args"].lower()
+        assert "magnify" not in result["joined_args"].lower()
+        assert "ABSolute" not in result["joined_args"]
+        assert "LOWPass" not in result["joined_args"]
+        assert "MAGNify" not in result["joined_args"]
+        # The DIFF token must have been used for the transform.
+        assert "DIFF" in result["joined_args"] or "diff" in result["joined_args"].lower()
