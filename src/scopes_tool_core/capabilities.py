@@ -47,6 +47,8 @@ class ScopeCapabilities:
     math_visualization_operations: frozenset[str] = frozenset()
     supports_advanced_fft: bool = False
     supports_measure_results_dump: bool = False
+    supports_area_measurement: bool = False
+    supports_measure_statistics: bool = False
     serial_bus_count: int = 0
     serial_modes: frozenset[str] = frozenset()
     segmented_max_segments: int = 0
@@ -101,6 +103,8 @@ _CAPABILITY_PROFILES = {
         supports_wgen=True,
         wgen_scpi_root=":WGEN",
         segmented_max_segments=250,
+        supports_area_measurement=False,
+        supports_measure_statistics=False,
     ),
     "keysight-infiniivision-3000x": ScopeCapabilities(
         series="3000X",
@@ -141,6 +145,8 @@ _CAPABILITY_PROFILES = {
         supports_wgen=True,
         wgen_scpi_root=":WGEN",
         segmented_max_segments=1000,
+        supports_area_measurement=True,
+        supports_measure_statistics=True,
     ),
     "keysight-infiniivision-4000x": ScopeCapabilities(
         series="4000X",
@@ -220,6 +226,8 @@ _CAPABILITY_PROFILES = {
         supports_wgen=True,
         wgen_scpi_root=":WGEN1",
         segmented_max_segments=1000,
+        supports_area_measurement=True,
+        supports_measure_statistics=True,
         supports_segmented_waveform_all=True,
     ),
 }

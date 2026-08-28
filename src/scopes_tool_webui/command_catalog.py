@@ -1350,6 +1350,12 @@ def _model_command_presentation(
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"
             )
+        if name in ("item", "items") and not capabilities.supports_area_measurement:
+            base_options = override.get("options", field.get("options", ()))
+            if "area" in base_options:
+                override["options"] = tuple(
+                    option for option in base_options if option != "area"
+                )
         if override:
             fields[name] = override
     return {"supported": supported, "fields": fields}

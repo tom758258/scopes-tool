@@ -3526,7 +3526,7 @@ if ($snapshotComplete) {
                 "minimum", "maximum", "x_at_max", "x_at_min", "rise_time",
                 "fall_time", "amplitude", "top", "base", "overshoot", "preshoot",
                 "positive_width", "negative_width", "duty_cycle", "negative_duty_cycle",
-                "area", "positive_edges", "negative_edges", "positive_pulses", "negative_pulses",
+                "positive_edges", "negative_edges", "positive_pulses", "negative_pulses",
                 "y_at_x", "time_at_edge", "time_at_value"
             )
             foreach ($item in $singleItems) {
@@ -3549,6 +3549,19 @@ if ($snapshotComplete) {
         }
     } elseif (-not $script:FunctionalFailed) {
         Add-NotApplicableCase -Name "measurements" -Detail "Measurement subsystem is unsupported by the detected instrument."
+    }
+
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_area_measurement) {
+        Invoke-BaselineCase -Name "measure-area" -Action {
+            $rawArguments = @(
+                "measure", "--live", "--resource", $Resource, "--json",
+                "--channel", "1", "--item", "area"
+            )
+            $measurementInvocation = Invoke-CliRaw -Stage "measure-area" -Arguments $rawArguments
+            [void](Assert-SingleMeasurementInvocation -Invocation $measurementInvocation -Item "area")
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        Add-NotApplicableCase -Name "measure-area" -Detail "AREA measurement is unsupported by the detected instrument."
     }
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
@@ -3638,7 +3651,7 @@ if ($snapshotComplete) {
             -Detail "Measurement subsystem is unsupported by the detected instrument."
     }
 
-    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measurements) {
+    if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measure_statistics) {
         Invoke-BaselineCase -Name "measure-stats" -Action {
             $stats = Invoke-LiveCli -Stage "measure-stats" -Command "measure-stats" -Arguments @(
                 "--channel", "1", "--items", "vpp,frequency", "--mode", "all", "--reset"

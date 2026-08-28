@@ -726,3 +726,81 @@ def test_measurement_controller_rejects_invalid_channel_before_scpi():
         controller.query(5, "vpp")
 
     assert backend.history == []
+
+
+def test_measurement_query_area_uses_capability_flag_instead_of_series():
+    with pytest.raises(ParameterValidationError, match="capability profile"):
+        measurement_query("area", 1, capabilities=capabilities_for_model("DSOX2004A"))
+    assert measurement_query(
+        "area", 1, capabilities=capabilities_for_model("DSOX4024A")
+    ) == ":MEASure:AREA? CHANnel1"
+
+
+def test_measurement_controller_rejects_area_before_scpi_when_unsupported():
+    backend = FakeBackend()
+    controller = MeasurementController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    with pytest.raises(ParameterValidationError, match="capability profile"):
+        controller.query(1, "area")
+
+    assert backend.history == []
+
+
+def test_measurement_capability_profiles_for_area_and_statistics():
+    caps_2000x = capabilities_for_model("DSOX2004A")
+    caps_3000x = capabilities_for_model("DSOX3024A")
+    caps_4000x = capabilities_for_model("DSOX4024A")
+
+    assert caps_2000x.supports_area_measurement is False
+    assert caps_2000x.supports_measure_statistics is False
+    assert caps_3000x.supports_area_measurement is True
+    assert caps_3000x.supports_measure_statistics is True
+    assert caps_4000x.supports_area_measurement is True
+    assert caps_4000x.supports_measure_statistics is True
+    # existing flags unchanged
+    assert caps_2000x.supports_measure_results_dump is False
+    assert caps_3000x.supports_measure_results_dump is True
+    assert caps_4000x.supports_measure_results_dump is True
+
+
+def test_measurement_controller_rejects_statistics_before_scpi_when_unsupported():
+    backend = FakeBackend()
+    controller = MeasurementController(
+        SCPIClient(backend), capabilities_for_model("DSOX2004A")
+    )
+
+    with pytest.raises(ParameterValidationError, match="capability profile"):
+        controller.statistics(1, ("vpp",))
+
+    assert backend.history == []
+
+
+def test_measurement_controller_statistics_uses_capability_flag():
+    # 4000X with statistics disabled should still reject even though measurements are supported
+    disabled_4000x = replace(
+        capabilities_for_model("DSOX4024A"), supports_measure_statistics=False
+    )
+    backend = FakeBackend()
+    controller = MeasurementController(SCPIClient(backend), disabled_4000x)
+
+    with pytest.raises(ParameterValidationError, match="capability profile"):
+        controller.statistics(1, ("vpp",))
+
+    assert backend.history == []
+    # 3000X with flag enabled should not be rejected at validation time
+    enabled_3000x = capabilities_for_model("DSOX3024A")
+    backend2 = FakeBackend(
+        responses={
+            ":MEASure:RESults?": "vpp,1.0,0.9,1.1,1.0,0.01,10",
+        }
+    )
+    controller2 = MeasurementController(SCPIClient(backend2), enabled_3000x)
+    # Should not raise at validation; will proceed to SCPI (may fail on missing stubs but not on capability)
+    try:
+        controller2.statistics(1, ("vpp",))
+    except ParameterValidationError:
+        pytest.fail("3000X statistics should be supported")
+    # At least one SCPI should have been attempted
+    assert any(cmd.startswith(":MEASure:") for cmd in backend2.history)

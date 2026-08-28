@@ -26,12 +26,32 @@ def _pair_lifecycle_block(script: str) -> str:
 
 def test_single_measurement_breadth_uses_raw_acceptance_path() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
-    block = _case_block(script, "measurements", "measure-phase")
+    common = _case_block(script, "measurements", "measure-area")
+    area = _case_block(script, "measure-area", "measure-phase")
 
-    assert '"--level", "0.5", "--slope", "positive", "--occurrence", "1"' in block
-    assert "Invoke-CliRaw" in block
-    assert "Assert-SingleMeasurementInvocation" in block
-    assert 'Invoke-LiveCli -Stage "measure-${item}"' not in block
+    assert '"area"' not in common
+    assert '"--level", "0.5", "--slope", "positive", "--occurrence", "1"' in common
+    assert "Invoke-CliRaw" in common
+    assert "Assert-SingleMeasurementInvocation" in common
+    assert 'Invoke-LiveCli -Stage "measure-${item}"' not in common
+
+    # measure-area must be capability-gated and retain raw acceptance semantics
+    assert 'if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_area_measurement)' in script
+    assert "Invoke-CliRaw" in area
+    assert "Assert-SingleMeasurementInvocation" in area
+    assert "Add-NotApplicableCase" in script
+    assert 'Add-NotApplicableCase -Name "measure-area"' in script
+    assert '"--item", "area"' in area
+
+
+def test_measure_statistics_uses_capability_gate() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+    # outer gate must be on statistics capability, not just general measurements
+    assert 'if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measure_statistics)' in script
+    stats = _case_block(script, "measure-stats", "measure-controls")
+    assert "Add-NotApplicableCase" in script
+    assert 'Add-NotApplicableCase -Name "measure-stats"' in script
+    assert "measure-stats" in stats
 
 
 def test_pair_measurements_remain_strict() -> None:

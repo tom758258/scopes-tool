@@ -358,7 +358,7 @@ class MeasurementController:
         settle_seconds: float | None = None,
     ) -> MeasurementStatisticsResult:
         channel = validate_analog_channel(channel, self.capabilities)
-        validate_measurements_supported(self.capabilities)
+        validate_measure_statistics_supported(self.capabilities)
         normalized_items = validate_statistics_items(items)
         mode = normalize_statistics_mode(mode)
         if max_count is not None:
@@ -583,6 +583,8 @@ def measurement_query(
     item = normalize_measurement_item(item)
     if capabilities is not None:
         validate_measurements_supported(capabilities)
+    if item == "area":
+        _validate_area_measurement_supported(capabilities)
     if item in _PARAMETERIZED_MEASUREMENT_ITEMS:
         return _parameterized_measurement_query(
             item,
@@ -774,6 +776,25 @@ def validate_measurements_supported(capabilities: ScopeCapabilities) -> None:
     if not capabilities.supports_measurements:
         raise ParameterValidationError(
             "measurements are not supported by this scope capability profile."
+        )
+
+
+def _validate_area_measurement_supported(
+    capabilities: ScopeCapabilities | None,
+) -> None:
+    if capabilities is None:
+        return
+    if not capabilities.supports_area_measurement:
+        raise ParameterValidationError(
+            "area measurement is not supported by this scope capability profile."
+        )
+
+
+def validate_measure_statistics_supported(capabilities: ScopeCapabilities) -> None:
+    validate_measurements_supported(capabilities)
+    if not capabilities.supports_measure_statistics:
+        raise ParameterValidationError(
+            "measurement statistics are not supported by this scope capability profile."
         )
 
 

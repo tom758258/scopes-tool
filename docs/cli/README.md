@@ -136,13 +136,14 @@ Current implemented scope:
 - Query read-only Vpp, frequency, period, display average voltage, display
   DC RMS voltage, minimum, maximum, rise time, fall time, amplitude, top, base,
   overshoot, preshoot, positive width, negative width, duty cycle, negative
-  duty cycle, area, edge count, pulse count, parameterized time, phase, and
-  safe 4000X delay measurements with explicit invalid-sentinel handling.
+  duty cycle, area (3000X/4000X), edge count, pulse count, parameterized time,
+  phase, and safe 4000X delay measurements with explicit invalid-sentinel
+  handling.
 - Dump the currently displayed front-panel measurement results without
   clearing, installing, or reconfiguring measurements with `measure-results`
   on 3000X and 4000X.
 - Rebuild front-panel quick measurements and query measurement statistics with
-  `measure-stats`.
+  `measure-stats` on 3000X and 4000X.
 - Control common measurement subsystem state with `measure-clear`,
   `measure-show`, `measure-source`, and `measure-window`.
 - Save, display, label, clear, or query reference waveform slots 1 and 2 with
@@ -1967,8 +1968,9 @@ The measurement command supports `vpp`, `frequency` (`freq` alias),
 `negative_width` (`nwidth`, `negative-width`, and `nwid` aliases),
 `duty_cycle` (`duty`, `dutycycle`, and `duty-cycle` aliases), and
 `negative_duty_cycle` (`nduty`, `negative-duty`, and `negative-duty-cycle`
-aliases), `area`, `positive_edges` (`pedges` and `positive-edges` aliases),
-`negative_edges` (`nedges` and `negative-edges` aliases), `positive_pulses`
+aliases), `area` (3000X/4000X), `positive_edges` (`pedges` and `positive-edges`
+aliases), `negative_edges` (`nedges` and `negative-edges` aliases),
+`positive_pulses`
 (`ppulses` and `positive-pulses` aliases), and `negative_pulses` (`npulses`
 and `negative-pulses` aliases), plus parameterized single-channel queries:
 `y_at_x` (`yatx`, `y-at-x`, `vtime`, `y_at_time`, and `y-at-time` aliases),
@@ -1990,7 +1992,7 @@ post-check. The added item queries are
 `:MEASure:VBASe? CHANnelN`, `:MEASure:OVERshoot? CHANnelN`,
 `:MEASure:PREShoot? CHANnelN`, `:MEASure:PWIDth? CHANnelN`,
 `:MEASure:NWIDth? CHANnelN`, `:MEASure:DUTYcycle? CHANnelN`,
-`:MEASure:NDUTy? CHANnelN`, `:MEASure:AREA? CHANnelN`,
+`:MEASure:NDUTy? CHANnelN`, `:MEASure:AREA? CHANnelN` (3000X/4000X),
 `:MEASure:PEDGes? CHANnelN`, `:MEASure:NEDGes? CHANnelN`,
 `:MEASure:PPULses? CHANnelN`, `:MEASure:NPULses? CHANnelN`,
 `:MEASure:VTIMe? <time>,CHANnelN`,
