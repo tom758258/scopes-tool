@@ -401,6 +401,18 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .live-state-field { display: flex; align-items: center; gap: 8px; min-height: 36px; min-width: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); color: var(--muted); box-shadow: var(--shadow-sm); }
 .live-state-field > span { white-space: nowrap; font-size: 12px; font-weight: 600; }
 .live-state-field strong { color: var(--ink); font-weight: 600; }
+.live-instrument-summary { display: grid; gap: 14px; padding: 0 16px 16px; }
+#live-data-status { margin: 0; }
+.live-summary-section { min-width: 0; }
+.live-summary-section h2 { margin: 0 0 8px; font-size: 12px; font-weight: 700; }
+.live-channel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.live-channel-card { min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); box-shadow: var(--shadow-sm); }
+.live-channel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.live-summary-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.live-summary-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0; }
+.live-summary-fields dt { color: var(--muted); font-size: 12px; }
+.live-summary-fields dd { min-width: 0; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.live-data-unavailable { grid-column: 1 / -1; margin: 0; }
 .state-indicator { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
 .state-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #98a6b4; box-shadow: 0 0 0 2px rgb(152 166 180 / 16%); }
 .state-text { min-width: 0; overflow-wrap: anywhere; }
@@ -441,6 +453,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .workspace-header-actions { justify-content: flex-start; }
   .command-description { overflow: visible; text-overflow: clip; white-space: normal; }
   .section-head { align-items: flex-start; }
+  .live-summary-columns { grid-template-columns: 1fr; }
   .basic-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pc-output-row { grid-template-columns: 1fr; }
   .command-pill-button { width: 100%; }

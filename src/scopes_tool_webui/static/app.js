@@ -12,6 +12,7 @@ import {
 } from "/static/execution-context.js";
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
+import { renderInstrumentSummary } from "/static/live-data.js";
 import {
   pcOutputContext,
   pcOutputDirectory,
@@ -32,6 +33,16 @@ const elements = {
   webuiState: document.querySelector("#webui-state"),
   commandState: document.querySelector("#command-state"),
   liveState: document.querySelector("#live-state"),
+  liveDataRefresh: document.querySelector("#live-data-refresh"),
+  liveDataStatus: document.querySelector("#live-data-status"),
+  liveDataChannels: document.querySelector("#live-data-channels"),
+  liveTimebaseScale: document.querySelector("#live-timebase-scale"),
+  liveTimebasePosition: document.querySelector("#live-timebase-position"),
+  liveTriggerType: document.querySelector("#live-trigger-type"),
+  liveTriggerSource: document.querySelector("#live-trigger-source"),
+  liveTriggerLevel: document.querySelector("#live-trigger-level"),
+  liveTriggerSlope: document.querySelector("#live-trigger-slope"),
+  liveTriggerSweep: document.querySelector("#live-trigger-sweep"),
   mode: [...document.querySelectorAll("input[name=mode]")],
   model: document.querySelector("#model-select"),
   modelField: document.querySelector("#planning-model-field"),
@@ -105,6 +116,11 @@ let liveCommandState = { key: "device.ready" };
 let pendingResourceLiveSupport = null;
 let updateBasicAvailability = () => {};
 let pcOutputSelectionStatus = null;
+let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false };
+
+const INTERNAL_COMMANDS = {
+  "live-data-snapshot": { id: "live-data-snapshot", modes: ["live", "simulate"], internal: true },
+};
 
 const EDITOR_RENDERERS = {
   "save-export": () => saveExportEditor,
@@ -240,6 +256,7 @@ async function initialize() {
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   bindPcOutputControls();
+  elements.liveDataRefresh.addEventListener("click", refreshLiveDataSnapshot);
   updateAvailability();
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
@@ -395,7 +412,7 @@ function renderCollapseLabels() {
 
 async function executeCommand(command, parameters, options = {}) {
   if (isExecutionBusy()) return null;
-  const definition = commands.find((item) => item.id === command);
+  const definition = commands.find((item) => item.id === command) || INTERNAL_COMMANDS[command];
   if (!definition || !definition.modes.includes(context.mode)) {
     elements.deviceStatus.textContent = translate("status.noCommands");
     return;
@@ -434,7 +451,7 @@ async function executeCommand(command, parameters, options = {}) {
     resultPresentation = { kind: "job", job, message: null };
     renderCurrentResult();
     updateIdentity(job, commandContext);
-    captureWorkspaceResult(job, submittedWorkspaceContext);
+    if (!definition.internal) captureWorkspaceResult(job, submittedWorkspaceContext);
     if (job.status === "completed" && ownsCommandForm()) {
       if (options.intent === "apply") commandForm.clearDirty();
       commandForm.syncResult(job, options.intent !== "apply");
@@ -683,9 +700,9 @@ function invalidateGenericFormOwnership() {
 
 function commandAvailable(command) {
   if (!catalog) return false;
-  const definition = commands.find((item) => item.id === command);
+  const definition = commands.find((item) => item.id === command) || INTERNAL_COMMANDS[command];
   if (!definition || !definition.modes.includes(context.mode)) return false;
-  if (typeof catalog.supported === "function" && !catalog.supported(definition)) return false;
+  if (!definition.internal && typeof catalog.supported === "function" && !catalog.supported(definition)) return false;
   if (context.mode !== "live" || command === "list-resources") return true;
   if (!context.resource) return false;
   if (command === "identify") return true;
@@ -702,6 +719,7 @@ function updateAvailability() {
   const busy = isExecutionBusy();
   elements.execute.disabled = busy || !selected || !commandAvailable(selected.id);
   elements.refresh.disabled = busy || !selected || !commandAvailable(selected.id);
+  elements.liveDataRefresh.disabled = busy || liveDataSnapshot.loading || !commandAvailable("live-data-snapshot");
   triggerEditor?.applyBusyState();
   searchEditor?.applyBusyState();
   saveExportEditor?.applyBusyState();
@@ -840,7 +858,47 @@ function renderVersion() {
   elements.version.textContent = `v${healthState.version || "—"}`;
 }
 
+function liveDataContextKey() {
+  return `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`;
+}
+
+function syncLiveDataContext() {
+  const contextKey = liveDataContextKey();
+  if (liveDataSnapshot.contextKey === contextKey) return;
+  liveDataSnapshot = { contextKey, value: null, error: null, loading: false };
+}
+
+async function refreshLiveDataSnapshot() {
+  if (isExecutionBusy() || !commandAvailable("live-data-snapshot")) return;
+  syncLiveDataContext();
+  const submittedContextKey = liveDataSnapshot.contextKey;
+  liveDataSnapshot = { ...liveDataSnapshot, error: null, loading: true };
+  renderLiveData();
+  updateAvailability();
+
+  const job = await executeCommand("live-data-snapshot", {});
+  if (submittedContextKey !== liveDataContextKey()) return;
+  const snapshot = job?.result?.result?.live_data || job?.result?.live_data;
+  if (job?.status === "completed" && snapshot) {
+    liveDataSnapshot = {
+      contextKey: submittedContextKey,
+      value: snapshot,
+      error: null,
+      loading: false,
+    };
+  } else {
+    liveDataSnapshot = {
+      ...liveDataSnapshot,
+      error: job?.error || translate("live_data.readFailed"),
+      loading: false,
+    };
+  }
+  renderLiveData();
+  updateAvailability();
+}
+
 function renderLiveData() {
+  syncLiveDataContext();
   const webuiReady = healthState.status === "ready";
   setStateIndicator(
     elements.webuiState,
@@ -875,6 +933,29 @@ function renderLiveData() {
     context.mode === "live" && (!context.resource || !deviceResource?.hasCurrentIdentity())
       ? "state-warning"
       : "state-ok",
+  );
+
+  renderInstrumentSummary(
+    {
+      status: elements.liveDataStatus,
+      channels: elements.liveDataChannels,
+      timebaseScale: elements.liveTimebaseScale,
+      timebasePosition: elements.liveTimebasePosition,
+      triggerType: elements.liveTriggerType,
+      triggerSource: elements.liveTriggerSource,
+      triggerLevel: elements.liveTriggerLevel,
+      triggerSlope: elements.liveTriggerSlope,
+      triggerSweep: elements.liveTriggerSweep,
+    },
+    liveDataSnapshot.value,
+    translate,
+    liveDataSnapshot.loading
+      ? { key: "live_data.reading" }
+      : liveDataSnapshot.error
+        ? { key: "live_data.readFailed", error: liveDataSnapshot.error }
+        : liveDataSnapshot.value
+          ? {}
+          : { key: "live_data.unavailable" },
   );
 }
 

@@ -71,6 +71,14 @@ def _direct_measurement_items() -> tuple[str, ...]:
 _DIRECT_MEASUREMENT_ITEMS = _direct_measurement_items()
 COMMANDS = (
     {
+        "id": "live-data-snapshot",
+        "category": "Device",
+        "label": "Live Data snapshot",
+        "hidden": True,
+        "modes": ("live", "simulate"),
+        "fields": (),
+    },
+    {
         "id": "list-resources",
         "category": "Device",
         "label": "List resources",

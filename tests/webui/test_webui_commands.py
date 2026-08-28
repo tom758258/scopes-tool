@@ -93,6 +93,41 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)
 
 
+def test_live_data_snapshot_is_hidden_and_runs_through_simulated_jobs() -> None:
+    client = TestClient(app)
+
+    assert "live-data-snapshot" not in {
+        entry["id"] for entry in client.get("/api/commands").json()
+    }
+    job = submit(client, "live-data-snapshot", "simulate", {})
+
+    assert job["status"] == "completed"
+    summary = job["result"]["result"]["live_data"]
+    assert len(summary["channels"]) == 4
+    assert {"display", "units", "scale", "offset"} <= summary["channels"][0].keys()
+    assert summary["timebase"] == {"scale": 0.001, "position": 0.0}
+    assert summary["trigger"] == {
+        "type": "edge",
+        "source": "analog-channel",
+        "source_channel": 1,
+        "level": 0.0,
+        "units": "volt",
+        "slope": "positive",
+        "sweep": "auto",
+    }
+
+    rejected = client.post(
+        "/api/jobs",
+        json={
+            "command": "live-data-snapshot",
+            "mode": "dry-run",
+            "model_id": MODEL_ID,
+            "parameters": {},
+        },
+    )
+    assert rejected.status_code == 400
+
+
 def test_command_catalog_projects_setting_and_model_presentation() -> None:
     commands = {
         entry["id"]: entry

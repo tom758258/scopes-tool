@@ -289,6 +289,20 @@ commands are not advertised in Dry-run because no corresponding Core planner
 exists. Dry-run does not open an instrument backend. Simulate uses Core's
 deterministic simulator; Live opens the explicit resource through Core.
 
+## Live Data
+
+Live Data keeps the existing WebUI, command, and Live status indicators and
+adds a small read-only summary of analog channels, horizontal settings, and
+the common trigger state. **Refresh** is an explicit foreground action that
+uses the same Core-backed job admission as other commands. Live requires a
+selected resource with confirmed identity, Simulate uses the Core simulator,
+and Dry-run reports the summary as unavailable.
+
+The summary is cleared when its mode, resource, detected model, or planning
+model changes. A failed refresh leaves the previous successful summary visible
+for the same context. Live Data does not poll automatically or stream waveform
+data.
+
 ## Jobs, results, and artifacts
 
 Command submission returns a job ID. The browser polls job status through the
@@ -350,9 +364,9 @@ Command IDs, model IDs, VISA resources, SCPI, JSON keys, and raw diagnostics
 remain unchanged.
 
 The WebUI does not include remote access, authentication, multi-instrument
-sessions, WebSockets/SSE, live waveform streaming, Live Data monitoring, dark
-mode, Electron/onedir packaging, Generic Sequence editing, advanced FFT/Math
-transform/filter/visualization editors, or conditional editors for features
-not exposed by the current Core APIs. Dry-run remains limited to commands with
-existing Core planners; `capture-batch` and `measure-log` are Live/Simulate
-only.
+sessions, WebSockets/SSE, live waveform streaming, automatic Live Data
+polling, dark mode, Electron/onedir packaging, Generic Sequence editing,
+advanced FFT/Math transform/filter/visualization editors, or conditional
+editors for features not exposed by the current Core APIs. Dry-run remains
+limited to commands with existing Core planners; `capture-batch` and
+`measure-log` are Live/Simulate only.

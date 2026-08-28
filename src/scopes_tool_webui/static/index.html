@@ -76,6 +76,7 @@
       <section class="live-data-section" aria-labelledby="live-data-heading">
         <div class="section-head">
           <strong id="live-data-heading" data-i18n="live_data.heading">Live Data</strong>
+          <button id="live-data-refresh" class="secondary" type="button" data-i18n="actions.refresh" disabled>Refresh</button>
         </div>
         <div class="live-state-row" aria-live="polite">
           <div class="live-state-field">
@@ -98,6 +99,32 @@
               <span class="state-dot" aria-hidden="true"></span>
               <span class="state-text" data-i18n="live_data.noResource">No resource</span>
             </strong>
+          </div>
+        </div>
+        <div class="live-instrument-summary">
+          <p id="live-data-status" class="compact-note" aria-live="polite" data-i18n="live_data.unavailable">Unavailable</p>
+          <section class="live-summary-section" aria-labelledby="live-channels-heading">
+            <h2 id="live-channels-heading" data-i18n="live_data.channels">Channels</h2>
+            <div id="live-data-channels" class="live-channel-grid"><p class="muted live-data-unavailable">—</p></div>
+          </section>
+          <div class="live-summary-columns">
+            <section class="live-summary-section" aria-labelledby="live-horizontal-heading">
+              <h2 id="live-horizontal-heading" data-i18n="live_data.horizontal">Horizontal</h2>
+              <dl class="live-summary-fields">
+                <dt data-i18n="live_data.scale">Scale</dt><dd id="live-timebase-scale">—</dd>
+                <dt data-i18n="live_data.position">Position</dt><dd id="live-timebase-position">—</dd>
+              </dl>
+            </section>
+            <section class="live-summary-section" aria-labelledby="live-trigger-heading">
+              <h2 id="live-trigger-heading" data-i18n="live_data.trigger">Trigger</h2>
+              <dl class="live-summary-fields">
+                <dt data-i18n="live_data.type">Type</dt><dd id="live-trigger-type">—</dd>
+                <dt data-i18n="live_data.source">Source</dt><dd id="live-trigger-source">—</dd>
+                <dt data-i18n="live_data.level">Level</dt><dd id="live-trigger-level">—</dd>
+                <dt data-i18n="live_data.slope">Slope</dt><dd id="live-trigger-slope">—</dd>
+                <dt data-i18n="live_data.sweep">Sweep</dt><dd id="live-trigger-sweep">—</dd>
+              </dl>
+            </section>
           </div>
         </div>
       </section>

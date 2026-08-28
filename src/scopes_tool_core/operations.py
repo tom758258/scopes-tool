@@ -60,7 +60,12 @@ from .planning import (
     resolve_sweep_channels,
 )
 from .scope import Oscilloscope
-from .trigger import TriggerWaitConfig, wait_for_trigger_completion
+from .trigger import (
+    TriggerWaitConfig,
+    parse_trigger_mode,
+    trigger_mode_query,
+    wait_for_trigger_completion,
+)
 from .waveform import (
     MultiChannelWaveformCapture,
     WaveformCapture,
@@ -1427,6 +1432,63 @@ def doctor_snapshot(scope: Oscilloscope) -> dict[str, object]:
             "level_volts": trigger.level_volts,
             "slope": trigger.slope,
         },
+    }
+
+
+def query_instrument_summary(scope: Oscilloscope) -> dict[str, object]:
+    """Read the small, common instrument state used by status surfaces."""
+
+    if scope.capabilities is None:
+        raise OscilloscopeError("Capabilities unavailable for this model")
+
+    channel_entries = scope.query_channel_summary()
+    channels = [
+        {
+            "channel": entry.channel,
+            "display": entry.display,
+            "units": entry.units,
+            "scale": entry.scale,
+            "offset": entry.offset,
+        }
+        for entry in channel_entries
+    ]
+    channel_units = {entry.channel: entry.units for entry in channel_entries}
+
+    raw_trigger_type = scope.scpi.query(trigger_mode_query()).strip()
+    trigger_type = parse_trigger_mode(raw_trigger_type) or raw_trigger_type
+    trigger: dict[str, object] = {
+        "type": trigger_type,
+        "source": None,
+        "source_channel": None,
+        "level": None,
+        "units": None,
+        "slope": None,
+        "sweep": scope.query_trigger_sweep().mode,
+    }
+    if trigger_type == "edge":
+        source = scope.query_trigger_edge_source()
+        slope = scope.query_trigger_edge_slope()
+        trigger["source"] = source.source or source.raw_source
+        trigger["source_channel"] = source.source_channel
+        trigger["slope"] = slope.slope or slope.raw_slope
+        if (
+            source.source == "analog-channel"
+            and source.source_channel is not None
+            and 1 <= source.source_channel <= scope.capabilities.analog_channels
+        ):
+            level = scope.query_trigger_edge_level(
+                source_channel=source.source_channel
+            )
+            trigger["level"] = level.level_volts
+            trigger["units"] = channel_units.get(source.source_channel)
+
+    return {
+        "channels": channels,
+        "timebase": {
+            "scale": scope.query_timebase_scale(),
+            "position": scope.query_timebase_position(),
+        },
+        "trigger": trigger,
     }
 
 

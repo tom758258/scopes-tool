@@ -43,6 +43,34 @@ def extract_css_rule(source: str, selector: str) -> str:
     return source[body_start:end + 1]
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
+    live_data_path = STATIC_ROOT / "live-data.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        const source = fs.readFileSync(process.argv[1], "utf8")
+          .replaceAll("export function ", "function ")
+          + "\nglobalThis.liveDataApi = { formatEngineering };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { formatEngineering } = globalThis.liveDataApi;
+
+        assert.equal(formatEngineering(0.5, "V", { perDivision: true }), "500 mV/div");
+        assert.equal(formatEngineering(2, "A", { perDivision: true }), "2.00 A/div");
+        assert.equal(formatEngineering(-0.0024, "s", { signed: true }), "-2.40 ms");
+        assert.equal(formatEngineering(0, "V", { signed: true }), "+0.00 V");
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(live_data_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def run_generic_form_ownership_behavior(assertions: str) -> None:
     source = read_static("app.js").replace("options = {}", "options = null", 1)
     declarations = "\n".join(

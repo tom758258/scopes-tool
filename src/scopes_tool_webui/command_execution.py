@@ -25,6 +25,7 @@ from scopes_tool_core import (
     plan_measure_until,
     plan_triggered_capture_series,
     plan_triggered_measure_loop,
+    query_instrument_summary,
     run_capture,
     run_capture_batch,
     run_measure,
@@ -243,6 +244,8 @@ def _execute_scope_command(
         idn_payload = _jsonable(idn)
         idn_payload["model_id"] = idn.model_id
         return {"exit_code": 0, "result": {"idn": idn_payload}, "artifacts": []}
+    if command == "live-data-snapshot":
+        return _state_scope_result("live_data", query_instrument_summary(scope))
     if command == "run":
         scope.run()
         return _simple_scope_result("run")
