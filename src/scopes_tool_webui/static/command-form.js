@@ -181,6 +181,12 @@ export class CommandForm {
         this.syncMultiChoices(input);
       } else {
         input.value = entry.value;
+        if (input.tagName === "SELECT" && !input.multiple) {
+          const validValues = new Set([...input.options].map((o) => o.value));
+          if (entry.value !== "" && !validValues.has(String(entry.value))) {
+            input.value = "";
+          }
+        }
       }
       if (entry.dirty) input.dataset.dirty = "true";
     });
@@ -217,7 +223,8 @@ export class CommandForm {
     wrapper.className = isMultiEnum ? "field field-multi" : "field";
     if (field.visible_if) wrapper.dataset.visibleIf = JSON.stringify(field.visible_if);
     const label = document.createElement("span");
-    label.textContent = translate(`field.${field.name}`);
+    const labelKey = field.label_key ? `field.${field.label_key}` : `field.${field.name}`;
+    label.textContent = hasTranslation(labelKey) ? translate(labelKey) : translate(`field.${field.name}`);
     wrapper.append(label);
     let input;
     if (["enum", "multi-enum"].includes(field.type)) {
@@ -250,8 +257,13 @@ export class CommandForm {
       }
       const options = this.catalog.optionsFor(field);
       options.forEach((option) => {
-        const channelKey = `enum.channel${option}`;
-        const label = hasTranslation(channelKey) ? translate(channelKey) : translateEnum(option);
+        let label;
+        if (field.option_label === "channel") {
+          const channelKey = `enum.channel${option}`;
+          label = hasTranslation(channelKey) ? translate(channelKey) : String(option);
+        } else {
+          label = translateEnum(option);
+        }
         input.append(new Option(label, String(option)));
       });
     } else if (field.type === "boolean") {
@@ -264,10 +276,17 @@ export class CommandForm {
         input = document.createElement("select");
         const required = field.required === true || Boolean(field.required_if);
         input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
-        input.append(
-          new Option(translate("status.enabled"), "true"),
-          new Option(translate("status.disabled"), "false"),
-        );
+        if (field.option_label === "enabled" || field.name === "enabled") {
+          input.append(
+            new Option(translate("enum.enable"), "true"),
+            new Option(translate("enum.disable"), "false"),
+          );
+        } else {
+          input.append(
+            new Option(translate("enum.true"), "true"),
+            new Option(translate("enum.false"), "false"),
+          );
+        }
       }
     } else {
       input = document.createElement("input");

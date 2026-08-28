@@ -69,6 +69,18 @@ def _direct_measurement_items() -> tuple[str, ...]:
 
 
 _DIRECT_MEASUREMENT_ITEMS = _direct_measurement_items()
+_ANALOG_CHANNEL_FIELDS = frozenset(
+    {
+        "channel",
+        "source_channel",
+        "source2_channel",
+        "reference_channel",
+        "arm_channel",
+        "trigger_channel",
+        "clock_channel",
+        "data_channel",
+    }
+)
 COMMANDS = (
     {
         "id": "live-data-snapshot",
@@ -235,7 +247,13 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "volts", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-offset.volts"},
+            {
+                "name": "volts",
+                "type": "number",
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "channel-offset.volts",
+                "label_key": "channel-offset.value",
+            },
         ),
     },
     {
@@ -313,6 +331,7 @@ COMMANDS = (
                 "exclusive_minimum": 0,
                 "required_if": [{"field": "action", "equals": "set"}],
                 "help_key": "channel-range.volts",
+                "label_key": "channel-range.value",
             },
         ),
     },
@@ -1122,6 +1141,13 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
 COMMANDS = COMMANDS + TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS
 _TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS = frozenset(entry["id"] for entry in TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS)
 
+# Ensure analog channel selector fields are select-capable even without an active model.
+for _entry in COMMANDS:
+    for _field in _entry["fields"]:
+        if _field.get("type") == "integer" and _field.get("name") in _ANALOG_CHANNEL_FIELDS:
+            _field.setdefault("options", (1, 2, 3, 4))
+            _field.setdefault("option_label", "channel")
+
 PC_OUTPUT_COMMAND_IDS = frozenset(
     {
         "screenshot",
@@ -1350,20 +1376,10 @@ def _model_command_presentation(
     capabilities = capabilities_for_model_id(model_id)
     supported = _command_supported_by_capabilities(entry, capabilities)
     fields: dict[str, dict[str, Any]] = {}
-    analog_fields = {
-        "channel",
-        "source_channel",
-        "source2_channel",
-        "reference_channel",
-        "arm_channel",
-        "trigger_channel",
-        "clock_channel",
-        "data_channel",
-    }
     for field in entry["fields"]:
         name = field["name"]
         override: dict[str, Any] = {}
-        if field.get("type") == "integer" and name in analog_fields:
+        if field.get("type") == "integer" and name in _ANALOG_CHANNEL_FIELDS:
             override["maximum"] = capabilities.analog_channels
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
         if field.get("type") == "multi-enum" and name == "channels":

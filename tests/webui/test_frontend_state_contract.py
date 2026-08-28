@@ -3103,10 +3103,12 @@ def test_command_editor_and_result_presentation_contract() -> None:
 
     assert 'input.type = "hidden";' in form_source
     assert 'field.help_key ? `help.${field.help_key}` : `help.${field.name}`' in form_source
-    assert 'new Option(translate("status.enabled"), "true")' in form_source
-    assert 'new Option(translate("status.disabled"), "false")' in form_source
-    assert 'new Option(translate("enum.true")' not in form_source
-    assert 'new Option(translate("enum.false")' not in form_source
+    assert 'field.label_key ? `field.${field.label_key}`' in form_source
+    assert 'translate("enum.enable")' in form_source
+    assert 'translate("enum.disable")' in form_source
+    assert 'translate("enum.true")' in form_source
+    assert 'translate("enum.false")' in form_source
+    assert 'new Option(translate("status.enabled")' not in form_source
     assert "commandForm.queryValues()" in app_source
     assert 'intent: "readback"' in app_source
     assert 'if (options.intent === "apply") commandForm.clearDirty();' in app_source

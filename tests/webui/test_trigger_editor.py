@@ -112,7 +112,8 @@ def test_trigger_channel_fields_follow_the_existing_model_projection() -> None:
             expected = capabilities_for_model_id(model_id).analog_channels
             assert presentation["supported"] is True
             for name in field_names:
-                assert presentation["fields"][name] == {"maximum": expected}
+                assert presentation["fields"][name]["maximum"] == expected
+                assert presentation["fields"][name]["options"] == list(range(1, expected + 1))
 
 
 def test_app_routes_editors_by_command_metadata() -> None:
