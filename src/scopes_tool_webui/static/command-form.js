@@ -2,7 +2,9 @@ import { hasTranslation, translate } from "/static/i18n.js";
 
 const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
-function translateEnum(value) {
+function translateEnum(value, optionLabel = null) {
+  const scopedKey = optionLabel ? `enum.${optionLabel}.${String(value)}` : null;
+  if (scopedKey && hasTranslation(scopedKey)) return translate(scopedKey);
   const key = `enum.${String(value)}`;
   return hasTranslation(key) ? translate(key) : String(value);
 }
@@ -239,7 +241,7 @@ export class CommandForm {
       }
       const options = actionChoices || this.catalog.optionsFor(field);
       options.forEach((option) => {
-        input.append(new Option(translateEnum(option), String(option)));
+        input.append(new Option(translateEnum(option, field.option_label), String(option)));
       });
       if (input.multiple) {
         input.size = Math.min(Math.max(options.length, 2), 6);

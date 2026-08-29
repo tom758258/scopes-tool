@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import textwrap
 from pathlib import Path
@@ -188,6 +189,9 @@ def test_channel_summary_result_locale_keys_exist() -> None:
     reason="Node.js is required for frontend behavior checks",
 )
 def test_generic_command_form_integer_options_render_as_select_and_serialize_integer() -> None:
+    measure_fields = next(
+        entry["fields"] for entry in command_catalog() if entry["id"] == "measure"
+    )
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -214,6 +218,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
             this._value = "";
             this.options = [];
             this.selectedOptions = [];
+            this.parentElement = null;
           }
           get value(){ return this._value; }
           set value(v){
@@ -227,6 +232,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           append(...nodes){
             for(const n of nodes){
               this.children.push(n);
+              n.parentElement = this;
               if(n.tagName==="OPTION"){
                 this.options.push(n);
                 if(n.selected) this.selectedOptions.push(n);
@@ -244,7 +250,13 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           addEventListener(){}
           dispatchEvent(){ return true; }
           closest(sel){
-            if(sel==='[data-visible-if-hidden="true"]') return null;
+            if(sel==='[data-visible-if-hidden="true"]'){
+              let node = this;
+              while(node){
+                if(node.dataset?.visibleIfHidden === "true") return node;
+                node = node.parentElement;
+              }
+            }
             return null;
           }
           setCustomValidity(){}
@@ -306,6 +318,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         globalThis.HTMLElement = FakeEl;
 
         const translations = {
+          "enum.measure.slope.positive":"上升","enum.measure.slope.negative":"下降",
           "enum.channel1":"通道 1","enum.channel2":"通道 2","enum.channel3":"通道 3","enum.channel4":"通道 4",
           "enum.enable":"啟用","enum.disable":"停用","enum.true":"是","enum.false":"否",
           "form.selectValue":"請選擇值","form.leaveUnchanged":"保持不變","field.channel":"通道","field.enabled":"啟用","field.bus":"匯流排","field.channel-scale.value":"每格數值","field.channel-offset.value":"偏移值","field.channel-range.value":"範圍值"
@@ -317,6 +330,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           fieldsFor: (cmd)=> cmd.fields,
           optionsFor: (f)=> f.options||[],
         };
+        const measureFields = __MEASURE_FIELDS__;
 
         let source = fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/command-form.js"),"utf8");
         source = source.replace(/^import[^\n]*\r?\n/gm,"").replace(/^export /gm,"");
@@ -407,9 +421,61 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           assert.deepEqual(vals, { channel: 2 });
         }
 
+        // F. vpp keeps only the common fields and excludes hidden values
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const cmd = { id:"measure", fields:measureFields, presentation:{ kind:"command", action:"run" } };
+          form.render(cmd);
+          const hiddenNames = ["reference_channel", "time_s", "level", "slope", "occurrence"];
+          for(const name of hiddenNames){
+            assert.equal(cont.querySelector(`[data-field="${name}"]`).parentElement.hidden, true, name);
+          }
+          assert.deepEqual(form.values(), { item:"vpp", channel:1 });
+        }
+
+        // G. phase shows a required reference channel without leave-unchanged wording
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const cmd = { id:"measure", fields:measureFields, presentation:{ kind:"command", action:"run" } };
+          form.render(cmd);
+          cont.querySelector('[data-field="item"]').value = "phase";
+          form.refreshVisibility();
+          const reference = cont.querySelector('[data-field="reference_channel"]');
+          assert.equal(reference.parentElement.hidden, false);
+          assert.equal(reference.required, true);
+          assert.equal(reference.options[0].textContent, translations["form.selectValue"]);
+          assert.ok(reference.options.every((option)=> option.textContent !== translations["form.leaveUnchanged"]));
+        }
+
+        // H. time_at_value uses required level and measurement-specific defaults/labels
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const cmd = { id:"measure", fields:measureFields, presentation:{ kind:"command", action:"run" } };
+          form.render(cmd);
+          cont.querySelector('[data-field="item"]').value = "time_at_value";
+          form.refreshVisibility();
+          const level = cont.querySelector('[data-field="level"]');
+          const slope = cont.querySelector('[data-field="slope"]');
+          const occurrence = cont.querySelector('[data-field="occurrence"]');
+          assert.equal(level.parentElement.hidden, false);
+          assert.equal(level.required, true);
+          assert.equal(slope.value, "positive");
+          assert.equal(slope.options[0].textContent, "上升");
+          assert.equal(slope.options[1].textContent, "下降");
+          assert.equal(occurrence.value, "1");
+          assert.equal(cont.querySelector('[data-field="time_s"]').parentElement.hidden, true);
+          level.value = "0.5";
+          assert.deepEqual(form.values(), {
+            item:"time_at_value", channel:1, level:0.5, slope:"positive", occurrence:1,
+          });
+        }
+
         console.log("all channel control frontend checks passed");
         '''
-    )
+    ).replace("__MEASURE_FIELDS__", json.dumps(measure_fields))
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script],
         capture_output=True,

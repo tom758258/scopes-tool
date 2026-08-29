@@ -102,6 +102,105 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)
 
 
+def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
+    measure = next(
+        entry for entry in TestClient(app).get("/api/commands").json()
+        if entry["id"] == "measure"
+    )
+    fields = {field["name"]: field for field in measure["fields"]}
+
+    assert measure["label"] == "Single measurement"
+    assert fields["item"]["label_key"] == "measure.item"
+    assert fields["slope"]["option_label"] == "measure.slope"
+    assert fields["slope"]["default"] == "positive"
+    assert fields["occurrence"]["default"] == 1
+    assert fields["reference_channel"]["visible_if"] == [
+        {"field": "item", "in": ["phase", "delay"]}
+    ]
+    assert fields["reference_channel"]["required_if"] == [
+        {"field": "item", "in": ["phase", "delay"]}
+    ]
+    assert fields["time_s"]["visible_if"] == [
+        {"field": "item", "equals": "y_at_x"}
+    ]
+    assert fields["time_s"]["required_if"] == [
+        {"field": "item", "equals": "y_at_x"}
+    ]
+    assert fields["level"]["visible_if"] == [
+        {"field": "item", "equals": "time_at_value"}
+    ]
+    assert fields["level"]["required_if"] == [
+        {"field": "item", "equals": "time_at_value"}
+    ]
+    assert fields["slope"]["visible_if"] == [
+        {"field": "item", "in": ["time_at_edge", "time_at_value"]}
+    ]
+    assert fields["occurrence"]["visible_if"] == [
+        {"field": "item", "in": ["time_at_edge", "time_at_value"]}
+    ]
+    for field_name in fields:
+        assert fields[field_name]["help_key"] == f"measure.{field_name}"
+
+    def applies(field: dict, item: str, key: str) -> bool:
+        predicates = field.get(key, [])
+        return all(
+            item == predicate.get("equals")
+            if "equals" in predicate
+            else item in predicate["in"]
+            for predicate in predicates
+        )
+
+    for item in SUPPORTED_MEASUREMENT_ITEMS:
+        expected = {"item", "channel"}
+        if item in {"phase", "delay"}:
+            expected.add("reference_channel")
+        elif item == "y_at_x":
+            expected.add("time_s")
+        elif item == "time_at_edge":
+            expected.update({"slope", "occurrence"})
+        elif item == "time_at_value":
+            expected.update({"level", "slope", "occurrence"})
+        visible = {
+            name for name, field in fields.items()
+            if applies(field, item, "visible_if")
+        }
+        assert visible == expected, item
+
+        required = {
+            name for name, field in fields.items()
+            if applies(field, item, "required_if") and field.get("required_if")
+        }
+        expected_required = {
+            "reference_channel" if item in {"phase", "delay"} else
+            "time_s" if item == "y_at_x" else
+            "level" if item == "time_at_value" else
+            ""
+        } - {""}
+        assert required == expected_required, item
+
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    assert '"command.measure": "Single measurement"' in english
+    assert '"command.measure": "單次量測"' in chinese
+    assert '"field.measure.item": "Measurement item"' in english
+    assert '"field.measure.item": "量測項目"' in chinese
+    for key in (
+        "measure.item",
+        "measure.channel",
+        "measure.reference_channel",
+        "measure.time_s",
+        "measure.level",
+        "measure.slope",
+        "measure.occurrence",
+    ):
+        assert f'"help.{key}":' in english
+        assert f'"help.{key}":' in chinese
+    assert '"enum.measure.slope.positive": "Positive"' in english
+    assert '"enum.measure.slope.positive": "上升"' in chinese
+    assert '"enum.measure.slope.negative": "Negative"' in english
+    assert '"enum.measure.slope.negative": "下降"' in chinese
+
+
 def test_live_data_snapshot_is_hidden_and_runs_through_simulated_jobs() -> None:
     client = TestClient(app)
 
