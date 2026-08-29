@@ -159,12 +159,32 @@ export function renderIdentityWorkspaceResult(container, job) {
   });
 }
 
+const CHANNEL_SUMMARY_FIELDS = [
+  "display",
+  "label",
+  "scale",
+  "range",
+  "offset",
+  "coupling",
+  "impedance",
+  "invert",
+  "bandwidth_limit",
+  "units",
+  "vernier",
+  "probe_ratio",
+  "probe_skew",
+];
+
 export function renderWorkspaceResult(container, job, context = {}) {
   if (job.command === "identify") {
     renderIdentityWorkspaceResult(container, job);
     return;
   }
   const result = jobResultPayload(job);
+  if (job.command === "channel-summary" && Array.isArray(result?.channels)) {
+    renderChannelSummaryWorkspaceResult(container, result.channels);
+    return;
+  }
   if (result && typeof result === "object") {
     const display = unwrapStructuredResult(result);
     const fields = Object.entries(display).filter(([name]) => !isRawDiagnosticField(name));
@@ -180,10 +200,96 @@ export function renderWorkspaceResult(container, job, context = {}) {
   ]);
 }
 
+function channelTitle(channel) {
+  const key = `enum.channel${channel}`;
+  if (hasTranslation(key)) return translate(key);
+  return `${resultFieldLabel("channel")} ${channel}`;
+}
+
+function channelUnitSymbol(entry) {
+  if (entry?.units === "amp" || entry?.units === "A") return "A";
+  if (entry?.units === "volt" || entry?.units === "V") return "V";
+  return "";
+}
+
+function formatChannelValue(field, value, entry = {}) {
+  if (value === null || value === undefined) return "—";
+  if (field === "label") {
+    return String(value).trim() === "" ? "—" : String(value);
+  }
+  if (typeof value === "boolean") {
+    return translate(value ? "status.enabled" : "status.disabled");
+  }
+  const unitSymbol = channelUnitSymbol(entry);
+  if (field === "scale") {
+    return unitSymbol ? `${value} ${unitSymbol}/div` : String(value);
+  }
+  if (field === "range" || field === "offset") {
+    return unitSymbol ? `${value} ${unitSymbol}` : String(value);
+  }
+  if (field === "coupling") {
+    return String(value).toUpperCase();
+  }
+  if (field === "impedance") {
+    if (value === "one_meg") return "1 MΩ";
+    if (value === "fifty") return "50 Ω";
+    return String(value);
+  }
+  if (field === "units") {
+    if (value === "volt") return "V";
+    if (value === "amp") return "A";
+    return String(value);
+  }
+  if (field === "probe_ratio") {
+    return String(value).includes(":") ? String(value) : `${value}:1`;
+  }
+  if (field === "probe_skew") {
+    return `${value} s`;
+  }
+  return String(value);
+}
+
+function renderChannelSummaryWorkspaceResult(container, channels) {
+  channels.forEach((entry) => {
+    const card = document.createElement("div");
+    card.className = "workspace-channel-card";
+
+    const title = document.createElement("strong");
+    title.className = "workspace-channel-title";
+    title.textContent = channelTitle(entry.channel);
+    card.append(title);
+
+    const fieldsList = document.createElement("dl");
+    fieldsList.className = "workspace-channel-fields";
+
+    const keys = [
+      ...CHANNEL_SUMMARY_FIELDS.filter((key) => key in entry && !isRawDiagnosticField(key)),
+      ...Object.keys(entry).filter(
+        (key) => key !== "channel" && !CHANNEL_SUMMARY_FIELDS.includes(key) && !isRawDiagnosticField(key),
+      ),
+    ];
+
+    keys.forEach((key) => {
+      const dt = document.createElement("dt");
+      dt.textContent = resultFieldLabel(key);
+      const dd = document.createElement("dd");
+      dd.textContent = formatChannelValue(key, entry[key], entry);
+      fieldsList.append(dt, dd);
+    });
+
+    card.append(fieldsList);
+    container.append(card);
+  });
+}
+
 function unwrapStructuredResult(result) {
   const entries = Object.entries(result);
-  if (entries.length === 1 && entries[0][1] && typeof entries[0][1] === "object"
-      && !Array.isArray(entries[0][1])) {
+  if (
+    entries.length === 1
+    && entries[0][1]
+    && typeof entries[0][1] === "object"
+    && !Array.isArray(entries[0][1])
+  ) {
     return entries[0][1];
   }
   return result;

@@ -347,6 +347,11 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .workspace-result-field small { color: var(--muted); font-size: 11px; }
 .identity-workspace-field-wide,
 .workspace-result-field-wide { grid-column: 1 / -1; }
+.workspace-channel-card { display: grid; gap: 8px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); box-shadow: var(--shadow-sm); }
+.workspace-channel-title { font-size: 12px; font-weight: 700; color: var(--ink); }
+.workspace-channel-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; }
+.workspace-channel-fields dt { color: var(--muted); font-size: 11px; }
+.workspace-channel-fields dd { min-width: 0; margin: 0; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .workspace-result-content > .muted { grid-column: 1 / -1; margin: 0; padding: 2px 2px 8px; font-size: 11px; }
 .workspace-result:has(.workspace-result-content > .muted) { margin-top: 10px; }
 .workspace-result:has(.workspace-result-content > .muted) > strong { border-bottom-color: transparent; }

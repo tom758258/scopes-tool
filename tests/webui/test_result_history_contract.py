@@ -309,3 +309,167 @@ def test_result_history_runtime_behaviour() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_channel_summary_workspace_result_focused_behavior() -> None:
+    script = textwrap.dedent(
+        r"""
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
+          }
+          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
+          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.testLocale = "en";
+
+        const enLabels = {
+          "command.channel-summary": "Channel summary",
+          "enum.channel1": "Channel 1",
+          "enum.channel2": "Channel 2",
+          "status.enabled": "Enabled",
+          "status.disabled": "Disabled",
+          "results.field.scale": "Scale",
+          "results.field.impedance": "Impedance",
+          "results.field.probe_ratio": "Probe ratio",
+          "results.field.label": "Label",
+          "results.field.units": "Units",
+        };
+        const zhLabels = {
+          "command.channel-summary": "通道設定摘要",
+          "enum.channel1": "通道 1",
+          "status.enabled": "已啟用",
+          "status.disabled": "已停用",
+          "results.field.scale": "刻度",
+          "results.field.impedance": "輸入阻抗",
+          "results.field.probe_ratio": "探棒衰減比",
+          "results.field.label": "標籤",
+          "results.field.units": "單位",
+        };
+
+        const translate = (key, values = {}) => {
+          const dict = globalThis.testLocale === "zh-TW" ? zhLabels : enLabels;
+          const text = dict[key] || key;
+          return Object.entries(values).reduce(
+            (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
+            text,
+          );
+        };
+        const hasTranslation = (key) => {
+          const dict = globalThis.testLocale === "zh-TW" ? zhLabels : enLabels;
+          return key in dict;
+        };
+        const translateJobStatus = (status) => translate(`status.${status}`);
+        globalThis.testTranslate = translate;
+        globalThis.testHasTranslation = hasTranslation;
+        globalThis.testTranslateJobStatus = translateJobStatus;
+
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          "const translateJobStatus = globalThis.testTranslateJobStatus;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
+          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob, renderWorkspaceResult };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const api = globalThis.resultApi;
+        const makeJob = (cmd, resultPayload, status = "completed") => ({
+          job_id: "j1", command: cmd, status,
+          result: { exit_code: 0, result: resultPayload },
+        });
+
+        // A: two independent cards, not a single semicolon-delimited text wall
+        const workspace = new FakeNode("div");
+        api.renderWorkspaceResult(workspace, makeJob("channel-summary", {
+          channels: [
+            { channel: 1, display: true, label: "", scale: 1.0, range: 8.0, offset: 0.0,
+              coupling: "dc", impedance: "one_meg", invert: false, bandwidth_limit: false,
+              units: "volt", vernier: false, probe_ratio: 10.0, probe_skew: 0.0 },
+            { channel: 2, display: false, label: "CLK", scale: 0.5, range: 4.0, offset: 1.2,
+              coupling: "ac", impedance: "fifty", invert: true, bandwidth_limit: true,
+              units: "amp", vernier: true, probe_ratio: 1.0, probe_skew: 1e-9 },
+          ],
+        }));
+        assert.equal(workspace.children.length, 2, "expect 2 independent cards");
+        assert.equal(workspace.children[0].className, "workspace-channel-card");
+        assert.equal(workspace.children[1].className, "workspace-channel-card");
+
+        // B: representative formatting assertions
+        const card1 = workspace.children[0];
+        const fields1 = card1.children[1];
+        const dd1 = fields1.children.filter((n) => n.tagName === "DD").map((n) => n.textContent);
+        assert(dd1.some((t) => t === "Enabled"), "boolean enabled");
+        assert(dd1.some((t) => t === "1 MΩ"), "one_meg");
+        assert(dd1.some((t) => t === "1 V/div"), "scale with volt");
+        assert(dd1.some((t) => t === "10:1"), "probe_ratio");
+        assert(dd1.some((t) => t === "—"), "empty label");
+
+        // C: zh-TW title and boolean translation
+        globalThis.testLocale = "zh-TW";
+        const zhWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(zhWorkspace, makeJob("channel-summary", {
+          channels: [{ channel: 1, display: true, label: "", scale: 1.0, range: 8.0, offset: 0.0,
+            coupling: "dc", impedance: "one_meg", invert: false, bandwidth_limit: false,
+            units: "volt", vernier: false, probe_ratio: 10.0, probe_skew: 0.0 }],
+        }));
+        assert.equal(zhWorkspace.children.length, 1);
+        assert.equal(zhWorkspace.children[0].children[0].textContent, "通道 1", "zh-TW title");
+        const zhFields = zhWorkspace.children[0].children[1];
+        const zhDd = zhFields.children.filter((n) => n.tagName === "DD").map((n) => n.textContent);
+        assert(zhDd.some((t) => t === "已啟用"), "zh-TW boolean enabled");
+
+        // D: unknown/missing unit must not fall back to V
+        globalThis.testLocale = "en";
+        const unknownWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(unknownWorkspace, makeJob("channel-summary", {
+          channels: [{ channel: 1, display: false, label: "X", scale: 2.0, range: 10.0, offset: 0,
+            coupling: "dc", impedance: "fifty", invert: false, bandwidth_limit: false,
+            units: null, vernier: false, probe_ratio: 1.0, probe_skew: 0.5 }],
+        }));
+        const unknownFields = unknownWorkspace.children[0].children[1];
+        const unknownDd = unknownFields.children.filter((n) => n.tagName === "DD").map((n) => n.textContent);
+        assert(!unknownDd.some((t) => t.includes("V/div") || (t.includes(" V") && t !== "V")), "unknown unit must not be V");
+        assert(unknownDd.some((t) => t === "2"), "scale without unit uses plain value");
+        assert(unknownDd.some((t) => t === "10"), "range without unit uses plain value");
+
+        // A. command-scoped dispatch: non-channel-summary command must not use card renderer
+        // even when result contains a channels array
+        const otherWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(otherWorkspace, makeJob("some-other-command", {
+          channels: [{ channel: 1, value: 123 }],
+          count: 1,
+        }));
+        assert.equal(otherWorkspace.children.length, 2, "generic renderer should present count and channels fields");
+        assert(!otherWorkspace.children.some((n) => n.className === "workspace-channel-card"), "non-channel-summary must not use card renderer");
+        // The sibling field `count` should still be presented by generic workspace renderer
+        // Because the command is not channel-summary, the renderer falls through to generic fields
+        // (In this synthetic test we just protect that no `.workspace-channel-card` appears.)
+
+        // B. single-key structured result unwrap preserves inner fields directly
+        const unwrapWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(unwrapWorkspace, makeJob("timebase-scale", {
+          timebase: { seconds_per_division: 0.001 },
+        }));
+        // After unwrap, the inner object fields should be presented directly,
+        // not nested as a single semicolon-delimited text wall.
+        const unwrapTexts = unwrapWorkspace.children.flatMap((field) =>
+          field.children.map((node) => node.textContent),
+        );
+        assert(unwrapTexts.includes("0.001"), "unwrap must present inner numeric value directly");
+        assert(unwrapTexts.includes("Seconds per division"), "unwrap must present inner field label directly");
+        assert(!unwrapTexts.includes("Timebase"), "unwrap must not present outer wrapper as field");
+        """
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
