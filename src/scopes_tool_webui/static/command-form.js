@@ -407,10 +407,12 @@ export class CommandForm {
       }
       const input = this.container.querySelector(`[data-field="${help.dataset.helpFor}"]`);
       const helpName = input ? helpByValue[input.value] : undefined;
-      const helpKey = helpName
-        ? `help.${helpName}`
-        : help.dataset.helpFallback ? `help.${help.dataset.helpFallback}` : "";
-      help.textContent = helpKey && hasTranslation(helpKey) ? translate(helpKey) : "";
+      const baseKey = help.dataset.helpFallback ? `help.${help.dataset.helpFallback}` : "";
+      const specificKey = helpName ? `help.${helpName}` : "";
+      help.textContent = [baseKey, specificKey]
+        .filter((key) => key && hasTranslation(key))
+        .map((key) => translate(key))
+        .join("\n");
       help.hidden = !help.textContent;
     });
     this.container.querySelectorAll("[data-visible-if]").forEach((wrapper) => {

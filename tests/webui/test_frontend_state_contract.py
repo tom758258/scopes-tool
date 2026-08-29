@@ -108,6 +108,7 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
           triggerEditor: {},
           searchEditor: {},
           workflowEditor: {},
+          measurementEditor: {},
           selectedCommand: {},
           commandDescription: {},
           commandSupportReason: {},

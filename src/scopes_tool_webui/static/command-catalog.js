@@ -41,7 +41,9 @@ export class CommandCatalog {
   }
 
   availableCommands() {
-    return this.commands.filter((command) => command.modes.includes(this.activeMode));
+    return this.commands.filter(
+      (command) => command.modes.includes(this.activeMode) && !command.browser_hidden,
+    );
   }
 
   categories() {

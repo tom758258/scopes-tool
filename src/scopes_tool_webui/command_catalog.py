@@ -426,9 +426,10 @@ COMMANDS = (
         "id": "measure",
         "category": "Measurement",
         "label": "Run measurement",
+        "editor": "measurement",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
-            {"name": "item", "type": "enum", "options": SUPPORTED_MEASUREMENT_ITEMS, "default": "vpp", "label_key": "measure.item", "help_key": "measure.item", "help_by_value": {"y_at_x": "measure.item.y_at_x", "time_at_edge": "measure.item.time_at_edge", "time_at_value": "measure.item.time_at_value", "phase": "measure.item.phase", "delay": "measure.item.delay"}},
+            {"name": "item", "type": "enum", "options": SUPPORTED_MEASUREMENT_ITEMS, "default": "vpp", "label_key": "measure.item", "help_key": "measure.item", "help_by_value": {item: f"measure.item.{item}" for item in SUPPORTED_MEASUREMENT_ITEMS}},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "measure.channel"},
             {"name": "reference_channel", "type": "integer", "minimum": 1, "maximum": 4, "visible_if": [{"field": "item", "in": ("phase", "delay")}], "required_if": [{"field": "item", "in": ("phase", "delay")}], "help_key": "measure.reference_channel"},
             {"name": "time_s", "type": "number", "visible_if": [{"field": "item", "equals": "y_at_x"}], "required_if": [{"field": "item", "equals": "y_at_x"}], "help_key": "measure.time_s"},
@@ -441,6 +442,7 @@ COMMANDS = (
         "id": "measure-results",
         "category": "Measurement",
         "label": "Front-panel measurement results",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
     },
@@ -448,6 +450,7 @@ COMMANDS = (
         "id": "measure-clear",
         "category": "Measurement",
         "label": "Clear measurements",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
     },
@@ -455,6 +458,7 @@ COMMANDS = (
         "id": "measure-show",
         "category": "Measurement",
         "label": "Show measurement results",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
@@ -476,6 +480,7 @@ COMMANDS = (
         "id": "measure-window",
         "category": "Measurement",
         "label": "Measurement window",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
@@ -1297,11 +1302,21 @@ def _jsonable(value: Any) -> Any:
 
 
 def command_catalog() -> list[dict[str, Any]]:
-    return [
+    catalog = [
         _jsonable(_command_catalog_entry(entry))
         for entry in COMMANDS
         if not entry.get("hidden")
     ]
+    catalog.append(_jsonable(_command_catalog_entry({
+        "id": "front-panel-measurements",
+        "category": "Measurement",
+        "label": "Front-panel measurements",
+        "editor": "measurement",
+        "presentation_only": True,
+        "modes": ("live", "simulate"),
+        "fields": (),
+    })))
+    return catalog
 
 
 def model_catalog() -> list[dict[str, str]]:

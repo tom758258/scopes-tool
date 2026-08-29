@@ -481,7 +481,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           });
         }
 
-        // I. help_by_value falls back to field help until a window is selected
+        // I. help_by_value adds selected guidance after the base help
         {
           const cont = makeContainer();
           const form = new CommandForm(cont, catalog);
@@ -496,7 +496,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           assert.equal(help.textContent, "選擇量測範圍");
           window.value = "main";
           form.refreshVisibility();
-          assert.equal(help.textContent, "在主要視窗量測");
+          assert.equal(help.textContent, "選擇量測範圍\n在主要視窗量測");
         }
 
         console.log("all channel control frontend checks passed");
@@ -508,6 +508,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         ["node", "--input-type=module", "--eval", script],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout

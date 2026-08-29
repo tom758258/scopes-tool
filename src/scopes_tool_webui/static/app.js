@@ -13,6 +13,7 @@ import {
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { renderInstrumentSummary } from "/static/live-data.js";
+import { MeasurementEditor } from "/static/measurement-editor.js";
 import {
   pcOutputContext,
   pcOutputDirectory,
@@ -73,6 +74,7 @@ const elements = {
   triggerEditor: document.querySelector("#trigger-editor"),
   searchEditor: document.querySelector("#search-editor"),
   workflowEditor: document.querySelector("#workflow-editor"),
+  measurementEditor: document.querySelector("#measurement-editor"),
   workspaceHeaderActions: document.querySelector("#workspace-header-actions"),
   refresh: document.querySelector("#refresh-button"),
   execute: document.querySelector("#execute-button"),
@@ -107,6 +109,7 @@ let serialEditor;
 let triggerEditor;
 let searchEditor;
 let workflowEditor;
+let measurementEditor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -128,6 +131,7 @@ const EDITOR_RENDERERS = {
   trigger: () => triggerEditor,
   search: () => searchEditor,
   workflow: () => workflowEditor,
+  measurement: () => measurementEditor,
 };
 
 function editorKindFor(command) {
@@ -212,6 +216,14 @@ async function initialize() {
       return Boolean(selected && commandAvailable(selected.id));
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  measurementEditor = new MeasurementEditor(elements.measurementEditor, catalog, {
+    executeCommand,
+    isExecutionBusy,
+    isCommandAvailable: commandAvailable,
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    mode: () => context.mode,
     selectedCommand: () => catalog.selected(),
   });
   catalog.render();
@@ -413,7 +425,7 @@ function renderCollapseLabels() {
 async function executeCommand(command, parameters, options = {}) {
   if (isExecutionBusy()) return null;
   const definition = commands.find((item) => item.id === command) || INTERNAL_COMMANDS[command];
-  if (!definition || !definition.modes.includes(context.mode)) {
+  if (!definition || definition.presentation_only || !definition.modes.includes(context.mode)) {
     elements.deviceStatus.textContent = translate("status.noCommands");
     return;
   }
@@ -596,8 +608,8 @@ function sameExecutionContext(left, right) {
 
 function renderWorkspace() {
   const selected = catalog?.selected();
-  elements.identityWorkspace.hidden = !selected;
-  if (!selected) return;
+  elements.identityWorkspace.hidden = !selected || selected.presentation_only === true;
+  if (!selected || selected.presentation_only === true) return;
 
   elements.identityWorkspaceContent.replaceChildren();
   const workspaceContext = currentWorkspaceContext(selected.id);
@@ -650,6 +662,7 @@ document.addEventListener("localechange", () => {
   triggerEditor?.rerender();
   searchEditor?.rerender();
   workflowEditor?.rerender();
+  measurementEditor?.rerender();
   syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
 });
@@ -673,15 +686,20 @@ function syncCommandSelection(draft = null) {
   elements.triggerEditor.hidden = editorKind !== "trigger";
   elements.searchEditor.hidden = editorKind !== "search";
   elements.workflowEditor.hidden = editorKind !== "workflow";
+  elements.measurementEditor.hidden = editorKind !== "measurement";
   syncWorkspaceHeaderActions(editorKind);
   elements.selectedCommand.textContent = selected
     ? editorOwned
-      ? translate(`${editorKind}.editor.title`)
+      ? editorKind === "measurement"
+        ? catalog.commandLabel(selected)
+        : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
     : translate("commands.selectCommand");
   elements.commandDescription.textContent = selected
     ? editorOwned
-      ? translate(`${editorKind}.editor.description`)
+      ? editorKind === "measurement"
+        ? catalog.description(selected)
+        : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
     : translate("commands.noDescription");
   const supportReason = selected ? catalog.supportReason(selected) : "";
@@ -725,6 +743,7 @@ function updateAvailability() {
   saveExportEditor?.applyBusyState();
   serialEditor?.render(serialEditor.controller.state);
   workflowEditor?.applyBusyState();
+  measurementEditor?.applyBusyState();
   deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
   updateBasicAvailability();
 }
@@ -754,6 +773,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "trigger") triggerEditor?.schedulePresentation();
   if (editorKind === "search") searchEditor?.schedulePresentation();
   if (editorKind === "workflow") workflowEditor?.schedulePresentation();
+  if (editorKind === "measurement") measurementEditor?.schedulePresentation();
 }
 
 function commandAction(command) {

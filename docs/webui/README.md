@@ -94,9 +94,12 @@ The Command workbench exposes:
   `channel-range`, `channel-units`, `channel-vernier`, `channel-probe-skew`
 - Display: `display-label`, `display-clear`, `display-persistence`,
   `display-intensity`, `display-vectors`
-- Measurement: `measure`, `measure-results`, `measure-clear`, `measure-show`,
-  `measure-window`. The `measure-source` backend helper remains available to
-  existing API clients but is hidden from the Command Browser.
+- Measurement: Measurement settings combines `measure` with the persistent
+  `measure-window` setting. Front-panel measurements combines
+  `measure-results`, `measure-show`, and `measure-clear` for reading and
+  managing the instrument's displayed measurements. The `measure-source`
+  backend helper remains available to existing API clients but is not shown in
+  the normal workbench.
 - Capture: `screenshot`, `capture`
 - Reference: `reference-save`, `reference-display`, `reference-label`,
   `reference-clear`, `reference-query`

@@ -112,11 +112,7 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     assert measure["label"] == "Run measurement"
     assert fields["item"]["label_key"] == "measure.item"
     assert fields["item"]["help_by_value"] == {
-        "y_at_x": "measure.item.y_at_x",
-        "time_at_edge": "measure.item.time_at_edge",
-        "time_at_value": "measure.item.time_at_value",
-        "phase": "measure.item.phase",
-        "delay": "measure.item.delay",
+        item: f"measure.item.{item}" for item in SUPPORTED_MEASUREMENT_ITEMS
     }
     assert fields["slope"]["option_label"] == "measure.slope"
     assert fields["slope"]["default"] == "positive"
@@ -196,6 +192,8 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
     assert '"command.measure": "Run measurement"' in english
     assert '"command.measure": "量測設定"' in chinese
+    assert '"command.front-panel-measurements": "Front-panel measurements"' in english
+    assert '"command.front-panel-measurements": "前面板量測"' in chinese
     assert '"command.measure-results": "Front-panel measurement results"' in english
     assert '"command.measure-results": "前面板量測結果"' in chinese
     assert '"command.measure-show": "Show measurement results"' in english
@@ -219,13 +217,8 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     ):
         assert f'"help.{key}":' in english
         assert f'"help.{key}":' in chinese
-    for key in (
-        "measure.item.y_at_x",
-        "measure.item.time_at_edge",
-        "measure.item.time_at_value",
-        "measure.item.phase",
-        "measure.item.delay",
-    ):
+    for item in SUPPORTED_MEASUREMENT_ITEMS:
+        key = f"measure.item.{item}"
         assert f'"help.{key}":' in english
         assert f'"help.{key}":' in chinese
     for locale in (english, chinese):
@@ -525,6 +518,20 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
         "math-clear",
     } <= command_ids
     assert "measure-source" not in command_ids
+    assert "front-panel-measurements" in command_ids
+    helpers = {
+        entry["id"]: entry for entry in response.json()
+        if entry["id"] in {
+            "measure-results", "measure-clear", "measure-show", "measure-window"
+        }
+    }
+    assert all(entry["browser_hidden"] is True for entry in helpers.values())
+    composite = next(
+        entry for entry in response.json()
+        if entry["id"] == "front-panel-measurements"
+    )
+    assert composite["presentation_only"] is True
+    assert composite["editor"] == "measurement"
     assert {"trigger", "math-transform", "math-filter", "math-visualization"}.isdisjoint(command_ids)
 
     dvm_mode = next(entry for entry in response.json() if entry["id"] == "dvm-mode")
@@ -641,6 +648,13 @@ def test_query_only_commands_do_not_default_set_only_channels() -> None:
 
 
 def test_measure_source_remains_in_backend_validation_contract() -> None:
+    backend_ids = {entry["id"] for entry in commands_module.COMMANDS}
+    assert {
+        "measure", "measure-results", "measure-clear", "measure-show",
+        "measure-source", "measure-window",
+    } <= backend_ids
+    assert "front-panel-measurements" not in commands_module._COMMAND_BY_ID
+
     request = validate_job_request({
         "command": "measure-source",
         "mode": "simulate",
