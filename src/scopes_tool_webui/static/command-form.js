@@ -351,6 +351,7 @@ export class CommandForm {
       if (field.help_by_value) {
         help.dataset.helpByValue = JSON.stringify(field.help_by_value);
         help.dataset.helpFor = field.name;
+        if (field.help_key) help.dataset.helpFallback = field.help_key;
       } else {
         const helpKey = field.help_key ? `help.${field.help_key}` : `help.${field.name}`;
         help.textContent = hasTranslation(helpKey) ? translate(helpKey) : field.help;
@@ -406,7 +407,9 @@ export class CommandForm {
       }
       const input = this.container.querySelector(`[data-field="${help.dataset.helpFor}"]`);
       const helpName = input ? helpByValue[input.value] : undefined;
-      const helpKey = helpName ? `help.${helpName}` : "";
+      const helpKey = helpName
+        ? `help.${helpName}`
+        : help.dataset.helpFallback ? `help.${help.dataset.helpFallback}` : "";
       help.textContent = helpKey && hasTranslation(helpKey) ? translate(helpKey) : "";
       help.hidden = !help.textContent;
     });

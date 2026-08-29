@@ -425,22 +425,22 @@ COMMANDS = (
     {
         "id": "measure",
         "category": "Measurement",
-        "label": "Single measurement",
+        "label": "Run measurement",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
-            {"name": "item", "type": "enum", "options": SUPPORTED_MEASUREMENT_ITEMS, "default": "vpp", "label_key": "measure.item", "help_key": "measure.item"},
+            {"name": "item", "type": "enum", "options": SUPPORTED_MEASUREMENT_ITEMS, "default": "vpp", "label_key": "measure.item", "help_key": "measure.item", "help_by_value": {"y_at_x": "measure.item.y_at_x", "time_at_edge": "measure.item.time_at_edge", "time_at_value": "measure.item.time_at_value", "phase": "measure.item.phase", "delay": "measure.item.delay"}},
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "measure.channel"},
             {"name": "reference_channel", "type": "integer", "minimum": 1, "maximum": 4, "visible_if": [{"field": "item", "in": ("phase", "delay")}], "required_if": [{"field": "item", "in": ("phase", "delay")}], "help_key": "measure.reference_channel"},
             {"name": "time_s", "type": "number", "visible_if": [{"field": "item", "equals": "y_at_x"}], "required_if": [{"field": "item", "equals": "y_at_x"}], "help_key": "measure.time_s"},
             {"name": "level", "type": "number", "visible_if": [{"field": "item", "equals": "time_at_value"}], "required_if": [{"field": "item", "equals": "time_at_value"}], "help_key": "measure.level"},
             {"name": "slope", "type": "enum", "options": ("positive", "negative"), "default": "positive", "visible_if": [{"field": "item", "in": ("time_at_edge", "time_at_value")}], "option_label": "measure.slope", "help_key": "measure.slope"},
-            {"name": "occurrence", "type": "integer", "minimum": 1, "default": 1, "visible_if": [{"field": "item", "in": ("time_at_edge", "time_at_value")}], "help_key": "measure.occurrence"},
+            {"name": "occurrence", "type": "integer", "minimum": 1, "default": 1, "visible_if": [{"field": "item", "in": ("time_at_edge", "time_at_value")}], "label_key": "measure.occurrence", "help_key": "measure.occurrence"},
         ),
     },
     {
         "id": "measure-results",
         "category": "Measurement",
-        "label": "Measurement results",
+        "label": "Front-panel measurement results",
         "modes": ("live", "simulate"),
         "fields": (),
     },
@@ -454,7 +454,7 @@ COMMANDS = (
     {
         "id": "measure-show",
         "category": "Measurement",
-        "label": "Measurement display",
+        "label": "Show measurement results",
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
@@ -465,6 +465,7 @@ COMMANDS = (
         "category": "Measurement",
         "label": "Measurement source",
         "modes": ("live", "simulate"),
+        "hidden": True,
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}]},
@@ -478,7 +479,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "window", "type": "enum", "options": MEASUREMENT_WINDOW_CHOICES, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "window", "type": "enum", "options": MEASUREMENT_WINDOW_CHOICES, "required_if": [{"field": "action", "equals": "set"}], "label_key": "measure-window.window", "option_label": "measure-window.window", "help_key": "measure-window.window", "help_by_value": {option: f"measure-window.window.{option}" for option in MEASUREMENT_WINDOW_CHOICES}},
         ),
     },
     {
@@ -1418,6 +1419,11 @@ def _model_command_presentation(
         if entry["id"] == "measure" and name == "item" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"
+            )
+        if entry["id"] == "measure-window" and name == "window":
+            override["options"] = tuple(
+                option for option in field.get("options", ())
+                if option != "gate" or capabilities.series == "4000X"
             )
         if name == "pair_items" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(

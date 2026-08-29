@@ -95,7 +95,8 @@ The Command workbench exposes:
 - Display: `display-label`, `display-clear`, `display-persistence`,
   `display-intensity`, `display-vectors`
 - Measurement: `measure`, `measure-results`, `measure-clear`, `measure-show`,
-  `measure-source`, `measure-window`
+  `measure-window`. The `measure-source` backend helper remains available to
+  existing API clients but is hidden from the Command Browser.
 - Capture: `screenshot`, `capture`
 - Reference: `reference-save`, `reference-display`, `reference-label`,
   `reference-clear`, `reference-query`

@@ -109,11 +109,25 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     )
     fields = {field["name"]: field for field in measure["fields"]}
 
-    assert measure["label"] == "Single measurement"
+    assert measure["label"] == "Run measurement"
     assert fields["item"]["label_key"] == "measure.item"
+    assert fields["item"]["help_by_value"] == {
+        "y_at_x": "measure.item.y_at_x",
+        "time_at_edge": "measure.item.time_at_edge",
+        "time_at_value": "measure.item.time_at_value",
+        "phase": "measure.item.phase",
+        "delay": "measure.item.delay",
+    }
     assert fields["slope"]["option_label"] == "measure.slope"
     assert fields["slope"]["default"] == "positive"
+    assert fields["occurrence"]["type"] == "integer"
+    assert fields["occurrence"]["minimum"] == 1
     assert fields["occurrence"]["default"] == 1
+    assert fields["occurrence"]["label_key"] == "measure.occurrence"
+    assert "minimum" not in fields["time_s"]
+    assert "maximum" not in fields["time_s"]
+    assert "minimum" not in fields["level"]
+    assert "maximum" not in fields["level"]
     assert fields["reference_channel"]["visible_if"] == [
         {"field": "item", "in": ["phase", "delay"]}
     ]
@@ -180,10 +194,20 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
 
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
-    assert '"command.measure": "Single measurement"' in english
-    assert '"command.measure": "單次量測"' in chinese
+    assert '"command.measure": "Run measurement"' in english
+    assert '"command.measure": "量測設定"' in chinese
+    assert '"command.measure-results": "Front-panel measurement results"' in english
+    assert '"command.measure-results": "前面板量測結果"' in chinese
+    assert '"command.measure-show": "Show measurement results"' in english
+    assert '"command.measure-show": "顯示量測結果"' in chinese
+    assert '"description.measure-results":' in english
+    assert 'Latest successful result' in english
+    assert '"description.measure-results":' in chinese
+    assert "最新成功結果" in chinese
     assert '"field.measure.item": "Measurement item"' in english
     assert '"field.measure.item": "量測項目"' in chinese
+    assert '"field.measure.occurrence": "Edge/crossing number"' in english
+    assert '"field.measure.occurrence": "第幾次邊緣／交越"' in chinese
     for key in (
         "measure.item",
         "measure.channel",
@@ -195,10 +219,42 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     ):
         assert f'"help.{key}":' in english
         assert f'"help.{key}":' in chinese
+    for key in (
+        "measure.item.y_at_x",
+        "measure.item.time_at_edge",
+        "measure.item.time_at_value",
+        "measure.item.phase",
+        "measure.item.delay",
+    ):
+        assert f'"help.{key}":' in english
+        assert f'"help.{key}":' in chinese
+    for locale in (english, chinese):
+        help_values = "\n".join(
+            line.split('": ', 1)[1]
+            for line in locale.splitlines()
+            if '"help.measure.' in line and '": ' in line
+        )
+        assert "y_at_x" not in help_values
+        assert "time_at_edge" not in help_values
+        assert "time_at_value" not in help_values
     assert '"enum.measure.slope.positive": "Positive"' in english
     assert '"enum.measure.slope.positive": "上升"' in chinese
     assert '"enum.measure.slope.negative": "Negative"' in english
     assert '"enum.measure.slope.negative": "下降"' in chinese
+    for key in (
+        "measure-window.window",
+        "measure-window.window.main",
+        "measure-window.window.zoom",
+        "measure-window.window.auto",
+        "measure-window.window.gate",
+    ):
+        assert f'"help.{key}":' in english
+        assert f'"help.{key}":' in chinese
+    assert '"field.measure-window.window": "Measurement range"' in english
+    assert '"field.measure-window.window": "量測範圍"' in chinese
+    for option in MEASUREMENT_WINDOW_CHOICES:
+        assert f'"enum.measure-window.window.{option}":' in english
+        assert f'"enum.measure-window.window.{option}":' in chinese
 
 
 def test_live_data_snapshot_is_hidden_and_runs_through_simulated_jobs() -> None:
@@ -266,6 +322,7 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
             assert "minimum" not in field
 
     model_2000x = "keysight-dsox2004a"
+    model_3000x = "keysight-dsox3024a"
     impedance = commands["channel-impedance"]["presentation"]["models"][model_2000x]
     assert impedance["fields"]["impedance"]["options"] == ["one_meg"]
     math_display = commands["math-display"]["presentation"]["models"][model_2000x]
@@ -283,9 +340,6 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     assert segmented["kind"] == "setting"
     assert segmented["query_value"] == "query"
     assert segmented["action_choices"] == ["enable", "disable"]
-    assert commands["measure-source"]["presentation"]["readback_fields"] == {
-        "source_channel": "source1_channel"
-    }
     assert commands["math-vertical"]["presentation"]["readback_fields"] == {
         "range_value": "range"
     }
@@ -313,6 +367,25 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     }
     assert commands["measure-show"]["presentation"]["kind"] == "one-way"
     assert commands["measure-show"]["presentation"]["action"] == "show"
+
+    measure_window = commands["measure-window"]
+    window_field = next(field for field in measure_window["fields"] if field["name"] == "window")
+    assert window_field["help_key"] == "measure-window.window"
+    assert window_field["label_key"] == "measure-window.window"
+    assert window_field["option_label"] == "measure-window.window"
+    assert window_field["help_by_value"] == {
+        option: f"measure-window.window.{option}"
+        for option in MEASUREMENT_WINDOW_CHOICES
+    }
+    assert measure_window["presentation"]["models"][model_2000x]["fields"]["window"]["options"] == [
+        "main", "zoom", "auto"
+    ]
+    assert measure_window["presentation"]["models"][model_3000x]["fields"]["window"]["options"] == [
+        "main", "zoom", "auto"
+    ]
+    assert measure_window["presentation"]["models"][MODEL_ID]["fields"]["window"]["options"] == [
+        "main", "zoom", "auto", "gate"
+    ]
 
     acquisition_type = next(
         field for field in commands["acquisition"]["fields"] if field["name"] == "type"
@@ -433,7 +506,6 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
         "measure-results",
         "measure-clear",
         "measure-show",
-        "measure-source",
         "measure-window",
         "system-clear-status",
         "system-opc",
@@ -452,6 +524,7 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
         "math-composite-source",
         "math-clear",
     } <= command_ids
+    assert "measure-source" not in command_ids
     assert {"trigger", "math-transform", "math-filter", "math-visualization"}.isdisjoint(command_ids)
 
     dvm_mode = next(entry for entry in response.json() if entry["id"] == "dvm-mode")
@@ -555,10 +628,55 @@ def test_query_only_commands_do_not_default_set_only_channels() -> None:
 
     assert response.status_code == 200
     commands = {entry["id"]: entry for entry in response.json()}
-    measure_source = next(field for field in commands["measure-source"]["fields"] if field["name"] == "source_channel")
+    measure_source_command = next(
+        entry for entry in commands_module.COMMANDS if entry["id"] == "measure-source"
+    )
+    measure_source = next(
+        field for field in measure_source_command["fields"]
+        if field["name"] == "source_channel"
+    )
     dvm_source = next(field for field in commands["dvm-source"]["fields"] if field["name"] == "channel")
     assert "default" not in measure_source
     assert "default" not in dvm_source
+
+
+def test_measure_source_remains_in_backend_validation_contract() -> None:
+    request = validate_job_request({
+        "command": "measure-source",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {"action": "query"},
+    })
+
+    assert request["command"] == "measure-source"
+    assert request["parameters"] == {"action": "query"}
+
+
+@pytest.mark.parametrize(
+    ("model_id", "accepted"),
+    (
+        ("keysight-dsox2004a", False),
+        ("keysight-dsox3024a", False),
+        (MODEL_ID, True),
+    ),
+)
+def test_measurement_window_gate_validation_follows_model_series(
+    model_id: str, accepted: bool
+) -> None:
+    payload = {
+        "command": "measure-window",
+        "mode": "simulate",
+        "model_id": model_id,
+        "parameters": {"action": "set", "window": "gate"},
+    }
+
+    if not accepted:
+        with pytest.raises(WebUIRequestError, match="measurement window gate is not supported"):
+            validate_job_request(payload)
+        return
+
+    request = validate_job_request(payload)
+    assert request["parameters"] == {"action": "set", "window": "GATE"}
 
 
 def test_measure_and_dvm_query_requests_complete_without_set_only_channels() -> None:

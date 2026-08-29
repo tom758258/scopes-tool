@@ -192,6 +192,9 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
     measure_fields = next(
         entry["fields"] for entry in command_catalog() if entry["id"] == "measure"
     )
+    measure_window_fields = next(
+        entry["fields"] for entry in command_catalog() if entry["id"] == "measure-window"
+    )
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -267,6 +270,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
             const out=[];
             const isDataField = sel==="[data-field]" || sel.startsWith('[data-field="');
             const isVisibleIf = sel==="[data-visible-if]";
+            const isHelpByValue = sel==="[data-help-by-value]";
             const isMultiFor = sel==="[data-multi-for]";
             const mField = sel.match(/^\[data-field="([^"]+)"\]$/);
             const walk=(node)=>{
@@ -276,6 +280,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
                 else if(mField && node.dataset.field===mField[1]) out.push(node);
               }
               if(isVisibleIf && node.dataset && "visibleIf" in node.dataset) out.push(node);
+              if(isHelpByValue && node.dataset && "helpByValue" in node.dataset) out.push(node);
               if(isMultiFor && node.dataset && "multiFor" in node.dataset) out.push(node);
               if(sel==="span" && node.tagName==="SPAN") out.push(node);
               for(const c of node.children||[]) walk(c);
@@ -319,9 +324,11 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
 
         const translations = {
           "enum.measure.slope.positive":"上升","enum.measure.slope.negative":"下降",
+          "enum.measure-window.window.main":"主要視窗","enum.measure-window.window.zoom":"縮放視窗","enum.measure-window.window.auto":"自動","enum.measure-window.window.gate":"游標區間",
           "enum.channel1":"通道 1","enum.channel2":"通道 2","enum.channel3":"通道 3","enum.channel4":"通道 4",
           "enum.enable":"啟用","enum.disable":"停用","enum.true":"是","enum.false":"否",
-          "form.selectValue":"請選擇值","form.leaveUnchanged":"保持不變","field.channel":"通道","field.enabled":"啟用","field.bus":"匯流排","field.channel-scale.value":"每格數值","field.channel-offset.value":"偏移值","field.channel-range.value":"範圍值"
+          "form.selectValue":"請選擇值","form.leaveUnchanged":"保持不變","field.channel":"通道","field.enabled":"啟用","field.bus":"匯流排","field.channel-scale.value":"每格數值","field.channel-offset.value":"偏移值","field.channel-range.value":"範圍值",
+          "help.measure-window.window":"選擇量測範圍","help.measure-window.window.main":"在主要視窗量測"
         };
         globalThis.hasTranslation = k=> k in translations;
         globalThis.translate = k=> translations[k]||k;
@@ -331,6 +338,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           optionsFor: (f)=> f.options||[],
         };
         const measureFields = __MEASURE_FIELDS__;
+        const measureWindowFields = __MEASURE_WINDOW_FIELDS__;
 
         let source = fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/command-form.js"),"utf8");
         source = source.replace(/^import[^\n]*\r?\n/gm,"").replace(/^export /gm,"");
@@ -473,9 +481,29 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           });
         }
 
+        // I. help_by_value falls back to field help until a window is selected
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const cmd = {
+            id:"measure-window",
+            fields:measureWindowFields,
+            presentation:{ kind:"setting", action_field:"action", query_value:"query", apply_value:"set", query_fields:[] },
+          };
+          form.render(cmd);
+          const help = cont.querySelector("[data-help-by-value]");
+          const window = cont.querySelector('[data-field="window"]');
+          assert.equal(help.textContent, "選擇量測範圍");
+          window.value = "main";
+          form.refreshVisibility();
+          assert.equal(help.textContent, "在主要視窗量測");
+        }
+
         console.log("all channel control frontend checks passed");
         '''
-    ).replace("__MEASURE_FIELDS__", json.dumps(measure_fields))
+    ).replace("__MEASURE_FIELDS__", json.dumps(measure_fields)).replace(
+        "__MEASURE_WINDOW_FIELDS__", json.dumps(measure_window_fields)
+    )
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script],
         capture_output=True,

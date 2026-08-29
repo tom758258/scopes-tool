@@ -908,6 +908,10 @@ def _validate_parameters(
                     parameters["window"] = normalize_measurement_window(parameters["window"])
                 except Exception as exc:
                     raise WebUIRequestError(str(exc)) from exc
+                if parameters["window"] == "GATE" and capabilities.series != "4000X":
+                    raise WebUIRequestError(
+                        f"measurement window gate is not supported by {capabilities.series} models"
+                    )
             else:
                 _reject_query_parameters(parameters, ("window",), command)
     elif command == "reference-save":
