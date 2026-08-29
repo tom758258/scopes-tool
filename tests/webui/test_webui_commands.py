@@ -28,6 +28,7 @@ from scopes_tool_webui.jobs import JobManager, JobManagerShuttingDown
 
 
 MODEL_ID = "keysight-dsox4024a"
+STATIC_ROOT = Path(__file__).resolve().parents[2] / "src" / "scopes_tool_webui" / "static"
 
 
 def wait_for_job(client: TestClient, job_id: str) -> dict:
@@ -213,6 +214,28 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     }
     assert commands["measure-show"]["presentation"]["kind"] == "one-way"
     assert commands["measure-show"]["presentation"]["action"] == "show"
+
+    acquisition_type = next(
+        field for field in commands["acquisition"]["fields"] if field["name"] == "type"
+    )
+    assert acquisition_type["label_key"] == "acquisition.type"
+    assert acquisition_type["help_by_value"] == {
+        "normal": "acquisition.type.normal",
+        "average": "acquisition.type.average",
+        "high_resolution": "acquisition.type.high_resolution",
+        "peak": "acquisition.type.peak",
+    }
+
+    intensity_value = next(
+        field for field in commands["display-intensity"]["fields"] if field["name"] == "value"
+    )
+    assert intensity_value["label_key"] == "display-intensity.value"
+    assert intensity_value["help_key"] == "display-intensity.value"
+    zh = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    en = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    assert '"command.display-intensity": "波形顯示強度"' in zh
+    assert '"field.display-intensity.value": "亮度"' in zh
+    assert '"field.display-intensity.value": "Brightness"' in en
 
     persistence_fields = {
         field["name"]: field for field in commands["display-persistence"]["fields"]

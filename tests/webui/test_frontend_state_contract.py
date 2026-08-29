@@ -3131,8 +3131,12 @@ def test_acquisition_form_shows_average_count_only_after_readback() -> None:
         import assert from "node:assert/strict";
         import fs from "node:fs";
 
-        globalThis.testTranslate = (key) => key;
-        globalThis.testHasTranslation = () => false;
+        const translations = {
+          "help.acquisition.type.average": "Average help",
+          "help.acquisition.type.peak": "Peak help",
+        };
+        globalThis.testTranslate = (key) => translations[key] ?? key;
+        globalThis.testHasTranslation = (key) => key in translations;
         globalThis.Option = class {
           constructor(text, value) { this.textContent = text; this.value = value; }
         };
@@ -3157,8 +3161,20 @@ def test_acquisition_form_shows_average_count_only_after_readback() -> None:
           dataset: { visibleIf: JSON.stringify([{ field: "type", equals: "average" }]) },
           hidden: false,
         };
+        const help = {
+          dataset: {
+            helpByValue: JSON.stringify({
+              average: "acquisition.type.average",
+              peak: "acquisition.type.peak",
+            }),
+            helpFor: "type",
+          },
+          textContent: "",
+          hidden: false,
+        };
         const container = {
           querySelectorAll(selector) {
+            if (selector === "[data-help-by-value]") return [help];
             if (selector === "[data-visible-if]") return [wrapper];
             if (selector === "[data-field]") return [type, count];
             return [];
@@ -3176,6 +3192,12 @@ def test_acquisition_form_shows_average_count_only_after_readback() -> None:
         assert.equal(type.value, "average");
         assert.equal(count.value, "16");
         assert.equal(wrapper.hidden, false);
+        assert.equal(help.textContent, "Average help");
+        assert.equal(help.hidden, false);
+        form.syncResult({ result: { type: "peak", count: 16 } });
+        assert.equal(type.value, "peak");
+        assert.equal(wrapper.hidden, true);
+        assert.equal(help.textContent, "Peak help");
         '''
     )
     completed = subprocess.run(

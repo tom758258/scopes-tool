@@ -343,11 +343,16 @@ export class CommandForm {
       wrapper.append(choices);
     }
     wrapper.append(input);
-    if (field.help || field.help_key) {
+    if (field.help || field.help_key || field.help_by_value) {
       const help = document.createElement("small");
       help.className = "field-help";
-      const helpKey = field.help_key ? `help.${field.help_key}` : `help.${field.name}`;
-      help.textContent = hasTranslation(helpKey) ? translate(helpKey) : field.help;
+      if (field.help_by_value) {
+        help.dataset.helpByValue = JSON.stringify(field.help_by_value);
+        help.dataset.helpFor = field.name;
+      } else {
+        const helpKey = field.help_key ? `help.${field.help_key}` : `help.${field.name}`;
+        help.textContent = hasTranslation(helpKey) ? translate(helpKey) : field.help;
+      }
       wrapper.append(help);
     }
     return wrapper;
@@ -390,6 +395,19 @@ export class CommandForm {
   }
 
   refreshVisibility() {
+    this.container.querySelectorAll("[data-help-by-value]").forEach((help) => {
+      let helpByValue;
+      try {
+        helpByValue = JSON.parse(help.dataset.helpByValue);
+      } catch (_error) {
+        helpByValue = {};
+      }
+      const input = this.container.querySelector(`[data-field="${help.dataset.helpFor}"]`);
+      const helpName = input ? helpByValue[input.value] : undefined;
+      const helpKey = helpName ? `help.${helpName}` : "";
+      help.textContent = helpKey && hasTranslation(helpKey) ? translate(helpKey) : "";
+      help.hidden = !help.textContent;
+    });
     this.container.querySelectorAll("[data-visible-if]").forEach((wrapper) => {
       let predicates;
       try {

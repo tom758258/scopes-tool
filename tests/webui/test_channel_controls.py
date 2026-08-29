@@ -174,6 +174,8 @@ def test_channel_summary_result_locale_keys_exist() -> None:
         assert f'"{key}":' in en
     assert '"description.channel-summary":' in zh
     assert '"description.channel-summary":' in en
+    assert '"results.channelSummary.field.scale": "垂直刻度"' in zh
+    assert '"results.channelSummary.field.scale": "Vertical scale"' in en
     # Polluting generic labels must remain generic
     assert '"results.field.scale": "刻度"' in zh
     assert '"results.field.range": "範圍"' in zh

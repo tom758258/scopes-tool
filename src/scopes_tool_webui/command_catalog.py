@@ -151,6 +151,13 @@ COMMANDS = (
                 "type": "enum",
                 "options": ("normal", "average", "high_resolution", "peak"),
                 "required_if": [{"field": "action", "equals": "set"}],
+                "label_key": "acquisition.type",
+                "help_by_value": {
+                    "normal": "acquisition.type.normal",
+                    "average": "acquisition.type.average",
+                    "high_resolution": "acquisition.type.high_resolution",
+                    "peak": "acquisition.type.peak",
+                },
             },
             {
                 "name": "count",
@@ -375,7 +382,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "label_key": "display-label.enabled", "help_key": "display-label.enabled"},
         ),
     },
     {
@@ -392,8 +399,8 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "mode", "type": "enum", "options": ("minimum", "infinite", "timed"), "visible_if": [{"field": "action", "equals": "set"}], "required_if": [{"field": "action", "equals": "set"}]},
-            {"name": "seconds", "type": "number", "minimum": 0.1, "maximum": 60.0, "visible_if": [{"field": "action", "equals": "set"}, {"field": "mode", "equals": "timed"}], "required_if": [{"field": "action", "equals": "set"}, {"field": "mode", "equals": "timed"}]},
+            {"name": "mode", "type": "enum", "options": ("minimum", "infinite", "timed"), "visible_if": [{"field": "action", "equals": "set"}], "required_if": [{"field": "action", "equals": "set"}], "label_key": "display-persistence.mode", "help_key": "display-persistence.mode"},
+            {"name": "seconds", "type": "number", "minimum": 0.1, "maximum": 60.0, "visible_if": [{"field": "action", "equals": "set"}, {"field": "mode", "equals": "timed"}], "required_if": [{"field": "action", "equals": "set"}, {"field": "mode", "equals": "timed"}], "label_key": "display-persistence.seconds", "help_key": "display-persistence.seconds"},
         ),
     },
     {
@@ -403,7 +410,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "value", "type": "integer", "minimum": 0, "maximum": 100, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "value", "type": "integer", "minimum": 0, "maximum": 100, "required_if": [{"field": "action", "equals": "set"}], "label_key": "display-intensity.value", "help_key": "display-intensity.value"},
         ),
     },
     {

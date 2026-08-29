@@ -339,6 +339,7 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "results.field.probe_ratio": "Probe ratio",
           "results.field.label": "Label",
           "results.field.units": "Units",
+          "results.channelSummary.field.scale": "Vertical scale",
         };
         const zhLabels = {
           "command.channel-summary": "通道設定摘要",
@@ -350,6 +351,7 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "results.field.probe_ratio": "探棒衰減比",
           "results.field.label": "標籤",
           "results.field.units": "單位",
+          "results.channelSummary.field.scale": "垂直刻度",
         };
 
         const translate = (key, values = {}) => {
@@ -421,7 +423,9 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         assert.equal(zhWorkspace.children.length, 1);
         assert.equal(zhWorkspace.children[0].children[0].textContent, "通道 1", "zh-TW title");
         const zhFields = zhWorkspace.children[0].children[1];
+        const zhDt = zhFields.children.filter((n) => n.tagName === "DT").map((n) => n.textContent);
         const zhDd = zhFields.children.filter((n) => n.tagName === "DD").map((n) => n.textContent);
+        assert(zhDt.some((t) => t === "垂直刻度"), "channel-summary-specific zh-TW label");
         assert(zhDd.some((t) => t === "已啟用"), "zh-TW boolean enabled");
 
         // D: unknown/missing unit must not fall back to V

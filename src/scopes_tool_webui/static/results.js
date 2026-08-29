@@ -271,7 +271,7 @@ function renderChannelSummaryWorkspaceResult(container, channels) {
 
     keys.forEach((key) => {
       const dt = document.createElement("dt");
-      dt.textContent = resultFieldLabel(key);
+      dt.textContent = channelSummaryFieldLabel(key);
       const dd = document.createElement("dd");
       dd.textContent = formatChannelValue(key, entry[key], entry);
       fieldsList.append(dt, dd);
@@ -280,6 +280,11 @@ function renderChannelSummaryWorkspaceResult(container, channels) {
     card.append(fieldsList);
     container.append(card);
   });
+}
+
+function channelSummaryFieldLabel(name) {
+  const key = `results.channelSummary.field.${name}`;
+  return hasTranslation(key) ? translate(key) : resultFieldLabel(name);
 }
 
 function unwrapStructuredResult(result) {
