@@ -207,8 +207,8 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-display.enabled"},
         ),
     },
     {
@@ -218,7 +218,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {
                 "name": "volts_per_division",
                 "type": "number",
@@ -242,7 +242,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "text", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-label.text"},
         ),
     },
@@ -253,7 +253,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {
                 "name": "volts",
                 "type": "number",
@@ -270,7 +270,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "coupling", "type": "enum", "options": ("ac", "dc"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-coupling.coupling"},
         ),
     },
@@ -281,7 +281,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {
                 "name": "ratio",
                 "type": "number",
@@ -298,7 +298,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-bandwidth-limit.enabled"},
         ),
     },
@@ -309,7 +309,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "impedance", "type": "enum", "options": ("one_meg", "fifty"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-impedance.impedance"},
         ),
     },
@@ -320,7 +320,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-invert.enabled"},
         ),
     },
@@ -331,7 +331,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {
                 "name": "volts",
                 "type": "number",
@@ -349,7 +349,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "units", "type": "enum", "options": ("volt", "amp"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-units.units"},
         ),
     },
@@ -360,7 +360,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-vernier.enabled"},
         ),
     },
@@ -371,7 +371,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "seconds", "type": "number", "minimum": -100e-9, "maximum": 100e-9, "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-probe-skew.seconds"},
         ),
     },
@@ -508,7 +508,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "reference-display.enabled"},
         ),
     },
     {
@@ -734,7 +734,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "dvm-enable.enabled"},
         ),
     },
     {
@@ -764,7 +764,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "dvm-auto-range.enabled"},
         ),
     },
     {
@@ -794,7 +794,7 @@ COMMANDS = (
             {"name": "window", "type": "string"},
             {"name": "center_hz", "type": "number", "minimum": 0},
             {"name": "span_hz", "type": "number", "minimum": 0},
-            {"name": "display", "type": "boolean"},
+            {"name": "display", "type": "boolean", "help_key": "fft.display"},
         ),
     },
     {
@@ -805,7 +805,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-display.enabled"},
         ),
     },
     {
