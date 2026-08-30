@@ -319,6 +319,38 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert(toggleMarkers.container.children.some(
           (node) => node.className === "measurement-front-panel-results",
         ));
+
+        const unknownCatalog = {
+          activeModelId: null,
+          commands: ["measure-results", "measure-show", "measure-clear"].map((id) => ({ id })),
+          fieldsFor: () => [{ name: "action" }],
+          supportReason: () => "",
+        };
+        const unknownModel = new globalThis.MeasurementEditor(new FakeNode("div"), unknownCatalog, {
+          isExecutionBusy: () => false,
+          isCommandAvailable: () => false,
+          executeCommand: async () => ({ status: "completed" }),
+        });
+        unknownModel.renderFrontPanel();
+        unknownModel.applyBusyState();
+        assert(unknownModel.controls.frontPanelRefresh);
+        assert(unknownModel.controls.frontPanelShow);
+        assert(unknownModel.controls.frontPanelHide);
+        assert(unknownModel.controls.frontPanelClear);
+        assert.equal(unknownModel.controls.frontPanelRefresh.disabled, true);
+        assert.equal(unknownModel.controls.frontPanelShow.disabled, true);
+        assert.equal(unknownModel.controls.frontPanelHide.disabled, true);
+        assert.equal(unknownModel.controls.frontPanelClear.disabled, true);
+        assert.equal(unknownModel.controls.frontPanelShow.className, "secondary");
+        assert.equal(unknownModel.controls.frontPanelHide.className, "secondary");
+        const collectText = (node) => {
+          const texts = [];
+          if (node.textContent) texts.push(node.textContent);
+          for (const child of node.children || []) texts.push(...collectText(child));
+          return texts;
+        };
+        const allTexts = collectText(unknownModel.container);
+        assert.equal(allTexts.includes("measurement.frontPanel.markersAlwaysOn"), false);
         '''
     ).replace("__CATALOG__", catalog_json)
     completed = subprocess.run(

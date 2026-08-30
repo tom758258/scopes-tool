@@ -192,7 +192,7 @@ export class MeasurementEditor {
     notes.className = "measurement-front-panel-notes";
     const actionDefinitions = [
       ["frontPanelRefresh", "measure-results", "measurement.frontPanel.refresh", "primary"],
-      ...(this.markerToggleSupported() === true
+      ...(this.markerToggleSupported() !== false
         ? [
           ["frontPanelShow", "measure-show", "measurement.frontPanel.show", "secondary", true],
           ["frontPanelHide", "measure-show", "measurement.frontPanel.hide", "secondary", false],
