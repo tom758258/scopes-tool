@@ -632,6 +632,9 @@ def _validate_parameter_shapes(
         field_type = field["type"]
         if field_type == "integer":
             parsed = _integer(value, name)
+            options = field.get("mode_options", {}).get(mode, field.get("options"))
+            if options is not None and parsed not in options:
+                raise WebUIRequestError(f"{name} must be one of: {', '.join(map(str, options))}")
         elif field_type == "number":
             parsed = _finite_number(value, name)
         elif field_type == "boolean":

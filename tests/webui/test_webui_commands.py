@@ -511,6 +511,39 @@ def test_command_catalog_projects_fixed_numeric_constraints() -> None:
         }
 
 
+def test_capture_points_integer_options_rejected_pre_queue() -> None:
+    # valid fixed choices pass pre-queue
+    for points in (1000, 5000, 10000):
+        request = validate_job_request({
+            "command": "capture",
+            "mode": "live",
+            "model_id": MODEL_ID,
+            "resource": "USB0::TEST::INSTR",
+            "parameters": {"channel": 1, "points": points, "format": "byte"},
+        })
+        assert request["parameters"]["points"] == points
+
+    # fixed illegal value rejected before queue (integer+options membership)
+    with pytest.raises(WebUIRequestError, match="points must be one of: 1000, 5000, 10000"):
+        validate_job_request({
+            "command": "capture",
+            "mode": "live",
+            "model_id": MODEL_ID,
+            "resource": "USB0::TEST::INSTR",
+            "parameters": {"channel": 1, "points": 1001, "format": "byte"},
+        })
+
+    # string still rejected as integer type
+    with pytest.raises(WebUIRequestError, match="points must be an integer"):
+        validate_job_request({
+            "command": "capture",
+            "mode": "live",
+            "model_id": MODEL_ID,
+            "resource": "USB0::TEST::INSTR",
+            "parameters": {"channel": 1, "points": "5000", "format": "byte"},
+        })
+
+
 def test_simulated_timebase_and_display_persistence_use_setting_readback() -> None:
     client = TestClient(app)
 
