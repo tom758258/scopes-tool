@@ -152,6 +152,7 @@ COMMANDS = (
                 "options": ("normal", "average", "high_resolution", "peak"),
                 "required_if": [{"field": "action", "equals": "set"}],
                 "label_key": "acquisition.type",
+                "help_key": "acquisition.type",
                 "help_by_value": {
                     "normal": "acquisition.type.normal",
                     "average": "acquisition.type.average",
@@ -495,7 +496,7 @@ COMMANDS = (
         "label": "Screenshot",
         "modes": ("live", "simulate"),
         "fields": (
-            {"name": "background", "type": "enum", "options": ("black", "white"), "default": "black"},
+            {"name": "background", "type": "enum", "options": ("black", "white"), "default": "black", "help_key": "screenshot.background"},
         ),
     },
     {
@@ -581,7 +582,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "format", "type": "enum", "options": SAVE_IMAGE_FORMATS, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "format", "type": "enum", "options": SAVE_IMAGE_FORMATS, "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-image-format.format"},
         ),
     },
     {
@@ -640,7 +641,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "format", "type": "enum", "options": SAVE_WAVEFORM_FORMATS, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "format", "type": "enum", "options": SAVE_WAVEFORM_FORMATS, "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-waveform-format.format"},
         ),
     },
     {
@@ -681,9 +682,9 @@ COMMANDS = (
         "label": "Waveform capture",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "points", "type": "integer", "options": (1000, 5000, 10000), "default": 1000},
-            {"name": "format", "type": "enum", "options": ("byte", "word"), "default": "byte"},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
+            {"name": "points", "type": "integer", "options": (1000, 5000, 10000), "default": 1000, "help_key": "capture.points"},
+            {"name": "format", "type": "enum", "options": ("byte", "word"), "default": "byte", "help_key": "capture.format"},
         ),
     },
     {
@@ -762,7 +763,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "mode", "type": "enum", "options": DVM_MODES, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "mode", "type": "enum", "options": DVM_MODES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "dvm-mode.mode"},
         ),
     },
     {
@@ -797,11 +798,11 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}]},
-            {"name": "units", "type": "string"},
-            {"name": "window", "type": "string"},
-            {"name": "center_hz", "type": "number", "minimum": 0},
-            {"name": "span_hz", "type": "number", "exclusive_minimum": 0},
+            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel.target"},
+            {"name": "units", "type": "string", "help_key": "fft.units"},
+            {"name": "window", "type": "string", "help_key": "fft.window"},
+            {"name": "center_hz", "type": "number", "minimum": 0, "help_key": "fft.center_hz"},
+            {"name": "span_hz", "type": "number", "exclusive_minimum": 0, "help_key": "fft.span_hz"},
             {"name": "display", "type": "boolean", "help_key": "fft.display"},
         ),
     },
@@ -824,9 +825,9 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "scale", "type": "number", "exclusive_minimum": 0},
-            {"name": "range_value", "type": "number", "exclusive_minimum": 0},
-            {"name": "offset", "type": "number"},
+            {"name": "scale", "type": "number", "exclusive_minimum": 0, "help_key": "math-vertical.scale"},
+            {"name": "range_value", "type": "number", "exclusive_minimum": 0, "help_key": "math-vertical.range_value"},
+            {"name": "offset", "type": "number", "help_key": "math-vertical.offset"},
         ),
     },
     {
@@ -917,9 +918,9 @@ _TV_LINE_MODES = ("line-field1", "line-field2", "line-alternate")
 TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command(
         "trigger-edge", "Trigger", "Edge trigger", (
-            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
-            _command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
-            _command_field("slope", "enum", options=_TRIGGER_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="channel.target"),
+            _command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.level"),
+            _command_field("slope", "enum", options=_TRIGGER_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.slope"),
         ),
         group="edge",
         editor="trigger",
@@ -1122,12 +1123,12 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     },
     {
         "id": "segmented-capture", "category": "Segmented Memory", "label": "Segmented capture", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1), _command_field("segments", "integer", minimum=2, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
+        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1, help_key="channel.target"), _command_field("segments", "integer", minimum=2, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
     },
     {
         "id": "capture-batch", "category": "Workflow", "label": "Capture batch", "modes": ("live", "simulate"),
         "group": "capture",
-        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("count", "integer", minimum=1, default=1), _command_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("count", "integer", minimum=1, default=1), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
         "id": "measure-log", "category": "Workflow", "label": "Measurement log", "modes": ("live", "simulate"),
@@ -1149,7 +1150,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     {
         "id": "triggered-capture-series", "category": "Workflow", "label": "Triggered capture series", "modes": ("live", "simulate", "dry-run"),
         "group": "triggered",
-        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("count", "integer", minimum=1, required=True), _command_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("count", "integer", minimum=1, required=True), _command_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
 )
 

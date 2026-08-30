@@ -508,6 +508,7 @@ def test_command_catalog_projects_fixed_numeric_constraints() -> None:
             "type": "integer",
             "options": [1000, 5000, 10000],
             "default": 1000,
+            "help_key": "capture.points",
         }
 
 
