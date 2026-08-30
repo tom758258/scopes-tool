@@ -2577,14 +2577,20 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
 
-def test_desktop_command_panels_stretch_to_the_same_grid_row_height() -> None:
+def test_command_panels_use_fixed_desktop_height_and_internal_overflow() -> None:
     styles = read_static("styles.css")
+    root = extract_css_rule(styles, ":root {")
     workbench = extract_css_rule(styles, ".command-workbench {")
-    rail = extract_css_rule(styles, ".rail {")
+    panels = extract_css_rule(styles, ".rail, .workspace-panel {")
+    workspace_content = extract_css_rule(styles, ".workspace-content {")
 
-    assert "align-items: stretch;" in workbench
-    assert "align-items: start;" not in workbench
-    assert "height:" not in rail
+    assert "--command-panel-height: 560px;" in root
+    assert "align-items: start;" in workbench
+    assert "height: var(--command-panel-height);" in panels
+    assert "overflow: hidden;" in panels
+    assert "flex: 1;" in workspace_content
+    assert "min-height: 0;" in workspace_content
+    assert "overflow: auto;" in workspace_content
     assert ".rail, .workspace-panel { height: auto; min-height: 0; }" in styles
 
 
