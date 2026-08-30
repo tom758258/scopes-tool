@@ -1,4 +1,5 @@
 import { hasTranslation, translate } from "/static/i18n.js";
+import { applyNumericFieldConstraints } from "/static/numeric-input.js";
 
 const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
@@ -292,14 +293,11 @@ export class CommandForm {
       }
     } else {
       input = document.createElement("input");
-      input.type = ["integer", "number"].includes(field.type) ? "number" : "text";
-      if (field.type === "integer") input.step = "1";
-      if (field.type === "number") input.step = "any";
-      if (field.minimum !== undefined) input.min = field.minimum;
-      if (field.exclusive_minimum !== undefined) {
-        input.dataset.exclusiveMinimum = String(field.exclusive_minimum);
+      if (["integer", "number"].includes(field.type)) {
+        applyNumericFieldConstraints(input, field);
+      } else {
+        input.type = "text";
       }
-      if (field.maximum !== undefined) input.max = field.maximum;
     }
     input.dataset.field = field.name;
     input.dataset.type = field.type;

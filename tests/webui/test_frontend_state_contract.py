@@ -10,6 +10,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
+NUMERIC_INPUT_PATH = STATIC_ROOT / "numeric-input.js"
 
 
 def read_static(name: str) -> str:
@@ -1308,8 +1309,10 @@ def test_generic_form_multi_choice_and_two_state_boolean_presentation() -> None:
         const source = [
           "const translate = globalThis.testTranslate;",
           "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
           .replace(/^export class /gm, "class ")
           + "\nglobalThis.CommandForm = CommandForm;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
@@ -1426,7 +1429,7 @@ def test_generic_form_multi_choice_and_two_state_boolean_presentation() -> None:
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
         capture_output=True,
         text=True,
         check=False,
@@ -2624,10 +2627,19 @@ def test_hidden_elements_override_component_display_rules() -> None:
     assert "[hidden] { display: none !important; }" in styles
 
 
-def test_number_fields_allow_fractional_html_values() -> None:
-    source = read_static("command-form.js")
+def test_numeric_inputs_share_spinner_presentation_rules() -> None:
+    command_form = read_static("command-form.js")
+    workflow_editor = read_static("workflow-editor.js")
+    helper = read_static("numeric-input.js")
+    styles = read_static("styles.css")
 
-    assert 'if (field.type === "number") input.step = "any";' in source
+    assert 'from "/static/numeric-input.js";' in command_form
+    assert 'from "/static/numeric-input.js";' in workflow_editor
+    assert 'input.step = "any";' in helper
+    assert 'input.classList.add("no-number-spinner");' in helper
+    assert "input.no-number-spinner::-webkit-inner-spin-button" in styles
+    assert "input.no-number-spinner::-webkit-outer-spin-button" in styles
+    assert "-moz-appearance: textfield;" in styles
 
 
 def test_summary_uses_only_scopes_supported_states() -> None:
@@ -2657,8 +2669,10 @@ def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
         const source = [
           "const translate = globalThis.testTranslate;",
           "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
           .replace(/^export class /gm, "class ")
           + "\nglobalThis.formApi = { CommandForm };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
@@ -2699,41 +2713,106 @@ def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
         );
 
         globalThis.document = {
-          createElement: (tag) => ({
-            tagName: tag.toUpperCase(),
-            children: [],
-            dataset: {},
-            value: "",
-            type: "",
-            required: false,
-            customValidity: "",
-            append(...nodes) { this.children.push(...nodes); },
-            setCustomValidity(message) { this.customValidity = message; },
-            checkValidity() { return this.customValidity === ""; },
-            reportValidity() { this.reported = true; return false; },
-            closest: () => null,
-          }),
+          createElement: (tag) => {
+            const classes = new Set();
+            return {
+              tagName: tag.toUpperCase(),
+              children: [],
+              dataset: {},
+              value: "",
+              type: "",
+              required: false,
+              customValidity: "",
+              classList: {
+                add: (...names) => names.forEach((name) => classes.add(name)),
+                contains: (name) => classes.has(name),
+              },
+              append(...nodes) { this.children.push(...nodes); },
+              setCustomValidity(message) { this.customValidity = message; },
+              checkValidity() {
+                if (this.customValidity !== "") return false;
+                if (this.required && this.value === "") return false;
+                if (this.value !== "" && this.type === "number") {
+                  const value = Number(this.value);
+                  if (!Number.isFinite(value)) return false;
+                  if (this.min !== undefined && value < Number(this.min)) return false;
+                  if (this.max !== undefined && value > Number(this.max)) return false;
+                  if (this.step === "1" && !Number.isInteger(value)) return false;
+                }
+                return true;
+              },
+              reportValidity() { this.reported = true; return false; },
+              closest: () => null,
+            };
+          },
         };
-        const renderedForm = new globalThis.formApi.CommandForm({}, null);
-        const wrapper = renderedForm.field({
-          name: "timeout_seconds",
+        const renderedForm = new globalThis.formApi.CommandForm({}, { optionsFor: () => [] });
+        const renderedInput = (field) => renderedForm.field(field).children[1];
+
+        const timeout = renderedInput({
+          name: "seconds_per_division",
           type: "number",
           exclusive_minimum: 0,
           required: true,
         });
-        const timeout = wrapper.children[1];
+        assert.equal(timeout.type, "number");
+        assert.equal(timeout.step, "any");
+        assert.equal(timeout.min, "0");
         assert.equal(timeout.dataset.exclusiveMinimum, "0");
+        assert.equal(timeout.classList.contains("no-number-spinner"), true);
         timeout.value = "0";
         assert.equal(valuesFor(timeout), null);
         assert.equal(timeout.customValidity, "form.greaterThan");
         assert.equal(timeout.reported, true);
 
+        timeout.value = "-1";
+        assert.equal(valuesFor(timeout), null);
+
         timeout.value = "1e-12";
-        assert.deepEqual(valuesFor(timeout), { timeout_seconds: 1e-12 });
+        assert.deepEqual(valuesFor(timeout), { seconds_per_division: 1e-12 });
+
+        const skew = renderedInput({
+          name: "seconds",
+          type: "number",
+          minimum: -1e-7,
+          maximum: 1e-7,
+        });
+        assert.equal(skew.min, "-1e-7");
+        assert.equal(skew.max, "1e-7");
+        assert.equal(skew.classList.contains("no-number-spinner"), true);
+        skew.value = "-5e-8";
+        assert.deepEqual(valuesFor(skew), { seconds: -5e-8 });
+        skew.value = "-2e-7";
+        assert.equal(valuesFor(skew), null);
+
+        const width = renderedInput({
+          name: "width",
+          type: "integer",
+          minimum: 4,
+          maximum: 64,
+        });
+        assert.equal(width.step, "1");
+        assert.equal(width.min, "4");
+        assert.equal(width.max, "64");
+        assert.equal(width.classList.contains("no-number-spinner"), false);
+        width.value = "8";
+        assert.deepEqual(valuesFor(width), { width: 8 });
+        width.value = "8.5";
+        assert.equal(valuesFor(width), null);
+
+        const baud = renderedInput({
+          name: "baud_rate",
+          type: "integer",
+          minimum: 10000,
+          maximum: 5000000,
+          spinner: false,
+        });
+        assert.equal(baud.step, "1");
+        assert.equal(baud.classList.contains("no-number-spinner"), true);
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
         capture_output=True,
         text=True,
         check=False,
@@ -2772,8 +2851,10 @@ def test_generic_form_applies_conditional_required_fields() -> None:
         const source = [
           "const translate = globalThis.testTranslate;",
           "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
           .replace(/^export class /gm, "class ")
           + "\nglobalThis.CommandForm = CommandForm;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
@@ -2835,7 +2916,7 @@ def test_generic_form_applies_conditional_required_fields() -> None:
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
         capture_output=True,
         text=True,
         check=False,
@@ -2856,8 +2937,10 @@ def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
         const source = [
           "const translate = globalThis.testTranslate;",
           "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
           .replace(/^export class /gm, "class ")
           + "\nglobalThis.CommandForm = CommandForm;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
@@ -3019,7 +3102,7 @@ def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
         capture_output=True,
         text=True,
         check=False,
@@ -3040,8 +3123,10 @@ def test_workflow_multi_select_serializes_the_existing_csv_contract() -> None:
         const source = [
           "const translate = globalThis.testTranslate;",
           "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
           .replace(/^export class /gm, "class ")
           + "\nglobalThis.CommandForm = CommandForm;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
@@ -3071,7 +3156,7 @@ def test_workflow_multi_select_serializes_the_existing_csv_contract() -> None:
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(command_form_path)],
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
         capture_output=True,
         text=True,
         check=False,
@@ -3166,8 +3251,10 @@ def test_acquisition_form_shows_average_count_only_after_readback() -> None:
         const source = [
           "const translate = globalThis.testTranslate;",
           "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
           .replace(/^export class /gm, "class ")
           + "\nglobalThis.CommandForm = CommandForm;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
@@ -3224,7 +3311,7 @@ def test_acquisition_form_shows_average_count_only_after_readback() -> None:
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(form_path)],
+        ["node", "--input-type=module", "--eval", script, str(form_path), str(NUMERIC_INPUT_PATH)],
         capture_output=True,
         text=True,
         check=False,

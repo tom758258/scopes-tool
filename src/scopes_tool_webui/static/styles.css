@@ -496,3 +496,13 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 @media (max-width: 560px) {
   .mode-options { flex-wrap: wrap; }
 }
+
+input.no-number-spinner::-webkit-inner-spin-button,
+input.no-number-spinner::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+input.no-number-spinner {
+  -moz-appearance: textfield;
+}

@@ -222,6 +222,11 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
             this.options = [];
             this.selectedOptions = [];
             this.parentElement = null;
+            const classes = new Set();
+            this.classList = {
+              add: (...names) => names.forEach((name) => classes.add(name)),
+              contains: (name) => classes.has(name),
+            };
           }
           get value(){ return this._value; }
           set value(v){
@@ -340,7 +345,10 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         const measureFields = __MEASURE_FIELDS__;
         const measureWindowFields = __MEASURE_WINDOW_FIELDS__;
 
-        let source = fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/command-form.js"),"utf8");
+        let source = [
+          fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/numeric-input.js"),"utf8"),
+          fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/command-form.js"),"utf8"),
+        ].join("\n");
         source = source.replace(/^import[^\n]*\r?\n/gm,"").replace(/^export /gm,"");
         source += "\nglobalThis.CommandForm=CommandForm;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);

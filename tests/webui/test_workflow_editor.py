@@ -14,6 +14,7 @@ from scopes_tool_webui.commands import command_catalog
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
 EDITOR_SOURCE = STATIC_ROOT / "workflow-editor.js"
+NUMERIC_INPUT_SOURCE = STATIC_ROOT / "numeric-input.js"
 
 
 def read_static(name: str) -> str:
@@ -91,6 +92,11 @@ WORKFLOW_EDITOR_HARNESS = r'''
         this.className = "";
         this.textContent = "";
         this.customValidity = "";
+        const classes = new Set();
+        this.classList = {
+          add: (...names) => names.forEach((name) => classes.add(name)),
+          contains: (name) => classes.has(name),
+        };
       }
       addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
       dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
@@ -149,8 +155,12 @@ WORKFLOW_EDITOR_HARNESS = r'''
     globalThis.translate = (key) => key;
     globalThis.hasTranslation = () => false;
 
-    const source = fs.readFileSync(process.argv[1], "utf8")
+    const source = [
+      fs.readFileSync(process.argv[2], "utf8"),
+      fs.readFileSync(process.argv[1], "utf8"),
+    ].join("\n")
       .replace(/^import[^\n]*\r?\n/gm, "")
+      .replace(/^export function /gm, "function ")
       .replace(/^export /gm, "")
       + "\nglobalThis.workflowApi = { WorkflowEditor };";
     await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
@@ -206,12 +216,36 @@ def run_editor_behavior(script: str) -> None:
             "--eval",
             textwrap.dedent(WORKFLOW_EDITOR_HARNESS) + textwrap.dedent(script),
             str(EDITOR_SOURCE),
+            str(NUMERIC_INPUT_SOURCE),
         ],
         capture_output=True,
         text=True,
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_number_fields_share_numeric_constraints() -> None:
+    run_editor_behavior(
+        r'''
+        const editor = buildEditor();
+        const interval = editor.buildNumberField({
+          name: "interval_seconds", type: "number", minimum: 0,
+        }, "").input;
+        assert.equal(interval.type, "number");
+        assert.equal(interval.step, "any");
+        assert.equal(interval.min, "0");
+        assert.equal(interval.classList.contains("no-number-spinner"), true);
+
+        const timeout = editor.buildNumberField({
+          name: "trigger_timeout_seconds", type: "number", exclusive_minimum: 0,
+        }, "").input;
+        assert.equal(timeout.min, "0");
+        assert.equal(timeout.dataset.exclusiveMinimum, "0");
+        assert.equal(timeout.classList.contains("no-number-spinner"), true);
+        '''
+    )
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

@@ -462,6 +462,54 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
         )
 
 
+def test_command_catalog_projects_fixed_numeric_constraints() -> None:
+    commands = {
+        entry["id"]: entry
+        for entry in TestClient(app).get("/api/commands").json()
+    }
+    cases = (
+        ("timebase-scale", "seconds_per_division", {"exclusive_minimum": 0}),
+        ("channel-scale", "volts_per_division", {"exclusive_minimum": 0}),
+        ("channel-probe-skew", "seconds", {"minimum": -1e-7, "maximum": 1e-7}),
+        ("fft", "span_hz", {"exclusive_minimum": 0}),
+        ("math-vertical", "scale", {"exclusive_minimum": 0}),
+        ("trigger-delay", "time_seconds", {"minimum": 4e-9, "maximum": 10}),
+        ("trigger-edge-burst", "idle_time", {"minimum": 1e-8, "maximum": 10}),
+        ("serial-uart", "baud_rate", {"minimum": 100, "maximum": 12_000_000, "spinner": False}),
+        ("serial-can", "baud_rate", {"minimum": 10_000, "maximum": 5_000_000, "spinner": False}),
+        ("serial-can", "sample_point", {"minimum": 30, "maximum": 90}),
+        ("serial-trigger-spi", "width", {"minimum": 4, "maximum": 64}),
+        ("serial-trigger-can", "data_length", {"minimum": 1, "maximum": 8}),
+        ("serial-search-uart", "data", {"minimum": 0, "maximum": 255}),
+        ("serial-search-spi", "width", {"minimum": 1, "maximum": 10}),
+        ("serial-search-can", "data_length", {"minimum": 1, "maximum": 8}),
+        ("segmented-memory", "segments", {"minimum": 2}),
+        ("segmented-capture", "segments", {"minimum": 2}),
+    )
+    for command_id, field_name, expected in cases:
+        field = next(
+            field for field in commands[command_id]["fields"]
+            if field["name"] == field_name
+        )
+        assert {key: field[key] for key in expected} == expected
+
+    for command_id in (
+        "segmented-capture",
+        "capture-batch",
+        "triggered-capture-series",
+    ):
+        points = next(
+            field for field in commands[command_id]["fields"]
+            if field["name"] == "points"
+        )
+        assert points == {
+            "name": "points",
+            "type": "enum",
+            "options": [1000, 5000, 10000],
+            "default": 1000,
+        }
+
+
 def test_simulated_timebase_and_display_persistence_use_setting_readback() -> None:
     client = TestClient(app)
 

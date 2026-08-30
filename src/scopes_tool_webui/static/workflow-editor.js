@@ -1,4 +1,5 @@
 import { hasTranslation, translate } from "/static/i18n.js";
+import { applyNumericFieldConstraints } from "/static/numeric-input.js";
 
 function translatedChoice(value) {
   const key = `enum.${String(value)}`;
@@ -307,13 +308,7 @@ export class WorkflowEditor {
     const label = document.createElement("span");
     label.textContent = translate(`field.${field.name}`);
     const input = document.createElement("input");
-    input.type = "number";
-    input.step = field.type === "integer" ? "1" : "any";
-    if (field.minimum !== undefined) input.min = String(field.minimum);
-    if (field.exclusive_minimum !== undefined) {
-      input.dataset.exclusiveMinimum = String(field.exclusive_minimum);
-    }
-    if (field.maximum !== undefined) input.max = String(field.maximum);
+    applyNumericFieldConstraints(input, field);
     input.required = field.required === true;
     input.value = value || "";
     input.dataset.workflowField = field.name;
