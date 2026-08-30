@@ -2527,8 +2527,8 @@ specified. Pass `-Backend "@py"` to run the same validation with pyvisa-py:
 .\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -Backend "@py"
 ```
 
-System VISA and pyvisa-py are separate backend executions. Existing System VISA
-validation evidence does not establish hardware validation for pyvisa-py.
+System VISA and pyvisa-py are separate backend selections for each live
+validation run.
 
 ### Live CLI Validation
 

@@ -179,6 +179,7 @@ foreach ($functionName in @("Assert-FiniteNumber", "Invoke-PairMeasurementReadin
 }
 
 $Resource = "SIMULATED"
+$script:LiveConnectionArguments = @("--live", "--resource", $Resource)
 $script:Scenario = ""
 $script:ReadinessCalls = 0
 $script:SleepCalls = 0
