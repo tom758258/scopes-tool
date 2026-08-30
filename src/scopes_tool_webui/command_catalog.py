@@ -936,7 +936,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command("trigger-edge-slope", "Trigger", "Edge trigger slope", (_command_field("slope", "enum", options=_TRIGGER_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.slope"),), group="edge", editor="trigger"),
     _action_command(
         "trigger-edge-level", "Trigger", "Edge trigger level", (
-            _command_field("source_channel", "integer", minimum=1, maximum=4, help_key="trigger-edge.source_channel"),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, help_key="trigger-edge-level.source_channel"),
             _command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.level"),
         ),
         group="edge",
