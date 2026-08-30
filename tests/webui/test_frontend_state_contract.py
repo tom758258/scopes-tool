@@ -2577,6 +2577,17 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
 
+def test_desktop_command_panels_stretch_to_the_same_grid_row_height() -> None:
+    styles = read_static("styles.css")
+    workbench = extract_css_rule(styles, ".command-workbench {")
+    rail = extract_css_rule(styles, ".rail {")
+
+    assert "align-items: stretch;" in workbench
+    assert "align-items: start;" not in workbench
+    assert "height:" not in rail
+    assert ".rail, .workspace-panel { height: auto; min-height: 0; }" in styles
+
+
 def test_live_mode_badge_is_neutral_and_utility_glyphs_are_centered() -> None:
     styles = read_static("styles.css")
     icon_button = extract_css_rule(styles, ".icon-button")

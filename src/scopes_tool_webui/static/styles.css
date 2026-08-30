@@ -250,10 +250,10 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .pc-output-command-note { margin-bottom: 10px; }
 .advanced-command-button { font-size: 12px; }
 
-.command-workbench { display: grid; grid-template-columns: minmax(380px, 42%) minmax(0, 1fr); align-items: start; gap: 14px; min-width: 0; }
+.command-workbench { display: grid; grid-template-columns: minmax(380px, 42%) minmax(0, 1fr); align-items: stretch; gap: 14px; min-width: 0; }
 .command-workbench.collapsed { display: none; }
 .rail, .workspace-panel { min-width: 0; overflow: hidden; }
-.rail { display: flex; flex-direction: column; height: 560px; }
+.rail { display: flex; flex-direction: column; }
 .rail-head { align-items: stretch; flex-direction: column; padding: 11px 16px; }
 .rail-head > strong { flex: 0 0 auto; }
 .filter-field input { min-height: var(--control-h); }
