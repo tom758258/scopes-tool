@@ -233,6 +233,9 @@ export class MeasurementEditor {
     }
     actions.append(buttons);
     if (notes.children.length) actions.append(notes);
+    this.container.append(actions);
+    this.frontPanelContent = null;
+    if (!this.hooks.isCommandAvailable("measure-results")) return;
     const result = document.createElement("section");
     result.className = "measurement-front-panel-results";
     const heading = document.createElement("strong");
@@ -241,7 +244,7 @@ export class MeasurementEditor {
     this.frontPanelContent.className = "measurement-front-panel-content";
     this.frontPanelContent.setAttribute("aria-live", "polite");
     result.append(heading, this.frontPanelContent);
-    this.container.append(actions, result);
+    this.container.append(result);
     this.renderFrontPanelReadback();
   }
 

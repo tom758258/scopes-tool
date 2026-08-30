@@ -284,6 +284,10 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert(notes2000x.children.some(
           (node) => node.textContent === "measurement.frontPanel.markersAlwaysOn",
         ));
+        assert.equal(model2000x.frontPanelContent, null);
+        assert.equal(model2000x.container.children.some(
+          (node) => node.className === "measurement-front-panel-results",
+        ), false);
 
         const model3000x = frontPanelEditor("keysight-dsox3024a");
         assert.equal(model3000x.controls.frontPanelRefresh.disabled, false);
@@ -297,6 +301,14 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           notes3000x.children[0].textContent,
           "measurement.frontPanel.markersAlwaysOn",
         );
+        const results3000x = model3000x.container.children.find(
+          (node) => node.className === "measurement-front-panel-results",
+        );
+        assert(results3000x);
+        assert.equal(
+          results3000x.children[1].children[0].textContent,
+          "measurement.frontPanel.unread",
+        );
 
         const toggleMarkers = frontPanelEditor("keysight-dsox4024a");
         assert.equal(toggleMarkers.controls.frontPanelRefresh.disabled, false);
@@ -304,6 +316,9 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(toggleMarkers.controls.frontPanelHide.className, "secondary");
         assert.equal(toggleMarkers.controls.frontPanelClear.className, "danger");
         assert.equal(toggleMarkers.controls.frontPanelClear.disabled, false);
+        assert(toggleMarkers.container.children.some(
+          (node) => node.className === "measurement-front-panel-results",
+        ));
         '''
     ).replace("__CATALOG__", catalog_json)
     completed = subprocess.run(
