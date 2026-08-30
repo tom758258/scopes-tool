@@ -528,7 +528,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
-            {"name": "label", "type": "string", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "label", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "reference-label.label"},
         ),
     },
     {
@@ -558,7 +558,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "path", "type": "string", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "path", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-pwd.path"},
         ),
     },
     {
@@ -570,7 +570,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "name", "type": "string", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "name", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-filename.name"},
         ),
     },
     {
@@ -682,7 +682,7 @@ COMMANDS = (
         "label": "Waveform capture",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "capture.channel"},
             {"name": "points", "type": "integer", "options": (1000, 5000, 10000), "default": 1000, "help_key": "capture.points"},
             {"name": "format", "type": "enum", "options": ("byte", "word"), "default": "byte", "help_key": "capture.format"},
         ),
@@ -798,7 +798,7 @@ COMMANDS = (
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel.target"},
+            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}], "help_key": "fft.source_channel"},
             {"name": "units", "type": "string", "help_key": "fft.units"},
             {"name": "window", "type": "string", "help_key": "fft.window"},
             {"name": "center_hz", "type": "number", "minimum": 0, "help_key": "fft.center_hz"},
@@ -918,7 +918,7 @@ _TV_LINE_MODES = ("line-field1", "line-field2", "line-alternate")
 TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command(
         "trigger-edge", "Trigger", "Edge trigger", (
-            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="channel.target"),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.source_channel"),
             _command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.level"),
             _command_field("slope", "enum", options=_TRIGGER_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.slope"),
         ),
@@ -933,11 +933,11 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         group="edge",
         editor="trigger",
     ),
-    _action_command("trigger-edge-slope", "Trigger", "Edge trigger slope", (_command_field("slope", "enum", options=_TRIGGER_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="edge", editor="trigger"),
+    _action_command("trigger-edge-slope", "Trigger", "Edge trigger slope", (_command_field("slope", "enum", options=_TRIGGER_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.slope"),), group="edge", editor="trigger"),
     _action_command(
         "trigger-edge-level", "Trigger", "Edge trigger level", (
-            _command_field("source_channel", "integer", minimum=1, maximum=4),
-            _command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, help_key="trigger-edge.source_channel"),
+            _command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.level"),
         ),
         group="edge",
         editor="trigger",
@@ -1123,7 +1123,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     },
     {
         "id": "segmented-capture", "category": "Segmented Memory", "label": "Segmented capture", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1, help_key="channel.target"), _command_field("segments", "integer", minimum=2, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
+        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1, help_key="capture.channel"), _command_field("segments", "integer", minimum=2, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
     },
     {
         "id": "capture-batch", "category": "Workflow", "label": "Capture batch", "modes": ("live", "simulate"),
