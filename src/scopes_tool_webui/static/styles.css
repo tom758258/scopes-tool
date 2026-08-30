@@ -350,6 +350,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .measurement-front-panel-action > button { justify-self: start; }
 .measurement-front-panel-action > .primary { box-shadow: var(--shadow-sm); }
 .measurement-front-panel-action .command-support-reason { max-width: 220px; margin: 0; }
+.measurement-front-panel-marker-note { flex-basis: 100%; }
 .measurement-front-panel-results { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); }
 .measurement-front-panel-results > strong { display: block; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .measurement-front-panel-content { overflow-x: auto; padding: 10px; }

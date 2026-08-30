@@ -1263,7 +1263,6 @@ _SETTING_READBACK_FIELDS = {
 
 _ONE_WAY_ACTIONS = {
     "display-vectors": "enable",
-    "measure-show": "show",
 }
 
 _READ_COMMANDS = frozenset(

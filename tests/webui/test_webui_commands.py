@@ -378,8 +378,11 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
         "action_field": "action",
         "apply_value": "set",
     }
-    assert commands["measure-show"]["presentation"]["kind"] == "one-way"
-    assert commands["measure-show"]["presentation"]["action"] == "show"
+    assert commands["measure-show"]["presentation"]["kind"] == "setting"
+    assert commands["measure-show"]["presentation"]["action"] == "apply"
+    assert commands["measure-show"]["presentation"]["action_field"] == "action"
+    assert commands["measure-show"]["presentation"]["query_value"] == "query"
+    assert commands["measure-show"]["presentation"]["apply_value"] == "set"
     measure_show = commands["measure-show"]
     assert measure_show["presentation"]["models"][model_2000x]["fields"]["enabled"]["hidden"] is True
     assert measure_show["presentation"]["models"][model_3000x]["fields"]["enabled"]["hidden"] is True

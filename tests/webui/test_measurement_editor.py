@@ -41,11 +41,21 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert '"measurement.frontPanel.readFailedCleared"' in editor_source
     assert '"danger"' in editor_source
     assert ".danger {" in styles
+    assert ".measurement-front-panel-marker-note { flex-basis: 100%; }" in styles
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
         import fs from "node:fs";
         import path from "node:path";
+
+        class FakeNode {
+          constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; }
+          append(...nodes) { this.children.push(...nodes); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          addEventListener(_name, handler) { this.handler = handler; }
+          setAttribute() {}
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
 
         globalThis.hasTranslation = () => false;
         globalThis.translate = (key) => key;
@@ -216,51 +226,9 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.deepEqual(calls.at(-1), ["measure-clear", {}]);
         assert.equal(editor.frontPanelState.kind, "cleared");
         assert.equal(editor.frontPanelReadError, null);
-        '''
-    ).replace("__CATALOG__", catalog_json)
-    completed = subprocess.run(
-        ["node", "--input-type=module"],
-        cwd=REPO_ROOT,
-        input=script,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
 
-
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
-def test_measurement_marker_actions_follow_projected_model_fields() -> None:
-    editor_source = (REPO_ROOT / "src/scopes_tool_webui/static/measurement-editor.js").read_text(
-        encoding="utf-8"
-    )
-    script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; }
-          append(...nodes) { this.children.push(...nodes); }
-          replaceChildren(...nodes) { this.children = [...nodes]; }
-          addEventListener(_name, handler) { this.handler = handler; }
-          setAttribute() {}
-        }
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
-        globalThis.translate = (key) => key;
-        globalThis.CommandForm = class CommandForm {};
-        const source = fs.readFileSync(process.argv[1], "utf8")
-          .replace(/^import.*$/gm, "")
-          .replace("export class MeasurementEditor", "class MeasurementEditor")
-          + "\nglobalThis.MeasurementEditor = MeasurementEditor;";
-        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
-
-        const makeEditor = (modelId) => {
-          const catalog = {
+        const markerEditor = (modelId) => {
+          const markerCatalog = {
             activeModelId: modelId,
             commands: [{ id: "measure-show" }],
             fieldsFor: () => modelId === "keysight-dsox4024a"
@@ -268,29 +236,30 @@ def test_measurement_marker_actions_follow_projected_model_fields() -> None:
               : [{ name: "action" }],
             supportReason: () => "",
           };
-          const editor = new globalThis.MeasurementEditor(new FakeNode("div"), catalog, {
+          const instance = new globalThis.MeasurementEditor(new FakeNode("div"), markerCatalog, {
             isExecutionBusy: () => false,
             isCommandAvailable: () => true,
             executeCommand: async () => ({ status: "completed" }),
           });
-          editor.renderFrontPanel();
-          return editor;
+          instance.renderFrontPanel();
+          return instance;
         };
-
-        const fixed = makeEditor("keysight-dsox3024a");
-        assert.equal(fixed.controls.frontPanelShow, undefined);
-        assert.equal(fixed.controls.frontPanelHide, undefined);
-        assert(fixed.container.children[0].children.some((node) => node.textContent === "measurement.frontPanel.markersAlwaysOn"));
-
-        const toggle = makeEditor("keysight-dsox4024a");
-        assert.equal(toggle.controls.frontPanelShow.className, "secondary");
-        assert.equal(toggle.controls.frontPanelHide.className, "secondary");
-        assert.equal(toggle.controls.frontPanelClear.className, "danger");
+        const fixedMarkers = markerEditor("keysight-dsox3024a");
+        assert.equal(fixedMarkers.controls.frontPanelShow, undefined);
+        assert.equal(fixedMarkers.controls.frontPanelHide, undefined);
+        assert(fixedMarkers.container.children[0].children.some(
+          (node) => node.textContent === "measurement.frontPanel.markersAlwaysOn",
+        ));
+        const toggleMarkers = markerEditor("keysight-dsox4024a");
+        assert.equal(toggleMarkers.controls.frontPanelShow.className, "secondary");
+        assert.equal(toggleMarkers.controls.frontPanelHide.className, "secondary");
+        assert.equal(toggleMarkers.controls.frontPanelClear.className, "danger");
         '''
-    )
+    ).replace("__CATALOG__", catalog_json)
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(REPO_ROOT / "src/scopes_tool_webui/static/measurement-editor.js")],
+        ["node", "--input-type=module"],
         cwd=REPO_ROOT,
+        input=script,
         capture_output=True,
         text=True,
         encoding="utf-8",
