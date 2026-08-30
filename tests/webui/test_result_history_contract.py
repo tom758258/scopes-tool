@@ -477,3 +477,83 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_measurement_workspace_result_presents_operator_fields_and_preserves_dry_run_plan() -> None:
+    script = textwrap.dedent(
+        r"""
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.textContent = ""; this.className = ""; }
+          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
+          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        const translations = {
+          "enum.period": "Period", "enum.phase": "Phase",
+          "enum.channel1": "Channel 1", "enum.channel2": "Channel 2",
+          "results.field.measurement": "Measurement",
+          "results.field.channel": "Channel",
+          "results.field.reference_channel": "Reference channel",
+          "results.field.result": "Result",
+          "results.field.planned_scpi": "Planned SCPI",
+          "results.summary.completed": "Completed",
+        };
+        const translate = (key) => translations[key] || key;
+        const hasTranslation = (key) => key in translations;
+        const translateJobStatus = (status) => status;
+        globalThis.testTranslate = translate;
+        globalThis.testHasTranslation = hasTranslation;
+        globalThis.testTranslateJobStatus = translateJobStatus;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          "const translateJobStatus = globalThis.testTranslateJobStatus;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
+          + "\nglobalThis.resultApi = { renderWorkspaceResult };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const api = globalThis.resultApi;
+        const makeJob = (result) => ({ command: "measure", result: { result } });
+        const fieldTexts = (container) => container.children.map((field) => field.children.map((node) => node.textContent));
+
+        const single = new FakeNode("div");
+        api.renderWorkspaceResult(single, makeJob({
+          item: "period", channel: 1, reference_channel: null,
+          value: 0.001, unit: "s", valid: true,
+          command: ":MEASure:PERiod? CHANnel1", raw_value: "0.001", parameters: { item: "period" },
+        }));
+        assert.deepEqual(fieldTexts(single), [
+          ["Period", "Measurement"], ["Channel 1", "Channel"], ["0.001 s", "Result"],
+        ]);
+        assert(!JSON.stringify(fieldTexts(single)).includes(":MEASure:"));
+        assert(!JSON.stringify(fieldTexts(single)).includes("parameters"));
+
+        const pair = new FakeNode("div");
+        api.renderWorkspaceResult(pair, makeJob({
+          item: "phase", channel: 1, reference_channel: 2,
+          value: 32.4, unit: "deg", valid: true,
+          command: ":MEASure:PHASe? CHANnel1,CHANnel2",
+        }));
+        assert.deepEqual(fieldTexts(pair), [
+          ["Phase", "Measurement"], ["Channel 1", "Channel"],
+          ["Channel 2", "Reference channel"], ["32.4 deg", "Result"],
+        ]);
+
+        const dryRun = new FakeNode("div");
+        api.renderWorkspaceResult(dryRun, makeJob({ planned_scpi: [":MEASure:PERiod? CHANnel1"] }));
+        const dryRunText = JSON.stringify(fieldTexts(dryRun));
+        assert(dryRunText.includes("Planned SCPI"));
+        assert(dryRunText.includes(":MEASure:PERiod? CHANnel1"));
+        """
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

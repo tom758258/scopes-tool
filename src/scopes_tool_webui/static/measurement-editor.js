@@ -32,6 +32,15 @@ export class MeasurementEditor {
     return this.catalog.commands.find((command) => command.id === id) || null;
   }
 
+  markerToggleSupported() {
+    if (!this.catalog?.activeModelId) return null;
+    const definition = this.definition("measure-show");
+    const fields = this.catalog?.fieldsFor
+      ? this.catalog.fieldsFor(definition)
+      : definition?.fields || [];
+    return fields.some((field) => field.name === "enabled");
+  }
+
   selectedDefinition() {
     const selected = this.hooks.selectedCommand?.();
     return selected?.editor === "measurement" ? selected : null;
@@ -177,24 +186,26 @@ export class MeasurementEditor {
     this.controls = {};
     const actions = document.createElement("div");
     actions.className = "measurement-front-panel-actions";
-    for (const [name, command, key] of [
-      ["frontPanelRefresh", "measure-results", "measurement.frontPanel.refresh"],
-      ["frontPanelShow", "measure-show", "measurement.frontPanel.show"],
-      ["frontPanelClear", "measure-clear", "measurement.frontPanel.clear"],
-    ]) {
+    const actionDefinitions = [
+      ["frontPanelRefresh", "measure-results", "measurement.frontPanel.refresh", "primary"],
+      ...(this.markerToggleSupported() === true
+        ? [
+          ["frontPanelShow", "measure-show", "measurement.frontPanel.show", "secondary", true],
+          ["frontPanelHide", "measure-show", "measurement.frontPanel.hide", "secondary", false],
+        ]
+        : []),
+      ["frontPanelClear", "measure-clear", "measurement.frontPanel.clear", "danger"],
+    ];
+    for (const [name, command, key, className, enabled] of actionDefinitions) {
       const wrapper = document.createElement("div");
       wrapper.className = "measurement-front-panel-action";
       const button = document.createElement("button");
       button.type = "button";
-      button.className = name === "frontPanelRefresh"
-        ? "primary"
-        : name === "frontPanelClear"
-          ? "danger"
-          : "secondary";
+      button.className = className;
       button.textContent = translate(key);
       button.addEventListener("click", () => {
         if (command === "measure-results") void this.refreshFrontPanel();
-        else if (command === "measure-show") void this.showFrontPanel();
+        else if (command === "measure-show") void this.showFrontPanel(enabled);
         else void this.clearFrontPanel();
       });
       this.controls[name] = button;
@@ -207,6 +218,12 @@ export class MeasurementEditor {
         wrapper.append(note);
       }
       actions.append(wrapper);
+    }
+    if (this.markerToggleSupported() === false) {
+      const note = document.createElement("p");
+      note.className = "compact-note measurement-front-panel-marker-note";
+      note.textContent = translate("measurement.frontPanel.markersAlwaysOn");
+      actions.append(note);
     }
     const result = document.createElement("section");
     result.className = "measurement-front-panel-results";
@@ -236,9 +253,9 @@ export class MeasurementEditor {
     this.renderFrontPanelReadback();
   }
 
-  async showFrontPanel() {
+  async showFrontPanel(enabled = true) {
     if (!this.hooks.isCommandAvailable("measure-show")) return;
-    await this.hooks.executeCommand("measure-show", { action: "set" });
+    await this.hooks.executeCommand("measure-show", { action: "set", enabled });
   }
 
   async clearFrontPanel() {
@@ -260,10 +277,14 @@ export class MeasurementEditor {
       error.textContent = translate(
         this.frontPanelState.kind === "results"
           ? "measurement.frontPanel.readFailedStale"
-          : this.frontPanelReadError,
+          : this.frontPanelState.kind === "empty"
+            ? "measurement.frontPanel.readFailedEmpty"
+            : this.frontPanelState.kind === "cleared"
+              ? "measurement.frontPanel.readFailedCleared"
+              : this.frontPanelReadError,
       );
       this.frontPanelContent.append(error);
-      if (this.frontPanelState.kind === "unread") return;
+      if (this.frontPanelState.kind !== "results") return;
     }
     if (this.frontPanelState.kind !== "results") {
       const note = document.createElement("p");
@@ -334,6 +355,7 @@ export class MeasurementEditor {
     for (const [name, command] of [
       ["frontPanelRefresh", "measure-results"],
       ["frontPanelShow", "measure-show"],
+      ["frontPanelHide", "measure-show"],
       ["frontPanelClear", "measure-clear"],
     ]) {
       if (this.controls[name]) {

@@ -1407,8 +1407,8 @@ class Oscilloscope:
     def clear_measurements(self) -> None:
         self._measurement_controller().clear()
 
-    def configure_measurement_show(self) -> None:
-        self._measurement_controller().set_show_on()
+    def configure_measurement_show(self, enabled: bool = True) -> None:
+        self._measurement_controller().set_show(enabled)
 
     def query_measurement_show(self) -> MeasurementShowState:
         return self._measurement_controller().query_show()

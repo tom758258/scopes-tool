@@ -418,7 +418,7 @@ def _execute_scope_command(
         return _simple_scope_result("measure-clear")
     if command == "measure-show":
         if parameters["action"] == "set":
-            scope.configure_measurement_show()
+            scope.configure_measurement_show(parameters.get("enabled", True))
         return _state_scope_result("show", scope.query_measurement_show())
     if command == "measure-source":
         if parameters["action"] == "set":

@@ -5,6 +5,7 @@ from scopes_tool_core.errors import ParameterValidationError
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.measurements import (
     MeasurementController,
+    measurement_show_command,
     measurement_source_command,
     measurement_window_command,
     parse_measurement_show,
@@ -44,6 +45,29 @@ def test_measurement_control_builders_validate_channels_and_values():
         measurement_source_command(5, capabilities=capabilities)
 
 
+def test_measurement_show_command_supports_on_and_off():
+    assert measurement_show_command() == ":MEASure:SHOW ON"
+    assert measurement_show_command(True) == ":MEASure:SHOW ON"
+    assert measurement_show_command(False) == ":MEASure:SHOW OFF"
+
+
+@pytest.mark.parametrize("model_id", ("DSOX2004A", "DSOX3024A"))
+def test_measurement_controller_rejects_marker_off_on_2000x_and_3000x(model_id):
+    backend = FakeBackend()
+    controller = MeasurementController(SCPIClient(backend), capabilities_for_model(model_id))
+    with pytest.raises(ParameterValidationError, match="OFF"):
+        controller.set_show(False)
+    assert backend.history == []
+
+
+def test_measurement_controller_accepts_marker_off_on_4000x():
+    backend = FakeBackend(responses={":MEASure:SHOW?": "0"})
+    controller = MeasurementController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
+    controller.set_show(False)
+    assert controller.query_show().enabled is False
+    assert backend.history == [":MEASure:SHOW OFF", ":MEASure:SHOW?"]
+
+
 def test_measurement_controller_command_order_and_raw_state():
     backend = FakeBackend(
         responses={
@@ -79,5 +103,7 @@ def test_measurement_control_simulator_roundtrip():
     scope.configure_measurement_source(1, 2)
     scope.configure_measurement_window("gate")
     assert scope.query_measurement_show().enabled is True
+    scope.configure_measurement_show(False)
+    assert scope.query_measurement_show().enabled is False
     assert scope.query_measurement_source().source2_channel == 2
     assert scope.query_measurement_window().window == "GATE"

@@ -109,7 +109,7 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     )
     fields = {field["name"]: field for field in measure["fields"]}
 
-    assert measure["label"] == "Run measurement"
+    assert measure["label"] == "Measurement settings"
     assert fields["item"]["label_key"] == "measure.item"
     assert fields["item"]["help_by_value"] == {
         item: f"measure.item.{item}" for item in SUPPORTED_MEASUREMENT_ITEMS
@@ -190,14 +190,20 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
 
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
-    assert '"command.measure": "Run measurement"' in english
+    assert '"command.measure": "Measurement settings"' in english
     assert '"command.measure": "量測設定"' in chinese
     assert '"command.front-panel-measurements": "Front-panel measurements"' in english
     assert '"command.front-panel-measurements": "前面板量測"' in chinese
     assert '"command.measure-results": "Front-panel measurement results"' in english
     assert '"command.measure-results": "前面板量測結果"' in chinese
-    assert '"command.measure-show": "Show measurement results"' in english
-    assert '"command.measure-show": "顯示量測結果"' in chinese
+    assert '"command.measure-show": "Measurement marker display"' in english
+    assert '"command.measure-show": "量測標記顯示"' in chinese
+    assert '"measurement.frontPanel.show": "Show measurement markers"' in english
+    assert '"measurement.frontPanel.show": "顯示量測標記"' in chinese
+    assert '"measurement.frontPanel.hide": "Hide measurement markers"' in english
+    assert '"measurement.frontPanel.hide": "隱藏量測標記"' in chinese
+    assert '"measurement.frontPanel.markersAlwaysOn":' in english
+    assert '"measurement.frontPanel.markersAlwaysOn":' in chinese
     assert '"description.measure-results":' in english
     assert 'Latest successful result' in english
     assert '"description.measure-results":' in chinese
@@ -374,6 +380,10 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     }
     assert commands["measure-show"]["presentation"]["kind"] == "one-way"
     assert commands["measure-show"]["presentation"]["action"] == "show"
+    measure_show = commands["measure-show"]
+    assert measure_show["presentation"]["models"][model_2000x]["fields"]["enabled"]["hidden"] is True
+    assert measure_show["presentation"]["models"][model_3000x]["fields"]["enabled"]["hidden"] is True
+    assert "enabled" not in measure_show["presentation"]["models"][MODEL_ID]["fields"]
 
     measure_window = commands["measure-window"]
     window_field = next(field for field in measure_window["fields"] if field["name"] == "window")
@@ -705,6 +715,48 @@ def test_measurement_window_gate_validation_follows_model_series(
 
     request = validate_job_request(payload)
     assert request["parameters"] == {"action": "set", "window": "GATE"}
+
+
+@pytest.mark.parametrize("model_id", ("keysight-dsox2004a", "keysight-dsox3024a"))
+def test_measurement_show_off_validation_follows_model_series(model_id: str) -> None:
+    with pytest.raises(WebUIRequestError, match="measure-show OFF is not supported"):
+        validate_job_request({
+            "command": "measure-show",
+            "mode": "simulate",
+            "model_id": model_id,
+            "parameters": {"action": "set", "enabled": False},
+        })
+
+
+def test_measurement_show_enabled_is_backward_compatible_and_4000x_supports_off() -> None:
+    omitted = validate_job_request({
+        "command": "measure-show",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {"action": "set"},
+    })
+    assert omitted["parameters"] == {"action": "set"}
+    enabled = validate_job_request({
+        "command": "measure-show",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {"action": "set", "enabled": True},
+    })
+    assert enabled["parameters"]["enabled"] is True
+    disabled = validate_job_request({
+        "command": "measure-show",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {"action": "set", "enabled": False},
+    })
+    assert disabled["parameters"]["enabled"] is False
+    with pytest.raises(WebUIRequestError, match="query cannot include enabled"):
+        validate_job_request({
+            "command": "measure-show",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"action": "query", "enabled": True},
+        })
 
 
 def test_measure_and_dvm_query_requests_complete_without_set_only_channels() -> None:

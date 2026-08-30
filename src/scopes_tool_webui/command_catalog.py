@@ -425,7 +425,7 @@ COMMANDS = (
     {
         "id": "measure",
         "category": "Measurement",
-        "label": "Run measurement",
+        "label": "Measurement settings",
         "editor": "measurement",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
@@ -457,11 +457,13 @@ COMMANDS = (
     {
         "id": "measure-show",
         "category": "Measurement",
-        "label": "Show measurement results",
+        "label": "Measurement marker display",
+        "description": "Set or read whether measurement markers are displayed on the instrument.",
         "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "enabled", "type": "boolean", "option_label": "enabled", "help_key": "measure-show.enabled"},
         ),
     },
     {
@@ -1440,6 +1442,8 @@ def _model_command_presentation(
                 option for option in field.get("options", ())
                 if option != "gate" or capabilities.series == "4000X"
             )
+        if entry["id"] == "measure-show" and name == "enabled" and capabilities.series != "4000X":
+            override["hidden"] = True
         if name == "pair_items" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"

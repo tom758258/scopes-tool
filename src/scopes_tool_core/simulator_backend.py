@@ -1188,8 +1188,8 @@ class SimulatorBackend:
             self.marker_y2 = value
         elif upper == ":MEASURE:CLEAR":
             self.measurement_statistics_items.clear()
-        elif upper == ":MEASURE:SHOW ON":
-            self.measurement_show = True
+        elif upper in {":MEASURE:SHOW ON", ":MEASURE:SHOW OFF"}:
+            self.measurement_show = upper.endswith(" ON")
         elif upper.startswith(":MEASURE:SOURCE CHANNEL"):
             match = re.fullmatch(
                 r":MEASure:SOURce\s+CHAN(?:nel)?(\d+)(?:\s*,\s*CHAN(?:nel)?(\d+))?",

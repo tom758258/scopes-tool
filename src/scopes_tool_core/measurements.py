@@ -253,9 +253,16 @@ class MeasurementController:
         validate_measurements_supported(self.capabilities)
         self.scpi.write(measurement_clear_command())
 
-    def set_show_on(self) -> None:
+    def set_show(self, enabled: bool = True) -> None:
         validate_measurements_supported(self.capabilities)
-        self.scpi.write(measurement_show_command())
+        if not enabled and self.capabilities.series != "4000X":
+            raise ParameterValidationError(
+                f"measure-show OFF is not supported by {self.capabilities.series} models"
+            )
+        self.scpi.write(measurement_show_command(enabled))
+
+    def set_show_on(self) -> None:
+        self.set_show(True)
 
     def query_show(self) -> MeasurementShowState:
         validate_measurements_supported(self.capabilities)
@@ -395,11 +402,9 @@ def measurement_results_query() -> str:
 
 
 def measurement_show_command(enabled: bool = True) -> str:
-    if enabled is not True:
-        raise ParameterValidationError(
-            "measure-show OFF is not supported in v1; use ON or query."
-        )
-    return ":MEASure:SHOW ON"
+    if not isinstance(enabled, bool):
+        raise ParameterValidationError("measure-show enabled value must be a boolean.")
+    return ":MEASure:SHOW ON" if enabled else ":MEASure:SHOW OFF"
 
 
 def measurement_show_query() -> str:

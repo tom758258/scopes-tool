@@ -17,7 +17,7 @@ export function commandSupportReason(command, modelId, modelLabel = modelId) {
 
 export function fieldsForModel(command, modelId) {
   const overrides = modelPresentation(command, modelId)?.fields || {};
-  return (command?.fields || []).map((field) => ({
+  return (command?.fields || []).filter((field) => !overrides[field.name]?.hidden).map((field) => ({
     ...field,
     ...(overrides[field.name] || {}),
   }));

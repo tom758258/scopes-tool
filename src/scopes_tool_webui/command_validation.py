@@ -886,9 +886,14 @@ def _validate_parameters(
         action = _action(parameters, command)
         if command == "measure-show":
             if action == "set":
-                pass
+                if "enabled" in parameters:
+                    _require_boolean(parameters["enabled"], "enabled")
+                    if not parameters["enabled"] and capabilities.series != "4000X":
+                        raise WebUIRequestError(
+                            f"measure-show OFF is not supported by {capabilities.series} models"
+                        )
             else:
-                _reject_query_parameters(parameters, (), command)
+                _reject_query_parameters(parameters, ("enabled",), command)
         elif command == "measure-source":
             if action == "set":
                 _require_parameter(parameters, "source_channel", command)

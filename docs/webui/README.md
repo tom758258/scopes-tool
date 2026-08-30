@@ -97,7 +97,9 @@ The Command workbench exposes:
 - Measurement: Measurement settings combines `measure` with the persistent
   `measure-window` setting. Front-panel measurements combines
   `measure-results`, `measure-show`, and `measure-clear` for reading and
-  managing the instrument's displayed measurements. The `measure-source`
+  managing the instrument's displayed measurements and measurement markers.
+  Measurement markers are always on for 2000X/3000X models; 4000X models
+  support showing or hiding them. The `measure-source`
   backend helper remains available to existing API clients but is not shown in
   the normal workbench.
 - Capture: `screenshot`, `capture`

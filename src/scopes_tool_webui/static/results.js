@@ -185,6 +185,10 @@ export function renderWorkspaceResult(container, job, context = {}) {
     renderChannelSummaryWorkspaceResult(container, result.channels);
     return;
   }
+  if (job.command === "measure" && isMeasurementResult(result)) {
+    renderMeasurementWorkspaceResult(container, result);
+    return;
+  }
   if (result && typeof result === "object") {
     const display = unwrapStructuredResult(result);
     const fields = Object.entries(display).filter(([name]) => !isRawDiagnosticField(name));
@@ -280,6 +284,40 @@ function renderChannelSummaryWorkspaceResult(container, channels) {
     card.append(fieldsList);
     container.append(card);
   });
+}
+
+function isMeasurementResult(result) {
+  return Boolean(
+    result
+      && typeof result === "object"
+      && typeof result.item === "string"
+      && Number.isInteger(result.channel)
+      && Object.prototype.hasOwnProperty.call(result, "value")
+      && Object.prototype.hasOwnProperty.call(result, "valid"),
+  );
+}
+
+function measurementItemLabel(item) {
+  const key = `enum.${item}`;
+  return hasTranslation(key) ? translate(key) : String(item);
+}
+
+function measurementResultValue(result) {
+  if (result.value === null || result.value === undefined) return "";
+  return result.unit ? `${result.value} ${result.unit}` : String(result.value);
+}
+
+function renderMeasurementWorkspaceResult(container, result) {
+  const fields = [
+    ["measurement", measurementItemLabel(result.item)],
+    ["channel", channelTitle(result.channel)],
+  ];
+  if (result.reference_channel !== null && result.reference_channel !== undefined) {
+    fields.push(["reference_channel", channelTitle(result.reference_channel)]);
+  }
+  const value = measurementResultValue(result);
+  if (value) fields.push(["result", value]);
+  appendWorkspaceFields(container, fields);
 }
 
 function channelSummaryFieldLabel(name) {

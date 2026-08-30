@@ -34,9 +34,12 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert "measurementEditor?.runMeasurement()" in execute_handler
     assert 'selected?.id === "measure" && editorKind === "measurement"' in header_actions
     assert "measurement-editor-action" not in editor_source
-    assert 'button.className = name === "frontPanelRefresh"' in editor_source
-    assert '? "danger"' in editor_source
-    assert ': "secondary"' in editor_source
+    assert 'button.className = className;' in editor_source
+    assert '["frontPanelHide", "measure-show"]' in editor_source
+    assert '"measurement.frontPanel.markersAlwaysOn"' in editor_source
+    assert '"measurement.frontPanel.readFailedEmpty"' in editor_source
+    assert '"measurement.frontPanel.readFailedCleared"' in editor_source
+    assert '"danger"' in editor_source
     assert ".danger {" in styles
     script = textwrap.dedent(
         r'''
@@ -176,6 +179,11 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         await editor.refreshFrontPanel();
         assert.equal(editor.frontPanelState.kind, "empty");
 
+        jobs["measure-results"] = { status: "failed" };
+        await editor.refreshFrontPanel();
+        assert.equal(editor.frontPanelState.kind, "empty");
+        assert.equal(editor.frontPanelReadError, "measurement.frontPanel.readFailed");
+
         jobs["measure-results"] = {
           status: "completed",
           result: { result: { measurements: { items: [{ label: "Period CH1", value: "1e-3" }] } } },
@@ -200,8 +208,10 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const callCount = calls.length;
         await editor.refreshFrontPanel();
         assert.equal(calls.length, callCount);
-        await editor.showFrontPanel();
-        assert.deepEqual(calls.at(-1), ["measure-show", { action: "set" }]);
+        await editor.showFrontPanel(true);
+        assert.deepEqual(calls.at(-1), ["measure-show", { action: "set", enabled: true }]);
+        await editor.showFrontPanel(false);
+        assert.deepEqual(calls.at(-1), ["measure-show", { action: "set", enabled: false }]);
         await editor.clearFrontPanel();
         assert.deepEqual(calls.at(-1), ["measure-clear", {}]);
         assert.equal(editor.frontPanelState.kind, "cleared");
@@ -212,6 +222,75 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         ["node", "--input-type=module"],
         cwd=REPO_ROOT,
         input=script,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
+
+
+@pytest.mark.skipif(
+    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_measurement_marker_actions_follow_projected_model_fields() -> None:
+    editor_source = (REPO_ROOT / "src/scopes_tool_webui/static/measurement-editor.js").read_text(
+        encoding="utf-8"
+    )
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; }
+          append(...nodes) { this.children.push(...nodes); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          addEventListener(_name, handler) { this.handler = handler; }
+          setAttribute() {}
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.translate = (key) => key;
+        globalThis.CommandForm = class CommandForm {};
+        const source = fs.readFileSync(process.argv[1], "utf8")
+          .replace(/^import.*$/gm, "")
+          .replace("export class MeasurementEditor", "class MeasurementEditor")
+          + "\nglobalThis.MeasurementEditor = MeasurementEditor;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const makeEditor = (modelId) => {
+          const catalog = {
+            activeModelId: modelId,
+            commands: [{ id: "measure-show" }],
+            fieldsFor: () => modelId === "keysight-dsox4024a"
+              ? [{ name: "action" }, { name: "enabled" }]
+              : [{ name: "action" }],
+            supportReason: () => "",
+          };
+          const editor = new globalThis.MeasurementEditor(new FakeNode("div"), catalog, {
+            isExecutionBusy: () => false,
+            isCommandAvailable: () => true,
+            executeCommand: async () => ({ status: "completed" }),
+          });
+          editor.renderFrontPanel();
+          return editor;
+        };
+
+        const fixed = makeEditor("keysight-dsox3024a");
+        assert.equal(fixed.controls.frontPanelShow, undefined);
+        assert.equal(fixed.controls.frontPanelHide, undefined);
+        assert(fixed.container.children[0].children.some((node) => node.textContent === "measurement.frontPanel.markersAlwaysOn"));
+
+        const toggle = makeEditor("keysight-dsox4024a");
+        assert.equal(toggle.controls.frontPanelShow.className, "secondary");
+        assert.equal(toggle.controls.frontPanelHide.className, "secondary");
+        assert.equal(toggle.controls.frontPanelClear.className, "danger");
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(REPO_ROOT / "src/scopes_tool_webui/static/measurement-editor.js")],
+        cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         encoding="utf-8",
