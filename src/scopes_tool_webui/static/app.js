@@ -701,7 +701,7 @@ function syncCommandSelection(draft = null) {
     : translate("commands.selectCommand");
   elements.commandDescription.textContent = selected
     ? editorOwned
-      ? editorKind === "measurement"
+      ? ["measurement", "save-export"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)

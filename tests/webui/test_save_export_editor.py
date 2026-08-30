@@ -46,8 +46,22 @@ def test_save_export_commands_keep_groups_and_route_to_the_dedicated_editor() ->
     assert catalog["save-image-format"]["presentation"]["kind"] == "setting"
     assert catalog["save-waveform-length-max"]["presentation"]["kind"] == "command"
     assert catalog["save-waveform-length-max"]["presentation"]["action"] == "read"
+    assert catalog["save-waveform-length-max"]["fields"] == []
     assert catalog["save-image"]["presentation"]["action"] == "save"
     assert catalog["save-waveform"]["presentation"]["action"] == "save"
+    expected_help = {
+        "save-image-palette": ("palette", "save-image-palette.palette"),
+        "save-image-ink-saver": ("enabled", "save-image-ink-saver.enabled"),
+        "save-image-factors": ("enabled", "save-image-factors.enabled"),
+        "save-waveform-length": ("points", "save-waveform-length.points"),
+        "save-image": ("filename", "save-image.filename"),
+        "save-waveform": ("filename", "save-waveform.filename"),
+    }
+    for command_id, (field_name, help_key) in expected_help.items():
+        field = next(
+            field for field in catalog[command_id]["fields"] if field["name"] == field_name
+        )
+        assert field["help_key"] == help_key
 
 
 def test_save_export_editor_frontend_wiring_and_localization() -> None:
@@ -67,6 +81,8 @@ def test_save_export_editor_frontend_wiring_and_localization() -> None:
     assert "headerActions" in editor_source
     assert "saveExportEditor?.schedulePresentation();" in app_source
     assert "saveExportEditor?.rerender();" in app_source
+    assert '["measurement", "save-export"].includes(editorKind)' in app_source
+    assert "this.catalog.description?.(command)" in editor_source
     assert "applyAll" not in editor_source
     assert "Apply All" not in editor_source
     for key in (
@@ -77,12 +93,22 @@ def test_save_export_editor_frontend_wiring_and_localization() -> None:
         "save-export.editor.currentLoaded",
         "save-export.editor.currentReadFailed",
         "save-export.editor.currentValueUnavailable",
-        "save-export.editor.filenameHelp",
+        "save-export.editor.workspaceLabel",
+        "save-export.editor.workspaceName",
+        "description.save-waveform-length-max",
+        "help.save-image-palette.palette",
+        "help.save-image-ink-saver.enabled",
+        "help.save-image-factors.enabled",
+        "help.save-waveform-length.points",
+        "help.save-image.filename",
+        "help.save-waveform.filename",
     ):
         assert f'"{key}":' in english
         assert f'"{key}":' in chinese
     assert "instrument-side storage" in english
     assert "儀器端儲存裝置" in chinese
+    assert '"command.save-waveform-length-max": "Use maximum waveform length"' in english
+    assert '"command.save-waveform-length-max": "使用最大波形長度"' in chinese
 
 
 SAVE_EXPORT_EDITOR_HARNESS = r'''
@@ -115,7 +141,8 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           "save-export.editor.currentLoaded": "loaded:{{group}}",
           "save-export.editor.currentReadFailed": "failed:{{group}}:{{failed}}/{{total}}",
           "save-export.editor.currentValueUnavailable": "current-value-unavailable",
-          "save-export.editor.filenameHelp": "filename-help",
+          "save-export.editor.workspaceLabel": "workspace",
+          "save-export.editor.workspaceName": "workspace",
         };
         globalThis.translate = (key, values = {}) => {
           let text = translations[key] || key;
@@ -261,7 +288,7 @@ def run_node(script: str) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_save_export_editor_reads_only_the_active_group() -> None:
+def test_save_export_editor_always_shows_and_refreshes_the_complete_workspace() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         const editor = buildEditor();
@@ -270,22 +297,34 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
         assert.deepEqual(submitted, []);
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
           "save-pwd", "save-filename",
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors", "save-image",
+          "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max", "save-waveform",
         ]);
 
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-pwd", "save-filename",
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors", "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max",
         ]);
         assert.ok(submitted.every((entry) => entry.intent === "readback"));
-        assert.ok(editor.entries.every((entry) => entry.form.syncCalls.at(-1)[1] === true));
-        assert.equal(editor.readStatus.textContent, "loaded:path-filename");
+        assert.ok(editor.entries.filter((entry) => entry.kind === "setting").every(
+          (entry) => entry.form.syncCalls.at(-1)[1] === true,
+        ));
+        assert.equal(editor.readStatus.textContent, "loaded:workspace");
 
         submitted.length = 0;
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-pwd", "save-filename",
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors", "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max",
         ]);
 
         submitted.length = 0;
@@ -293,23 +332,22 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
         editor.schedulePresentation();
         await settle();
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
+          "save-pwd", "save-filename",
           "save-image-format", "save-image-palette", "save-image-ink-saver",
           "save-image-factors", "save-image",
+          "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max", "save-waveform",
         ]);
         assert.deepEqual(submitted, []);
-        editor.refreshButton.dispatch("click");
-        await settle();
-        assert.deepEqual(submitted.map((entry) => entry.command), [
-          "save-image-format", "save-image-palette", "save-image-ink-saver",
-          "save-image-factors",
-        ]);
-        assert.equal(editor.readStatus.textContent, "loaded:image");
 
         submitted.length = 0;
         env.selectedId = "save-waveform";
         editor.schedulePresentation();
         await settle();
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
+          "save-pwd", "save-filename",
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors", "save-image",
           "save-waveform-format", "save-waveform-length",
           "save-waveform-length-max", "save-waveform",
         ]);
@@ -317,13 +355,16 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
-          "save-waveform-format", "save-waveform-length", "save-waveform-length-max",
+          "save-pwd", "save-filename",
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors", "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max",
         ]);
         const maximum = editor.entries.find((entry) => entry.id === "save-waveform-length-max");
         assert.equal(maximum.kind, "readonly");
         assert.equal(maximum.button, undefined);
         assert.equal(maximum.output.textContent, "status.enabled");
-        assert.equal(editor.readStatus.textContent, "loaded:waveform");
+        assert.equal(editor.readStatus.textContent, "loaded:workspace");
 
         submitted.length = 0;
         env.contextKey = "ctx-2";
@@ -333,7 +374,10 @@ def test_save_export_editor_reads_only_the_active_group() -> None:
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
-          "save-waveform-format", "save-waveform-length", "save-waveform-length-max",
+          "save-pwd", "save-filename",
+          "save-image-format", "save-image-palette", "save-image-ink-saver",
+          "save-image-factors", "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max",
         ]);
         '''
     )
@@ -357,7 +401,7 @@ def test_save_export_editor_reports_sequential_readback_progress_without_recursi
         editor.scheduleRefresh();
         await settle();
         assert.equal(editor.busy, true);
-        assert.equal(editor.readStatus.textContent, "reading:image:1/4");
+        assert.equal(editor.readStatus.textContent, "reading:workspace:1/9");
         assert.equal(pending.length, 1);
         assert.equal(editor.refreshButton.disabled, true);
         assert.ok(editor.entries.filter((entry) => entry.button).every(
@@ -367,22 +411,28 @@ def test_save_export_editor_reports_sequential_readback_progress_without_recursi
           (entry) => entry.form.disableCalls.at(-1) === true,
         ));
 
-        for (let index = 0; index < 4; index += 1) {
+        for (let index = 0; index < 9; index += 1) {
           pending[index].resolve({
             job_id: `read-${index}`,
             status: "completed",
-            result: { result: {} },
+            result: {
+              result: pending[index].command === "save-waveform-length-max"
+                ? { enabled: true }
+                : {},
+            },
           });
           await settle();
-          if (index < 3) {
-            assert.equal(editor.readStatus.textContent, `reading:image:${index + 2}/4`);
+          if (index < 8) {
+            assert.equal(editor.readStatus.textContent, `reading:workspace:${index + 2}/9`);
           }
         }
         assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-pwd", "save-filename",
           "save-image-format", "save-image-palette", "save-image-ink-saver",
-          "save-image-factors",
+          "save-image-factors", "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max",
         ]);
-        assert.equal(editor.readStatus.textContent, "loaded:image");
+        assert.equal(editor.readStatus.textContent, "loaded:workspace");
         assert.equal(editor.busy, false);
         assert.equal(editor.refreshButton.disabled, false);
         assert.equal(editor.pendingRefresh, false);
@@ -414,7 +464,9 @@ def test_save_export_editor_surfaces_partial_failure_and_allows_retry_and_apply(
           return {
             job_id: `${command}-${submitted.length}`,
             status: "completed",
-            result: { result: {} },
+            result: {
+              result: command === "save-waveform-length-max" ? { enabled: true } : {},
+            },
           };
         };
         const editor = buildEditor();
@@ -423,12 +475,14 @@ def test_save_export_editor_surfaces_partial_failure_and_allows_retry_and_apply(
 
         const palette = editor.entries.find((entry) => entry.id === "save-image-palette");
         assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-pwd", "save-filename",
           "save-image-format", "save-image-palette", "save-image-ink-saver",
-          "save-image-factors",
+          "save-image-factors", "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max",
         ]);
         assert.equal(palette.readError.hidden, false);
         assert.equal(palette.readError.textContent, "current-value-unavailable");
-        assert.equal(editor.readStatus.textContent, "failed:image:1/4");
+        assert.equal(editor.readStatus.textContent, "failed:workspace:1/9");
         assert.equal(editor.busy, false);
         assert.equal(palette.button.disabled, false);
 
@@ -436,12 +490,14 @@ def test_save_export_editor_surfaces_partial_failure_and_allows_retry_and_apply(
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-pwd", "save-filename",
           "save-image-format", "save-image-palette", "save-image-ink-saver",
-          "save-image-factors",
+          "save-image-factors", "save-waveform-format", "save-waveform-length",
+          "save-waveform-length-max",
         ]);
         assert.equal(submitted.some((entry) => entry.command === "save-image"), false);
         assert.equal(palette.readError.hidden, true);
-        assert.equal(editor.readStatus.textContent, "loaded:image");
+        assert.equal(editor.readStatus.textContent, "loaded:workspace");
         assert.ok(editor.entries.filter((entry) => entry.kind === "setting").every(
           (entry) => entry.form.syncCalls.at(-1)[1] === true,
         ));
@@ -515,7 +571,6 @@ def test_save_actions_submit_once_without_group_refresh_and_busy_gates_controls(
         editor.scheduleRefresh();
         await settle();
         const imageEntry = editor.entries.find((entry) => entry.id === "save-image");
-        assert.equal(imageEntry.help.textContent, "filename-help");
         imageEntry.form.valuesResult = { filename: "scope-screen" };
 
         submitted.length = 0;
@@ -547,7 +602,6 @@ def test_save_actions_submit_once_without_group_refresh_and_busy_gates_controls(
         editor.scheduleRefresh();
         await settle();
         const waveformEntry = editor.entries.find((entry) => entry.id === "save-waveform");
-        assert.equal(waveformEntry.help.textContent, "filename-help");
         waveformEntry.form.valuesResult = { filename: "wave-data" };
         submitted.length = 0;
         waveformEntry.button.dispatch("click");

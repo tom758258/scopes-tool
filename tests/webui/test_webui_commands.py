@@ -336,6 +336,16 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
 
     model_2000x = "keysight-dsox2004a"
     model_3000x = "keysight-dsox3024a"
+    for command_id in (
+        "reference-save",
+        "reference-display",
+        "reference-label",
+        "reference-clear",
+        "reference-query",
+    ):
+        slot = commands[command_id]["presentation"]["models"][model_2000x]["fields"]["slot"]
+        assert slot["maximum"] == 2
+        assert slot["options"] == [1, 2]
     impedance = commands["channel-impedance"]["presentation"]["models"][model_2000x]
     assert impedance["fields"]["impedance"]["options"] == ["one_meg"]
     math_display = commands["math-display"]["presentation"]["models"][model_2000x]
@@ -1400,7 +1410,19 @@ def test_command_catalog_exposes_required_field_contracts() -> None:
         field["name"]: field for field in commands["reference-save"]["fields"]
     }
     assert reference_fields["slot"]["required"] is True
+    assert reference_fields["slot"]["label_key"] == "reference.slot"
+    assert reference_fields["slot"]["option_label"] == "reference-waveform"
+    assert reference_fields["slot"]["help_key"] == "reference.slot"
     assert reference_fields["source_channel"]["required"] is True
+    assert reference_fields["source_channel"]["help_key"] == "reference-save.source_channel"
+
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    assert '"field.reference.slot": "Reference waveform"' in english
+    assert '"enum.reference-waveform": "Reference waveform {{value}}"' in english
+    assert '"field.reference.slot": "參考波形"' in chinese
+    assert '"enum.reference-waveform": "參考波形 {{value}}"' in chinese
+    assert "參考波形插槽" not in chinese
 
     scale_fields = {
         field["name"]: field for field in commands["channel-scale"]["fields"]

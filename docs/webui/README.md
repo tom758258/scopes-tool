@@ -233,17 +233,16 @@ Controls and fails rather than overwriting an existing file with that name.
 Selecting a Save / Export command opens the dedicated Save / Export editor
 instead of a plain command form. The Command Browser remains the only
 navigation and keeps the Path / Filename, Image, and Waveform groups; the
-editor adds no second tab layer. Selecting any command shows its whole group.
-Selection is presentation-only. Explicit Refresh reads `save-pwd` and
-`save-filename` for Path / Filename; Image reads its format, palette, ink-saver,
-and measurement-factor settings; Waveform reads its format and length settings
-plus the read-only maximum-length state. Each setting
+editor adds no second tab layer. Selecting any command shows the same complete
+workspace with Default save location, Image, and Waveform sections; selection
+is presentation-only. Explicit Refresh serially reads every readable setting
+in all three sections without running Save Image or Save Waveform. Each setting
 keeps an independent Apply over its existing command, and a successful Apply
-is followed by an active-group readback that preserves unapplied sibling
+is followed by its existing group readback that preserves unapplied sibling
 edits. The editor shows readback progress and identifies settings whose current
-value could not be read; after a failed read, an operator can retry the group
-or enter and apply a new value manually. There is no Apply All, merged payload,
-transaction, or rollback.
+value could not be read; after a failed read, an operator can retry the
+workspace or enter and apply a new value manually. There is no Apply All,
+merged payload, transaction, or rollback.
 
 Save Image and Save Waveform each require their own explicit filename and
 submit only their existing instrument-side Save command. They do not inherit

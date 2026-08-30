@@ -505,8 +505,8 @@ COMMANDS = (
         "label": "Save reference waveform",
         "modes": ("live", "simulate"),
         "fields": (
-            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "required": True},
-            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required": True},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "required": True, "label_key": "reference.slot", "option_label": "reference-waveform", "help_key": "reference.slot"},
+            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required": True, "help_key": "reference-save.source_channel"},
         ),
     },
     {
@@ -516,7 +516,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1, "label_key": "reference.slot", "option_label": "reference-waveform", "help_key": "reference.slot"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "reference-display.enabled"},
         ),
     },
@@ -527,7 +527,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1, "label_key": "reference.slot", "option_label": "reference-waveform", "help_key": "reference.slot"},
             {"name": "label", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "reference-label.label"},
         ),
     },
@@ -537,7 +537,7 @@ COMMANDS = (
         "label": "Clear reference waveform",
         "modes": ("live", "simulate"),
         "fields": (
-            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1, "label_key": "reference.slot", "option_label": "reference-waveform", "help_key": "reference.slot"},
         ),
     },
     {
@@ -546,7 +546,7 @@ COMMANDS = (
         "label": "Reference waveform state",
         "modes": ("live", "simulate"),
         "fields": (
-            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 2, "default": 1, "label_key": "reference.slot", "option_label": "reference-waveform", "help_key": "reference.slot"},
         ),
     },
     {
@@ -558,7 +558,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "path", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-pwd.path"},
+            {"name": "path", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "label_key": "save-pwd.path", "help_key": "save-pwd.path"},
         ),
     },
     {
@@ -570,7 +570,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "name", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-filename.name"},
+            {"name": "name", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "label_key": "save-filename.name", "help_key": "save-filename.name"},
         ),
     },
     {
@@ -594,7 +594,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "palette", "type": "enum", "options": SAVE_IMAGE_PALETTES, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "palette", "type": "enum", "options": SAVE_IMAGE_PALETTES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-image-palette.palette"},
         ),
     },
     {
@@ -606,7 +606,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-image-ink-saver.enabled"},
         ),
     },
     {
@@ -618,7 +618,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-image-factors.enabled"},
         ),
     },
     {
@@ -629,7 +629,7 @@ COMMANDS = (
         "group": "image",
         "editor": "save-export",
         "fields": (
-            {"name": "filename", "type": "string", "required": True},
+            {"name": "filename", "type": "string", "required": True, "label_key": "save-image.filename", "help_key": "save-image.filename"},
         ),
     },
     {
@@ -653,13 +653,13 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "points", "type": "integer", "minimum": 100, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "points", "type": "integer", "minimum": 100, "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-waveform-length.points"},
         ),
     },
     {
         "id": "save-waveform-length-max",
         "category": "Save / Export",
-        "label": "Maximum waveform save length",
+        "label": "Use maximum waveform length",
         "modes": ("live", "simulate"),
         "group": "waveform",
         "editor": "save-export",
@@ -673,7 +673,7 @@ COMMANDS = (
         "group": "waveform",
         "editor": "save-export",
         "fields": (
-            {"name": "filename", "type": "string", "required": True},
+            {"name": "filename", "type": "string", "required": True, "label_key": "save-waveform.filename", "help_key": "save-waveform.filename"},
         ),
     },
     {
@@ -1415,6 +1415,7 @@ def _model_command_presentation(
             override["maximum"] = capabilities.serial_bus_count
         if name == "slot" and capabilities.reference_waveforms:
             override["maximum"] = capabilities.reference_waveforms
+            override["options"] = tuple(range(1, capabilities.reference_waveforms + 1))
         if entry["id"] == "channel-impedance" and name == "impedance":
             override["options"] = (
                 ("one_meg", "fifty")

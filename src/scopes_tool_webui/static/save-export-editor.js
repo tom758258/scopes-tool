@@ -1,6 +1,8 @@
 import { translate } from "/static/i18n.js";
 import { CommandForm } from "/static/command-form.js";
 
+const SAVE_EXPORT_GROUPS = ["path-filename", "image", "waveform"];
+
 function resultValue(payload, key, depth = 0) {
   if (payload === null || typeof payload !== "object" || depth > 4) return undefined;
   if (Object.prototype.hasOwnProperty.call(payload, key)) {
@@ -77,8 +79,7 @@ export class SaveExportEditor {
     return [
       this.hooks.contextKey(),
       String(this.hooks.isAvailable()),
-      selected?.id || "",
-      selected?.group || "",
+      selected ? "save-export" : "",
     ].join("|");
   }
 
@@ -122,10 +123,10 @@ export class SaveExportEditor {
     if (read) this.setBusy(true);
     try {
       this.stateKey = key;
-      this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
+      this.groupHeading.textContent = translate("save-export.editor.workspaceLabel");
       if (this.renderedKey !== key) this.rebuildSections(key);
       this.applyBusyState();
-      if (read) await this.readActiveGroup();
+      if (read) await this.readWorkspace();
     } finally {
       if (read) this.setBusy(false);
     }
@@ -147,31 +148,50 @@ export class SaveExportEditor {
     this.entries = [];
     this.readStatus.textContent = "";
     this.sectionsHost.replaceChildren();
-    const definition = this.selectedDefinition();
-    if (!definition) return;
-    for (const command of this.catalog.commands) {
-      if (command.editor !== "save-export" || command.group !== definition.group) continue;
-      if (!this.catalog.supported(command)) continue;
-      this.entries.push(this.buildSection(command, epoch));
+    if (!this.selectedDefinition()) return;
+    for (const group of SAVE_EXPORT_GROUPS) {
+      const commands = this.catalog.commands.filter(
+        (command) => command.editor === "save-export"
+          && command.group === group
+          && this.catalog.supported(command),
+      );
+      if (!commands.length) continue;
+      const section = document.createElement("section");
+      section.className = "trigger-editor-section save-export-group";
+      const heading = document.createElement("strong");
+      heading.className = "trigger-editor-heading";
+      heading.textContent = this.catalog.groupLabel(group);
+      section.append(heading);
+      this.sectionsHost.append(section);
+      for (const command of commands) {
+        this.entries.push(this.buildCommand(command, epoch, section));
+      }
     }
   }
 
-  buildSection(command, epoch) {
-    const section = document.createElement("section");
-    section.className = "trigger-editor-section";
+  buildCommand(command, epoch, section) {
+    const commandBlock = document.createElement("div");
+    commandBlock.className = "save-export-command";
     const heading = document.createElement("strong");
     heading.className = "trigger-editor-heading";
     heading.textContent = this.catalog.commandLabel(command);
-    section.append(heading);
-    this.sectionsHost.append(section);
+    commandBlock.append(heading);
+    const description = this.catalog.description?.(command);
+    if (description) {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = description;
+      commandBlock.append(note);
+    }
+    section.append(commandBlock);
 
     if (command.id === "save-waveform-length-max") {
       const output = document.createElement("output");
       output.className = "readonly-value";
       output.textContent = "-";
       const readError = this.buildReadError();
-      section.append(output, readError);
-      return { id: command.id, kind: "readonly", output, readError, epoch };
+      commandBlock.append(output, readError);
+      return { id: command.id, group: command.group, kind: "readonly", output, readError, epoch };
     }
 
     const formContainer = document.createElement("div");
@@ -183,11 +203,12 @@ export class SaveExportEditor {
     actionButton.textContent = translate(
       kind === "setting" ? "actions.apply" : `actions.${action}`,
     );
-    section.append(formContainer, actionButton);
+    commandBlock.append(formContainer, actionButton);
     const form = new CommandForm(formContainer, this.catalog);
     form.render(command, {});
     const entry = {
       id: command.id,
+      group: command.group,
       kind,
       action,
       form,
@@ -196,13 +217,7 @@ export class SaveExportEditor {
     };
     if (kind === "setting") {
       entry.readError = this.buildReadError();
-      section.append(entry.readError);
-    } else if (action === "save") {
-      const help = document.createElement("p");
-      help.className = "muted compact-note";
-      help.textContent = translate("save-export.editor.filenameHelp");
-      section.insertBefore(help, actionButton);
-      entry.help = help;
+      commandBlock.append(entry.readError);
     }
     actionButton.addEventListener("click", () => {
       void this.submit(entry);
@@ -252,12 +267,11 @@ export class SaveExportEditor {
     return true;
   }
 
-  async readActiveGroup() {
+  async readEntries(entries, group) {
     const epoch = this.epoch;
-    const readable = this.entries.filter(
+    const readable = entries.filter(
       (entry) => ["setting", "readonly"].includes(entry.kind),
     );
-    const group = this.catalog.groupLabel(this.selectedDefinition()?.group || "");
     readable.forEach((entry) => this.setReadError(entry, false));
     let failed = 0;
     for (const [index, entry] of readable.entries()) {
@@ -277,6 +291,20 @@ export class SaveExportEditor {
       failed,
       total: readable.length,
     });
+  }
+
+  async readWorkspace() {
+    await this.readEntries(
+      this.entries,
+      translate("save-export.editor.workspaceName"),
+    );
+  }
+
+  async readGroup(group) {
+    await this.readEntries(
+      this.entries.filter((entry) => entry.group === group),
+      this.catalog.groupLabel(group),
+    );
   }
 
   async submit(entry) {
@@ -301,7 +329,7 @@ export class SaveExportEditor {
       ) return;
       entry.form.clearDirty();
       entry.form.syncResult(job, false);
-      this.pendingRefresh = true;
+      await this.readGroup(entry.group);
     } finally {
       this.setBusy(false);
     }

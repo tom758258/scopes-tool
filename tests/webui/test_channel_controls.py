@@ -195,6 +195,12 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
     measure_window_fields = next(
         entry["fields"] for entry in command_catalog() if entry["id"] == "measure-window"
     )
+    reference_save = next(
+        entry for entry in command_catalog() if entry["id"] == "reference-save"
+    )
+    reference_slot = next(
+        field for field in reference_save["fields"] if field["name"] == "slot"
+    ) | reference_save["presentation"]["models"]["keysight-dsox4024a"]["fields"]["slot"]
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -335,8 +341,15 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           "form.selectValue":"請選擇值","form.leaveUnchanged":"保持不變","field.channel":"通道","field.enabled":"啟用","field.bus":"匯流排","field.channel-scale.value":"每格數值","field.channel-offset.value":"偏移值","field.channel-range.value":"範圍值",
           "help.measure-window.window":"選擇量測範圍","help.measure-window.window.main":"在主要視窗量測"
         };
+        translations["enum.reference-waveform"] = "Reference waveform {{value}}";
         globalThis.hasTranslation = k=> k in translations;
-        globalThis.translate = k=> translations[k]||k;
+        globalThis.translate = (k, values = {})=> {
+          let text = translations[k] || k;
+          for (const [name, value] of Object.entries(values)) {
+            text = text.replaceAll(`{{${name}}}`, String(value));
+          }
+          return text;
+        };
 
         const catalog = {
           fieldsFor: (cmd)=> cmd.fields,
@@ -344,6 +357,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         };
         const measureFields = __MEASURE_FIELDS__;
         const measureWindowFields = __MEASURE_WINDOW_FIELDS__;
+        const referenceSlot = __REFERENCE_SLOT__;
 
         let source = [
           fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/numeric-input.js"),"utf8"),
@@ -373,7 +387,24 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           assert.equal(typeof vals.channel, "number");
         }
 
-        // B. generic integer without channel label renders numeric
+        // B. projected reference waveform options render as a SELECT
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const cmd = { id:"reference-save", fields:[referenceSlot], presentation:{ kind:"command", action:"save" } };
+          form.render(cmd);
+          const sel = cont.querySelector('[data-field="slot"]');
+          assert.equal(sel.tagName, "SELECT");
+          assert.equal(sel.options.length, 3);
+          assert.equal(sel.options[1].value, "1");
+          assert.equal(sel.options[2].value, "2");
+          assert.equal(sel.options[1].textContent, "Reference waveform 1");
+          assert.equal(sel.options[2].textContent, "Reference waveform 2");
+          sel.value = "2";
+          assert.deepEqual(form.values(), { slot: 2 });
+        }
+
+        // C. generic integer without channel label uses numeric option text
         {
           const cont = makeContainer();
           const form = new CommandForm(cont, catalog);
@@ -511,6 +542,8 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         '''
     ).replace("__MEASURE_FIELDS__", json.dumps(measure_fields)).replace(
         "__MEASURE_WINDOW_FIELDS__", json.dumps(measure_window_fields)
+    ).replace(
+        "__REFERENCE_SLOT__", json.dumps(reference_slot)
     )
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script],

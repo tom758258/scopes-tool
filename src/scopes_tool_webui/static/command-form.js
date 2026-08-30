@@ -6,6 +6,10 @@ const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
 function translateEnum(value, optionLabel = null) {
   const scopedKey = optionLabel ? `enum.${optionLabel}.${String(value)}` : null;
   if (scopedKey && hasTranslation(scopedKey)) return translate(scopedKey);
+  const scopedTemplate = optionLabel ? `enum.${optionLabel}` : null;
+  if (scopedTemplate && hasTranslation(scopedTemplate)) {
+    return translate(scopedTemplate, { value });
+  }
   const key = `enum.${String(value)}`;
   return hasTranslation(key) ? translate(key) : String(value);
 }
@@ -265,7 +269,7 @@ export class CommandForm {
           const channelKey = `enum.channel${option}`;
           label = hasTranslation(channelKey) ? translate(channelKey) : String(option);
         } else {
-          label = translateEnum(option);
+          label = translateEnum(option, field.option_label);
         }
         input.append(new Option(label, String(option)));
       });
