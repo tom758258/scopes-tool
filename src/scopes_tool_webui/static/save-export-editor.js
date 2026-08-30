@@ -78,7 +78,6 @@ export class SaveExportEditor {
     const selected = this.selectedDefinition();
     return [
       this.hooks.contextKey(),
-      String(this.hooks.isAvailable()),
       selected ? "save-export" : "",
     ].join("|");
   }
@@ -113,22 +112,26 @@ export class SaveExportEditor {
     }
     if (read && this.hooks.isExecutionBusy?.()) return;
     const definition = this.selectedDefinition();
-    if (!definition || !this.hooks.isAvailable()) {
+    if (!definition) {
       this.stateKey = null;
       this.clearSections();
       return;
     }
     const key = this.currentStateKey();
-    if (!force && key === this.stateKey) return;
+    if (!force && key === this.stateKey) {
+      this.applyBusyState();
+      return;
+    }
+    this.stateKey = key;
+    this.groupHeading.textContent = translate("save-export.editor.workspaceLabel");
+    if (this.renderedKey !== key) this.rebuildSections(key);
+    this.applyBusyState();
+    if (!read || !this.hooks.isAvailable()) return;
     if (read) this.setBusy(true);
     try {
-      this.stateKey = key;
-      this.groupHeading.textContent = translate("save-export.editor.workspaceLabel");
-      if (this.renderedKey !== key) this.rebuildSections(key);
-      this.applyBusyState();
-      if (read) await this.readWorkspace();
+      await this.readWorkspace();
     } finally {
-      if (read) this.setBusy(false);
+      this.setBusy(false);
     }
   }
 

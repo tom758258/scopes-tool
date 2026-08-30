@@ -99,6 +99,18 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
             .map((command) => command.id),
           ["measure", "front-panel-measurements"],
         );
+        assert.deepEqual(
+          catalog.availableCommands()
+            .filter((command) => command.category === "Reference")
+            .map((command) => command.id),
+          ["reference-waveform"],
+        );
+        assert.deepEqual(
+          catalog.availableCommands()
+            .filter((command) => command.category === "Save / Export")
+            .map((command) => command.id),
+          ["save-export"],
+        );
         catalog.activeMode = "live";
         assert.deepEqual(
           catalog.availableCommands()

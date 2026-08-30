@@ -102,7 +102,6 @@ export class SearchEditor {
     const selected = this.selectedDefinition();
     return [
       this.hooks.contextKey(),
-      String(this.hooks.isAvailable()),
       selected?.id || "",
       selected?.group || "",
       String(this.bus),
@@ -180,10 +179,7 @@ export class SearchEditor {
     this.refreshSerialContext(definition);
     const key = this.currentStateKey();
 
-    // Capability-unsupported selections stay presentable: the view renders
-    // its own unavailable state with disabled controls instead of going
-    // blank. Runtime unavailability (mode, resource, identity) keeps
-    // clearing the view.
+    // Capability-unsupported selections render their own unavailable state.
     if (!this.catalog.supported(definition)) {
       if (!force && key === this.stateKey) return;
       this.stateKey = key;
@@ -193,21 +189,20 @@ export class SearchEditor {
       return;
     }
 
-    if (!this.hooks.isAvailable()) {
-      this.stateKey = null;
-      this.clearView();
+    if (!force && key === this.stateKey) {
+      this.applyBusyState();
       return;
     }
-    if (!force && key === this.stateKey) return;
-    if (read) this.setBusy(true);
+    this.stateKey = key;
+    this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
+    if (this.renderedKey !== key) this.rebuildView(definition);
+    this.applyBusyState();
+    if (!read || !this.hooks.isAvailable()) return;
+    this.setBusy(true);
     try {
-      this.stateKey = key;
-      this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
-      if (this.renderedKey !== key) this.rebuildView(definition);
-      this.applyBusyState();
-      if (read) await this.readActiveView();
+      await this.readActiveView();
     } finally {
-      if (read) this.setBusy(false);
+      this.setBusy(false);
     }
   }
 

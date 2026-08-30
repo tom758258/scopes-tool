@@ -40,9 +40,12 @@ def test_save_export_commands_keep_groups_and_route_to_the_dedicated_editor() ->
     assert {entry["id"] for entry in save_commands} == set(EXPECTED_SAVE_EXPORT_GROUPS)
     for entry in save_commands:
         assert entry.get("editor") == "save-export", entry["id"]
+        assert entry.get("browser_hidden") is True, entry["id"]
         assert entry["group"] == EXPECTED_SAVE_EXPORT_GROUPS[entry["id"]]
 
     catalog = {entry["id"]: entry for entry in command_catalog()}
+    assert catalog["save-export"]["presentation_only"] is True
+    assert catalog["save-export"]["editor"] == "save-export"
     assert catalog["save-image-format"]["presentation"]["kind"] == "setting"
     assert catalog["save-waveform-length-max"]["presentation"]["kind"] == "command"
     assert catalog["save-waveform-length-max"]["presentation"]["action"] == "read"
@@ -81,7 +84,7 @@ def test_save_export_editor_frontend_wiring_and_localization() -> None:
     assert "headerActions" in editor_source
     assert "saveExportEditor?.schedulePresentation();" in app_source
     assert "saveExportEditor?.rerender();" in app_source
-    assert '["measurement", "save-export"].includes(editorKind)' in app_source
+    assert '["measurement", "reference", "save-export"].includes(editorKind)' in app_source
     assert "this.catalog.description?.(command)" in editor_source
     assert "applyAll" not in editor_source
     assert "Apply All" not in editor_source
@@ -211,6 +214,12 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           setting("save-waveform-length", "waveform"),
           def("save-waveform-length-max", "waveform", { kind: "command", action: "read" }),
           save("save-waveform", "waveform"),
+          {
+            id: "save-export", editor: "save-export", category: "Save / Export",
+            label: "Save / Export", modes: ["live", "simulate"],
+            presentation_only: true, presentation: { kind: "command", action: "run" },
+            fields: [],
+          },
         ];
         const catalog = {
           commands,
@@ -219,7 +228,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           commandLabel: (command) => command.label,
         };
         const env = {
-          available: true, executionBusy: false, contextKey: "ctx", selectedId: "save-pwd",
+          available: true, executionBusy: false, contextKey: "ctx", selectedId: "save-export",
         };
         const submitted = [];
         const recordingExecute = async (command, parameters, options) => {
@@ -285,6 +294,41 @@ def run_node(script: str) -> subprocess.CompletedProcess[str]:
         text=True,
         check=False,
     )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_unavailable_workspace_stays_visible_and_recovers() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.available = false;
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.entries.length, 11);
+        assert.equal(editor.refreshButton.disabled, true);
+        assert.ok(editor.entries.filter((entry) => entry.button).every(
+          (entry) => entry.button.disabled,
+        ));
+        assert.deepEqual(submitted, []);
+
+        editor.scheduleRefresh(true);
+        await settle();
+        assert.equal(editor.entries.length, 11);
+        assert.deepEqual(submitted, []);
+
+        env.available = true;
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.refreshButton.disabled, false);
+        assert.ok(editor.entries.filter((entry) => entry.button).every(
+          (entry) => !entry.button.disabled,
+        ));
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(submitted.filter((entry) => entry.intent === "readback").length, 9);
+        ''')
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

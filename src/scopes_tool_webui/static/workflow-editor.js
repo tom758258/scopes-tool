@@ -71,7 +71,7 @@ export class WorkflowEditor {
 
   present() {
     const definition = this.selectedDefinition();
-    if (!definition || !this.hooks.isAvailable()) {
+    if (!definition) {
       this.captureDraft();
       this.renderedKey = null;
       this.controls = {};

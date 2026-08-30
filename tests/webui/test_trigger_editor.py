@@ -470,13 +470,17 @@ def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> N
         assert.deepEqual(submitted[0].parameters, {});
         assert.equal(readEntry.form.clearedDirty, 0);
 
-        // Unavailable contexts clear the editor without submitting anything.
+        // Runtime unavailability keeps the editor visible and disabled without I/O.
         submitted.length = 0;
         env.available = false;
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries, []);
+        assert.deepEqual(editor.entries.map((entry) => entry.id), [
+          "external-trigger-settings",
+        ]);
         assert.equal(editor.refreshButton.disabled, true);
+        assert.equal(editor.entries[0].button.disabled, true);
+        assert.equal(editor.entries[0].form.disableCalls.at(-1), true);
         assert.deepEqual(submitted, []);
         env.available = true;
         editor.scheduleRefresh();
@@ -484,6 +488,7 @@ def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> N
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
           "external-trigger-settings",
         ]);
+        assert.equal(editor.entries[0].button.disabled, false);
         '''
     )
     completed = subprocess.run(

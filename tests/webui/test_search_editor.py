@@ -266,6 +266,43 @@ SEARCH_EDITOR_HARNESS = r'''
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_search_runtime_unavailable_view_stays_visible_and_recovers() -> None:
+    script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.available = false;
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        assert.deepEqual(editor.entries.map((entry) => entry.id), [
+          "search-state", "search-mode",
+        ]);
+        assert.ok(editor.readouts.count);
+        assert.equal(editor.refreshButton.disabled, true);
+        assert.ok(editor.entries.every((entry) => entry.button.disabled));
+        assert.deepEqual(submitted, []);
+
+        env.available = true;
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.refreshButton.disabled, false);
+        assert.ok(editor.entries.every((entry) => !entry.button.disabled));
+        assert.deepEqual(submitted, []);
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "search-state", "search-mode", "search-count",
+        ]);
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(SEARCH_EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_search_actions_follow_global_execution_admission_and_recover() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''

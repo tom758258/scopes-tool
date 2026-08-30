@@ -200,7 +200,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
     )
     reference_slot = next(
         field for field in reference_save["fields"] if field["name"] == "slot"
-    ) | reference_save["presentation"]["models"]["keysight-dsox4024a"]["fields"]["slot"]
+    )
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";

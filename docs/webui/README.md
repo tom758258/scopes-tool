@@ -103,10 +103,11 @@ The Command workbench exposes:
   backend helper remains available to existing API clients but is not shown in
   the normal workbench.
 - Capture: `screenshot`, `capture`
-- Reference: `reference-save`, `reference-display`, `reference-label`,
-  `reference-clear`, `reference-query`
-- Save / Export: a dedicated editor with Path / Filename, Image, and Waveform
-  groups over `save-pwd`, `save-filename`, `save-image-format`,
+- Reference: a single Reference waveform workspace over `reference-save`,
+  `reference-display`, `reference-label`, `reference-clear`, and
+  `reference-query`
+- Save / Export: a single workspace with Path / Filename, Image, and Waveform
+  sections over `save-pwd`, `save-filename`, `save-image-format`,
   `save-image-palette`, `save-image-ink-saver`, `save-image-factors`,
   `save-image`, `save-waveform-format`, `save-waveform-length`,
   `save-waveform-length-max`, and `save-waveform`
@@ -135,7 +136,7 @@ Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
 
 The Command Browser keeps Category as its first level. Categories with group
-metadata (Trigger, Search, Serial, Save / Export, and Workflow) show
+metadata (Trigger, Search, Serial, and Workflow) show
 Category → Group → Commands sections, while categories without group metadata
 keep the plain Category → Commands list. Groups start expanded and can be
 collapsed and reopened; collapse state lives only in the current page session
@@ -148,6 +149,14 @@ group first.
 Grouping is presentation only: it does not change Core command semantics,
 model or capability gating, or the metadata-driven forms. Dedicated editors
 use the existing groups where described below.
+
+Selecting Reference waveform opens one workspace for the existing Save,
+Display, Label, Clear, and aggregate state-query commands. The shared reference
+waveform selector is visible before Live identity is available and is then
+limited by the detected model's projected capabilities. Selection is passive;
+explicit Refresh uses `reference-query` to read display and label state for the
+selected waveform. Each action still submits its existing command through the
+normal foreground execution path.
 
 Selecting `measure-log` or `triggered-measure-loop` opens the dedicated
 Workflow editor. It provides model-projected analog channel and measurement
@@ -230,12 +239,10 @@ the existing host-side raw CSV retrieval with its registered job artifact. Its
 filename-only field writes under the PC output folder selected in Basic
 Controls and fails rather than overwriting an existing file with that name.
 
-Selecting a Save / Export command opens the dedicated Save / Export editor
-instead of a plain command form. The Command Browser remains the only
-navigation and keeps the Path / Filename, Image, and Waveform groups; the
-editor adds no second tab layer. Selecting any command shows the same complete
-workspace with Default save location, Image, and Waveform sections; selection
-is presentation-only. Explicit Refresh serially reads every readable setting
+Selecting Save / Export opens one workspace with Default save location, Image,
+and Waveform sections. The underlying commands remain available to the
+workspace but are hidden from the Command Browser. Selection is
+presentation-only. Explicit Refresh serially reads every readable setting
 in all three sections without running Save Image or Save Waveform. Each setting
 keeps an independent Apply over its existing command, and a successful Apply
 is followed by its existing group readback that preserves unapplied sibling

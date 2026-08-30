@@ -51,7 +51,6 @@ export class TriggerEditor {
     const selected = this.selectedDefinition();
     return [
       this.hooks.contextKey(),
-      String(this.hooks.isAvailable()),
       selected?.id || "",
       selected?.group || "",
     ].join("|");
@@ -87,22 +86,26 @@ export class TriggerEditor {
     }
     if (read && this.hooks.isExecutionBusy?.()) return;
     const definition = this.selectedDefinition();
-    if (!definition || !this.hooks.isAvailable()) {
+    if (!definition) {
       this.stateKey = null;
       this.clearSections();
       return;
     }
     const key = this.currentStateKey();
-    if (!force && key === this.stateKey) return;
-    if (read) this.setBusy(true);
-    try {
-      this.stateKey = key;
-      this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
-      if (this.renderedKey !== key) this.rebuildSections(key);
+    if (!force && key === this.stateKey) {
       this.applyBusyState();
-      if (read) await this.readActiveGroup();
+      return;
+    }
+    this.stateKey = key;
+    this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
+    if (this.renderedKey !== key) this.rebuildSections(key);
+    this.applyBusyState();
+    if (!read || !this.hooks.isAvailable()) return;
+    this.setBusy(true);
+    try {
+      await this.readActiveGroup();
     } finally {
-      if (read) this.setBusy(false);
+      this.setBusy(false);
     }
   }
 

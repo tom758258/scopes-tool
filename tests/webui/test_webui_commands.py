@@ -343,6 +343,9 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
         "reference-clear",
         "reference-query",
     ):
+        command = commands[command_id]
+        base_slot = next(field for field in command["fields"] if field["name"] == "slot")
+        assert base_slot["options"] == [1, 2]
         slot = commands[command_id]["presentation"]["models"][model_2000x]["fields"]["slot"]
         assert slot["maximum"] == 2
         assert slot["options"] == [1, 2]
@@ -702,6 +705,15 @@ def test_commands_expose_reference_and_save_subset() -> None:
     assert expected <= commands.keys()
     for command in expected:
         assert commands[command]["modes"] == ["live", "simulate"]
+        assert commands[command]["browser_hidden"] is True
+    assert commands["reference-waveform"]["presentation_only"] is True
+    assert commands["reference-waveform"]["editor"] == "reference"
+    assert commands["save-export"]["presentation_only"] is True
+    assert commands["save-export"]["editor"] == "save-export"
+    assert expected <= {entry["id"] for entry in commands_module.COMMANDS}
+    assert {"reference-waveform", "save-export"}.isdisjoint(
+        commands_module._COMMAND_BY_ID
+    )
 
 
 def test_representative_reference_and_save_simulated_commands_complete_without_artifacts() -> None:

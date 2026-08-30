@@ -188,7 +188,10 @@ WORKFLOW_EDITOR_HARNESS = r'''
       { id: "measure-log", editor: "workflow", fields },
       { id: "triggered-measure-loop", editor: "workflow", fields: triggeredFields },
     ];
-    const env = { selectedId: "measure-log", contextKey: "simulate||model", executionBusy: false };
+    const env = {
+      selectedId: "measure-log", contextKey: "simulate||model",
+      executionBusy: false, available: true,
+    };
     const submissions = [];
     const catalog = { fieldsFor: (definition) => definition.fields };
     const hooks = {
@@ -198,7 +201,7 @@ WORKFLOW_EDITOR_HARNESS = r'''
       },
       headerActions: new FakeNode(),
       isExecutionBusy: () => env.executionBusy,
-      isAvailable: () => true,
+      isAvailable: () => env.available,
       contextKey: () => env.contextKey,
       selectedCommand: () => definitions.find((item) => item.id === env.selectedId),
     };
@@ -223,6 +226,35 @@ def run_editor_behavior(script: str) -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_runtime_unavailable_content_stays_visible_and_recovers() -> None:
+    run_editor_behavior(
+        r'''
+        env.available = false;
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        assert.ok(editor.controls.count);
+        assert.equal(editor.runButton.disabled, true);
+        assert.ok(editor.container.querySelectorAll("input, select, button").every(
+          (control) => control.disabled,
+        ));
+        await editor.submit();
+        assert.deepEqual(submissions, []);
+
+        env.available = true;
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.runButton.disabled, false);
+        assert.equal(editor.controls.count.disabled, false);
+        editor.controls.count.value = "1";
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.equal(submissions[0].command, "measure-log");
+        ''',
+    )
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

@@ -20,6 +20,7 @@ import {
   renderPcOutputCommandNote,
 } from "/static/pc-output.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
+import { ReferenceEditor } from "/static/reference-editor.js";
 import { SaveExportEditor } from "/static/save-export-editor.js";
 import { SearchEditor } from "/static/search-editor.js";
 import { SerialEditor } from "/static/serial-editor.js";
@@ -69,6 +70,7 @@ const elements = {
   advancedToggle: document.querySelector("#advanced-command-toggle"),
   form: document.querySelector("#command-form"),
   formHeading: document.querySelector("#form-heading"),
+  referenceEditor: document.querySelector("#reference-editor"),
   saveExportEditor: document.querySelector("#save-export-editor"),
   serialEditor: document.querySelector("#serial-editor"),
   triggerEditor: document.querySelector("#trigger-editor"),
@@ -104,6 +106,7 @@ let context = state.executionContext;
 let catalog;
 let commandForm;
 let genericFormRevision = 0;
+let referenceEditor;
 let saveExportEditor;
 let serialEditor;
 let triggerEditor;
@@ -126,6 +129,7 @@ const INTERNAL_COMMANDS = {
 };
 
 const EDITOR_RENDERERS = {
+  reference: () => referenceEditor,
   "save-export": () => saveExportEditor,
   serial: () => serialEditor,
   trigger: () => triggerEditor,
@@ -163,6 +167,17 @@ async function initialize() {
     list: elements.commandList,
   }, () => syncCommandSelection());
   commandForm = new CommandForm(elements.form, catalog);
+  referenceEditor = new ReferenceEditor(elements.referenceEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
   saveExportEditor = new SaveExportEditor(elements.saveExportEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
@@ -661,6 +676,7 @@ document.addEventListener("localechange", () => {
     catalog.render();
     syncCommandSelection(commandDraft);
   }
+  referenceEditor?.rerender();
   saveExportEditor?.rerender();
   serialEditor?.rerender();
   triggerEditor?.rerender();
@@ -685,6 +701,7 @@ function syncCommandSelection(draft = null) {
   });
   elements.formHeading.hidden = editorOwned;
   elements.form.hidden = editorOwned;
+  elements.referenceEditor.hidden = editorKind !== "reference";
   elements.saveExportEditor.hidden = editorKind !== "save-export";
   elements.serialEditor.hidden = editorKind !== "serial";
   elements.triggerEditor.hidden = editorKind !== "trigger";
@@ -701,7 +718,7 @@ function syncCommandSelection(draft = null) {
     : translate("commands.selectCommand");
   elements.commandDescription.textContent = selected
     ? editorOwned
-      ? ["measurement", "save-export"].includes(editorKind)
+      ? ["measurement", "reference", "save-export"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
@@ -744,6 +761,7 @@ function updateAvailability() {
   elements.liveDataRefresh.disabled = busy || liveDataSnapshot.loading || !commandAvailable("live-data-snapshot");
   triggerEditor?.applyBusyState();
   searchEditor?.applyBusyState();
+  referenceEditor?.applyBusyState();
   saveExportEditor?.applyBusyState();
   serialEditor?.render(serialEditor.controller.state);
   workflowEditor?.applyBusyState();
@@ -763,6 +781,9 @@ function syncWorkspaceHeaderActions(editorKind) {
   const measurementRun = selected?.id === "measure" && editorKind === "measurement";
   elements.refresh.hidden = !selected || editorKind !== null || !commandForm?.isSettingEditor();
   elements.execute.hidden = !selected || (editorKind !== null && !measurementRun);
+  if (referenceEditor?.refreshButton) {
+    referenceEditor.refreshButton.hidden = editorKind !== "reference";
+  }
   if (saveExportEditor?.refreshButton) {
     saveExportEditor.refreshButton.hidden = editorKind !== "save-export";
   }
@@ -773,6 +794,7 @@ function syncWorkspaceHeaderActions(editorKind) {
 }
 
 function syncEditorPresentation(editorKind) {
+  if (editorKind === "reference") referenceEditor?.schedulePresentation();
   if (editorKind === "save-export") saveExportEditor?.schedulePresentation();
   if (editorKind === "serial") serialEditor?.schedulePresentation();
   if (editorKind === "trigger") triggerEditor?.schedulePresentation();
