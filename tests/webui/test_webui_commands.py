@@ -494,6 +494,7 @@ def test_command_catalog_projects_fixed_numeric_constraints() -> None:
         assert {key: field[key] for key in expected} == expected
 
     for command_id in (
+        "capture",
         "segmented-capture",
         "capture-batch",
         "triggered-capture-series",
@@ -504,7 +505,7 @@ def test_command_catalog_projects_fixed_numeric_constraints() -> None:
         )
         assert points == {
             "name": "points",
-            "type": "enum",
+            "type": "integer",
             "options": [1000, 5000, 10000],
             "default": 1000,
         }

@@ -682,7 +682,7 @@ COMMANDS = (
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "points", "type": "enum", "options": (1000, 5000, 10000), "default": 1000},
+            {"name": "points", "type": "integer", "options": (1000, 5000, 10000), "default": 1000},
             {"name": "format", "type": "enum", "options": ("byte", "word"), "default": "byte"},
         ),
     },
@@ -1122,12 +1122,12 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     },
     {
         "id": "segmented-capture", "category": "Segmented Memory", "label": "Segmented capture", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1), _command_field("segments", "integer", minimum=2, required=True), _command_field("points", "enum", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
+        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1), _command_field("segments", "integer", minimum=2, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
     },
     {
         "id": "capture-batch", "category": "Workflow", "label": "Capture batch", "modes": ("live", "simulate"),
         "group": "capture",
-        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("points", "enum", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("count", "integer", minimum=1, default=1), _command_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("count", "integer", minimum=1, default=1), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
         "id": "measure-log", "category": "Workflow", "label": "Measurement log", "modes": ("live", "simulate"),
@@ -1149,7 +1149,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     {
         "id": "triggered-capture-series", "category": "Workflow", "label": "Triggered capture series", "modes": ("live", "simulate", "dry-run"),
         "group": "triggered",
-        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("count", "integer", minimum=1, required=True), _command_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("points", "enum", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("interval_seconds", "number", minimum=0, default=0)),
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("count", "integer", minimum=1, required=True), _command_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000), _command_field("format", "enum", options=("byte", "word"), default="byte"), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
 )
 

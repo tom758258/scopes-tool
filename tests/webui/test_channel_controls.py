@@ -520,3 +520,178 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         check=False,
     )
     assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
+
+
+@pytest.mark.skipif(
+    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_capture_points_integer_options_render_as_select_and_serialize_integer() -> None:
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeEl {
+          constructor(tag){
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.attributes = {};
+            this.style = {};
+            this.className = "";
+            this.textContent = "";
+            this.hidden = false;
+            this.disabled = false;
+            this.checked = false;
+            this.type = "";
+            this.multiple = false;
+            this.required = false;
+            this.validity = {};
+            this._value = "";
+            this.options = [];
+            this.selectedOptions = [];
+            this.parentElement = null;
+            const classes = new Set();
+            this.classList = {
+              add: (...names) => names.forEach((name) => classes.add(name)),
+              contains: (name) => classes.has(name),
+            };
+          }
+          get value(){ return this._value; }
+          set value(v){
+            this._value = String(v);
+            if(this.tagName==="SELECT"){
+              for(const o of this.options) o.selected = (o.value===this._value);
+              this.selectedOptions = this.options.filter(o=>o.selected);
+            }
+          }
+          append(...nodes){
+            for(const n of nodes){
+              this.children.push(n);
+              n.parentElement = this;
+              if(n.tagName==="OPTION"){
+                this.options.push(n);
+                if(n.selected) this.selectedOptions.push(n);
+              }
+            }
+          }
+          replaceChildren(...nodes){
+            this.children = [];
+            this.options = [];
+            this.selectedOptions = [];
+            if(nodes.length) this.append(...nodes);
+          }
+          setAttribute(k,v){ this.attributes[k]=String(v); }
+          getAttribute(k){ return this.attributes[k]; }
+          addEventListener(){}
+          dispatchEvent(){ return true; }
+          closest(sel){
+            if(sel==='[data-visible-if-hidden="true"]'){
+              let node = this;
+              while(node){
+                if(node.dataset?.visibleIfHidden === "true") return node;
+                node = node.parentElement;
+              }
+            }
+            return null;
+          }
+          setCustomValidity(){}
+          checkValidity(){ return true; }
+          reportValidity(){}
+          querySelector(sel){ return this.querySelectorAll(sel)[0]||null; }
+          querySelectorAll(sel){
+            const out=[];
+            const isDataField = sel==="[data-field]" || sel.startsWith('[data-field="');
+            const mField = sel.match(/^\[data-field="([^"]+)"\]$/);
+            const walk=(node)=>{
+              if(!node) return;
+              if(isDataField && node.dataset && "field" in node.dataset){
+                if(sel==="[data-field]") out.push(node);
+                else if(mField && node.dataset.field===mField[1]) out.push(node);
+              }
+              if(node.dataset && "visibleIf" in node.dataset && sel==="[data-visible-if]") out.push(node);
+              if(node.dataset && "helpByValue" in node.dataset && sel==="[data-help-by-value]") out.push(node);
+              if(node.dataset && "multiFor" in node.dataset && sel==="[data-multi-for]") out.push(node);
+              if(sel==="span" && node.tagName==="SPAN") out.push(node);
+              for(const c of node.children||[]) walk(c);
+              for(const o of node.options||[]) {
+                if(isDataField && o.dataset && "field" in o.dataset) {
+                  if(sel==="[data-field]") out.push(o);
+                  else if(mField && o.dataset.field===mField[1]) out.push(o);
+                }
+              }
+            };
+            for(const w of this.children) walk(w);
+            for(const w of this.children){
+              for(const c of w.children||[]){
+                if(c.dataset && "field" in c.dataset){
+                  if(sel==="[data-field]") { if(!out.includes(c)) out.push(c); }
+                  else if(mField && c.dataset.field===mField[1]){ if(!out.includes(c)) out.push(c); }
+                }
+              }
+            }
+            return out;
+          }
+        }
+        function makeContainer(){
+          const c=new FakeEl("div");
+          return c;
+        }
+        globalThis.document = { createElement(tag){ return new FakeEl(tag); } };
+        globalThis.Option = function(text, value){
+          const o=new FakeEl("option");
+          o.textContent=text; o.value=String(value); o.selected=false; return o;
+        };
+        globalThis.Event = class Event { constructor(t){ this.type=t; } };
+        globalThis.HTMLElement = FakeEl;
+
+        globalThis.hasTranslation = () => false;
+        globalThis.translate = (k) => k;
+
+        const catalog = {
+          fieldsFor: (cmd)=> cmd.fields,
+          optionsFor: (f)=> f.options||[],
+        };
+
+        let source = [
+          fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/numeric-input.js"),"utf8"),
+          fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/command-form.js"),"utf8"),
+        ].join("\n");
+        source = source.replace(/^import[^\n]*\r?\n/gm,"").replace(/^export /gm,"");
+        source += "\nglobalThis.CommandForm=CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const CommandForm = globalThis.CommandForm;
+
+        // verify integer + options renders as SELECT and serializes as Number
+        const cont = makeContainer();
+        const form = new CommandForm(cont, catalog);
+        const field = { name:"points", type:"integer", options:[1000, 5000, 10000], default:1000 };
+        const cmd = { id:"capture", fields:[field], presentation:{ kind:"command", action:"capture" } };
+        form.render(cmd);
+        const sel = cont.querySelector('[data-field="points"]');
+        assert.ok(sel, "points should be rendered");
+        assert.equal(sel.tagName, "SELECT");
+        assert.equal(sel.dataset.type, "integer");
+        assert.equal(sel.options.length, 3);
+        assert.equal(sel.options[0].value, "1000");
+        assert.equal(sel.options[1].value, "5000");
+        assert.equal(sel.options[2].value, "10000");
+        assert.equal(sel.value, "1000");
+        sel.value = "5000";
+        const vals = form.values();
+        assert.deepEqual(vals, { points: 5000 });
+        assert.equal(typeof vals.points, "number");
+        assert.notEqual(typeof vals.points, "string");
+        console.log("points integer-select serialization passed");
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
