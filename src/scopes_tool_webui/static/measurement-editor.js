@@ -186,6 +186,10 @@ export class MeasurementEditor {
     this.controls = {};
     const actions = document.createElement("div");
     actions.className = "measurement-front-panel-actions";
+    const buttons = document.createElement("div");
+    buttons.className = "measurement-front-panel-buttons";
+    const notes = document.createElement("div");
+    notes.className = "measurement-front-panel-notes";
     const actionDefinitions = [
       ["frontPanelRefresh", "measure-results", "measurement.frontPanel.refresh", "primary"],
       ...(this.markerToggleSupported() === true
@@ -214,17 +218,21 @@ export class MeasurementEditor {
       if (reason) {
         const note = document.createElement("small");
         note.className = "command-support-reason";
-        note.textContent = reason;
-        wrapper.append(note);
+        note.textContent = command === "measure-results"
+          ? translate("measurement.frontPanel.resultsUnsupported")
+          : reason;
+        notes.append(note);
       }
-      actions.append(wrapper);
+      buttons.append(wrapper);
     }
     if (this.markerToggleSupported() === false) {
       const note = document.createElement("p");
       note.className = "compact-note measurement-front-panel-marker-note";
       note.textContent = translate("measurement.frontPanel.markersAlwaysOn");
-      actions.append(note);
+      notes.append(note);
     }
+    actions.append(buttons);
+    if (notes.children.length) actions.append(notes);
     const result = document.createElement("section");
     result.className = "measurement-front-panel-results";
     const heading = document.createElement("strong");

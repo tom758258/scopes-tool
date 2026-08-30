@@ -737,6 +737,7 @@ export const en = {
   "measurement.frontPanel.show": "Show measurement markers",
   "measurement.frontPanel.hide": "Hide measurement markers",
   "measurement.frontPanel.clear": "Clear measurements",
+  "measurement.frontPanel.resultsUnsupported": "This model cannot read the front-panel measurement list as a batch. Use Measurement settings to obtain individual measurement values.",
   "measurement.frontPanel.resultsTitle": "Current front-panel measurements",
   "measurement.frontPanel.unread": "Current front-panel measurements have not been read yet.",
   "measurement.frontPanel.empty": "There are currently no front-panel measurement items.",

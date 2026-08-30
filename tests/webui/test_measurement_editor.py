@@ -23,6 +23,10 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     editor_source = (REPO_ROOT / "src/scopes_tool_webui/static/measurement-editor.js").read_text(
         encoding="utf-8"
     )
+    english = (REPO_ROOT / "src/scopes_tool_webui/static/locale_en.js").read_text(encoding="utf-8")
+    chinese = (REPO_ROOT / "src/scopes_tool_webui/static/locale_zh_tw.js").read_text(
+        encoding="utf-8"
+    )
     styles = (REPO_ROOT / "src/scopes_tool_webui/static/styles.css").read_text(encoding="utf-8")
     execute_handler = app_source.split('elements.execute.addEventListener("click"', 1)[1].split(
         'elements.cancel.addEventListener("click"', 1
@@ -36,12 +40,23 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert "measurement-editor-action" not in editor_source
     assert 'button.className = className;' in editor_source
     assert '["frontPanelHide", "measure-show"]' in editor_source
+    assert '"measurement.frontPanel.resultsUnsupported"' in editor_source
+    assert (
+        '"measurement.frontPanel.resultsUnsupported": "This model cannot read the front-panel '
+        'measurement list as a batch. Use Measurement settings to obtain individual measurement '
+        'values."' in english
+    )
+    assert (
+        '"measurement.frontPanel.resultsUnsupported": "此型號無法一次讀取前面板量測清單；'
+        '若要取得量測值，請使用「量測設定」。"' in chinese
+    )
     assert '"measurement.frontPanel.markersAlwaysOn"' in editor_source
     assert '"measurement.frontPanel.readFailedEmpty"' in editor_source
     assert '"measurement.frontPanel.readFailedCleared"' in editor_source
     assert '"danger"' in editor_source
     assert ".danger {" in styles
-    assert ".measurement-front-panel-marker-note { flex-basis: 100%; }" in styles
+    assert ".measurement-front-panel-buttons { display: flex; flex-wrap: wrap;" in styles
+    assert ".measurement-front-panel-notes { display: grid;" in styles
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -227,33 +242,68 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(editor.frontPanelState.kind, "cleared");
         assert.equal(editor.frontPanelReadError, null);
 
-        const markerEditor = (modelId) => {
+        const frontPanelEditor = (modelId) => {
+          const available = new Set(modelId === "keysight-dsox2004a"
+            ? ["measure-clear"]
+            : ["measure-results", "measure-show", "measure-clear"]);
           const markerCatalog = {
             activeModelId: modelId,
-            commands: [{ id: "measure-show" }],
+            commands: ["measure-results", "measure-show", "measure-clear"].map((id) => ({ id })),
             fieldsFor: () => modelId === "keysight-dsox4024a"
               ? [{ name: "action" }, { name: "enabled" }]
               : [{ name: "action" }],
-            supportReason: () => "",
+            supportReason: (definition) => available.has(definition.id) ? "" : "generic unsupported",
           };
           const instance = new globalThis.MeasurementEditor(new FakeNode("div"), markerCatalog, {
             isExecutionBusy: () => false,
-            isCommandAvailable: () => true,
+            isCommandAvailable: (command) => available.has(command),
             executeCommand: async () => ({ status: "completed" }),
           });
           instance.renderFrontPanel();
+          instance.applyBusyState();
           return instance;
         };
-        const fixedMarkers = markerEditor("keysight-dsox3024a");
-        assert.equal(fixedMarkers.controls.frontPanelShow, undefined);
-        assert.equal(fixedMarkers.controls.frontPanelHide, undefined);
-        assert(fixedMarkers.container.children[0].children.some(
+        const model2000x = frontPanelEditor("keysight-dsox2004a");
+        assert.equal(model2000x.controls.frontPanelRefresh.disabled, true);
+        assert.equal(model2000x.controls.frontPanelClear.disabled, false);
+        assert.equal(model2000x.controls.frontPanelShow, undefined);
+        assert.equal(model2000x.controls.frontPanelHide, undefined);
+        const actions2000x = model2000x.container.children[0];
+        const buttons2000x = actions2000x.children[0];
+        const notes2000x = actions2000x.children[1];
+        assert.equal(buttons2000x.className, "measurement-front-panel-buttons");
+        assert(buttons2000x.children.every((node) =>
+          node.className === "measurement-front-panel-action"
+          && node.children.length === 1
+          && node.children[0].tagName === "BUTTON"
+        ));
+        assert.equal(notes2000x.className, "measurement-front-panel-notes");
+        assert(notes2000x.children.some(
+          (node) => node.textContent === "measurement.frontPanel.resultsUnsupported",
+        ));
+        assert(notes2000x.children.some(
           (node) => node.textContent === "measurement.frontPanel.markersAlwaysOn",
         ));
-        const toggleMarkers = markerEditor("keysight-dsox4024a");
+
+        const model3000x = frontPanelEditor("keysight-dsox3024a");
+        assert.equal(model3000x.controls.frontPanelRefresh.disabled, false);
+        assert.equal(model3000x.controls.frontPanelClear.disabled, false);
+        assert.equal(model3000x.controls.frontPanelShow, undefined);
+        assert.equal(model3000x.controls.frontPanelHide, undefined);
+        const notes3000x = model3000x.container.children[0].children[1];
+        assert.equal(notes3000x.className, "measurement-front-panel-notes");
+        assert.equal(notes3000x.children.length, 1);
+        assert.equal(
+          notes3000x.children[0].textContent,
+          "measurement.frontPanel.markersAlwaysOn",
+        );
+
+        const toggleMarkers = frontPanelEditor("keysight-dsox4024a");
+        assert.equal(toggleMarkers.controls.frontPanelRefresh.disabled, false);
         assert.equal(toggleMarkers.controls.frontPanelShow.className, "secondary");
         assert.equal(toggleMarkers.controls.frontPanelHide.className, "secondary");
         assert.equal(toggleMarkers.controls.frontPanelClear.className, "danger");
+        assert.equal(toggleMarkers.controls.frontPanelClear.disabled, false);
         '''
     ).replace("__CATALOG__", catalog_json)
     completed = subprocess.run(

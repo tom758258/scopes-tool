@@ -737,6 +737,7 @@ export const zhTW = {
   "measurement.frontPanel.show": "顯示量測標記",
   "measurement.frontPanel.hide": "隱藏量測標記",
   "measurement.frontPanel.clear": "清除量測",
+  "measurement.frontPanel.resultsUnsupported": "此型號無法一次讀取前面板量測清單；若要取得量測值，請使用「量測設定」。",
   "measurement.frontPanel.resultsTitle": "目前前面板量測",
   "measurement.frontPanel.unread": "尚未讀取目前的前面板量測。",
   "measurement.frontPanel.empty": "目前沒有前面板量測項目。",
