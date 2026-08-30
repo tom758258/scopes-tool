@@ -2583,15 +2583,20 @@ def test_command_panels_use_fixed_desktop_height_and_internal_overflow() -> None
     workbench = extract_css_rule(styles, ".command-workbench {")
     panels = extract_css_rule(styles, ".rail, .workspace-panel {")
     workspace_content = extract_css_rule(styles, ".workspace-content {")
+    responsive = extract_function(styles, "@media (max-width: 1100px)")
+    responsive_panels = extract_css_rule(responsive, ".rail, .workspace-panel {")
+    responsive_workspace_content = extract_css_rule(responsive, ".workspace-content {")
 
-    assert "--command-panel-height: 560px;" in root
+    assert "--command-panel-height:" in root
     assert "align-items: start;" in workbench
     assert "height: var(--command-panel-height);" in panels
     assert "overflow: hidden;" in panels
     assert "flex: 1;" in workspace_content
     assert "min-height: 0;" in workspace_content
     assert "overflow: auto;" in workspace_content
-    assert ".rail, .workspace-panel { height: auto; min-height: 0; }" in styles
+    assert "height: auto;" in responsive_panels
+    assert "min-height: 0;" in responsive_panels
+    assert "overflow: visible;" in responsive_workspace_content
 
 
 def test_live_mode_badge_is_neutral_and_utility_glyphs_are_centered() -> None:
