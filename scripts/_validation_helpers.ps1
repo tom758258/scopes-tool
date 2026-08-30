@@ -32,6 +32,26 @@ function Get-SupportedTargetModelIds {
     return @(Get-ValidationTargetProfiles | ForEach-Object { $_.model_id })
 }
 
+function Get-LiveConnectionArguments {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Resource,
+
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string] $Backend
+    )
+
+    $arguments = @("--live", "--resource", $Resource)
+    if ([string]::IsNullOrEmpty($Backend)) {
+        return $arguments
+    }
+    if ($Backend -cne "@py") {
+        throw "Unsupported backend '${Backend}'. Use '@py' or omit Backend for System VISA."
+    }
+    return $arguments + @("--visa-library", "@py")
+}
+
 function Resolve-ValidationTargets {
     param([AllowNull()][AllowEmptyString()][string]$Target = "all")
 
@@ -383,7 +403,7 @@ function Get-ArtifactRelativePath {
 
 function Complete-LiveValidationRun {
     # Finalizes a live validator run using the caller's script-scope state:
-    # $Resource, $RepoRoot, $script:Target/Connection/RunDirectory/RunRoot/
+    # $Resource, $RepoRoot, $script:Target/Connection/BackendName/RunDirectory/RunRoot/
     # ShareableRoot/CaseResults/Diagnostics/Invocations/HardwareTouched/
     # ShareableGenerationFailed, plus a script-local Write-Summary.
     param(
@@ -476,6 +496,7 @@ function Complete-LiveValidationRun {
         status = $status
         target = $script:Target
         connection = $script:Connection
+        backend = $script:BackendName
         package_version = $packageVersionValue
         git_head = $gitHeadValue
         generated_at = $generatedAtValue

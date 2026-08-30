@@ -12,6 +12,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string] $Resource,
 
+    [Alias("VisaLibrary")]
+    [string] $Backend,
+
     [string] $Python = ".\.venv\Scripts\python.exe",
 
     [string] $OutputRoot = ".tmp_tests\live_cli_check"
@@ -70,6 +73,17 @@ if (-not $resourceMatchesConnection) {
         $mismatchMessage -f $normalizedConnection, $Resource
     )
 }
+
+try {
+    $script:LiveConnectionArguments = @(
+        Get-LiveConnectionArguments -Resource $Resource -Backend $Backend
+    )
+} catch {
+    Write-LiveUsageError -Domain cli $_.Exception.Message
+}
+$script:BackendName = if (
+    $script:LiveConnectionArguments -contains "--visa-library"
+) { "pyvisa_py" } else { "system_visa" }
 
 function ConvertTo-InvariantString {
     param(
@@ -230,6 +244,7 @@ function Write-Summary {
     $lines.Add("Result: ${Result}")
     $lines.Add("Target: $($script:Target)")
     $lines.Add("Connection: $($script:Connection)")
+    $lines.Add("Backend: $($script:BackendName)")
     $lines.Add("")
     $lines.Add("| Case | Status | Detail |")
     $lines.Add("|---|---|---|")
@@ -443,9 +458,8 @@ function Invoke-LiveCli {
 
     $script:HardwareTouched = $true
 
-    return Invoke-ModeCli -Stage $Stage -Command $Command -ModeArguments @(
-        "--live", "--resource", $Resource
-    ) -Arguments $Arguments
+    return Invoke-ModeCli -Stage $Stage -Command $Command `
+        -ModeArguments $script:LiveConnectionArguments -Arguments $Arguments
 }
 
 function Get-ErrorDrain {
@@ -456,8 +470,8 @@ function Get-ErrorDrain {
 
     $script:HardwareTouched = $true
 
-    $arguments = @(
-        "check-error", "--live", "--resource", $Resource, "--json",
+    $arguments = @("check-error") + $script:LiveConnectionArguments + @(
+        "--json",
         "--all", "--max-reads", "30"
     )
     $invocation = Invoke-CliRaw -Stage $Stage -Arguments $arguments
@@ -701,8 +715,8 @@ function Invoke-StrictPairMeasurement {
         [string[]] $ExpectedCommands
     )
 
-    $arguments = @(
-        "measure", "--live", "--resource", $Resource, "--json",
+    $arguments = @("measure") + $script:LiveConnectionArguments + @(
+        "--json",
         "--source-channel", [string]$Channel
     )
     if ($ReferenceChannel -gt 0) {
@@ -730,9 +744,11 @@ function Invoke-ReferenceWaveformReadiness {
     $elapsedMilliseconds = 0
     $lastReason = "invalid measurement sentinel"
     while ($elapsedMilliseconds -le $TimeoutMilliseconds) {
-        $invocation = Invoke-CliRaw -Stage "reference-ch1-readiness" -Arguments @(
-            "measure", "--live", "--resource", $Resource, "--json",
-            "--source-channel", "1", "--item", "vpp"
+        $invocation = Invoke-CliRaw -Stage "reference-ch1-readiness" -Arguments (
+            @("measure") + $script:LiveConnectionArguments + @(
+                "--json",
+                "--source-channel", "1", "--item", "vpp"
+            )
         )
         $payload = $invocation.Payload
         if ($null -eq $payload) {
@@ -820,9 +836,11 @@ function Invoke-PairMeasurementReadiness {
     $elapsedMilliseconds = 0
     $lastReason = "invalid measurement sentinel"
     while ($elapsedMilliseconds -le $TimeoutMilliseconds) {
-        $invocation = Invoke-CliRaw -Stage "measure-ch2-readiness" -Arguments @(
-            "measure", "--live", "--resource", $Resource, "--json",
-            "--source-channel", "2", "--item", "vpp"
+        $invocation = Invoke-CliRaw -Stage "measure-ch2-readiness" -Arguments (
+            @("measure") + $script:LiveConnectionArguments + @(
+                "--json",
+                "--source-channel", "2", "--item", "vpp"
+            )
         )
         $payload = $invocation.Payload
         if ($null -eq $payload) {
@@ -3538,9 +3556,8 @@ if ($snapshotComplete) {
                 } elseif ($item -eq "time_at_value") {
                     $arguments += @("--level", "0.5", "--slope", "positive", "--occurrence", "1")
                 }
-                $rawArguments = @(
-                    "measure", "--live", "--resource", $Resource, "--json"
-                ) + $arguments
+                $rawArguments = @("measure") + $script:LiveConnectionArguments + `
+                    @("--json") + $arguments
                 $measurementInvocation = Invoke-CliRaw -Stage "measure-${item}" `
                     -Arguments $rawArguments
                 [void](Assert-SingleMeasurementInvocation `
@@ -3553,8 +3570,8 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_area_measurement) {
         Invoke-BaselineCase -Name "measure-area" -Action {
-            $rawArguments = @(
-                "measure", "--live", "--resource", $Resource, "--json",
+            $rawArguments = @("measure") + $script:LiveConnectionArguments + @(
+                "--json",
                 "--channel", "1", "--item", "area"
             )
             $measurementInvocation = Invoke-CliRaw -Stage "measure-area" -Arguments $rawArguments

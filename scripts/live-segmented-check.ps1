@@ -12,6 +12,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string] $Resource,
 
+    [Alias("VisaLibrary")]
+    [string] $Backend,
+
     [string] $Python = ".\.venv\Scripts\python.exe",
 
     [string] $OutputRoot = ".tmp_tests\live_segmented_check"
@@ -72,6 +75,17 @@ if (-not $resourceMatchesConnection) {
         $mismatchMessage -f $normalizedConnection, $Resource
     )
 }
+
+try {
+    $script:LiveConnectionArguments = @(
+        Get-LiveConnectionArguments -Resource $Resource -Backend $Backend
+    )
+} catch {
+    Write-LiveUsageError -Domain "segmented" $_.Exception.Message
+}
+$script:BackendName = if (
+    $script:LiveConnectionArguments -contains "--visa-library"
+) { "pyvisa_py" } else { "system_visa" }
 
 function Get-PayloadErrorText {
     param(
@@ -136,6 +150,7 @@ function Write-Summary {
     $lines.Add("Result: ${Result}")
     $lines.Add("Target: $($script:Target)")
     $lines.Add("Connection: $($script:Connection)")
+    $lines.Add("Backend: $($script:BackendName)")
     $lines.Add("")
     $lines.Add("| Case | Status | Detail |")
     $lines.Add("|---|---|---|")
@@ -323,9 +338,8 @@ function Invoke-LiveCli {
 
     $script:HardwareTouched = $true
 
-    return Invoke-ModeCli -Stage $Stage -Command $Command -ModeArguments @(
-        "--live", "--resource", $Resource
-    ) -Arguments $Arguments
+    return Invoke-ModeCli -Stage $Stage -Command $Command `
+        -ModeArguments $script:LiveConnectionArguments -Arguments $Arguments
 }
 
 function Get-RequiredResultValue {
@@ -359,8 +373,8 @@ function Get-ErrorDrain {
 
     $script:HardwareTouched = $true
 
-    $arguments = @(
-        "check-error", "--live", "--resource", $Resource, "--json",
+    $arguments = @("check-error") + $script:LiveConnectionArguments + @(
+        "--json",
         "--all", "--max-reads", "30"
     )
     $invocation = Invoke-CliRaw -Stage $Stage -Arguments $arguments
@@ -428,9 +442,8 @@ function Drain-AfterFailure {
 }
 
 function Invoke-SegmentedConfigurationReadback {
-    $arguments = @(
-        "segmented-memory", "--live", "--resource", $Resource, "--json", "--query"
-    )
+    $arguments = @("segmented-memory") + $script:LiveConnectionArguments + `
+        @("--json", "--query")
 
     Start-Sleep -Milliseconds 500
     $invocation = Invoke-CliRaw -Stage "configuration-query-segmented" `
@@ -878,9 +891,11 @@ if ($realtimePreconditionPassed -and -not $script:FunctionalFailed) {
     $enableDrain = $null
     $enableFailure = ""
     try {
-        $enableInvocation = Invoke-CliRaw -Stage "configuration-enable" -Arguments @(
-            "segmented-memory", "--live", "--resource", $Resource, "--json",
-            "--enable", "--segments", "2"
+        $enableInvocation = Invoke-CliRaw -Stage "configuration-enable" -Arguments (
+            @("segmented-memory") + $script:LiveConnectionArguments + @(
+                "--json",
+                "--enable", "--segments", "2"
+            )
         )
     } catch {
         $enableFailure = $_.Exception.Message

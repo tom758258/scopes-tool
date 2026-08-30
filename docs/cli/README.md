@@ -2516,6 +2516,20 @@ instrument model and transport:
 Do not scan or rotate through resources inside an active live workflow. Use one
 explicit resource selected by the operator for the whole workflow.
 
+The maintained live validation scripts use System VISA when `-Backend` is not
+specified. Pass `-Backend "@py"` to run the same validation with pyvisa-py:
+
+```powershell
+# System VISA (default)
+.\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+
+# pyvisa-py
+.\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -Backend "@py"
+```
+
+System VISA and pyvisa-py are separate backend executions. Existing System VISA
+validation evidence does not establish hardware validation for pyvisa-py.
+
 ### Live CLI Validation
 
 Run the maintained manual baseline for registered Keysight InfiniiVision

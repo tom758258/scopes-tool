@@ -18,6 +18,7 @@ LIVE_SCRIPTS = (
     REPO_ROOT / "scripts" / "live-dvm-check.ps1",
     REPO_ROOT / "scripts" / "live-segmented-check.ps1",
     REPO_ROOT / "scripts" / "live-serial-check.ps1",
+    REPO_ROOT / "scripts" / "live-workflow-check.ps1",
 )
 
 requires_windows = pytest.mark.skipif(
@@ -384,7 +385,7 @@ function Invoke-CliRaw {
     return [pscustomobject]@{ Payload = $payload }
 }
 
-$Resource = "TEST::INSTR"
+$script:LiveConnectionArguments = @("--live", "--resource", "TEST::INSTR")
 $singletonClean = Get-ErrorDrain -Stage "singleton-clean"
 $singletonError = Get-ErrorDrain -Stage "singleton-error"
 $multipleEntries = Get-ErrorDrain -Stage "multiple-entries"
@@ -1051,6 +1052,7 @@ $script:Sleeps = New-Object System.Collections.Generic.List[int]
 $configurationPassed = $false
 $enableInvocation = $null
 $Resource = "TEST::INSTR"
+$script:LiveConnectionArguments = @("--live", "--resource", $Resource)
 
 Write-DrainErrors -Errors @() -CaseName "empty-drain"
 $emptyDrainDiagnosticCount = $script:Diagnostics.Count
@@ -1707,6 +1709,7 @@ $script:ListerAcquisitionTimeoutMilliseconds = 500
 $script:ListerAcquisitionPollIntervalMilliseconds = 1
 $script:OperationConditionRunMask = 8
 $Resource = "TEST::INSTR"
+$script:LiveConnectionArguments = @("--live", "--resource", $Resource)
 $script:RunRoot = Split-Path -Parent $OutputPath
 $snapshot = [pscustomobject]@{
     SerialDisplayEnabled = $SerialDisplayEnabledValue -eq 1
@@ -2640,10 +2643,17 @@ foreach ($drainBlock in @(
     Set-Variable -Name $drainBlock.VariableName -Value $matchingBlocks[0].Extent.Text
 }
 
-$supportsSkip = [System.IO.Path]::GetFileName($ScriptPath) -ne "live-cli-check.ps1"
+$scriptName = [System.IO.Path]::GetFileName($ScriptPath)
+$usesBooleanCaseResult = $scriptName -eq "live-cli-check.ps1"
+$supportsSkip = $scriptName -in @(
+    "live-dvm-check.ps1",
+    "live-segmented-check.ps1",
+    "live-serial-check.ps1"
+)
 # Migrated validators' Write-Summary reports target/connection metadata.
 $script:Target = "keysight-dsox4034a"
 $script:Connection = "usb"
+$script:BackendName = "system_visa"
 # Extracted production drain blocks may invoke the shared finalize on their
 # failure paths; provide a disposable run layout for those calls.
 $Resource = "TEST::INSTR"
@@ -2661,10 +2671,10 @@ $script:RunRoot = Join-Path $OutputRoot "pass"
 New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
-if ($supportsSkip) {
-    Add-CaseResult -Name "preflight" -Status "PASS"
-} else {
+if ($usesBooleanCaseResult) {
     Add-CaseResult -Name "preflight" -Passed $true
+} else {
+    Add-CaseResult -Name "preflight" -Status "PASS"
 }
 Write-DrainErrors -Errors @(
     [pscustomobject]@{ code = -350; message = "stale diagnostic" }
@@ -2675,11 +2685,11 @@ $script:RunRoot = Join-Path $OutputRoot "fail"
 New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
-if ($supportsSkip) {
-    Add-CaseResult -Name "functional-case" -Status "FAIL" `
+if ($usesBooleanCaseResult) {
+    Add-CaseResult -Name "functional-case" -Passed $false `
         -Detail "known failure detail"
 } else {
-    Add-CaseResult -Name "functional-case" -Passed $false `
+    Add-CaseResult -Name "functional-case" -Status "FAIL" `
         -Detail "known failure detail"
 }
 Write-Summary -Result "FAIL"
@@ -2688,11 +2698,11 @@ $script:RunRoot = Join-Path $OutputRoot "scpi-fail"
 New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
-if ($supportsSkip) {
-    Add-CaseResult -Name "final-error-queue" -Status "FAIL" `
+if ($usesBooleanCaseResult) {
+    Add-CaseResult -Name "final-error-queue" -Passed $false `
         -Detail "Final error queue contained 1 error(s)."
 } else {
-    Add-CaseResult -Name "final-error-queue" -Passed $false `
+    Add-CaseResult -Name "final-error-queue" -Status "FAIL" `
         -Detail "Final error queue contained 1 error(s)."
 }
 Write-DrainErrors -Errors @(
@@ -2792,6 +2802,7 @@ Write-Summary -Result "FAIL"
     pass_summary = pass_bytes.decode("utf-8")
     assert not pass_bytes.startswith(b"\xef\xbb\xbf")
     assert "Result: PASS" in pass_summary
+    assert "Backend: system_visa" in pass_summary
     assert "| preflight | PASS |" in pass_summary
     assert "### stale-error-drain" in pass_summary
     assert "system error -350: stale diagnostic" in pass_summary
@@ -2840,7 +2851,11 @@ Write-Summary -Result "FAIL"
         final_unterminated_summary
     )
 
-    if script_path.name != "live-cli-check.ps1":
+    if script_path.name in {
+        "live-dvm-check.ps1",
+        "live-segmented-check.ps1",
+        "live-serial-check.ps1",
+    }:
         skip_bytes = (output_root / "skip" / "summary.md").read_bytes()
         skip_summary = skip_bytes.decode("utf-8")
         assert not skip_bytes.startswith(b"\xef\xbb\xbf")
@@ -2932,6 +2947,7 @@ sys.exit(9)
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["status"] == "failed"
     assert report["hardware_touched"] is False
+    assert report["backend"] == "system_visa"
 
     invocations = [
         json.loads(line)
@@ -2939,6 +2955,147 @@ sys.exit(9)
     ]
     assert invocations
     assert all("--live" not in arguments for arguments in invocations)
+
+
+@requires_windows
+@pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
+@pytest.mark.parametrize(
+    ("backend", "expected_arguments"),
+    (
+        pytest.param(
+            "",
+            ["--live", "--resource", "TEST::INSTR"],
+            id="system-visa",
+        ),
+        pytest.param(
+            "@py",
+            [
+                "--live",
+                "--resource",
+                "TEST::INSTR",
+                "--visa-library",
+                "@py",
+            ],
+            id="pyvisa-py",
+        ),
+    ),
+)
+def test_live_backend_arguments_reach_commands_and_error_drains(
+    tmp_path: Path,
+    script_path: Path,
+    backend: str,
+    expected_arguments: list[str],
+) -> None:
+    harness_path = tmp_path / f"{script_path.stem}-backend-harness.ps1"
+    harness_path.write_text(
+        r'''param(
+    [Parameter(Mandatory = $true)][string] $ScriptPath,
+    [AllowEmptyString()][string] $Backend
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+. (Join-Path (Split-Path -Parent $ScriptPath) "_validation_helpers.ps1")
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @("Invoke-LiveCli", "Get-ErrorDrain")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "${functionName} was not found." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+function Invoke-ModeCli {
+    param(
+        [string] $Stage,
+        [string] $Command,
+        [string[]] $ModeArguments,
+        [string[]] $Arguments = @()
+    )
+    $script:CommandArguments = @($ModeArguments)
+    return [pscustomobject]@{ Payload = [pscustomobject]@{} }
+}
+
+function Invoke-CliRaw {
+    param([string] $Stage, [string[]] $Arguments)
+    $script:DrainArguments = @($Arguments)
+    return [pscustomobject]@{
+        Payload = [pscustomobject]@{
+            result = [pscustomobject]@{
+                entries = @([pscustomobject]@{ code = 0; message = "No error" })
+            }
+        }
+    }
+}
+
+$script:LiveConnectionArguments = @(
+    Get-LiveConnectionArguments -Resource "TEST::INSTR" -Backend $Backend
+)
+$script:HardwareTouched = $false
+[void](Invoke-LiveCli -Stage "identity" -Command "identify")
+[void](Get-ErrorDrain -Stage "final-error-queue")
+
+[ordered]@{
+    command_arguments = @($script:CommandArguments)
+    drain_arguments = @($script:DrainArguments)
+    hardware_touched = $script:HardwareTouched
+} | ConvertTo-Json -Depth 5 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-Backend",
+            backend,
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["command_arguments"] == expected_arguments
+    assert payload["drain_arguments"] == [
+        "check-error",
+        *expected_arguments,
+        "--json",
+        "--all",
+        "--max-reads",
+        "30",
+    ]
+    assert payload["hardware_touched"] is True
+
+
+def test_live_scripts_use_shared_backend_arguments_for_live_invocations() -> None:
+    for script_path in LIVE_SCRIPTS:
+        script = script_path.read_text(encoding="utf-8")
+        assert '[Alias("VisaLibrary")]' in script
+        assert script.count("Get-LiveConnectionArguments -Resource $Resource") == 1
+        assert '"--live"' not in script
 
 
 def test_baseline_live_script_contains_acquisition_measurement_and_status_wiring() -> None:
@@ -7836,6 +7993,7 @@ function Run-Scenario {
     $script:Diagnostics = [ordered]@{}
     $script:FunctionalFailed = $false
     $Resource = "TEST::INSTR"
+    $script:LiveConnectionArguments = @("--live", "--resource", $Resource)
     $liveArtifactRoot = Join-Path $ArtifactRoot $Scenario.Name
     [void](New-Item -ItemType Directory -Path $liveArtifactRoot -Force)
 
@@ -8482,6 +8640,20 @@ Remove-Item -LiteralPath $functionsFile -Force
             "does not match resource 'USB0::1::2::SYNTH12345::INSTR'",
             id="tcpip-label-with-usb-resource-rejected",
         ),
+        pytest.param(
+            (
+                "-Target",
+                "keysight-dsox4034a",
+                "-Connection",
+                "usb",
+                "-Resource",
+                "USB0::1::2::SYNTH12345::INSTR",
+                "-Backend",
+                "@unsupported",
+            ),
+            "Unsupported backend '@unsupported'",
+            id="unsupported-backend-rejected",
+        ),
     ),
 )
 def test_live_cli_check_usage_errors(args, expected_error):
@@ -8617,6 +8789,13 @@ def test_live_validators_enforce_canonical_target_contract(tmp_path, script_name
     assert completed.returncode == 2
     assert f"does not match resource '{tcpip}'" in completed.stderr
 
+    completed = run(
+        "-Target", "keysight-dsox4034a", "-Connection", "usb",
+        "-Resource", usb, "-Backend", "@unsupported"
+    )
+    assert completed.returncode == 2
+    assert "Unsupported backend '@unsupported'" in completed.stderr
+
 
 @pytest.mark.parametrize(("script_name", "domain"), LIVE_VALIDATOR_SCRIPTS)
 def test_live_validators_wire_shared_framework(script_name, domain):
@@ -8659,6 +8838,7 @@ $script:RunRoot = $layout.Private
 $script:ShareableRoot = $layout.Shareable
 $script:Target = 'keysight-dsox4034a'
 $script:Connection = 'usb'
+$script:BackendName = 'system_visa'
 $script:FunctionalFailed = $true
 $script:ShareableGenerationFailed = $false
 $script:HardwareTouched = $true
@@ -8720,6 +8900,7 @@ $layout2 = New-ValidationRunDirectory -BaseRoot $RunsRoot -Prefix 'run'
 $script:RunDirectory = $layout2.Root
 $script:RunRoot = $layout2.Private
 $script:ShareableRoot = $layout2.Shareable
+$script:BackendName = 'pyvisa_py'
 $script:FunctionalFailed = $false
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
@@ -8738,6 +8919,7 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     s1_status = [string]$privateReport.status
     s1_target = [string]$privateReport.target
     s1_connection = [string]$privateReport.connection
+    s1_backend = [string]$privateReport.backend
     s1_counts_cases = [int]$privateReport.summary_counts.cases
     s1_counts_passed = [int]$privateReport.summary_counts.passed
     s1_counts_failed = [int]$privateReport.summary_counts.failed
@@ -8747,6 +8929,8 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     s1_private_report_raw = $privateReportRaw
     s1_private_summary_has_target =
         $privateSummaryText.Contains('Target: keysight-dsox4034a')
+    s1_private_summary_has_backend =
+        $privateSummaryText.Contains('Backend: system_visa')
     s1_shareable_report_raw = $shareableReportRaw
     s1_shareable_summary_raw = $shareableSummaryRaw
     s1_mirror_reference = $mirrorReference
@@ -8757,6 +8941,8 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     s1_shareable_status = [string]$shareableReport.status
     s2_flag = $script:ShareableGenerationFailed
     s2_status = [string]$s2Report.status
+    s2_backend = [string]$s2Report.backend
+    s2_summary_has_backend = $s2SummaryText.Contains('Backend: pyvisa_py')
     s2_error = [string]$s2Report.shareable_generation_error
     s2_summary_reason = $s2SummaryText.Contains(
         'Shareable artifact generation failed:')
@@ -8772,6 +8958,7 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     assert payload["s1_status"] == "failed"
     assert payload["s1_target"] == "keysight-dsox4034a"
     assert payload["s1_connection"] == "usb"
+    assert payload["s1_backend"] == "system_visa"
     assert payload["s1_counts_cases"] == 3
     assert payload["s1_counts_passed"] == 1
     assert payload["s1_counts_failed"] == 1
@@ -8780,6 +8967,7 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     assert payload["s1_hardware_touched"] is True
     assert payload["s1_case_statuses"] == ["PASS", "FAIL", "N/A"]
     assert payload["s1_private_summary_has_target"] is True
+    assert payload["s1_private_summary_has_backend"] is True
     assert payload["s1_shareable_status"] == "failed"
 
     # Private evidence retains raw sensitive values.
@@ -8811,6 +8999,8 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     # Scenario 2: all cases passed, but shareable generation failed.
     assert payload["s2_flag"] is True
     assert payload["s2_status"] == "failed"
+    assert payload["s2_backend"] == "pyvisa_py"
+    assert payload["s2_summary_has_backend"] is True
     assert payload["s2_error"] == "simulated shareable artifact generation failure"
     assert payload["s2_summary_reason"] is True
 

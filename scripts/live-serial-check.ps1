@@ -12,6 +12,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string] $Resource,
 
+    [Alias("VisaLibrary")]
+    [string] $Backend,
+
     [string] $Python = ".\.venv\Scripts\python.exe",
 
     [string] $OutputRoot = ".tmp_tests\live_serial_check"
@@ -75,6 +78,17 @@ if (-not $resourceMatchesConnection) {
         $mismatchMessage -f $normalizedConnection, $Resource
     )
 }
+
+try {
+    $script:LiveConnectionArguments = @(
+        Get-LiveConnectionArguments -Resource $Resource -Backend $Backend
+    )
+} catch {
+    Write-LiveUsageError -Domain "serial" $_.Exception.Message
+}
+$script:BackendName = if (
+    $script:LiveConnectionArguments -contains "--visa-library"
+) { "pyvisa_py" } else { "system_visa" }
 
 function ConvertTo-InvariantString {
     param(
@@ -161,6 +175,7 @@ function Write-Summary {
     $lines.Add("Result: ${Result}")
     $lines.Add("Target: $($script:Target)")
     $lines.Add("Connection: $($script:Connection)")
+    $lines.Add("Backend: $($script:BackendName)")
     $lines.Add("")
     $lines.Add("| Case | Status | Detail |")
     $lines.Add("|---|---|---|")
@@ -371,9 +386,8 @@ function Invoke-LiveCli {
 
     $script:HardwareTouched = $true
 
-    return Invoke-ModeCli -Stage $Stage -Command $Command -ModeArguments @(
-        "--live", "--resource", $Resource
-    ) -Arguments $Arguments
+    return Invoke-ModeCli -Stage $Stage -Command $Command `
+        -ModeArguments $script:LiveConnectionArguments -Arguments $Arguments
 }
 
 function Get-RequiredResultValue {
@@ -407,8 +421,8 @@ function Get-ErrorDrain {
 
     $script:HardwareTouched = $true
 
-    $arguments = @(
-        "check-error", "--live", "--resource", $Resource, "--json",
+    $arguments = @("check-error") + $script:LiveConnectionArguments + @(
+        "--json",
         "--all", "--max-reads", "30"
     )
     $invocation = Invoke-CliRaw -Stage $Stage -Arguments $arguments
@@ -1256,8 +1270,9 @@ $availabilityInvocation = $null
 $availabilityDrain = $null
 $availabilityFailure = ""
 try {
-    $availabilityInvocation = Invoke-CliRaw -Stage "availability" -Arguments @(
-        "serial-query", "--live", "--resource", $Resource, "--json", "--bus", "1"
+    $availabilityInvocation = Invoke-CliRaw -Stage "availability" -Arguments (
+        @("serial-query") + $script:LiveConnectionArguments + `
+            @("--json", "--bus", "1")
     )
 } catch {
     $availabilityFailure = $_.Exception.Message
@@ -1570,9 +1585,11 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
                 )
             }
 
-            $exportInvocation = Invoke-CliRaw -Stage "lister-export" -Arguments @(
-                "serial-lister-export", "--live", "--resource", $Resource, "--json",
-                "--output", $listerCsvPath
+            $exportInvocation = Invoke-CliRaw -Stage "lister-export" -Arguments (
+                @("serial-lister-export") + $script:LiveConnectionArguments + @(
+                    "--json",
+                    "--output", $listerCsvPath
+                )
             )
             $exportOkProperty = $exportInvocation.Payload.PSObject.Properties["ok"]
             $exportOk = $null -ne $exportOkProperty -and

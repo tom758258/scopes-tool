@@ -12,6 +12,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string] $Resource,
 
+    [Alias("VisaLibrary")]
+    [string] $Backend,
+
     [string] $Python = ".\.venv\Scripts\python.exe",
 
     [string] $OutputRoot = ".tmp_tests\live_workflow_check"
@@ -72,6 +75,17 @@ if (-not $resourceMatchesConnection) {
         $mismatchMessage -f $normalizedConnection, $Resource
     )
 }
+
+try {
+    $script:LiveConnectionArguments = @(
+        Get-LiveConnectionArguments -Resource $Resource -Backend $Backend
+    )
+} catch {
+    Write-LiveUsageError -Domain "workflow" $_.Exception.Message
+}
+$script:BackendName = if (
+    $script:LiveConnectionArguments -contains "--visa-library"
+) { "pyvisa_py" } else { "system_visa" }
 
 function Get-PayloadErrorText {
     param(
@@ -149,6 +163,7 @@ function Write-Summary {
     $lines.Add("Result: ${Result}")
     $lines.Add("Target: $($script:Target)")
     $lines.Add("Connection: $($script:Connection)")
+    $lines.Add("Backend: $($script:BackendName)")
     $lines.Add("")
     $lines.Add("| Case | Status | Detail |")
     $lines.Add("|---|---|---|")
@@ -351,9 +366,8 @@ function Invoke-LiveCli {
 
     $script:HardwareTouched = $true
 
-    return Invoke-ModeCli -Stage $Stage -Command $Command -ModeArguments @(
-        "--live", "--resource", $Resource
-    ) -Arguments $Arguments
+    return Invoke-ModeCli -Stage $Stage -Command $Command `
+        -ModeArguments $script:LiveConnectionArguments -Arguments $Arguments
 }
 
 function Get-RequiredResultValue {
@@ -387,8 +401,8 @@ function Get-ErrorDrain {
 
     $script:HardwareTouched = $true
 
-    $arguments = @(
-        "check-error", "--live", "--resource", $Resource, "--json",
+    $arguments = @("check-error") + $script:LiveConnectionArguments + @(
+        "--json",
         "--all", "--max-reads", "30"
     )
     $invocation = Invoke-CliRaw -Stage $Stage -Arguments $arguments
@@ -799,8 +813,8 @@ if (-not $script:FunctionalFailed) {
 if (-not $script:FunctionalFailed) {
     Invoke-WorkflowCase -Name "measure-until-timeout" -Action {
         $outputDir = Join-Path $liveArtifactRoot "measure-until-timeout"
-        $arguments = @(
-            "measure-until", "--live", "--resource", $Resource, "--json",
+        $arguments = @("measure-until") + $script:LiveConnectionArguments + @(
+            "--json",
             "--channel", "1", "--item", "vpp", "--operator", "lt",
             "--threshold", "-1", "--timeout-seconds", "1",
             "--interval-seconds", "0.1", "--output-dir", $outputDir
