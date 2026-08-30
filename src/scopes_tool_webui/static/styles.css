@@ -78,6 +78,7 @@ button:disabled { cursor: default; opacity: .55; }
 
 .secondary,
 .primary,
+.danger,
 .command-pill-button {
   min-height: var(--control-h);
   padding: 6px 12px;
@@ -94,6 +95,8 @@ button:disabled { cursor: default; opacity: .55; }
 .command-pill-button:hover { border-color: var(--accent); color: var(--accent); }
 .primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 .primary:hover { border-color: var(--accent-strong); background: var(--accent-strong); }
+.danger { border-color: var(--danger); background: var(--panel); color: var(--danger); }
+.danger:not(:disabled):hover { background: var(--danger); color: #fff; }
 .locale-toggle { white-space: nowrap; }
 .icon-button {
   display: inline-flex;
@@ -341,15 +344,20 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .measurement-editor-section { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .measurement-editor-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .measurement-window-form { padding-top: 0; }
-.measurement-editor-action { justify-self: start; }
 .measurement-editor-note { margin: 0; }
 .measurement-front-panel-actions { display: flex; flex-wrap: wrap; align-items: start; gap: 10px; }
 .measurement-front-panel-action { display: grid; gap: 5px; }
+.measurement-front-panel-action > button { justify-self: start; }
+.measurement-front-panel-action > .primary { box-shadow: var(--shadow-sm); }
 .measurement-front-panel-action .command-support-reason { max-width: 220px; margin: 0; }
 .measurement-front-panel-results { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); }
 .measurement-front-panel-results > strong { display: block; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .measurement-front-panel-content { overflow-x: auto; padding: 10px; }
-.measurement-front-panel-content > .muted { margin: 0; }
+.measurement-front-panel-content > .muted,
+.measurement-front-panel-error { margin: 0; }
+.measurement-front-panel-error { color: var(--danger); font-size: 12px; }
+.measurement-front-panel-error + .muted,
+.measurement-front-panel-error + .measurement-results-table { margin-top: 8px; }
 .measurement-results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .measurement-results-table th, .measurement-results-table td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 .measurement-results-table th { color: var(--muted); font-size: 11px; }

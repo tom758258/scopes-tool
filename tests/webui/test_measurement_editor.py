@@ -19,6 +19,25 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 )
 def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     catalog_json = json.dumps(command_catalog())
+    app_source = (REPO_ROOT / "src/scopes_tool_webui/static/app.js").read_text(encoding="utf-8")
+    editor_source = (REPO_ROOT / "src/scopes_tool_webui/static/measurement-editor.js").read_text(
+        encoding="utf-8"
+    )
+    styles = (REPO_ROOT / "src/scopes_tool_webui/static/styles.css").read_text(encoding="utf-8")
+    execute_handler = app_source.split('elements.execute.addEventListener("click"', 1)[1].split(
+        'elements.cancel.addEventListener("click"', 1
+    )[0]
+    header_actions = app_source.split("function syncWorkspaceHeaderActions(editorKind)", 1)[1].split(
+        "function syncEditorPresentation(editorKind)", 1
+    )[0]
+    assert 'selected?.id === "measure"' in execute_handler
+    assert "measurementEditor?.runMeasurement()" in execute_handler
+    assert 'selected?.id === "measure" && editorKind === "measurement"' in header_actions
+    assert "measurement-editor-action" not in editor_source
+    assert 'button.className = name === "frontPanelRefresh"' in editor_source
+    assert '? "danger"' in editor_source
+    assert ': "secondary"' in editor_source
+    assert ".danger {" in styles
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -76,6 +95,9 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           .replace("export class MeasurementEditor", "class MeasurementEditor")
           + "\nglobalThis.MeasurementEditor = MeasurementEditor;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(editorSource)}`);
+        const freshEditor = new globalThis.MeasurementEditor(null, null, {});
+        assert.deepEqual(freshEditor.frontPanelState, { kind: "unread", payload: null });
+        assert.equal(freshEditor.frontPanelReadError, null);
 
         let activeContext = "simulate||keysight-dsox4024a";
         let mode = "simulate";
@@ -90,12 +112,13 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           "measure-show": { status: "completed" },
           "measure-clear": { status: "completed" },
         };
+        const unavailable = new Set();
         const editor = Object.create(globalThis.MeasurementEditor.prototype);
         Object.assign(editor, {
           hooks: {
             contextKey: () => activeContext,
             mode: () => mode,
-            isCommandAvailable: () => true,
+            isCommandAvailable: (command) => !unavailable.has(command),
             executeCommand: async (command, parameters) => {
               calls.push([command, parameters]);
               return jobs[command];
@@ -106,6 +129,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           windowReadback: "auto",
           windowDirty: true,
           frontPanelState: { kind: "results", payload: { items: [{ label: "old" }] } },
+          frontPanelReadError: "old-error",
           renderFrontPanelReadback: () => {},
           present: () => {},
           controls: {},
@@ -116,7 +140,8 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(editor.windowCurrent, "");
         assert.equal(editor.windowReadback, "");
         assert.equal(editor.windowDirty, false);
-        assert.deepEqual(editor.frontPanelState, { kind: "empty", payload: null });
+        assert.deepEqual(editor.frontPanelState, { kind: "unread", payload: null });
+        assert.equal(editor.frontPanelReadError, null);
 
         editor.contextKey = activeContext;
         editor.windowDirty = true;
@@ -142,11 +167,45 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.deepEqual(calls[0], ["measure-results", {}]);
         assert.equal(editor.frontPanelState.kind, "results");
         assert.equal(editor.frontPanelState.payload.items[0].label, "VPP CH1");
+        assert.equal(editor.frontPanelReadError, null);
+
+        jobs["measure-results"] = {
+          status: "completed",
+          result: { result: { measurements: { items: [] } } },
+        };
+        await editor.refreshFrontPanel();
+        assert.equal(editor.frontPanelState.kind, "empty");
+
+        jobs["measure-results"] = {
+          status: "completed",
+          result: { result: { measurements: { items: [{ label: "Period CH1", value: "1e-3" }] } } },
+        };
+        await editor.refreshFrontPanel();
+        const previousPayload = editor.frontPanelState.payload;
+        jobs["measure-results"] = { status: "failed" };
+        await editor.refreshFrontPanel();
+        assert.equal(editor.frontPanelState.kind, "results");
+        assert.equal(editor.frontPanelState.payload, previousPayload);
+        assert.equal(editor.frontPanelReadError, "measurement.frontPanel.readFailed");
+
+        jobs["measure-results"] = {
+          status: "completed",
+          result: { result: { measurements: { items: [{ label: "Frequency CH1", value: "1000" }] } } },
+        };
+        await editor.refreshFrontPanel();
+        assert.equal(editor.frontPanelState.payload.items[0].label, "Frequency CH1");
+        assert.equal(editor.frontPanelReadError, null);
+
+        unavailable.add("measure-results");
+        const callCount = calls.length;
+        await editor.refreshFrontPanel();
+        assert.equal(calls.length, callCount);
         await editor.showFrontPanel();
-        assert.deepEqual(calls[1], ["measure-show", { action: "set" }]);
+        assert.deepEqual(calls.at(-1), ["measure-show", { action: "set" }]);
         await editor.clearFrontPanel();
-        assert.deepEqual(calls[2], ["measure-clear", {}]);
+        assert.deepEqual(calls.at(-1), ["measure-clear", {}]);
         assert.equal(editor.frontPanelState.kind, "cleared");
+        assert.equal(editor.frontPanelReadError, null);
         '''
     ).replace("__CATALOG__", catalog_json)
     completed = subprocess.run(

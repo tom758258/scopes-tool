@@ -273,6 +273,10 @@ async function initialize() {
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
     const selected = catalog.selected();
+    if (selected?.id === "measure" && editorKindFor(selected) === "measurement") {
+      void measurementEditor?.runMeasurement();
+      return;
+    }
     const parameters = commandForm.values();
     if (selected && parameters !== null) executeCommand(selected.id, parameters, {
       intent: commandForm.isSettingEditor() ? "apply" : "command",
@@ -756,8 +760,9 @@ function isExecutionBusy() {
 
 function syncWorkspaceHeaderActions(editorKind) {
   const selected = catalog?.selected();
+  const measurementRun = selected?.id === "measure" && editorKind === "measurement";
   elements.refresh.hidden = !selected || editorKind !== null || !commandForm?.isSettingEditor();
-  elements.execute.hidden = !selected || editorKind !== null;
+  elements.execute.hidden = !selected || (editorKind !== null && !measurementRun);
   if (saveExportEditor?.refreshButton) {
     saveExportEditor.refreshButton.hidden = editorKind !== "save-export";
   }

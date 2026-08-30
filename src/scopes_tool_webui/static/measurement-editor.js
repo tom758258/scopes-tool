@@ -23,7 +23,8 @@ export class MeasurementEditor {
     this.windowCurrent = "";
     this.windowReadback = "";
     this.windowDirty = false;
-    this.frontPanelState = { kind: "empty", payload: null };
+    this.frontPanelState = { kind: "unread", payload: null };
+    this.frontPanelReadError = null;
     this.controls = {};
   }
 
@@ -43,7 +44,8 @@ export class MeasurementEditor {
     this.windowCurrent = "";
     this.windowReadback = "";
     this.windowDirty = false;
-    this.frontPanelState = { kind: "empty", payload: null };
+    this.frontPanelState = { kind: "unread", payload: null };
+    this.frontPanelReadError = null;
     this.renderedKey = null;
     return true;
   }
@@ -101,13 +103,6 @@ export class MeasurementEditor {
     } else {
       this.container.append(this.buildWindowSection());
     }
-
-    this.controls.run = document.createElement("button");
-    this.controls.run.type = "button";
-    this.controls.run.className = "primary measurement-editor-action";
-    this.controls.run.textContent = translate("actions.run");
-    this.controls.run.addEventListener("click", () => void this.runMeasurement());
-    this.container.append(this.controls.run);
   }
 
   buildWindowSection() {
@@ -191,7 +186,11 @@ export class MeasurementEditor {
       wrapper.className = "measurement-front-panel-action";
       const button = document.createElement("button");
       button.type = "button";
-      button.className = name === "frontPanelClear" ? "secondary" : "primary";
+      button.className = name === "frontPanelRefresh"
+        ? "primary"
+        : name === "frontPanelClear"
+          ? "danger"
+          : "secondary";
       button.textContent = translate(key);
       button.addEventListener("click", () => {
         if (command === "measure-results") void this.refreshFrontPanel();
@@ -227,11 +226,12 @@ export class MeasurementEditor {
     const job = await this.hooks.executeCommand("measure-results", {});
     if (requestedContext !== this.contextKey) return;
     if (job?.status !== "completed") {
-      this.frontPanelState = { kind: "error", payload: null };
+      this.frontPanelReadError = "measurement.frontPanel.readFailed";
     } else {
       const payload = measurementPayload(job);
       const hasRows = Boolean(payload?.items?.length || payload?.statistics_items?.length);
       this.frontPanelState = { kind: hasRows ? "results" : "empty", payload };
+      this.frontPanelReadError = null;
     }
     this.renderFrontPanelReadback();
   }
@@ -247,20 +247,32 @@ export class MeasurementEditor {
     const job = await this.hooks.executeCommand("measure-clear", {});
     if (requestedContext !== this.contextKey || job?.status !== "completed") return;
     this.frontPanelState = { kind: "cleared", payload: null };
+    this.frontPanelReadError = null;
     this.renderFrontPanelReadback();
   }
 
   renderFrontPanelReadback() {
     if (!this.frontPanelContent) return;
     this.frontPanelContent.replaceChildren();
+    if (this.frontPanelReadError) {
+      const error = document.createElement("p");
+      error.className = "measurement-front-panel-error";
+      error.textContent = translate(
+        this.frontPanelState.kind === "results"
+          ? "measurement.frontPanel.readFailedStale"
+          : this.frontPanelReadError,
+      );
+      this.frontPanelContent.append(error);
+      if (this.frontPanelState.kind === "unread") return;
+    }
     if (this.frontPanelState.kind !== "results") {
       const note = document.createElement("p");
       note.className = "muted";
       const key = this.frontPanelState.kind === "cleared"
         ? "measurement.frontPanel.cleared"
-        : this.frontPanelState.kind === "error"
-          ? "measurement.frontPanel.readFailed"
-          : "measurement.frontPanel.empty";
+        : this.frontPanelState.kind === "empty"
+          ? "measurement.frontPanel.empty"
+          : "measurement.frontPanel.unread";
       note.textContent = translate(key);
       this.frontPanelContent.append(note);
       return;
@@ -315,9 +327,6 @@ export class MeasurementEditor {
     const busy = this.hooks.isExecutionBusy();
     this.measureForm?.setDisabled(busy);
     this.windowForm?.setDisabled(busy);
-    if (this.controls.run) {
-      this.controls.run.disabled = busy || !this.hooks.isCommandAvailable("measure");
-    }
     if (this.controls.windowRefresh) {
       this.controls.windowRefresh.disabled = busy
         || !this.hooks.isCommandAvailable("measure-window");

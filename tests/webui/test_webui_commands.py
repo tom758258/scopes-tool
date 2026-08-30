@@ -243,8 +243,22 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     ):
         assert f'"help.{key}":' in english
         assert f'"help.{key}":' in chinese
-    assert '"field.measure-window.window": "Measurement range"' in english
-    assert '"field.measure-window.window": "量測範圍"' in chinese
+    assert '"field.measure-window.window": "Range"' in english
+    assert '"field.measure-window.window": "範圍"' in chinese
+    assert (
+        '"description.measure": "Configure the measurement item, channel, required conditions, '
+        'and measurement range for this run."' in english
+    )
+    assert '"description.measure": "設定本次量測的項目、通道、必要條件與量測範圍。"' in chinese
+    for key in (
+        "measurement.frontPanel.unread",
+        "measurement.frontPanel.empty",
+        "measurement.frontPanel.cleared",
+        "measurement.frontPanel.readFailed",
+        "measurement.frontPanel.readFailedStale",
+    ):
+        assert f'"{key}":' in english
+        assert f'"{key}":' in chinese
     for option in MEASUREMENT_WINDOW_CHOICES:
         assert f'"enum.measure-window.window.{option}":' in english
         assert f'"enum.measure-window.window.{option}":' in chinese
