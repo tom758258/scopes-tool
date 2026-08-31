@@ -104,6 +104,7 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
           execute: { disabled: false },
           formHeading: {},
           form: {},
+          referenceEditor: {},
           saveExportEditor: {},
           serialEditor: {},
           triggerEditor: {},
@@ -2576,7 +2577,7 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 5
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 6
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
 
