@@ -53,6 +53,37 @@ def test_drain_exceeds_max_reads_raises():
             drain_preexisting_system_errors(scope, max_reads=30)
 
 
+def test_drain_with_query_only_fake_scope():
+    from scopes_tool_core.status import parse_system_error
+
+    class FakeScope:
+        def __init__(self, responses):
+            self._responses = [parse_system_error(r) for r in responses]
+            self.read_count = 0
+
+        def query_system_error(self):
+            self.read_count += 1
+            return self._responses[self.read_count - 1]
+
+    fake = FakeScope(['-420,"Query UNTERMINATED"', '-221,"Settings conflict"', '0,"No error"'])
+    assert not hasattr(fake, "drain_system_errors")
+    drained = drain_preexisting_system_errors(fake)
+    assert [entry.code for entry in drained] == [-420, -221]
+    assert fake.read_count == 3
+
+
+def test_drain_rejects_max_reads_zero():
+    from scopes_tool_core.status import parse_system_error
+
+    class FakeScope:
+        def query_system_error(self):
+            return parse_system_error('0,"No error"')
+
+    fake = FakeScope()
+    with pytest.raises(ValueError, match="max_reads must be at least 1"):
+        drain_preexisting_system_errors(fake, max_reads=0)
+
+
 def test_capture_batch_stale_drained_then_completed(tmp_path):
     # stale -420 before batch, per-capture should be clean
     with _scope(system_errors=['-420,"Query UNTERMINATED"', '0,"No error"']) as scope:

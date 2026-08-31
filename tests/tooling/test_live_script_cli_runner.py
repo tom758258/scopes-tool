@@ -9483,25 +9483,169 @@ $joinedArgs = $allArgs -join " | "
         assert "math-vertical-baseline-query" in baseline_stages
         assert "math-vertical-query" in baseline_stages
 
-def test_workflow_post_case_error_queue_regression():
+@requires_windows
+def test_workflow_post_case_error_queue_regression(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-workflow-check.ps1"
-    text = script_path.read_text(encoding="utf-8")
-    wf_start = text.index("function Invoke-WorkflowCase")
-    wf_end = text.index("function Invoke-HardwareFreePreflight", wf_start)
-    wf = text[wf_start:wf_end]
-    assert 'Get-ErrorDrain -Stage "${Name}-post-error-queue"' in wf
-    assert "Post-case error queue contained" in wf
-    assert "did not reach code 0 within 30 reads after" in wf
-    assert "Drain-AfterFailure" in wf
-    # Behavioral simulation in Python mirroring PS logic
-    def simulate(post_errors, terminated):
-        # Action succeeds, then post-drain check
-        if post_errors:
-            return "FAIL", True
-        if not terminated:
-            return "FAIL", True
-        return "PASS", False
-    clean_status, clean_failed = simulate([], True)
-    err_status, err_failed = simulate([{"code": -221}], True)
-    assert clean_status == "PASS" and clean_failed is False
-    assert err_status == "FAIL" and err_failed is True
+    harness_path = tmp_path / "workflow-post-case-harness.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse live script: $($parseErrors[0].Message)"
+}
+
+$functionAst = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Invoke-WorkflowCase"
+    )
+}, $true)
+if ($null -eq $functionAst) {
+    throw "Invoke-WorkflowCase was not found in ${ScriptPath}."
+}
+Invoke-Expression $functionAst.Extent.Text
+
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:WriteDrainErrorsCalls = New-Object System.Collections.Generic.List[object]
+$script:DrainAfterFailureCalls = New-Object System.Collections.Generic.List[object]
+$script:AddCaseResultCalls = New-Object System.Collections.Generic.List[object]
+
+function Add-CaseResult {
+    param([string] $Name, [string] $Status, [string] $Detail = "")
+    $script:AddCaseResultCalls.Add([pscustomobject]@{ Name = $Name; Status = $Status; Detail = $Detail })
+    $script:CaseResults[$Name] = [pscustomobject]@{ Status = $Status; Detail = $Detail }
+}
+function Write-DrainErrors {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]] $Errors,
+        [string] $CaseName = ""
+    )
+    $script:WriteDrainErrorsCalls.Add([pscustomobject]@{ Errors = @($Errors); CaseName = $CaseName })
+}
+function Drain-AfterFailure {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+        [Parameter(Mandatory = $true)]
+        [string] $CaseName
+    )
+    $script:DrainAfterFailureCalls.Add([pscustomobject]@{ Stage = $Stage; CaseName = $CaseName })
+}
+$script:Scenario = "pass"
+function Get-ErrorDrain {
+    param([Parameter(Mandatory = $true)][string] $Stage)
+    if ($script:Scenario -eq "pass") {
+        return [pscustomobject]@{
+            Invocation = $null
+            Entries = @([pscustomobject]@{ code = 0; message = "No error"; raw = '+0,"No error"' })
+            Errors = @()
+            Terminated = $true
+        }
+    } else {
+        $err = [pscustomobject]@{ code = -221; message = "Settings conflict"; raw = '-221,"Settings conflict"' }
+        return [pscustomobject]@{
+            Invocation = $null
+            Entries = @($err, [pscustomobject]@{ code = 0; message = "No error"; raw = '+0,"No error"' })
+            Errors = @($err)
+            Terminated = $true
+        }
+    }
+}
+
+# PASS case
+$script:Scenario = "pass"
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:WriteDrainErrorsCalls.Clear()
+$script:DrainAfterFailureCalls.Clear()
+$script:AddCaseResultCalls.Clear()
+Invoke-WorkflowCase -Name "demo-pass" -Action { }
+$passStatus = $script:CaseResults["demo-pass"].Status
+$passFunctional = $script:FunctionalFailed
+$passWriteCount = $script:WriteDrainErrorsCalls.Count
+$passDrainCount = $script:DrainAfterFailureCalls.Count
+
+# FAIL case
+$script:Scenario = "fail"
+$script:CaseResults = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:WriteDrainErrorsCalls.Clear()
+$script:DrainAfterFailureCalls.Clear()
+$script:AddCaseResultCalls.Clear()
+Invoke-WorkflowCase -Name "demo-fail" -Action { }
+$failStatus = $script:CaseResults["demo-fail"].Status
+$failFunctional = $script:FunctionalFailed
+$failWriteCount = $script:WriteDrainErrorsCalls.Count
+$failDrainCount = $script:DrainAfterFailureCalls.Count
+$failDrainStage = if ($failDrainCount -gt 0) { $script:DrainAfterFailureCalls[0].Stage } else { "" }
+$failDrainCase = if ($failDrainCount -gt 0) { $script:DrainAfterFailureCalls[0].CaseName } else { "" }
+$failDetail = $script:CaseResults["demo-fail"].Detail
+
+[ordered]@{
+    pass_status = $passStatus
+    pass_functional_failed = $passFunctional
+    pass_write_count = $passWriteCount
+    pass_drain_count = $passDrainCount
+    fail_status = $failStatus
+    fail_functional_failed = $failFunctional
+    fail_write_count = $failWriteCount
+    fail_drain_count = $failDrainCount
+    fail_drain_stage = $failDrainStage
+    fail_drain_case = $failDrainCase
+    fail_detail = $failDetail
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["pass_status"] == "PASS"
+    assert result["pass_functional_failed"] is False
+    assert result["pass_drain_count"] == 0
+    assert result["pass_write_count"] == 0
+    assert result["fail_status"] == "FAIL"
+    assert result["fail_functional_failed"] is True
+    assert result["fail_write_count"] == 1
+    assert result["fail_drain_count"] == 1
+    assert result["fail_drain_stage"] == "demo-fail-error-drain"
+    assert result["fail_drain_case"] == "demo-fail"
+    assert "Post-case error queue contained" in result["fail_detail"]

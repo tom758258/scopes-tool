@@ -48,8 +48,9 @@ def test_segmented_capture_simulate_json_writes_artifacts_and_order(tmp_path, ca
     assert (tmp_path / "segment_0001.csv").read_text(encoding="utf-8").splitlines()[0] == (
         "time_s,ch1_v"
     )
-    assert payload["scpi"]["sent"][:11] == [
+    assert payload["scpi"]["sent"][:12] == [
         "*IDN?",
+        ":SYSTem:ERRor?",
         ":ACQuire:MODE?",
         ":ACQuire:TYPE?",
         ":CHANnel1:UNITs?",

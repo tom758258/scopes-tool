@@ -567,8 +567,9 @@ def test_capture_simulate_wait_trigger_json_reports_trigger_metadata(capsys, tmp
     assert len(trigger_values) == 2
     assert trigger_values[0] & OPERATION_CONDITION_RUN_MASK
     assert not trigger_values[1] & OPERATION_CONDITION_RUN_MASK
-    assert payload["scpi"]["sent"][:4] == [
+    assert payload["scpi"]["sent"][:5] == [
         "*IDN?",
+        ":SYSTem:ERRor?",
         ":SINGle",
         ":OPERegister:CONDition?",
         ":OPERegister:CONDition?",
@@ -775,6 +776,8 @@ def test_acquisition_check_system_error_keeps_report(capsys, tmp_path):
                 "--simulate",
                 "--json",
                 "--simulate-system-error",
+                "0",
+                "--simulate-system-error",
                 "-113",
                 "--output-dir",
                 str(output_dir),
@@ -820,6 +823,7 @@ def test_acquisition_check_check_only_json_reports_initial_state_and_no_writes(
     ]
     assert payload["scpi"]["sent"] == [
         "*IDN?",
+        ":SYSTem:ERRor?",
         ":ACQuire:TYPE?",
         ":ACQuire:COUNt?",
         ":SYSTem:ERRor?",
@@ -832,7 +836,7 @@ def test_acquisition_check_check_only_json_reports_initial_state_and_no_writes(
 def test_acquisition_check_stop_on_error_stops_after_first_error(monkeypatch, capsys, tmp_path):
     output_dir = tmp_path / "stop-on-error"
     backend = SimulatorBackend(
-        system_errors=['+0,"No error"', '-113,"Undefined header"']
+        system_errors=['+0,"No error"', '+0,"No error"', '-113,"Undefined header"']
     )
     monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
@@ -1001,7 +1005,7 @@ def test_simulate_json_backend_error_keeps_single_json_object(monkeypatch, capsy
     assert payload["ok"] is False
     assert payload["mode"] == "simulate"
     assert payload["error"]["message"] == "configured measurement failure"
-    assert payload["scpi"]["sent"] == ["*IDN?", ":MEASure:VPP? CHANnel1"]
+    assert payload["scpi"]["sent"] == ["*IDN?", ":SYSTem:ERRor?", ":MEASure:VPP? CHANnel1"]
 
 
 def test_check_error_simulate_json_can_report_injected_error_queue(monkeypatch, capsys):
@@ -1552,6 +1556,7 @@ def test_measure_pair_delay_simulate_json_on_4000x_uses_signal_model(capsys):
     assert result["unit"] == "s"
     assert payload["scpi"]["sent"] == [
         "*IDN?",
+        ":SYSTem:ERRor?",
         ":MEASure:DELay? AUTO,CHANnel1,CHANnel2",
         ":SYSTem:ERRor?",
     ]
@@ -2965,6 +2970,7 @@ def test_capture_simulate_json_binary_failure_reports_single_json_object(
     assert payload["error"]["message"] == "configured binary failure"
     assert payload["scpi"]["sent"] == [
         "*IDN?",
+        ":SYSTem:ERRor?",
         ":WAVeform:SOURce CHANnel1",
         ":CHANnel1:UNITs?",
         ":WAVeform:FORMat BYTE",
@@ -3272,7 +3278,7 @@ def test_capture_batch_simulate_json_stops_after_injected_system_error(
 ):
     output_dir = tmp_path / "batch"
     backend = SimulatorBackend(
-        system_errors=['+0,"No error"', '-113,"Undefined header"']
+        system_errors=['+0,"No error"', '+0,"No error"', '-113,"Undefined header"']
     )
     monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 

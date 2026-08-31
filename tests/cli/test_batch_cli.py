@@ -100,6 +100,7 @@ def test_capture_batch_cli_runs_two_captures_and_writes_outputs(
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("capture_waveforms_byte", (1, 2), 1000),
         "query_system_error",
         ("capture_waveforms_byte", (1, 2), 1000),
@@ -216,6 +217,7 @@ def test_capture_batch_cli_channel_all_expands_to_detected_model_channels(
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("capture_waveforms_byte", (1, 2, 3, 4), 1000),
         "query_system_error",
     ]
@@ -248,6 +250,7 @@ def test_capture_batch_cli_word_single_channel_uses_single_word_api_each_time(
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("capture_waveform_word", 1, 1000),
         "query_system_error",
         ("capture_waveform_word", 1, 1000),
@@ -283,6 +286,7 @@ def test_capture_batch_cli_word_multi_channel_uses_plural_word_api(
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("capture_waveforms_word", (2, 1), 1000),
         "query_system_error",
     ]
@@ -322,6 +326,7 @@ def test_capture_batch_cli_uses_interruptible_wait_between_captures(monkeypatch,
 def test_capture_batch_cli_stops_after_instrument_error(monkeypatch, tmp_path):
     errors = [
         SystemErrorEntry(code=0, message="No error", raw='+0,"No error"'),
+        SystemErrorEntry(code=0, message="No error", raw='+0,"No error"'),
         SystemErrorEntry(code=-113, message="Undefined header", raw='-113,"Undefined header"'),
     ]
     scope = install_scope(monkeypatch, _BatchDummyScope(system_errors=errors))
@@ -346,6 +351,7 @@ def test_capture_batch_cli_stops_after_instrument_error(monkeypatch, tmp_path):
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("capture_waveform_byte", 1, 1000),
         "query_system_error",
         ("capture_waveform_byte", 1, 1000),
@@ -387,7 +393,7 @@ def test_capture_batch_cli_reports_output_write_error_without_traceback(
         == 1
     )
 
-    assert scope.calls == ["query_idn", ("capture_waveform_byte", 1, 1000)]
+    assert scope.calls == ["query_idn", "query_system_error", ("capture_waveform_byte", 1, 1000)]
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "error"
     captured = capsys.readouterr()
@@ -483,7 +489,7 @@ def test_capture_batch_cli_writes_interrupted_manifest(monkeypatch, capsys, tmp_
         == 130
     )
 
-    assert scope.calls == ["query_idn", ("capture_waveform_byte", 1, 1000)]
+    assert scope.calls == ["query_idn", "query_system_error", ("capture_waveform_byte", 1, 1000)]
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "interrupted"
     assert manifest["captures"] == []

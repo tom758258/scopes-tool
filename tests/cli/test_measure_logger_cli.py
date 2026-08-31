@@ -179,6 +179,8 @@ def test_measure_log_cli_simulate_json_stops_on_injected_system_error(
             "--model",
             "keysight-dsox4024a",
             "--simulate-system-error",
+            "0",
+            "--simulate-system-error",
             "-113",
             "--channel",
             "1",

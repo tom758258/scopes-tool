@@ -86,7 +86,7 @@ def test_triggered_measure_loop_simulator_happy_path(tmp_path, capsys):
     assert payload["result"]["status"] == "completed"
     assert payload["result"]["completed_count"] == 2
     assert payload["scpi"]["sent"].count(":SINGle") == 2
-    assert payload["scpi"]["sent"].count(":SYSTem:ERRor?") == 2
+    assert payload["scpi"]["sent"].count(":SYSTem:ERRor?") == 3
     assert (output_dir / "measurements.csv").exists()
     assert (output_dir / "manifest.json").exists()
     assert (output_dir / "scpi.log").exists()

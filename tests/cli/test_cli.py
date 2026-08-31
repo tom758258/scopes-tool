@@ -2058,7 +2058,7 @@ def test_capture_cli_writes_csv_and_metadata_then_checks_error(monkeypatch, caps
         == 0
     )
 
-    assert scope.calls == ["query_idn", ("capture_waveform_byte", 1, 10000), "query_system_error"]
+    assert scope.calls == ["query_idn", "query_system_error", ("capture_waveform_byte", 1, 10000), "query_system_error"]
     assert (tmp_path / "capture_meta.json").exists()
     assert csv_path.read_text(encoding="utf-8").splitlines()[0] == "time_s,ch1_v"
     out = capsys.readouterr().out
@@ -2150,7 +2150,7 @@ def test_capture_cli_supports_word_format(monkeypatch, capsys, tmp_path):
         == 0
     )
 
-    assert scope.calls == ["query_idn", ("capture_waveform_word", 1, 5000), "query_system_error"]
+    assert scope.calls == ["query_idn", "query_system_error", ("capture_waveform_word", 1, 5000), "query_system_error"]
     metadata = (tmp_path / "capture_meta.json").read_text(encoding="utf-8")
     assert '"format": "WORD"' in metadata
     assert '"byte_order": "MSBFirst"' in metadata
@@ -2226,10 +2226,11 @@ def test_capture_cli_writes_multi_channel_csv_and_metadata(monkeypatch, capsys, 
     )
 
     assert scope.calls == [
-        "query_idn",
-        ("capture_waveforms_byte", (1, 2), 1000),
-        "query_system_error",
-    ]
+            "query_idn",
+            "query_system_error",
+            ("capture_waveforms_byte", (1, 2), 1000),
+            "query_system_error",
+        ]
     assert csv_path.read_text(encoding="utf-8").splitlines()[0] == "time_s,ch1_v,ch2_v"
     metadata = json.loads((tmp_path / "capture_meta.json").read_text(encoding="utf-8"))
     assert metadata["format"] == "BYTE"
@@ -2381,10 +2382,11 @@ def test_capture_cli_channel_all_expands_to_detected_model_channels(
     )
 
     assert scope.calls == [
-        "query_idn",
-        ("capture_waveforms_byte", (1, 2, 3, 4), 1000),
-        "query_system_error",
-    ]
+            "query_idn",
+            "query_system_error",
+            ("capture_waveforms_byte", (1, 2, 3, 4), 1000),
+            "query_system_error",
+        ]
     assert csv_path.read_text(encoding="utf-8").splitlines()[0] == (
         "time_s,ch1_v,ch2_v,ch3_v,ch4_v"
     )
@@ -2450,10 +2452,11 @@ def test_capture_cli_channel_all_is_case_insensitive_and_supports_word(
     )
 
     assert scope.calls == [
-        "query_idn",
-        ("capture_waveforms_word", (1, 2, 3, 4), 1000),
-        "query_system_error",
-    ]
+            "query_idn",
+            "query_system_error",
+            ("capture_waveforms_word", (1, 2, 3, 4), 1000),
+            "query_system_error",
+        ]
     out = capsys.readouterr().out
     assert "Planned capture: CH1, CH2, CH3, CH4, 1000 points, WORD format" in out
     assert out.count("Command: :WAVeform:FORMat WORD") == 4
@@ -2521,10 +2524,11 @@ def test_capture_cli_multi_channel_word_uses_plural_api(monkeypatch, capsys, tmp
     )
 
     assert scope.calls == [
-        "query_idn",
-        ("capture_waveforms_word", (2, 1), 5000),
-        "query_system_error",
-    ]
+            "query_idn",
+            "query_system_error",
+            ("capture_waveforms_word", (2, 1), 5000),
+            "query_system_error",
+        ]
     out = capsys.readouterr().out
     assert "Planned capture: CH2, CH1, 5000 points, WORD format" in out
     assert "Command: :WAVeform:SOURce CHANnel2" in out
@@ -2569,6 +2573,10 @@ def test_capture_cli_reports_multi_channel_metadata_permission_error_without_tra
                 )
             )
 
+        def query_system_error(self):
+            self.calls.append("query_system_error")
+            return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
+
     scope = DummyScope()
     csv_path = tmp_path / "capture.csv"
     meta_path = tmp_path / "capture_meta.json"
@@ -2603,7 +2611,7 @@ def test_capture_cli_reports_multi_channel_metadata_permission_error_without_tra
         == 1
     )
 
-    assert scope.calls == ["query_idn", ("capture_waveforms_byte", (1, 2), 1000)]
+    assert scope.calls == ["query_idn", "query_system_error", ("capture_waveforms_byte", (1, 2), 1000)]
     captured = capsys.readouterr()
     assert "Traceback" not in captured.err
     assert "could not write waveform metadata JSON file" in captured.err
@@ -2836,7 +2844,7 @@ def test_capture_cli_uses_timestamped_default_csv_when_omitted(monkeypatch, caps
 
     assert cli.main(["capture", "--resource", "USB0::FAKE::INSTR", "--channel", "1"]) == 0
 
-    assert scope.calls == ["query_idn", ("capture_waveform_byte", 1, 1000), "query_system_error"]
+    assert scope.calls == ["query_idn", "query_system_error", ("capture_waveform_byte", 1, 1000), "query_system_error"]
     assert default_csv_path.exists()
     assert (tmp_path / "data" / "2026-05-12-14-30-05_meta.json").exists()
     assert default_csv_path.read_text(encoding="utf-8").splitlines()[0] == "time_s,ch1_v"
@@ -2895,6 +2903,10 @@ def test_capture_cli_reports_csv_permission_error_without_traceback(monkeypatch,
                 vertical_unit="V",
             )
 
+        def query_system_error(self):
+            self.calls.append("query_system_error")
+            return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
+
     scope = DummyScope()
     csv_path = tmp_path / "capture.csv"
 
@@ -2920,7 +2932,7 @@ def test_capture_cli_reports_csv_permission_error_without_traceback(monkeypatch,
         == 1
     )
 
-    assert scope.calls == ["query_idn", ("capture_waveform_byte", 1, 1000)]
+    assert scope.calls == ["query_idn", "query_system_error", ("capture_waveform_byte", 1, 1000)]
     captured = capsys.readouterr()
     assert "Traceback" not in captured.err
     assert "could not write waveform CSV file" in captured.err
@@ -3333,6 +3345,7 @@ def test_measure_cli_queries_new_items_then_checks_error(
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_measurement", 1, normalized_item),
         "query_system_error",
     ]
@@ -3494,6 +3507,7 @@ def test_measure_cli_queries_parameterized_items_then_checks_error(
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_measurement", 1, normalized_item, kwargs),
         "query_system_error",
     ]
@@ -3565,6 +3579,7 @@ def test_measure_cli_queries_pair_items_then_checks_error(
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_pair_measurement", 1, 2, item),
         "query_system_error",
     ]
@@ -3601,6 +3616,7 @@ def test_measure_cli_treats_channel_as_source_alias_for_pair_item(monkeypatch, c
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_pair_measurement", 1, 2, "phase"),
         "query_system_error",
     ]
@@ -3625,7 +3641,7 @@ def test_measure_cli_accepts_source_channel_for_single_item(monkeypatch, capsys)
         == 0
     )
 
-    assert scope.calls == ["query_idn", ("query_measurement", 1, "vpp"), "query_system_error"]
+    assert scope.calls == ["query_idn", "query_system_error", ("query_measurement", 1, "vpp"), "query_system_error"]
     assert "Command: :MEASure:VPP? CHANnel1" in capsys.readouterr().out
 
 
@@ -3761,6 +3777,7 @@ def test_measure_cli_reports_invalid_sentinel_for_pair_item(monkeypatch, capsys)
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_pair_measurement", 1, 2, "phase"),
         "query_system_error",
     ]
@@ -3812,6 +3829,7 @@ def test_measure_cli_reports_invalid_sentinel_for_new_items(
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_measurement", 1, normalized_item),
         "query_system_error",
     ]
@@ -3881,7 +3899,7 @@ def test_measure_cli_queries_vpp_then_checks_error(monkeypatch, capsys):
         == 0
     )
 
-    assert scope.calls == ["query_idn", ("query_measurement", 1, "vpp"), "query_system_error"]
+    assert scope.calls == ["query_idn", "query_system_error", ("query_measurement", 1, "vpp"), "query_system_error"]
     out = capsys.readouterr().out
     assert "Planned query: CH1 vpp measurement" in out
     assert "Command: :MEASure:VPP? CHANnel1" in out
@@ -3949,7 +3967,7 @@ def test_measure_cli_queries_vrms_then_checks_error(monkeypatch, capsys):
         == 0
     )
 
-    assert scope.calls == ["query_idn", ("query_measurement", 1, "vrms"), "query_system_error"]
+    assert scope.calls == ["query_idn", "query_system_error", ("query_measurement", 1, "vrms"), "query_system_error"]
     out = capsys.readouterr().out
     assert "Planned query: CH1 vrms measurement" in out
     assert "Command: :MEASure:VRMS? DISPlay,DC,CHANnel1" in out
@@ -4017,6 +4035,7 @@ def test_measure_cli_accepts_risetime_alias_then_checks_error(monkeypatch, capsy
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_measurement", 1, "rise_time"),
         "query_system_error",
     ]
@@ -4087,6 +4106,7 @@ def test_measure_cli_accepts_freq_alias(monkeypatch, capsys):
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_measurement", 1, "frequency"),
         "query_system_error",
     ]
@@ -4155,6 +4175,7 @@ def test_measure_cli_reports_invalid_sentinel_without_losing_raw(monkeypatch, ca
 
     assert scope.calls == [
         "query_idn",
+        "query_system_error",
         ("query_measurement", 1, "frequency"),
         "query_system_error",
     ]

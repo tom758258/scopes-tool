@@ -2340,8 +2340,9 @@ def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
     assert meta_path.exists()
     assert not list(tmp_path.rglob("request.json"))
     assert not list(tmp_path.rglob("result.json"))
-    assert job.result["scpi"]["sent"][:4] == [
+    assert job.result["scpi"]["sent"][:5] == [
         "*IDN?",
+        ":SYSTem:ERRor?",
         single_command(),
         operation_condition_query(),
         operation_condition_query(),

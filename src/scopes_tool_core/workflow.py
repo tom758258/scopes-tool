@@ -71,17 +71,24 @@ def workflow_scpi_logging(
 def drain_preexisting_system_errors(scope, *, max_reads: int = 30) -> tuple:
     """Drain stale system errors before a top-level operation.
 
-    Uses the existing ``scope.drain_system_errors`` bounded drain.
-    Returns non-zero entries for human diagnostics. Raises if the queue
-    does not reach code 0 within ``max_reads``.
+    Reads the system error queue until code 0 is reached or ``max_reads``
+    is exhausted. Returns non-zero entries for human diagnostics.
     """
 
-    entries = scope.drain_system_errors(max_reads=max_reads)
-    if not entries or entries[-1].is_error:
+    if max_reads < 1:
+        raise ValueError("max_reads must be at least 1.")
+    entries: list = []
+    for _ in range(max_reads):
+        entry = scope.query_system_error()
+        entries.append(entry)
+        if not entry.is_error:
+            break
+    entries_tuple = tuple(entries)
+    if not entries_tuple or entries_tuple[-1].is_error:
         raise OscilloscopeError(
             f"System error queue did not reach code 0 within {max_reads} reads."
         )
-    return tuple(entry for entry in entries if entry.is_error)
+    return tuple(entry for entry in entries_tuple if entry.is_error)
 
 
 def interruptible_wait(
