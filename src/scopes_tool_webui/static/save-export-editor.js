@@ -19,7 +19,6 @@ const SAVE_EXPORT_MODES = {
     settingIds: [
       "save-waveform-format",
       "save-waveform-length",
-      "save-waveform-length-max",
     ],
     saveCommandId: "save-waveform",
   },
@@ -49,7 +48,7 @@ function determineFileExtension(mode, formatValue) {
   }
   if (value.includes("csv")) return ".csv";
   if (value.includes("bin")) return ".bin";
-  if (value.includes("xy")) return ".xy";
+  if (value.includes("xy")) return ".csv";
   return ".csv";
 }
 
@@ -68,6 +67,8 @@ export class SaveExportEditor {
     this.mode = "image";
     this.pathEntry = null;
     this.filenameEntry = null;
+    this.advancedEntry = null;
+    this.lengthMaxEntry = null;
     this.destinationPreview = null;
     this.modeButtons = [];
     this.buildDom();
@@ -154,7 +155,7 @@ export class SaveExportEditor {
 
   schedulePresentation() {
     queueMicrotask(() => {
-      void this.refresh(false, false);
+      void this.refresh(false, true);
     });
   }
 
@@ -162,19 +163,13 @@ export class SaveExportEditor {
     this.buildDom();
     this.stateKey = null;
     this.renderedKey = null;
-    this.schedulePresentation();
+    queueMicrotask(() => {
+      void this.refresh(false, false);
+    });
   }
 
   commandForId(commandId) {
     return this.catalog.commands.find((command) => command.id === commandId) || null;
-  }
-
-  formatCommand(command, includeAction = false) {
-    if (!command) return command;
-    const fields = (this.catalog.fieldsFor ? this.catalog.fieldsFor(command) : command.fields).filter(
-      (field) => includeAction || field.name !== "action",
-    );
-    return { ...command, fields };
   }
 
   async refresh(force = false, read = true) {
@@ -198,10 +193,14 @@ export class SaveExportEditor {
       this.applyBusyState();
       return;
     }
-    this.stateKey = key;
     if (this.renderedKey !== key) this.rebuildSections(key);
     this.applyBusyState();
-    if (!read || !this.hooks.isAvailable()) return;
+    if (!read) {
+      this.stateKey = key;
+      return;
+    }
+    if (!this.hooks.isAvailable()) return;
+    this.stateKey = key;
     this.setBusy(true);
     try {
       await this.readWorkspace();
@@ -213,6 +212,10 @@ export class SaveExportEditor {
   clearSections() {
     this.renderedKey = null;
     this.entries = [];
+    this.pathEntry = null;
+    this.filenameEntry = null;
+    this.advancedEntry = null;
+    this.lengthMaxEntry = null;
     this.sectionsHost.replaceChildren();
     this.groupHeading.textContent = "";
     this.readStatus.textContent = "";
@@ -247,6 +250,13 @@ export class SaveExportEditor {
       this.entries.push(entry);
     }
 
+    if (modeConfig.id === "waveform") {
+      const command = this.commandForId("save-waveform-length-max");
+      if (command && this.catalog.supported(command)) {
+        this.lengthMaxEntry = this.buildReadonlyState(command, modeSection);
+      }
+    }
+
     const saveButton = document.createElement("button");
     saveButton.type = "button";
     saveButton.className = "primary trigger-editor-action";
@@ -264,9 +274,9 @@ export class SaveExportEditor {
     summary.textContent = translate("save-export.editor.advancedSettings");
     const advancedHost = document.createElement("div");
     advancedHost.className = "trigger-editor-details-content";
-    const advancedEntry = this.buildAdvancedEntry();
-    if (advancedEntry) {
-      advancedHost.append(advancedEntry.container);
+    this.advancedEntry = this.buildAdvancedEntry();
+    if (this.advancedEntry) {
+      advancedHost.append(this.advancedEntry.container);
       advanced.append(summary, advancedHost);
       this.sectionsHost.append(advanced);
     }
@@ -283,7 +293,7 @@ export class SaveExportEditor {
     const formHost = document.createElement("div");
     const command = this.commandForId("save-pwd");
     const form = new CommandForm(formHost, this.catalog);
-    form.render(command ? this.formatCommand(command, false) : { id: "save-pwd", fields: [] });
+    form.render(command, { onDirty: () => this.updateDestinationPreview() });
     this.pathStatus = document.createElement("p");
     this.pathStatus.className = "muted compact-note";
     this.pathStatus.textContent = "";
@@ -305,7 +315,7 @@ export class SaveExportEditor {
     const formHost = document.createElement("div");
     const command = this.commandForId(saveCommandId);
     const form = new CommandForm(formHost, this.catalog);
-    form.render(this.formatCommand(command, false));
+    form.render(command, { onDirty: () => this.updateDestinationPreview() });
     const preview = document.createElement("p");
     preview.className = "muted compact-note";
     preview.textContent = translate("save-export.editor.destinationPreviewLabel");
@@ -331,7 +341,7 @@ export class SaveExportEditor {
     }
     const formHost = document.createElement("div");
     const form = new CommandForm(formHost, this.catalog);
-    form.render(this.formatCommand(command, false));
+    form.render(command, { onDirty: () => this.updateDestinationPreview() });
     section.append(heading, formHost);
     container.append(section);
     return { id: command.id, form, kind: "setting", section };
@@ -346,24 +356,56 @@ export class SaveExportEditor {
     note.textContent = translate("save-export.editor.baseFilenameHelp");
     const formHost = document.createElement("div");
     const form = new CommandForm(formHost, this.catalog);
-    form.render(this.formatCommand(command, false));
-    container.append(note, formHost);
-    return { container, form };
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary trigger-editor-action";
+    button.textContent = translate("actions.apply");
+    form.render(command, { onDirty: () => this.applyBusyState() });
+    const entry = { id: command.id, container, form, button, kind: "setting" };
+    button.addEventListener("click", () => {
+      void this.applyAdvancedFilename(entry);
+    });
+    container.append(note, formHost, button);
+    return entry;
+  }
+
+  buildReadonlyState(command, container) {
+    const section = document.createElement("section");
+    section.className = "trigger-editor-section";
+    const heading = document.createElement("strong");
+    heading.className = "trigger-editor-heading";
+    heading.textContent = this.catalog.commandLabel(command);
+    const value = document.createElement("output");
+    value.className = "readonly-value";
+    value.textContent = "-";
+    section.append(heading, value);
+    container.append(section);
+    return { id: command.id, section, value };
   }
 
   updateDestinationPreview() {
     if (!this.destinationPreview) return;
     const currentValues = (form) => {
       if (!form) return {};
+      if (typeof form.draft === "function") {
+        const draft = form.draft();
+        if (Array.isArray(draft)) {
+          return Object.fromEntries(
+            draft
+              .filter((entry) => entry.value !== "" && entry.value !== null && entry.value !== undefined)
+              .map((entry) => [entry.name, entry.value]),
+          );
+        }
+      }
       const values = form.values ? form.values() : {};
       if (values && Object.keys(values).length > 0) return values;
       const queryValues = form.queryValues ? form.queryValues() : null;
-      return queryValues && Object.keys(queryValues).length > 0 ? queryValues : values;
+      return queryValues && Object.keys(queryValues).length > 0 ? queryValues : values || {};
     };
     const pathValues = currentValues(this.pathEntry?.form);
     const filenameValues = currentValues(this.filenameEntry?.form);
     const path = String(pathValues.path || "");
-    const filename = String(filenameValues.filename || "scope");
+    const filename = String(filenameValues.filename || "");
     const mode = this.mode;
     const formatEntry = mode === "image"
       ? this.entries.find((entry) => entry.id === "save-image-format")
@@ -371,36 +413,48 @@ export class SaveExportEditor {
     const formatValue = currentValues(formatEntry?.form).format;
     const suffix = determineFileExtension(mode, formatValue);
     const normalizedPath = path ? (path.endsWith("\\") ? path : `${path}\\`) : "";
-    this.destinationPreview.textContent = `${normalizedPath}${filename}${suffix}`;
+    this.destinationPreview.textContent = filename
+      ? `${normalizedPath}${filename}${suffix}`
+      : normalizedPath;
   }
 
   async readWorkspace() {
-    const ids = ["save-pwd", ...this.modeConfig().settingIds];
+    const ids = ["save-pwd", "save-filename", ...this.modeConfig().settingIds];
     if (this.mode === "waveform") ids.push("save-waveform-length-max");
+    const entries = ids
+      .map((id) => ({ id, entry: this.entryForId(id) }))
+      .filter(({ entry }) => entry);
     let failed = 0;
-    const total = ids.length;
+    const total = entries.length;
+    const epoch = this.epoch;
+    const stateKey = this.currentStateKey();
     this.setReadStatus("reading", {
       group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
       current: 0,
       total,
     });
-    for (const id of ids) {
-      const entry = this.entries.find((item) => item.id === id)
-        || (id === "save-pwd" && this.pathEntry ? { id, form: this.pathEntry.form, kind: "setting" } : null);
-      if (!entry) continue;
-      const values = entry.form.queryValues();
+    for (const [index, { id, entry }] of entries.entries()) {
+      if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
+      this.setReadStatus("reading", {
+        group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
+        current: index,
+        total,
+      });
+      const values = id === "save-waveform-length-max" ? {} : entry.form.queryValues();
       if (values === null) {
         failed += 1;
         if (id === "save-pwd" && this.pathStatus) this.pathStatus.textContent = translate("save-export.editor.pathUnavailable");
         continue;
       }
       const job = await this.hooks.executeCommand(id, values, { intent: "readback" });
+      if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
       if (job?.status !== "completed") {
         failed += 1;
         if (id === "save-pwd" && this.pathStatus) this.pathStatus.textContent = translate("save-export.editor.pathUnavailable");
         continue;
       }
-      entry.form.syncResult(job, true);
+      if (id === "save-waveform-length-max") this.syncLengthMaxState(job);
+      else entry.form.syncResult(job, true);
       if (id === "save-pwd") {
         if (this.pathStatus) this.pathStatus.textContent = "";
         this.updateDestinationPreview();
@@ -412,6 +466,51 @@ export class SaveExportEditor {
       total,
     });
     this.updateDestinationPreview();
+  }
+
+  entryForId(id) {
+    if (id === "save-pwd") return this.pathEntry;
+    if (id === "save-filename") return this.advancedEntry;
+    if (id === "save-waveform-length-max") return this.lengthMaxEntry;
+    return this.entries.find((entry) => entry.id === id) || null;
+  }
+
+  syncLengthMaxState(job) {
+    if (!this.lengthMaxEntry) return;
+    const payload = job?.result?.result ?? job?.result;
+    const enabled = typeof payload === "boolean" ? payload : resultValue(payload, "enabled");
+    if (typeof enabled !== "boolean") return;
+    this.lengthMaxEntry.value.textContent = translate(
+      enabled ? "status.enabled" : "status.disabled",
+    );
+  }
+
+  async applyAdvancedFilename(entry) {
+    if (
+      this.busy
+      || this.hooks.isExecutionBusy?.()
+      || !this.hooks.isAvailable()
+      || !this.isDirty(entry.form)
+    ) return null;
+    const values = entry.form.values();
+    if (values === null) return null;
+    const epoch = this.epoch;
+    const stateKey = this.currentStateKey();
+    this.setBusy(true);
+    try {
+      const job = await this.hooks.executeCommand(entry.id, values, { intent: "apply" });
+      if (
+        job?.status === "completed"
+        && epoch === this.epoch
+        && stateKey === this.currentStateKey()
+      ) {
+        entry.form.clearDirty();
+        entry.form.syncResult(job, false);
+      }
+      return job;
+    } finally {
+      this.setBusy(false);
+    }
   }
 
   modeConfig() {
@@ -432,7 +531,8 @@ export class SaveExportEditor {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     const executionOrder = [];
     const pathValues = this.pathEntry?.form?.values?.();
-    if (this.pathEntry && pathValues !== null && this.isDirty(this.pathEntry.form)) {
+    if (this.pathEntry && this.isDirty(this.pathEntry.form)) {
+      if (pathValues === null) return;
       executionOrder.push({ id: "save-pwd", form: this.pathEntry.form, values: pathValues, intent: "apply" });
     }
     for (const entry of this.entries) {
@@ -444,23 +544,28 @@ export class SaveExportEditor {
     }
     const saveValues = this.filenameEntry?.form?.values?.();
     if (saveValues === null) return;
-    for (const item of executionOrder) {
-      const job = await this.hooks.executeCommand(item.id, item.values, { intent: item.intent });
-      if (job?.status !== "completed") {
+    this.setBusy(true);
+    try {
+      for (const item of executionOrder) {
+        const job = await this.hooks.executeCommand(item.id, item.values, { intent: item.intent });
+        if (job?.status !== "completed") {
+          this.setReadStatus("failed", { group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"), failed: 1, total: 1 });
+          return;
+        }
+        item.form.clearDirty();
+        item.form.syncResult(job, false);
+      }
+      const saveJob = await this.hooks.executeCommand(saveCommandId, saveValues, { intent: "command" });
+      if (saveJob?.status !== "completed") {
         this.setReadStatus("failed", { group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"), failed: 1, total: 1 });
         return;
       }
-      item.form.clearDirty();
-      item.form.syncResult(job, false);
+      this.filenameEntry.form.clearDirty();
+      this.filenameEntry.form.syncResult(saveJob, false);
+      this.updateDestinationPreview();
+    } finally {
+      this.setBusy(false);
     }
-    const saveJob = await this.hooks.executeCommand(saveCommandId, saveValues, { intent: "command" });
-    if (saveJob?.status !== "completed") {
-      this.setReadStatus("failed", { group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"), failed: 1, total: 1 });
-      return;
-    }
-    this.filenameEntry.form.clearDirty();
-    this.filenameEntry.form.syncResult(saveJob, false);
-    this.updateDestinationPreview();
   }
 
   isDirty(form) {
@@ -491,6 +596,10 @@ export class SaveExportEditor {
     });
     if (this.pathEntry?.form) this.pathEntry.form.setDisabled(disabled);
     if (this.filenameEntry?.form) this.filenameEntry.form.setDisabled(disabled);
+    if (this.advancedEntry?.form) this.advancedEntry.form.setDisabled(disabled);
+    if (this.advancedEntry?.button) {
+      this.advancedEntry.button.disabled = disabled || !this.isDirty(this.advancedEntry.form);
+    }
     for (const entry of this.entries) {
       entry.form?.setDisabled(disabled);
     }
