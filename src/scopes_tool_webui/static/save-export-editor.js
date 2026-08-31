@@ -51,6 +51,13 @@ function determineFileExtension(mode, formatValue) {
   return "";
 }
 
+function hasExplicitSaveExtension(mode, filename) {
+  const value = String(filename || "");
+  return mode === "image"
+    ? /\.(?:png|bmp)$/i.test(value)
+    : /\.(?:csv|bin)$/i.test(value);
+}
+
 export class SaveExportEditor {
   constructor(container, catalog, hooks) {
     this.container = container;
@@ -198,23 +205,20 @@ export class SaveExportEditor {
       return;
     }
     const key = this.currentStateKey();
-    if (!force && key === this.stateKey) {
-      this.applyBusyState();
-      return;
-    }
-    if (this.renderedKey !== key) this.rebuildSections(key);
+    const needsRebuild = this.renderedKey !== key;
+    if (needsRebuild) this.rebuildSections(key);
     this.applyBusyState();
-    if (!read) {
-      this.stateKey = key;
-      return;
-    }
+    if (!force && !needsRebuild && key === this.stateKey) return;
+    if (!read) return;
     if (!this.hooks.isAvailable()) return;
     this.pendingRefresh = false;
     this.pendingRefreshForce = false;
-    this.stateKey = key;
     this.setBusy(true);
     try {
-      await this.readWorkspace();
+      const completed = await this.readWorkspace();
+      if (completed && key === this.currentStateKey() && key === this.renderedKey) {
+        this.stateKey = key;
+      }
     } finally {
       this.setBusy(false);
     }
@@ -458,7 +462,7 @@ export class SaveExportEditor {
       });
     }
     for (const [index, { id, entry }] of entries.entries()) {
-      if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
+      if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return false;
       this.setReadStatus("reading", {
         group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
         current: index + 1,
@@ -472,7 +476,7 @@ export class SaveExportEditor {
         continue;
       }
       const job = await this.hooks.executeCommand(id, values, { intent: "readback" });
-      if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
+      if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return false;
       if (job?.status !== "completed") {
         failed += 1;
         if (id === "save-pwd" && this.pathStatus) this.pathStatus.textContent = translate("save-export.editor.pathUnavailable");
@@ -486,12 +490,14 @@ export class SaveExportEditor {
         this.updateDestinationPreview();
       }
     }
+    if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return false;
     this.setReadStatus(failed ? "failed" : "loaded", {
       group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
       failed,
       total,
     });
     this.updateDestinationPreview();
+    return true;
   }
 
   entryForId(id) {
@@ -563,6 +569,33 @@ export class SaveExportEditor {
     this.readStatus.textContent = translate(key, values);
   }
 
+  async resyncCurrentFormat(mode, epoch, stateKey) {
+    if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
+    const formatId = mode === "image" ? "save-image-format" : "save-waveform-format";
+    const entry = this.entryForId(formatId);
+    if (!entry?.form) return;
+    const values = entry.form.queryValues();
+    const job = values === null
+      ? null
+      : await this.hooks.executeCommand(formatId, values, { intent: "readback" });
+    if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
+    if (job?.status === "completed") {
+      entry.form.syncResult(job, true);
+      this.updateDestinationPreview();
+      return;
+    }
+    entry.form.render(this.commandForId(formatId), {
+      onDirty: () => this.updateDestinationPreview(),
+    });
+    this.stateKey = null;
+    this.setReadStatus("failed", {
+      group: translate(mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
+      failed: 1,
+      total: 1,
+    });
+    this.updateDestinationPreview();
+  }
+
   async submitCurrentMode(saveCommandId) {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     const executionOrder = [];
@@ -580,6 +613,10 @@ export class SaveExportEditor {
     }
     const saveValues = this.filenameEntry?.form?.values?.();
     if (saveValues === null) return;
+    const mode = this.mode;
+    const epoch = this.epoch;
+    const stateKey = this.currentStateKey();
+    const resyncFormat = hasExplicitSaveExtension(mode, saveValues?.filename);
     this.setBusy(true);
     try {
       for (const item of executionOrder) {
@@ -599,6 +636,7 @@ export class SaveExportEditor {
       this.filenameEntry.form.clearDirty();
       this.filenameEntry.form.syncResult(saveJob, false);
       this.updateDestinationPreview();
+      if (resyncFormat) await this.resyncCurrentFormat(mode, epoch, stateKey);
     } finally {
       this.setBusy(false);
     }

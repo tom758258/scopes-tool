@@ -126,10 +126,13 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
             this.syncCalls = [];
             this.disableCalls = [];
             this.valueCalls = 0;
+            this.renderCalls = 0;
             this.container._fieldNodes = [];
           }
           render(command, options = {}) {
+            this.renderCalls += 1;
             this.command = command;
+            this.valuesResult = {};
             this.onDirty = options.onDirty || (() => {});
           }
           values() {
@@ -363,6 +366,7 @@ def test_save_export_editor_submits_image_settings_then_final_image_save() -> No
         ]);
         assert.ok(!submitted.some((entry) => entry.command.startsWith("save-waveform")));
         assert.ok(!submitted.some((entry) => entry.command === "save-filename"));
+        assert.ok(!submitted.some((entry) => entry.parameters.action === "query"));
         '''
     )
     completed = run_node(script)
@@ -474,6 +478,191 @@ def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context
         assert.deepEqual(submitted.slice(-1)[0].parameters, {});
         assert.equal(editor.lengthMaxEntry.value.textContent, "Enabled");
         assert.ok(!editor.entries.some((entry) => entry.id === "save-waveform-length-max"));
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_retries_an_interrupted_read_without_premarking_loaded() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        let built;
+        let interrupt = true;
+        built = buildEditor(async (command) => {
+          if (interrupt && command === "save-image-format") {
+            interrupt = false;
+            built.hooks.selectedCommand = () => null;
+          }
+          return { status: "completed", job_id: command, result: { result: {} } };
+        });
+        const { editor, submitted, hooks, catalog } = built;
+
+        await editor.refresh(false, false);
+        assert.equal(submitted.length, 0);
+        assert.equal(editor.renderedKey, "ctx|save-export:image");
+        assert.equal(editor.stateKey, null);
+
+        await editor.refresh(false, true);
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-pwd",
+          "save-filename",
+          "save-image-format",
+        ]);
+        assert.equal(editor.stateKey, null);
+
+        hooks.selectedCommand = () => catalog.commands.find((command) => command.id === "save-export");
+        const interruptedCount = submitted.length;
+        await editor.refresh(false, true);
+        assert.equal(submitted.length, interruptedCount + 6);
+        assert.deepEqual(submitted.slice(interruptedCount).map((entry) => entry.command), [
+          "save-pwd",
+          "save-filename",
+          "save-image-format",
+          "save-image-palette",
+          "save-image-ink-saver",
+          "save-image-factors",
+        ]);
+        assert.equal(editor.stateKey, "ctx|save-export:image");
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_resyncs_format_after_explicit_image_and_waveform_extensions() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const imageReads = { count: 0 };
+        const imageBuilt = buildEditor((command, parameters) => {
+          if (command === "save-image-format" && parameters.action === "query") {
+            imageReads.count += 1;
+            const format = imageReads.count === 1 ? "PNG" : "BMP";
+            return { status: "completed", job_id: `image-format-${imageReads.count}`, result: { result: { state: { format } } } };
+          }
+          return { status: "completed", job_id: command, result: { result: {} } };
+        });
+        const imageEditor = imageBuilt.editor;
+        imageEditor.rebuildSections("ctx|save-export:image");
+        const imageFormat = imageEditor.entries.find((entry) => entry.id === "save-image-format");
+        imageFormat.form.syncResult = function (job, preserveDirty) {
+          this.syncCalls.push([job.job_id, preserveDirty]);
+          const format = job?.result?.result?.state?.format;
+          if (format) this.valuesResult = { format };
+        };
+        await imageEditor.refresh(false, true);
+        assert.equal(imageFormat.form.valuesResult.format, "PNG");
+        const imageStart = imageBuilt.submitted.length;
+        imageEditor.filenameEntry.form.valuesResult = { filename: "screen.bmp" };
+        await imageEditor.submitCurrentMode("save-image");
+        const imageCommands = imageBuilt.submitted.slice(imageStart);
+        assert.deepEqual(imageCommands.map((entry) => entry.command), [
+          "save-image",
+          "save-image-format",
+        ]);
+        assert.deepEqual(imageCommands[0].parameters, { filename: "screen.bmp" });
+        assert.deepEqual(imageCommands[1].parameters, { action: "query" });
+        assert.equal(imageCommands[1].intent, "readback");
+        assert.ok(!imageCommands.some((entry) => entry.parameters.action === "set"));
+        assert.ok(!imageCommands.some((entry) => entry.command === "save-filename"));
+        assert.equal(imageFormat.form.valuesResult.format, "BMP");
+        imageEditor.filenameEntry.form.valuesResult = { filename: "screen2" };
+        imageEditor.updateDestinationPreview();
+        assert.equal(imageEditor.destinationPreview.textContent, "screen2.bmp");
+
+        const waveformReads = { count: 0 };
+        const waveformBuilt = buildEditor((command, parameters) => {
+          if (command === "save-waveform-format" && parameters.action === "query") {
+            waveformReads.count += 1;
+            const format = waveformReads.count === 1 ? "BINARY" : "CSV";
+            return { status: "completed", job_id: `waveform-format-${waveformReads.count}`, result: { result: { state: { format } } } };
+          }
+          return { status: "completed", job_id: command, result: { result: {} } };
+        });
+        const waveformEditor = waveformBuilt.editor;
+        waveformEditor.mode = "waveform";
+        waveformEditor.rebuildSections("ctx|save-export:waveform");
+        const waveformFormat = waveformEditor.entries.find((entry) => entry.id === "save-waveform-format");
+        waveformFormat.form.syncResult = function (job, preserveDirty) {
+          this.syncCalls.push([job.job_id, preserveDirty]);
+          const format = job?.result?.result?.state?.format;
+          if (format) this.valuesResult = { format };
+        };
+        await waveformEditor.refresh(false, true);
+        assert.equal(waveformFormat.form.valuesResult.format, "BINARY");
+        const waveformStart = waveformBuilt.submitted.length;
+        waveformEditor.filenameEntry.form.valuesResult = { filename: "trace.csv" };
+        await waveformEditor.submitCurrentMode("save-waveform");
+        const waveformCommands = waveformBuilt.submitted.slice(waveformStart);
+        assert.deepEqual(waveformCommands.map((entry) => entry.command), [
+          "save-waveform",
+          "save-waveform-format",
+        ]);
+        assert.deepEqual(waveformCommands[0].parameters, { filename: "trace.csv" });
+        assert.deepEqual(waveformCommands[1].parameters, { action: "query" });
+        assert.ok(!waveformCommands.some((entry) => entry.parameters.action === "set"));
+        assert.ok(!waveformCommands.some((entry) => entry.command === "save-filename"));
+        assert.equal(waveformFormat.form.valuesResult.format, "CSV");
+        waveformEditor.filenameEntry.form.valuesResult = { filename: "trace2" };
+        waveformEditor.updateDestinationPreview();
+        assert.equal(waveformEditor.destinationPreview.textContent, "trace2.csv");
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_keeps_successful_save_when_format_resync_fails() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        let formatReads = 0;
+        const { editor, submitted } = buildEditor((command, parameters) => {
+          if (command === "save-image-format" && parameters.action === "query") {
+            formatReads += 1;
+            if (formatReads === 2) return { status: "failed", job_id: "format-resync" };
+            const format = formatReads === 1 ? "PNG" : "BMP";
+            return { status: "completed", job_id: `format-${formatReads}`, result: { result: { state: { format } } } };
+          }
+          return { status: "completed", job_id: command, result: { result: {} } };
+        });
+        editor.rebuildSections("ctx|save-export:image");
+        const format = editor.entries.find((entry) => entry.id === "save-image-format");
+        format.form.syncResult = function (job, preserveDirty) {
+          this.syncCalls.push([job.job_id, preserveDirty]);
+          const value = job?.result?.result?.state?.format;
+          if (value) this.valuesResult = { format: value };
+        };
+        await editor.refresh(false, true);
+        assert.equal(editor.stateKey, "ctx|save-export:image");
+        assert.equal(format.form.valuesResult.format, "PNG");
+        const advancedDirty = { dataset: { dirty: "true" } };
+        editor.advancedEntry.form.valuesResult = { action: "set", name: "keep_me" };
+        editor.advancedEntry.form.container._fieldNodes = [advancedDirty];
+
+        const saveStart = submitted.length;
+        editor.filenameEntry.form.valuesResult = { filename: "screen.bmp" };
+        await editor.submitCurrentMode("save-image");
+        const saveCommands = submitted.slice(saveStart);
+        assert.deepEqual(saveCommands.map((entry) => entry.command), [
+          "save-image",
+          "save-image-format",
+        ]);
+        assert.equal(saveCommands[0].job.status, "completed");
+        assert.equal(saveCommands[1].job.status, "failed");
+        assert.equal(submitted.filter((entry) => entry.command === "save-image").length, 1);
+        assert.equal(format.form.renderCalls, 2);
+        assert.deepEqual(format.form.valuesResult, {});
+        assert.equal(editor.stateKey, null);
+        assert.ok(editor.readStatus.textContent.startsWith("failed:Image"));
+        assert.equal(editor.advancedEntry.form.container._fieldNodes[0], advancedDirty);
+
+        await editor.refresh(true, true);
+        assert.equal(submitted.filter((entry) => entry.command === "save-image").length, 1);
+        assert.equal(editor.stateKey, "ctx|save-export:image");
+        assert.equal(format.form.valuesResult.format, "BMP");
         '''
     )
     completed = run_node(script)
