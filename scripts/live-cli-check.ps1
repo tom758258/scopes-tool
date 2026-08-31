@@ -2238,6 +2238,7 @@ Write-Host "  [6] Disconnect unknown DUT signals"
 Write-Host "  [7] WGEN output OFF and disconnected from unknown DUT"
 Write-Host "  [8] DEMO output OFF"
 Write-Host "  [9] External trigger input disconnected from unknown/sensitive DUT"
+Write-Host "  [10] Timebase mode = MAIN / normal horizontal timebase (not XY or Roll)"
 Write-Host ""
 Write-Host "THE VALIDATOR WILL CONFIGURE"
 Write-Host ""
@@ -3534,25 +3535,48 @@ if ($snapshotComplete) {
                 -Expected 0 -Label "Timebase position"
             $originalReference = [string]$snapshot.TimebaseReference
             $targetReference = if ($originalReference -eq "left") { "right" } else { "left" }
+            $referenceChanged = $false
+            $primaryException = $null
+            $restoreException = $null
             try {
                 Invoke-LiveCli -Stage "timebase-reference-set" `
                     -Command "timebase-reference" `
                     -Arguments @("--reference", $targetReference) | Out-Null
+                $referenceChanged = $true
                 $reference = Invoke-LiveCli -Stage "timebase-reference-query" `
                     -Command "timebase-reference" -Arguments @("--query")
                 if ([string]$reference.result.reference -ne $targetReference) {
                     throw "Timebase reference readback does not match ${targetReference}."
                 }
+            } catch {
+                $primaryException = $_.Exception
             } finally {
-                Invoke-LiveCli -Stage "timebase-reference-restore" `
-                    -Command "timebase-reference" `
-                    -Arguments @("--reference", $originalReference) | Out-Null
-                $restoredReference = Invoke-LiveCli `
-                    -Stage "timebase-reference-restore-query" `
-                    -Command "timebase-reference" -Arguments @("--query")
-                if ([string]$restoredReference.result.reference -ne $originalReference) {
-                    throw "Timebase reference restoration did not restore ${originalReference}."
+                if ($referenceChanged) {
+                    try {
+                        Invoke-LiveCli -Stage "timebase-reference-restore" `
+                            -Command "timebase-reference" `
+                            -Arguments @("--reference", $originalReference) | Out-Null
+                        $restoredReference = Invoke-LiveCli `
+                            -Stage "timebase-reference-restore-query" `
+                            -Command "timebase-reference" -Arguments @("--query")
+                        if ([string]$restoredReference.result.reference -ne $originalReference) {
+                            throw "Timebase reference restoration did not restore ${originalReference}."
+                        }
+                    } catch {
+                        $restoreException = $_.Exception
+                        Add-Diagnostic -Name "timebase" -Message (
+                            "timebase reference restore failed: $($_.Exception.Message)"
+                        )
+                        Drain-AfterFailure -Stage "timebase-reference-restore-error-drain" `
+                            -CaseName "timebase"
+                    }
                 }
+            }
+            if ($null -ne $primaryException) {
+                throw $primaryException
+            }
+            if ($null -ne $restoreException) {
+                throw $restoreException
             }
         }
     }

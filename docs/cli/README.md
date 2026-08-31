@@ -2548,11 +2548,12 @@ resource:
 .\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
 ```
 
-Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
-confirm that a stable waveform is visible before running the script. After its
-hardware-free preflight, the runner displays the detected instrument and
-resource and waits for Enter before starting any state-changing validation.
-Use Ctrl+C at that gate to cancel.
+Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output,
+confirm that a stable waveform is visible, and set the instrument to MAIN
+(normal horizontal) timebase mode before running the script. Do not use XY or
+Roll mode for the full live validator. After its hardware-free preflight, the
+runner displays the detected instrument and resource and waits for Enter before
+starting any state-changing validation. Use Ctrl+C at that gate to cancel.
 
 The runner temporarily changes acquisition, CH1 display and coupling,
 timebase, Edge Trigger, and waveform transfer settings. It promises to restore

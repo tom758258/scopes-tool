@@ -3304,6 +3304,7 @@ def test_baseline_live_script_contains_acquisition_measurement_and_status_wiring
         "trigger = Edge / CH1 / Positive / 1 V",
         "fixed laboratory validation fixture",
         "does not adapt an incorrect physical fixture",
+        "Timebase mode = MAIN / normal horizontal timebase",
         "Press Enter only after the PHYSICAL SETUP above is ready",
     ):
         assert required_prompt_text in prompt
@@ -4696,6 +4697,186 @@ function Invoke-Scenario {
         or stage.startswith("save-image-factors")
         for stage in failure["stages"]
     )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_timebase_reference_restore_preserves_primary_failure(
+    tmp_path: Path,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
+    harness_path = tmp_path / "timebase-reference-restore-harness.ps1"
+    harness_path.write_text(
+        r'''
+param([Parameter(Mandatory = $true)][string] $ScriptPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
+
+foreach ($functionName in @("Assert-NearlyEqual", "Invoke-BaselineCase")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$matchingCommands = @($ast.FindAll({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
+        $node.Extent.Text.Contains("-Name `"timebase`"")
+    )
+}, $true))
+if ($matchingCommands.Count -ne 1) { throw "Expected one timebase case." }
+$caseBlock = $matchingCommands[0].Extent.Text
+
+function Add-CaseResult {
+    param([string] $Name, [bool] $Passed, [string] $Detail = "")
+    $script:CaseResults[$Name] = [pscustomobject]@{
+        Passed = $Passed
+        Detail = $Detail
+    }
+}
+
+function Add-Diagnostic {
+    param([string] $Name, [string] $Message)
+    if (-not $script:Diagnostics.Contains($Name)) {
+        $script:Diagnostics[$Name] = New-Object System.Collections.Generic.List[string]
+    }
+    $script:Diagnostics[$Name].Add($Message)
+}
+
+function Drain-AfterFailure {
+    param([string] $Stage, [string] $CaseName)
+    $script:Drains.Add($Stage)
+}
+
+function Invoke-LiveCli {
+    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
+    $script:Stages.Add($Stage)
+    $result = [ordered]@{}
+    switch ($Stage) {
+        "timebase-scale-query" { $result.seconds_per_division = 0.001 }
+        "timebase-position-query" { $result.position_seconds = 0.0 }
+        "timebase-reference-set" {
+            if ($script:Scenario -eq "set-failure") {
+                throw "reference set failure"
+            }
+        }
+        "timebase-reference-query" {
+            $result.reference = if ($script:Scenario -eq "primary-and-restore-failure") {
+                "right"
+            } else {
+                "left"
+            }
+        }
+        "timebase-reference-restore" {
+            if ($script:Scenario -eq "primary-and-restore-failure") {
+                throw "reference restore failure"
+            }
+        }
+        "timebase-reference-restore-query" { $result.reference = "center" }
+    }
+    return [pscustomobject]@{ result = [pscustomobject]$result }
+}
+
+function Invoke-Scenario {
+    param(
+        [ValidateSet("success", "set-failure", "primary-and-restore-failure")]
+        [string] $Name
+    )
+    $script:Scenario = $Name
+    $script:CaseResults = [ordered]@{}
+    $script:Diagnostics = [ordered]@{}
+    $script:FunctionalFailed = $false
+    $script:Stages = New-Object System.Collections.Generic.List[string]
+    $script:Drains = New-Object System.Collections.Generic.List[string]
+    $snapshot = [pscustomobject]@{ TimebaseReference = "center" }
+    Invoke-Expression $caseBlock
+    $diagnostics = @(
+        if ($script:Diagnostics.Contains("timebase")) {
+            $script:Diagnostics["timebase"] | ForEach-Object { $_ }
+        }
+    )
+    return [pscustomobject]@{
+        passed = $script:CaseResults["timebase"].Passed
+        detail = $script:CaseResults["timebase"].Detail
+        stages = @($script:Stages | ForEach-Object { $_ })
+        drains = @($script:Drains | ForEach-Object { $_ })
+        diagnostics = $diagnostics
+    }
+}
+
+[ordered]@{
+    success = Invoke-Scenario -Name "success"
+    set_failure = Invoke-Scenario -Name "set-failure"
+    primary_and_restore_failure = Invoke-Scenario -Name "primary-and-restore-failure"
+} | ConvertTo-Json -Depth 8 -Compress
+''',
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    success = result["success"]
+    assert success["passed"] is True, success["detail"]
+    assert success["stages"][-2:] == [
+        "timebase-reference-restore",
+        "timebase-reference-restore-query",
+    ]
+    assert success["drains"] == []
+    assert success["diagnostics"] == []
+
+    set_failure = result["set_failure"]
+    assert set_failure["passed"] is False
+    assert "reference set failure" in set_failure["detail"]
+    assert "timebase-reference-restore" not in set_failure["stages"]
+    assert set_failure["drains"] == ["timebase-error-drain"]
+
+    combined_failure = result["primary_and_restore_failure"]
+    assert combined_failure["passed"] is False
+    assert "Timebase reference readback does not match left" in combined_failure["detail"]
+    assert "reference restore failure" not in combined_failure["detail"]
+    assert combined_failure["stages"][-1] == "timebase-reference-restore"
+    assert "timebase-reference-restore-query" not in combined_failure["stages"]
+    assert combined_failure["drains"] == [
+        "timebase-reference-restore-error-drain",
+        "timebase-error-drain",
+    ]
+    assert combined_failure["diagnostics"] == [
+        "timebase reference restore failed: reference restore failure"
+    ]
 
 
 def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
