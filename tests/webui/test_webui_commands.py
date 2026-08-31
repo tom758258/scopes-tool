@@ -1525,8 +1525,8 @@ def test_command_catalog_group_metadata_contract() -> None:
         "measure-log": "measurement",
         "measure-until": "measurement",
         "triggered-measure-loop": "triggered",
-        "channel-scale": "basic",
-        "channel-coupling": "advanced",
+        "channel-scale": "channel-basic",
+        "channel-coupling": "channel-advanced",
     }
     for command_id, group in expected_groups.items():
         assert commands[command_id]["group"] == group, command_id
@@ -1582,7 +1582,8 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
     assert {entry["group"] for entry in grouped} == {
         "edge", "common", "external", "pulse-width", "runt", "transition",
         "delay", "setup-hold", "edge-burst", "tv", "pattern-or",
-        "basic", "advanced", "event", "serial",
+        "channel-basic", "channel-advanced",
+        "basic", "event", "serial",
         "uart", "i2c", "spi", "can",
         "bus", "lister",
         "path-filename", "image", "waveform",

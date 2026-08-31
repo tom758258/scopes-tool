@@ -211,7 +211,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-display.enabled"},
         ),
-        "group": "basic",
+        "group": "channel-basic",
     },
     {
         "id": "channel-scale",
@@ -229,7 +229,7 @@ COMMANDS = (
                 "help_key": "channel-scale.volts_per_division",
             },
         ),
-        "group": "basic",
+        "group": "channel-basic",
     },
     {
         "id": "channel-summary",
@@ -237,7 +237,7 @@ COMMANDS = (
         "label": "Read Channel Information",
         "modes": ("live", "simulate"),
         "fields": (),
-        "group": "basic",
+        "group": "channel-basic",
     },
     {
         "id": "channel-label",
@@ -249,7 +249,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "text", "type": "string", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-label.text"},
         ),
-        "group": "basic",
+        "group": "channel-basic",
     },
     {
         "id": "channel-offset",
@@ -267,7 +267,7 @@ COMMANDS = (
                 "label_key": "channel-offset.value",
             },
         ),
-        "group": "basic",
+        "group": "channel-basic",
     },
     {
         "id": "channel-range",
@@ -286,7 +286,7 @@ COMMANDS = (
                 "label_key": "channel-range.value",
             },
         ),
-        "group": "basic",
+        "group": "channel-basic",
     },
     {
         "id": "channel-coupling",
@@ -298,7 +298,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "coupling", "type": "enum", "options": ("ac", "dc"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-coupling.coupling"},
         ),
-        "group": "advanced",
+        "group": "channel-advanced",
     },
     {
         "id": "channel-probe",
@@ -316,7 +316,7 @@ COMMANDS = (
                 "help_key": "channel-probe.ratio",
             },
         ),
-        "group": "advanced",
+        "group": "channel-advanced",
     },
     {
         "id": "channel-bandwidth-limit",
@@ -328,7 +328,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-bandwidth-limit.enabled"},
         ),
-        "group": "advanced",
+        "group": "channel-advanced",
     },
     {
         "id": "channel-impedance",
@@ -340,7 +340,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "impedance", "type": "enum", "options": ("one_meg", "fifty"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-impedance.impedance"},
         ),
-        "group": "advanced",
+        "group": "channel-advanced",
     },
     {
         "id": "channel-invert",
@@ -352,7 +352,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-invert.enabled"},
         ),
-        "group": "advanced",
+        "group": "channel-advanced",
     },
     {
         "id": "channel-units",
@@ -364,7 +364,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "units", "type": "enum", "options": ("volt", "amp"), "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-units.units"},
         ),
-        "group": "advanced",
+        "group": "channel-advanced",
     },
     {
         "id": "channel-vernier",
@@ -376,7 +376,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-vernier.enabled"},
         ),
-        "group": "advanced",
+        "group": "channel-advanced",
     },
     {
         "id": "channel-probe-skew",
@@ -388,7 +388,7 @@ COMMANDS = (
             {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "channel.target"},
             {"name": "seconds", "type": "number", "minimum": -100e-9, "maximum": 100e-9, "required_if": [{"field": "action", "equals": "set"}], "help_key": "channel-probe-skew.seconds"},
         ),
-        "group": "advanced",
+        "group": "channel-advanced",
     },
     {
         "id": "display-label",

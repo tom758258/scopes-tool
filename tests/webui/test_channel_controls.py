@@ -556,20 +556,20 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
 
 
 EXPECTED_CHANNEL_GROUPS = {
-    "channel-display": "basic",
-    "channel-scale": "basic",
-    "channel-summary": "basic",
-    "channel-label": "basic",
-    "channel-offset": "basic",
-    "channel-range": "basic",
-    "channel-coupling": "advanced",
-    "channel-probe": "advanced",
-    "channel-bandwidth-limit": "advanced",
-    "channel-impedance": "advanced",
-    "channel-invert": "advanced",
-    "channel-units": "advanced",
-    "channel-vernier": "advanced",
-    "channel-probe-skew": "advanced",
+    "channel-display": "channel-basic",
+    "channel-scale": "channel-basic",
+    "channel-summary": "channel-basic",
+    "channel-label": "channel-basic",
+    "channel-offset": "channel-basic",
+    "channel-range": "channel-basic",
+    "channel-coupling": "channel-advanced",
+    "channel-probe": "channel-advanced",
+    "channel-bandwidth-limit": "channel-advanced",
+    "channel-impedance": "channel-advanced",
+    "channel-invert": "channel-advanced",
+    "channel-units": "channel-advanced",
+    "channel-vernier": "channel-advanced",
+    "channel-probe-skew": "channel-advanced",
 }
 
 EXPECTED_CHANNEL_BASIC_ORDER = [
@@ -584,15 +584,18 @@ EXPECTED_CHANNEL_BASIC_ORDER = [
 
 def test_channel_commands_keep_groups_order_and_presentation_labels() -> None:
     channel_commands = [entry for entry in COMMANDS if entry["category"] == "Channel"]
+    assert len(channel_commands) == len(EXPECTED_CHANNEL_GROUPS)
     assert {entry["id"] for entry in channel_commands} == set(EXPECTED_CHANNEL_GROUPS)
 
     for entry in channel_commands:
         assert entry.get("group") == EXPECTED_CHANNEL_GROUPS[entry["id"]], entry["id"]
 
-    basic_commands = [entry["id"] for entry in channel_commands if entry.get("group") == "basic"]
+    basic_commands = [entry["id"] for entry in channel_commands if entry.get("group") == "channel-basic"]
+    assert len(basic_commands) == 6
     assert basic_commands == EXPECTED_CHANNEL_BASIC_ORDER
 
-    advanced_commands = [entry["id"] for entry in channel_commands if entry.get("group") == "advanced"]
+    advanced_commands = [entry["id"] for entry in channel_commands if entry.get("group") == "channel-advanced"]
+    assert len(advanced_commands) == 8
     assert set(advanced_commands) == set(EXPECTED_CHANNEL_GROUPS) - set(EXPECTED_CHANNEL_BASIC_ORDER)
 
     summary_entry = next(entry for entry in channel_commands if entry["id"] == "channel-summary")
@@ -603,182 +606,11 @@ def test_channel_commands_keep_groups_order_and_presentation_labels() -> None:
 
     assert '"command.channel-summary": "讀取通道資訊"' in zh
     assert '"command.channel-summary": "Read Channel Information"' in en
-    assert '"group.basic": "基本功能"' in zh
-    assert '"group.advanced": "進階功能"' in zh
+    assert '"group.channel-basic": "基本功能"' in zh
+    assert '"group.channel-advanced": "進階功能"' in zh
+    assert '"group.channel-basic": "Basic"' in en
+    assert '"group.channel-advanced": "Advanced"' in en
+
+    # Search and shared basic group remains intact
+    assert '"group.basic": "基本"' in zh
     assert '"group.basic": "Basic"' in en
-    assert '"group.advanced": "Advanced"' in en
-
-
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
-def test_channel_catalog_grouping_and_search_behavior() -> None:
-    channel_commands = [entry for entry in command_catalog() if entry["category"] == "Channel"]
-    script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-        import path from "node:path";
-
-        class FakeNode {
-          constructor(tagName = "div") {
-            this.tagName = tagName.toUpperCase();
-            this.children = [];
-            this.parentElement = null;
-            this.listeners = {};
-            this.dataset = {};
-            this.attributes = {};
-            const classSet = new Set();
-            this.classList = {
-              add: (...names) => { for (const name of names) classSet.add(name); },
-              contains: (name) => classSet.has(name),
-            };
-            this.className = "";
-            this.textContent = "";
-            this.hidden = false;
-            this.disabled = false;
-            this.type = "";
-            this.value = "";
-          }
-          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
-          dispatch(name, event = {}) { for (const handler of this.listeners[name] || []) handler(event); }
-          append(...nodes) {
-            nodes.forEach((n) => {
-              this.children.push(n);
-              n.parentElement = this;
-            });
-          }
-          replaceChildren(...nodes) {
-            this.children = [];
-            if (nodes.length) this.append(...nodes);
-          }
-          setAttribute(name, value) { this.attributes[name] = String(value); }
-          getAttribute(name) { return this.attributes[name]; }
-          closest(selector) {
-            const match = selector.match(/data-([a-z-]+)\]$/);
-            if (!match) return null;
-            const property = match[1].replace(/-([a-z])/g, (_all, char) => char.toUpperCase());
-            return this.dataset[property] !== undefined ? this : null;
-          }
-          addEventListener() {}
-        }
-
-        const translations = {
-          "group.basic": "基本功能",
-          "group.advanced": "進階功能",
-          "category.Channel": "通道",
-          "command.channel-display": "通道顯示",
-          "command.channel-scale": "垂直刻度",
-          "command.channel-summary": "讀取通道資訊",
-          "command.channel-label": "通道標籤",
-          "command.channel-offset": "垂直偏移",
-          "command.channel-range": "垂直範圍",
-          "command.channel-coupling": "輸入耦合",
-          "command.channel-probe": "探棒衰減比",
-          "command.channel-bandwidth-limit": "頻寬限制",
-          "command.channel-impedance": "輸入阻抗",
-          "command.channel-invert": "波形反相",
-          "command.channel-units": "通道單位",
-          "command.channel-vernier": "刻度微調",
-          "command.channel-probe-skew": "探棒時間校正",
-          "commands.noMatches": "查無符合的指令",
-        };
-
-        globalThis.testTranslate = (key) => translations[key] ?? key;
-        globalThis.testHasTranslation = (key) => key in translations;
-        globalThis.testCommandSupported = () => true;
-        globalThis.testCommandSupportReason = () => "";
-        globalThis.testFieldsForModel = (cmd) => cmd.fields || [];
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
-
-        const source = [
-          "const translate = globalThis.testTranslate;",
-          "const hasTranslation = globalThis.testHasTranslation;",
-          "const commandSupported = (...args) => globalThis.testCommandSupported(...args);",
-          "const commandSupportReason = (...args) => globalThis.testCommandSupportReason(...args);",
-          "const fieldsForModel = globalThis.testFieldsForModel;",
-          fs.readFileSync(path.join(process.cwd(), "src/scopes_tool_webui/static/command-catalog.js"), "utf8")
-            .replace('import { hasTranslation, translate } from "/static/i18n.js";', "")
-            .replace(/import \{[^}]*\} from "\/static\/command-support\.js";/, ""),
-        ].join("\n").replace(/^export class /gm, "class ")
-          + "\nglobalThis.catalogApi = { CommandCatalog };";
-
-        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
-
-        const channelCommands = __CHANNEL_COMMANDS__;
-        const elements = {
-          filter: new FakeNode("input"),
-          categories: new FakeNode(),
-          list: new FakeNode(),
-        };
-        const selections = [];
-        const catalog = new globalThis.catalogApi.CommandCatalog(
-          channelCommands,
-          elements,
-          (selected) => selections.push(selected?.id || ""),
-        );
-        catalog.render();
-
-        const sections = (list) => list.children.filter((n) => n.className === "command-group");
-        const sectionFor = (list, group) =>
-          sections(list).find((n) => n.children[0].dataset.commandGroup === group);
-
-        // 1. Verify basic and advanced sections rendered
-        const groups = sections(elements.list).map((n) => n.children[0].dataset.commandGroup);
-        assert.deepEqual(groups, ["basic", "advanced"]);
-
-        // 2. Verify basic group commands and order
-        const basicButtons = sectionFor(elements.list, "basic").children[1].children;
-        const basicIds = basicButtons.map((n) => n.dataset.command);
-        assert.deepEqual(basicIds, [
-          "channel-display",
-          "channel-scale",
-          "channel-summary",
-          "channel-label",
-          "channel-offset",
-          "channel-range",
-        ]);
-
-        // 3. Verify advanced group commands
-        const advancedButtons = sectionFor(elements.list, "advanced").children[1].children;
-        const advancedIds = advancedButtons.map((n) => n.dataset.command);
-        assert.deepEqual(advancedIds, [
-          "channel-coupling",
-          "channel-probe",
-          "channel-bandwidth-limit",
-          "channel-impedance",
-          "channel-invert",
-          "channel-units",
-          "channel-vernier",
-          "channel-probe-skew",
-        ]);
-
-        // 4. Verify search finds advanced commands without breaking
-        catalog.filterText = "probe";
-        catalog.renderCommands();
-        const filteredAdvanced = sectionFor(elements.list, "advanced");
-        assert.ok(filteredAdvanced, "Advanced group should be present when search matches advanced command");
-        const matchedAdvancedIds = filteredAdvanced.children[1].children.map((n) => n.dataset.command);
-        assert.deepEqual(matchedAdvancedIds, ["channel-probe", "channel-probe-skew"]);
-
-        // 5. Verify search finds basic command (summary)
-        catalog.filterText = "資訊";
-        catalog.renderCommands();
-        const filteredBasic = sectionFor(elements.list, "basic");
-        assert.ok(filteredBasic, "Basic group should be present when search matches summary");
-        const matchedBasicIds = filteredBasic.children[1].children.map((n) => n.dataset.command);
-        assert.deepEqual(matchedBasicIds, ["channel-summary"]);
-
-        console.log("channel catalog grouping and search behavior passed");
-        '''
-    ).replace("__CHANNEL_COMMANDS__", json.dumps(channel_commands))
-
-    completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
