@@ -213,6 +213,7 @@ export class SaveExportEditor {
     if (!this.hooks.isAvailable()) return;
     this.pendingRefresh = false;
     this.pendingRefreshForce = false;
+    this.stateKey = null;
     this.setBusy(true);
     try {
       const completed = await this.readWorkspace();
@@ -570,7 +571,10 @@ export class SaveExportEditor {
   }
 
   async resyncCurrentFormat(mode, epoch, stateKey) {
-    if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
+    if (epoch !== this.epoch || stateKey !== this.currentStateKey()) {
+      this.stateKey = null;
+      return;
+    }
     const formatId = mode === "image" ? "save-image-format" : "save-waveform-format";
     const entry = this.entryForId(formatId);
     if (!entry?.form) return;
@@ -578,7 +582,10 @@ export class SaveExportEditor {
     const job = values === null
       ? null
       : await this.hooks.executeCommand(formatId, values, { intent: "readback" });
-    if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
+    if (epoch !== this.epoch || stateKey !== this.currentStateKey()) {
+      this.stateKey = null;
+      return;
+    }
     if (job?.status === "completed") {
       entry.form.syncResult(job, true);
       this.updateDestinationPreview();
