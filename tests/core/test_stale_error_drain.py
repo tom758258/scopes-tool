@@ -87,9 +87,8 @@ def test_measure_until_stale_drained(tmp_path):
             "SIM::keysight-dsox4024a::INSTR",
             MeasureUntilRequest(channel=1, item="vpp", operator="gt", threshold=0, timeout_seconds=2, interval_seconds=0, output_dir=tmp_path / "until"),
         )
-    # should complete (simulator vpp >0)
-    assert result.exit_code in (0, 1)  # may be completed or error but not instrument_error from stale
-    # ensure stale was drained human line exists
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
     assert any("Pre-operation stale" in line for line in result.human_lines)
 
 
@@ -130,3 +129,34 @@ def test_sequence_top_level_only_drains_once(tmp_path):
     # capture step should have caused instrument_error status, drain should not have swallowed it
     assert result.result["status"] == "instrument_error"
     assert result.exit_code == 1
+
+
+def test_run_measure_validation_before_drain(tmp_path):
+    # stale exists but request is invalid -> must not drain
+    from scopes_tool_core.errors import ParameterValidationError
+
+    with _scope(system_errors=['-420,"Query UNTERMINATED"', '0,"No error"']) as scope:
+        before = list(scope.backend.history)
+        with pytest.raises(ParameterValidationError):
+            run_measure(scope, "SIM::keysight-dsox4024a::INSTR", MeasureRequest(item="vpp", channel=99))
+        new_history = scope.backend.history[len(before):]
+        assert ":SYSTem:ERRor?" not in new_history
+        # stale still present
+        assert scope.query_system_error().code == -420
+
+
+def test_run_measure_log_validation_before_drain(tmp_path):
+    from scopes_tool_core.errors import ParameterValidationError
+    from scopes_tool_core.operations import MeasureLogRequest, run_measure_log
+
+    with _scope(system_errors=['-420,"Query UNTERMINATED"', '0,"No error"']) as scope:
+        before = list(scope.backend.history)
+        with pytest.raises((ParameterValidationError, Exception)):
+            run_measure_log(
+                scope,
+                "SIM::keysight-dsox4024a::INSTR",
+                MeasureLogRequest(channels=(99,), items="vpp", requested_count=1, output_dir=tmp_path / "bad"),
+            )
+        new_history = scope.backend.history[len(before):]
+        assert ":SYSTem:ERRor?" not in new_history
+        assert scope.query_system_error().code == -420

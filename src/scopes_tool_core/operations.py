@@ -181,7 +181,6 @@ def run_capture(
     request: CaptureRequest,
     *,
     _establish_error_boundary: bool = True,
-    **_kwargs,
 ) -> OperationResult:
     """Capture waveform data and write the requested artifacts."""
 
@@ -669,7 +668,6 @@ def run_measure(
     request: MeasureRequest,
     *,
     _establish_error_boundary: bool = True,
-    **_kwargs,
 ) -> OperationResult:
     """Run one read-only measurement query."""
 
@@ -681,15 +679,11 @@ def run_measure(
         human.append("Capabilities: unavailable for this model")
         return OperationResult(1, {}, human_lines=human, idn=idn, **_scope_backend_json(scope))
     item = normalize_measurement_item(request.item)
-    if _establish_error_boundary:
-        for _entry in drain_preexisting_system_errors(scope):
-            human.append(f"Pre-operation stale system error drained: {_entry.format()}")
     kwargs = _measurement_query_kwargs(request, item)
     if is_pair_measurement_item(item):
         source, reference = resolve_pair_measurement_channels(request, scope.capabilities, item)
         command = pair_measurement_query(item, source, reference, capabilities=scope.capabilities)
         human.append(f"Planned query: CH{source} to CH{reference} {item} measurement")
-        measurement = scope.query_pair_measurement(source, reference, item)
     else:
         channel = resolve_single_measurement_channel(request, scope.capabilities)
         command = measurement_query(item, channel, capabilities=scope.capabilities, **kwargs)
@@ -697,6 +691,12 @@ def run_measure(
             f"Planned query: CH{channel} {item} measurement"
             f"{_format_measurement_parameters(kwargs)}"
         )
+    if _establish_error_boundary:
+        for _entry in drain_preexisting_system_errors(scope):
+            human.append(f"Pre-operation stale system error drained: {_entry.format()}")
+    if is_pair_measurement_item(item):
+        measurement = scope.query_pair_measurement(source, reference, item)
+    else:
         measurement = scope.query_measurement(channel, item, **kwargs)
     result = {"command": command, **_measurement_result_json(measurement, parameters=kwargs)}
     entry = scope.query_system_error()
@@ -873,8 +873,6 @@ def run_measure_log(
             human.extend([f"Model: {idn.model}", f"Series: {idn.series or 'unknown'}"])
             if scope.capabilities is None:
                 raise OscilloscopeError("Capabilities unavailable for this model")
-            for _entry in drain_preexisting_system_errors(scope):
-                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
             channels = resolve_capture_channels(
                 request.channels or ("all",),
                 scope.capabilities,
@@ -882,6 +880,8 @@ def run_measure_log(
             items = parse_measurement_item_list(request.items, allow_pair=False)
             pairs = parse_pair_specs(request.pairs, scope.capabilities)
             pair_items = parse_measurement_item_list(request.pair_items, allow_pair=True)
+            for _entry in drain_preexisting_system_errors(scope):
+                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
             workflow = log_measurements_workflow(
                 scope=scope,
                 resource=resource,

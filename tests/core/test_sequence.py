@@ -402,7 +402,8 @@ def test_capture_artifact_failure_preserves_existing_csv_partial_result(
         _step("single"),
     )
 
-    def failing_run_capture(scp, res, req, **_kwargs):
+    def failing_run_capture(scp, res, req, *, _establish_error_boundary):
+        assert _establish_error_boundary is False
         req.csv_path.parent.mkdir(parents=True, exist_ok=True)
         req.csv_path.write_text("time,ch1\n0,1\n", encoding="utf-8")
         raise OscilloscopeError("mock metadata write error")

@@ -9482,3 +9482,11 @@ $joinedArgs = $allArgs -join " | "
         baseline_stages = [inv["stage"] for inv in result["invocations"]]
         assert "math-vertical-baseline-query" in baseline_stages
         assert "math-vertical-query" in baseline_stages
+
+def test_workflow_post_case_error_queue_regression(tmp_path):
+    from pathlib import Path
+    script_path = Path('scripts/live-workflow-check.ps1')
+    text = script_path.read_text(encoding='utf-8')
+    assert 'Get-ErrorDrain -Stage' in text
+    assert 'post-error-queue' in text
+    assert 'Post-case error queue contained' in text
