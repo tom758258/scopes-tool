@@ -29,7 +29,7 @@ from .trigger import (
 )
 from .output_files import write_capture_csv_file
 from .scope import Oscilloscope
-from .workflow import workflow_scpi_logging
+from .workflow import drain_preexisting_system_errors, workflow_scpi_logging
 from .segmented import (
     SegmentedMemoryController,
     ensure_segmented_memory_supported,
@@ -530,6 +530,8 @@ def run_segmented_capture(
                 capabilities = scope.capabilities
                 validate_segmented_capture_request(request, capabilities)
                 assert capabilities is not None
+                for _entry in drain_preexisting_system_errors(scope):
+                    human.append(f"Pre-operation stale system error drained: {_entry.format()}")
                 controller = SegmentedMemoryController(scope.scpi, capabilities)
 
                 raw_initial_mode = guarded_read(

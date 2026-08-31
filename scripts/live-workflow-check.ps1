@@ -521,6 +521,14 @@ function Invoke-WorkflowCase {
 
     try {
         & $Action
+        $postDrain = Get-ErrorDrain -Stage "${Name}-post-error-queue"
+        if ($postDrain.Errors.Count -gt 0) {
+            Write-DrainErrors -Errors $postDrain.Errors -CaseName $Name
+            throw "Post-case error queue contained $($postDrain.Errors.Count) error(s) after ${Name}."
+        }
+        if (-not $postDrain.Terminated) {
+            throw "Post-case error queue did not reach code 0 within 30 reads after ${Name}."
+        }
         Add-CaseResult -Name $Name -Status "PASS"
     } catch {
         $script:FunctionalFailed = $true

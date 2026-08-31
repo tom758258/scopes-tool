@@ -39,6 +39,7 @@ from .workflow import (
     ProgressReporter,
     StopRequested,
     WorkflowProgress,
+    drain_preexisting_system_errors,
     interruptible_wait,
     workflow_scpi_logging,
 )
@@ -173,6 +174,8 @@ def run_triggered_measure_loop(
             scpi_log_path,
             echo_to_stderr=request.log_scpi,
         ):
+            for _entry in drain_preexisting_system_errors(scope):
+                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
             with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
                 writer = csv.writer(csv_file)
                 writer.writerow(headers)

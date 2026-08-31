@@ -78,6 +78,7 @@ from .workflow import (
     ProgressReporter,
     StopRequested,
     WorkflowProgress,
+    drain_preexisting_system_errors,
     interruptible_wait,
     workflow_scpi_logging,
 )
@@ -174,7 +175,14 @@ class AcquisitionCheckRequest:
     log_scpi: bool = False
 
 
-def run_capture(scope: Oscilloscope, resource: str, request: CaptureRequest) -> OperationResult:
+def run_capture(
+    scope: Oscilloscope,
+    resource: str,
+    request: CaptureRequest,
+    *,
+    _establish_error_boundary: bool = True,
+    **_kwargs,
+) -> OperationResult:
     """Capture waveform data and write the requested artifacts."""
 
     human: list[str] = []
@@ -194,6 +202,9 @@ def run_capture(scope: Oscilloscope, resource: str, request: CaptureRequest) -> 
     waveform_format = request.waveform_format.upper()
     if request.waveform_format.lower() == "word":
         validate_word_format_supported(scope.capabilities)
+    if _establish_error_boundary:
+        for _entry in drain_preexisting_system_errors(scope):
+            human.append(f"Pre-operation stale system error drained: {_entry.format()}")
     if len(channels) == 1:
         human.append(
             f"Planned capture: CH{channels[0]}, {points} points, {waveform_format} format"
@@ -385,6 +396,8 @@ def run_capture_batch(
             waveform_format = request.waveform_format.upper()
             if request.waveform_format.lower() == "word":
                 validate_word_format_supported(scope.capabilities)
+            for _entry in drain_preexisting_system_errors(scope):
+                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
             manifest.channels = list(channels)
             manifest.points = points
             manifest.format = waveform_format
@@ -650,7 +663,14 @@ def run_doctor(scope: Oscilloscope, resource: str) -> OperationResult:
     )
 
 
-def run_measure(scope: Oscilloscope, resource: str, request: MeasureRequest) -> OperationResult:
+def run_measure(
+    scope: Oscilloscope,
+    resource: str,
+    request: MeasureRequest,
+    *,
+    _establish_error_boundary: bool = True,
+    **_kwargs,
+) -> OperationResult:
     """Run one read-only measurement query."""
 
     human: list[str] = []
@@ -661,6 +681,9 @@ def run_measure(scope: Oscilloscope, resource: str, request: MeasureRequest) -> 
         human.append("Capabilities: unavailable for this model")
         return OperationResult(1, {}, human_lines=human, idn=idn, **_scope_backend_json(scope))
     item = normalize_measurement_item(request.item)
+    if _establish_error_boundary:
+        for _entry in drain_preexisting_system_errors(scope):
+            human.append(f"Pre-operation stale system error drained: {_entry.format()}")
     kwargs = _measurement_query_kwargs(request, item)
     if is_pair_measurement_item(item):
         source, reference = resolve_pair_measurement_channels(request, scope.capabilities, item)
@@ -727,6 +750,8 @@ def run_measure_sweep(
     items = parse_measurement_item_list(request.items, allow_pair=False)
     pairs = parse_pair_specs(request.pairs, scope.capabilities)
     pair_items = parse_measurement_item_list(request.pair_items, allow_pair=True)
+    for _entry in drain_preexisting_system_errors(scope):
+        human.append(f"Pre-operation stale system error drained: {_entry.format()}")
     measurements: list[dict[str, object]] = []
     human.append(f"Planned sweep: {_format_channel_list(channels)}; items {', '.join(items)}")
     for channel in channels:
@@ -848,6 +873,8 @@ def run_measure_log(
             human.extend([f"Model: {idn.model}", f"Series: {idn.series or 'unknown'}"])
             if scope.capabilities is None:
                 raise OscilloscopeError("Capabilities unavailable for this model")
+            for _entry in drain_preexisting_system_errors(scope):
+                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
             channels = resolve_capture_channels(
                 request.channels or ("all",),
                 scope.capabilities,
@@ -972,6 +999,8 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
             human.extend([f"Model: {idn.model}", f"Series: {idn.series or 'unknown'}"])
             if scope.capabilities is None:
                 raise OscilloscopeError("Capabilities unavailable for this model")
+            for _entry in drain_preexisting_system_errors(scope):
+                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
             doctor = doctor_snapshot(scope)
             report["doctor"] = doctor
             measurements = []
@@ -1099,6 +1128,8 @@ def run_acquisition_check(
             human.extend([f"Model: {idn.model}", f"Series: {idn.series or 'unknown'}"])
             if scope.capabilities is None:
                 raise OscilloscopeError("Capabilities unavailable for this model")
+            for _entry in drain_preexisting_system_errors(scope):
+                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
             steps: list[dict[str, object]] = []
             if request.check_only:
                 initial_step = _run_acquisition_query_step(scope, "initial-query", human)

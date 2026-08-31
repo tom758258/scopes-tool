@@ -261,7 +261,7 @@ def test_run_measure_log_returns_structured_result_without_console_output(tmp_pa
 
 
 def test_run_measure_log_preserves_instrument_error_result(tmp_path):
-    with _scope(system_errors=['-113,"Undefined header"']) as scope:
+    with _scope(system_errors=['0,"No error"', '-113,"Undefined header"']) as scope:
         result = run_measure_log(
             scope,
             "SIM::keysight-dsox4024a::INSTR",

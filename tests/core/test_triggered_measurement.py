@@ -111,7 +111,7 @@ def test_happy_path_persists_two_completed_cycles_and_reports(tmp_path):
     assert result.result["status"] == "completed"
     assert result.result["completed_count"] == 2
     assert scope.backend.history.count(":SINGle") == 2
-    assert scope.backend.history.count(":SYSTem:ERRor?") == 2
+    assert scope.backend.history.count(":SYSTem:ERRor?") == 3
     assert [item.completed_count for item in progress] == [1, 2]
     assert all(item.total_count == 2 for item in progress)
     assert len(samples) == 2
@@ -190,7 +190,7 @@ def test_trigger_timeout_preserves_previous_cycle_and_stops(monkeypatch, tmp_pat
 
 
 def test_system_error_fails_before_cycle_persistence(tmp_path):
-    scope = _scope(system_errors=['-113,"Undefined header"'])
+    scope = _scope(system_errors=['0,"No error"', '-113,"Undefined header"'])
     output_dir = tmp_path / "system-error"
 
     result = triggered_measurement.run_triggered_measure_loop(

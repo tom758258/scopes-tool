@@ -10,6 +10,7 @@ import sys
 import time
 from typing import Callable, Iterator
 
+from .errors import OscilloscopeError
 from .log import LOGGER_NAME
 
 
@@ -65,6 +66,22 @@ def workflow_scpi_logging(
             handler.close()
         logger.setLevel(old_level)
         logger.propagate = old_propagate
+
+
+def drain_preexisting_system_errors(scope, *, max_reads: int = 30) -> tuple:
+    """Drain stale system errors before a top-level operation.
+
+    Uses the existing ``scope.drain_system_errors`` bounded drain.
+    Returns non-zero entries for human diagnostics. Raises if the queue
+    does not reach code 0 within ``max_reads``.
+    """
+
+    entries = scope.drain_system_errors(max_reads=max_reads)
+    if not entries or entries[-1].is_error:
+        raise OscilloscopeError(
+            f"System error queue did not reach code 0 within {max_reads} reads."
+        )
+    return tuple(entry for entry in entries if entry.is_error)
 
 
 def interruptible_wait(

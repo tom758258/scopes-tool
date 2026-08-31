@@ -187,7 +187,7 @@ def test_timeout_is_failure_and_preserves_committed_samples(monkeypatch, tmp_pat
 
 
 def test_system_error_stops_before_sample_commit(tmp_path):
-    scope = _scope(system_errors=['-113,"Undefined header"'])
+    scope = _scope(system_errors=['0,"No error"', '-113,"Undefined header"'])
     output_dir = tmp_path / "system-error"
 
     result = measure_until.run_measure_until(

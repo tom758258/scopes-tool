@@ -385,7 +385,8 @@ def test_wait_trigger_cancellation_does_not_query_system_error_or_execute_next_s
     assert result.exit_code == 130
     assert result.result["status"] == "cancelled"
     assert calls == ["wait_for_trigger"]
-    assert not any("SYSTem:ERRor?" in entry for entry in scope.backend.history)
+    # Sequence top-level stale drain adds one SYST:ERRor? before wait-trigger
+    assert scope.backend.history.count(":SYSTem:ERRor?") == 1
     assert scope.backend.history.count(":SINGle") == 0
 
 
@@ -401,7 +402,7 @@ def test_capture_artifact_failure_preserves_existing_csv_partial_result(
         _step("single"),
     )
 
-    def failing_run_capture(scp, res, req):
+    def failing_run_capture(scp, res, req, **_kwargs):
         req.csv_path.parent.mkdir(parents=True, exist_ok=True)
         req.csv_path.write_text("time,ch1\n0,1\n", encoding="utf-8")
         raise OscilloscopeError("mock metadata write error")

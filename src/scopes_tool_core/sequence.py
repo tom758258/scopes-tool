@@ -51,6 +51,7 @@ from .workflow import (
     ProgressReporter,
     StopRequested,
     WorkflowProgress,
+    drain_preexisting_system_errors,
     interruptible_wait,
     workflow_scpi_logging,
 )
@@ -285,6 +286,8 @@ def run_sequence(
 
     try:
         with workflow_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
+            for _entry in drain_preexisting_system_errors(scope):
+                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
             for loop_index in range(1, document.loop_count + 1):
                 if _stop_requested(stop_requested):
                     return _finish_sequence(
@@ -650,6 +653,7 @@ def _execute_step(
             scope,
             resource,
             _measure_request(step.parameters),
+            _establish_error_boundary=False,
         )
         status = _operation_status(operation)
         return _StepOutcome(
@@ -671,6 +675,7 @@ def _execute_step(
                 meta_path=meta_path,
                 allow_time_axis_tolerance=bool(step.parameters["allow_time_axis_tolerance"]),
             ),
+            _establish_error_boundary=False,
         )
         return _StepOutcome(
             dict(operation.result),

@@ -112,7 +112,7 @@ def test_happy_path_commits_two_cycles_before_reporting_and_preserves_completion
     assert result.result["status"] == "completed"
     assert result.result["completed_count"] == 2
     assert scope.backend.history.count(":SINGle") == 2
-    assert scope.backend.history.count(":SYSTem:ERRor?") == 2
+    assert scope.backend.history.count(":SYSTem:ERRor?") == 3
     assert observed == [(1, 1, True, True), (2, 2, True, True)]
     assert [item.completed_count for item in progress] == [1, 2]
     assert all(item.total_count == 2 for item in progress)
@@ -208,7 +208,7 @@ def test_interval_cancellation_keeps_committed_cycle(monkeypatch, tmp_path):
 
 
 def test_post_capture_system_error_keeps_diagnostics_without_committing_cycle(tmp_path):
-    scope = _scope(system_errors=['-113,"Undefined header"'])
+    scope = _scope(system_errors=['0,"No error"', '-113,"Undefined header"'])
     output_dir = tmp_path / "system-error"
     samples = []
 

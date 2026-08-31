@@ -244,6 +244,7 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(
     assert backend.history == [
         segmented_waveform_all_command(True),
         "*IDN?",
+        ":SYSTem:ERRor?",
         ":ACQuire:MODE?",
         ":ACQuire:TYPE?",
         ":CHANnel1:UNITs?",
@@ -703,7 +704,7 @@ def test_run_segmented_capture_rejects_average_before_segmented_write(tmp_path):
     assert result.result["status"] == "failed"
     assert ":ACQuire:MODE SEGMented" not in backend.history
     assert ":SINGle" not in backend.history
-    assert backend.history == ["*IDN?", ":ACQuire:MODE?", ":ACQuire:TYPE?"]
+    assert backend.history == ["*IDN?", ":SYSTem:ERRor?", ":ACQuire:MODE?", ":ACQuire:TYPE?"]
 
 
 @pytest.mark.parametrize(
