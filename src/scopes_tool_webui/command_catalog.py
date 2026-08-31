@@ -1362,6 +1362,17 @@ def command_catalog() -> list[dict[str, Any]]:
             },
         )
     )
+    for presentation_id, first_underlying_id in (
+        ("reference-waveform", "reference-save"),
+        ("save-export", "save-pwd"),
+    ):
+        presentation = next(entry for entry in catalog if entry["id"] == presentation_id)
+        catalog.remove(presentation)
+        insert_at = next(
+            index for index, entry in enumerate(catalog)
+            if entry["id"] == first_underlying_id
+        )
+        catalog.insert(insert_at, presentation)
     return catalog
 
 

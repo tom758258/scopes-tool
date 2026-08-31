@@ -206,6 +206,18 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
           command: "reference-query", parameters: { slot: 1 }, intent: "readback",
         }]);
         assert.equal(editor.readStatus.textContent, "reference.editor.currentLoaded");
+        assert.equal(
+          editor.entries.find((entry) => entry.id === "reference-save").form.syncCalls.length,
+          0,
+        );
+        assert.equal(
+          editor.entries.find((entry) => entry.id === "reference-display").form.syncCalls.length,
+          1,
+        );
+        assert.equal(
+          editor.entries.find((entry) => entry.id === "reference-label").form.syncCalls.length,
+          1,
+        );
 
         for (const id of [
           "reference-save", "reference-display", "reference-label", "reference-clear",
@@ -227,6 +239,35 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
             .command.presentation.readback_fields.enabled,
           "displayed",
         );
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_reference_editor_does_not_submit_invalid_form_and_clear_needs_no_form() -> None:
+    script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.available = true;
+        editor.schedulePresentation();
+        await settle();
+
+        const save = editor.entries.find((entry) => entry.id === "reference-save");
+        save.form.valuesResult = null;
+        assert.equal(await editor.submit(save), null);
+        assert.equal(submitted.length, 0);
+
+        const clear = editor.entries.find((entry) => entry.id === "reference-clear");
+        assert.equal(clear.form, null);
+        const job = await editor.submit(clear);
+        assert.equal(job.status, "completed");
+        assert.equal(submitted[0].command, "reference-clear");
+        assert.deepEqual(submitted[0].parameters, { slot: 1 });
         ''')
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],

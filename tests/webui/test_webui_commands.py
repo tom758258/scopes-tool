@@ -715,6 +715,24 @@ def test_commands_expose_reference_and_save_subset() -> None:
         commands_module._COMMAND_BY_ID
     )
 
+    browser_commands = [
+        entry for entry in response.json() if not entry.get("browser_hidden")
+    ]
+    assert [
+        entry["id"]
+        for entry in browser_commands
+        if entry["category"] == "Reference"
+    ] == ["reference-waveform"]
+    assert [
+        entry["id"]
+        for entry in browser_commands
+        if entry["category"] == "Save / Export"
+    ] == ["save-export"]
+    categories = list(dict.fromkeys(entry["category"] for entry in browser_commands))
+    assert categories.index("Capture") < categories.index("Reference")
+    assert categories.index("Reference") < categories.index("Save / Export")
+    assert categories.index("Save / Export") < categories.index("System")
+
 
 def test_representative_reference_and_save_simulated_commands_complete_without_artifacts() -> None:
     client = TestClient(app)

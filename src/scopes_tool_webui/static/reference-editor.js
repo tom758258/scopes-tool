@@ -176,7 +176,11 @@ export class ReferenceEditor {
       this.readStatus.textContent = translate("reference.editor.readFailed");
       return job;
     }
-    for (const entry of this.entries) entry.form?.syncResult(job, true);
+    for (const entry of this.entries) {
+      if (["reference-display", "reference-label"].includes(entry.id)) {
+        entry.form?.syncResult(job, true);
+      }
+    }
     this.readStatus.textContent = translate("reference.editor.currentLoaded");
     return job;
   }
@@ -194,7 +198,7 @@ export class ReferenceEditor {
   async submit(entry) {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
     const slot = this.selectedSlot();
-    const values = entry.form?.values() || {};
+    const values = entry.form ? entry.form.values() : {};
     if (slot === null || slot === undefined || values === null) return null;
     this.setBusy(true);
     try {
