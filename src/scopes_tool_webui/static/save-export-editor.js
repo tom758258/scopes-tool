@@ -40,16 +40,15 @@ function resultValue(payload, key, depth = 0) {
 }
 
 function determineFileExtension(mode, formatValue) {
-  const value = String(formatValue || "").toLowerCase();
+  const value = String(formatValue || "").trim().toLowerCase();
   if (mode === "image") {
-    if (value.includes("png")) return ".png";
-    if (value.includes("bmp")) return ".bmp";
-    return ".png";
+    if (value === "png") return ".png";
+    if (["bmp", "bmp8", "bmp24"].includes(value)) return ".bmp";
+    return "";
   }
-  if (value.includes("csv")) return ".csv";
-  if (value.includes("bin")) return ".bin";
-  if (value.includes("xy")) return ".csv";
-  return ".csv";
+  if (value === "csv" || value === "ascii-xy") return ".csv";
+  if (value === "binary") return ".bin";
+  return "";
 }
 
 export class SaveExportEditor {
@@ -63,12 +62,14 @@ export class SaveExportEditor {
     this.renderedKey = null;
     this.entries = [];
     this.pendingRefresh = false;
+    this.pendingRefreshForce = false;
     this.pendingPresentation = false;
     this.mode = "image";
     this.pathEntry = null;
     this.filenameEntry = null;
     this.advancedEntry = null;
     this.lengthMaxEntry = null;
+    this.saveButton = null;
     this.destinationPreview = null;
     this.modeButtons = [];
     this.buildDom();
@@ -124,14 +125,15 @@ export class SaveExportEditor {
       if (modeKey === this.mode) button.classList.add("selected");
       button.textContent = translate(config.labelKey);
       button.addEventListener("click", () => {
+        if (modeKey === this.mode) return;
         this.mode = modeKey;
         this.renderModeButtons();
-        this.rebuildSections(this.currentStateKey());
         this.scheduleRefresh(false);
       });
       this.modeSelector.append(button);
       this.modeButtons.push(button);
     }
+    this.applyBusyState();
   }
 
   selectedDefinition() {
@@ -176,12 +178,19 @@ export class SaveExportEditor {
     if (this.busy) {
       if (read && (force || this.currentStateKey() !== this.stateKey)) {
         this.pendingRefresh = true;
+        this.pendingRefreshForce ||= force;
       } else if (!read) {
         this.pendingPresentation = true;
       }
       return;
     }
-    if (read && this.hooks.isExecutionBusy?.()) return;
+    if (read && this.hooks.isExecutionBusy?.()) {
+      if (force || this.currentStateKey() !== this.stateKey) {
+        this.pendingRefresh = true;
+        this.pendingRefreshForce ||= force;
+      }
+      return;
+    }
     const definition = this.selectedDefinition();
     if (!definition) {
       this.stateKey = null;
@@ -200,6 +209,8 @@ export class SaveExportEditor {
       return;
     }
     if (!this.hooks.isAvailable()) return;
+    this.pendingRefresh = false;
+    this.pendingRefreshForce = false;
     this.stateKey = key;
     this.setBusy(true);
     try {
@@ -216,6 +227,7 @@ export class SaveExportEditor {
     this.filenameEntry = null;
     this.advancedEntry = null;
     this.lengthMaxEntry = null;
+    this.saveButton = null;
     this.sectionsHost.replaceChildren();
     this.groupHeading.textContent = "";
     this.readStatus.textContent = "";
@@ -226,6 +238,7 @@ export class SaveExportEditor {
     this.epoch += 1;
     this.renderedKey = key;
     this.entries = [];
+    this.saveButton = null;
     this.readStatus.textContent = "";
     this.sectionsHost.replaceChildren();
     if (!this.selectedDefinition()) return;
@@ -257,16 +270,16 @@ export class SaveExportEditor {
       }
     }
 
-    const saveButton = document.createElement("button");
-    saveButton.type = "button";
-    saveButton.className = "primary trigger-editor-action";
-    saveButton.textContent = translate(
+    this.saveButton = document.createElement("button");
+    this.saveButton.type = "button";
+    this.saveButton.className = "primary trigger-editor-action";
+    this.saveButton.textContent = translate(
       modeConfig.id === "image" ? "save-export.editor.saveImage" : "save-export.editor.saveWaveform",
     );
-    saveButton.addEventListener("click", () => {
+    this.saveButton.addEventListener("click", () => {
       void this.submitCurrentMode(modeConfig.saveCommandId);
     });
-    modeSection.append(saveButton);
+    modeSection.append(this.saveButton);
 
     const advanced = document.createElement("details");
     advanced.className = "trigger-editor-details";
@@ -413,9 +426,15 @@ export class SaveExportEditor {
     const formatValue = currentValues(formatEntry?.form).format;
     const suffix = determineFileExtension(mode, formatValue);
     const normalizedPath = path ? (path.endsWith("\\") ? path : `${path}\\`) : "";
-    this.destinationPreview.textContent = filename
-      ? `${normalizedPath}${filename}${suffix}`
-      : normalizedPath;
+    if (!filename) {
+      this.destinationPreview.textContent = normalizedPath;
+    } else if (/[\\/:]/.test(filename)) {
+      this.destinationPreview.textContent = filename;
+    } else if (/(?:^|[\\/])[^\\/]*\.[^\\/.]+$/.test(filename)) {
+      this.destinationPreview.textContent = `${normalizedPath}${filename}`;
+    } else {
+      this.destinationPreview.textContent = `${normalizedPath}${filename}${suffix}`;
+    }
   }
 
   async readWorkspace() {
@@ -428,22 +447,28 @@ export class SaveExportEditor {
     const total = entries.length;
     const epoch = this.epoch;
     const stateKey = this.currentStateKey();
-    this.setReadStatus("reading", {
-      group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
-      current: 0,
-      total,
-    });
+    if (this.mode === "waveform" && this.lengthMaxEntry) {
+      this.lengthMaxEntry.value.textContent = "-";
+    }
+    if (total === 0) {
+      this.setReadStatus("reading", {
+        group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
+        current: 0,
+        total,
+      });
+    }
     for (const [index, { id, entry }] of entries.entries()) {
       if (epoch !== this.epoch || stateKey !== this.currentStateKey()) return;
       this.setReadStatus("reading", {
         group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
-        current: index,
+        current: index + 1,
         total,
       });
       const values = id === "save-waveform-length-max" ? {} : entry.form.queryValues();
       if (values === null) {
         failed += 1;
         if (id === "save-pwd" && this.pathStatus) this.pathStatus.textContent = translate("save-export.editor.pathUnavailable");
+        if (id === "save-waveform-length-max") this.setLengthMaxUnavailable();
         continue;
       }
       const job = await this.hooks.executeCommand(id, values, { intent: "readback" });
@@ -451,6 +476,7 @@ export class SaveExportEditor {
       if (job?.status !== "completed") {
         failed += 1;
         if (id === "save-pwd" && this.pathStatus) this.pathStatus.textContent = translate("save-export.editor.pathUnavailable");
+        if (id === "save-waveform-length-max") this.setLengthMaxUnavailable();
         continue;
       }
       if (id === "save-waveform-length-max") this.syncLengthMaxState(job);
@@ -479,9 +505,19 @@ export class SaveExportEditor {
     if (!this.lengthMaxEntry) return;
     const payload = job?.result?.result ?? job?.result;
     const enabled = typeof payload === "boolean" ? payload : resultValue(payload, "enabled");
-    if (typeof enabled !== "boolean") return;
+    if (typeof enabled !== "boolean") {
+      this.setLengthMaxUnavailable();
+      return;
+    }
     this.lengthMaxEntry.value.textContent = translate(
       enabled ? "status.enabled" : "status.disabled",
+    );
+  }
+
+  setLengthMaxUnavailable() {
+    if (!this.lengthMaxEntry) return;
+    this.lengthMaxEntry.value.textContent = translate(
+      "save-export.editor.currentValueUnavailable",
     );
   }
 
@@ -530,8 +566,8 @@ export class SaveExportEditor {
   async submitCurrentMode(saveCommandId) {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     const executionOrder = [];
-    const pathValues = this.pathEntry?.form?.values?.();
     if (this.pathEntry && this.isDirty(this.pathEntry.form)) {
+      const pathValues = this.pathEntry.form.values();
       if (pathValues === null) return;
       executionOrder.push({ id: "save-pwd", form: this.pathEntry.form, values: pathValues, intent: "apply" });
     }
@@ -578,18 +614,16 @@ export class SaveExportEditor {
   setBusy(value) {
     this.busy = value;
     this.applyBusyState();
-    if (!value && this.pendingRefresh) {
-      this.pendingRefresh = false;
-      this.pendingPresentation = false;
-      this.scheduleRefresh(true);
-    } else if (!value && this.pendingPresentation) {
+    if (!value && this.pendingPresentation && !this.pendingRefresh) {
       this.pendingPresentation = false;
       this.schedulePresentation();
     }
   }
 
   applyBusyState() {
-    const disabled = this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable();
+    const executionBusy = this.hooks.isExecutionBusy?.() || false;
+    const available = this.hooks.isAvailable();
+    const disabled = this.busy || executionBusy || !available;
     this.refreshButton.disabled = disabled;
     this.modeButtons.forEach((button) => {
       button.disabled = disabled;
@@ -600,8 +634,16 @@ export class SaveExportEditor {
     if (this.advancedEntry?.button) {
       this.advancedEntry.button.disabled = disabled || !this.isDirty(this.advancedEntry.form);
     }
+    if (this.saveButton) this.saveButton.disabled = disabled;
     for (const entry of this.entries) {
       entry.form?.setDisabled(disabled);
+    }
+    if (!this.busy && !executionBusy && available && this.pendingRefresh) {
+      const force = this.pendingRefreshForce;
+      this.pendingRefresh = false;
+      this.pendingRefreshForce = false;
+      this.pendingPresentation = false;
+      this.scheduleRefresh(force);
     }
   }
 }

@@ -90,6 +90,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           "save-export.editor.storageNote": "Instrument-side storage",
           "save-export.editor.pathHelper": "Example: \\usb\\",
           "save-export.editor.pathUnavailable": "Could not read the current save location.",
+          "save-export.editor.currentValueUnavailable": "Current value unavailable.",
           "save-export.editor.destinationPreviewLabel": "Destination preview",
           "save-export.editor.advancedSettings": "Advanced settings",
           "save-export.editor.baseFilenameHelp": "This is the instrument SAVE default base filename.",
@@ -124,13 +125,17 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
             this.clearedDirty = 0;
             this.syncCalls = [];
             this.disableCalls = [];
+            this.valueCalls = 0;
             this.container._fieldNodes = [];
           }
           render(command, options = {}) {
             this.command = command;
             this.onDirty = options.onDirty || (() => {});
           }
-          values() { return this.valuesResult; }
+          values() {
+            this.valueCalls += 1;
+            return this.valuesResult;
+          }
           queryValues() {
             if (this.queryValuesResult !== undefined) return this.queryValuesResult;
             return this.command?.presentation?.kind === "setting" ? { action: "query" } : null;
@@ -179,6 +184,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           const catalog = makeCatalog();
           const submitted = [];
           const context = { value: "ctx" };
+          const executionState = { busy: false, available: true };
           const hooks = {
               executeCommand: async (command, parameters, options) => {
               const job = execute
@@ -187,12 +193,12 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
               submitted.push({ command, parameters, intent: options?.intent, job });
               return job;
             },
-            isAvailable: () => true,
-            isExecutionBusy: () => false,
+            isAvailable: () => executionState.available,
+            isExecutionBusy: () => executionState.busy,
             contextKey: () => context.value,
             selectedCommand: () => catalog.commands.find((command) => command.id === "save-export"),
           };
-          return { editor: new globalThis.saveExportApi.SaveExportEditor(new FakeNode("div"), catalog, hooks), submitted, hooks, catalog, context };
+          return { editor: new globalThis.saveExportApi.SaveExportEditor(new FakeNode("div"), catalog, hooks), submitted, hooks, catalog, context, executionState };
         };
 '''
 
@@ -227,6 +233,38 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_same_mode_click_preserves_state_and_mode_change_reads_once() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const { editor, submitted } = buildEditor();
+        await editor.refresh(false, true);
+        const imagePathEntry = editor.pathEntry;
+        const imageReadCount = submitted.length;
+
+        editor.modeButtons[0].dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(editor.pathEntry, imagePathEntry);
+        assert.equal(submitted.length, imageReadCount);
+
+        editor.modeButtons[1].dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(editor.mode, "waveform");
+        assert.notEqual(editor.pathEntry, imagePathEntry);
+        assert.deepEqual(submitted.slice(-5).map((entry) => entry.command), [
+          "save-pwd",
+          "save-filename",
+          "save-waveform-format",
+          "save-waveform-length",
+          "save-waveform-length-max",
+        ]);
+        assert.equal(submitted.length, imageReadCount + 5);
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_reads_and_displays_the_current_save_path() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -244,6 +282,50 @@ def test_save_export_editor_reads_and_displays_the_current_save_path() -> None:
         editor.pathStatus.textContent = "";
         await editor.readWorkspace();
         assert.equal(editor.pathStatus.textContent, "Could not read the current save location.");
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_read_progress_is_one_based() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const { editor } = buildEditor();
+        const readingProgress = [];
+        const setReadStatus = editor.setReadStatus.bind(editor);
+        editor.setReadStatus = (kind, values) => {
+          if (kind === "reading") readingProgress.push(values.current);
+          setReadStatus(kind, values);
+        };
+
+        await editor.refresh(false, true);
+        assert.deepEqual(readingProgress, [1, 2, 3, 4, 5, 6]);
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        let pathValuesCalls = 0;
+        const { editor, submitted } = buildEditor((command) => {
+          if (command === "save-image") assert.equal(pathValuesCalls, 0);
+          return { status: "completed", job_id: command };
+        });
+        editor.rebuildSections("ctx|save-export:image");
+        editor.pathEntry.form.values = () => {
+          pathValuesCalls += 1;
+          return { action: "set", path: "\\usb\\" };
+        };
+        editor.filenameEntry.form.valuesResult = { filename: "screen" };
+
+        await editor.submitCurrentMode("save-image");
+        assert.deepEqual(submitted.map((entry) => entry.command), ["save-image"]);
         '''
     )
     completed = run_node(script)
@@ -399,6 +481,62 @@ def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const { editor, submitted, context, executionState } = buildEditor();
+        executionState.busy = true;
+        editor.schedulePresentation();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(submitted.length, 0);
+        assert.equal(editor.pendingRefresh, true);
+        assert.equal(editor.pendingRefreshForce, false);
+
+        context.value = "changed-context";
+        executionState.busy = false;
+        editor.applyBusyState();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-pwd",
+          "save-filename",
+          "save-image-format",
+          "save-image-palette",
+          "save-image-ink-saver",
+          "save-image-factors",
+        ]);
+        assert.equal(editor.stateKey, "changed-context|save-export:image");
+        const firstReadCount = submitted.length;
+
+        editor.applyBusyState();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(submitted.length, firstReadCount);
+
+        executionState.busy = true;
+        editor.scheduleRefresh(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(submitted.length, firstReadCount);
+        assert.equal(editor.pendingRefresh, true);
+        assert.equal(editor.pendingRefreshForce, true);
+
+        executionState.busy = false;
+        executionState.available = false;
+        editor.applyBusyState();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(submitted.length, firstReadCount);
+        assert.equal(editor.pendingRefresh, true);
+        assert.equal(editor.pendingRefreshForce, true);
+
+        executionState.available = true;
+        editor.applyBusyState();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(submitted.length, firstReadCount * 2);
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_applies_advanced_filename_only_when_requested() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -453,6 +591,37 @@ def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> 
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const { editor, executionState } = buildEditor();
+        editor.rebuildSections("ctx|save-export:image");
+        assert.equal(editor.saveButton.disabled, false);
+
+        editor.busy = true;
+        editor.applyBusyState();
+        assert.equal(editor.saveButton.disabled, true);
+
+        editor.busy = false;
+        executionState.busy = true;
+        editor.applyBusyState();
+        assert.equal(editor.saveButton.disabled, true);
+
+        executionState.busy = false;
+        executionState.available = false;
+        editor.applyBusyState();
+        assert.equal(editor.saveButton.disabled, true);
+
+        executionState.available = true;
+        editor.applyBusyState();
+        assert.equal(editor.saveButton.disabled, false);
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -478,6 +647,33 @@ def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> No
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_clears_stale_waveform_length_max_on_failed_read() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        let maxReads = 0;
+        const { editor } = buildEditor((command) => {
+          if (command === "save-waveform-length-max") {
+            maxReads += 1;
+            return maxReads === 1
+              ? { status: "completed", job_id: command, result: { result: { state: { enabled: true } } } }
+              : { status: "failed", job_id: command };
+          }
+          return { status: "completed", job_id: command, result: { result: {} } };
+        });
+        editor.mode = "waveform";
+        await editor.refresh(false, true);
+        assert.equal(editor.lengthMaxEntry.value.textContent, "Enabled");
+
+        await editor.refresh(true, true);
+        assert.equal(editor.lengthMaxEntry.value.textContent, "Current value unavailable.");
+        assert.equal(maxReads, 2);
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -488,11 +684,28 @@ def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> 
         editor.filenameEntry.form.valuesResult = { filename: "screen" };
         const imageFormat = editor.entries.find((entry) => entry.id === "save-image-format");
 
-        for (const [format, suffix] of [["PNG", ".png"], ["BMP24", ".bmp"]]) {
+        for (const [format, suffix] of [["PNG", ".png"], ["BMP", ".bmp"], ["BMP8", ".bmp"], ["BMP24", ".bmp"]]) {
           imageFormat.form.valuesResult = { format };
           editor.updateDestinationPreview();
           assert.equal(editor.destinationPreview.textContent, `\\usb\\screen${suffix}`);
         }
+
+        imageFormat.form.valuesResult = { format: "none" };
+        editor.updateDestinationPreview();
+        assert.equal(editor.destinationPreview.textContent, "\\usb\\screen");
+        imageFormat.form.valuesResult = { format: "future-format" };
+        editor.updateDestinationPreview();
+        assert.equal(editor.destinationPreview.textContent, "\\usb\\screen");
+        imageFormat.form.valuesResult = { format: "" };
+        editor.updateDestinationPreview();
+        assert.equal(editor.destinationPreview.textContent, "\\usb\\screen");
+        imageFormat.form.valuesResult = { format: "PNG" };
+        editor.filenameEntry.form.valuesResult = { filename: "screen.bmp" };
+        editor.filenameEntry.form.notifyDirty();
+        assert.equal(editor.destinationPreview.textContent, "\\usb\\screen.bmp");
+        editor.filenameEntry.form.valuesResult = { filename: "captures/screen" };
+        editor.filenameEntry.form.notifyDirty();
+        assert.equal(editor.destinationPreview.textContent, "captures/screen");
 
         editor.filenameEntry.form.valuesResult = {};
         editor.pathEntry.form.notifyDirty();
@@ -509,6 +722,18 @@ def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> 
           editor.updateDestinationPreview();
           assert.equal(editor.destinationPreview.textContent, `\\usb\\trace${suffix}`);
         }
+        waveformFormat.form.valuesResult = { format: "none" };
+        editor.updateDestinationPreview();
+        assert.equal(editor.destinationPreview.textContent, "\\usb\\trace");
+        waveformFormat.form.valuesResult = { format: "unknown" };
+        editor.updateDestinationPreview();
+        assert.equal(editor.destinationPreview.textContent, "\\usb\\trace");
+        waveformFormat.form.valuesResult = { format: "" };
+        editor.updateDestinationPreview();
+        assert.equal(editor.destinationPreview.textContent, "\\usb\\trace");
+        editor.filenameEntry.form.valuesResult = { filename: "D:\\captures\\trace.csv" };
+        editor.filenameEntry.form.notifyDirty();
+        assert.equal(editor.destinationPreview.textContent, "D:\\captures\\trace.csv");
         '''
     )
     completed = run_node(script)
