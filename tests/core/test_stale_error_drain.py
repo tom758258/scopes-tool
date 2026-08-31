@@ -146,16 +146,43 @@ def test_run_measure_validation_before_drain(tmp_path):
 
 
 def test_run_measure_log_validation_before_drain(tmp_path):
-    from scopes_tool_core.errors import ParameterValidationError
+    from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
     from scopes_tool_core.operations import MeasureLogRequest, run_measure_log
 
     with _scope(system_errors=['-420,"Query UNTERMINATED"', '0,"No error"']) as scope:
         before = list(scope.backend.history)
-        with pytest.raises((ParameterValidationError, Exception)):
+        with pytest.raises(OscilloscopeError) as exc:
             run_measure_log(
                 scope,
                 "SIM::keysight-dsox4024a::INSTR",
                 MeasureLogRequest(channels=(99,), items="vpp", requested_count=1, output_dir=tmp_path / "bad"),
+            )
+        assert isinstance(exc.value.__cause__, ParameterValidationError) or isinstance(exc.value, ParameterValidationError)
+        new_history = scope.backend.history[len(before):]
+        assert ":SYSTem:ERRor?" not in new_history
+        assert scope.query_system_error().code == -420
+
+
+def test_run_measure_sweep_single_capability_before_drain(tmp_path):
+    from scopes_tool_core.errors import ParameterValidationError
+    from scopes_tool_core.operations import MeasureSweepRequest, run_measure_sweep
+
+    def _sweep_scope(**kwargs):
+        return Oscilloscope(
+            SimulatorBackend(
+                physical_model_id="keysight-dsox2004a",
+                resource_name="SIM::keysight-dsox2004a::INSTR",
+                **kwargs,
+            )
+        )
+
+    with _sweep_scope(system_errors=['-420,"Query UNTERMINATED"', '0,"No error"']) as scope:
+        before = list(scope.backend.history)
+        with pytest.raises(ParameterValidationError):
+            run_measure_sweep(
+                scope,
+                "SIM::keysight-dsox2004a::INSTR",
+                MeasureSweepRequest(channels=(1,), items="area"),
             )
         new_history = scope.backend.history[len(before):]
         assert ":SYSTem:ERRor?" not in new_history

@@ -9483,10 +9483,25 @@ $joinedArgs = $allArgs -join " | "
         assert "math-vertical-baseline-query" in baseline_stages
         assert "math-vertical-query" in baseline_stages
 
-def test_workflow_post_case_error_queue_regression(tmp_path):
-    from pathlib import Path
-    script_path = Path('scripts/live-workflow-check.ps1')
-    text = script_path.read_text(encoding='utf-8')
-    assert 'Get-ErrorDrain -Stage' in text
-    assert 'post-error-queue' in text
-    assert 'Post-case error queue contained' in text
+def test_workflow_post_case_error_queue_regression():
+    script_path = REPO_ROOT / "scripts" / "live-workflow-check.ps1"
+    text = script_path.read_text(encoding="utf-8")
+    wf_start = text.index("function Invoke-WorkflowCase")
+    wf_end = text.index("function Invoke-HardwareFreePreflight", wf_start)
+    wf = text[wf_start:wf_end]
+    assert 'Get-ErrorDrain -Stage "${Name}-post-error-queue"' in wf
+    assert "Post-case error queue contained" in wf
+    assert "did not reach code 0 within 30 reads after" in wf
+    assert "Drain-AfterFailure" in wf
+    # Behavioral simulation in Python mirroring PS logic
+    def simulate(post_errors, terminated):
+        # Action succeeds, then post-drain check
+        if post_errors:
+            return "FAIL", True
+        if not terminated:
+            return "FAIL", True
+        return "PASS", False
+    clean_status, clean_failed = simulate([], True)
+    err_status, err_failed = simulate([{"code": -221}], True)
+    assert clean_status == "PASS" and clean_failed is False
+    assert err_status == "FAIL" and err_failed is True

@@ -750,6 +750,9 @@ def run_measure_sweep(
     items = parse_measurement_item_list(request.items, allow_pair=False)
     pairs = parse_pair_specs(request.pairs, scope.capabilities)
     pair_items = parse_measurement_item_list(request.pair_items, allow_pair=True)
+    for channel in channels:
+        for item in items:
+            measurement_query(item, channel, capabilities=scope.capabilities)
     for _entry in drain_preexisting_system_errors(scope):
         human.append(f"Pre-operation stale system error drained: {_entry.format()}")
     measurements: list[dict[str, object]] = []
