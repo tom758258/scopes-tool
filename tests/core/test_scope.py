@@ -318,12 +318,13 @@ def test_scope_timebase_requires_known_capabilities():
         raise AssertionError("Expected ParameterValidationError")
 
 
-def test_scope_timebase_scale_and_position_use_capabilities_from_idn():
+def test_scope_timebase_controls_use_capabilities_from_idn():
     backend = FakeBackend(
         responses={
             "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20",
             ":TIMebase:SCALe?": "1.0E-3",
             ":TIMebase:POSition?": "-5.0E-4",
+            ":TIMebase:REFerence?": "RIGH",
         }
     )
     scope = Oscilloscope(backend)
@@ -333,15 +334,20 @@ def test_scope_timebase_scale_and_position_use_capabilities_from_idn():
     scale = scope.query_timebase_scale()
     scope.set_timebase_position(-0.0005)
     position = scope.query_timebase_position()
+    scope.set_timebase_reference("right")
+    reference = scope.query_timebase_reference()
 
     assert scale == 0.001
     assert position == -0.0005
+    assert reference == "right"
     assert backend.history == [
         "*IDN?",
         ":TIMebase:SCALe 0.001",
         ":TIMebase:SCALe?",
         ":TIMebase:POSition -0.0005",
         ":TIMebase:POSition?",
+        ":TIMebase:REFerence RIGHt",
+        ":TIMebase:REFerence?",
     ]
 
 

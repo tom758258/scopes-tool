@@ -210,6 +210,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "annotation",
     "timebase-scale",
     "timebase-position",
+    "timebase-reference",
     "trigger-edge",
     "trigger-edge-source",
     "trigger-edge-slope",

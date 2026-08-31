@@ -64,9 +64,12 @@ from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 from scopes_tool_core.timebase import (
     timebase_position_command,
     timebase_position_query,
+    timebase_reference_command,
+    timebase_reference_query,
     timebase_scale_command,
     timebase_scale_query,
     validate_timebase_position,
+    validate_timebase_reference,
     validate_timebase_scale,
 )
 
@@ -881,3 +884,40 @@ def _cmd_timebase_position(args: argparse.Namespace) -> int:
         print(f"System error: {entry.format()}")
         return 1 if entry.is_error else 0
 
+
+def _cmd_timebase_reference(args: argparse.Namespace) -> int:
+    resource = runtime._require_resource(args)
+    if resource is None:
+        return 2
+
+    runtime._configure_scpi_logging(args)
+
+    with runtime._open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        runtime._json_record_scope(scope, idn)
+        runtime._print_session_header(scope, resource)
+        print(f"Model: {idn.model}")
+        print(f"Series: {idn.series or 'unknown'}")
+        if scope.capabilities is None:
+            print("Capabilities: unavailable for this model")
+            return 1
+
+        if args.timebase_reference_query:
+            command = timebase_reference_query()
+            print("Planned query: timebase reference")
+            reference = scope.query_timebase_reference()
+            runtime._json_update_result(operation="query", command=command, reference=reference)
+            print(f"Command: {command}")
+            print(f"Timebase reference: {reference}")
+        else:
+            reference = validate_timebase_reference(args.timebase_reference_value)
+            command = timebase_reference_command(reference)
+            print(f"Planned change: timebase reference {reference}")
+            scope.set_timebase_reference(reference)
+            runtime._json_update_result(operation="set", command=command, reference=reference)
+            print(f"Command: {command}")
+
+        entry = scope.query_system_error()
+        runtime._json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 1 if entry.is_error else 0

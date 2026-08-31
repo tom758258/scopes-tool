@@ -196,6 +196,7 @@ class SimulatorBackend:
     run_state: str = "stopped"
     timebase_scale: float = 1e-3
     timebase_position: float = 0.0
+    timebase_reference: str = "center"
     dvm_enabled: bool = False
     dvm_source_channel: int = 1
     dvm_mode: str = "DC"
@@ -608,6 +609,14 @@ class SimulatorBackend:
             self.timebase_scale = float(command.rsplit(" ", 1)[1])
         elif upper.startswith(":TIMEBASE:POSITION "):
             self.timebase_position = float(command.rsplit(" ", 1)[1])
+        elif upper.startswith(":TIMEBASE:REFERENCE "):
+            reference = command.rsplit(" ", 1)[1].upper()
+            references = {"LEFT": "left", "CENTER": "center", "RIGHT": "right"}
+            if reference not in references:
+                raise SimulatorBackendError(
+                    f"Unsupported simulator timebase reference: {command}"
+                )
+            self.timebase_reference = references[reference]
         elif upper.startswith(":DVM:ENABLE "):
             self.dvm_enabled = _parse_scpi_bool_write(command)
         elif upper.startswith(":DVM:SOURCE CHANNEL"):
@@ -1486,6 +1495,8 @@ class SimulatorBackend:
             return f"{self.timebase_scale:.12g}"
         if upper == ":TIMEBASE:POSITION?":
             return f"{self.timebase_position:.12g}"
+        if upper == ":TIMEBASE:REFERENCE?":
+            return self.timebase_reference.upper()
         if upper == ":TRIGGER:SWEEP?":
             return "NORM" if self.trigger_sweep.upper().startswith("NORM") else "AUTO"
         if upper == ":TRIGGER:NREJECT?":

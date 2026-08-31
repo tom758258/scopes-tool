@@ -318,6 +318,7 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     for command_id, value_name in (
         ("timebase-scale", "seconds_per_division"),
         ("timebase-position", "position_seconds"),
+        ("timebase-reference", "reference"),
     ):
         timebase = commands[command_id]
         assert timebase["presentation"]["kind"] == "setting"
@@ -333,6 +334,13 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
             field = next(field for field in timebase["fields"] if field["name"] == value_name)
             assert field["exclusive_minimum"] == 0
             assert "minimum" not in field
+
+    reference_field = next(
+        field for field in commands["timebase-reference"]["fields"]
+        if field["name"] == "reference"
+    )
+    assert reference_field["type"] == "enum"
+    assert reference_field["options"] == ["left", "center", "right"]
 
     model_2000x = "keysight-dsox2004a"
     model_3000x = "keysight-dsox3024a"
@@ -583,6 +591,15 @@ def test_simulated_timebase_and_display_persistence_use_setting_readback() -> No
         "position_seconds": -0.0005
     }
 
+    reference = submit(
+        client,
+        "timebase-reference",
+        "simulate",
+        {"action": "set", "reference": "left"},
+    )
+    assert reference["status"] == "completed"
+    assert reference["result"]["result"]["timebase"] == {"reference": "left"}
+
     persistence = submit(
         client,
         "display-persistence",
@@ -592,6 +609,26 @@ def test_simulated_timebase_and_display_persistence_use_setting_readback() -> No
     assert persistence["status"] == "completed"
     assert persistence["result"]["result"]["persistence"]["mode"] == "timed"
     assert persistence["result"]["result"]["persistence"]["seconds"] == 2.5
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    (
+        "keysight-dsox2004a",
+        "keysight-dsox3024a",
+        "keysight-dsox4024a",
+        "keysight-dsox4034a",
+    ),
+)
+def test_timebase_reference_is_available_for_registered_models(model_id: str) -> None:
+    commands = {
+        entry["id"]: entry
+        for entry in TestClient(app).get("/api/commands").json()
+    }
+
+    assert commands["timebase-reference"]["presentation"]["models"][model_id][
+        "supported"
+    ] is True
 
 
 def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> None:

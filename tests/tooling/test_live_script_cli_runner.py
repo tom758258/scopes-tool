@@ -3927,6 +3927,7 @@ function Initialize-ProductionSnapshot {
     $annotationRestorable = $false
     $timebaseScale = New-QueryPayload @{ seconds_per_division = 0.001 }
     $timebasePosition = New-QueryPayload @{ position_seconds = 0.0 }
+    $timebaseReference = New-QueryPayload @{ reference = "center" }
     $triggerSource = New-QueryPayload @{ source = "analog-channel"; source_channel = 1 }
     $triggerSlope = New-QueryPayload @{ slope = "negative" }
     $triggerLevel = New-QueryPayload @{ level_volts = 0.0 }
@@ -6752,6 +6753,9 @@ function Invoke-LiveCli {
         "restore-display-vectors-query" {
             return [pscustomobject]@{ result = [pscustomobject]@{ value = $true } }
         }
+        "restore-timebase-reference-query" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ reference = "center" } }
+        }
         "restore-annotation-query" {
             return [pscustomobject]@{ result = [pscustomobject]@{
                 enabled = $false
@@ -6800,6 +6804,7 @@ $snapshot = [pscustomobject]@{
     TriggerSourceChannel = 2
     TimebasePosition = -4E-05
     TimebaseScale = 0.001
+    TimebaseReference = "center"
     ChannelCoupling = "dc"
     ChannelDisplay = $true
     AcquisitionType = "normal"
@@ -7033,6 +7038,12 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         if entry["stage"] == "restore-timebase-position"
     )
     assert timebase_position_restore["arguments"] == ["--seconds=-4E-05"]
+    timebase_reference_restore = next(
+        entry
+        for entry in result["invocations"]
+        if entry["stage"] == "restore-timebase-reference"
+    )
+    assert timebase_reference_restore["arguments"] == ["--reference", "center"]
     absent_commands = [entry["command"] for entry in result["absent_invocations"]]
     assert "wgen-output" not in absent_commands
     for command in (
@@ -7615,6 +7626,9 @@ function Invoke-LiveCli {
         "^restore-display-vectors-query$" {
             return [pscustomobject]@{ result = [pscustomobject]@{ value = $true } }
         }
+        "^restore-timebase-reference-query$" {
+            return [pscustomobject]@{ result = [pscustomobject]@{ reference = "center" } }
+        }
         "^restore-annotation-query$" {
             return [pscustomobject]@{
                 result = [pscustomobject]@{ enabled = $false; text = ""; color = "WHITE"; background = "OPAQ"; x = 20; y = 30 }
@@ -7677,6 +7691,7 @@ $nonRestorableSnapshot = [pscustomobject]@{
     TriggerSourceChannel = 2
     TimebasePosition = 0.0
     TimebaseScale = 0.001
+    TimebaseReference = "center"
     ChannelCoupling = "dc"
     ChannelDisplay = $true
     AcquisitionType = "normal"

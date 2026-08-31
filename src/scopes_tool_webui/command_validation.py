@@ -97,6 +97,7 @@ from scopes_tool_core.serial import (
 )
 from scopes_tool_core.timebase import (
     validate_timebase_position,
+    validate_timebase_reference,
     validate_timebase_scale,
 )
 from scopes_tool_core.trigger import (
@@ -743,6 +744,18 @@ def _validate_parameters(
                 raise WebUIRequestError(str(exc)) from exc
         else:
             _reject_query_parameters(parameters, ("position_seconds",), command)
+    elif command == "timebase-reference":
+        action = _action(parameters, command)
+        if action == "set":
+            _require_parameter(parameters, "reference", command)
+            try:
+                parameters["reference"] = validate_timebase_reference(
+                    parameters["reference"]
+                )
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            _reject_query_parameters(parameters, ("reference",), command)
     elif command in {"channel-display", "channel-scale"}:
         action = parameters.setdefault("action", "query")
         if action not in {"query", "set"}:

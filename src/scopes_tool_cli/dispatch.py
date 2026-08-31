@@ -162,6 +162,8 @@ def _dispatch_command(
         return channel_display._cmd_timebase_scale(args)
     if args.command == "timebase-position":
         return channel_display._cmd_timebase_position(args)
+    if args.command == "timebase-reference":
+        return channel_display._cmd_timebase_reference(args)
     if args.command == "trigger-edge":
         return trigger_search._cmd_trigger_edge(args)
     if args.command == "trigger-edge-source":
@@ -282,4 +284,3 @@ def _dispatch_command(
     if args.command == "acquisition-check":
         return workflows._cmd_acquisition_check(args)
     raise OscilloscopeError("missing command")
-

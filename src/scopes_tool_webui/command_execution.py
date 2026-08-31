@@ -271,6 +271,13 @@ def _execute_scope_command(
             "timebase",
             {"position_seconds": scope.query_timebase_position()},
         )
+    if command == "timebase-reference":
+        if parameters["action"] == "set":
+            scope.set_timebase_reference(parameters["reference"])
+        return _state_scope_result(
+            "timebase",
+            {"reference": scope.query_timebase_reference()},
+        )
     if command == "channel-display":
         return _execute_channel_display(scope, parameters)
     if command == "channel-scale":

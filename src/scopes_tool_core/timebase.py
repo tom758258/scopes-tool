@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 import math
+from typing import Literal
 
 from .errors import ParameterValidationError, TimebaseResponseError
 from .scpi import SCPIClient
+
+
+TimebaseReference = Literal["left", "center", "right"]
+TIMEBASE_REFERENCES: tuple[TimebaseReference, ...] = ("left", "center", "right")
+_TIMEBASE_REFERENCE_TOKENS = {
+    "left": "LEFT",
+    "center": "CENTer",
+    "right": "RIGHt",
+}
 
 
 class TimebaseController:
@@ -36,6 +46,17 @@ class TimebaseController:
 
         return parse_timebase_float(self.scpi.query(timebase_position_query()), "position")
 
+    def set_reference(self, reference: str) -> None:
+        """Set the horizontal timebase reference position."""
+
+        reference = validate_timebase_reference(reference)
+        self.scpi.write(timebase_reference_command(reference))
+
+    def query_reference(self) -> TimebaseReference:
+        """Query the horizontal timebase reference position."""
+
+        return parse_timebase_reference(self.scpi.query(timebase_reference_query()))
+
 
 def validate_timebase_scale(seconds_per_division: float) -> float:
     """Validate a horizontal scale value before sending it to the instrument."""
@@ -63,6 +84,14 @@ def validate_timebase_position(seconds: float) -> float:
     return value
 
 
+def validate_timebase_reference(reference: str) -> TimebaseReference:
+    """Validate a horizontal timebase reference value."""
+
+    if reference not in TIMEBASE_REFERENCES:
+        raise ParameterValidationError("timebase reference must be left, center, or right.")
+    return reference
+
+
 def timebase_scale_command(seconds_per_division: float) -> str:
     """Build the SCPI command for horizontal scale."""
 
@@ -85,6 +114,34 @@ def timebase_position_query() -> str:
     """Build the SCPI query for horizontal position."""
 
     return ":TIMebase:POSition?"
+
+
+def timebase_reference_command(reference: str) -> str:
+    """Build the SCPI command for horizontal timebase reference."""
+
+    reference = validate_timebase_reference(reference)
+    return f":TIMebase:REFerence {_TIMEBASE_REFERENCE_TOKENS[reference]}"
+
+
+def timebase_reference_query() -> str:
+    """Build the SCPI query for horizontal timebase reference."""
+
+    return ":TIMebase:REFerence?"
+
+
+def parse_timebase_reference(raw: str) -> TimebaseReference:
+    """Parse a timebase reference query response."""
+
+    normalized = raw.strip().upper()
+    if normalized == "LEFT":
+        return "left"
+    if normalized in {"CENT", "CENTER"}:
+        return "center"
+    if normalized in {"RIGH", "RIGHT"}:
+        return "right"
+    raise TimebaseResponseError(
+        f"Could not parse timebase reference response: {raw!r}"
+    )
 
 
 def parse_timebase_float(raw: str, setting_name: str) -> float:

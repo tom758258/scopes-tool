@@ -87,7 +87,7 @@ The Command workbench exposes:
 
 - Identity: `identify` (Read device information)
 - Acquisition: `run`, `single`, `stop-acquisition`, `acquisition`
-- Timebase: `timebase-scale`, `timebase-position`
+- Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`
 - Channel: `channel-display`, `channel-scale`, `channel-summary`,
   `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,
   `channel-bandwidth-limit`, `channel-impedance`, `channel-invert`,
@@ -283,10 +283,11 @@ the selected planning model. The command workspace shows the latest successful
 result for that exact command and execution context, while Result History and
 raw Result Detail retain the full job and diagnostic views.
 
-Timebase scale and position use the same read-edit-Apply-verification pattern.
-Core does not currently expose public Timebase mode or reference controls, so
-the WebUI does not invent them. Display persistence uses explicit Minimum,
-Infinite, and Timed modes instead of requiring a magic string.
+Timebase scale, position, and reference use the same
+read-edit-Apply-verification pattern. Reference accepts Left, Center, or Right.
+Core does not currently expose public Timebase mode controls, so the WebUI does
+not invent them. Display persistence uses explicit Minimum, Infinite, and Timed
+modes instead of requiring a magic string.
 
 The added instrument-setting commands use Live or Simulate mode and the
 existing Core capability and validation boundaries. They do not add new

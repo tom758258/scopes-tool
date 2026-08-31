@@ -1058,11 +1058,29 @@ def test_channel_timebase_trigger_json_results(capsys):
     assert timebase_payload["result"]["operation"] == "set"
     assert timebase_payload["result"]["position_seconds"] == 0.001
 
+    assert cli.main(["timebase-reference", "--simulate", "--json", "--reference", "right"]) == 0
+    reference_set = _json_stdout(capsys)
+    assert reference_set["result"]["reference"] == "right"
+    assert ":TIMebase:REFerence RIGHt" in reference_set["scpi"]["sent"]
+
+    assert cli.main(["timebase-reference", "--simulate", "--json", "--query"]) == 0
+    reference_query = _json_stdout(capsys)
+    assert reference_query["result"]["reference"] == "center"
+    assert ":TIMebase:REFerence?" in reference_query["scpi"]["sent"]
+
     assert cli.main(["trigger-edge", "--simulate", "--json", "--source-channel", "1", "--level", "0.2", "--slope", "positive"]) == 0
     trigger_payload = _json_stdout(capsys)
     assert trigger_payload["result"]["source_channel"] == 1
     assert trigger_payload["result"]["level_volts"] == 0.2
     assert trigger_payload["result"]["slope"] == "POSitive"
+
+
+def test_timebase_reference_cli_rejects_invalid_enum_before_execution(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["timebase-reference", "--simulate", "--reference", "middle"])
+
+    assert excinfo.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
 
 
 def test_channel_advanced_simulate_json_results(capsys):

@@ -71,6 +71,7 @@ from scopes_tool_core.serial import (
 )
 from scopes_tool_core.simulator_config import PRESET_NAMES
 from scopes_tool_core.timebase import (
+    TIMEBASE_REFERENCES,
     validate_timebase_position,
     validate_timebase_scale,
 )
@@ -1241,6 +1242,27 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="timebase_position_query",
         action="store_true",
         help="query the horizontal position",
+    )
+
+    timebase_reference_parser = subparsers.add_parser(
+        "timebase-reference",
+        help="set or query horizontal reference position",
+    )
+    _add_scope_connection_args(timebase_reference_parser)
+    reference_action = timebase_reference_parser.add_mutually_exclusive_group(
+        required=True
+    )
+    reference_action.add_argument(
+        "--reference",
+        dest="timebase_reference_value",
+        choices=TIMEBASE_REFERENCES,
+        help="horizontal reference position",
+    )
+    reference_action.add_argument(
+        "--query",
+        dest="timebase_reference_query",
+        action="store_true",
+        help="query the horizontal reference position",
     )
 
     edge_trigger_parser = subparsers.add_parser(

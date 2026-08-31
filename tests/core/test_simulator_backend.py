@@ -101,6 +101,7 @@ def test_simulator_state_queries_reflect_channel_timebase_and_trigger_writes():
     backend.write(":CHANnel1:BWLimit ON")
     backend.write(":TIMebase:SCALe 0.002")
     backend.write(":TIMebase:POSition 0.001")
+    backend.write(":TIMebase:REFerence RIGHt")
     backend.write(":TRIGger:MODE EDGE")
     backend.write(":TRIGger:EDGE:SOURce CHANnel2")
     backend.write(":TRIGger:EDGE:LEVel 0.15")
@@ -113,6 +114,7 @@ def test_simulator_state_queries_reflect_channel_timebase_and_trigger_writes():
     assert backend.query(":CHANnel1:BWLimit?") == "1"
     assert backend.query(":TIMebase:SCALe?") == "0.002"
     assert backend.query(":TIMebase:POSition?") == "0.001"
+    assert backend.query(":TIMebase:REFerence?") == "RIGHT"
     assert backend.query(":TRIGger:EDGE:SOURce?") == "CHANnel2"
     assert backend.query(":TRIGger:EDGE:LEVel?") == "0.15"
     assert backend.query(":TRIGger:EDGE:SLOPe?") == "NEG"

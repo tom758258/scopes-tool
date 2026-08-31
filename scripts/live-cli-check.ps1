@@ -1388,6 +1388,8 @@ function Invoke-HardwareFreePreflight {
         -ModeArguments $dryRun -Arguments @("--seconds-per-division", "0.001") | Out-Null
     Invoke-ModeCli -Stage "preflight-timebase-position" -Command "timebase-position" `
         -ModeArguments $dryRun -Arguments @("--seconds", "0") | Out-Null
+    Invoke-ModeCli -Stage "preflight-timebase-reference" -Command "timebase-reference" `
+        -ModeArguments $dryRun -Arguments @("--reference", "center") | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-edge" -Command "trigger-edge" `
         -ModeArguments $dryRun -Arguments @(
             "--source-channel", "1", "--level", "0", "--slope", "positive"
@@ -1507,6 +1509,8 @@ function Invoke-HardwareFreePreflight {
     Invoke-ModeCli -Stage "preflight-timebase-scale-query" -Command "timebase-scale" `
         -ModeArguments $simulate -Arguments @("--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-timebase-position-query" -Command "timebase-position" `
+        -ModeArguments $simulate -Arguments @("--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-timebase-reference-query" -Command "timebase-reference" `
         -ModeArguments $simulate -Arguments @("--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-source-query" -Command "trigger-edge-source" `
         -ModeArguments $simulate -Arguments @("--query") | Out-Null
@@ -1722,6 +1726,11 @@ function Restore-InstrumentState {
             } else {
                 @("--source", [string]$Snapshot.TriggerSource)
             }
+        },
+        [pscustomobject]@{
+            Name = "timebase reference"
+            Command = "timebase-reference"
+            Arguments = @("--reference", [string]$Snapshot.TimebaseReference)
         },
         [pscustomobject]@{
             Name = "timebase position"
@@ -2022,6 +2031,14 @@ function Restore-InstrumentState {
                 throw "Restored display-persistence mode does not match the snapshot."
             }
 
+            $timebaseReference = Invoke-LiveCli `
+                -Stage "restore-timebase-reference-query" `
+                -Command "timebase-reference" -Arguments @("--query")
+            if ([string]$timebaseReference.result.reference -ne
+                [string]$Snapshot.TimebaseReference) {
+                throw "Restored timebase reference does not match the snapshot."
+            }
+
             $annotationRestorableProperty = $Snapshot.PSObject.Properties["AnnotationRestorable"]
             $annotationSupportedProperty = $Snapshot.PSObject.Properties["AnnotationSupported"]
             if ($null -ne $annotationRestorableProperty -and [bool]$annotationRestorableProperty.Value) {
@@ -2306,6 +2323,8 @@ try {
         -Command "timebase-scale" -Arguments @("--query")
     $timebasePosition = Invoke-LiveCli -Stage "snapshot-timebase-position" `
         -Command "timebase-position" -Arguments @("--query")
+    $timebaseReference = Invoke-LiveCli -Stage "snapshot-timebase-reference" `
+        -Command "timebase-reference" -Arguments @("--query")
     $triggerSource = Invoke-LiveCli -Stage "snapshot-trigger-source" `
         -Command "trigger-edge-source" -Arguments @("--query")
     $triggerSlope = Invoke-LiveCli -Stage "snapshot-trigger-slope" `
@@ -2422,6 +2441,7 @@ try {
             -Value $timebaseScale.result.seconds_per_division -Label "timebase scale"
         TimebasePosition = Assert-FiniteNumber `
             -Value $timebasePosition.result.position_seconds -Label "timebase position"
+        TimebaseReference = [string]$timebaseReference.result.reference
         TriggerSource = [string]$triggerSource.result.source
         TriggerSourceChannel = $triggerSource.result.source_channel
         TriggerSlope = [string]$triggerSlope.result.slope
@@ -3512,6 +3532,28 @@ if ($snapshotComplete) {
                 -Expected 0.001 -Label "Timebase scale"
             Assert-NearlyEqual -Actual ([double]$position.result.position_seconds) `
                 -Expected 0 -Label "Timebase position"
+            $originalReference = [string]$snapshot.TimebaseReference
+            $targetReference = if ($originalReference -eq "left") { "right" } else { "left" }
+            try {
+                Invoke-LiveCli -Stage "timebase-reference-set" `
+                    -Command "timebase-reference" `
+                    -Arguments @("--reference", $targetReference) | Out-Null
+                $reference = Invoke-LiveCli -Stage "timebase-reference-query" `
+                    -Command "timebase-reference" -Arguments @("--query")
+                if ([string]$reference.result.reference -ne $targetReference) {
+                    throw "Timebase reference readback does not match ${targetReference}."
+                }
+            } finally {
+                Invoke-LiveCli -Stage "timebase-reference-restore" `
+                    -Command "timebase-reference" `
+                    -Arguments @("--reference", $originalReference) | Out-Null
+                $restoredReference = Invoke-LiveCli `
+                    -Stage "timebase-reference-restore-query" `
+                    -Command "timebase-reference" -Arguments @("--query")
+                if ([string]$restoredReference.result.reference -ne $originalReference) {
+                    throw "Timebase reference restoration did not restore ${originalReference}."
+                }
+            }
         }
     }
 

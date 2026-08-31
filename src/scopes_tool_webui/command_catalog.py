@@ -202,6 +202,22 @@ COMMANDS = (
         ),
     },
     {
+        "id": "timebase-reference",
+        "category": "Timebase",
+        "label": "Timebase reference",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {
+                "name": "reference",
+                "type": "enum",
+                "options": ("left", "center", "right"),
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "timebase.reference",
+            },
+        ),
+    },
+    {
         "id": "channel-display",
         "category": "Channel",
         "label": "Channel display",

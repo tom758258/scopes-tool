@@ -111,7 +111,7 @@ from .status import (
     SystemOptionsState,
     parse_system_error,
 )
-from .timebase import TimebaseController
+from .timebase import TimebaseController, TimebaseReference
 from .wgen import (
     WgenController,
     WgenFrequencyState,
@@ -488,6 +488,16 @@ class Oscilloscope:
         """Query the horizontal position in seconds."""
 
         return self._timebase_controller().query_position()
+
+    def set_timebase_reference(self, reference: str) -> None:
+        """Set the horizontal timebase reference position."""
+
+        self._timebase_controller().set_reference(reference)
+
+    def query_timebase_reference(self) -> TimebaseReference:
+        """Query the horizontal timebase reference position."""
+
+        return self._timebase_controller().query_reference()
 
     def configure_trigger_edge(self, source_channel: int, level_volts: float, slope: str) -> None:
         """Configure analog edge trigger source, level, and slope."""

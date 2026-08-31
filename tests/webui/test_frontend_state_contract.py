@@ -2828,10 +2828,12 @@ def test_command_help_and_common_result_labels_are_localized() -> None:
     for key in (
         "description.action.apply",
         "description.timebase-scale",
+        "description.timebase-reference",
         "form.greaterThan",
         "help.pairs",
         "help.timebase.seconds_per_division",
         "help.timebase.position_seconds",
+        "help.timebase.reference",
         "results.field.seconds_per_division",
         "results.field.planned_scpi",
     ):

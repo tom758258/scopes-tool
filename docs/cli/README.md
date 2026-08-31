@@ -89,8 +89,8 @@ Current implemented scope:
   vernier, and probe skew with `:CHANnel<n>:IMPedance`,
   `:CHANnel<n>:INVert`, `:CHANnel<n>:RANGe`, `:CHANnel<n>:UNITs`,
   `:CHANnel<n>:VERNier`, and `:CHANnel<n>:PROBe:SKEW`.
-- Set or query horizontal timebase scale and position with `:TIMebase:SCALe`
-  and `:TIMebase:POSition`.
+- Set or query horizontal timebase scale, position, and reference with
+  `:TIMebase:SCALe`, `:TIMebase:POSition`, and `:TIMebase:REFerence`.
 - Configure or query analog edge trigger source, level, and slope with
   `:TRIGger:MODE EDGE` and `:TRIGger:EDGE:*`.
 - Configure or query Edge Trigger coupling and reject-filter settings with
@@ -901,10 +901,18 @@ Set or query the horizontal timebase position:
 .\.venv\Scripts\scopes-tool.exe timebase-position --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 ```
 
+Set or query the horizontal timebase reference:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe timebase-reference --resource "$env:SCOPES_TOOL_RESOURCE" --reference center --log-scpi
+.\.venv\Scripts\scopes-tool.exe timebase-reference --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+```
+
 Timebase scale must be a positive finite number in seconds per division.
-Timebase position must be a finite number in seconds. These commands first
-query `*IDN?` to verify the connected scope model is recognized, then perform
-one `:SYSTem:ERRor?` post-check.
+Timebase position must be a finite number in seconds. Timebase reference accepts
+`left`, `center`, or `right`. These commands first query `*IDN?` to verify the
+connected scope model is recognized, then perform one `:SYSTem:ERRor?`
+post-check.
 
 Configure or query analog edge trigger source, level, and slope with the
 canonical `trigger-edge` command:
@@ -2549,8 +2557,8 @@ Use Ctrl+C at that gate to cancel.
 The runner temporarily changes acquisition, CH1 display and coupling,
 timebase, Edge Trigger, and waveform transfer settings. It promises to restore
 the acquisition type and applicable average count, CH1 display and coupling,
-timebase scale and position, Edge source and slope, and CH1 Edge level. It does
-not modify the run/stop state.
+timebase scale, position, and reference, Edge source and slope, and CH1 Edge
+level. It does not modify the run/stop state.
 
 The original generic trigger mode cannot be restored through the existing
 public CLI, so the instrument may remain in Edge mode. Waveform source, format,

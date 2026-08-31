@@ -6,11 +6,15 @@ from scopes_tool_core.scpi import SCPIClient
 from scopes_tool_core.timebase import (
     TimebaseController,
     parse_timebase_float,
+    parse_timebase_reference,
     timebase_position_command,
     timebase_position_query,
+    timebase_reference_command,
+    timebase_reference_query,
     timebase_scale_command,
     timebase_scale_query,
     validate_timebase_position,
+    validate_timebase_reference,
     validate_timebase_scale,
 )
 
@@ -20,6 +24,30 @@ def test_timebase_scale_and_position_commands_use_keysight_syntax():
     assert timebase_scale_query() == ":TIMebase:SCALe?"
     assert timebase_position_command(-0.0005) == ":TIMebase:POSition -0.0005"
     assert timebase_position_query() == ":TIMebase:POSition?"
+
+
+@pytest.mark.parametrize(
+    "reference, token",
+    [("left", "LEFT"), ("center", "CENTer"), ("right", "RIGHt")],
+)
+def test_timebase_reference_commands_use_keysight_syntax(reference, token):
+    assert timebase_reference_command(reference) == f":TIMebase:REFerence {token}"
+    assert timebase_reference_query() == ":TIMebase:REFerence?"
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [("LEFT", "left"), (" CENT ", "center"), ("RIGHt", "right")],
+)
+def test_parse_timebase_reference_normalizes_instrument_response(raw, expected):
+    assert parse_timebase_reference(raw) == expected
+
+
+def test_timebase_reference_rejects_invalid_values_and_responses():
+    with pytest.raises(ParameterValidationError):
+        validate_timebase_reference("middle")
+    with pytest.raises(TimebaseResponseError):
+        parse_timebase_reference("MIDDLE")
 
 
 @pytest.mark.parametrize("raw, expected", [("1.0E-3", 0.001), (" -5.0E-4 ", -0.0005)])
@@ -83,5 +111,27 @@ def test_timebase_controller_rejects_invalid_scale_before_scpi():
 
     with pytest.raises(ParameterValidationError):
         controller.set_scale(0.0)
+
+    assert backend.history == []
+
+
+def test_timebase_controller_sets_and_queries_reference():
+    backend = FakeBackend(responses={":TIMebase:REFerence?": "CENT"})
+    controller = TimebaseController(SCPIClient(backend))
+
+    controller.set_reference("center")
+    assert controller.query_reference() == "center"
+    assert backend.history == [
+        ":TIMebase:REFerence CENTer",
+        ":TIMebase:REFerence?",
+    ]
+
+
+def test_timebase_controller_rejects_invalid_reference_before_scpi():
+    backend = FakeBackend()
+    controller = TimebaseController(SCPIClient(backend))
+
+    with pytest.raises(ParameterValidationError):
+        controller.set_reference("middle")
 
     assert backend.history == []

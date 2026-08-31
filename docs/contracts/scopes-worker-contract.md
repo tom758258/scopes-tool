@@ -205,7 +205,7 @@ Worker `/command` supports the existing Scopes capability surface:
   `channel-vernier`, `channel-probe-skew`
 - `display-label`, `display-clear`, `display-persistence`,
   `display-intensity`, `display-vectors`, `annotation`
-- `timebase-scale`, `timebase-position`
+- `timebase-scale`, `timebase-position`, `timebase-reference`
 - `trigger-edge`, `trigger-edge-source`, `trigger-edge-slope`, `trigger-edge-level`,
   `external-trigger-range`, `trigger-edge-external-level`,
   `external-trigger-probe`, `external-trigger-units`, `external-trigger-settings`,

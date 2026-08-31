@@ -271,9 +271,12 @@ from scopes_tool_core.simulator_config import parse_simulate_signal_spec
 from scopes_tool_core.timebase import (
     timebase_position_command,
     timebase_position_query,
+    timebase_reference_command,
+    timebase_reference_query,
     timebase_scale_command,
     timebase_scale_query,
     validate_timebase_position,
+    validate_timebase_reference,
     validate_timebase_scale,
 )
 from scopes_tool_core.trigger import (
@@ -1411,6 +1414,10 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         position = None if args.timebase_position_query else validate_timebase_position(args.timebase_position_value)
         planned = [timebase_position_query()] if args.timebase_position_query else [timebase_position_command(position)]
         return planned + [":SYSTem:ERRor?"], [], {"operation": "query" if args.timebase_position_query else "set", "command": planned[0], "position_seconds": position}
+    if command == "timebase-reference":
+        reference = None if args.timebase_reference_query else validate_timebase_reference(args.timebase_reference_value)
+        planned = [timebase_reference_query()] if args.timebase_reference_query else [timebase_reference_command(reference)]
+        return planned + [":SYSTem:ERRor?"], [], {"operation": "query" if args.timebase_reference_query else "set", "command": planned[0], "reference": reference}
     if command == "trigger-edge":
         if args.edge_query:
             commands = [edge_trigger_source_query(), edge_trigger_level_query(), edge_trigger_slope_query()]
