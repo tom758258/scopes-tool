@@ -401,14 +401,6 @@ def _validate_request_fields(request: CaptureMonitorRequest) -> None:
         request.retention_points, int
     ):
         raise ParameterValidationError("capture monitor retention points must be an integer")
-    if request.retention_points < request.points:
-        raise ParameterValidationError(
-            "capture monitor retention points must be at least points per capture"
-        )
-    if request.retention_points % request.points != 0:
-        raise ParameterValidationError(
-            "capture monitor retention points must be a multiple of points per capture"
-        )
     if not isinstance(request.save_results, bool):
         raise ParameterValidationError("capture monitor save_results must be a boolean")
     if request.output_dir is not None and not isinstance(request.output_dir, (str, Path)):
@@ -423,6 +415,14 @@ def _normalize_request(
     _validate_request_fields(request)
     channels = resolve_capture_channels(request.channels, capabilities)
     points = validate_waveform_points(request.points, capabilities)
+    if request.retention_points < points:
+        raise ParameterValidationError(
+            "capture monitor retention points must be at least points per capture"
+        )
+    if request.retention_points % points != 0:
+        raise ParameterValidationError(
+            "capture monitor retention points must be a multiple of points per capture"
+        )
     waveform_format = request.waveform_format.lower()
     if waveform_format == "word":
         validate_word_format_supported(capabilities)

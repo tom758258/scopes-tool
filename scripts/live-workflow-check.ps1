@@ -940,6 +940,64 @@ if (-not $script:FunctionalFailed) {
     }
 }
 
+if (-not $script:FunctionalFailed) {
+    Invoke-WorkflowCase -Name "capture-until" -Action {
+        $outputDir = Join-Path $liveArtifactRoot "capture-until"
+        $payload = Invoke-LiveCli -Stage "capture-until" -Command "capture-until" `
+            -Arguments @(
+                "--channel", "1", "--condition-channel", "1", "--points", "1000", "--format", "byte",
+                "--metric", "max", "--operator", "gt", "--threshold", "-1e9",
+                "--count", "2", "--timeout-seconds", "10", "--interval-seconds", "0",
+                "--output-dir", $outputDir
+            )
+        Assert-ResultEquals -Payload $payload -Name "status" -Expected "completed" -Stage "capture-until"
+        Assert-ResultEquals -Payload $payload -Name "requested_count" -Expected 2 -Stage "capture-until"
+        Assert-ResultEquals -Payload $payload -Name "completed_count" -Expected 2 -Stage "capture-until"
+        $captureCount = [int](Get-RequiredResultValue -Payload $payload -Name "capture_count" -Stage "capture-until")
+        if ($captureCount -lt 2) {
+            throw "capture-until capture_count is $captureCount, expected >=2."
+        }
+        Assert-ResultEquals -Payload $payload -Name "termination_reason" -Expected "condition_met" -Stage "capture-until"
+        Assert-ExpectedFiles -OutputDir $outputDir `
+            -Names @("match_001.csv", "match_001_meta.json", "match_002.csv", "match_002_meta.json", "manifest.json", "scpi.log") `
+            -Stage "capture-until"
+    }
+}
+
+if (-not $script:FunctionalFailed) {
+    Invoke-WorkflowCase -Name "capture-monitor" -Action {
+        $outputDir = Join-Path $liveArtifactRoot "capture-monitor"
+        $payload = Invoke-LiveCli -Stage "capture-monitor" -Command "capture-monitor" `
+            -Arguments @(
+                "--channel", "1", "--points", "1000", "--format", "byte",
+                "--count", "5", "--interval-seconds", "0", "--retention-points", "2000",
+                "--output-dir", $outputDir
+            )
+        Assert-ResultEquals -Payload $payload -Name "status" -Expected "completed" -Stage "capture-monitor"
+        Assert-ResultEquals -Payload $payload -Name "completed_count" -Expected 5 -Stage "capture-monitor"
+        Assert-ResultEquals -Payload $payload -Name "total_observed_points" -Expected 5000 -Stage "capture-monitor"
+        Assert-ResultEquals -Payload $payload -Name "retained_points" -Expected 2000 -Stage "capture-monitor"
+        Assert-ResultEquals -Payload $payload -Name "dropped_points" -Expected 3000 -Stage "capture-monitor"
+        Assert-ResultEquals -Payload $payload -Name "first_retained_capture_index" -Expected 4 -Stage "capture-monitor"
+        Assert-ResultEquals -Payload $payload -Name "last_retained_capture_index" -Expected 5 -Stage "capture-monitor"
+        Assert-ExpectedFiles -OutputDir $outputDir `
+            -Names @("retained_waveforms.csv", "manifest.json", "scpi.log") -Stage "capture-monitor"
+        $csvPath = Join-Path $outputDir "retained_waveforms.csv"
+        $header = (Get-Content -LiteralPath $csvPath -TotalCount 1).Trim()
+        if ($header -notlike "capture_index,global_sample_index,sample_index,time_s,*") {
+            throw "capture-monitor CSV header unexpected: $header"
+        }
+        $rows = Import-Csv -LiteralPath $csvPath
+        if ($rows.Count -ne 2000) {
+            throw "capture-monitor CSV row count is $($rows.Count), expected 2000."
+        }
+        $indices = @($rows | Select-Object -ExpandProperty capture_index | Sort-Object -Unique)
+        if (($indices -join ",") -ne "4,5") {
+            throw "capture-monitor CSV capture_index values are $($indices -join ','), expected 4,5."
+        }
+    }
+}
+
 if ($snapshotTaken) {
     try {
         Restore-AcquisitionState -WasRunning $wasRunning

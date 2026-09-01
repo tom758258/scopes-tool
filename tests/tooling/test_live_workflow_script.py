@@ -26,6 +26,8 @@ def test_live_workflow_script_covers_public_workflows() -> None:
         "capture-batch",
         "triggered-measure-loop",
         "triggered-capture-series",
+        "capture-until",
+        "capture-monitor",
     ):
         assert f'-Name "{case}"' in text
 
@@ -36,6 +38,8 @@ def test_live_workflow_script_covers_public_workflows() -> None:
         "capture-batch",
         "triggered-measure-loop",
         "triggered-capture-series",
+        "capture-until",
+        "capture-monitor",
     ):
         assert f'-Command "{command}"' in text
 

@@ -68,6 +68,15 @@ def test_retention_default_and_validation(tmp_path, values, message):
         )
 
 
+@pytest.mark.parametrize("points", [0, "bad"])
+def test_capture_monitor_invalid_points_use_parameter_validation(tmp_path, points):
+    with pytest.raises(ParameterValidationError):
+        capture_monitor.plan_capture_monitor(
+            _request(tmp_path / "never", points=points),
+            _scope().backend._capabilities,
+        )
+
+
 def test_retention_drops_oldest_complete_chunk_but_preserves_overall_max(
     monkeypatch, tmp_path
 ):

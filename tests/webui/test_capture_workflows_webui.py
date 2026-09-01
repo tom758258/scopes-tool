@@ -236,6 +236,87 @@ def test_monitor_webui_stop_and_transient_callbacks_reach_core(monkeypatch, tmp_
     assert received == [(stop_requested, sample_reporter)]
 
 
+def test_monitor_status_shows_full_metrics(tmp_path):
+    manager = JobManager()
+    job = Job(
+        job_id="monitor-metrics",
+        command="capture-monitor",
+        mode="simulate",
+        resource=None,
+        model_id=MODEL_ID,
+        pc_output_dir=str(tmp_path),
+        parameters={"points": 1000, "retention_points": 2000},
+        pc_output_root=tmp_path,
+    )
+    try:
+        manager._append_monitor_update(
+            job,
+            {
+                "capture_index": 1,
+                "global_start_index": 0,
+                "time_s": [0.0],
+                "channels": {"CH1": {"unit": "V", "values": [1.0]}},
+                "completed_count": 1,
+                "requested_count": 2,
+                "total_observed_points": 1000,
+                "retained_points": 1000,
+                "dropped_points": 0,
+                "dropped_capture_count": 0,
+                "metrics": {
+                    "CH1": {
+                        "maximum": 1.82,
+                        "minimum": -0.31,
+                        "peak_to_peak": 2.13,
+                        "abs_max": 1.82,
+                        "unit": "V",
+                    }
+                },
+            },
+        )
+        payload = job.to_payload()
+        # backend summary must contain full metrics, not just maximum
+        summary = payload["monitor_runtime"]["summary"]
+        assert summary["metrics"]["CH1"]["minimum"] == -0.31
+        assert summary["metrics"]["CH1"]["peak_to_peak"] == 2.13
+        assert summary["metrics"]["CH1"]["abs_max"] == 1.82
+    finally:
+        manager._executor.shutdown(wait=True)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_monitor_frontend_shows_min_p2p_absmax():
+    run_editor_behavior(
+        r'''
+        definitions.push({
+          id: "capture-monitor", editor: "workflow", fields: [
+            { name: "channels", type: "multi-enum", options: [1], default: [1], required: true },
+            { name: "points", type: "integer", options: [1000], default: 1000 },
+            { name: "format", type: "enum", options: ["byte"], default: "byte" },
+            { name: "count", type: "integer", minimum: 1, required: true },
+            { name: "interval_seconds", type: "number", minimum: 0, default: 0 },
+            { name: "retention_points", type: "integer", minimum: 1000, default: 2000 },
+            { name: "save_results", type: "boolean", default: true },
+          ],
+        });
+        env.selectedId = "capture-monitor";
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        editor.handleJobUpdate({ command: "capture-monitor", monitor_runtime: {
+          reset: true, summary: {
+            completed_count: 1, requested_count: 2,
+            total_observed_points: 1000, retained_points: 1000, dropped_points: 0,
+            metrics: { CH1: { maximum: 1.82, minimum: -0.31, peak_to_peak: 2.13, abs_max: 1.82, unit: "V" } }
+          }, updates: []
+        }});
+        assert.ok(editor.monitorStatus.textContent.includes("max="));
+        assert.ok(editor.monitorStatus.textContent.includes("min="));
+        assert.ok(editor.monitorStatus.textContent.includes("p2p="));
+        assert.ok(editor.monitorStatus.textContent.includes("abs-max="));
+        ''',
+    )
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
 def test_waveform_editor_filters_condition_channel_and_bounds_plot_chunks():
     run_editor_behavior(

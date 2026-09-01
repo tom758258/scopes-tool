@@ -608,8 +608,8 @@ export class WorkflowEditor {
     if (this.monitorStatus) {
       const summary = this.monitorSummary || {};
       const metrics = Object.entries(summary.metrics || {}).map(
-        ([channel, values]) => `${channel}.max=${values.maximum}`,
-      ).join(" ");
+        ([channel, values]) => `${channel} max=${values.maximum} ${values.unit} min=${values.minimum} ${values.unit} p2p=${values.peak_to_peak} ${values.unit} abs-max=${values.abs_max} ${values.unit}`,
+      ).join(" | ");
       this.monitorStatus.textContent = summary.completed_count
         ? `${summary.completed_count}/${summary.requested_count} observed=${summary.total_observed_points} retained=${summary.retained_points} dropped=${summary.dropped_points} ${metrics}`.trim()
         : translate("workflow.monitor.waiting");

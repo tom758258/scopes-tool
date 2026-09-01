@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
+from typing import Mapping
 
 from .. import preflight, runtime
 from scopes_tool_core.setup import (
@@ -581,6 +582,47 @@ def _cmd_capture_until(
         return operation_result.exit_code
 
 
+def _monitor_human_reporter(update: Mapping[str, object]) -> None:
+    try:
+        completed = update.get("completed_count")
+        requested = update.get("requested_count")
+        total = update.get("total_observed_points")
+        retained = update.get("retained_points")
+        dropped = update.get("dropped_points")
+        metrics = update.get("metrics") if isinstance(update.get("metrics"), Mapping) else {}
+        print(f"Capture {completed}/{requested}: observed={total} retained={retained} dropped={dropped}")
+        if isinstance(metrics, Mapping) and metrics:
+            parts: list[str] = []
+            for channel in sorted(metrics.keys(), key=lambda name: str(name)):
+                values = metrics[channel]
+                if not isinstance(values, Mapping):
+                    continue
+                maximum = values.get("maximum")
+                minimum = values.get("minimum")
+                p2p = values.get("peak_to_peak")
+                abs_max = values.get("abs_max")
+                unit = str(values.get("unit", "")).strip()
+
+                def _fmt(value: object) -> str:
+                    try:
+                        return f"{float(value):g}"
+                    except Exception:
+                        return str(value)
+
+                if unit:
+                    parts.append(
+                        f"{channel} max={_fmt(maximum)} {unit} min={_fmt(minimum)} {unit} p2p={_fmt(p2p)} {unit} abs-max={_fmt(abs_max)} {unit}"
+                    )
+                else:
+                    parts.append(
+                        f"{channel} max={_fmt(maximum)} min={_fmt(minimum)} p2p={_fmt(p2p)} abs-max={_fmt(abs_max)}"
+                    )
+            if parts:
+                print(" | ".join(parts))
+    except Exception:
+        return
+
+
 def _cmd_capture_monitor(
     args: argparse.Namespace,
     *,
@@ -590,6 +632,9 @@ def _cmd_capture_monitor(
     resource = runtime._require_resource(args)
     if resource is None:
         return 2
+    effective_reporter = sample_reporter
+    if effective_reporter is None and runtime._JSON_RECORD is None:
+        effective_reporter = _monitor_human_reporter
     with runtime._open_scope(args, resource) as scope:
         operation_result = run_capture_monitor(
             scope,
@@ -606,7 +651,7 @@ def _cmd_capture_monitor(
                 log_scpi=bool(args.log_scpi),
             ),
             stop_requested=stop_requested,
-            sample_reporter=sample_reporter,
+            sample_reporter=effective_reporter,
         )
         if operation_result.idn is not None:
             runtime._json_record_scope(scope, operation_result.idn)
