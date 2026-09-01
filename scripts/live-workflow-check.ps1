@@ -636,6 +636,29 @@ function Invoke-HardwareFreePreflight {
     Assert-ResultEquals -Payload $triggeredCapture -Name "status" -Expected "completed" `
         -Stage "Preflight triggered-capture-series"
 
+    $sequenceFile = Join-Path $preflightRoot "sequence.json"
+    $sequenceOutputDir = Join-Path $preflightRoot "sequence-run"
+    $sequenceJson = @'
+{
+  "version": 1,
+  "loop_count": 1,
+  "steps": [
+    {"action": "single", "parameters": {}},
+    {"action": "wait-trigger", "parameters": {"timeout_seconds": 5}},
+    {"action": "measure", "parameters": {"item": "vpp", "channel": 1}},
+    {"action": "capture", "parameters": {"channels": [1], "points": 1000, "waveform_format": "byte"}}
+  ]
+}
+'@
+    Write-Utf8NoBomText -LiteralPath $sequenceFile -Text $sequenceJson
+    $sequence = Invoke-ModeCli -Stage "preflight-sequence" -Command "sequence" -ModeArguments $simulate -Arguments @(
+        "--file", $sequenceFile, "--output-dir", $sequenceOutputDir
+    )
+    Assert-ResultEquals -Payload $sequence -Name "status" -Expected "completed" -Stage "Preflight sequence"
+    Assert-ResultEquals -Payload $sequence -Name "completed_step_executions" -Expected 4 -Stage "Preflight sequence"
+    Assert-ExpectedFiles -OutputDir $sequenceOutputDir -Names @("manifest.json", "scpi.log") -Stage "Preflight sequence"
+    Assert-ExpectedFiles -OutputDir $sequenceOutputDir -Names @("loop_0001/step_0004_capture/waveform.csv", "loop_0001/step_0004_capture/waveform_meta.json") -Stage "Preflight sequence"
+
     Invoke-ModeCli -Stage "preflight-operation-status" `
         -Command "system-operation-status" -ModeArguments $simulate `
         -Arguments @("--query") | Out-Null
@@ -1030,6 +1053,34 @@ if (-not $script:FunctionalFailed) {
                 "waveform_0001_meta.json", "waveform_0002.csv",
                 "waveform_0002_meta.json"
             ) -Stage "triggered-capture-series"
+    }
+}
+
+if (-not $script:FunctionalFailed) {
+    Invoke-WorkflowCase -Name "sequence" -Action {
+        $sequenceFile = Join-Path $liveArtifactRoot "sequence.json"
+        $outputDir = Join-Path $liveArtifactRoot "sequence"
+        $sequenceJson = @'
+{
+  "version": 1,
+  "loop_count": 1,
+  "steps": [
+    {"action": "single", "parameters": {}},
+    {"action": "wait-trigger", "parameters": {"timeout_seconds": 5}},
+    {"action": "measure", "parameters": {"item": "vpp", "channel": 1}},
+    {"action": "capture", "parameters": {"channels": [1], "points": 1000, "waveform_format": "byte"}}
+  ]
+}
+'@
+        Write-Utf8NoBomText -LiteralPath $sequenceFile -Text $sequenceJson
+        $payload = Invoke-LiveCli -Stage "sequence" -Command "sequence" -Arguments @(
+            "--file", $sequenceFile, "--output-dir", $outputDir
+        )
+        Assert-ResultEquals -Payload $payload -Name "status" -Expected "completed" -Stage "sequence"
+        Assert-ResultEquals -Payload $payload -Name "step_count" -Expected 4 -Stage "sequence"
+        Assert-ResultEquals -Payload $payload -Name "completed_step_executions" -Expected 4 -Stage "sequence"
+        Assert-ExpectedFiles -OutputDir $outputDir -Names @("manifest.json", "scpi.log") -Stage "sequence"
+        Assert-ExpectedFiles -OutputDir $outputDir -Names @("loop_0001/step_0004_capture/waveform.csv", "loop_0001/step_0004_capture/waveform_meta.json") -Stage "sequence"
     }
 }
 

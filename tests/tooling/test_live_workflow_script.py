@@ -28,6 +28,7 @@ def test_live_workflow_script_covers_public_workflows() -> None:
         "triggered-capture-series",
         "capture-until",
         "capture-monitor",
+        "sequence",
     ):
         assert f'-Name "{case}"' in text
 
@@ -40,6 +41,7 @@ def test_live_workflow_script_covers_public_workflows() -> None:
         "triggered-capture-series",
         "capture-until",
         "capture-monitor",
+        "sequence",
     ):
         assert f'-Command "{command}"' in text
 
@@ -105,11 +107,12 @@ def test_live_workflow_script_orders_waveform_before_triggered() -> None:
     assert until_index < triggered_index
 
 
-def test_live_workflow_script_preflight_covers_new_waveform_workflows() -> None:
+def test_live_workflow_script_preflight_covers_workflows() -> None:
     text = _script_text()
 
     assert 'preflight-capture-until' in text
     assert 'preflight-capture-monitor' in text
+    assert 'preflight-sequence' in text
 
 
 def test_live_workflow_script_uses_qualification_status_vocabulary() -> None:
