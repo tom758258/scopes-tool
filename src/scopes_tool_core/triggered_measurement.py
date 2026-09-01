@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import csv
+from contextlib import nullcontext
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -65,6 +66,7 @@ class TriggeredMeasureLoopRequest:
     pair_items: str = "phase,delay"
     interval_seconds: float = 0.0
     output_dir: str | Path | None = None
+    save_results: bool = True
     log_scpi: bool = False
 
 
@@ -75,16 +77,18 @@ def plan_triggered_measure_loop(
     """Validate and plan one representative cycle without hardware or files."""
 
     normalized = _normalize_request(request, capabilities)
-    output_dir = (
-        Path(request.output_dir)
-        if request.output_dir is not None
-        else TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR / "DRY-RUN"
-    )
+    output_dir = None
+    if request.save_results:
+        output_dir = (
+            Path(request.output_dir)
+            if request.output_dir is not None
+            else TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR / "DRY-RUN"
+        )
     csv_path, manifest_path, scpi_log_path = _workflow_paths(output_dir)
-    files = (
-        {"kind": "csv", "path": str(csv_path)},
-        {"kind": "manifest", "path": str(manifest_path)},
-        {"kind": "scpi_log", "path": str(scpi_log_path)},
+    files = tuple(
+        {"kind": kind, "path": str(path)}
+        for kind, path in (("csv", csv_path), ("manifest", manifest_path), ("scpi_log", scpi_log_path))
+        if path is not None
     )
     planned = [single_command(), operation_condition_query()]
     planned.extend(_measurement_queries(normalized, capabilities))
@@ -96,11 +100,11 @@ def plan_triggered_measure_loop(
         "completed_count": 0,
         "trigger_timeout_seconds": float(request.trigger_timeout_seconds),
         "interval_seconds": float(request.interval_seconds),
-        "cycles": [],
-        "output_dir": str(output_dir),
-        "csv_path": str(csv_path),
-        "manifest_path": str(manifest_path),
-        "scpi_log_path": str(scpi_log_path),
+        "last_measurement": None,
+        "output_dir": str(output_dir) if output_dir is not None else None,
+        "csv_path": str(csv_path) if csv_path is not None else None,
+        "manifest_path": str(manifest_path) if manifest_path is not None else None,
+        "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
         "error": None,
     }
     return OperationPlan(tuple(planned), files, result)
@@ -126,15 +130,19 @@ def run_triggered_measure_loop(
         raise OscilloscopeError("Capabilities unavailable for this model")
     normalized = _normalize_request(request, scope.capabilities)
 
-    output_dir = prepare_batch_output_dir(
-        request.output_dir,
-        base_dir=TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR,
+    output_dir = (
+        prepare_batch_output_dir(
+            request.output_dir,
+            base_dir=TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR,
+        )
+        if request.save_results
+        else None
     )
     csv_path, manifest_path, scpi_log_path = _workflow_paths(output_dir)
     files = [
-        {"kind": "csv", "path": str(csv_path)},
-        {"kind": "manifest", "path": str(manifest_path)},
-        {"kind": "scpi_log", "path": str(scpi_log_path)},
+        {"kind": kind, "path": str(path)}
+        for kind, path in (("csv", csv_path), ("manifest", manifest_path), ("scpi_log", scpi_log_path))
+        if path is not None
     ]
     manifest: dict[str, object] = {
         "schema_version": TRIGGERED_MEASURE_LOOP_SCHEMA_VERSION,
@@ -151,35 +159,47 @@ def run_triggered_measure_loop(
         "trigger_timeout_seconds": float(request.trigger_timeout_seconds),
         "interval_seconds": float(request.interval_seconds),
         "cycles": [],
+        "last_measurement": None,
         "files": [
             {"kind": item["kind"], "path": relative_manifest_path(item["path"], output_dir)}
             for item in files
-        ],
+        ] if output_dir is not None else [],
         "error": None,
     }
     human = [
         f"Triggered measurement loop: {request.count} cycle(s)",
         f"Trigger timeout seconds: {float(request.trigger_timeout_seconds):.12g}",
         f"Interval seconds: {float(request.interval_seconds):.12g}",
-        f"Output directory: {output_dir}",
     ]
+    human.append(
+        f"Output directory: {output_dir}"
+        if output_dir is not None
+        else "Result file saving: disabled"
+    )
     headers = _csv_headers(normalized)
     last_system_error: dict[str, object] | None = None
     current_cycle = 0
     reporter_failed = False
 
     try:
-        _write_manifest(manifest, manifest_path)
+        if manifest_path is not None:
+            _write_manifest(manifest, manifest_path)
         with workflow_scpi_logging(
             scpi_log_path,
             echo_to_stderr=request.log_scpi,
         ):
             for _entry in drain_preexisting_system_errors(scope):
                 human.append(f"Pre-operation stale system error drained: {_entry.format()}")
-            with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
-                writer = csv.writer(csv_file)
-                writer.writerow(headers)
-                csv_file.flush()
+            csv_context = (
+                csv_path.open("w", newline="", encoding="utf-8")
+                if csv_path is not None
+                else nullcontext(None)
+            )
+            with csv_context as csv_file:
+                writer = csv.writer(csv_file) if csv_file is not None else None
+                if writer is not None:
+                    writer.writerow(headers)
+                    csv_file.flush()
                 start_perf = time.perf_counter()
 
                 for index in range(1, request.count + 1):
@@ -274,16 +294,17 @@ def run_triggered_measure_loop(
                             scope, error=error,
                         )
 
-                    writer.writerow(
-                        [
-                            index,
-                            timestamp_iso,
-                            f"{elapsed_seconds:.6f}",
-                            f"{trigger_elapsed_seconds:.6f}",
-                            *[values[header] for header in headers[4:]],
-                        ]
-                    )
-                    csv_file.flush()
+                    if writer is not None:
+                        writer.writerow(
+                            [
+                                index,
+                                timestamp_iso,
+                                f"{elapsed_seconds:.6f}",
+                                f"{trigger_elapsed_seconds:.6f}",
+                                *[values[header] for header in headers[4:]],
+                            ]
+                        )
+                        csv_file.flush()
 
                     cycle = {
                         "index": index,
@@ -297,11 +318,6 @@ def run_triggered_measure_loop(
                     candidate_cycles = candidate["cycles"]
                     assert isinstance(candidate_cycles, list)
                     candidate_cycles.append(cycle)
-                    _write_manifest(candidate, manifest_path)
-                    manifest = candidate
-                    human.extend(row_human)
-                    human.append(f"System error: {entry.format()}")
-
                     sample = {
                         "index": index,
                         "timestamp_iso": timestamp_iso,
@@ -310,6 +326,10 @@ def run_triggered_measure_loop(
                         "values": dict(values),
                         "system_error": dict(last_system_error),
                     }
+                    candidate["last_measurement"] = sample
+                    if manifest_path is not None:
+                        _write_manifest(candidate, manifest_path)
+                    manifest = candidate
                     try:
                         if sample_reporter is not None:
                             sample_reporter(sample)
@@ -410,6 +430,10 @@ def _validate_request_fields(request: TriggeredMeasureLoopRequest) -> None:
     if request.output_dir is not None and not isinstance(request.output_dir, (str, Path)):
         raise ParameterValidationError(
             "triggered measurement loop output_dir must be a path or string"
+        )
+    if not isinstance(request.save_results, bool):
+        raise ParameterValidationError(
+            "triggered measurement loop save_results must be a boolean"
         )
 
 
@@ -526,7 +550,9 @@ def _trigger_failure(
     }
 
 
-def _workflow_paths(output_dir: Path) -> tuple[Path, Path, Path]:
+def _workflow_paths(output_dir: Path | None) -> tuple[Path | None, Path | None, Path | None]:
+    if output_dir is None:
+        return None, None, None
     return (
         output_dir / "measurements.csv",
         output_dir / "manifest.json",
@@ -548,9 +574,9 @@ def _finish_result(
     status: str,
     exit_code: int,
     manifest: dict[str, object],
-    manifest_path: Path,
-    csv_path: Path,
-    scpi_log_path: Path,
+    manifest_path: Path | None,
+    csv_path: Path | None,
+    scpi_log_path: Path | None,
     files: list[dict[str, str]],
     human: list[str],
     idn: object,
@@ -563,21 +589,24 @@ def _finish_result(
     manifest["status"] = status
     manifest["end_time"] = batch_iso_timestamp()
     manifest["error"] = error
-    if best_effort:
+    if manifest_path is None:
+        pass
+    elif best_effort:
         try:
             _write_manifest(manifest, manifest_path)
         except OscilloscopeError:
             pass
     else:
         _write_manifest(manifest, manifest_path)
-    human.extend(
-        [
-            f"Triggered measurement loop status: {status}",
-            f"CSV: {csv_path}",
-            f"Manifest: {manifest_path}",
-            f"SCPI log: {scpi_log_path}",
-        ]
-    )
+    human.append(f"Triggered measurement loop status: {status}")
+    if manifest_path is not None:
+        human.extend([f"CSV: {csv_path}", f"Manifest: {manifest_path}", f"SCPI log: {scpi_log_path}"])
+    last_measurement = manifest.get("last_measurement")
+    if isinstance(last_measurement, Mapping):
+        human.append(
+            f"Last measurement: cycle {last_measurement['index']}, "
+            f"values={last_measurement['values']}"
+        )
     result = {
         "status": status,
         "channels": list(manifest["channels"]),
@@ -588,11 +617,11 @@ def _finish_result(
         "completed_count": manifest["completed_count"],
         "trigger_timeout_seconds": manifest["trigger_timeout_seconds"],
         "interval_seconds": manifest["interval_seconds"],
-        "cycles": list(manifest["cycles"]),
-        "output_dir": str(manifest_path.parent),
-        "csv_path": str(csv_path),
-        "manifest_path": str(manifest_path),
-        "scpi_log_path": str(scpi_log_path),
+        "last_measurement": last_measurement,
+        "output_dir": str(manifest_path.parent) if manifest_path is not None else None,
+        "csv_path": str(csv_path) if csv_path is not None else None,
+        "manifest_path": str(manifest_path) if manifest_path is not None else None,
+        "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
         "error": error,
     }
     return OperationResult(
@@ -620,7 +649,7 @@ def _pre_start_cancelled_result(
         "completed_count": 0,
         "trigger_timeout_seconds": float(request.trigger_timeout_seconds),
         "interval_seconds": float(request.interval_seconds),
-        "cycles": [],
+        "last_measurement": None,
         "output_dir": None,
         "csv_path": None,
         "manifest_path": None,

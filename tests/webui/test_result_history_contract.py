@@ -487,6 +487,19 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         assert(unknownDd.some((t) => t === "2"), "scale without unit uses plain value");
         assert(unknownDd.some((t) => t === "10"), "range without unit uses plain value");
 
+        // E: compact workflow result exposes its summary and final measurement
+        const workflowWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(workflowWorkspace, makeJob("measure-until", {
+          status: "completed",
+          completed_count: 2,
+          last_measurement: { index: 2, value: "4", matched: true },
+        }));
+        const workflowText = workflowWorkspace.children.flatMap((field) =>
+          field.children.map((node) => node.textContent)
+        );
+        assert(workflowText.includes("2"), "completed count");
+        assert(workflowText.some((text) => text.includes("Index: 2")), "last measurement");
+
         // A. command-scoped dispatch: non-channel-summary command must not use card renderer
         // even when result contains a channels array
         const otherWorkspace = new FakeNode("div");

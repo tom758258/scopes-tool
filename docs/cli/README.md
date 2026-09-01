@@ -166,9 +166,13 @@ Current implemented scope:
 - Query multi-channel and optional pair measurement sweeps with
   continue-and-summarize failure handling.
 - Log a finite batch of read-only measurements with `measure-log`, writing a
-  CSV, `manifest.json`, and `scpi.log` into one run directory.
+  CSV, `manifest.json`, and `scpi.log` into one run directory by default.
 - Query one read-only measurement until a finite numeric condition matches or
   fails with timeout through `measure-until`.
+- Use `--no-save` with `measure-log`, `measure-until`, or
+  `triggered-measure-loop` to skip their host-side CSV, manifest, and SCPI log
+  files while retaining a compact structured result with the final
+  measurement. Saving remains enabled by default.
 - Run strict finite Generic Sequence v1 JSON documents with `sequence`, using
   existing Core operations and deterministic capture/screenshot artifacts.
 - Run capture-safe hardware smoke checks that write a report directory with
@@ -308,6 +312,7 @@ mismatch fails before command-specific SCPI.
 .\.venv\Scripts\scopes-tool.exe capture --simulate --json --simulate-binary-transfer-failure --channel 1 --csv .tmp_tests\failure.csv
 .\.venv\Scripts\scopes-tool.exe capture-batch --simulate --json --channel 1 --count 2 --output-dir .tmp_tests\sim_batch
 .\.venv\Scripts\scopes-tool.exe measure-log --simulate --json --channel 1 --items vpp,frequency --count 2 --output-dir .tmp_tests\sim_measure_log
+.\.venv\Scripts\scopes-tool.exe measure-log --simulate --json --channel 1 --items vpp --count 2 --no-save
 ```
 
 Automation and orchestrator contracts live under `docs/contracts/`; start with

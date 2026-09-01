@@ -520,6 +520,8 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
         output_dir = Path(args.output_dir)
         return [output_dir / "manifest.json", output_dir / "scpi.log"]
     if command == "measure-log":
+        if getattr(args, "no_save", False):
+            return []
         output_dir = Path(args.output_dir)
         return [
             output_dir / "measurements.csv",
@@ -527,6 +529,8 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
             output_dir / "scpi.log",
         ]
     if command == "measure-until":
+        if getattr(args, "no_save", False):
+            return []
         output_dir = Path(args.output_dir)
         return [
             output_dir / "measurements.csv",
@@ -534,6 +538,8 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
             output_dir / "scpi.log",
         ]
     if command == "triggered-measure-loop":
+        if getattr(args, "no_save", False):
+            return []
         output_dir = Path(args.output_dir)
         return [
             output_dir / "measurements.csv",

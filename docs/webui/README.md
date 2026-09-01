@@ -165,7 +165,9 @@ through the normal foreground execution path.
 Selecting `measure-log` or `triggered-measure-loop` opens the dedicated
 Workflow editor. It provides model-projected analog channel and measurement
 choices, channel-pair rows, shared pair measurements, and the command's
-existing run limits. Selection and editing are browser-local and passive;
+existing run limits. **Save results to files** is enabled by default; disabling
+it runs the workflow without requiring or creating host-side output files.
+Selection and editing are browser-local and passive;
 Run submits one job through the shared foreground execution admission. The
 `capture-batch`, `measure-until`, and `triggered-capture-series` commands keep
 their metadata-driven Generic Form.
@@ -327,6 +329,10 @@ data.
 Command submission returns a job ID. The browser polls job status through the
 WebUI API. Jobs report `queued`, `running`, `completed`, `failed`, or
 `cancelled` and expose structured Core results, errors, and diagnostic lines.
+Measurement workflows present a compact status/count summary and their final
+measurement in Result. Their complete sample history is not copied into the
+terminal job result; when saving is enabled, existing workflow files retain
+their persistence role.
 
 Queued jobs can be cancelled immediately. Running jobs accept a cooperative
 cancellation request and remain running until Core execution and session

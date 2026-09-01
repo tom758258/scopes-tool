@@ -2247,6 +2247,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="output directory; if provided, it must not exist or must be empty",
     )
     measure_log_parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="run without creating measurement result files",
+    )
+    measure_log_parser.add_argument(
         "--stop-on-error",
         action="store_true",
         help="abort logging immediately if an instrument system error is detected",
@@ -2300,6 +2305,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "workflow run directory; defaults to "
             "data/measure_until/<UTC+8 timestamp>"
         ),
+    )
+    measure_until_parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="run without creating measurement result files",
     )
 
     triggered_measure_loop_parser = subparsers.add_parser(
@@ -2358,6 +2368,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "workflow run directory; defaults to "
             "data/triggered_measure_loops/<UTC+8 timestamp>"
         ),
+    )
+    triggered_measure_loop_parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="run without creating measurement result files",
     )
 
     triggered_capture_series_parser = subparsers.add_parser(

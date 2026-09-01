@@ -92,6 +92,39 @@ def test_triggered_measure_loop_simulator_happy_path(tmp_path, capsys):
     assert (output_dir / "scpi.log").exists()
 
 
+def test_triggered_measure_loop_no_save_returns_last_measurement_without_files(
+    tmp_path, capsys
+):
+    output_dir = tmp_path / "not-created"
+
+    code = cli.main(
+        [
+            "triggered-measure-loop",
+            "--simulate",
+            "--json",
+            "--channel",
+            "1",
+            "--items",
+            "vpp",
+            "--count",
+            "2",
+            "--trigger-timeout-seconds",
+            "1",
+            "--output-dir",
+            str(output_dir),
+            "--no-save",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["files"] == []
+    assert payload["result"]["completed_count"] == 2
+    assert payload["result"]["last_measurement"]["index"] == 2
+    assert "cycles" not in payload["result"]
+    assert not output_dir.exists()
+
+
 def test_triggered_measure_loop_requires_count_and_timeout(capsys):
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["triggered-measure-loop", "--dry-run", "--channel", "1"])

@@ -724,6 +724,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 timeout_seconds=args.timeout_seconds,
                 interval_seconds=args.interval_seconds,
                 output_dir=args.output_dir,
+                save_results=not args.no_save,
                 log_scpi=bool(args.log_scpi),
             ),
             capabilities,
@@ -755,6 +756,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 trigger_timeout_seconds=args.trigger_timeout_seconds,
                 interval_seconds=args.interval_seconds,
                 output_dir=args.output_dir,
+                save_results=not args.no_save,
                 log_scpi=bool(args.log_scpi),
             ),
             capabilities,
@@ -1966,11 +1968,12 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "requested_count": args.count,
             "requested_duration_seconds": args.duration_seconds,
             "completed_rows": 0,
-            "files": files,
-            "manifest_path": files[1]["path"],
-            "scpi_log_path": files[2]["path"],
-            "csv_path": files[0]["path"],
-        }
+                "last_measurement": None,
+                "files": files,
+                "manifest_path": files[1]["path"] if files else None,
+                "scpi_log_path": files[2]["path"] if files else None,
+                "csv_path": files[0]["path"] if files else None,
+            }
         return planned, files, result
     if command == "screenshot":
         if args.query_hardcopy:
@@ -2626,6 +2629,8 @@ def _planned_capture_files(args: argparse.Namespace, command: str) -> list[dict[
 
 
 def _planned_measure_log_files(args: argparse.Namespace) -> list[dict[str, str]]:
+    if args.no_save:
+        return []
     output_dir = (
         Path(args.output_dir)
         if args.output_dir is not None

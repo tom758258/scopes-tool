@@ -3110,6 +3110,61 @@ def test_worker_executes_measure_until_with_owned_artifacts(tmp_path):
     assert (output_dir / "scpi.log").exists()
 
 
+def test_worker_measure_until_no_save_does_not_require_output_dir(tmp_path):
+    job, result = _execute_worker_job(
+        _runtime(),
+        "measure-until",
+        {
+            "channel": 1,
+            "item": "vpp",
+            "operator": "gt",
+            "threshold": 0,
+            "timeout_seconds": 1,
+            "interval_seconds": 0,
+            "save_results": False,
+        },
+    )
+
+    assert job.state == "succeeded"
+    assert result["files"] == []
+    assert result["result"]["last_measurement"]["index"] == 1
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "command, arguments",
+    [
+        ("measure-log", {"count": 1, "save_results": False}),
+        (
+            "measure-until",
+            {
+                "channel": 1,
+                "item": "vpp",
+                "operator": "gt",
+                "threshold": 0,
+                "timeout_seconds": 1,
+                "save_results": False,
+            },
+        ),
+        (
+            "triggered-measure-loop",
+            {
+                "count": 1,
+                "trigger_timeout_seconds": 1,
+                "save_results": False,
+            },
+        ),
+    ],
+)
+def test_worker_optional_persistence_wiring_uses_shared_no_save_flag(
+    command, arguments
+):
+    parsed = worker.parse_domain_command(command, arguments, _runtime())
+
+    assert parsed.no_save is True
+    assert parsed.output_dir is None
+
+
 @pytest.mark.parametrize(
     "status, expected",
     [

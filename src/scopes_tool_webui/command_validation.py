@@ -171,7 +171,11 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
     if resource is not None and (not isinstance(resource, str) or not resource.strip()):
         raise WebUIRequestError("resource must be a non-empty string when provided")
     pc_output_dir = payload.get("pc_output_dir", DEFAULT_PC_OUTPUT_DIR)
-    if not isinstance(pc_output_dir, str) or not pc_output_dir.strip():
+    output_optional = (
+        command in {"measure-log", "measure-until", "triggered-measure-loop"}
+        and parameters.get("save_results") is False
+    )
+    if not isinstance(pc_output_dir, str) or (not pc_output_dir.strip() and not output_optional):
         raise WebUIRequestError("pc_output_dir must be a non-empty string")
     model_id = None if mode == "live" else payload.get("model_id", DEFAULT_MODEL_ID)
     if mode != "live":
@@ -195,7 +199,7 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
         "mode": mode,
         "resource": resource.strip() if isinstance(resource, str) else None,
         "model_id": model_id,
-        "pc_output_dir": pc_output_dir.strip(),
+        "pc_output_dir": pc_output_dir.strip() or DEFAULT_PC_OUTPUT_DIR,
         "parameters": normalized,
     }
 
@@ -313,6 +317,7 @@ def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, 
                 _require_boolean(parameters["stop_on_error"], "stop_on_error")
             else:
                 parameters["stop_on_error"] = False
+            _require_boolean(parameters.setdefault("save_results", True), "save_results")
         elif command == "measure-until":
             parameters["channel"] = validate_analog_channel(_integer(parameters.get("channel", 1), "channel"), capabilities)
             try:
@@ -326,6 +331,7 @@ def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, 
             parameters["threshold"] = _finite_number(parameters.get("threshold"), "threshold")
             parameters["timeout_seconds"] = _finite_number(parameters.get("timeout_seconds"), "timeout_seconds")
             parameters["interval_seconds"] = _finite_number(parameters.get("interval_seconds", 1), "interval_seconds")
+            _require_boolean(parameters.setdefault("save_results", True), "save_results")
         elif command == "triggered-measure-loop":
             parameters["channels"] = _workflow_channels(parameters.get("channels"), capabilities, required=False)
             parameters["items"] = parameters.get("items", "vpp,frequency")
@@ -339,6 +345,7 @@ def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, 
                 parse_measurement_item_list(parameters["pair_items"], allow_pair=True)
             except Exception as exc:
                 raise WebUIRequestError(str(exc)) from exc
+            _require_boolean(parameters.setdefault("save_results", True), "save_results")
         else:
             parameters["channels"] = _workflow_channels(parameters.get("channels"), capabilities, required=True)
             parameters["count"] = _integer(parameters.get("count"), "count")

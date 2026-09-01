@@ -118,7 +118,8 @@ def test_measure_log_cli_simulate_json(capsys, tmp_path):
     assert payload["result"]["items"] == ["vpp", "frequency"]
     assert payload["result"]["pairs"] == ["1:2"]
     assert payload["result"]["pair_items"] == ["phase"]
-    assert len(payload["result"]["rows"]) == 2
+    assert payload["result"]["last_measurement"]["index"] == 2
+    assert "rows" not in payload["result"]
     assert payload["system_error"]["raw"] == '+0,"No error"'
 
     csv_file = output_dir / "measurements.csv"
@@ -138,6 +139,36 @@ def test_measure_log_cli_simulate_json(capsys, tmp_path):
     assert manifest_data["items"] == ["vpp", "frequency"]
     assert manifest_data["pairs"] == ["1:2"]
     assert manifest_data["pair_items"] == ["phase"]
+
+
+def test_measure_log_cli_no_save_returns_last_measurement_without_files(capsys, tmp_path):
+    output_dir = tmp_path / "not-created"
+
+    code = cli.main(
+        [
+            "measure-log",
+            "--simulate",
+            "--json",
+            "--channel",
+            "1",
+            "--items",
+            "vpp",
+            "--count",
+            "2",
+            "--interval-seconds",
+            "0",
+            "--output-dir",
+            str(output_dir),
+            "--no-save",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["files"] == []
+    assert payload["result"]["completed_rows"] == 2
+    assert payload["result"]["last_measurement"]["index"] == 2
+    assert not output_dir.exists()
 
 
 def test_measure_log_cli_simulate_fails_on_duplicate_channel(capsys):
@@ -201,7 +232,7 @@ def test_measure_log_cli_simulate_json_stops_on_injected_system_error(
     assert payload["ok"] is False
     assert payload["result"]["status"] == "instrument_error"
     assert payload["result"]["completed_rows"] == 1
-    assert payload["result"]["rows"][0]["system_error"]["code"] == -113
+    assert payload["result"]["last_measurement"]["system_error"]["code"] == -113
     assert payload["system_error"]["code"] == -113
 
     manifest_data = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))

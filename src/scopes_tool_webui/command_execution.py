@@ -166,15 +166,17 @@ def _execute_dry_run(
             )
         )
     elif command == "measure-until":
+        save_results = parameters.get("save_results", True)
         request = _measure_until_request(
             parameters,
-            _workflow_output_dir(command, artifact_dir),
+            _workflow_output_dir(command, artifact_dir) if save_results else None,
         )
         plan = plan_measure_until(request, capabilities)
     elif command == "triggered-measure-loop":
+        save_results = parameters.get("save_results", True)
         request = _triggered_measure_loop_request(
             parameters,
-            _workflow_output_dir(command, artifact_dir),
+            _workflow_output_dir(command, artifact_dir) if save_results else None,
         )
         plan = plan_triggered_measure_loop(request, capabilities)
     elif command == "triggered-capture-series":
@@ -830,7 +832,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
             )
         )
     if command == "measure-log":
-        output_dir = _workflow_output_dir(command, artifact_dir)
+        output_dir = _workflow_output_dir(command, artifact_dir) if parameters.get("save_results", True) else None
         return _operation_payload(
             run_measure_log(
                 scope,
@@ -840,7 +842,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
             )
         )
     if command == "measure-until":
-        output_dir = _workflow_output_dir(command, artifact_dir)
+        output_dir = _workflow_output_dir(command, artifact_dir) if parameters.get("save_results", True) else None
         return _operation_payload(
             run_measure_until(
                 scope,
@@ -850,7 +852,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
             )
         )
     if command == "triggered-measure-loop":
-        output_dir = _workflow_output_dir(command, artifact_dir)
+        output_dir = _workflow_output_dir(command, artifact_dir) if parameters.get("save_results", True) else None
         return _operation_payload(
             run_triggered_measure_loop(
                 scope,
@@ -1128,28 +1130,31 @@ def _capture_batch_request(parameters: Mapping[str, Any], artifact_dir: Path) ->
     )
 
 
-def _measure_log_request(parameters: Mapping[str, Any], artifact_dir: Path) -> MeasureLogRequest:
+def _measure_log_request(parameters: Mapping[str, Any], artifact_dir: Path | None) -> MeasureLogRequest:
     return MeasureLogRequest(
         channels=parameters.get("channels"), items=parameters["items"], pairs=parameters.get("pairs", []),
         pair_items=parameters["pair_items"], interval_seconds=parameters["interval_seconds"],
         requested_count=parameters.get("count"), requested_duration_seconds=parameters.get("duration_seconds"),
-        output_dir=artifact_dir, stop_on_error=parameters.get("stop_on_error", False),
+        output_dir=artifact_dir, save_results=parameters.get("save_results", True),
+        stop_on_error=parameters.get("stop_on_error", False),
     )
 
 
-def _measure_until_request(parameters: Mapping[str, Any], artifact_dir: Path) -> MeasureUntilRequest:
+def _measure_until_request(parameters: Mapping[str, Any], artifact_dir: Path | None) -> MeasureUntilRequest:
     return MeasureUntilRequest(
         channel=parameters["channel"], item=parameters["item"], operator=parameters["operator"],
         threshold=parameters["threshold"], timeout_seconds=parameters["timeout_seconds"],
         interval_seconds=parameters["interval_seconds"], output_dir=artifact_dir,
+        save_results=parameters.get("save_results", True),
     )
 
 
-def _triggered_measure_loop_request(parameters: Mapping[str, Any], artifact_dir: Path) -> TriggeredMeasureLoopRequest:
+def _triggered_measure_loop_request(parameters: Mapping[str, Any], artifact_dir: Path | None) -> TriggeredMeasureLoopRequest:
     return TriggeredMeasureLoopRequest(
         count=parameters["count"], trigger_timeout_seconds=parameters["trigger_timeout_seconds"],
         channels=parameters.get("channels"), items=parameters["items"], pairs=parameters.get("pairs", []),
         pair_items=parameters["pair_items"], interval_seconds=parameters["interval_seconds"], output_dir=artifact_dir,
+        save_results=parameters.get("save_results", True),
     )
 
 

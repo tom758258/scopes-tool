@@ -31,7 +31,7 @@ ProgressReporter = Callable[[WorkflowProgress], None]
 
 @contextmanager
 def workflow_scpi_logging(
-    log_path: str | Path,
+    log_path: str | Path | None,
     *,
     echo_to_stderr: bool = False,
 ) -> Iterator[None]:
@@ -43,10 +43,11 @@ def workflow_scpi_logging(
     formatter = logging.Formatter("%(name)s %(levelname)s: %(message)s")
     handlers: list[logging.Handler] = []
 
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
-    handlers.append(file_handler)
+    if log_path is not None:
+        file_handler = logging.FileHandler(log_path, encoding="utf-8")
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        handlers.append(file_handler)
 
     if echo_to_stderr:
         stream_handler = logging.StreamHandler(sys.stderr)

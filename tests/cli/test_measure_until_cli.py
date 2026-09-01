@@ -91,6 +91,39 @@ def test_measure_until_simulator_smoke(tmp_path, capsys):
     assert (output_dir / "scpi.log").exists()
 
 
+def test_measure_until_no_save_cli_uses_compact_result_without_files(tmp_path, capsys):
+    output_dir = tmp_path / "not-created"
+
+    code = cli.main(
+        [
+            "measure-until",
+            "--simulate",
+            "--json",
+            "--channel",
+            "1",
+            "--item",
+            "vpp",
+            "--operator",
+            "gt",
+            "--threshold",
+            "0",
+            "--timeout-seconds",
+            "1",
+            "--interval-seconds",
+            "0",
+            "--output-dir",
+            str(output_dir),
+            "--no-save",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["files"] == []
+    assert payload["result"]["last_measurement"]["index"] == 1
+    assert not output_dir.exists()
+
+
 def test_measure_until_cli_preserves_timeout_exit_and_result(monkeypatch, tmp_path, capsys):
     timeout_result = {
         "status": "error",

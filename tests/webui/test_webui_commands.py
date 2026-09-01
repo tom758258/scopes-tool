@@ -1700,6 +1700,25 @@ def test_trigger_search_serial_and_workflow_request_validation_regressions() -> 
         }
     )
     assert defaulted["parameters"]["stop_on_error"] is False
+    assert defaulted["parameters"]["save_results"] is True
+
+    no_save = validate_job_request(
+        {
+            "command": "measure-until",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "pc_output_dir": "",
+            "parameters": {
+                "channel": 1,
+                "item": "vpp",
+                "operator": "gt",
+                "threshold": 0,
+                "timeout_seconds": 1,
+                "save_results": False,
+            },
+        }
+    )
+    assert no_save["parameters"]["save_results"] is False
 
 
 def test_live_multi_enum_shape_is_checked_before_scope_open() -> None:
@@ -1840,6 +1859,24 @@ def test_trigger_search_serial_segmented_and_workflow_dry_run_planners_and_condi
     )
     assert job["status"] == "completed"
     assert job["result"]["result"]["status"] == "planned"
+
+    no_save = submit(
+        client,
+        "measure-until",
+        "simulate",
+        {
+            "channel": 1,
+            "item": "vpp",
+            "operator": "gt",
+            "threshold": 0,
+            "timeout_seconds": 1,
+            "interval_seconds": 0,
+            "save_results": False,
+        },
+    )
+    assert no_save["status"] == "completed"
+    assert no_save["artifacts"] == []
+    assert no_save["result"]["result"]["last_measurement"]["index"] == 1
 
     rejected = client.post(
         "/api/jobs",

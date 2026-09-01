@@ -142,6 +142,7 @@ export class WorkflowEditor {
       values[name] = value === undefined ? "" : String(value);
     }
     values.stop_on_error = Boolean(fieldByName(fields, "stop_on_error").default);
+    values.save_results = fieldByName(fields, "save_results").default !== false;
     return values;
   }
 
@@ -298,6 +299,18 @@ export class WorkflowEditor {
       this.controls.stop_on_error = input;
       limits.append(wrapper);
     }
+    const saveWrapper = document.createElement("label");
+    saveWrapper.className = "field field-boolean workflow-editor-save";
+    const saveLabel = document.createElement("span");
+    saveLabel.textContent = translate("field.save_results");
+    const saveInput = document.createElement("input");
+    saveInput.type = "checkbox";
+    saveInput.checked = draft.save_results !== false;
+    saveInput.dataset.workflowField = "save_results";
+    saveInput.addEventListener("change", () => this.captureDraft());
+    saveWrapper.append(saveLabel, saveInput);
+    this.controls.save_results = saveInput;
+    limits.append(saveWrapper);
     section.append(limits);
     return section;
   }
@@ -332,6 +345,7 @@ export class WorkflowEditor {
       trigger_timeout_seconds: this.controls.trigger_timeout_seconds?.value || "",
       interval_seconds: this.controls.interval_seconds?.value || "",
       stop_on_error: Boolean(this.controls.stop_on_error?.checked),
+      save_results: this.controls.save_results?.checked !== false,
     };
     this.drafts.set(this.renderedKey, draft);
   }
@@ -389,6 +403,7 @@ export class WorkflowEditor {
     const parameters = {
       items: draft.items.join(","),
       pair_items: draft.pair_items.join(","),
+      save_results: draft.save_results !== false,
     };
     if (draft.interval_seconds !== "") {
       parameters.interval_seconds = Number(draft.interval_seconds);

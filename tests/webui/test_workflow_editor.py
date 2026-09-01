@@ -300,6 +300,7 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
         editor.controls.duration_seconds.value = "12";
         editor.controls.interval_seconds.value = "0.25";
         editor.controls.stop_on_error.checked = true;
+        editor.controls.save_results.checked = false;
 
         await editor.submit();
         assert.equal(submissions.length, 1);
@@ -312,6 +313,7 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
           interval_seconds: 0.25,
           count: 5,
           duration_seconds: 12,
+          save_results: false,
           stop_on_error: true,
         });
         assert.deepEqual(submissions[0].options, { intent: "command" });
@@ -347,6 +349,7 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
           interval_seconds: 0,
           count: 3,
           trigger_timeout_seconds: 4.5,
+          save_results: true,
         });
         ''',
     )

@@ -141,6 +141,29 @@ def test_non_match_then_match_updates_compact_summary(monkeypatch, tmp_path):
     assert [row["matched"] for row in rows] == ["false", "true"]
 
 
+def test_no_save_runs_without_output_artifacts_and_keeps_last_measurement(
+    monkeypatch, tmp_path
+):
+    readings = iter((_measurement(3.0), _measurement(4.0)))
+    scope = _scope()
+    monkeypatch.setattr(scope, "query_measurement", lambda channel, item: next(readings))
+    output_dir = tmp_path / "not-created"
+
+    result = measure_until.run_measure_until(
+        scope,
+        RESOURCE,
+        _request(output_dir, save_results=False),
+    )
+
+    assert result.exit_code == 0
+    assert result.files == []
+    assert result.result["completed_count"] == 2
+    assert result.result["last_measurement"]["index"] == 2
+    assert result.result["last_measurement"]["value"] == "4"
+    assert result.result["output_dir"] is None
+    assert not output_dir.exists()
+
+
 def test_invalid_measurement_is_nan_non_match_and_continues(monkeypatch, tmp_path):
     readings = iter((_measurement(None, valid=False), _measurement(4.0)))
     scope = _scope()

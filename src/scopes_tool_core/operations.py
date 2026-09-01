@@ -155,6 +155,7 @@ class MeasureLogRequest:
     requested_count: int | None = None
     requested_duration_seconds: float | None = None
     output_dir: str | Path | None = None
+    save_results: bool = True
     stop_on_error: bool = False
     log_scpi: bool = False
 
@@ -834,12 +835,22 @@ def run_measure_log(
         raise OscilloscopeError(
             "measure-log requires --count or --duration-seconds so the run is finite"
         )
-    output_dir = prepare_measure_log_output_dir(request.output_dir)
-    csv_path, manifest_path, scpi_log_path = measure_log_paths(output_dir)
+    if not isinstance(request.save_results, bool):
+        raise OscilloscopeError("measure-log save_results must be a boolean")
+    output_dir = (
+        prepare_measure_log_output_dir(request.output_dir)
+        if request.save_results
+        else None
+    )
+    csv_path, manifest_path, scpi_log_path = (
+        measure_log_paths(output_dir)
+        if output_dir is not None
+        else (None, None, None)
+    )
     files = [
-        {"kind": "csv", "path": str(csv_path)},
-        {"kind": "manifest", "path": str(manifest_path)},
-        {"kind": "scpi_log", "path": str(scpi_log_path)},
+        {"kind": kind, "path": str(path)}
+        for kind, path in (("csv", csv_path), ("manifest", manifest_path), ("scpi_log", scpi_log_path))
+        if path is not None
     ]
     human: list[str] = []
     idn = None
@@ -905,7 +916,8 @@ def run_measure_log(
                 sample_reporter=report_sample if sample_reporter is not None else None,
             )
         human.extend(workflow.human_lines)
-        human.append(f"SCPI log: {scpi_log_path}")
+        if scpi_log_path is not None:
+            human.append(f"SCPI log: {scpi_log_path}")
         return OperationResult(
             workflow.exit_code,
             _measure_log_result_json(
@@ -1359,9 +1371,9 @@ class _OperationError(OscilloscopeError):
 
 def _measure_log_result_json(
     manifest: MeasureLogManifest,
-    csv_path: Path,
-    manifest_path: Path,
-    scpi_log_path: Path,
+    csv_path: Path | None,
+    manifest_path: Path | None,
+    scpi_log_path: Path | None,
 ) -> dict[str, object]:
     data = manifest.to_json_dict()
     return {
@@ -1374,19 +1386,19 @@ def _measure_log_result_json(
         "requested_count": data["requested_count"],
         "requested_duration_seconds": data["requested_duration_seconds"],
         "completed_rows": data["completed_rows"],
-        "manifest_path": str(manifest_path),
-        "scpi_log_path": str(scpi_log_path),
-        "csv_path": str(csv_path),
+        "manifest_path": str(manifest_path) if manifest_path is not None else None,
+        "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
+        "csv_path": str(csv_path) if csv_path is not None else None,
         "error": data["error"],
-        "rows": data["rows"],
+        "last_measurement": data["last_measurement"],
     }
 
 
 def _measure_log_failure_result(
     *,
-    manifest_path: Path,
-    csv_path: Path,
-    scpi_log_path: Path,
+    manifest_path: Path | None,
+    csv_path: Path | None,
+    scpi_log_path: Path | None,
     channels: Sequence[int],
     items: Sequence[str],
     pairs: Sequence[tuple[int, int]],
@@ -1396,7 +1408,7 @@ def _measure_log_failure_result(
 ) -> tuple[dict[str, object], dict[str, object] | None]:
     data: dict[str, object] = {}
     try:
-        loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+        loaded = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path is not None else {}
         if isinstance(loaded, dict):
             data = loaded
     except (OSError, json.JSONDecodeError):
@@ -1425,11 +1437,11 @@ def _measure_log_failure_result(
             request.requested_duration_seconds,
         ),
         "completed_rows": data.get("completed_rows", 0),
-        "manifest_path": str(manifest_path),
-        "scpi_log_path": str(scpi_log_path),
-        "csv_path": str(csv_path),
+        "manifest_path": str(manifest_path) if manifest_path is not None else None,
+        "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
+        "csv_path": str(csv_path) if csv_path is not None else None,
         "error": data.get("error", error),
-        "rows": rows,
+        "last_measurement": data.get("last_measurement"),
     }
     return result, system_error
 

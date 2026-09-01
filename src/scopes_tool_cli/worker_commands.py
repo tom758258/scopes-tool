@@ -335,6 +335,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     arguments = body.get("arguments", {})
     if not isinstance(arguments, dict):
         raise OscilloscopeError("arguments must be a JSON object")
+    arguments = _normalize_optional_persistence_worker_arguments(command, arguments)
     arguments = _normalize_capture_batch_worker_arguments(command, arguments)
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments)
@@ -369,6 +370,9 @@ def _validate_required_worker_outputs(
         return
     if command == "screenshot" and arguments.get("query_hardcopy") is True:
         return
+    if command in {"measure-log", "measure-until", "triggered-measure-loop"}:
+        if arguments.get("save_results", True) is False:
+            return
     for key in required:
         value = arguments.get(key)
         if not isinstance(value, str) or not value:
@@ -380,6 +384,7 @@ def parse_domain_command(
     arguments: dict[str, Any],
     runtime: WorkerRuntime,
 ) -> argparse.Namespace:
+    arguments = _normalize_optional_persistence_worker_arguments(command, arguments)
     arguments = _normalize_capture_batch_worker_arguments(command, arguments)
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments, runtime)
@@ -454,6 +459,18 @@ def parse_domain_command(
     )
     scope_cli._dry_run_payload(dry_args)
     return parsed
+
+
+def _normalize_optional_persistence_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if command not in {"measure-log", "measure-until", "triggered-measure-loop"}:
+        return arguments
+    values = dict(arguments)
+    if "save_results" in values and not isinstance(values["save_results"], bool):
+        raise OscilloscopeError(f"{command} argument save_results must be a boolean")
+    return values
 
 
 def _normalize_capture_batch_worker_arguments(
@@ -578,6 +595,7 @@ def _normalize_triggered_measure_loop_worker_arguments(
         "trigger_timeout_seconds",
         "interval_seconds",
         "output_dir",
+        "save_results",
     }
     unknown = set(arguments) - allowed
     if unknown:
@@ -771,6 +789,7 @@ def _normalize_measure_until_worker_arguments(
         "timeout_seconds",
         "interval_seconds",
         "output_dir",
+        "save_results",
     }
     unknown = set(arguments) - allowed
     if unknown:
@@ -2745,6 +2764,10 @@ def _normalize_math_worker_arguments(
 def arguments_to_argv(arguments: dict[str, Any]) -> list[str]:
     argv: list[str] = []
     for key, value in arguments.items():
+        if key == "save_results":
+            if value is False:
+                argv.append("--no-save")
+            continue
         option = "--" + key.replace("_", "-")
         if isinstance(value, bool):
             if value:

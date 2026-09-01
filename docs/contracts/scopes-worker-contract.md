@@ -147,7 +147,7 @@ Validation failures use HTTP `400`, `status: "error"`, the Common
 rejects new commands, cancels queued jobs, and emits `job_finished` for each
 cancelled job. Running jobs
 pass the existing cancellation state into Core workflows. `measure-log` checks
-between completed measurement queries and at persisted-row boundaries;
+between completed measurement queries and at completed-row boundaries;
 `measure-until` checks before each query and during relative interval waits;
 `capture-batch` checks between captures; `triggered-measure-loop` and
 `triggered-capture-series` check during trigger polling and interval waits.
@@ -282,11 +282,17 @@ fields and wrong JSON types are rejected before enqueue. `log_scpi` is rejected.
 }
 ```
 
+`measure-log` retains its existing finite measurement selection, count or
+duration, interval, and stop-on-error arguments. It also accepts optional
+boolean `save_results` (default `true`) and requires `output_dir` only when
+saving is enabled.
+
 `triggered-measure-loop` accepts only `channel` (an array of channel integers
 or `"all"`), `items` (string), `pair` (an array of `SRC:REF` strings),
 `pair_items` (string), required positive integer `count`, required positive
 finite number `trigger_timeout_seconds`, optional non-negative finite
-number `interval_seconds`, and required caller-supplied `output_dir`. Unknown
+number `interval_seconds`, optional boolean `save_results` (default `true`),
+and `output_dir` when saving is enabled. Unknown
 fields and wrong JSON types are rejected before enqueue.
 
 ```json
@@ -310,7 +316,8 @@ fields and wrong JSON types are rejected before enqueue.
 non-parameterized single-channel `item`, required `operator` (`"gt"`,
 `"gte"`, `"lt"`, or `"lte"`), required finite `threshold`, required positive
 finite `timeout_seconds`, optional non-negative finite
-`interval_seconds`, and required caller-supplied `output_dir`. Arrays, `"all"`,
+`interval_seconds`, optional boolean `save_results` (default `true`), and
+`output_dir` when saving is enabled. Arrays, `"all"`,
 pair or parameterized measurement items,
 unknown fields, and wrong JSON types are rejected before enqueue. `log_scpi` is
 rejected.
@@ -2241,18 +2248,22 @@ persistence.
 Commands that write host files require explicit caller-supplied destinations in
 the `/command` arguments; the Worker never chooses a host destination and
 allocates no job artifact directory. Missing destinations are rejected with
-HTTP `400` before enqueue, backend open, or SCPI:
+HTTP `400` before enqueue, backend open, or SCPI when file saving is enabled:
 
 - `capture`: requires `csv` and `meta` output paths; an optional `plot` path
   creates a PNG plot only when supplied. With `wait_trigger`, these artifacts
   are written only when the trigger outcome allows capture.
 - `screenshot`: requires an `output` image path. Query-only `query_hardcopy`
   creates no screenshot artifact and needs no output.
-- `capture-batch`, `measure-log`, `measure-until`, `triggered-measure-loop`,
-  `triggered-capture-series`, `segmented-capture`, `smoke`, and
+- `capture-batch`, `triggered-capture-series`, `segmented-capture`, `smoke`, and
   `acquisition-check`: require a caller-supplied `output_dir`; domain artifacts
   such as manifests, SCPI logs, measurement CSVs, report files, and segment
   CSVs are written inside that directory under the existing Core contracts.
+- `measure-log`, `measure-until`, and `triggered-measure-loop`: accept optional
+  boolean `save_results`, defaulting to `true`. Saving requires a caller-supplied
+  `output_dir`. With `save_results: false`, no output directory or domain
+  artifacts are created, `files` is empty, and `result` still contains the
+  compact workflow summary and `last_measurement` when a measurement completed.
 - `serial-lister-export`: requires an `output` CSV path.
 
 Command artifacts keep existing Scopes meanings: CSV waveform data, PNG plots

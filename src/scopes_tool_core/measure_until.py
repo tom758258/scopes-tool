@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import csv
+from contextlib import nullcontext
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -53,6 +54,7 @@ class MeasureUntilRequest:
     timeout_seconds: float
     interval_seconds: float = 1.0
     output_dir: str | Path | None = None
+    save_results: bool = True
     log_scpi: bool = False
 
 
@@ -63,16 +65,22 @@ def plan_measure_until(
     """Validate and plan one representative polling iteration."""
 
     normalized = _normalize_request(request, capabilities)
-    output_dir = (
-        Path(request.output_dir)
-        if request.output_dir is not None
-        else MEASURE_UNTIL_DEFAULT_BASE_DIR / "DRY-RUN"
-    )
+    output_dir = None
+    if request.save_results:
+        output_dir = (
+            Path(request.output_dir)
+            if request.output_dir is not None
+            else MEASURE_UNTIL_DEFAULT_BASE_DIR / "DRY-RUN"
+        )
     csv_path, manifest_path, scpi_log_path = _workflow_paths(output_dir)
-    files = (
-        {"kind": "csv", "path": str(csv_path)},
-        {"kind": "manifest", "path": str(manifest_path)},
-        {"kind": "scpi_log", "path": str(scpi_log_path)},
+    files = tuple(
+        {"kind": kind, "path": str(path)}
+        for kind, path in (
+            ("csv", csv_path),
+            ("manifest", manifest_path),
+            ("scpi_log", scpi_log_path),
+        )
+        if path is not None
     )
     planned = (
         measurement_query(
@@ -93,11 +101,12 @@ def plan_measure_until(
         "completed_count": 0,
         "matched": False,
         "matched_sample": None,
+        "last_measurement": None,
         "termination_reason": None,
-        "output_dir": str(output_dir),
-        "csv_path": str(csv_path),
-        "manifest_path": str(manifest_path),
-        "scpi_log_path": str(scpi_log_path),
+        "output_dir": str(output_dir) if output_dir is not None else None,
+        "csv_path": str(csv_path) if csv_path is not None else None,
+        "manifest_path": str(manifest_path) if manifest_path is not None else None,
+        "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
         "error": None,
     }
     return OperationPlan(planned, files, result)
@@ -125,15 +134,23 @@ def run_measure_until(
     channel = int(normalized["channel"])
     item = str(normalized["item"])
 
-    output_dir = prepare_batch_output_dir(
-        request.output_dir,
-        base_dir=MEASURE_UNTIL_DEFAULT_BASE_DIR,
+    output_dir = (
+        prepare_batch_output_dir(
+            request.output_dir,
+            base_dir=MEASURE_UNTIL_DEFAULT_BASE_DIR,
+        )
+        if request.save_results
+        else None
     )
     csv_path, manifest_path, scpi_log_path = _workflow_paths(output_dir)
     files = [
-        {"kind": "csv", "path": str(csv_path)},
-        {"kind": "manifest", "path": str(manifest_path)},
-        {"kind": "scpi_log", "path": str(scpi_log_path)},
+        {"kind": kind, "path": str(path)}
+        for kind, path in (
+            ("csv", csv_path),
+            ("manifest", manifest_path),
+            ("scpi_log", scpi_log_path),
+        )
+        if path is not None
     ]
     manifest: dict[str, object] = {
         "schema_version": MEASURE_UNTIL_SCHEMA_VERSION,
@@ -153,8 +170,9 @@ def run_measure_until(
         "completed_count": 0,
         "matched": False,
         "matched_sample": None,
+        "last_measurement": None,
         "termination_reason": None,
-        "files": _relative_files(files, output_dir),
+        "files": _relative_files(files, output_dir) if output_dir is not None else [],
         "error": None,
     }
     human = [
@@ -162,26 +180,36 @@ def run_measure_until(
         f"{float(request.threshold):.12g}",
         f"Timeout seconds: {float(request.timeout_seconds):.12g}",
         f"Interval seconds: {float(request.interval_seconds):.12g}",
-        f"Output directory: {output_dir}",
     ]
+    if output_dir is not None:
+        human.append(f"Output directory: {output_dir}")
+    else:
+        human.append("Result file saving: disabled")
     last_system_error: dict[str, object] | None = None
     current_sample = 0
     reporter_failed = False
 
     try:
-        _write_manifest(manifest, manifest_path)
+        if manifest_path is not None:
+            _write_manifest(manifest, manifest_path)
         with workflow_scpi_logging(
             scpi_log_path,
             echo_to_stderr=request.log_scpi,
         ):
             for _entry in drain_preexisting_system_errors(scope):
                 human.append(f"Pre-operation stale system error drained: {_entry.format()}")
-            with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
-                writer = csv.writer(csv_file)
-                writer.writerow(
-                    ["index", "timestamp_iso", "elapsed_seconds", "value", "matched"]
-                )
-                csv_file.flush()
+            csv_context = (
+                csv_path.open("w", newline="", encoding="utf-8")
+                if csv_path is not None
+                else nullcontext(None)
+            )
+            with csv_context as csv_file:
+                writer = csv.writer(csv_file) if csv_file is not None else None
+                if writer is not None:
+                    writer.writerow(
+                        ["index", "timestamp_iso", "elapsed_seconds", "value", "matched"]
+                    )
+                    csv_file.flush()
                 start_perf = time.perf_counter()
 
                 while True:
@@ -228,16 +256,17 @@ def run_measure_until(
                         float(request.threshold),
                     )
                     value_text = "NaN" if value is None else f"{value:.12g}"
-                    writer.writerow(
-                        [
-                            current_sample,
-                            timestamp_iso,
-                            f"{elapsed_seconds:.6f}",
-                            value_text,
-                            "true" if matched else "false",
-                        ]
-                    )
-                    csv_file.flush()
+                    if writer is not None:
+                        writer.writerow(
+                            [
+                                current_sample,
+                                timestamp_iso,
+                                f"{elapsed_seconds:.6f}",
+                                value_text,
+                                "true" if matched else "false",
+                            ]
+                        )
+                        csv_file.flush()
 
                     matched_sample = (
                         {
@@ -252,9 +281,6 @@ def run_measure_until(
                     candidate["completed_count"] = current_sample
                     candidate["matched"] = matched
                     candidate["matched_sample"] = matched_sample
-                    _write_manifest(candidate, manifest_path)
-                    manifest = candidate
-
                     sample = {
                         "index": current_sample,
                         "timestamp_iso": timestamp_iso,
@@ -263,6 +289,10 @@ def run_measure_until(
                         "matched": matched,
                         "system_error": dict(last_system_error),
                     }
+                    candidate["last_measurement"] = sample
+                    if manifest_path is not None:
+                        _write_manifest(candidate, manifest_path)
+                    manifest = candidate
                     try:
                         if sample_reporter is not None:
                             sample_reporter(sample)
@@ -277,12 +307,6 @@ def run_measure_until(
                     except Exception:
                         reporter_failed = True
                         raise
-
-                    human.append(
-                        f"Sample {current_sample}: {value_text}, "
-                        f"matched={'true' if matched else 'false'}"
-                    )
-                    human.append(f"System error: {entry.format()}")
 
                     if matched:
                         return _finish_result(
@@ -359,6 +383,8 @@ def _validate_request_fields(request: MeasureUntilRequest) -> None:
         raise ParameterValidationError("measure until log_scpi must be a boolean")
     if request.output_dir is not None and not isinstance(request.output_dir, (str, Path)):
         raise ParameterValidationError("measure until output_dir must be a path or string")
+    if not isinstance(request.save_results, bool):
+        raise ParameterValidationError("measure until save_results must be a boolean")
 
 
 def _normalize_request(
@@ -434,7 +460,9 @@ def _condition_timeout_error(timeout_seconds: float) -> dict[str, object]:
     }
 
 
-def _workflow_paths(output_dir: Path) -> tuple[Path, Path, Path]:
+def _workflow_paths(output_dir: Path | None) -> tuple[Path | None, Path | None, Path | None]:
+    if output_dir is None:
+        return None, None, None
     return (
         output_dir / "measurements.csv",
         output_dir / "manifest.json",
@@ -469,9 +497,9 @@ def _finish_result(
     status: str,
     exit_code: int,
     manifest: dict[str, object],
-    manifest_path: Path,
-    csv_path: Path,
-    scpi_log_path: Path,
+    manifest_path: Path | None,
+    csv_path: Path | None,
+    scpi_log_path: Path | None,
     files: list[dict[str, str]],
     human: list[str],
     idn: object,
@@ -486,21 +514,31 @@ def _finish_result(
     manifest["end_time"] = batch_iso_timestamp()
     manifest["termination_reason"] = termination_reason
     manifest["error"] = error
-    if best_effort:
+    if manifest_path is None:
+        pass
+    elif best_effort:
         try:
             _write_manifest(manifest, manifest_path)
         except OscilloscopeError:
             pass
     else:
         _write_manifest(manifest, manifest_path)
-    human.extend(
-        [
-            f"Measure until status: {status}",
-            f"CSV: {csv_path}",
-            f"Manifest: {manifest_path}",
-            f"SCPI log: {scpi_log_path}",
-        ]
-    )
+    human.append(f"Measure until status: {status}")
+    if manifest_path is not None:
+        human.extend(
+            [
+                f"CSV: {csv_path}",
+                f"Manifest: {manifest_path}",
+                f"SCPI log: {scpi_log_path}",
+            ]
+        )
+    last_measurement = manifest.get("last_measurement")
+    if isinstance(last_measurement, Mapping):
+        human.append(
+            "Last measurement: "
+            f"sample {last_measurement['index']}, value={last_measurement['value']}, "
+            f"matched={'true' if last_measurement['matched'] else 'false'}"
+        )
     result = {
         "status": status,
         "channel": manifest["channel"],
@@ -512,11 +550,12 @@ def _finish_result(
         "completed_count": manifest["completed_count"],
         "matched": manifest["matched"],
         "matched_sample": manifest["matched_sample"],
+        "last_measurement": last_measurement,
         "termination_reason": termination_reason,
-        "output_dir": str(manifest_path.parent),
-        "csv_path": str(csv_path),
-        "manifest_path": str(manifest_path),
-        "scpi_log_path": str(scpi_log_path),
+        "output_dir": str(manifest_path.parent) if manifest_path is not None else None,
+        "csv_path": str(csv_path) if csv_path is not None else None,
+        "manifest_path": str(manifest_path) if manifest_path is not None else None,
+        "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
         "error": error,
     }
     return OperationResult(
@@ -543,6 +582,7 @@ def _pre_start_cancelled_result(request: MeasureUntilRequest) -> OperationResult
         "completed_count": 0,
         "matched": False,
         "matched_sample": None,
+        "last_measurement": None,
         "termination_reason": None,
         "output_dir": None,
         "csv_path": None,
