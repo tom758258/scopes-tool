@@ -2026,9 +2026,15 @@ def test_capture_multi_channel_catalog_contract() -> None:
     assert field["help_key"] == "capture.channels"
 
 
-def test_capture_multi_channel_simulate_and_dry_run() -> None:
+def test_capture_multi_channel_simulate_and_dry_run(tmp_path) -> None:
     client = TestClient(app)
-    simulate = submit(client, "capture", "simulate", {"channels": "1,2", "points": 1000, "format": "byte"})
+    simulate = submit(
+        client,
+        "capture",
+        "simulate",
+        {"channels": "1,2", "points": 1000, "format": "byte"},
+        pc_output_dir=tmp_path / "capture-multi",
+    )
     assert simulate["status"] == "completed"
     assert simulate["result"]["result"]["channels"] == [1, 2]
     assert any(artifact["kind"] == "csv" for artifact in simulate["artifacts"])
@@ -2039,7 +2045,7 @@ def test_capture_multi_channel_simulate_and_dry_run() -> None:
     assert dry_run["result"]["result"]["channels"] == [1, 2]
 
 
-@pytest.mark.parametrize("channels", ["", "   ", [], ()])
+@pytest.mark.parametrize("channels", ["", "   ", []])
 def test_live_capture_rejects_empty_required_channels_before_queue(channels) -> None:
     client = TestClient(app)
     response = client.post(
