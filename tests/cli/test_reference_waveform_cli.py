@@ -27,6 +27,28 @@ def test_reference_waveform_json_modes(argv, targets, mode, capsys):
         assert target in scpi
 
 
+def test_reference_save_dry_run_plans_complete_operation_in_order(capsys):
+    assert cli.main(
+        [
+            "reference-save",
+            "--slot",
+            "1",
+            "--source-channel",
+            "1",
+            "--dry-run",
+            "--json",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["scpi"]["planned"] == [
+        "*IDN?",
+        ":WMEMory1:SAVE CHANnel1",
+        "*OPC?",
+        ":SYSTem:ERRor?",
+    ]
+
+
 def test_reference_query_result_preserves_raw_fields(capsys):
     assert cli.main(["reference-query", "--slot", "1", "--simulate", "--json"]) == 0
     result = json.loads(capsys.readouterr().out)["result"]

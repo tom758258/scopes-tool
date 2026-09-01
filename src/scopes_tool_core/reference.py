@@ -12,6 +12,9 @@ from .scpi import SCPIClient
 from .status import parse_operation_complete, system_opc_query
 
 
+_REFERENCE_SAVE_COMPLETION_TIMEOUT_MS = 15000
+
+
 @dataclass(frozen=True)
 class ReferenceWaveformState:
     """Display and label state for one reference waveform slot."""
@@ -34,7 +37,12 @@ class ReferenceWaveformController:
         self.scpi.write(
             reference_save_command(slot, source_channel, capabilities=self.capabilities)
         )
-        parse_operation_complete(self.scpi.query(system_opc_query()))
+        original_timeout = self.scpi.timeout
+        self.scpi.set_timeout(_REFERENCE_SAVE_COMPLETION_TIMEOUT_MS)
+        try:
+            parse_operation_complete(self.scpi.query(system_opc_query()))
+        finally:
+            self.scpi.set_timeout(original_timeout)
 
     def set_display(self, slot: int, enabled: bool) -> None:
         self.scpi.write(

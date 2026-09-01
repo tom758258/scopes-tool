@@ -90,6 +90,7 @@ from scopes_tool_core.reference import (
     validate_reference_label,
     validate_reference_slot,
 )
+from scopes_tool_core.status import system_opc_query
 from scopes_tool_core.timebase import (
     timebase_position_query,
     timebase_scale_command,
@@ -161,7 +162,7 @@ def _reference_waveform_plan(
     slot = validate_reference_slot(args.slot, capabilities)
     if args.command == "reference-save":
         command = reference_save_command(slot, args.source_channel, capabilities=capabilities)
-        return [command], {"operation": "save", "command": command, "slot": slot, "source_channel": args.source_channel}
+        return [command, system_opc_query()], {"operation": "save", "command": command, "slot": slot, "source_channel": args.source_channel}
     if args.command == "reference-display":
         query = bool(args.query)
         displayed = None if query else args.state == "on"
