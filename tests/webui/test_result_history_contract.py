@@ -348,6 +348,15 @@ def test_result_history_runtime_behaviour() -> None:
         assert.equal(summary.children[0].children[2].textContent, "Cancelled");
         assert.equal(detail.children.length, 1);
         assert.equal(detail.children[0].className, "result-block");
+        // Invalid sentinel with real system error must not be presented as warning
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("invalid-measure-system-error-job", "measure", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: { item: "vpp", channel: 1, valid: false, reason: "invalid measurement sentinel", value: null, raw_value: "+99E+36", unit: "V" }, system_error: { code: -113, is_error: true, message: "Undefined header" } },
+        }), detail);
+        assert.equal(summary.children[0].children[1].className, "badge badge-failed");
+        assert.equal(summary.children[0].children[2].textContent, "Core command returned a non-zero exit code.");
+        assert.equal(detail.children[0].className, "error-block");
         // Generic failed job still shows error block
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("generic-failed-job", "measure", "failed", {

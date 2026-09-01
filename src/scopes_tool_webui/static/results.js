@@ -26,6 +26,7 @@ function isInvalidMeasurementSentinel(job) {
   const result = jobResultPayload(job);
   return job?.status === "failed"
     && job?.command === "measure"
+    && job?.result?.system_error?.is_error === false
     && result?.valid === false
     && result?.reason === "invalid measurement sentinel";
 }
