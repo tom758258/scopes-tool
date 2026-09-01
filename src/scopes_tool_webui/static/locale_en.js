@@ -838,7 +838,7 @@ export const en = {
   "measurement.frontPanel.readFailedStale": "Refresh failed; the last successfully read results remain below.",
   "measurement.frontPanel.readFailedEmpty": "Refresh failed; the last successful read contained no front-panel measurements.",
   "measurement.frontPanel.readFailedCleared": "Refresh failed; the last successful action cleared the front-panel measurements.",
-  "measurement.frontPanel.markersAlwaysOn": "Measurement markers are always shown on this model.",
+  "measurement.frontPanel.markersAlwaysOn": "This model does not support hiding measurement markers.",
   "measurement.results.measurement": "Measurement",
   "measurement.results.value": "Value",
   "measurement.results.current": "Current",

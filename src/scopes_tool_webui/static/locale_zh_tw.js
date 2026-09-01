@@ -838,7 +838,7 @@ export const zhTW = {
   "measurement.frontPanel.readFailedStale": "重新讀取失敗；下方仍顯示上一筆成功讀取的結果。",
   "measurement.frontPanel.readFailedEmpty": "重新讀取失敗；上一次成功讀取時沒有前面板量測項目。",
   "measurement.frontPanel.readFailedCleared": "重新讀取失敗；前一次成功動作已清除前面板量測。",
-  "measurement.frontPanel.markersAlwaysOn": "量測標記：此型號固定顯示。",
+  "measurement.frontPanel.markersAlwaysOn": "本型號不支援關閉量測標記。",
   "measurement.results.measurement": "量測項目",
   "measurement.results.value": "數值",
   "measurement.results.current": "目前值",
