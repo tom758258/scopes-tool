@@ -4779,7 +4779,8 @@ if ($snapshotComplete) {
                     $saved = Invoke-LiveCli -Stage "reference-save" -Command "reference-save" `
                         -Arguments @("--slot", "1", "--source-channel", "1")
                     Assert-ScpiSent -Payload $saved -Label "Reference save" -ExpectedCommands @(
-                        ":WMEMory1:SAVE CHANnel1"
+                        ":WMEMory1:SAVE CHANnel1",
+                        "*OPC?"
                     )
 
                     $display = Invoke-LiveCli -Stage "reference-display-on" -Command "reference-display" `

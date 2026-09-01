@@ -325,3 +325,37 @@ def test_reference_save_failure_short_circuits_save_and_display() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_reference_display_failure_stops_before_readback() -> None:
+    script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.available = true;
+        editor.schedulePresentation();
+        await settle();
+
+        commandStatuses.push("completed", "failed");
+        const save = editor.entries.find((entry) => entry.id === "reference-save");
+        const job = await editor.saveAndDisplay(save);
+        assert.equal(job.status, "failed");
+        assert.deepEqual(submitted, [
+          {
+            command: "reference-save",
+            parameters: { source_channel: 1, slot: 1 },
+            intent: "command",
+          },
+          {
+            command: "reference-display",
+            parameters: { action: "set", slot: 1, enabled: true },
+            intent: "apply",
+          },
+        ]);
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

@@ -3623,7 +3623,7 @@ def test_baseline_live_script_contains_trigger_math_generator_save_and_safety_wi
     assert 'ExpectedCommands @(\":RUN\")' in reference_case
     assert 'ExpectedCommands @(\":STOP\")' in reference_case
     assert ':WMEMory1:SAVE CHANnel1' in reference_case
-    assert '*OPC?' not in reference_case
+    assert '"*OPC?"' in reference_case
     assert 'Start-Sleep' not in reference_case
     assert '$referenceFailure = $null' in reference_case
     assert 'Add-Diagnostic -Name "reference-lifecycle" -Message $stopMessage' in reference_case

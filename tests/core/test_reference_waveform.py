@@ -29,11 +29,16 @@ def test_reference_slot_validation(slot):
         reference_save_command(slot, 1, capabilities=capabilities_for_model("DSOX4024A"))
 
 
-def test_reference_controller_command_order_and_raw_state():
+@pytest.mark.parametrize("model", ["DSOX2004A", "DSOX3024A"])
+def test_reference_controller_command_order_and_raw_state(model):
     backend = FakeBackend(
-        responses={":WMEMory1:DISPlay?": "1", ":WMEMory1:LABel?": '"BASELINE"'}
+        responses={
+            "*OPC?": "1",
+            ":WMEMory1:DISPlay?": "1",
+            ":WMEMory1:LABel?": '"BASELINE"',
+        }
     )
-    controller = ReferenceWaveformController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
+    controller = ReferenceWaveformController(SCPIClient(backend), capabilities_for_model(model))
     controller.save(1, 2)
     controller.set_display(1, True)
     controller.set_label(1, "BASELINE")
@@ -45,6 +50,7 @@ def test_reference_controller_command_order_and_raw_state():
     assert state.raw_label == '"BASELINE"'
     assert backend.history == [
         ":WMEMory1:SAVE CHANnel2",
+        "*OPC?",
         ":WMEMory1:DISPlay ON",
         ':WMEMory1:LABel "BASELINE"',
         ":WMEMory1:DISPlay?",

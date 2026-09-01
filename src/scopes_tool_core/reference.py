@@ -9,6 +9,7 @@ from .channel import validate_analog_channel
 from .display import parse_display_label
 from .errors import ParameterValidationError
 from .scpi import SCPIClient
+from .status import parse_operation_complete, system_opc_query
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class ReferenceWaveformController:
         self.scpi.write(
             reference_save_command(slot, source_channel, capabilities=self.capabilities)
         )
+        parse_operation_complete(self.scpi.query(system_opc_query()))
 
     def set_display(self, slot: int, enabled: bool) -> None:
         self.scpi.write(
