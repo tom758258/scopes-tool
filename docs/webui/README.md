@@ -77,8 +77,9 @@ primary WebUI entry point for viewing host-side outputs. The value is
 browser-session state only and is snapshotted when each job is submitted.
 
 The setting applies to host-side artifacts created by `screenshot`, `capture`,
-`serial-lister-export`, `segmented-capture`, `capture-batch`, `measure-log`,
-`measure-until`, `triggered-measure-loop`, and `triggered-capture-series`.
+`serial-lister-export`, `segmented-capture`, `capture-batch`, `capture-until`,
+`capture-monitor`, `measure-log`, `measure-until`,
+`triggered-measure-loop`, and `triggered-capture-series`.
 Their command workspaces show the current shared folder but do not add another
 path control. Serial Lister Export accepts a filename only; its WebUI field
 cannot select or escape the shared folder.
@@ -131,8 +132,9 @@ The Command workbench exposes:
   protocol-independent Serial Lister section (display, reference, and
   host-side export), plus `serial-query`
 - Segmented Memory: `segmented-memory` and `segmented-capture`
-- Workflow: `capture-batch`, `measure-log`, `measure-until`,
-  `triggered-measure-loop`, and `triggered-capture-series`
+- Workflow: `capture-batch`, `capture-until`, `capture-monitor`, `measure-log`,
+  `measure-until`, `triggered-measure-loop`, and
+  `triggered-capture-series`
 
 Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
@@ -162,15 +164,25 @@ Selection is passive; explicit Refresh reads only display and label state for
 the selected waveform. Display, Label, and Clear remain independent actions
 through the normal foreground execution path.
 
-Selecting `measure-log` or `triggered-measure-loop` opens the dedicated
-Workflow editor. It provides model-projected analog channel and measurement
-choices, channel-pair rows, shared pair measurements, and the command's
-existing run limits. **Save results to files** is enabled by default; disabling
-it runs the workflow without requiring or creating host-side output files.
-Selection and editing are browser-local and passive;
-Run submits one job through the shared foreground execution admission. The
-`capture-batch`, `measure-until`, and `triggered-capture-series` commands keep
-their metadata-driven Generic Form.
+Selecting `measure-log`, `triggered-measure-loop`, `capture-until`, or
+`capture-monitor` opens the dedicated Workflow editor. Measurement workflows
+provide model-projected channel and measurement choices, channel-pair rows,
+shared pair measurements, and the command's existing run limits. Capture Until
+provides selected capture channels, a condition channel limited to that
+selection, points, format, one metric/operator/threshold, `1..255` matches, one
+whole-workflow timeout, and a relative interval. A match saves the exact
+multi-channel acquisition that was evaluated; it does not capture again.
+
+Capture Monitor provides channels, points, format, finite capture count,
+relative interval, retention points, and **Save results to files**. Before a
+run, the editor explains that the retained waveform is bounded per channel,
+overflow drops oldest complete captures, metrics cover all observed samples,
+the plot and saved CSV cover only retained history, and repeated acquisitions
+are not a continuous time-domain waveform. Saving is enabled by default;
+disabling it runs without host-side workflow artifacts. Selection and editing
+are browser-local and passive; Run submits one job through shared foreground
+execution admission. The `capture-batch`, `measure-until`, and
+`triggered-capture-series` commands keep their metadata-driven Generic Form.
 
 Selecting a Trigger command opens the dedicated Trigger editor instead of a
 plain command form. The Command Browser remains the only Trigger navigation:
@@ -334,6 +346,18 @@ measurement in Result. Their complete sample history is not copied into the
 terminal job result; when saving is enabled, existing workflow files retain
 their persistence role.
 
+While `capture-monitor` runs, the existing job polling path requests only
+transient updates newer than the browser's last sequence. Each normal update
+contains one completed capture chunk plus compact counters and all-session
+metrics. Backend and frontend runtime state both discard oldest complete chunks
+at the configured retention boundary, so they do not retain unbounded waveform
+history or resend the full retained window on every poll. A bounded reset is
+used only when a polling client has fallen behind the retained update window.
+Transient waveform arrays are WebUI-runtime data only: they are not copied into
+the final job result, CLI JSON, or Common Worker result and need not survive job
+completion. The rolling plot uses global sample index on X; each capture's
+`time_s` remains local and gaps may exist between repeated acquisitions.
+
 Queued jobs can be cancelled immediately. Running jobs accept a cooperative
 cancellation request and remain running until Core execution and session
 cleanup finish; blocking VISA I/O is not forcibly interrupted. When the
@@ -342,6 +366,11 @@ waits for running jobs to finish and close their own sessions before stopping
 Uvicorn. This shutdown has a timeout; if jobs do not finish or a session close
 fails, the Launcher displays **Shutdown incomplete** and remains available so
 Quit can be retried. No implicit Safe Cleanup is run.
+For a save-enabled Capture Monitor job cancelled after at least one successful
+capture, Core writes the stopped final retained window and the WebUI keeps the
+job cancelled. It does not re-capture or present cancellation as natural
+completion. Cancellation before the first successful capture creates no empty
+waveform CSV; with saving disabled it creates no workflow artifacts.
 Screenshot and waveform capture jobs register their generated artifacts.
 Instrument-side `save-image` and `save-waveform` commands return the Core save
 result but do not create host WebUI artifacts. The Result UI keeps structured
@@ -389,7 +418,7 @@ Command IDs, model IDs, VISA resources, SCPI, JSON keys, and raw diagnostics
 remain unchanged.
 
 The WebUI does not include remote access, authentication, multi-instrument
-sessions, WebSockets/SSE, live waveform streaming, automatic Live Data
+sessions, WebSockets/SSE, general live waveform streaming, automatic Live Data
 polling, dark mode, Electron/onedir packaging, Generic Sequence editing,
 advanced FFT/Math transform/filter/visualization editors, or conditional
 editors for features not exposed by the current Core APIs. Dry-run remains

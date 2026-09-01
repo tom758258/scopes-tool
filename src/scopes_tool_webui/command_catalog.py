@@ -1201,6 +1201,18 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("count", "integer", minimum=1, default=1), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
     {
+        "id": "capture-until", "category": "Workflow", "label": "Capture until", "modes": ("live", "simulate", "dry-run"),
+        "group": "capture",
+        "editor": "workflow",
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", default=(1,), required=True), _command_field("condition_channel", "enum", options=(1, 2, 3, 4), default=1, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("metric", "enum", options=("max", "min", "peak-to-peak", "abs-max"), default="max", required=True), _command_field("operator", "enum", options=("gt", "gte", "lt", "lte"), default="gt", required=True), _command_field("threshold", "number", required=True), _command_field("count", "integer", minimum=1, maximum=255, default=1, required=True), _command_field("timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("interval_seconds", "number", minimum=0, default=0)),
+    },
+    {
+        "id": "capture-monitor", "category": "Workflow", "label": "Capture monitor", "modes": ("live", "simulate", "dry-run"),
+        "group": "capture",
+        "editor": "workflow",
+        "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", default=(1,), required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("count", "integer", minimum=1, required=True), _command_field("interval_seconds", "number", minimum=0, default=0), _command_field("retention_points", "integer", minimum=1000, default=250000, required=True), _command_field("save_results", "boolean", default=True, help_key="workflow.save_results")),
+    },
+    {
         "id": "measure-log", "category": "Workflow", "label": "Measurement log", "modes": ("live", "simulate"),
         "group": "measurement",
         "editor": "workflow",
@@ -1241,6 +1253,8 @@ PC_OUTPUT_COMMAND_IDS = frozenset(
         "serial-lister-export",
         "segmented-capture",
         "capture-batch",
+        "capture-until",
+        "capture-monitor",
         "measure-log",
         "measure-until",
         "triggered-measure-loop",
@@ -1488,7 +1502,14 @@ def _command_presentation(entry: Mapping[str, Any]) -> dict[str, Any]:
         action = "read"
     elif "clear" in command_id:
         action = "clear"
-    elif command_id in {"screenshot", "capture", "segmented-capture", "capture-batch"}:
+    elif command_id in {
+        "screenshot",
+        "capture",
+        "segmented-capture",
+        "capture-batch",
+        "capture-until",
+        "capture-monitor",
+    }:
         action = "capture"
     elif command_id in {"save-image", "save-waveform", "reference-save"}:
         action = "save"

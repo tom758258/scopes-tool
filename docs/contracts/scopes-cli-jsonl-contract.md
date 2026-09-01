@@ -590,6 +590,20 @@ Measurement and artifact-producing flows:
 - `capture-batch`: `status`, `channels`, `format`, `requested_count`,
   `completed_count`, `manifest_path`, `scpi_log_path`, and compact capture
   entries, plus nullable `error`.
+- `capture-until`: `status`, `channels`, `condition_channel`, `points`,
+  `format`, `metric`, `operator`, `threshold`, matching `requested_count` and
+  `completed_count`, total waveform `capture_count`, `timeout_seconds`,
+  `interval_seconds`, nullable `termination_reason`, artifact paths, and
+  nullable `error`. A successful match uses `condition_met`; an unmet
+  whole-workflow timeout uses `condition_timeout` and exit code `1`. Waveform
+  samples and discarded evaluation history are omitted.
+- `capture-monitor`: `status`, `channels`, `points`, `format`,
+  `requested_count`, `completed_count`, `interval_seconds`, per-channel
+  `retention_points`, `total_observed_points`, `retained_points`,
+  `dropped_points`, first and last retained capture indexes, compact
+  per-channel all-session `metrics`, `retention_policy: "drop_oldest"`, time
+  axis semantics, `save_results`, artifact paths, and nullable `error`.
+  Waveform samples are omitted from final JSON.
 - `sequence`: `status`, document `version`, `loop_count`, `step_count`,
   `total_step_executions`, `completed_loops`,
   `completed_step_executions`, nullable `failed_step`, bounded per-document
@@ -610,8 +624,9 @@ Measurement and artifact-producing flows:
   `average_count`, `check_only`, `stopped_on_error`, `initial_acquisition`,
   `restore`, `termination_reason`, `steps`, `final_acquisition`, and `files`.
 
-For `measure-log`, `measure-until`, `capture-batch`, `triggered-measure-loop`,
-`triggered-capture-series`, and `sequence`, cooperative cancellation uses
+For `measure-log`, `measure-until`, `capture-batch`, `capture-until`,
+`capture-monitor`, `triggered-measure-loop`, `triggered-capture-series`, and
+`sequence`, cooperative cancellation uses
 `status: "cancelled"`, `error: null`, and one-shot Core/CLI exit code `130`.
 Already persisted rows or captures remain in the result and artifacts; an
 uncommitted partial measurement row is omitted. Finite termination precedence
@@ -636,7 +651,9 @@ for example, screenshot temporary ink saver restoration is described by
 Simulate and live payloads include sent SCPI history when available. Live JSON
 output with `--log-scpi` includes the recorded sent SCPI history. Raw waveform
 sample arrays are intentionally omitted from top-level JSON; use artifact files
-for raw data.
+for raw data. Standalone `capture` remains artifact-producing; workflow-owned
+RAM analysis and Capture Monitor's `--no-save` option do not add a standalone
+capture no-save mode.
 
 `triggered-measure-loop` dry-run reports one representative cycle only:
 `:SINGle`, the Operation Status Condition Run-bit query, selected measurement
@@ -651,6 +668,11 @@ statically repeating trigger polling or cycle SCPI.
 `measure-until` dry-run reports one representative polling iteration only:
 the selected canonical measurement query and one `:SYSTem:ERRor?`. It reports
 the finite timeout and relative interval without statically expanding polls.
+
+`capture-until` and `capture-monitor` dry-runs each report one representative
+waveform retrieval and system-error check. They report their requested finite
+counts and expected artifact/result shape without repeating possible captures.
+Capture Monitor with saving disabled reports no planned files.
 
 Capability JSON currently includes `series`, `analog_channels`,
 `default_waveform_points`, `safe_max_waveform_points`,

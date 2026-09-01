@@ -7,11 +7,14 @@ export async function runJob(command, parameters, context, onUpdate) {
     command,
     status: submitted.status || "queued",
   });
-  let job = await getJob(submitted.job_id);
+  let monitorSequence = 0;
+  let job = await getJob(submitted.job_id, monitorSequence);
+  monitorSequence = job.monitor_runtime?.sequence || monitorSequence;
   onUpdate(job);
   while (["queued", "running"].includes(job.status)) {
     await new Promise((resolve) => setTimeout(resolve, 250));
-    job = await getJob(submitted.job_id);
+    job = await getJob(submitted.job_id, monitorSequence);
+    monitorSequence = job.monitor_runtime?.sequence || monitorSequence;
     onUpdate(job);
   }
   return job;

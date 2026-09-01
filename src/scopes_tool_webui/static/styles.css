@@ -344,6 +344,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .workflow-editor-pair-remove { min-height: var(--control-h); }
 .workflow-editor-limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .workflow-editor-stop { align-self: end; }
+.workflow-monitor-warning { margin-top: 0.75rem; }
+.workflow-monitor-status { white-space: pre-wrap; margin: 0.75rem 0; }
+.workflow-monitor-plot { display: block; width: 100%; max-width: 800px; height: 260px; border: 1px solid var(--line); background: var(--panel); }
 .measurement-editor { display: grid; gap: 14px; padding-top: 12px; }
 .measurement-editor-form { padding-top: 0; }
 .measurement-editor-section { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }

@@ -94,6 +94,8 @@ from scopes_tool_core.measure_until import (
     MeasureUntilRequest,
     plan_measure_until,
 )
+from scopes_tool_core.capture_until import CaptureUntilRequest, plan_capture_until
+from scopes_tool_core.capture_monitor import CaptureMonitorRequest, plan_capture_monitor
 from scopes_tool_core.output_files import (
     write_json_file,
     write_json_file_best_effort,
@@ -589,6 +591,20 @@ def _print_text_dry_run_payload(payload: dict[str, object]) -> None:
 
 
 def _print_text_dry_run_summary(command: str, result: dict[str, object]) -> None:
+    if command == "capture-until":
+        print(
+            "Planned capture until condition: "
+            f"CH{result.get('condition_channel')} {result.get('metric')} "
+            f"{result.get('operator')} {result.get('threshold')}"
+        )
+        return
+    if command == "capture-monitor":
+        print(
+            "Planned capture monitor: "
+            f"{result.get('requested_count')} capture(s), "
+            f"{result.get('retention_points')} retained points per channel"
+        )
+        return
     if command == "measure-until":
         print(
             "Planned measure until condition: "
@@ -714,6 +730,41 @@ def _utc_timestamp() -> str:
 
 def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
     command = args.command
+    if command == "capture-until":
+        plan = plan_capture_until(
+            CaptureUntilRequest(
+                channels=args.channel,
+                condition_channel=args.condition_channel,
+                points=args.points,
+                waveform_format=args.waveform_format,
+                metric=args.metric,
+                operator=args.operator,
+                threshold=args.threshold,
+                count=args.count,
+                timeout_seconds=args.timeout_seconds,
+                interval_seconds=args.interval_seconds,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            capabilities,
+        )
+        return list(plan.planned_scpi), list(plan.files), plan.result
+    if command == "capture-monitor":
+        plan = plan_capture_monitor(
+            CaptureMonitorRequest(
+                channels=args.channel,
+                points=args.points,
+                waveform_format=args.waveform_format,
+                count=args.count,
+                interval_seconds=args.interval_seconds,
+                retention_points=args.retention_points,
+                save_results=not args.no_save,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            capabilities,
+        )
+        return list(plan.planned_scpi), list(plan.files), plan.result
     if command == "measure-until":
         plan = plan_measure_until(
             MeasureUntilRequest(

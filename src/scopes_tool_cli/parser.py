@@ -2193,6 +2193,84 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    capture_until_parser = subparsers.add_parser(
+        "capture-until",
+        allow_abbrev=False,
+        help="capture matching waveform acquisitions until a finite count or timeout",
+    )
+    _add_scope_connection_args(capture_until_parser)
+    capture_until_parser.add_argument(
+        "--channel", type=_capture_channel_arg, action="append", required=True
+    )
+    capture_until_parser.add_argument(
+        "--condition-channel", type=_positive_int, required=True
+    )
+    capture_until_parser.add_argument(
+        "--points", type=_waveform_points_arg, default=1000
+    )
+    capture_until_parser.add_argument(
+        "--format",
+        dest="waveform_format",
+        choices=("byte", "word"),
+        default="byte",
+    )
+    capture_until_parser.add_argument(
+        "--metric",
+        choices=("max", "min", "peak-to-peak", "abs-max"),
+        required=True,
+    )
+    capture_until_parser.add_argument(
+        "--operator", choices=("gt", "gte", "lt", "lte"), required=True
+    )
+    capture_until_parser.add_argument(
+        "--threshold", type=_measurement_finite_float, required=True
+    )
+    capture_until_parser.add_argument(
+        "--count",
+        type=_capture_until_count,
+        default=1,
+        help="matching acquisitions to save; defaults to 1, maximum 255",
+    )
+    capture_until_parser.add_argument(
+        "--timeout-seconds", type=_positive_plain_float, required=True
+    )
+    capture_until_parser.add_argument(
+        "--interval-seconds", type=_nonnegative_finite_float, default=0.0
+    )
+    capture_until_parser.add_argument("--output-dir", default=None)
+
+    capture_monitor_parser = subparsers.add_parser(
+        "capture-monitor",
+        allow_abbrev=False,
+        help="monitor a finite waveform series with bounded retained history",
+    )
+    _add_scope_connection_args(capture_monitor_parser)
+    capture_monitor_parser.add_argument(
+        "--channel", type=_capture_channel_arg, action="append", required=True
+    )
+    capture_monitor_parser.add_argument(
+        "--points", type=_waveform_points_arg, default=1000
+    )
+    capture_monitor_parser.add_argument(
+        "--format",
+        dest="waveform_format",
+        choices=("byte", "word"),
+        default="byte",
+    )
+    capture_monitor_parser.add_argument("--count", type=_positive_int, required=True)
+    capture_monitor_parser.add_argument(
+        "--interval-seconds", type=_nonnegative_finite_float, default=0.0
+    )
+    capture_monitor_parser.add_argument(
+        "--retention-points", type=_positive_int, default=250000
+    )
+    capture_monitor_parser.add_argument("--output-dir", default=None)
+    capture_monitor_parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="run without creating retained waveform result files",
+    )
+
     measure_log_parser = subparsers.add_parser(
         "measure-log",
         help="log a finite batch of single-channel and channel-pair measurements to CSV",
@@ -3041,6 +3119,13 @@ def _positive_int(value: str) -> int:
         raise argparse.ArgumentTypeError("must be an integer") from exc
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
+def _capture_until_count(value: str) -> int:
+    parsed = _positive_int(value)
+    if parsed > 255:
+        raise argparse.ArgumentTypeError("must be between 1 and 255")
     return parsed
 
 

@@ -14,6 +14,8 @@ from scopes_tool_core.setup import (
 from scopes_tool_core.channel import validate_analog_channel
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.measure_until import MeasureUntilRequest, run_measure_until
+from scopes_tool_core.capture_until import CaptureUntilRequest, run_capture_until
+from scopes_tool_core.capture_monitor import CaptureMonitorRequest, run_capture_monitor
 from scopes_tool_core.operations import (
     AcquisitionCheckRequest,
     CaptureBatchRequest,
@@ -530,6 +532,81 @@ def _cmd_measure_until(
                 log_scpi=bool(args.log_scpi),
             ),
             stop_requested=stop_requested,
+        )
+        if operation_result.idn is not None:
+            runtime._json_record_scope(scope, operation_result.idn)
+        _apply_operation_result(operation_result)
+        for line in operation_result.human_lines:
+            print(line)
+        if operation_result.result.get("status") == "interrupted":
+            print("error: interrupted", file=sys.stderr)
+        return operation_result.exit_code
+
+
+def _cmd_capture_until(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
+    resource = runtime._require_resource(args)
+    if resource is None:
+        return 2
+    with runtime._open_scope(args, resource) as scope:
+        operation_result = run_capture_until(
+            scope,
+            resource,
+            CaptureUntilRequest(
+                channels=args.channel,
+                condition_channel=args.condition_channel,
+                points=args.points,
+                waveform_format=args.waveform_format,
+                metric=args.metric,
+                operator=args.operator,
+                threshold=args.threshold,
+                count=args.count,
+                timeout_seconds=args.timeout_seconds,
+                interval_seconds=args.interval_seconds,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            stop_requested=stop_requested,
+        )
+        if operation_result.idn is not None:
+            runtime._json_record_scope(scope, operation_result.idn)
+        _apply_operation_result(operation_result)
+        for line in operation_result.human_lines:
+            print(line)
+        if operation_result.result.get("status") == "interrupted":
+            print("error: interrupted", file=sys.stderr)
+        return operation_result.exit_code
+
+
+def _cmd_capture_monitor(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+    sample_reporter=None,
+) -> int:
+    resource = runtime._require_resource(args)
+    if resource is None:
+        return 2
+    with runtime._open_scope(args, resource) as scope:
+        operation_result = run_capture_monitor(
+            scope,
+            resource,
+            CaptureMonitorRequest(
+                channels=args.channel,
+                points=args.points,
+                waveform_format=args.waveform_format,
+                count=args.count,
+                interval_seconds=args.interval_seconds,
+                retention_points=args.retention_points,
+                save_results=not args.no_save,
+                output_dir=args.output_dir,
+                log_scpi=bool(args.log_scpi),
+            ),
+            stop_requested=stop_requested,
+            sample_reporter=sample_reporter,
         )
         if operation_result.idn is not None:
             runtime._json_record_scope(scope, operation_result.idn)

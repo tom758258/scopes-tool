@@ -519,6 +519,18 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
     if command == "capture-batch":
         output_dir = Path(args.output_dir)
         return [output_dir / "manifest.json", output_dir / "scpi.log"]
+    if command == "capture-until":
+        output_dir = Path(args.output_dir)
+        return [output_dir / "manifest.json", output_dir / "scpi.log"]
+    if command == "capture-monitor":
+        if getattr(args, "no_save", False):
+            return []
+        output_dir = Path(args.output_dir)
+        return [
+            output_dir / "retained_waveforms.csv",
+            output_dir / "manifest.json",
+            output_dir / "scpi.log",
+        ]
     if command == "measure-log":
         if getattr(args, "no_save", False):
             return []

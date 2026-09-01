@@ -173,6 +173,16 @@ from .measure_until import (
     plan_measure_until,
     run_measure_until,
 )
+from .capture_until import (
+    CaptureUntilRequest,
+    plan_capture_until,
+    run_capture_until,
+)
+from .capture_monitor import (
+    CaptureMonitorRequest,
+    plan_capture_monitor,
+    run_capture_monitor,
+)
 from .scope import Oscilloscope
 from .status import (
     OperationCompleteState,
@@ -409,6 +419,8 @@ __all__ = [
     "TriggeredMeasureLoopRequest",
     "TriggeredCaptureSeriesRequest",
     "MeasureUntilRequest",
+    "CaptureUntilRequest",
+    "CaptureMonitorRequest",
     "ScopeCapabilities",
     "SegmentedMemoryController",
     "SegmentedMemoryQueryResult",
@@ -463,6 +475,8 @@ __all__ = [
     "plan_triggered_measure_loop",
     "plan_triggered_capture_series",
     "plan_measure_until",
+    "plan_capture_until",
+    "plan_capture_monitor",
     "plan_acquisition_check",
     "query_instrument_summary",
     "run_capture",
@@ -476,6 +490,8 @@ __all__ = [
     "run_triggered_measure_loop",
     "run_triggered_capture_series",
     "run_measure_until",
+    "run_capture_until",
+    "run_capture_monitor",
     "run_acquisition_check",
     "interruptible_wait",
     "load_sequence_document",

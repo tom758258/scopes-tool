@@ -24,8 +24,8 @@ CLI-only fields include:
 
 - `measurement_cli_name`
 - command names such as `measure-log`, `measure-until`, `capture-batch`,
-  `triggered-measure-loop`, `triggered-capture-series`, `sequence`, and
-  `hardware-report`
+  `capture-until`, `capture-monitor`, `triggered-measure-loop`,
+  `triggered-capture-series`, `sequence`, and `hardware-report`
 - process return-code behavior
 - stderr SCPI diagnostic handling
 - parser validation messages
@@ -73,16 +73,29 @@ These fields are adapter behavior, not Core schema. Core receives normalized
 requests and returns runtime data; the CLI decides how to render human text,
 JSON stdout, stderr logs, and exit codes.
 
-`measure-log`, `measure-until`, `capture-batch`, `triggered-measure-loop`, and
-`triggered-capture-series` execution is Core-owned. Their CLI adapters
-normalize arguments into `MeasureLogRequest`, `CaptureBatchRequest`,
-`MeasureUntilRequest`, `TriggeredMeasureLoopRequest`, or
-`TriggeredCaptureSeriesRequest`, open
+`measure-log`, `measure-until`, `capture-batch`, `capture-until`,
+`capture-monitor`, `triggered-measure-loop`, and `triggered-capture-series`
+execution is Core-owned. Their CLI adapters normalize arguments into the
+corresponding Core request, including `CaptureUntilRequest` and
+`CaptureMonitorRequest`, open
 the selected run-mode session, invoke the Core operation, and render its
 `OperationResult`. Internal JSON dispatch accepts an optional cancellation
 predicate so the Worker can reuse the same operations; normal direct CLI calls
 use the no-op default. The CLI does not maintain a parallel batch loop or
 workflow scheduler.
+
+Capture-until planning delegates one representative capture and system-error
+check to `plan_capture_until()`. Runtime delegates capture, in-RAM analysis,
+exact-match persistence, one whole-workflow timeout, and cooperative
+cancellation to `run_capture_until()`. The adapter never queries waveform data
+again after a match and never copies samples into machine results.
+
+Capture-monitor planning delegates one representative capture to
+`plan_capture_monitor()`. Runtime delegates bounded complete-chunk retention,
+all-session metrics, final retained-window persistence, and C1 cancellation
+saving to `run_capture_monitor()`. The optional sample callback is used only by
+WebUI runtime polling; final CLI and Worker results remain compact. `--no-save`
+belongs only to this workflow and does not change standalone `capture`.
 
 Measure-until dry-run delegates one representative query and system-error
 check to `plan_measure_until()`. Runtime delegates timeout-bounded polling to

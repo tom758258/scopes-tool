@@ -169,10 +169,15 @@ Current implemented scope:
   CSV, `manifest.json`, and `scpi.log` into one run directory by default.
 - Query one read-only measurement until a finite numeric condition matches or
   fails with timeout through `measure-until`.
-- Use `--no-save` with `measure-log`, `measure-until`, or
-  `triggered-measure-loop` to skip their host-side CSV, manifest, and SCPI log
-  files while retaining a compact structured result with the final
-  measurement. Saving remains enabled by default.
+- Capture and analyze waveforms in RAM through `capture-until`, saving only
+  exact matching acquisitions and preserving all selected channels on a match.
+- Run finite `capture-monitor` sessions with bounded per-channel waveform
+  retention and all-session running metrics.
+- Use `--no-save` with `measure-log`, `measure-until`,
+  `triggered-measure-loop`, or `capture-monitor` to skip their host-side result
+  files while retaining a compact structured result. Saving remains enabled by
+  default. Standalone `capture` remains artifact-producing and has no
+  `--no-save` option.
 - Run strict finite Generic Sequence v1 JSON documents with `sequence`, using
   existing Core operations and deterministic capture/screenshot artifacts.
 - Run capture-safe hardware smoke checks that write a report directory with
@@ -2092,6 +2097,54 @@ code `1` with `condition_timeout`. Direct CLI artifacts default to
 `data/measure_until/<timestamp>`. Dry-run shows one representative measurement
 query and one `:SYSTem:ERRor?` without opening VISA or writing files. See
 [`Core Integration`](../core/integration.md#measure-until-condition-v1).
+
+Capture exact acquisitions that meet one waveform condition:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe capture-until --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --condition-channel 1 --points 1000 --format byte --metric max --operator gt --threshold 1.5 --count 3 --timeout-seconds 60 --interval-seconds 0
+```
+
+`capture-until` evaluates one selected analog condition channel from the
+already-retrieved waveform. The source condition is one metric and comparison,
+but a match writes the same acquisition for every selected channel through the
+normal waveform CSV and metadata format. It never performs a second capture
+after a match. Non-matches create no waveform or metadata artifacts and are not
+kept as waveform history.
+
+`--count` is the number of matching acquisitions to save, defaults to `1`, and
+accepts `1..255` as a Scopes Tool product limit. One positive finite timeout
+covers the entire workflow and is not reset by a match. A partial
+`condition_timeout` keeps earlier `match_NNN.csv` and `match_NNN_meta.json`
+artifacts, returns exit code `1`, and reports both matching and total capture
+counts. Direct CLI output defaults to `data/capture_until/<timestamp>` and also
+contains `manifest.json` and `scpi.log`. The workflow uses current waveform
+retrieval behavior; it does not configure or wait for a trigger. Dry-run shows
+one representative capture only. See
+[`Core Integration`](../core/integration.md#capture-until-v1).
+
+Monitor a finite repeated capture session:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe capture-monitor --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --channel 2 --points 1000 --format byte --count 2000 --interval-seconds 0 --retention-points 250000
+```
+
+`capture-monitor` keeps at most `--retention-points` samples per channel in
+RAM. The default is `250000`; the value must be at least one capture and an
+integer multiple of `--points`. Overflow drops the oldest complete capture
+chunk. Maximum, minimum, peak-to-peak, and absolute-maximum statistics still
+cover every observed sample, including samples from dropped chunks.
+
+Repeated captures are separate acquisitions. Each chunk's `time_s` is local,
+and acquisition or communication gaps may exist between chunks; the global
+sample index is an ordering axis, not continuous time. With saving enabled,
+only the final retained window is written to `retained_waveforms.csv` together
+with `manifest.json` and `scpi.log`; dropped history is not persisted. The CSV
+keeps capture boundaries, global and local sample indexes, local time, and one
+value column per channel. `--no-save` creates no workflow result artifacts.
+When a saved run is cancelled after at least one capture, the stopped retained
+window is written while status remains cancelled or interrupted; cancellation
+before the first capture creates no empty waveform CSV. See
+[`Core Integration`](../core/integration.md#capture-monitor-v1).
 
 Run a finite triggered measurement loop:
 

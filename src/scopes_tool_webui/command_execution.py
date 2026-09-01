@@ -8,7 +8,9 @@ from typing import Any, Callable, Mapping
 
 from scopes_tool_core import (
     CaptureBatchRequest,
+    CaptureMonitorRequest,
     CaptureRequest,
+    CaptureUntilRequest,
     MeasureLogRequest,
     MeasureRequest,
     MeasureUntilRequest,
@@ -21,6 +23,8 @@ from scopes_tool_core import (
     open_scope_for_run,
     plan_acquisition_check,
     plan_capture,
+    plan_capture_monitor,
+    plan_capture_until,
     plan_measure,
     plan_measure_until,
     plan_triggered_capture_series,
@@ -28,6 +32,8 @@ from scopes_tool_core import (
     query_instrument_summary,
     run_capture,
     run_capture_batch,
+    run_capture_monitor,
+    run_capture_until,
     run_measure,
     run_measure_log,
     run_measure_until,
@@ -41,6 +47,8 @@ from scopes_tool_core.measure_logger import (
     default_measure_log_output_dir,
 )
 from scopes_tool_core.measure_until import MEASURE_UNTIL_DEFAULT_BASE_DIR
+from scopes_tool_core.capture_until import CAPTURE_UNTIL_DEFAULT_BASE_DIR
+from scopes_tool_core.capture_monitor import CAPTURE_MONITOR_DEFAULT_BASE_DIR
 from scopes_tool_core.output_files import (
     default_capture_csv_path,
     write_serial_lister_csv,
@@ -80,6 +88,7 @@ def execute_command(
     parameters: Mapping[str, Any],
     artifact_dir: Path,
     stop_requested: Callable[[], bool] | None = None,
+    sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
 ) -> dict[str, Any]:
     """Execute one validated request through the public Core APIs."""
 
@@ -116,6 +125,7 @@ def execute_command(
             normalized,
             artifact_dir,
             stop_requested=stop_requested,
+            sample_reporter=sample_reporter,
         )
     finally:
         try:
@@ -172,6 +182,18 @@ def _execute_dry_run(
             _workflow_output_dir(command, artifact_dir) if save_results else None,
         )
         plan = plan_measure_until(request, capabilities)
+    elif command == "capture-until":
+        request = _capture_until_request(
+            parameters, _workflow_output_dir(command, artifact_dir)
+        )
+        plan = plan_capture_until(request, capabilities)
+    elif command == "capture-monitor":
+        save_results = parameters.get("save_results", True)
+        request = _capture_monitor_request(
+            parameters,
+            _workflow_output_dir(command, artifact_dir) if save_results else None,
+        )
+        plan = plan_capture_monitor(request, capabilities)
     elif command == "triggered-measure-loop":
         save_results = parameters.get("save_results", True)
         request = _triggered_measure_loop_request(
@@ -229,6 +251,7 @@ def _execute_scope_command(
     artifact_dir: Path,
     *,
     stop_requested: Callable[[], bool] | None = None,
+    sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
 ) -> dict[str, Any]:
     if scope.capabilities is None:
         scope.query_idn()
@@ -240,6 +263,7 @@ def _execute_scope_command(
             parameters,
             artifact_dir,
             stop_requested=stop_requested,
+            sample_reporter=sample_reporter,
         )
     if command == "identify":
         idn = scope.idn or scope.query_idn()
@@ -613,6 +637,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
     artifact_dir: Path,
     *,
     stop_requested: Callable[[], bool] | None = None,
+    sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
 ) -> dict[str, Any]:
     action = parameters.get("action", "query")
     if command == "trigger-edge":
@@ -829,6 +854,31 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 resource,
                 _capture_batch_request(parameters, output_dir),
                 stop_requested=stop_requested,
+            )
+        )
+    if command == "capture-until":
+        output_dir = _workflow_output_dir(command, artifact_dir)
+        return _operation_payload(
+            run_capture_until(
+                scope,
+                resource,
+                _capture_until_request(parameters, output_dir),
+                stop_requested=stop_requested,
+            )
+        )
+    if command == "capture-monitor":
+        output_dir = (
+            _workflow_output_dir(command, artifact_dir)
+            if parameters.get("save_results", True)
+            else None
+        )
+        return _operation_payload(
+            run_capture_monitor(
+                scope,
+                resource,
+                _capture_monitor_request(parameters, output_dir),
+                stop_requested=stop_requested,
+                sample_reporter=sample_reporter,
             )
         )
     if command == "measure-log":
@@ -1113,6 +1163,8 @@ def _workflow_output_dir(command: str, output_root: Path) -> Path:
         )
     base_dirs = {
         "capture-batch": BATCH_DEFAULT_BASE_DIR,
+        "capture-until": CAPTURE_UNTIL_DEFAULT_BASE_DIR,
+        "capture-monitor": CAPTURE_MONITOR_DEFAULT_BASE_DIR,
         "measure-until": MEASURE_UNTIL_DEFAULT_BASE_DIR,
         "triggered-measure-loop": TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR,
         "triggered-capture-series": TRIGGERED_CAPTURE_SERIES_DEFAULT_BASE_DIR,
@@ -1127,6 +1179,39 @@ def _capture_batch_request(parameters: Mapping[str, Any], artifact_dir: Path) ->
     return CaptureBatchRequest(
         channels=parameters["channels"], points=parameters["points"], waveform_format=parameters["format"],
         requested_count=parameters["count"], interval_seconds=parameters["interval_seconds"], output_dir=artifact_dir,
+    )
+
+
+def _capture_until_request(
+    parameters: Mapping[str, Any], artifact_dir: Path
+) -> CaptureUntilRequest:
+    return CaptureUntilRequest(
+        channels=parameters["channels"],
+        condition_channel=parameters["condition_channel"],
+        points=parameters["points"],
+        waveform_format=parameters["format"],
+        metric=parameters["metric"],
+        operator=parameters["operator"],
+        threshold=parameters["threshold"],
+        count=parameters["count"],
+        timeout_seconds=parameters["timeout_seconds"],
+        interval_seconds=parameters["interval_seconds"],
+        output_dir=artifact_dir,
+    )
+
+
+def _capture_monitor_request(
+    parameters: Mapping[str, Any], artifact_dir: Path | None
+) -> CaptureMonitorRequest:
+    return CaptureMonitorRequest(
+        channels=parameters["channels"],
+        points=parameters["points"],
+        waveform_format=parameters["format"],
+        count=parameters["count"],
+        interval_seconds=parameters["interval_seconds"],
+        retention_points=parameters["retention_points"],
+        save_results=parameters.get("save_results", True),
+        output_dir=artifact_dir,
     )
 
 

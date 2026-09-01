@@ -173,7 +173,12 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise WebUIRequestError("resource must be a non-empty string when provided")
     pc_output_dir = payload.get("pc_output_dir", DEFAULT_PC_OUTPUT_DIR)
     output_optional = (
-        command in {"measure-log", "measure-until", "triggered-measure-loop"}
+        command in {
+            "measure-log",
+            "measure-until",
+            "triggered-measure-loop",
+            "capture-monitor",
+        }
         and parameters.get("save_results") is False
     )
     if not isinstance(pc_output_dir, str) or (not pc_output_dir.strip() and not output_optional):
@@ -309,7 +314,7 @@ def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, 
         except Exception as exc:
             raise WebUIRequestError(str(exc)) from exc
         return
-    if command in {"capture-batch", "measure-log", "measure-until", "triggered-measure-loop", "triggered-capture-series"}:
+    if command in {"capture-batch", "capture-until", "capture-monitor", "measure-log", "measure-until", "triggered-measure-loop", "triggered-capture-series"}:
         if command == "capture-batch":
             parameters["channels"] = _workflow_channels(parameters.get("channels"), capabilities, required=True)
             parameters["points"] = _integer(parameters.get("points", 1000), "points")
@@ -320,6 +325,76 @@ def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, 
             parameters["format"] = str(parameters.get("format", "byte")).lower()
             if parameters["format"] not in {"byte", "word"}:
                 raise WebUIRequestError("format must be byte or word")
+        elif command == "capture-until":
+            parameters["channels"] = _workflow_channels(
+                parameters.get("channels"), capabilities, required=True
+            )
+            parameters["condition_channel"] = validate_analog_channel(
+                _integer(parameters.get("condition_channel"), "condition_channel"),
+                capabilities,
+            )
+            if parameters["condition_channel"] not in parameters["channels"]:
+                raise WebUIRequestError(
+                    "condition_channel must be included in selected channels"
+                )
+            parameters["points"] = _integer(parameters.get("points", 1000), "points")
+            if parameters["points"] not in {1000, 5000, 10000}:
+                raise WebUIRequestError("points must be one of: 1000, 5000, 10000")
+            parameters["format"] = str(parameters.get("format", "byte")).lower()
+            if parameters["format"] not in {"byte", "word"}:
+                raise WebUIRequestError("format must be byte or word")
+            if parameters.get("metric") not in {
+                "max", "min", "peak-to-peak", "abs-max"
+            }:
+                raise WebUIRequestError("metric is not supported")
+            if parameters.get("operator") not in {"gt", "gte", "lt", "lte"}:
+                raise WebUIRequestError("operator must be gt, gte, lt, or lte")
+            parameters["threshold"] = _finite_number(
+                parameters.get("threshold"), "threshold"
+            )
+            parameters["count"] = _integer(parameters.get("count", 1), "count")
+            if not 1 <= parameters["count"] <= 255:
+                raise WebUIRequestError("count must be between 1 and 255")
+            parameters["timeout_seconds"] = _finite_number(
+                parameters.get("timeout_seconds"), "timeout_seconds"
+            )
+            if parameters["timeout_seconds"] <= 0:
+                raise WebUIRequestError("timeout_seconds must be greater than zero")
+            parameters["interval_seconds"] = _finite_number(
+                parameters.get("interval_seconds", 0), "interval_seconds"
+            )
+            if parameters["interval_seconds"] < 0:
+                raise WebUIRequestError("interval_seconds must be non-negative")
+        elif command == "capture-monitor":
+            parameters["channels"] = _workflow_channels(
+                parameters.get("channels"), capabilities, required=True
+            )
+            parameters["points"] = _integer(parameters.get("points", 1000), "points")
+            if parameters["points"] not in {1000, 5000, 10000}:
+                raise WebUIRequestError("points must be one of: 1000, 5000, 10000")
+            parameters["format"] = str(parameters.get("format", "byte")).lower()
+            if parameters["format"] not in {"byte", "word"}:
+                raise WebUIRequestError("format must be byte or word")
+            parameters["count"] = _integer(parameters.get("count"), "count")
+            if parameters["count"] < 1:
+                raise WebUIRequestError("count must be at least 1")
+            parameters["interval_seconds"] = _finite_number(
+                parameters.get("interval_seconds", 0), "interval_seconds"
+            )
+            if parameters["interval_seconds"] < 0:
+                raise WebUIRequestError("interval_seconds must be non-negative")
+            parameters["retention_points"] = _integer(
+                parameters.get("retention_points", 250000), "retention_points"
+            )
+            if parameters["retention_points"] < parameters["points"]:
+                raise WebUIRequestError(
+                    "retention_points must be at least points per capture"
+                )
+            if parameters["retention_points"] % parameters["points"] != 0:
+                raise WebUIRequestError(
+                    "retention_points must be a multiple of points per capture"
+                )
+            _require_boolean(parameters.setdefault("save_results", True), "save_results")
         elif command == "measure-log":
             parameters["channels"] = _workflow_channels(parameters.get("channels"), capabilities, required=False)
             parameters["items"] = parameters.get("items", "vpp,frequency")

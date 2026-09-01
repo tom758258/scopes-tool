@@ -102,6 +102,71 @@ The Worker never chooses a host destination. Orchestrators must send a
 caller-owned `output_dir` and must not send `log_scpi`. A matching committed sample succeeds with
 `condition_met`; an unmet timeout fails with `condition_timeout`.
 
+## Capture Until
+
+Capture Until uses the machine-facing CLI and Worker command `capture-until`,
+which delegates to Core `CaptureUntilRequest` and `run_capture_until()`.
+
+```json
+{
+  "schema_version": 2,
+  "command": "capture-until",
+  "arguments": {
+    "channel": [1, 2],
+    "condition_channel": 1,
+    "points": 1000,
+    "format": "byte",
+    "metric": "max",
+    "operator": "gt",
+    "threshold": 1.5,
+    "count": 3,
+    "timeout_seconds": 60,
+    "interval_seconds": 0,
+    "output_dir": "/results/run-001/capture-until"
+  }
+}
+```
+
+The condition channel must be one selected capture channel. `count` means
+matching acquisitions and is limited to `1..255` by the product contract. A
+match saves all selected channels from the exact capture that was analyzed.
+One timeout covers the whole workflow and does not restart after a match.
+Partial artifacts remain on timeout or cancellation. The Worker never chooses
+the required output directory and rejects `log_scpi`.
+
+## Capture Monitor
+
+Capture Monitor uses the finite machine-facing CLI and Worker command
+`capture-monitor`, which delegates to Core `CaptureMonitorRequest` and
+`run_capture_monitor()`.
+
+```json
+{
+  "schema_version": 2,
+  "command": "capture-monitor",
+  "arguments": {
+    "channel": [1, 2],
+    "points": 1000,
+    "format": "byte",
+    "count": 2000,
+    "interval_seconds": 0,
+    "retention_points": 250000,
+    "save_results": true,
+    "output_dir": "/results/run-001/capture-monitor"
+  }
+}
+```
+
+Retention defaults to `250000` points per channel and drops the oldest complete
+capture on overflow. Overall metrics include all observed samples, while the
+saved waveform contains only the final retained window. Repeated acquisitions
+may have gaps and are not a continuous waveform. With `save_results: false`,
+omit `output_dir` and expect no files. With saving enabled, cancellation after
+at least one capture saves the stopped retained window while Worker state
+remains `cancelled`; cancellation before the first capture creates no empty
+waveform file. Final Common results remain compact and contain no waveform
+sample arrays. The Worker rejects `log_scpi`.
+
 ## Worker Workflow
 
 Scopes is a queued-job Worker with a startup-bound execution context. Live

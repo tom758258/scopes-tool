@@ -32,6 +32,11 @@
 - Adds the finite `measure-until`, `triggered-measure-loop`, and
   `triggered-capture-series` workflows with Core, CLI, and Common v2 Worker
   adapters, artifacts, and dry-run planning.
+- Adds finite `capture-until` and `capture-monitor` workflows across Core,
+  CLI, Common v2 Worker, and WebUI. Capture Until saves exact matching
+  acquisitions; Capture Monitor keeps a bounded per-channel retained window,
+  all-session metrics, a retained-window artifact, and polling-based WebUI
+  waveform updates.
 - Names the existing batch capture workflow Periodic Capture (`capture-batch`)
   and supports cooperative Worker stopping for finite measurement and capture
   jobs.

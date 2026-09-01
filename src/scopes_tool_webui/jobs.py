@@ -44,15 +44,18 @@ class Job:
     artifact_paths: dict[str, Path] = field(default_factory=dict, repr=False)
     cancel_requested: bool = field(default=False, repr=False)
     cleanup_failed: bool = field(default=False, repr=False)
+    monitor_updates: list[dict[str, Any]] = field(default_factory=list, repr=False)
+    monitor_update_sequence: int = field(default=0, repr=False)
+    monitor_summary: dict[str, Any] | None = field(default=None, repr=False)
     future: Future[Any] | None = field(default=None, repr=False)
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def to_payload(self) -> dict[str, Any]:
+    def to_payload(self, *, after_sequence: int = 0) -> dict[str, Any]:
         with self.lock:
             artifacts = [dict(item) for item in self.artifacts]
             for artifact in artifacts:
                 artifact["url"] = f"/api/jobs/{self.job_id}/artifacts/{artifact['name']}"
-            return {
+            payload = {
                 "job_id": self.job_id,
                 "command": self.command,
                 "mode": self.mode,
@@ -68,6 +71,34 @@ class Job:
                 "error": self.error,
                 "artifacts": artifacts,
             }
+            if self.command == "capture-monitor":
+                first_sequence = (
+                    self.monitor_updates[0]["sequence"]
+                    if self.monitor_updates
+                    else self.monitor_update_sequence + 1
+                )
+                reset = bool(
+                    self.monitor_updates
+                    and after_sequence < first_sequence - 1
+                )
+                updates = (
+                    list(self.monitor_updates)
+                    if reset
+                    else [
+                        item
+                        for item in self.monitor_updates
+                        if item["sequence"] > after_sequence
+                    ]
+                )
+                payload["monitor_runtime"] = {
+                    "sequence": self.monitor_update_sequence,
+                    "reset": reset,
+                    "updates": updates,
+                    "summary": dict(self.monitor_summary or {}),
+                }
+                if self.status in TERMINAL_STATUSES:
+                    self.monitor_updates.clear()
+            return payload
 
 
 class JobManager:
@@ -212,6 +243,11 @@ class JobManager:
                         parameters=job.parameters,
                         artifact_dir=job.pc_output_root,
                         stop_requested=lambda: job.cancel_requested,
+                        sample_reporter=(
+                            lambda update: self._append_monitor_update(job, update)
+                            if job.command == "capture-monitor"
+                            else None
+                        ),
                     )
                 artifacts = self._register_artifacts(job, execution.get("artifacts", []))
             exit_code = execution.get("exit_code", 1)
@@ -278,6 +314,30 @@ class JobManager:
         with job.lock:
             job.artifact_paths = registered_paths
         return registered
+
+    def _append_monitor_update(
+        self,
+        job: Job,
+        update: Mapping[str, object],
+    ) -> None:
+        with job.lock:
+            job.monitor_update_sequence += 1
+            record = {"sequence": job.monitor_update_sequence, **dict(update)}
+            job.monitor_updates.append(record)
+            dropped = update.get("dropped_capture_count", 0)
+            if isinstance(dropped, int) and dropped > 0:
+                del job.monitor_updates[: min(dropped, len(job.monitor_updates))]
+            points = job.parameters.get("points", 1000)
+            retention = job.parameters.get("retention_points", 250000)
+            if isinstance(points, int) and points > 0 and isinstance(retention, int):
+                maximum_chunks = max(1, retention // points)
+                if len(job.monitor_updates) > maximum_chunks:
+                    del job.monitor_updates[:-maximum_chunks]
+            job.monitor_summary = {
+                key: value
+                for key, value in update.items()
+                if key not in {"time_s", "channels"}
+            }
 
     def artifact_path(self, job_id: str, name: str) -> tuple[Job, Path] | None:
         job = self.get(job_id)

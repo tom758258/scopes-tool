@@ -24,8 +24,9 @@ export async function openPcOutputFolder(pcOutputDir) {
   return requestJson(PC_OUTPUT_OPEN_FOLDER_PATH, "POST", { pc_output_dir: pcOutputDir });
 }
 
-export async function getJob(jobId) {
-  return getJson(`${JOBS_PATH}/${encodeURIComponent(jobId)}`);
+export async function getJob(jobId, afterSequence = 0) {
+  const query = afterSequence > 0 ? `?after_sequence=${afterSequence}` : "";
+  return getJson(`${JOBS_PATH}/${encodeURIComponent(jobId)}${query}`);
 }
 
 export async function cancelJob(jobId) {

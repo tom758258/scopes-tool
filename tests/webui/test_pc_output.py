@@ -616,6 +616,8 @@ def test_pc_output_catalog_and_locale_keys_are_centralized() -> None:
         "serial-lister-export",
         "segmented-capture",
         "capture-batch",
+        "capture-until",
+        "capture-monitor",
         "measure-log",
         "measure-until",
         "triggered-measure-loop",

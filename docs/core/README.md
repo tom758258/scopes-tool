@@ -94,12 +94,15 @@ progress reporters, and operation-specific sample callbacks; they do not
 introduce an async runtime, scheduler, persistence layer, or event bus.
 
 The current workflow surface includes `measure-log`, Periodic Capture through
-`capture-batch`, Triggered Measurement Loop, Triggered Capture Series, Measure
-Until Condition, Generic Sequence, and `segmented-capture` where supported by
-the active profile. Detailed contracts for the workflow families documented by
-Core Integration — including request fields, defaults, terminal behavior,
-artifact schemas, and Generic Sequence rules where applicable — are maintained
-in [Core Integration](integration.md).
+`capture-batch`, Capture Until, Capture Monitor, Triggered Measurement Loop,
+Triggered Capture Series, Measure Until Condition, Generic Sequence, and
+`segmented-capture` where supported by the active profile. Workflow-owned
+waveforms may be analyzed or retained in bounded RAM without changing the
+artifact-producing behavior of standalone `capture`. Detailed contracts for
+the workflow families documented by Core Integration — including request
+fields, defaults, terminal behavior, artifact schemas, and Generic Sequence
+rules where applicable — are maintained in
+[Core Integration](integration.md).
 
 ## Public Package Surface
 

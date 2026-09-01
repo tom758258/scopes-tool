@@ -137,6 +137,8 @@ names are intended for package consumers and tests:
 - `ResolvedRunConfig`
 - `RunModeOptions`
 - `CaptureBatchRequest`
+- `CaptureUntilRequest`
+- `CaptureMonitorRequest`
 - `CaptureRequest`
 - `MeasureLogRequest`
 - `MeasureRequest`
@@ -206,6 +208,8 @@ names are intended for package consumers and tests:
 - `plan_triggered_measure_loop`
 - `plan_triggered_capture_series`
 - `plan_measure_until`
+- `plan_capture_until`
+- `plan_capture_monitor`
 - `plan_acquisition_check`
 - `query_instrument_summary`
 - `run_capture`
@@ -220,6 +224,8 @@ names are intended for package consumers and tests:
 - `run_triggered_measure_loop`
 - `run_triggered_capture_series`
 - `run_measure_until`
+- `run_capture_until`
+- `run_capture_monitor`
 - `interruptible_wait`
 - `load_sequence_document`
 - `normalize_sequence_document`
@@ -455,6 +461,79 @@ The workflow does not provide multiple conditions, aggregation, parameterized
 measurements, equality/tolerance/debounce, retry, trigger or acquisition
 control, waveform capture, screenshots, Generic Sequence integration, or
 infinite execution.
+
+## Capture Until v1
+
+Capture Until uses `CaptureUntilRequest`, `plan_capture_until()`, and
+`run_capture_until()` to retrieve waveforms until it has saved the requested
+number of matching acquisitions. The request selects one or more capture
+channels and one condition channel that must be among them. The condition is
+one metric (`max`, `min`, `peak-to-peak`, or `abs-max`) and one operator (`gt`,
+`gte`, `lt`, or `lte`) against a finite threshold. Metrics are computed from
+the condition channel's already-retrieved `WaveformCapture.vertical_values`;
+the workflow does not issue another waveform query for analysis.
+
+`count` means matching acquisitions, defaults to `1`, and is limited by the
+Scopes Tool product contract to `1..255`. It is not a hardware limit. Every
+iteration preserves the invariant `capture -> analyze -> persist the same
+capture`: a match writes all selected channels from that acquisition through
+the normal waveform CSV and metadata writers, while a non-match writes no
+waveform or metadata artifact and is not retained as waveform history. Match
+files are named `match_001.csv`, `match_001_meta.json`, and so on.
+
+One positive finite timeout controls the entire workflow and is not restarted
+after a match. On `condition_timeout`, already completed match artifacts remain,
+the result reports the requested and completed matching counts plus the total
+waveform capture count, and execution returns non-zero. Cancellation likewise
+preserves completed matches. The workflow uses the current waveform retrieval
+behavior and does not configure, arm, wait for, or force a trigger.
+
+Planning validates one representative waveform capture and system-error check
+without expanding the possible acquisition count. Runtime artifacts also
+include `manifest.json` and `scpi.log`. Final results contain compact request,
+count, termination, and path metadata only; waveform samples and discarded
+evaluation history remain absent.
+
+## Capture Monitor v1
+
+Capture Monitor uses `CaptureMonitorRequest`, `plan_capture_monitor()`, and
+`run_capture_monitor()` for a finite repeated waveform capture session. It
+supports multiple selected channels, `1000`, `5000`, or `10000` points per
+capture, BYTE or WORD transfer, a positive capture count, a finite
+non-negative relative interval, and optional result saving. It uses current
+waveform retrieval behavior without trigger setup, Single, trigger waiting, or
+force trigger.
+
+Retention defaults to `250000` points per channel. It must be at least one
+capture and an integer multiple of points per capture. Core keeps a bounded
+deque of complete acquisition chunks; overflow drops the oldest complete
+chunk. Retention is per channel, so selecting more channels does not divide the
+point limit among them. Running maximum, minimum, peak-to-peak, and absolute
+maximum statistics cover every observed sample in the session even after old
+chunks are dropped. The compact result also reports completed captures and
+observed, retained, and dropped points per channel.
+
+Repeated captures are not represented as one continuous time-domain
+acquisition. Each chunk keeps its local `time_s`; acquisition and communication
+gaps may exist between chunks. Runtime presentation uses an accumulated global
+sample index as its main X axis.
+
+Saving is enabled by default. Natural completion writes only the final retained
+window to the dedicated `retained_waveforms.csv`, plus `manifest.json` and
+`scpi.log`; dropped waveforms are never streamed or reconstructed. CSV rows
+include `capture_index`, `global_sample_index`, local `sample_index`, local
+`time_s`, and one value column per selected channel. With saving disabled, no
+workflow artifacts are created. On cooperative cancellation or
+`KeyboardInterrupt`, saving remains enabled only when requested: if at least
+one successful capture is retained, the stopped final window is saved while
+the workflow remains cancelled or interrupted; cancellation before the first
+successful capture creates no empty waveform CSV.
+
+The optional monitor sample callback reports only the newly completed chunk
+and compact counters/statistics. It is intended for bounded adapter runtime
+presentation and does not add waveform arrays to final Core, CLI, or Worker
+results. Planning describes one representative capture and the final retained
+artifact shape.
 
 ## Generic Sequence v1
 

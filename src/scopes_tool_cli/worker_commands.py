@@ -91,6 +91,8 @@ _CORE_WORKFLOW_COMMANDS = {
     "measure-log",
     "measure-until",
     "capture-batch",
+    "capture-until",
+    "capture-monitor",
     "triggered-measure-loop",
     "triggered-capture-series",
 }
@@ -119,6 +121,8 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "channel-summary",
     "capture",
     "capture-batch",
+    "capture-until",
+    "capture-monitor",
     "screenshot",
     "smoke",
     "measure",
@@ -337,6 +341,8 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
         raise OscilloscopeError("arguments must be a JSON object")
     arguments = _normalize_optional_persistence_worker_arguments(command, arguments)
     arguments = _normalize_capture_batch_worker_arguments(command, arguments)
+    arguments = _normalize_capture_until_worker_arguments(command, arguments)
+    arguments = _normalize_capture_monitor_worker_arguments(command, arguments)
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments)
     arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
@@ -352,6 +358,8 @@ _REQUIRED_WORKER_OUTPUT_ARGUMENTS = {
     "capture": ("csv", "meta"),
     "screenshot": ("output",),
     "capture-batch": ("output_dir",),
+    "capture-until": ("output_dir",),
+    "capture-monitor": ("output_dir",),
     "measure-log": ("output_dir",),
     "measure-until": ("output_dir",),
     "triggered-measure-loop": ("output_dir",),
@@ -370,7 +378,12 @@ def _validate_required_worker_outputs(
         return
     if command == "screenshot" and arguments.get("query_hardcopy") is True:
         return
-    if command in {"measure-log", "measure-until", "triggered-measure-loop"}:
+    if command in {
+        "measure-log",
+        "measure-until",
+        "triggered-measure-loop",
+        "capture-monitor",
+    }:
         if arguments.get("save_results", True) is False:
             return
     for key in required:
@@ -386,6 +399,8 @@ def parse_domain_command(
 ) -> argparse.Namespace:
     arguments = _normalize_optional_persistence_worker_arguments(command, arguments)
     arguments = _normalize_capture_batch_worker_arguments(command, arguments)
+    arguments = _normalize_capture_until_worker_arguments(command, arguments)
+    arguments = _normalize_capture_monitor_worker_arguments(command, arguments)
     arguments = _normalize_segmented_memory_worker_arguments(command, arguments)
     arguments = _normalize_segmented_capture_worker_arguments(command, arguments, runtime)
     arguments = _normalize_triggered_measure_loop_worker_arguments(command, arguments)
@@ -465,7 +480,12 @@ def _normalize_optional_persistence_worker_arguments(
     command: str,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    if command not in {"measure-log", "measure-until", "triggered-measure-loop"}:
+    if command not in {
+        "measure-log",
+        "measure-until",
+        "triggered-measure-loop",
+        "capture-monitor",
+    }:
         return arguments
     values = dict(arguments)
     if "save_results" in values and not isinstance(values["save_results"], bool):
@@ -493,6 +513,101 @@ def _normalize_capture_batch_worker_arguments(
         raise OscilloscopeError(
             f"capture-batch unknown argument: {sorted(unknown)[0]}"
         )
+    return dict(arguments)
+
+
+def _normalize_capture_until_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if command != "capture-until":
+        return arguments
+    allowed = {
+        "channel",
+        "condition_channel",
+        "points",
+        "format",
+        "metric",
+        "operator",
+        "threshold",
+        "count",
+        "timeout_seconds",
+        "interval_seconds",
+        "output_dir",
+    }
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"capture-until unknown argument: {sorted(unknown)[0]}"
+        )
+    for required in (
+        "channel",
+        "condition_channel",
+        "metric",
+        "operator",
+        "threshold",
+        "timeout_seconds",
+    ):
+        if required not in arguments:
+            raise OscilloscopeError(f"capture-until requires argument {required}")
+    channels = arguments["channel"]
+    if not isinstance(channels, list) or not channels:
+        raise OscilloscopeError(
+            "capture-until argument channel must be a non-empty array"
+        )
+    condition_channel = arguments["condition_channel"]
+    if isinstance(condition_channel, bool) or not isinstance(condition_channel, int):
+        raise OscilloscopeError(
+            "capture-until argument condition_channel must be an integer"
+        )
+    count = arguments.get("count", 1)
+    if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 255:
+        raise OscilloscopeError(
+            "capture-until argument count must be an integer between 1 and 255"
+        )
+    return dict(arguments)
+
+
+def _normalize_capture_monitor_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if command != "capture-monitor":
+        return arguments
+    allowed = {
+        "channel",
+        "points",
+        "format",
+        "count",
+        "interval_seconds",
+        "retention_points",
+        "save_results",
+        "output_dir",
+    }
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise OscilloscopeError(
+            f"capture-monitor unknown argument: {sorted(unknown)[0]}"
+        )
+    for required in ("channel", "count"):
+        if required not in arguments:
+            raise OscilloscopeError(f"capture-monitor requires argument {required}")
+    channels = arguments["channel"]
+    if not isinstance(channels, list) or not channels:
+        raise OscilloscopeError(
+            "capture-monitor argument channel must be a non-empty array"
+        )
+    count = arguments["count"]
+    if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+        raise OscilloscopeError(
+            "capture-monitor argument count must be an integer of at least 1"
+        )
+    if "retention_points" in arguments:
+        retention = arguments["retention_points"]
+        if isinstance(retention, bool) or not isinstance(retention, int):
+            raise OscilloscopeError(
+                "capture-monitor argument retention_points must be an integer"
+            )
     return dict(arguments)
 
 

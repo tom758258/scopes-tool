@@ -473,6 +473,7 @@ async function executeCommand(command, parameters, options = {}) {
   try {
     const job = await runJob(command, parameters, commandContext, (updated) => {
       currentJobId = updated.job_id;
+      if (typeof workflowEditor !== "undefined") workflowEditor?.handleJobUpdate(updated);
       setExecutionStatus({ status: updated.status });
       resultPresentation = { kind: "job", job: updated, message: null };
       renderCurrentResult();

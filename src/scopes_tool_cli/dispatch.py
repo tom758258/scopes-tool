@@ -226,6 +226,10 @@ def _dispatch_command(
         return workflows._cmd_capture(args)
     if args.command == "capture-batch":
         return workflows._cmd_capture_batch(args, stop_requested=stop_requested)
+    if args.command == "capture-until":
+        return workflows._cmd_capture_until(args, stop_requested=stop_requested)
+    if args.command == "capture-monitor":
+        return workflows._cmd_capture_monitor(args, stop_requested=stop_requested)
     if args.command == "measure-log":
         return workflows._cmd_measure_log(args, stop_requested=stop_requested)
     if args.command == "measure-until":

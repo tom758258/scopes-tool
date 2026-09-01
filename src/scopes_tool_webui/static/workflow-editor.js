@@ -102,6 +102,11 @@ export class WorkflowEditor {
     this.pairRows = [];
     this.container.replaceChildren();
 
+    if (["capture-until", "capture-monitor"].includes(definition.id)) {
+      this.renderWaveformWorkflow(definition, fields, draft);
+      return;
+    }
+
     const channelField = fieldByName(fields, "channels");
     const channels = (channelField.options || []).map(String);
     this.container.append(
@@ -137,6 +142,8 @@ export class WorkflowEditor {
     };
     for (const name of [
       "count", "duration_seconds", "trigger_timeout_seconds", "interval_seconds",
+      "condition_channel", "points", "format", "metric", "operator",
+      "threshold", "timeout_seconds", "retention_points",
     ]) {
       const value = fieldByName(fields, name).default;
       values[name] = value === undefined ? "" : String(value);
@@ -272,6 +279,103 @@ export class WorkflowEditor {
     return { wrapper, input };
   }
 
+  renderWaveformWorkflow(definition, fields, draft) {
+    const channelField = fieldByName(fields, "channels");
+    const channels = (channelField.options || []).map(String);
+    const channelSection = this.buildChoiceSection(
+      "workflow.editor.channels", "channels", channels, draft.channels,
+    );
+    this.container.append(channelSection);
+    for (const input of this.controls.channels) {
+      input.addEventListener("change", () => this.refreshConditionChannel());
+    }
+
+    const settings = this.buildSection("workflow.editor.captureSettings");
+    const grid = document.createElement("div");
+    grid.className = "workflow-editor-limits";
+    const enumNames = definition.id === "capture-until"
+      ? ["condition_channel", "points", "format", "metric", "operator"]
+      : ["points", "format"];
+    const numberNames = definition.id === "capture-until"
+      ? ["threshold", "count", "timeout_seconds", "interval_seconds"]
+      : ["count", "interval_seconds", "retention_points"];
+    for (const name of enumNames) {
+      const field = fieldByName(fields, name);
+      const control = this.buildEnumField(field, draft[name]);
+      this.controls[name] = control.input;
+      grid.append(control.wrapper);
+    }
+    for (const name of numberNames) {
+      const field = fieldByName(fields, name);
+      const control = this.buildNumberField(field, draft[name]);
+      this.controls[name] = control.input;
+      grid.append(control.wrapper);
+    }
+    if (definition.id === "capture-monitor") {
+      const saveWrapper = document.createElement("label");
+      saveWrapper.className = "field field-boolean workflow-editor-save";
+      const label = document.createElement("span");
+      label.textContent = translate("field.save_results");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = draft.save_results !== false;
+      input.addEventListener("change", () => this.captureDraft());
+      saveWrapper.append(label, input);
+      this.controls.save_results = input;
+      grid.append(saveWrapper);
+    }
+    settings.append(grid);
+    this.container.append(settings);
+
+    if (definition.id === "capture-until") {
+      this.refreshConditionChannel();
+    } else {
+      const warning = document.createElement("p");
+      warning.className = "compact-note workflow-monitor-warning";
+      warning.textContent = translate("workflow.monitor.retentionWarning");
+      this.monitorStatus = document.createElement("pre");
+      this.monitorStatus.className = "workflow-monitor-status";
+      this.monitorCanvas = document.createElement("canvas");
+      this.monitorCanvas.className = "workflow-monitor-plot";
+      this.monitorCanvas.width = 800;
+      this.monitorCanvas.height = 260;
+      this.monitorCanvas.setAttribute("aria-label", translate("workflow.monitor.plot"));
+      this.container.append(warning, this.monitorStatus, this.monitorCanvas);
+      this.monitorChunks ||= [];
+      this.renderMonitorRuntime();
+    }
+  }
+
+  buildEnumField(field, value) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "field";
+    const label = document.createElement("span");
+    label.textContent = translate(`field.${field.name}`);
+    const input = document.createElement("select");
+    for (const option of field.options || []) {
+      const text = field.name === "condition_channel"
+        ? channelLabel(option)
+        : translatedChoice(option);
+      input.append(new Option(text, option));
+    }
+    input.value = String(value ?? field.default ?? "");
+    input.addEventListener("change", () => this.captureDraft());
+    wrapper.append(label, input);
+    return { wrapper, input };
+  }
+
+  refreshConditionChannel() {
+    const select = this.controls.condition_channel;
+    if (!select) return;
+    const selected = this.checkedValues("channels");
+    const previous = select.value;
+    select.replaceChildren(...selected.map(
+      (channel) => new Option(channelLabel(channel), channel),
+    ));
+    select.value = selected.includes(previous) ? previous : (selected[0] || "");
+    this.captureDraft();
+  }
+
   buildLimitsSection(definition, fields, draft) {
     const section = this.buildSection("workflow.editor.runLimits");
     const limits = document.createElement("div");
@@ -332,6 +436,25 @@ export class WorkflowEditor {
 
   captureDraft() {
     if (!this.renderedKey || !this.controls.channels) return;
+    const definition = this.selectedDefinition();
+    if (["capture-until", "capture-monitor"].includes(definition?.id)) {
+      const draft = {
+        channels: this.checkedValues("channels"),
+        condition_channel: this.controls.condition_channel?.value || "",
+        points: this.controls.points?.value || "",
+        format: this.controls.format?.value || "",
+        metric: this.controls.metric?.value || "",
+        operator: this.controls.operator?.value || "",
+        threshold: this.controls.threshold?.value || "",
+        count: this.controls.count?.value || "",
+        timeout_seconds: this.controls.timeout_seconds?.value || "",
+        interval_seconds: this.controls.interval_seconds?.value || "",
+        retention_points: this.controls.retention_points?.value || "",
+        save_results: this.controls.save_results?.checked !== false,
+      };
+      this.drafts.set(this.renderedKey, draft);
+      return;
+    }
     const draft = {
       channels: this.checkedValues("channels"),
       items: this.checkedValues("items"),
@@ -361,6 +484,9 @@ export class WorkflowEditor {
     const definition = this.selectedDefinition();
     const draft = this.drafts.get(this.currentKey());
     if (!definition || !draft) return null;
+    if (["capture-until", "capture-monitor"].includes(definition.id)) {
+      return this.waveformWorkflowValues(definition, draft);
+    }
     for (const name of [
       "count", "duration_seconds", "trigger_timeout_seconds", "interval_seconds",
     ]) {
@@ -423,11 +549,121 @@ export class WorkflowEditor {
     return parameters;
   }
 
+  waveformWorkflowValues(definition, draft) {
+    if (!draft.channels.length) return null;
+    const numberNames = definition.id === "capture-until"
+      ? ["threshold", "count", "timeout_seconds", "interval_seconds"]
+      : ["count", "interval_seconds", "retention_points"];
+    for (const name of numberNames) {
+      const input = this.controls[name];
+      input?.setCustomValidity?.("");
+      if (input && input.value !== "" && input.dataset.exclusiveMinimum !== undefined
+          && Number(input.value) <= Number(input.dataset.exclusiveMinimum)) {
+        input.setCustomValidity(translate("form.greaterThan", {
+          value: input.dataset.exclusiveMinimum,
+        }));
+      }
+      if (input && !input.checkValidity()) {
+        input.reportValidity?.();
+        return null;
+      }
+    }
+    const parameters = {
+      channels: draft.channels.join(","),
+      points: Number(draft.points),
+      format: draft.format,
+      count: Number(draft.count),
+      interval_seconds: Number(draft.interval_seconds),
+    };
+    if (definition.id === "capture-until") {
+      if (!draft.condition_channel) return null;
+      Object.assign(parameters, {
+        condition_channel: Number(draft.condition_channel),
+        metric: draft.metric,
+        operator: draft.operator,
+        threshold: Number(draft.threshold),
+        timeout_seconds: Number(draft.timeout_seconds),
+      });
+    } else {
+      parameters.retention_points = Number(draft.retention_points);
+      parameters.save_results = draft.save_results !== false;
+    }
+    return parameters;
+  }
+
+  handleJobUpdate(job) {
+    if (job?.command !== "capture-monitor" || !job.monitor_runtime) return;
+    const reset = Boolean(job.monitor_runtime.reset);
+    if (reset) this.monitorChunks = [];
+    for (const update of job.monitor_runtime.updates || []) {
+      const dropped = reset ? 0 : Number(update.dropped_capture_count || 0);
+      if (dropped > 0) this.monitorChunks.splice(0, dropped);
+      this.monitorChunks.push(update);
+    }
+    this.monitorSummary = job.monitor_runtime.summary || this.monitorSummary;
+    this.renderMonitorRuntime();
+  }
+
+  renderMonitorRuntime() {
+    if (this.monitorStatus) {
+      const summary = this.monitorSummary || {};
+      const metrics = Object.entries(summary.metrics || {}).map(
+        ([channel, values]) => `${channel}.max=${values.maximum}`,
+      ).join(" ");
+      this.monitorStatus.textContent = summary.completed_count
+        ? `${summary.completed_count}/${summary.requested_count} observed=${summary.total_observed_points} retained=${summary.retained_points} dropped=${summary.dropped_points} ${metrics}`.trim()
+        : translate("workflow.monitor.waiting");
+    }
+    const context = this.monitorCanvas?.getContext?.("2d");
+    if (!context || !this.monitorChunks?.length) return;
+    const width = this.monitorCanvas.width;
+    const height = this.monitorCanvas.height;
+    context.clearRect(0, 0, width, height);
+    const series = {};
+    for (const chunk of this.monitorChunks) {
+      for (const [channel, data] of Object.entries(chunk.channels || {})) {
+        const target = (series[channel] ||= []);
+        for (let index = 0; index < data.values.length; index += 1) {
+          target.push([chunk.global_start_index + index, data.values[index]]);
+        }
+      }
+    }
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const values of Object.values(series)) {
+      for (const [x, y] of values) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+    }
+    if (!Number.isFinite(minX)) return;
+    const colors = ["#1769aa", "#c44d00", "#2e7d32", "#7b1fa2"];
+    Object.values(series).forEach((values, channelIndex) => {
+      context.beginPath();
+      context.strokeStyle = colors[channelIndex % colors.length];
+      values.forEach(([x, y], index) => {
+        const px = 8 + ((x - minX) / Math.max(1, maxX - minX)) * (width - 16);
+        const py = height - 8 - ((y - minY) / Math.max(1e-12, maxY - minY)) * (height - 16);
+        if (index === 0) context.moveTo(px, py); else context.lineTo(px, py);
+      });
+      context.stroke();
+    });
+  }
+
   async submit() {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
     const definition = this.selectedDefinition();
     const parameters = this.values();
     if (!definition || parameters === null) return null;
+    if (definition.id === "capture-monitor") {
+      this.monitorChunks = [];
+      this.monitorSummary = null;
+      this.renderMonitorRuntime();
+    }
     this.setBusy(true);
     try {
       return await this.hooks.executeCommand(

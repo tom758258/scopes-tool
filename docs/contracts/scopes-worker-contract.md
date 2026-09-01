@@ -149,16 +149,16 @@ cancelled job. Running jobs
 pass the existing cancellation state into Core workflows. `measure-log` checks
 between completed measurement queries and at completed-row boundaries;
 `measure-until` checks before each query and during relative interval waits;
-`capture-batch` checks between captures; `triggered-measure-loop` and
-`triggered-capture-series` check during trigger polling and interval waits.
-These workflows use interruptible interval waits.
+`capture-batch`, `capture-until`, and `capture-monitor` check between captures;
+`triggered-measure-loop` and `triggered-capture-series` check during trigger
+polling and interval waits. These workflows use interruptible interval waits.
 They stop before the next iteration and preserve completed artifacts. A
 blocking device read is not forcibly interrupted and may not stop immediately.
 Finite workflow termination precedence is `instrument_error > completed >
 cancelled`; a stop request observed after the count, duration, or measurement
 condition is complete does not replace the completed Core result. For
-`measure-log`, `measure-until`, `capture-batch`, `triggered-measure-loop`, and
-`triggered-capture-series`, the
+`measure-log`, `measure-until`, `capture-batch`, `capture-until`,
+`capture-monitor`, `triggered-measure-loop`, and `triggered-capture-series`, the
 Worker maps Core `completed` to `succeeded`, Core
 `cancelled` to `cancelled` with exit code 3, and Core `instrument_error` or
 `error` to `failed`. A late Worker stop flag does not replace these
@@ -177,7 +177,8 @@ Worker `/command` supports the existing Scopes capability surface:
 - `run`, `single`, `stop-acquisition`, `force-trigger`
 - `acquisition`, `acquisition-check`, `sample-rate`, `acquisition-points`,
   `record-length`, `segmented-memory`, `segmented-capture`
-- `capture`, `capture-batch`, `triggered-capture-series`, `screenshot`, `smoke`
+- `capture`, `capture-batch`, `capture-until`, `capture-monitor`,
+  `triggered-capture-series`, `screenshot`, `smoke`
 - `channel-summary`
 - `measure`, `measure-results`, `measure-stats`, `measure-sweep`, `measure-log`,
   `measure-until`, `triggered-measure-loop`,
@@ -258,6 +259,73 @@ alias.
   }
 }
 ```
+
+`capture-until` accepts only required `channel` (a non-empty array of analog
+channel integers or the single value `"all"`), required integer
+`condition_channel` included in that selection, optional `points`, optional
+`format`, required `metric` (`"max"`, `"min"`, `"peak-to-peak"`, or
+`"abs-max"`), required `operator` (`"gt"`, `"gte"`, `"lt"`, or `"lte"`),
+required finite `threshold`, optional matching `count` from `1` through `255`
+(default `1`), required positive finite `timeout_seconds`, optional
+non-negative finite `interval_seconds`, and required caller-supplied
+`output_dir`. The count limit is a Scopes Tool product boundary, not a hardware
+limit. Unknown fields and `log_scpi` are rejected.
+
+```json
+{
+  "schema_version": 2,
+  "command": "capture-until",
+  "arguments": {
+    "channel": [1, 2],
+    "condition_channel": 1,
+    "points": 1000,
+    "format": "byte",
+    "metric": "max",
+    "operator": "gt",
+    "threshold": 1.5,
+    "count": 3,
+    "timeout_seconds": 60,
+    "interval_seconds": 0,
+    "output_dir": "/results/run-001/capture-until"
+  }
+}
+```
+
+The condition is evaluated from the retrieved condition-channel samples. A
+match persists that exact acquisition for every selected channel; it does not
+perform another capture. Non-matches create no waveform or metadata artifacts.
+One timeout covers the entire workflow and does not reset after matches.
+
+`capture-monitor` accepts only required `channel` (a non-empty array of analog
+channel integers or the single value `"all"`), optional `points`, optional
+`format`, required positive integer `count`, optional non-negative finite
+`interval_seconds`, optional integer `retention_points` (default `250000` per
+channel), optional boolean `save_results` (default `true`), and `output_dir`
+when saving is enabled. Retention must be at least `points` and an integer
+multiple of `points`. Unknown fields and `log_scpi` are rejected.
+
+```json
+{
+  "schema_version": 2,
+  "command": "capture-monitor",
+  "arguments": {
+    "channel": [1, 2],
+    "points": 1000,
+    "format": "byte",
+    "count": 2000,
+    "interval_seconds": 0,
+    "retention_points": 250000,
+    "save_results": true,
+    "output_dir": "/results/run-001/capture-monitor"
+  }
+}
+```
+
+Overflow drops the oldest complete capture chunk. Compact running metrics cover
+all observed samples even after old waveform chunks are dropped. Final Worker
+results contain counters and metrics but no waveform sample arrays. Repeated
+captures are separate acquisitions: `time_s` is local to each chunk and the
+global sample index does not imply continuous time.
 
 `triggered-capture-series` accepts only required `channel` (a non-empty array
 of positive channel integers or the single value `"all"`), optional `points`,
@@ -2255,15 +2323,22 @@ HTTP `400` before enqueue, backend open, or SCPI when file saving is enabled:
   are written only when the trigger outcome allows capture.
 - `screenshot`: requires an `output` image path. Query-only `query_hardcopy`
   creates no screenshot artifact and needs no output.
-- `capture-batch`, `triggered-capture-series`, `segmented-capture`, `smoke`, and
-  `acquisition-check`: require a caller-supplied `output_dir`; domain artifacts
-  such as manifests, SCPI logs, measurement CSVs, report files, and segment
-  CSVs are written inside that directory under the existing Core contracts.
-- `measure-log`, `measure-until`, and `triggered-measure-loop`: accept optional
+- `capture-batch`, `capture-until`, `triggered-capture-series`,
+  `segmented-capture`, `smoke`, and `acquisition-check`: require a
+  caller-supplied `output_dir`; domain artifacts such as waveform files,
+  manifests, SCPI logs, measurement CSVs, report files, and segment CSVs are
+  written inside that directory under the existing Core contracts.
+- `measure-log`, `measure-until`, `triggered-measure-loop`, and
+  `capture-monitor`: accept optional
   boolean `save_results`, defaulting to `true`. Saving requires a caller-supplied
   `output_dir`. With `save_results: false`, no output directory or domain
   artifacts are created, `files` is empty, and `result` still contains the
-  compact workflow summary and `last_measurement` when a measurement completed.
+  compact workflow summary. Measurement workflows also retain
+  `last_measurement` when a measurement completed. A saved Capture Monitor run
+  writes only its final retained waveform window. If cancelled after at least
+  one successful capture it saves the stopped retained window while Worker
+  state remains `cancelled`; cancellation before the first capture creates no
+  empty waveform CSV.
 - `serial-lister-export`: requires an `output` CSV path.
 
 Command artifacts keep existing Scopes meanings: CSV waveform data, PNG plots
