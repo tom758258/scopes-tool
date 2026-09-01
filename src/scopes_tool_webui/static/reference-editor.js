@@ -1,8 +1,7 @@
 import { CommandForm } from "/static/command-form.js";
 import { translate } from "/static/i18n.js";
 
-const REFERENCE_ACTIONS = [
-  "reference-save",
+const REFERENCE_MANAGEMENT_ACTIONS = [
   "reference-display",
   "reference-label",
   "reference-clear",
@@ -117,44 +116,66 @@ export class ReferenceEditor {
   buildActionSections() {
     this.entries = [];
     this.actionsHost.replaceChildren();
-    for (const id of REFERENCE_ACTIONS) {
-      const command = this.actionDefinition(id);
-      if (!command || !this.catalog.supported(command)) continue;
+    const save = this.buildActionEntry("reference-save", true);
+    if (save) {
       const section = document.createElement("section");
       section.className = "trigger-editor-section";
-      const heading = document.createElement("strong");
-      heading.className = "trigger-editor-heading";
-      heading.textContent = this.catalog.commandLabel(command);
-      section.append(heading);
-      const description = this.catalog.description?.(command);
-      if (description) {
-        const note = document.createElement("p");
-        note.className = "muted compact-note";
-        note.textContent = description;
-        section.append(note);
-      }
-
-      let form = null;
-      if (command.fields.length) {
-        const formHost = document.createElement("div");
-        form = new CommandForm(formHost, this.catalog);
-        form.render(command);
-        section.append(formHost);
-      }
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = id === "reference-clear" ? "danger" : "secondary";
-      button.textContent = translate(
-        command.presentation.kind === "setting"
-          ? "actions.apply"
-          : `actions.${command.presentation.action}`,
-      );
-      const entry = { id, form, button, kind: command.presentation.kind };
-      button.addEventListener("click", () => void this.submit(entry));
-      section.append(button);
+      this.appendActionHeading(section, save.command);
+      section.append(save.formHost, save.button);
       this.actionsHost.append(section);
-      this.entries.push(entry);
+      this.entries.push(save.entry);
     }
+
+    const management = document.createElement("section");
+    management.className = "trigger-editor-section";
+    for (const id of REFERENCE_MANAGEMENT_ACTIONS) {
+      const action = this.buildActionEntry(id, false);
+      if (!action) continue;
+      const control = document.createElement("div");
+      control.className = "reference-editor-control";
+      this.appendActionHeading(control, action.command);
+      if (action.formHost) control.append(action.formHost);
+      control.append(action.button);
+      management.append(control);
+      this.entries.push(action.entry);
+    }
+    if (management.children.length) this.actionsHost.append(management);
+  }
+
+  appendActionHeading(container, command) {
+    const heading = document.createElement("strong");
+    heading.className = "trigger-editor-heading";
+    heading.textContent = this.catalog.commandLabel(command);
+    container.append(heading);
+  }
+
+  buildActionEntry(id, isSaveWorkflow) {
+    const command = this.actionDefinition(id);
+    if (!command || !this.catalog.supported(command)) return null;
+
+    let form = null;
+    let formHost = null;
+    if (command.fields.length) {
+      formHost = document.createElement("div");
+      form = new CommandForm(formHost, this.catalog);
+      form.render(command);
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    const style = isSaveWorkflow ? "primary" : id === "reference-clear" ? "danger" : "secondary";
+    button.className = `${style} trigger-editor-action`;
+    button.textContent = isSaveWorkflow
+      ? translate("reference.editor.saveAndDisplay")
+      : translate(
+          command.presentation.kind === "setting"
+            ? "actions.apply"
+            : `actions.${command.presentation.action}`,
+        );
+    const entry = { id, form, button, kind: command.presentation.kind };
+    button.addEventListener("click", () => void (
+      isSaveWorkflow ? this.saveAndDisplay(entry) : this.submit(entry)
+    ));
+    return { command, entry, formHost, button };
   }
 
   selectedSlot() {
@@ -212,6 +233,34 @@ export class ReferenceEditor {
         await this.readCurrentState();
       }
       return job;
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  async saveAndDisplay(entry) {
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
+    const slot = this.selectedSlot();
+    const values = entry.form?.values();
+    if (slot === null || slot === undefined || values === null) return null;
+    this.setBusy(true);
+    try {
+      const saveJob = await this.hooks.executeCommand(
+        "reference-save",
+        { ...values, slot },
+        { intent: "command" },
+      );
+      if (saveJob?.status !== "completed") return saveJob;
+      entry.form.clearDirty();
+
+      const displayJob = await this.hooks.executeCommand(
+        "reference-display",
+        { action: "set", slot, enabled: true },
+        { intent: "apply" },
+      );
+      if (displayJob?.status !== "completed") return displayJob;
+      await this.readCurrentState();
+      return displayJob;
     } finally {
       this.setBusy(false);
     }

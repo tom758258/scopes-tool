@@ -150,13 +150,15 @@ Grouping is presentation only: it does not change Core command semantics,
 model or capability gating, or the metadata-driven forms. Dedicated editors
 use the existing groups where described below.
 
-Selecting Reference waveform opens one workspace for the existing Save,
-Display, Label, Clear, and aggregate state-query commands. The shared reference
-waveform selector is visible before Live identity is available and is then
-limited by the detected model's projected capabilities. Selection is passive;
-explicit Refresh uses `reference-query` to read display and label state for the
-selected waveform. Each action still submits its existing command through the
-normal foreground execution path.
+Selecting Reference waveform opens one workspace for saving and comparing a
+source channel with a selected reference waveform. Save and display runs the
+existing `reference-save` command, then `reference-display` only after the save
+completes, and finally refreshes display and label state with `reference-query`.
+The shared reference waveform selector is visible before Live identity is
+available and is then limited by the detected model's projected capabilities.
+Selection is passive; explicit Refresh reads only display and label state for
+the selected waveform. Display, Label, and Clear remain independent actions
+through the normal foreground execution path.
 
 Selecting `measure-log` or `triggered-measure-loop` opens the dedicated
 Workflow editor. It provides model-projected analog channel and measurement

@@ -318,6 +318,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .trigger-editor-section:first-child { margin-top: 0; }
 .trigger-editor-section .command-form { padding-top: 0; }
 .trigger-editor-action { justify-self: start; min-height: var(--control-h); }
+.reference-editor-control { display: grid; gap: 8px; }
+.reference-editor-control + .reference-editor-control { padding-top: 10px; margin-top: 4px; border-top: 1px dashed var(--line); }
 .save-export-command { display: grid; gap: 8px; padding-top: 10px; }
 .save-export-command + .save-export-command { margin-top: 4px; border-top: 1px dashed var(--line); }
 .search-editor { display: grid; gap: 14px; padding-top: 12px; }

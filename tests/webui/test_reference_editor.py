@@ -32,6 +32,7 @@ def test_reference_editor_wiring_and_localization() -> None:
         "command.reference-waveform",
         "description.reference-waveform",
         "reference.editor.title",
+        "reference.editor.saveAndDisplay",
         "reference.editor.currentLoaded",
         "reference.editor.readFailed",
         "command.save-export",
@@ -98,7 +99,7 @@ REFERENCE_EDITOR_HARNESS = r'''
           select.dataset.field = "slot";
           this.container.append(select);
         } else if (command.id === "reference-save") {
-          this.valuesResult = { source_channel: 2 };
+          this.valuesResult = { source_channel: 1 };
         } else if (command.id === "reference-display") {
           this.valuesResult = { action: "set", enabled: true };
         } else if (command.id === "reference-label") {
@@ -156,12 +157,13 @@ REFERENCE_EDITOR_HARNESS = r'''
     };
     const env = { available: false, executionBusy: false, contextKey: "live||" };
     const submitted = [];
+    const commandStatuses = [];
     const hooks = {
       executeCommand: async (command, parameters, options) => {
         submitted.push({ command, parameters, intent: options?.intent });
         return {
           job_id: `job-${submitted.length}`,
-          status: "completed",
+          status: commandStatuses.shift() || "completed",
           result: { result: { reference: { displayed: true, label: "BASE" } } },
         };
       },
@@ -219,9 +221,28 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
           1,
         );
 
-        for (const id of [
-          "reference-save", "reference-display", "reference-label", "reference-clear",
-        ]) {
+        submitted.length = 0;
+        const save = editor.entries.find((entry) => entry.id === "reference-save");
+        await editor.saveAndDisplay(save);
+        assert.deepEqual(submitted, [
+          {
+            command: "reference-save",
+            parameters: { source_channel: 1, slot: 1 },
+            intent: "command",
+          },
+          {
+            command: "reference-display",
+            parameters: { action: "set", slot: 1, enabled: true },
+            intent: "apply",
+          },
+          {
+            command: "reference-query",
+            parameters: { slot: 1 },
+            intent: "readback",
+          },
+        ]);
+
+        for (const id of ["reference-display", "reference-label", "reference-clear"]) {
           submitted.length = 0;
           const entry = editor.entries.find((item) => item.id === id);
           await editor.submit(entry);
@@ -232,7 +253,7 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
         }
         assert.deepEqual(
           editor.entries.find((entry) => entry.id === "reference-save").form.valuesResult,
-          { source_channel: 2 },
+          { source_channel: 1 },
         );
         assert.equal(
           editor.entries.find((entry) => entry.id === "reference-display").form
@@ -259,7 +280,7 @@ def test_reference_editor_does_not_submit_invalid_form_and_clear_needs_no_form()
 
         const save = editor.entries.find((entry) => entry.id === "reference-save");
         save.form.valuesResult = null;
-        assert.equal(await editor.submit(save), null);
+        assert.equal(await editor.saveAndDisplay(save), null);
         assert.equal(submitted.length, 0);
 
         const clear = editor.entries.find((entry) => entry.id === "reference-clear");
@@ -268,6 +289,34 @@ def test_reference_editor_does_not_submit_invalid_form_and_clear_needs_no_form()
         assert.equal(job.status, "completed");
         assert.equal(submitted[0].command, "reference-clear");
         assert.deepEqual(submitted[0].parameters, { slot: 1 });
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_reference_save_failure_short_circuits_save_and_display() -> None:
+    script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.available = true;
+        editor.schedulePresentation();
+        await settle();
+
+        commandStatuses.push("failed");
+        const save = editor.entries.find((entry) => entry.id === "reference-save");
+        const job = await editor.saveAndDisplay(save);
+        assert.equal(job.status, "failed");
+        assert.deepEqual(submitted, [{
+          command: "reference-save",
+          parameters: { source_channel: 1, slot: 1 },
+          intent: "command",
+        }]);
+        assert.equal(save.form.clearCalls, 0);
         ''')
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],

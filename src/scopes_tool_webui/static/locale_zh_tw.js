@@ -907,6 +907,7 @@ export const zhTW = {
   "search.editor.eventUnavailable": "此儀器不支援搜尋事件導覽。",
   "search.editor.serialUnavailable": "請先連接並識別具備串列搜尋匯流排的支援儀器，再設定串列搜尋。",
   "reference.editor.title": "參考波形",
+  "reference.editor.saveAndDisplay": "儲存並顯示",
   "reference.editor.currentLoaded": "已載入目前的參考波形狀態。",
   "reference.editor.readFailed": "無法讀取目前的參考波形狀態。",
   "save-export.editor.title": "儲存 / 匯出",

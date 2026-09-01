@@ -907,6 +907,7 @@ export const en = {
   "search.editor.eventUnavailable": "Search event navigation is not available for this instrument.",
   "search.editor.serialUnavailable": "Identify a supported instrument with Serial Search buses to configure Serial Search.",
   "reference.editor.title": "Reference waveform",
+  "reference.editor.saveAndDisplay": "Save and display",
   "reference.editor.currentLoaded": "Current reference waveform state loaded.",
   "reference.editor.readFailed": "Current reference waveform state could not be read.",
   "save-export.editor.title": "Save / Export",
