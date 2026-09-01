@@ -541,7 +541,7 @@ def test_capture_points_integer_options_rejected_pre_queue() -> None:
             "mode": "live",
             "model_id": MODEL_ID,
             "resource": "USB0::TEST::INSTR",
-            "parameters": {"channel": 1, "points": points, "format": "byte"},
+            "parameters": {"channels": "1", "points": points, "format": "byte"},
         })
         assert request["parameters"]["points"] == points
 
@@ -552,7 +552,7 @@ def test_capture_points_integer_options_rejected_pre_queue() -> None:
             "mode": "live",
             "model_id": MODEL_ID,
             "resource": "USB0::TEST::INSTR",
-            "parameters": {"channel": 1, "points": 1001, "format": "byte"},
+            "parameters": {"channels": "1", "points": 1001, "format": "byte"},
         })
 
     # string still rejected as integer type
@@ -562,7 +562,7 @@ def test_capture_points_integer_options_rejected_pre_queue() -> None:
             "mode": "live",
             "model_id": MODEL_ID,
             "resource": "USB0::TEST::INSTR",
-            "parameters": {"channel": 1, "points": "5000", "format": "byte"},
+            "parameters": {"channels": "1", "points": "5000", "format": "byte"},
         })
 
 
@@ -1027,7 +1027,7 @@ def test_simulated_measure_and_dry_run_capture_complete() -> None:
         client,
         "capture",
         "dry-run",
-        {"channel": 1, "points": 1000, "format": "byte"},
+        {"channels": "1", "points": 1000, "format": "byte"},
     )
     assert dry_run["status"] == "completed"
     assert dry_run["result"]["result"]["status"] == "planned"
@@ -1164,7 +1164,7 @@ def test_simulated_capture_artifact_is_registered_and_downloadable(tmp_path) -> 
         client,
         "capture",
         "simulate",
-        {"channel": 1, "points": 1000, "format": "byte"},
+        {"channels": "1", "points": 1000, "format": "byte"},
         pc_output_dir=tmp_path / "capture-output",
     )
 
@@ -1183,7 +1183,7 @@ def test_invalid_request_is_rejected_before_queueing() -> None:
         json={
             "command": "capture",
             "mode": "live",
-            "parameters": {"channel": 1, "points": 1000, "format": "byte"},
+            "parameters": {"channels": "1", "points": 1000, "format": "byte"},
         },
     )
 

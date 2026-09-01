@@ -733,7 +733,17 @@ COMMANDS = (
         "label": "Waveform capture",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "capture.channel"},
+            {
+                "name": "channels",
+                "type": "multi-enum",
+                "options": (1, 2, 3, 4),
+                "default": (1,),
+                "serialize": "csv",
+                "required": True,
+                "option_label": "channel",
+                "label_key": "capture.channels",
+                "help_key": "capture.channels",
+            },
             {"name": "points", "type": "integer", "options": (1000, 5000, 10000), "default": 1000, "help_key": "capture.points"},
             {"name": "format", "type": "enum", "options": ("byte", "word"), "default": "byte", "help_key": "capture.format"},
         ),

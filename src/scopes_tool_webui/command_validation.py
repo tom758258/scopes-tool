@@ -43,6 +43,7 @@ from scopes_tool_core.measurements import (
 from scopes_tool_core.planning import (
     parse_measurement_item_list,
     parse_pair_specs,
+    resolve_capture_channels,
     resolve_sweep_channels,
 )
 from scopes_tool_core.reference import validate_reference_label, validate_reference_slot
@@ -239,6 +240,29 @@ def _workflow_pairs(value: Any, capabilities: Any) -> list[str]:
     except Exception as exc:
         raise WebUIRequestError(str(exc)) from exc
     return values
+
+
+def _capture_channels(value: Any, capabilities: Any) -> list[int]:
+    if isinstance(value, str):
+        raw_values = [item.strip() for item in value.split(",") if item.strip()]
+        if not raw_values:
+            raise WebUIRequestError("channels are required")
+        raw = [int(item) if item.isdigit() else item for item in raw_values]
+    elif isinstance(value, (list, tuple)):
+        if not value:
+            raise WebUIRequestError("channels are required")
+        raw_values = [str(item).strip() for item in value if str(item).strip()]
+        if not raw_values:
+            raise WebUIRequestError("channels are required")
+        raw = [int(item) if item.isdigit() else item for item in raw_values]
+    elif value is None:
+        raise WebUIRequestError("channels are required")
+    else:
+        raise WebUIRequestError("channels must be a comma-separated string or list")
+    try:
+        return list(resolve_capture_channels(raw, capabilities))
+    except Exception as exc:
+        raise WebUIRequestError(str(exc)) from exc
 
 
 def _segmented_capture_request(parameters: Mapping[str, Any], artifact_dir: Path) -> SegmentedCaptureRequest:
@@ -1191,9 +1215,9 @@ def _validate_parameters(
         if "slope" in parameters and parameters["slope"] not in {"positive", "negative"}:
             raise WebUIRequestError("slope must be positive or negative")
     elif command == "capture":
-        parameters["channel"] = validate_analog_channel(
-            _integer(parameters.get("channel", 1), "channel"), capabilities
-        )
+        if "channels" not in parameters:
+            parameters["channels"] = [1]
+        parameters["channels"] = _capture_channels(parameters.get("channels"), capabilities)
         parameters["points"] = _integer(parameters.get("points", 1000), "points")
         if parameters["points"] not in {1000, 5000, 10000}:
             raise WebUIRequestError("points must be one of: 1000, 5000, 10000")

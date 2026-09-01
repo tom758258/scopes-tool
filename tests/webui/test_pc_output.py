@@ -321,7 +321,7 @@ def test_capture_uses_timestamp_stem_directly_under_selected_root(tmp_path) -> N
             "mode": "simulate",
             "model_id": MODEL_ID,
             "pc_output_dir": str(output_root),
-            "parameters": {"channel": 1, "points": 1000, "format": "byte"},
+            "parameters": {"channels": "1", "points": 1000, "format": "byte"},
         }
     )
     job = manager.submit(request)
@@ -427,7 +427,7 @@ def test_dry_run_plans_selected_root_without_creating_it(tmp_path) -> None:
             "mode": "dry-run",
             "model_id": MODEL_ID,
             "pc_output_dir": str(output_root),
-            "parameters": {"channel": 1, "points": 1000, "format": "byte"},
+            "parameters": {"channels": "1", "points": 1000, "format": "byte"},
         }
     )
     job = manager.submit(request)

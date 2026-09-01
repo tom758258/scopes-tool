@@ -150,7 +150,7 @@ def _execute_dry_run(
         csv_path, meta_path = _capture_output_paths(artifact_dir)
         plan = plan_capture(
             CapturePlanRequest(
-                channels=(parameters["channel"],),
+                channels=tuple(parameters["channels"]),
                 points=parameters["points"],
                 waveform_format=parameters["format"],
                 csv_path=csv_path,
@@ -445,7 +445,7 @@ def _execute_scope_command(
             scope,
             resource,
             CaptureRequest(
-                channels=(parameters["channel"],),
+                channels=tuple(parameters["channels"]),
                 points=parameters["points"],
                 waveform_format=parameters["format"],
                 csv_path=csv_path,
