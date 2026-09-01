@@ -94,6 +94,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           "save-export.editor.destinationPreviewLabel": "Destination preview",
           "save-export.editor.advancedSettings": "Advanced settings",
           "save-export.editor.baseFilenameHelp": "This is the instrument SAVE default base filename.",
+          "save-export.editor.waveformLengthMaxNote": "Maximum waveform length mode cannot be configured by this tool. If the mode is enabled on the instrument, the manual waveform save length setting has no effect.",
           "save-export.editor.readingCurrent": "reading:{{group}}:{{current}}/{{total}}",
           "save-export.editor.currentLoaded": "loaded:{{group}}",
           "save-export.editor.currentReadFailed": "failed:{{group}}:{{failed}}/{{total}}",
@@ -227,8 +228,8 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
           "save-waveform-format",
           "save-waveform-length",
         ]);
-        assert.equal(editor.lengthMaxEntry.id, "save-waveform-length-max");
         assert.ok(!editor.entries.some((entry) => entry.id.startsWith("save-image")));
+        assert.ok(editor.sectionsHost.textContent.includes("Maximum waveform length mode"));
         '''
     )
     completed = run_node(script)
@@ -253,14 +254,14 @@ def test_save_export_editor_same_mode_click_preserves_state_and_mode_change_read
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.equal(editor.mode, "waveform");
         assert.notEqual(editor.pathEntry, imagePathEntry);
-        assert.deepEqual(submitted.slice(-5).map((entry) => entry.command), [
+        assert.deepEqual(submitted.slice(-4).map((entry) => entry.command), [
           "save-pwd",
           "save-filename",
           "save-waveform-format",
           "save-waveform-length",
-          "save-waveform-length-max",
         ]);
-        assert.equal(submitted.length, imageReadCount + 5);
+        assert.equal(submitted.length, imageReadCount + 4);
+        assert.ok(!submitted.some((entry) => entry.command === "save-waveform-length-max"));
         '''
     )
     completed = run_node(script)
@@ -441,9 +442,7 @@ def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context
         const { editor, submitted, context } = buildEditor((command) => ({
           status: "completed",
           job_id: command,
-          result: command === "save-waveform-length-max"
-            ? { result: { state: { enabled: true } } }
-            : { result: {} },
+          result: { result: {} },
         }));
 
         await editor.refresh(false, true);
@@ -468,15 +467,14 @@ def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context
 
         editor.mode = "waveform";
         await editor.refresh(false, true);
-        assert.deepEqual(submitted.slice(-5).map((entry) => entry.command), [
+        assert.deepEqual(submitted.slice(-4).map((entry) => entry.command), [
           "save-pwd",
           "save-filename",
           "save-waveform-format",
           "save-waveform-length",
-          "save-waveform-length-max",
         ]);
-        assert.deepEqual(submitted.slice(-1)[0].parameters, {});
-        assert.equal(editor.lengthMaxEntry.value.textContent, "Enabled");
+        assert.ok(!submitted.some((entry) => entry.command === "save-waveform-length-max"));
+        assert.ok(editor.sectionsHost.textContent.includes("Maximum waveform length mode"));
         assert.ok(!editor.entries.some((entry) => entry.id === "save-waveform-length-max"));
         '''
     )
@@ -937,33 +935,6 @@ def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> No
 
         await editor.submitCurrentMode("save-image");
         assert.deepEqual(submitted.map((entry) => entry.command), ["save-pwd", "save-image-format"]);
-        '''
-    )
-    completed = run_node(script)
-    assert completed.returncode == 0, completed.stderr or completed.stdout
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_save_export_editor_clears_stale_waveform_length_max_on_failed_read() -> None:
-    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
-        r'''
-        let maxReads = 0;
-        const { editor } = buildEditor((command) => {
-          if (command === "save-waveform-length-max") {
-            maxReads += 1;
-            return maxReads === 1
-              ? { status: "completed", job_id: command, result: { result: { state: { enabled: true } } } }
-              : { status: "failed", job_id: command };
-          }
-          return { status: "completed", job_id: command, result: { result: {} } };
-        });
-        editor.mode = "waveform";
-        await editor.refresh(false, true);
-        assert.equal(editor.lengthMaxEntry.value.textContent, "Enabled");
-
-        await editor.refresh(true, true);
-        assert.equal(editor.lengthMaxEntry.value.textContent, "Current value unavailable.");
-        assert.equal(maxReads, 2);
         '''
     )
     completed = run_node(script)

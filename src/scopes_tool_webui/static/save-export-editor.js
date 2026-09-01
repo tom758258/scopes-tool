@@ -24,21 +24,6 @@ const SAVE_EXPORT_MODES = {
   },
 };
 
-function resultValue(payload, key, depth = 0) {
-  if (payload === null || typeof payload !== "object" || depth > 4) return undefined;
-  if (Object.prototype.hasOwnProperty.call(payload, key)) {
-    const value = payload[key];
-    if (value === null || typeof value !== "object") return value;
-  }
-  for (const value of Object.values(payload)) {
-    if (value && typeof value === "object") {
-      const found = resultValue(value, key, depth + 1);
-      if (found !== undefined) return found;
-    }
-  }
-  return undefined;
-}
-
 function determineFileExtension(mode, formatValue) {
   const value = String(formatValue || "").trim().toLowerCase();
   if (mode === "image") {
@@ -75,7 +60,6 @@ export class SaveExportEditor {
     this.pathEntry = null;
     this.filenameEntry = null;
     this.advancedEntry = null;
-    this.lengthMaxEntry = null;
     this.saveButton = null;
     this.destinationPreview = null;
     this.modeButtons = [];
@@ -231,7 +215,6 @@ export class SaveExportEditor {
     this.pathEntry = null;
     this.filenameEntry = null;
     this.advancedEntry = null;
-    this.lengthMaxEntry = null;
     this.saveButton = null;
     this.sectionsHost.replaceChildren();
     this.groupHeading.textContent = "";
@@ -269,10 +252,10 @@ export class SaveExportEditor {
     }
 
     if (modeConfig.id === "waveform") {
-      const command = this.commandForId("save-waveform-length-max");
-      if (command && this.catalog.supported(command)) {
-        this.lengthMaxEntry = this.buildReadonlyState(command, modeSection);
-      }
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = translate("save-export.editor.waveformLengthMaxNote");
+      modeSection.append(note);
     }
 
     this.saveButton = document.createElement("button");
@@ -387,20 +370,6 @@ export class SaveExportEditor {
     return entry;
   }
 
-  buildReadonlyState(command, container) {
-    const section = document.createElement("section");
-    section.className = "trigger-editor-section";
-    const heading = document.createElement("strong");
-    heading.className = "trigger-editor-heading";
-    heading.textContent = this.catalog.commandLabel(command);
-    const value = document.createElement("output");
-    value.className = "readonly-value";
-    value.textContent = "-";
-    section.append(heading, value);
-    container.append(section);
-    return { id: command.id, section, value };
-  }
-
   updateDestinationPreview() {
     if (!this.destinationPreview) return;
     const currentValues = (form) => {
@@ -444,7 +413,6 @@ export class SaveExportEditor {
 
   async readWorkspace() {
     const ids = ["save-pwd", "save-filename", ...this.modeConfig().settingIds];
-    if (this.mode === "waveform") ids.push("save-waveform-length-max");
     const entries = ids
       .map((id) => ({ id, entry: this.entryForId(id) }))
       .filter(({ entry }) => entry);
@@ -452,9 +420,6 @@ export class SaveExportEditor {
     const total = entries.length;
     const epoch = this.epoch;
     const stateKey = this.currentStateKey();
-    if (this.mode === "waveform" && this.lengthMaxEntry) {
-      this.lengthMaxEntry.value.textContent = "-";
-    }
     if (total === 0) {
       this.setReadStatus("reading", {
         group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"),
@@ -469,11 +434,10 @@ export class SaveExportEditor {
         current: index + 1,
         total,
       });
-      const values = id === "save-waveform-length-max" ? {} : entry.form.queryValues();
+      const values = entry.form.queryValues();
       if (values === null) {
         failed += 1;
         if (id === "save-pwd" && this.pathStatus) this.pathStatus.textContent = translate("save-export.editor.pathUnavailable");
-        if (id === "save-waveform-length-max") this.setLengthMaxUnavailable();
         continue;
       }
       const job = await this.hooks.executeCommand(id, values, { intent: "readback" });
@@ -481,11 +445,9 @@ export class SaveExportEditor {
       if (job?.status !== "completed") {
         failed += 1;
         if (id === "save-pwd" && this.pathStatus) this.pathStatus.textContent = translate("save-export.editor.pathUnavailable");
-        if (id === "save-waveform-length-max") this.setLengthMaxUnavailable();
         continue;
       }
-      if (id === "save-waveform-length-max") this.syncLengthMaxState(job);
-      else entry.form.syncResult(job, true);
+      entry.form.syncResult(job, true);
       if (id === "save-pwd") {
         if (this.pathStatus) this.pathStatus.textContent = "";
         this.updateDestinationPreview();
@@ -504,28 +466,7 @@ export class SaveExportEditor {
   entryForId(id) {
     if (id === "save-pwd") return this.pathEntry;
     if (id === "save-filename") return this.advancedEntry;
-    if (id === "save-waveform-length-max") return this.lengthMaxEntry;
     return this.entries.find((entry) => entry.id === id) || null;
-  }
-
-  syncLengthMaxState(job) {
-    if (!this.lengthMaxEntry) return;
-    const payload = job?.result?.result ?? job?.result;
-    const enabled = typeof payload === "boolean" ? payload : resultValue(payload, "enabled");
-    if (typeof enabled !== "boolean") {
-      this.setLengthMaxUnavailable();
-      return;
-    }
-    this.lengthMaxEntry.value.textContent = translate(
-      enabled ? "status.enabled" : "status.disabled",
-    );
-  }
-
-  setLengthMaxUnavailable() {
-    if (!this.lengthMaxEntry) return;
-    this.lengthMaxEntry.value.textContent = translate(
-      "save-export.editor.currentValueUnavailable",
-    );
   }
 
   async applyAdvancedFilename(entry) {

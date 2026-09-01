@@ -109,8 +109,10 @@ The Command workbench exposes:
 - Save / Export: a single workspace with Path / Filename, Image, and Waveform
   sections over `save-pwd`, `save-filename`, `save-image-format`,
   `save-image-palette`, `save-image-ink-saver`, `save-image-factors`,
-  `save-image`, `save-waveform-format`, `save-waveform-length`,
-  `save-waveform-length-max`, and `save-waveform`
+  `save-image`, `save-waveform-format`, `save-waveform-length`, and
+  `save-waveform` (`save-waveform-length-max` remains an underlying
+  query-only operation; the WebUI does not query or configure it and only
+  displays the maximum-length-mode limitation)
 - System: `check-error`, `system-status-byte`, `system-operation-status`,
   `system-clear-status`, `system-opc`, `system-standard-event`,
   `system-options`
@@ -245,7 +247,9 @@ Selecting Save / Export opens one workspace with Default save location, Image,
 and Waveform sections. The underlying commands remain available to the
 workspace but are hidden from the Command Browser. Selection is
 presentation-only. Explicit Refresh serially reads every readable setting
-in all three sections without running Save Image or Save Waveform. Each setting
+in all three sections without running Save Image or Save Waveform
+(`save-waveform-length-max` is not queried; the WebUI only displays the
+maximum-length-mode limitation). Each setting
 keeps an independent Apply over its existing command, and a successful Apply
 is followed by its existing group readback that preserves unapplied sibling
 edits. The editor shows readback progress and identifies settings whose current

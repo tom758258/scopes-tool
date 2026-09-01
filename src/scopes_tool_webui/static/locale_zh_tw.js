@@ -388,6 +388,7 @@ export const zhTW = {
   "save-export.editor.currentLoaded": "已載入目前的{{group}}設定。",
   "save-export.editor.currentReadFailed": "有 {{failed}} / {{total}} 個{{group}}設定無法讀取。",
   "save-export.editor.currentValueUnavailable": "無法讀取目前值。",
+  "save-export.editor.waveformLengthMaxNote": "本工具不支援設定最大波形長度模式。若儀器已啟用此模式，手動設定的波形儲存長度不會生效。",
   "save-export.editor.saveImage": "儲存影像",
   "save-export.editor.saveWaveform": "儲存波形",
   "save-export.editor.description": "選擇儲存類型、設定儲存位置和本次檔名，然後一次完成影像或波形儲存。",

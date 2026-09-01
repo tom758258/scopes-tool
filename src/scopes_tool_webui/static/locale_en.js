@@ -398,6 +398,7 @@ export const en = {
   "save-export.editor.currentLoaded": "Current {{group}} settings loaded.",
   "save-export.editor.currentReadFailed": "Could not read {{failed}} of {{total}} {{group}} settings.",
   "save-export.editor.currentValueUnavailable": "Current value could not be read.",
+  "save-export.editor.waveformLengthMaxNote": "This tool does not support configuring maximum waveform length mode. If the mode is enabled on the instrument, the manual waveform save length setting has no effect.",
   "save-export.editor.saveImage": "Save image",
   "save-export.editor.saveWaveform": "Save waveform",
   "save-export.editor.description": "Choose the save target, set the storage location and per-save filename, then save the image or waveform once.",
