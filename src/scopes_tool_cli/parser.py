@@ -2296,7 +2296,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--interval-seconds",
         type=_nonnegative_finite_float,
         default=1.0,
-        help="interruptible wait after a persisted non-matching sample; defaults to 1.0",
+        help="interruptible wait after a completed non-matching sample; defaults to 1.0",
     )
     measure_until_parser.add_argument(
         "--output-dir",
@@ -2359,7 +2359,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--interval-seconds",
         type=_nonnegative_finite_float,
         default=0.0,
-        help="interruptible wait after a persisted cycle; defaults to 0",
+        help="interruptible wait after a completed cycle; defaults to 0",
     )
     triggered_measure_loop_parser.add_argument(
         "--output-dir",

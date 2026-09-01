@@ -282,6 +282,44 @@ def test_run_measure_log_preserves_instrument_error_result(tmp_path):
     assert result.system_error["code"] == -113
 
 
+def test_run_measure_log_no_save_failure_preserves_completed_progress(
+    tmp_path, monkeypatch
+):
+    output_dir = tmp_path / "not-created"
+    with _scope() as scope:
+        original_query_system_error = scope.query_system_error
+        query_count = 0
+
+        def fail_after_first_completed_row():
+            nonlocal query_count
+            query_count += 1
+            if query_count == 3:
+                raise OscilloscopeError("measurement backend failure")
+            return original_query_system_error()
+
+        monkeypatch.setattr(scope, "query_system_error", fail_after_first_completed_row)
+        with pytest.raises(OscilloscopeError, match="measurement backend failure") as exc_info:
+            run_measure_log(
+                scope,
+                "SIM::keysight-dsox4024a::INSTR",
+                MeasureLogRequest(
+                    channels=(1,),
+                    items="vpp",
+                    pair_items="phase",
+                    interval_seconds=0,
+                    requested_count=3,
+                    output_dir=output_dir,
+                    save_results=False,
+                ),
+            )
+
+    result = exc_info.value.result
+    assert result.result["completed_rows"] == 1
+    assert result.result["last_measurement"]["index"] == 1
+    assert result.files == []
+    assert not output_dir.exists()
+
+
 def test_run_measure_log_preserves_invalid_measurement_and_duration_limit(tmp_path):
     with _scope(invalid_measurement_channels=(1,)) as scope:
         result = run_measure_log(

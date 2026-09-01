@@ -163,6 +163,36 @@ def test_log_measurements_workflow_runs_successfully_and_writes_files(tmp_path, 
         assert float(reader[i][6]) is not None
 
 
+def test_log_measurements_workflow_no_save_keeps_only_compact_state(tmp_path):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    result = measure_logger.log_measurements_workflow(
+        scope=scope,
+        resource="SIM::keysight-dsox4024a::INSTR",
+        output_dir=None,
+        csv_path=None,
+        manifest_path=None,
+        scpi_log_path=None,
+        channels=[1],
+        items=["vpp"],
+        pairs=[],
+        pair_items=[],
+        interval_seconds=0,
+        requested_count=3,
+        requested_duration_seconds=None,
+        stop_on_error=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.manifest.completed_rows == 3
+    assert result.manifest.last_measurement["index"] == 3
+    assert result.manifest.rows == []
+    assert result.manifest.files == []
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_log_measurements_workflow_respects_duration_limit(tmp_path):
     backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
     scope = Oscilloscope(backend)

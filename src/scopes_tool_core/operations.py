@@ -859,6 +859,8 @@ def run_measure_log(
     pairs: tuple[tuple[int, int], ...] = ()
     pair_items: tuple[str, ...] = ()
     reporter_failed = False
+    completed_rows = 0
+    last_measurement: dict[str, object] | None = None
 
     def report_progress(progress: WorkflowProgress) -> None:
         nonlocal reporter_failed
@@ -871,7 +873,9 @@ def run_measure_log(
             raise
 
     def report_sample(sample: Mapping[str, object]) -> None:
-        nonlocal reporter_failed
+        nonlocal completed_rows, last_measurement, reporter_failed
+        completed_rows = int(sample["index"])
+        last_measurement = dict(sample)
         if sample_reporter is None:
             return
         try:
@@ -913,7 +917,7 @@ def run_measure_log(
                 stop_on_error=request.stop_on_error,
                 stop_requested=stop_requested,
                 progress_reporter=report_progress if progress_reporter is not None else None,
-                sample_reporter=report_sample if sample_reporter is not None else None,
+                sample_reporter=report_sample,
             )
         human.extend(workflow.human_lines)
         if scpi_log_path is not None:
@@ -945,6 +949,8 @@ def run_measure_log(
             pair_items=pair_items,
             request=request,
             error=str(exc),
+            completed_rows=completed_rows,
+            last_measurement=last_measurement,
         )
         raise _OperationError(
             exc,
@@ -974,6 +980,8 @@ def run_measure_log(
             pair_items=pair_items,
             request=request,
             error=str(error),
+            completed_rows=completed_rows,
+            last_measurement=last_measurement,
         )
         raise _OperationError(
             error,
@@ -1405,6 +1413,8 @@ def _measure_log_failure_result(
     pair_items: Sequence[str],
     request: MeasureLogRequest,
     error: str,
+    completed_rows: int,
+    last_measurement: Mapping[str, object] | None,
 ) -> tuple[dict[str, object], dict[str, object] | None]:
     data: dict[str, object] = {}
     try:
@@ -1419,6 +1429,10 @@ def _measure_log_failure_result(
     system_error = None
     if rows and isinstance(rows[-1], dict):
         candidate = rows[-1].get("system_error")
+        if isinstance(candidate, dict):
+            system_error = candidate
+    elif last_measurement is not None:
+        candidate = last_measurement.get("system_error")
         if isinstance(candidate, dict):
             system_error = candidate
     result = {
@@ -1436,12 +1450,12 @@ def _measure_log_failure_result(
             "requested_duration_seconds",
             request.requested_duration_seconds,
         ),
-        "completed_rows": data.get("completed_rows", 0),
+        "completed_rows": data.get("completed_rows", completed_rows),
         "manifest_path": str(manifest_path) if manifest_path is not None else None,
         "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
         "csv_path": str(csv_path) if csv_path is not None else None,
         "error": data.get("error", error),
-        "last_measurement": data.get("last_measurement"),
+        "last_measurement": data.get("last_measurement", last_measurement),
     }
     return result, system_error
 

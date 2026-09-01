@@ -382,14 +382,15 @@ def log_measurements_workflow(
                     csv_file.flush()
 
                 manifest.completed_rows = row_index
-                manifest.rows.append(
-                    {
-                        "index": row_index,
-                        "timestamp_iso": iso_now,
-                        "elapsed_seconds": elapsed_now,
-                        "system_error": system_error_manifest_dict(system_err),
-                    }
-                )
+                if manifest_path is not None:
+                    manifest.rows.append(
+                        {
+                            "index": row_index,
+                            "timestamp_iso": iso_now,
+                            "elapsed_seconds": elapsed_now,
+                            "system_error": system_error_manifest_dict(system_err),
+                        }
+                    )
                 last_system_error = system_error_manifest_dict(system_err)
                 sample = {
                     "index": row_index,

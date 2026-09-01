@@ -19,7 +19,7 @@ StopRequested = Callable[[], bool]
 
 @dataclass(frozen=True)
 class WorkflowProgress:
-    """Progress reported after one workflow item is safely persisted."""
+    """Progress reported after one workflow item is completed."""
 
     completed_count: int
     total_count: int | None

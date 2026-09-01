@@ -135,6 +135,37 @@ def test_happy_path_persists_two_completed_cycles_and_reports(tmp_path):
     assert (output_dir / "scpi.log").exists()
 
 
+def test_no_save_keeps_only_compact_runtime_state(monkeypatch, tmp_path):
+    scope = _scope()
+    output_dir = tmp_path / "not-created"
+    observed_cycles = []
+    finish_result = triggered_measurement._finish_result
+
+    def inspect_finish(*args, **kwargs):
+        observed_cycles.append(list(args[2]["cycles"]))
+        return finish_result(*args, **kwargs)
+
+    monkeypatch.setattr(triggered_measurement, "_finish_result", inspect_finish)
+    monkeypatch.setattr(
+        triggered_measurement.copy,
+        "deepcopy",
+        lambda value: pytest.fail("no-save must not deepcopy the runtime manifest"),
+    )
+
+    result = triggered_measurement.run_triggered_measure_loop(
+        scope,
+        RESOURCE,
+        _request(output_dir, count=3, save_results=False),
+    )
+
+    assert result.exit_code == 0
+    assert result.result["completed_count"] == 3
+    assert result.result["last_measurement"]["index"] == 3
+    assert observed_cycles == [[]]
+    assert result.files == []
+    assert not output_dir.exists()
+
+
 def test_invalid_measurement_sentinel_is_nan_and_cycle_continues(tmp_path):
     scope = _scope(invalid_channels={2})
     output_dir = tmp_path / "invalid"

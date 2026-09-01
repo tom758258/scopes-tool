@@ -306,18 +306,6 @@ def run_triggered_measure_loop(
                         )
                         csv_file.flush()
 
-                    cycle = {
-                        "index": index,
-                        "timestamp_iso": timestamp_iso,
-                        "elapsed_seconds": elapsed_seconds,
-                        "trigger_elapsed_seconds": trigger_elapsed_seconds,
-                        "system_error": dict(last_system_error),
-                    }
-                    candidate = copy.deepcopy(manifest)
-                    candidate["completed_count"] = index
-                    candidate_cycles = candidate["cycles"]
-                    assert isinstance(candidate_cycles, list)
-                    candidate_cycles.append(cycle)
                     sample = {
                         "index": index,
                         "timestamp_iso": timestamp_iso,
@@ -326,10 +314,25 @@ def run_triggered_measure_loop(
                         "values": dict(values),
                         "system_error": dict(last_system_error),
                     }
-                    candidate["last_measurement"] = sample
                     if manifest_path is not None:
+                        cycle = {
+                            "index": index,
+                            "timestamp_iso": timestamp_iso,
+                            "elapsed_seconds": elapsed_seconds,
+                            "trigger_elapsed_seconds": trigger_elapsed_seconds,
+                            "system_error": dict(last_system_error),
+                        }
+                        candidate = copy.deepcopy(manifest)
+                        candidate["completed_count"] = index
+                        candidate_cycles = candidate["cycles"]
+                        assert isinstance(candidate_cycles, list)
+                        candidate_cycles.append(cycle)
+                        candidate["last_measurement"] = sample
                         _write_manifest(candidate, manifest_path)
-                    manifest = candidate
+                        manifest = candidate
+                    else:
+                        manifest["completed_count"] = index
+                        manifest["last_measurement"] = sample
                     try:
                         if sample_reporter is not None:
                             sample_reporter(sample)
