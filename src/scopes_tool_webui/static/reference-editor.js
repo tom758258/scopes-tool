@@ -157,6 +157,9 @@ export class ReferenceEditor {
     let formHost = null;
     if (command.fields.length) {
       formHost = document.createElement("div");
+      if (id === "reference-save" || id === "reference-display") {
+        formHost.className = "command-form";
+      }
       form = new CommandForm(formHost, this.catalog);
       form.render(command);
     }

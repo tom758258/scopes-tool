@@ -359,3 +359,35 @@ def test_reference_display_failure_stops_before_readback() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_reference_action_forms_use_command_form_layout() -> None:
+    script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.available = true;
+        editor.schedulePresentation();
+        await settle();
+
+        const selectorSection = editor.container.children[0];
+        const selectorHost = selectorSection.children[0];
+        assert.equal(selectorHost.className.includes("command-form"), false);
+
+        const saveSection = editor.actionsHost.children[0];
+        const saveFormHost = saveSection.children[1];
+        assert.ok(saveFormHost);
+        assert.equal(saveFormHost.className, "command-form");
+
+        const management = editor.actionsHost.children[1];
+        const displayControl = management.children[0];
+        const displayFormHost = displayControl.children[1];
+        assert.ok(displayFormHost);
+        assert.equal(displayFormHost.className, "command-form");
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
