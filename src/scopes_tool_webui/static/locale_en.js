@@ -139,6 +139,8 @@ export const en = {
   "results.detailAvailable": "Details available below",
   "results.summary.completed": "Command completed successfully",
   "results.summary.failed": "Command failed",
+  "results.summary.noValidMeasurement": "No valid measurement value — the instrument cannot obtain a valid result. Please ensure the selected channel has a visible, measurable waveform and check the measurement range.",
+  "results.status.noValidMeasurement": "No valid measurement",
   "results.summary.queued": "Waiting to run...",
   "results.summary.running": "Executing command...",
   "results.summary.identificationRead": "Identification read",

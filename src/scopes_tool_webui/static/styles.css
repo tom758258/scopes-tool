@@ -393,6 +393,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .badge-completed { border-color: #b8d7c5; background: #edf8f1; color: var(--ok); }
 .badge-failed { border-color: #e5a29a; background: #fff0ee; color: var(--danger); }
 .badge-cancelled { border-color: #e4c98b; background: #fff8e8; color: var(--warning); }
+.badge-warning { border-color: #e4c98b; background: #fff8e8; color: var(--warning); }
 
 .result-section, .result-detail-section { overflow: hidden; }
 .results-content, .result-detail-content { min-height: 76px; padding: 12px 16px 14px; }

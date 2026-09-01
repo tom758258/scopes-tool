@@ -123,6 +123,7 @@ def test_result_history_runtime_behaviour() -> None:
             serial: "serial {{serial}}", firmware: "firmware {{firmware}}", empty: "No command has been run yet.",
             period: "Period", phase: "Phase", channel1: "Channel 1", channel2: "Channel 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", result: "Result", plannedScpi: "Planned SCPI",
+            noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value",
           },
           "zh-TW": {
             identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d",
@@ -130,6 +131,7 @@ def test_result_history_runtime_behaviour() -> None:
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
             period: "Period", phase: "Phase", channel1: "Channel 1", channel2: "Channel 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", result: "Result", plannedScpi: "Planned SCPI",
+            noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c",
           },
         };
         const translate = (key, values = {}) => {
@@ -160,8 +162,10 @@ def test_result_history_runtime_behaviour() -> None:
                                                      : key === "results.field.channel" ? locale.channel
                                                        : key === "results.field.reference_channel" ? locale.referenceChannel
                                                          : key === "results.field.result" ? locale.result
-                                                           : key === "results.field.planned_scpi" ? locale.plannedScpi
-                                                             : key;
+                            : key === "results.field.planned_scpi" ? locale.plannedScpi
+                              : key === "results.status.noValidMeasurement" ? locale.noValidStatus
+                                : key === "results.summary.noValidMeasurement" ? locale.noValidSummary
+                                                              : key;
           return Object.entries(values).reduce(
             (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
             text,
@@ -171,6 +175,7 @@ def test_result_history_runtime_behaviour() -> None:
           "command.identify", "command.run", "command.screenshot", "command.capture", "command.list-resources",
           "enum.period", "enum.phase", "enum.channel1", "enum.channel2",
           "results.field.measurement", "results.field.channel", "results.field.reference_channel", "results.field.result", "results.field.planned_scpi",
+          "results.status.noValidMeasurement", "results.summary.noValidMeasurement",
         ].includes(key);
         const translateJobStatus = (status) => translate(`status.${status}`);
         globalThis.testTranslate = translate;
@@ -317,6 +322,29 @@ def test_result_history_runtime_behaviour() -> None:
         assert.equal(summary.children[0].textContent, "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002");
         assert.equal(detail.children[0].className, "muted");
         assert.equal(detail.children[0].textContent, "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002");
+
+        // Invalid measurement sentinel should be presented as warning, not generic failure
+        globalThis.testLocale = "en";
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("invalid-measure-job", "measure", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { result: { item: "vpp", channel: 1, valid: false, reason: "invalid measurement sentinel", value: null, raw_value: "+99E+36", unit: "V", system_error: { code: 0, is_error: false, message: "No error" } } },
+        }), detail);
+        assert.equal(summary.children[0].children[1].className, "badge badge-warning");
+        assert.equal(summary.children[0].children[1].textContent, "No valid measurement");
+        assert.equal(summary.children[0].children[2].textContent, "No valid measurement value");
+        assert.equal(detail.children.length, 1);
+        assert.equal(detail.children[0].className, "result-block");
+        assert.match(detail.children[0].textContent, /\+99E\+36/);
+        assert.match(detail.children[0].textContent, /No error/);
+        // Generic failed job still shows error block
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("generic-failed-job", "measure", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { result: { item: "vpp", channel: 1, valid: true, value: 1.2 } },
+        }), detail);
+        assert.equal(summary.children[0].children[1].className, "badge badge-failed");
+        assert.equal(detail.children[0].className, "error-block");
 
         const measurementJob = (result) => makeJob("measurement-job", "measure", "completed", { result: { result } });
         const fieldTexts = (container) => container.children.map((field) => field.children.map((node) => node.textContent));

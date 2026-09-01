@@ -22,6 +22,11 @@ export function renderError(summaryContainer, detailContainer, message, command 
   }
 }
 
+function isInvalidMeasurementSentinel(job) {
+  const result = jobResultPayload(job);
+  return result?.valid === false && result?.reason === "invalid measurement sentinel";
+}
+
 export function renderJob(summaryContainer, job, detailContainer) {
   const existingIndex = resultHistory.findIndex(
     (entry) => entry.kind === "job" && entry.job.job_id === job.job_id,
@@ -36,7 +41,7 @@ export function renderJob(summaryContainer, job, detailContainer) {
 
   if (!detailContainer) return;
   detailContainer.replaceChildren();
-  if (job.error) appendError(detailContainer, job.error);
+  if (job.error && !isInvalidMeasurementSentinel(job)) appendError(detailContainer, job.error);
   if (job.command === "identify" && job.status === "completed") {
     appendIdentityDetail(detailContainer, job);
   }
@@ -69,10 +74,16 @@ function renderHistory(summaryContainer) {
     }
     statusLine.append(label);
 
+    const invalidMeasurement =
+      entry.kind === "job" && isInvalidMeasurementSentinel(entry.job);
     const statusValue = entry.kind === "job" ? entry.job.status : "failed";
     const status = document.createElement("span");
-    status.className = `badge badge-${statusValue}`;
-    status.textContent = translateJobStatus(statusValue);
+    status.className = invalidMeasurement
+      ? "badge badge-warning"
+      : `badge badge-${statusValue}`;
+    status.textContent = invalidMeasurement
+      ? translate("results.status.noValidMeasurement")
+      : translateJobStatus(statusValue);
     statusLine.append(status);
 
     const summary = document.createElement("span");
@@ -90,6 +101,7 @@ function commandLabel(command) {
 }
 
 function jobSummary(job) {
+  if (isInvalidMeasurementSentinel(job)) return translate("results.summary.noValidMeasurement");
   if (job.status === "failed") return jobErrorSummary(job);
   if (job.status === "cancelled") return translate("status.cancelled");
   if (job.status === "queued") return translate("results.summary.queued");

@@ -140,6 +140,8 @@ export const zhTW = {
   "results.detailAvailable": "詳細資料如下",
   "results.summary.completed": "指令已成功完成",
   "results.summary.failed": "指令失敗",
+  "results.summary.noValidMeasurement": "無有效量測值 — 儀器目前無法取得有效量測值，請確認所選通道有可見且可量測的波形，並檢查量測範圍。",
+  "results.status.noValidMeasurement": "無有效量測值",
   "results.summary.queued": "等待執行",
   "results.summary.running": "正在執行指令",
   "results.summary.identificationRead": "已讀取識別資訊",
