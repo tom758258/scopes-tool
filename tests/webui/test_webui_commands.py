@@ -1921,3 +1921,53 @@ def test_channel_display_and_scale_query_and_set_validation_semantics() -> None:
         non_bool_enabled.json()["detail"]
         == "enabled must be a boolean for channel-display set"
     )
+
+
+def test_check_error_catalog_exposes_max_reads_field() -> None:
+    command = next(
+        entry for entry in TestClient(app).get("/api/commands").json()
+        if entry["id"] == "check-error"
+    )
+    field = next(
+        field for field in command["fields"]
+        if field["name"] == "max_reads"
+    )
+
+    assert field["type"] == "integer"
+    assert field["minimum"] == 1
+    assert field["default"] == 20
+
+
+def test_check_error_execution_passes_max_reads_and_preserves_entries(tmp_path: Path) -> None:
+    from scopes_tool_core.status import SystemErrorEntry
+
+    class FakeScope:
+        capabilities = object()
+
+        def __init__(self) -> None:
+            self.called: dict[str, int] = {}
+
+        def drain_system_errors(self, max_reads: int = 20):  # type: ignore[no-untyped-def]
+            self.called["max_reads"] = max_reads
+            return (
+                SystemErrorEntry(-113, "Undefined header", '-113,"Undefined header"'),
+                SystemErrorEntry(-221, "Settings conflict", '-221,"Settings conflict"'),
+                SystemErrorEntry(0, "No error", '0,"No error"'),
+            )
+
+    scope = FakeScope()
+
+    result = command_execution_module._execute_scope_command(
+        scope,
+        "check-error",
+        "USB0::TEST::INSTR",
+        {"max_reads": 5},
+        tmp_path,
+    )
+
+    assert scope.called["max_reads"] == 5
+    assert result["result"]["drain"] is True
+    assert result["result"]["max_reads"] == 5
+    assert [entry["code"] for entry in result["result"]["entries"]] == [-113, -221, 0]
+    assert result["result"]["system_error"] == result["result"]["entries"][-1]
+    assert result["exit_code"] == 1
