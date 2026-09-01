@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
+from scopes_tool_core import normalize_sequence_document
 
 from . import __version__
 from .commands import command_catalog, model_catalog, validate_job_request
@@ -75,6 +76,15 @@ async def commands() -> list[dict[str, Any]]:
 @app.get("/api/models")
 async def models() -> list[dict[str, str]]:
     return model_catalog()
+
+
+@app.post("/api/sequence/validate")
+async def validate_sequence(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    try:
+        document = normalize_sequence_document(payload)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "document": document.to_json()}
 
 
 @app.post("/api/pc-output/select-folder")

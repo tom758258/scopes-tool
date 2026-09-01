@@ -3,6 +3,7 @@ const COMMANDS_PATH = "/api/commands";
 const JOBS_PATH = "/api/jobs";
 const PC_OUTPUT_FOLDER_PATH = "/api/pc-output/select-folder";
 const PC_OUTPUT_OPEN_FOLDER_PATH = "/api/pc-output/open-folder";
+const SEQUENCE_VALIDATE_PATH = "/api/sequence/validate";
 
 export async function getHealth() {
   return getJson(HEALTH_PATH);
@@ -14,6 +15,10 @@ export async function getCommands() {
 
 export async function submitJob(payload) {
   return requestJson(JOBS_PATH, "POST", payload);
+}
+
+export async function validateSequence(document) {
+  return requestJson(SEQUENCE_VALIDATE_PATH, "POST", document);
 }
 
 export async function selectPcOutputFolder() {

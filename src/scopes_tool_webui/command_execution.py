@@ -17,9 +17,11 @@ from scopes_tool_core import (
     OperationResult,
     ResolvedRunConfig,
     RunModeOptions,
+    SequenceRequest,
     TriggeredCaptureSeriesRequest,
     TriggeredMeasureLoopRequest,
     capabilities_for_model_id,
+    normalize_sequence_document,
     open_scope_for_run,
     plan_acquisition_check,
     plan_capture,
@@ -27,6 +29,7 @@ from scopes_tool_core import (
     plan_capture_until,
     plan_measure,
     plan_measure_until,
+    plan_sequence,
     plan_triggered_capture_series,
     plan_triggered_measure_loop,
     query_instrument_summary,
@@ -37,6 +40,7 @@ from scopes_tool_core import (
     run_measure,
     run_measure_log,
     run_measure_until,
+    run_sequence,
     run_triggered_capture_series,
     run_triggered_measure_loop,
 )
@@ -89,6 +93,7 @@ def execute_command(
     artifact_dir: Path,
     stop_requested: Callable[[], bool] | None = None,
     sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
+    progress_reporter: Callable[[Any], None] | None = None,
 ) -> dict[str, Any]:
     """Execute one validated request through the public Core APIs."""
 
@@ -126,6 +131,7 @@ def execute_command(
             artifact_dir,
             stop_requested=stop_requested,
             sample_reporter=sample_reporter,
+            progress_reporter=progress_reporter,
         )
     finally:
         try:
@@ -141,7 +147,15 @@ def _execute_dry_run(
     artifact_dir: Path,
 ) -> dict[str, Any]:
     capabilities = capabilities_for_model_id(model_id)
-    if command == "measure":
+    if command == "sequence":
+        plan = plan_sequence(
+            SequenceRequest(
+                normalize_sequence_document(parameters["document"]),
+                output_dir=_workflow_output_dir(command, artifact_dir),
+            ),
+            capabilities,
+        )
+    elif command == "measure":
         request = _measure_request(parameters)
         plan = plan_measure(
             MeasurePlanRequest(
@@ -252,6 +266,7 @@ def _execute_scope_command(
     *,
     stop_requested: Callable[[], bool] | None = None,
     sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
+    progress_reporter: Callable[[Any], None] | None = None,
 ) -> dict[str, Any]:
     if scope.capabilities is None:
         scope.query_idn()
@@ -264,6 +279,7 @@ def _execute_scope_command(
             artifact_dir,
             stop_requested=stop_requested,
             sample_reporter=sample_reporter,
+            progress_reporter=progress_reporter,
         )
     if command == "identify":
         idn = scope.idn or scope.query_idn()
@@ -638,6 +654,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
     *,
     stop_requested: Callable[[], bool] | None = None,
     sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
+    progress_reporter: Callable[[Any], None] | None = None,
 ) -> dict[str, Any]:
     action = parameters.get("action", "query")
     if command == "trigger-edge":
@@ -921,6 +938,19 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 stop_requested=stop_requested,
             )
         )
+    if command == "sequence":
+        return _operation_payload(
+            run_sequence(
+                scope,
+                resource,
+                SequenceRequest(
+                    normalize_sequence_document(parameters["document"]),
+                    output_dir=_workflow_output_dir(command, artifact_dir),
+                ),
+                stop_requested=stop_requested,
+                progress_reporter=progress_reporter,
+            )
+        )
     raise WebUIRequestError(f"command is not supported by the Scopes Tool WebUI: {command}")
 
 
@@ -1169,6 +1199,7 @@ def _workflow_output_dir(command: str, output_root: Path) -> Path:
         "triggered-measure-loop": TRIGGERED_MEASURE_LOOP_DEFAULT_BASE_DIR,
         "triggered-capture-series": TRIGGERED_CAPTURE_SERIES_DEFAULT_BASE_DIR,
         "segmented-capture": SEGMENTED_CAPTURE_DEFAULT_BASE_DIR,
+        "sequence": Path("sequences"),
     }
     return default_batch_output_dir(
         base_dir=output_root / base_dirs[command].name,

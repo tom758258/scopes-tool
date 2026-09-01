@@ -1,4 +1,4 @@
-import { getCommands, getHealth, openPcOutputFolder, selectPcOutputFolder } from "/static/api.js";
+import { getCommands, getHealth, openPcOutputFolder, selectPcOutputFolder, validateSequence } from "/static/api.js";
 import { bindBasicControls } from "/static/basic-controls.js";
 import { CommandCatalog } from "/static/command-catalog.js";
 import { CommandForm } from "/static/command-form.js";
@@ -27,6 +27,7 @@ import { SerialEditor } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
 import { TriggerEditor } from "/static/trigger-editor.js";
 import { WorkflowEditor } from "/static/workflow-editor.js";
+import { SequenceEditor } from "/static/sequence-editor.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
 const elements = {
@@ -76,6 +77,7 @@ const elements = {
   triggerEditor: document.querySelector("#trigger-editor"),
   searchEditor: document.querySelector("#search-editor"),
   workflowEditor: document.querySelector("#workflow-editor"),
+  sequenceEditor: document.querySelector("#sequence-editor"),
   measurementEditor: document.querySelector("#measurement-editor"),
   workspaceHeaderActions: document.querySelector("#workspace-header-actions"),
   refresh: document.querySelector("#refresh-button"),
@@ -112,6 +114,7 @@ let serialEditor;
 let triggerEditor;
 let searchEditor;
 let workflowEditor;
+let sequenceEditor;
 let measurementEditor;
 let deviceResource;
 let executing = false;
@@ -135,6 +138,7 @@ const EDITOR_RENDERERS = {
   trigger: () => triggerEditor,
   search: () => searchEditor,
   workflow: () => workflowEditor,
+  sequence: () => sequenceEditor,
   measurement: () => measurementEditor,
 };
 
@@ -224,6 +228,18 @@ async function initialize() {
   });
   workflowEditor = new WorkflowEditor(elements.workflowEditor, catalog, {
     executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  sequenceEditor = new SequenceEditor(elements.sequenceEditor, catalog, {
+    executeCommand,
+    validateSequence,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
     isAvailable: () => {
@@ -683,6 +699,7 @@ document.addEventListener("localechange", () => {
   triggerEditor?.rerender();
   searchEditor?.rerender();
   workflowEditor?.rerender();
+  sequenceEditor?.rerender();
   measurementEditor?.rerender();
   syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
@@ -708,6 +725,7 @@ function syncCommandSelection(draft = null) {
   elements.triggerEditor.hidden = editorKind !== "trigger";
   elements.searchEditor.hidden = editorKind !== "search";
   elements.workflowEditor.hidden = editorKind !== "workflow";
+  if (elements.sequenceEditor) elements.sequenceEditor.hidden = editorKind !== "sequence";
   elements.measurementEditor.hidden = editorKind !== "measurement";
   syncWorkspaceHeaderActions(editorKind);
   elements.selectedCommand.textContent = selected
@@ -766,6 +784,7 @@ function updateAvailability() {
   saveExportEditor?.applyBusyState();
   serialEditor?.render(serialEditor.controller.state);
   workflowEditor?.applyBusyState();
+  sequenceEditor?.applyBusyState();
   measurementEditor?.applyBusyState();
   deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
   updateBasicAvailability();
@@ -792,6 +811,7 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
   if (searchEditor?.refreshButton) searchEditor.refreshButton.hidden = editorKind !== "search";
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
+  if (sequenceEditor?.executeButton) sequenceEditor.executeButton.hidden = editorKind !== "sequence";
 }
 
 function syncEditorPresentation(editorKind) {
@@ -801,6 +821,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "trigger") triggerEditor?.schedulePresentation();
   if (editorKind === "search") searchEditor?.schedulePresentation();
   if (editorKind === "workflow") workflowEditor?.schedulePresentation();
+  if (editorKind === "sequence") sequenceEditor?.schedulePresentation();
   if (editorKind === "measurement") measurementEditor?.schedulePresentation();
 }
 

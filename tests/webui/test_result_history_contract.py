@@ -62,22 +62,22 @@ def test_identify_detail_is_localized_and_keeps_raw_json() -> None:
     assert '"results.identity.resource": "資源"' in chinese
 
 
-def test_result_ui_does_not_render_artifact_download_entries() -> None:
+def test_result_ui_reuses_job_artifact_download_entries() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
     locales = (
         LOCALE_EN_JS.read_text(encoding="utf-8"),
         LOCALE_ZH_TW_JS.read_text(encoding="utf-8"),
     )
 
-    assert "artifactUrl" not in source
-    assert "job.artifacts" not in source
+    assert "job.artifacts" in source
+    assert "artifact.url" in source
     assert "job.result?.artifacts" not in source
     assert "results.summary.artifact_one" not in source
     assert "results.summary.artifact_many" not in source
     for locale in locales:
         assert "results.summary.artifact_one" not in locale
         assert "results.summary.artifact_many" not in locale
-        assert "results.artifacts" not in locale
+        assert "results.artifacts" in locale
         assert "results.download" not in locale
         assert "results.artifactSize" not in locale
         assert '"results.field.files":' in locale
@@ -264,12 +264,14 @@ def test_result_history_runtime_behaviour() -> None:
 
         const artifactJob = makeJob("artifact-job", "screenshot", "completed", {
           result: { result: { artifact: "capture.png" } },
-          artifacts: [{ name: "capture.png", kind: "screenshot", size: 10 }],
+          artifacts: [{ name: "capture.png", kind: "screenshot", size: 10, url: "/api/jobs/artifact-job/artifacts/capture.png" }],
         });
         api.renderJob(summary, artifactJob, detail);
         assert.equal(rowTexts()[0][2], "Screenshot captured");
-        assert.equal(detail.children.length, 1);
+        assert.equal(detail.children.length, 3);
         assert.equal(detail.children[0].tagName, "PRE");
+        assert.equal(detail.children[2].children[0].children[0].textContent, "capture.png");
+        assert.equal(detail.children[2].children[0].children[0].href, "/api/jobs/artifact-job/artifacts/capture.png");
         const artifactWorkspace = new FakeNode("div");
         api.renderWorkspaceResult(artifactWorkspace, artifactJob);
         assert.equal(artifactWorkspace.children.length, 1);

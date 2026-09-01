@@ -59,6 +59,12 @@ from .workflow import (
 
 SEQUENCE_VERSION = 1
 SEQUENCE_MANIFEST_SCHEMA_VERSION = 1
+SEQUENCE_MIN_STEPS = 1
+SEQUENCE_MAX_STEPS = 255
+SEQUENCE_MIN_LOOPS = 1
+SEQUENCE_MAX_LOOPS = 255
+SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS = 65_025
+SEQUENCE_MAX_ARTIFACT_STEPS = 10
 SEQUENCE_ACTIONS = (
     "wait",
     "single",
@@ -155,13 +161,30 @@ def normalize_sequence_document(payload: Mapping[str, object]) -> SequenceDocume
     if version != SEQUENCE_VERSION:
         raise ParameterValidationError("sequence version must be 1")
     loop_count = _strict_integer(payload.get("loop_count", 1), "sequence loop_count")
-    if loop_count < 1:
-        raise ParameterValidationError("sequence loop_count must be at least 1")
+    if loop_count < SEQUENCE_MIN_LOOPS:
+        raise ParameterValidationError(
+            f"sequence loop_count must be at least {SEQUENCE_MIN_LOOPS}"
+        )
+    if loop_count > SEQUENCE_MAX_LOOPS:
+        raise ParameterValidationError(
+            f"sequence loop_count must be at most {SEQUENCE_MAX_LOOPS}"
+        )
     raw_steps = payload["steps"]
-    if not isinstance(raw_steps, list) or not raw_steps:
+    if not isinstance(raw_steps, list) or len(raw_steps) < SEQUENCE_MIN_STEPS:
         raise ParameterValidationError("sequence steps must be a non-empty JSON array")
+    if len(raw_steps) > SEQUENCE_MAX_STEPS:
+        raise ParameterValidationError(
+            f"sequence step_count must be at most {SEQUENCE_MAX_STEPS}"
+        )
+    total_step_executions = loop_count * len(raw_steps)
+    if total_step_executions > SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS:
+        raise ParameterValidationError(
+            "sequence total_step_executions must be at most "
+            f"{SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS}"
+        )
 
     steps: list[SequenceStep] = []
+    artifact_step_count = 0
     for index, raw_step in enumerate(raw_steps, start=1):
         label = f"sequence step {index}"
         if not isinstance(raw_step, Mapping):
@@ -171,6 +194,13 @@ def normalize_sequence_document(payload: Mapping[str, object]) -> SequenceDocume
         if not isinstance(action, str) or action not in SEQUENCE_ACTIONS:
             supported = ", ".join(SEQUENCE_ACTIONS)
             raise ParameterValidationError(f"{label} action must be one of: {supported}")
+        if action in {"capture", "screenshot"}:
+            artifact_step_count += 1
+            if artifact_step_count > SEQUENCE_MAX_ARTIFACT_STEPS:
+                raise ParameterValidationError(
+                    "sequence capture and screenshot steps must total at most "
+                    f"{SEQUENCE_MAX_ARTIFACT_STEPS}"
+                )
         parameters = raw_step["parameters"]
         if not isinstance(parameters, Mapping):
             raise ParameterValidationError(f"{label} parameters must be a JSON object")

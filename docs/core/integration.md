@@ -543,8 +543,12 @@ Core request is `SequenceRequest`, containing a normalized `SequenceDocument`,
 optional `output_dir`, and `log_scpi`.
 
 Sequence documents are strict JSON. `version` must be the JSON integer `1`,
-`loop_count` defaults to `1` and must be a positive JSON integer, and `steps`
-must be non-empty. Unknown document, step, parameter, and action fields fail
+`loop_count` defaults to `1` and must be in `1..255`, and documents must contain
+`1..255` steps. Total step executions (`loop_count * step_count`) must not
+exceed 65,025. A document may contain at most 10 combined `capture` and
+`screenshot` steps per loop; at 255 loops this naturally permits at most 2,550
+such executions. These are Scopes Tool product limits, not oscilloscope
+hardware limits. Unknown document, step, parameter, and action fields fail
 closed. Boolean values are not accepted as integers. Non-standard JSON numbers
 such as `NaN` and `Infinity` are rejected. The supported action contract is:
 

@@ -6,7 +6,15 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from scopes_tool_core import capabilities_for_model_id
+from scopes_tool_core import (
+    SEQUENCE_ACTIONS,
+    SEQUENCE_MAX_ARTIFACT_STEPS,
+    SEQUENCE_MAX_LOOPS,
+    SEQUENCE_MAX_STEPS,
+    SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS,
+    capabilities_for_model_id,
+)
+from scopes_tool_core.cleanup import CLEANUP_PROFILES
 from scopes_tool_core.identity import PHYSICAL_MODEL_REGISTRY
 from scopes_tool_core.dvm import DVM_MODES
 from scopes_tool_core.math import (
@@ -54,6 +62,7 @@ from scopes_tool_core.serial import (
     UART_TRIGGER_QUALIFIERS,
     UART_TRIGGER_TYPES,
 )
+from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 
 
 def _direct_measurement_items() -> tuple[str, ...]:
@@ -1234,6 +1243,48 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         "group": "triggered",
         "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("count", "integer", minimum=1, required=True), _command_field("trigger_timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("interval_seconds", "number", minimum=0, default=0)),
     },
+    {
+        "id": "sequence",
+        "category": "Workflow",
+        "label": "Sequence",
+        "modes": ("live", "simulate", "dry-run"),
+        "group": "automation",
+        "editor": "sequence",
+        "fields": ({"name": "document", "type": "object", "required": True},),
+        "sequence": {
+            "version": 1,
+            "actions": SEQUENCE_ACTIONS,
+            "limits": {
+                "step_count": SEQUENCE_MAX_STEPS,
+                "loop_count": SEQUENCE_MAX_LOOPS,
+                "total_step_executions": SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS,
+                "artifact_steps": SEQUENCE_MAX_ARTIFACT_STEPS,
+            },
+            "parameters": {
+                "wait": ({"name": "seconds", "type": "number", "minimum": 0, "default": 0, "required": True},),
+                "single": (),
+                "wait-trigger": ({"name": "timeout_seconds", "type": "number", "exclusive_minimum": 0, "default": 1, "required": True},),
+                "measure": (
+                    {"name": "item", "type": "enum", "options": SUPPORTED_MEASUREMENT_ITEMS, "default": "vpp", "required": True},
+                    {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+                    {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4},
+                    {"name": "reference_channel", "type": "integer", "options": (1, 2, 3, 4), "visible_if": [{"field": "item", "in": ("phase", "delay")}], "required_if": [{"field": "item", "in": ("phase", "delay")}]},
+                    {"name": "time_s", "type": "number", "visible_if": [{"field": "item", "equals": "y_at_x"}], "required_if": [{"field": "item", "equals": "y_at_x"}]},
+                    {"name": "level", "type": "number", "visible_if": [{"field": "item", "equals": "time_at_value"}], "required_if": [{"field": "item", "equals": "time_at_value"}]},
+                    {"name": "slope", "type": "enum", "options": ("positive", "negative"), "default": "positive", "visible_if": [{"field": "item", "in": ("time_at_edge", "time_at_value")}]},
+                    {"name": "occurrence", "type": "integer", "minimum": 1, "default": 1, "visible_if": [{"field": "item", "in": ("time_at_edge", "time_at_value")}]},
+                ),
+                "capture": (
+                    {"name": "channels", "type": "multi-enum", "options": ("all", 1, 2, 3, 4), "default": (1,), "required": True},
+                    {"name": "points", "type": "integer", "options": SUPPORTED_WAVEFORM_POINTS, "default": 1000},
+                    {"name": "waveform_format", "type": "enum", "options": ("byte", "word"), "default": "byte"},
+                    {"name": "allow_time_axis_tolerance", "type": "boolean", "default": False},
+                ),
+                "screenshot": ({"name": "background", "type": "enum", "options": ("black", "white"), "default": "black"},),
+                "cleanup": ({"name": "profile", "type": "enum", "options": CLEANUP_PROFILES, "default": "minimal"},),
+            },
+        },
+    },
 )
 
 COMMANDS = COMMANDS + TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS
@@ -1259,6 +1310,7 @@ PC_OUTPUT_COMMAND_IDS = frozenset(
         "measure-until",
         "triggered-measure-loop",
         "triggered-capture-series",
+        "sequence",
     }
 )
 

@@ -134,7 +134,7 @@ The Command workbench exposes:
 - Segmented Memory: `segmented-memory` and `segmented-capture`
 - Workflow: `capture-batch`, `capture-until`, `capture-monitor`, `measure-log`,
   `measure-until`, `triggered-measure-loop`, and
-  `triggered-capture-series`
+  `triggered-capture-series`, plus Generic Sequence v1 under Automation
 
 Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
@@ -183,6 +183,21 @@ disabling it runs without host-side workflow artifacts. Selection and editing
 are browser-local and passive; Run submits one job through shared foreground
 execution admission. The `capture-batch`, `measure-until`, and
 `triggered-capture-series` commands keep their metadata-driven Generic Form.
+
+Selecting Sequence under Workflow / Automation opens the Generic Sequence v1
+editor. It loads and saves `.sequence.json`/JSON documents and edits the seven
+Core actions `wait`, `single`, `wait-trigger`, `measure`, `capture`,
+`screenshot`, and `cleanup`. Load, Save, and Execute validate through Core;
+dry-run delegates to `plan_sequence()`, while Live and Simulate delegate to
+`run_sequence()` through the normal job, progress, cancellation, result, and
+artifact infrastructure. The editor does not execute steps itself and does not
+provide arbitrary SCPI.
+
+Documents use `1..255` steps and `loop_count` `1..255`, with at most 65,025
+total step executions. A document may contain at most 10 combined capture and
+screenshot steps per loop, which naturally permits at most 2,550 such
+executions at 255 loops. These are Scopes Tool product limits, not oscilloscope
+hardware limits.
 
 Selecting a Trigger command opens the dedicated Trigger editor instead of a
 plain command form. The Command Browser remains the only Trigger navigation:
@@ -401,7 +416,7 @@ information command.
 Advanced or diagnostic CLI paths are not automatically browser commands.
 Current intentional omissions include direct SCPI sending, setup recall/save,
 autoscale and broad cleanup operations, worker/doctor/hardware-report tooling,
-Generic Sequence editing, Cursor and Annotation editors, WGEN controls,
+Cursor and Annotation editors, WGEN controls,
 advanced measurement sweeps/statistics, and advanced FFT/Math
 transform/filter/visualization controls. Acquisition points, record length,
 sample rate, and similar low-level information remain CLI/Core paths until a
@@ -419,8 +434,8 @@ remain unchanged.
 
 The WebUI does not include remote access, authentication, multi-instrument
 sessions, WebSockets/SSE, general live waveform streaming, automatic Live Data
-polling, dark mode, Electron/onedir packaging, Generic Sequence editing,
-advanced FFT/Math transform/filter/visualization editors, or conditional
+polling, dark mode, Electron/onedir packaging, advanced FFT/Math
+transform/filter/visualization editors, or conditional
 editors for features not exposed by the current Core APIs. Dry-run remains
 limited to commands with existing Core planners; `capture-batch` and
 `measure-log` are Live/Simulate only.

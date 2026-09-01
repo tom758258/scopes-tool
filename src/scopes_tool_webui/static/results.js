@@ -55,6 +55,21 @@ export function renderJob(summaryContainer, job, detailContainer) {
     result.textContent = JSON.stringify(job.result, null, 2);
     detailContainer.append(result);
   }
+  if (Array.isArray(job.artifacts) && job.artifacts.length) {
+    const heading = document.createElement("strong");
+    heading.textContent = translate("results.artifacts");
+    const list = document.createElement("ul");
+    job.artifacts.forEach((artifact) => {
+      const item = document.createElement("li");
+      const link = document.createElement("a");
+      link.href = artifact.url;
+      link.textContent = artifact.name;
+      link.download = artifact.name;
+      item.append(link);
+      list.append(item);
+    });
+    detailContainer.append(heading, list);
+  }
   if (!detailContainer.childElementCount) detailContainer.append(emptyMessage());
 }
 
@@ -109,7 +124,15 @@ function jobSummary(job) {
   if (job.status === "failed") return jobErrorSummary(job);
   if (job.status === "cancelled") return translate("status.cancelled");
   if (job.status === "queued") return translate("results.summary.queued");
-  if (job.status === "running") return translate("results.summary.running");
+  if (job.status === "running") {
+    if (job.command === "sequence" && job.progress) {
+      return translate("results.summary.sequenceProgress", {
+        completed: job.progress.completed_count,
+        total: job.progress.total_count,
+      });
+    }
+    return translate("results.summary.running");
+  }
   if (job.status !== "completed") return translateJobStatus(job.status);
   return successfulJobSummary(job);
 }
@@ -126,6 +149,14 @@ function successfulJobSummary(job) {
   if (job.command === "identify") return identifySummary(result);
   if (job.command === "list-resources") return resourceSummary(result);
   if (job.command === "screenshot") return translate("results.summary.screenshotCaptured");
+  if (job.command === "sequence") {
+    return translate("results.summary.sequenceCompleted", {
+      completed: result?.completed_step_executions ?? 0,
+      total: result?.total_step_executions ?? 0,
+      loops: result?.loop_count ?? 0,
+      steps: result?.step_count ?? 0,
+    });
+  }
 
   return scalarResultSummary(result) || translate("results.summary.completed");
 }

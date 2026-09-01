@@ -150,6 +150,11 @@ from .run_config import (
 )
 from .screenshot import HardcopyState, ScreenshotCapture, ScreenshotController, ScreenshotOptions
 from .sequence import (
+    SEQUENCE_ACTIONS,
+    SEQUENCE_MAX_ARTIFACT_STEPS,
+    SEQUENCE_MAX_LOOPS,
+    SEQUENCE_MAX_STEPS,
+    SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS,
     SequenceDocument,
     SequenceRequest,
     SequenceStep,
@@ -496,6 +501,11 @@ __all__ = [
     "interruptible_wait",
     "load_sequence_document",
     "normalize_sequence_document",
+    "SEQUENCE_ACTIONS",
+    "SEQUENCE_MAX_ARTIFACT_STEPS",
+    "SEQUENCE_MAX_LOOPS",
+    "SEQUENCE_MAX_STEPS",
+    "SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS",
 ]
 
 __version__ = "0.1.0"

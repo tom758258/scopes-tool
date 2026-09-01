@@ -80,6 +80,46 @@ def test_sequence_loader_rejects_non_standard_json_numbers(tmp_path):
         sequence.load_sequence_document(path)
 
 
+def test_sequence_product_limits_accept_maximum_boundaries():
+    steps = [_step("wait", seconds=0) for _ in range(245)]
+    steps.extend(_step("capture", channels=[1]) for _ in range(5))
+    steps.extend(_step("screenshot") for _ in range(5))
+
+    document = sequence.normalize_sequence_document(
+        {"version": 1, "loop_count": 255, "steps": steps}
+    )
+
+    assert len(document.steps) == 255
+    assert document.loop_count == 255
+    assert document.loop_count * len(document.steps) == 65_025
+    scope = _scope()
+    scope.query_idn()
+    plan = sequence.plan_sequence(sequence.SequenceRequest(document), scope.capabilities)
+    assert plan.result["total_step_executions"] == 65_025
+
+
+@pytest.mark.parametrize(
+    "payload, message",
+    [
+        (
+            {"version": 1, "steps": [_step("wait", seconds=0)] * 256},
+            "step_count must be at most 255",
+        ),
+        (
+            {"version": 1, "loop_count": 256, "steps": [_step("wait", seconds=0)]},
+            "loop_count must be at most 255",
+        ),
+        (
+            {"version": 1, "steps": [_step("capture", channels=[1])] * 11},
+            "capture and screenshot steps must total at most 10",
+        ),
+    ],
+)
+def test_sequence_product_limits_reject_over_limit_documents(payload, message):
+    with pytest.raises(ParameterValidationError, match=message):
+        sequence.normalize_sequence_document(payload)
+
+
 def test_sequence_executes_steps_in_loop_order_and_reports_progress(
     monkeypatch, tmp_path
 ):

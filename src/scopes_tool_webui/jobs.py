@@ -47,6 +47,7 @@ class Job:
     monitor_updates: list[dict[str, Any]] = field(default_factory=list, repr=False)
     monitor_update_sequence: int = field(default=0, repr=False)
     monitor_summary: dict[str, Any] | None = field(default=None, repr=False)
+    progress: dict[str, Any] | None = field(default=None, repr=False)
     future: Future[Any] | None = field(default=None, repr=False)
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -71,6 +72,8 @@ class Job:
                 "error": self.error,
                 "artifacts": artifacts,
             }
+            if self.progress is not None:
+                payload["progress"] = dict(self.progress)
             if self.command == "capture-monitor":
                 first_sequence = (
                     self.monitor_updates[0]["sequence"]
@@ -248,6 +251,11 @@ class JobManager:
                             if job.command == "capture-monitor"
                             else None
                         ),
+                        progress_reporter=(
+                            lambda progress: self._set_progress(job, progress)
+                            if job.command == "sequence"
+                            else None
+                        ),
                     )
                 artifacts = self._register_artifacts(job, execution.get("artifacts", []))
             exit_code = execution.get("exit_code", 1)
@@ -302,7 +310,13 @@ class JobManager:
                 continue
             name = path.name
             if name in registered_paths:
-                continue
+                suffix = 2
+                while True:
+                    candidate = f"{path.stem}-{suffix}{path.suffix}"
+                    if candidate not in registered_paths:
+                        name = candidate
+                        break
+                    suffix += 1
             registered.append(
                 {
                     "name": name,
@@ -337,6 +351,14 @@ class JobManager:
                 key: value
                 for key, value in update.items()
                 if key not in {"time_s", "channels"}
+            }
+
+    def _set_progress(self, job: Job, progress: Any) -> None:
+        with job.lock:
+            job.progress = {
+                "completed_count": int(getattr(progress, "completed_count")),
+                "total_count": int(getattr(progress, "total_count") or 0),
+                "elapsed_seconds": float(getattr(progress, "elapsed_seconds")),
             }
 
     def artifact_path(self, job_id: str, name: str) -> tuple[Job, Path] | None:

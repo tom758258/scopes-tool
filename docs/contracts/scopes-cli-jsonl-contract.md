@@ -715,6 +715,9 @@ text:
   and records the normalized version-1 document, detected execution context,
   total and completed counts, completed step records, deterministic artifact
   paths, nullable failed-step details, terminal status, and nullable error.
+  Core admits `1..255` steps, `loop_count` `1..255`, no more than 65,025 total
+  step executions, and no more than 10 combined capture/screenshot steps per
+  document loop.
 - Measure-log `manifest.json` remains independently versioned at
   `schema_version: 1` and records status,
   resource, backend, IDN, requested row constraints, completed rows, row

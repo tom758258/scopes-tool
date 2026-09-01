@@ -532,8 +532,7 @@ def test_pc_output_frontend_controls_context_and_command_note() -> None:
     assert "submitJob({ command, parameters, ...context })" in jobs_source
     assert 'elements.pcOutputOpen.addEventListener("click"' in app_source
     assert "openPcOutputFolder(path)" in app_source
-    assert "artifactUrl" not in results_source
-    assert "job.artifacts" not in results_source
+    assert "job.artifacts" in results_source
     assert 'import { pcOutputDirectory } from "/static/pc-output.js";' in execution_context_source
     assert "pc_output_dir: pcOutputDirectory(elements.pcOutput)" in execution_context_source
     assert '"data"' not in execution_context_source
@@ -622,6 +621,7 @@ def test_pc_output_catalog_and_locale_keys_are_centralized() -> None:
         "measure-until",
         "triggered-measure-loop",
         "triggered-capture-series",
+        "sequence",
     }
     for locale_name in ("locale_en.js", "locale_zh_tw.js"):
         locale_source = (STATIC_ROOT / locale_name).read_text(encoding="utf-8")

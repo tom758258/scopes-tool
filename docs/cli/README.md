@@ -179,7 +179,8 @@ Current implemented scope:
   default. Standalone `capture` remains artifact-producing and has no
   `--no-save` option.
 - Run strict finite Generic Sequence v1 JSON documents with `sequence`, using
-  existing Core operations and deterministic capture/screenshot artifacts.
+  the same Core validation and execution used by the WebUI, with deterministic
+  capture/screenshot artifacts.
 - Run capture-safe hardware smoke checks that write a report directory with
   JSON, SCPI log, waveform CSV, metadata, and screenshot artifacts.
 - Capture one or more analog channel waveforms in BYTE or WORD format and
@@ -2189,6 +2190,11 @@ Run a Generic Sequence v1 document:
 `sequence` accepts strict JSON version 1 and executes a positive finite
 `loop_count` over ordered `steps`. Supported actions are `wait`, `single`,
 `wait-trigger`, `measure`, `capture`, `screenshot`, and `cleanup`.
+Documents support `1..255` steps, `loop_count` `1..255`, and at most 65,025
+total step executions. At most 10 steps per loop may be `capture` or
+`screenshot` in total; at 255 loops this naturally permits at most 2,550 such
+executions. These are Scopes Tool product limits, not oscilloscope hardware
+limits.
 `wait-trigger` waits for an acquisition already started by an earlier
 `single`; it does not arm or force a trigger. Execution is single-threaded and
 fail-fast, and cancellation never runs cleanup automatically. Every runtime

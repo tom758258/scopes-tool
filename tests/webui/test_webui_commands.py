@@ -1624,7 +1624,7 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
         "uart", "i2c", "spi", "can",
         "bus", "lister",
         "path-filename", "image", "waveform",
-        "measurement", "capture", "triggered",
+        "measurement", "capture", "triggered", "automation",
     }
 
     static_root = Path(__file__).resolve().parents[2] / "src" / "scopes_tool_webui" / "static"

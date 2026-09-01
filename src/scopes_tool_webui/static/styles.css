@@ -344,6 +344,15 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .workflow-editor-pair-remove { min-height: var(--control-h); }
 .workflow-editor-limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .workflow-editor-stop { align-self: end; }
+.sequence-editor { display: grid; gap: 14px; padding-top: 12px; }
+.sequence-editor-toolbar, .sequence-editor-overview, .sequence-step-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sequence-editor-overview { justify-content: space-between; }
+.sequence-editor-loop { max-width: 160px; }
+.sequence-editor-steps { display: grid; gap: 10px; }
+.sequence-step-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+.sequence-step-toggle { flex: 1 1 360px; text-align: left; }
+.sequence-step-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 10px; }
+.sequence-multi-enum { display: flex; flex-wrap: wrap; gap: 10px; }
 .workflow-monitor-warning { margin-top: 0.75rem; }
 .workflow-monitor-status { white-space: pre-wrap; margin: 0.75rem 0; }
 .workflow-monitor-plot { display: block; width: 100%; max-width: 800px; height: 260px; border: 1px solid var(--line); background: var(--panel); }

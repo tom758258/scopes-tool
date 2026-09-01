@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 from typing import Any, Mapping
 
-from scopes_tool_core import capabilities_for_model_id
+from scopes_tool_core import capabilities_for_model_id, normalize_sequence_document
 from scopes_tool_core.acquisition import (
     normalize_acquisition_type,
     validate_acquisition_count,
@@ -729,6 +729,12 @@ def _validate_parameter_shapes(
     parameters: Mapping[str, Any],
     mode: str,
 ) -> None:
+    if command == "sequence":
+        try:
+            normalize_sequence_document(parameters.get("document"))
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
+        return
     fields = {field["name"]: field for field in _COMMAND_BY_ID[command]["fields"]}
     for name, field in fields.items():
         if name not in parameters:
@@ -803,6 +809,14 @@ def _validate_parameters(
     mode: str,
     model_id: str | None,
 ) -> None:
+    if command == "sequence":
+        try:
+            parameters["document"] = normalize_sequence_document(
+                parameters.get("document")
+            ).to_json()
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
+        return
     if command == "list-resources":
         parameters.setdefault("live_only", False)
         _require_boolean(parameters["live_only"], "live_only")

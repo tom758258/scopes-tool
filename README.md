@@ -32,11 +32,30 @@ backend.
 - Query and configure segmented memory and run finite segmented captures
 - Run finite measurement, logging, batch capture, and triggered-capture
   workflows
+- Compose supported Core operations with Generic Sequence v1 from the CLI or
+  WebUI
 - Produce JSON, JSONL, CSV, screenshot, and related artifacts for automation
 
 Feature availability remains model- and capability-dependent. See
 [Supported Models](docs/core/supported-models.md) for the exact support scope
 and the [CLI README](docs/cli/README.md) for command details.
+
+## Generic Sequence v1
+
+The CLI and WebUI are adapters over the same Core Generic Sequence validation,
+planning, execution, progress, and cancellation path. Sequence v1 supports the
+seven actions `wait`, `single`, `wait-trigger`, `measure`, `capture`,
+`screenshot`, and `cleanup`.
+
+Each document must contain `1..255` steps and use a `loop_count` of `1..255`,
+with at most 65,025 total step executions. A document may contain at most 10
+combined `capture` and `screenshot` steps per loop. At the maximum loop count,
+those limits naturally allow at most 2,550 capture/screenshot executions.
+These are Scopes Tool product limits, not oscilloscope hardware limits.
+
+Generic Sequence composes supported Core operations. It is not an arbitrary
+SCPI macro facility; instrument settings remain available through their
+existing command surfaces.
 
 ## Project Structure
 
