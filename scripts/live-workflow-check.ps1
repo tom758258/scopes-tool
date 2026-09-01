@@ -581,6 +581,41 @@ function Invoke-HardwareFreePreflight {
     Assert-ResultEquals -Payload $captureBatch -Name "status" -Expected "completed" `
         -Stage "Preflight capture-batch"
 
+    $captureUntilDir = Join-Path $preflightRoot "capture-until"
+    $captureUntil = Invoke-ModeCli -Stage "preflight-capture-until" `
+        -Command "capture-until" -ModeArguments $simulate -Arguments @(
+            "--channel", "1", "--condition-channel", "1", "--points", "1000", "--format", "byte",
+            "--metric", "max", "--operator", "gt", "--threshold", "-1e9",
+            "--count", "1", "--timeout-seconds", "1", "--interval-seconds", "0",
+            "--output-dir", $captureUntilDir
+        )
+    Assert-ResultEquals -Payload $captureUntil -Name "status" -Expected "completed" `
+        -Stage "Preflight capture-until"
+    Assert-ResultEquals -Payload $captureUntil -Name "requested_count" -Expected 1 `
+        -Stage "Preflight capture-until"
+    Assert-ResultEquals -Payload $captureUntil -Name "completed_count" -Expected 1 `
+        -Stage "Preflight capture-until"
+    Assert-ResultEquals -Payload $captureUntil -Name "termination_reason" -Expected "condition_met" `
+        -Stage "Preflight capture-until"
+
+    $captureMonitorDir = Join-Path $preflightRoot "capture-monitor"
+    $captureMonitor = Invoke-ModeCli -Stage "preflight-capture-monitor" `
+        -Command "capture-monitor" -ModeArguments $simulate -Arguments @(
+            "--channel", "1", "--points", "1000", "--format", "byte",
+            "--count", "2", "--interval-seconds", "0", "--retention-points", "1000",
+            "--output-dir", $captureMonitorDir
+        )
+    Assert-ResultEquals -Payload $captureMonitor -Name "status" -Expected "completed" `
+        -Stage "Preflight capture-monitor"
+    Assert-ResultEquals -Payload $captureMonitor -Name "completed_count" -Expected 2 `
+        -Stage "Preflight capture-monitor"
+    Assert-ResultEquals -Payload $captureMonitor -Name "total_observed_points" -Expected 2000 `
+        -Stage "Preflight capture-monitor"
+    Assert-ResultEquals -Payload $captureMonitor -Name "retained_points" -Expected 1000 `
+        -Stage "Preflight capture-monitor"
+    Assert-ResultEquals -Payload $captureMonitor -Name "dropped_points" -Expected 1000 `
+        -Stage "Preflight capture-monitor"
+
     $triggeredMeasureDir = Join-Path $preflightRoot "triggered-measure-loop"
     $triggeredMeasure = Invoke-ModeCli -Stage "preflight-triggered-measure-loop" `
         -Command "triggered-measure-loop" -ModeArguments $simulate -Arguments @(
@@ -900,47 +935,6 @@ if (-not $script:FunctionalFailed) {
 }
 
 if (-not $script:FunctionalFailed) {
-    Invoke-WorkflowCase -Name "triggered-measure-loop" -Action {
-        $outputDir = Join-Path $liveArtifactRoot "triggered-measure-loop"
-        $payload = Invoke-LiveCli -Stage "triggered-measure-loop" `
-            -Command "triggered-measure-loop" -Arguments @(
-                "--channel", "1", "--items", "vpp,frequency",
-                "--count", "2", "--trigger-timeout-seconds", "5",
-                "--interval-seconds", "0", "--output-dir", $outputDir
-            )
-        Assert-ResultEquals -Payload $payload -Name "status" -Expected "completed" `
-            -Stage "triggered-measure-loop"
-        Assert-ResultEquals -Payload $payload -Name "completed_count" -Expected 2 `
-            -Stage "triggered-measure-loop"
-        Assert-ExpectedFiles -OutputDir $outputDir `
-            -Names @("measurements.csv", "manifest.json", "scpi.log") `
-            -Stage "triggered-measure-loop"
-    }
-}
-
-if (-not $script:FunctionalFailed) {
-    Invoke-WorkflowCase -Name "triggered-capture-series" -Action {
-        $outputDir = Join-Path $liveArtifactRoot "triggered-capture-series"
-        $payload = Invoke-LiveCli -Stage "triggered-capture-series" `
-            -Command "triggered-capture-series" -Arguments @(
-                "--channel", "1", "--points", "1000", "--format", "byte",
-                "--count", "2", "--trigger-timeout-seconds", "5",
-                "--interval-seconds", "0", "--output-dir", $outputDir
-            )
-        Assert-ResultEquals -Payload $payload -Name "status" -Expected "completed" `
-            -Stage "triggered-capture-series"
-        Assert-ResultEquals -Payload $payload -Name "completed_count" -Expected 2 `
-            -Stage "triggered-capture-series"
-        Assert-ExpectedFiles -OutputDir $outputDir `
-            -Names @(
-                "manifest.json", "scpi.log", "waveform_0001.csv",
-                "waveform_0001_meta.json", "waveform_0002.csv",
-                "waveform_0002_meta.json"
-            ) -Stage "triggered-capture-series"
-    }
-}
-
-if (-not $script:FunctionalFailed) {
     Invoke-WorkflowCase -Name "capture-until" -Action {
         $outputDir = Join-Path $liveArtifactRoot "capture-until"
         $payload = Invoke-LiveCli -Stage "capture-until" -Command "capture-until" `
@@ -995,6 +989,47 @@ if (-not $script:FunctionalFailed) {
         if (($indices -join ",") -ne "4,5") {
             throw "capture-monitor CSV capture_index values are $($indices -join ','), expected 4,5."
         }
+    }
+}
+
+if (-not $script:FunctionalFailed) {
+    Invoke-WorkflowCase -Name "triggered-measure-loop" -Action {
+        $outputDir = Join-Path $liveArtifactRoot "triggered-measure-loop"
+        $payload = Invoke-LiveCli -Stage "triggered-measure-loop" `
+            -Command "triggered-measure-loop" -Arguments @(
+                "--channel", "1", "--items", "vpp,frequency",
+                "--count", "2", "--trigger-timeout-seconds", "5",
+                "--interval-seconds", "0", "--output-dir", $outputDir
+            )
+        Assert-ResultEquals -Payload $payload -Name "status" -Expected "completed" `
+            -Stage "triggered-measure-loop"
+        Assert-ResultEquals -Payload $payload -Name "completed_count" -Expected 2 `
+            -Stage "triggered-measure-loop"
+        Assert-ExpectedFiles -OutputDir $outputDir `
+            -Names @("measurements.csv", "manifest.json", "scpi.log") `
+            -Stage "triggered-measure-loop"
+    }
+}
+
+if (-not $script:FunctionalFailed) {
+    Invoke-WorkflowCase -Name "triggered-capture-series" -Action {
+        $outputDir = Join-Path $liveArtifactRoot "triggered-capture-series"
+        $payload = Invoke-LiveCli -Stage "triggered-capture-series" `
+            -Command "triggered-capture-series" -Arguments @(
+                "--channel", "1", "--points", "1000", "--format", "byte",
+                "--count", "2", "--trigger-timeout-seconds", "5",
+                "--interval-seconds", "0", "--output-dir", $outputDir
+            )
+        Assert-ResultEquals -Payload $payload -Name "status" -Expected "completed" `
+            -Stage "triggered-capture-series"
+        Assert-ResultEquals -Payload $payload -Name "completed_count" -Expected 2 `
+            -Stage "triggered-capture-series"
+        Assert-ExpectedFiles -OutputDir $outputDir `
+            -Names @(
+                "manifest.json", "scpi.log", "waveform_0001.csv",
+                "waveform_0001_meta.json", "waveform_0002.csv",
+                "waveform_0002_meta.json"
+            ) -Stage "triggered-capture-series"
     }
 }
 

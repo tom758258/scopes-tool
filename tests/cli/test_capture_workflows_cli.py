@@ -134,8 +134,7 @@ def test_capture_monitor_human_cli_reports_compact_telemetry(tmp_path, capsys):
     assert "min=" in captured.out
     assert "p2p=" in captured.out
     assert "abs-max=" in captured.out
-    # no waveform samples in human output
-    assert "values" not in captured.out.lower() or "CH1 max=" in captured.out
+    assert "values" not in captured.out.lower()
 
 
 def test_capture_monitor_json_mode_not_polluted_by_telemetry(tmp_path, capsys):
@@ -159,14 +158,11 @@ def test_capture_monitor_json_mode_not_polluted_by_telemetry(tmp_path, capsys):
     payload = json.loads(raw)
     assert code == 0
     assert payload["ok"] is True
-    assert payload["result"]["completed_count"] == 2
     assert "samples" not in payload["result"]
-    # human_output in JSON should not contain per-capture telemetry spam beyond final summary
-    human_output = " ".join(payload["result"].get("human_output", []))
-    # telemetry lines are not supposed to be in JSON stdout beyond valid JSON; the raw stdout must be valid JSON
     assert raw.strip().startswith("{")
-    # ensure JSON result does not contain transient waveform samples
-    assert "channels" not in payload["result"].get("metrics", {}) or True
+    human_output = "\n".join(payload["result"].get("human_output", []))
+    assert "Capture 1/2:" not in human_output
+    assert "Capture 2/2:" not in human_output
 
 
 def test_worker_accepts_both_capture_workflows_and_optional_monitor_output(tmp_path):

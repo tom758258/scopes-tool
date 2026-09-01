@@ -94,6 +94,24 @@ def test_live_workflow_script_restores_acquisition_and_requires_clean_queue() ->
     assert snapshot_index < call_index < workflow_index
 
 
+def test_live_workflow_script_orders_waveform_before_triggered() -> None:
+    text = _script_text()
+
+    monitor_index = text.index('Invoke-WorkflowCase -Name "capture-monitor"')
+    triggered_index = text.index('Invoke-WorkflowCase -Name "triggered-measure-loop"')
+    until_index = text.index('Invoke-WorkflowCase -Name "capture-until"')
+
+    assert monitor_index < triggered_index
+    assert until_index < triggered_index
+
+
+def test_live_workflow_script_preflight_covers_new_waveform_workflows() -> None:
+    text = _script_text()
+
+    assert 'preflight-capture-until' in text
+    assert 'preflight-capture-monitor' in text
+
+
 def test_live_workflow_script_uses_qualification_status_vocabulary() -> None:
     text = _script_text()
 
