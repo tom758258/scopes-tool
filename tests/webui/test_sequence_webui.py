@@ -241,3 +241,171 @@ def test_sequence_editor_boundaries_load_and_invalid_submission() -> None:
         assert.equal(submissions.length, 0);
         ''',
     )
+
+
+def test_sequence_validate_text_strict_rejects_duplicate_keys() -> None:
+    client = TestClient(app)
+    duplicate_text = '{"version": 1, "loop_count": 1, "loop_count": 2, "steps": [{"action": "wait", "parameters": {"seconds": 0}}]}'
+    response = client.post("/api/sequence/validate-text", json={"text": duplicate_text})
+    assert response.status_code == 400
+    assert "duplicate object field" in response.json()["detail"]
+
+    # Valid raw text should pass and return normalized document
+    valid_text = '{"version": 1, "loop_count": 1, "steps": [{"action": "wait", "parameters": {"seconds": 0}}]}'
+    valid = client.post("/api/sequence/validate-text", json={"text": valid_text})
+    assert valid.status_code == 200
+    assert valid.json()["document"]["loop_count"] == 1
+
+
+SEQUENCE_EDITOR_VALIDATION_MESSAGE_HARNESS = r'''
+  import assert from "node:assert/strict";
+  import fs from "node:fs";
+  globalThis.translate = (key, values = {}) => Object.entries(values).reduce(
+    (text, [name, value]) => text.replaceAll(`{{${name}}}`, String(value)), key,
+  );
+  globalThis.queueMicrotask ||= (callback) => Promise.resolve().then(callback);
+  globalThis.applyNumericFieldConstraints = () => {};
+  globalThis.document = {
+    createElement: (tag) => {
+      const el = {
+        tagName: tag,
+        className: "",
+        dataset: {},
+        hidden: false,
+        textContent: "",
+        value: "",
+        checked: false,
+        type: "",
+        append: function(...c){ (this.children = this.children || []).push(...c); },
+        replaceChildren: function(...c){ this.children = c; },
+        setAttribute: function(){},
+        addEventListener: function(){},
+        remove: function(){},
+        querySelectorAll: function(){ return []; },
+      };
+      el.dataset = {};
+      if (tag === "input" || tag === "button" || tag === "select") {
+        el.setCustomValidity = (msg) => { el._msg = msg; };
+      }
+      return el;
+    },
+  };
+  globalThis.Option = function(text, value){ this.text = text; this.value = value; };
+  globalThis.Blob = class { constructor(parts, opts){ this.parts = parts; this.opts = opts; } };
+  globalThis.URL = { createObjectURL: () => "blob:fake", revokeObjectURL: () => {} };
+  const source = fs.readFileSync(process.argv[1], "utf8")
+    .replace(/^import[^\n]*\r?\n/gm, "")
+    .replace(/^export /gm, "")
+    + "\nglobalThis.SequenceEditor = SequenceEditor;";
+  await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+  const metadata = {
+    actions: ["wait", "single", "wait-trigger", "measure", "capture", "screenshot", "cleanup"],
+    limits: { step_count: 255, loop_count: 255, total_step_executions: 65025, artifact_steps: 10 },
+    parameters: {
+      wait: [{ name: "seconds", type: "number", minimum: 0, default: 0, required: true }],
+      single: [],
+      "wait-trigger": [{ name: "timeout_seconds", type: "number", exclusive_minimum: 0, default: 1, required: true }],
+      measure: [{ name: "item", type: "enum", options: ["vpp"], default: "vpp", required: true }, { name: "channel", type: "integer", options: [1, 2, 3, 4], default: 1 }],
+      capture: [{ name: "channels", type: "multi-enum", options: ["all", 1, 2, 3, 4], default: [1], required: true }, { name: "allow_time_axis_tolerance", type: "boolean", default: false }],
+      screenshot: [{ name: "background", type: "enum", options: ["black", "white"], default: "black" }],
+      cleanup: [{ name: "profile", type: "enum", options: ["minimal", "safe"], default: "minimal" }],
+    },
+  };
+  const state = { loopCount: "1", filename: "test.sequence.json", message: "", messageError: false, steps: [{ action: "wait", parameters: { seconds: "0" }, expanded: true }] };
+  const mockMessage = { textContent: "", hidden: true, className: "", setAttribute: () => {} };
+  const mockLoopInput = { value: state.loopCount, setCustomValidity: (msg) => { mockLoopInput._msg = msg; } };
+  const mockContainer = { querySelectorAll: () => [] };
+  const saveButton = { disabled: false, dataset: {} };
+  const executeButton = { disabled: false };
+  const headerActions = { append: () => {} };
+  const container = { replaceChildren: () => {}, querySelectorAll: () => [] , append: () => {} };
+  const editor = new globalThis.SequenceEditor(container, {}, {
+    headerActions,
+    isExecutionBusy: () => false,
+    isAvailable: () => true,
+    contextKey: () => "test|sequence",
+    selectedCommand: () => ({ editor: "sequence", sequence: metadata }),
+  });
+  // Override state and DOM hooks to use our mocks and real validation
+  editor.state = () => state;
+  editor.metadata = () => metadata;
+  editor.message = mockMessage;
+  editor.loopInput = mockLoopInput;
+  editor.container = mockContainer;
+  editor.saveButton = saveButton;
+  editor.executeButton = executeButton;
+  editor.busy = false;
+  // keep original hooks (with selectedCommand/contextKey) and just ensure availability
+  editor.hooks.isExecutionBusy = () => false;
+  editor.hooks.isAvailable = () => true;
+'''
+
+
+def run_validation_message_behavior(script: str) -> None:
+    completed = subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "--eval",
+            textwrap.dedent(SEQUENCE_EDITOR_VALIDATION_MESSAGE_HARNESS) + textwrap.dedent(script),
+            str(EDITOR_SOURCE),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_sequence_editor_validation_message_clears_success_on_invalid_mutation() -> None:
+    run_validation_message_behavior(
+        r'''
+        // Simulate successful Load
+        state.message = "Sequence loaded";
+        state.messageError = false;
+        mockMessage.textContent = state.message;
+        mockMessage.hidden = false;
+        mockMessage.className = "compact-note";
+        assert.equal(editor.validationError(), "");
+        // Mutate to invalid via document-changing handler (loopCount)
+        state.loopCount = "0";
+        mockLoopInput.value = "0";
+        editor.handleDocumentChange();
+        // Old success must be cleared and validation error shown
+        assert.equal(state.message, "");
+        assert.notEqual(editor.validationError(), "");
+        assert.equal(mockMessage.textContent, editor.validationError());
+        assert.equal(mockMessage.hidden, false);
+        assert.equal(mockMessage.className, "form-error");
+        editor.applyBusyState();
+        assert.equal(saveButton.disabled, true);
+        assert.equal(executeButton.disabled, true);
+        // Fix back to valid
+        state.loopCount = "1";
+        mockLoopInput.value = "1";
+        editor.handleDocumentChange();
+        assert.equal(state.message, "");
+        assert.equal(editor.validationError(), "");
+        assert.equal(mockMessage.hidden, true);
+        editor.applyBusyState();
+        assert.equal(saveButton.disabled, false);
+        assert.equal(executeButton.disabled, false);
+        // Collapse/expand must not clear success message
+        state.message = "Sequence loaded";
+        state.messageError = false;
+        mockMessage.textContent = "Sequence loaded";
+        mockMessage.hidden = false;
+        // Simulate collapse: toggle expanded without document change
+        state.steps[0].expanded = false;
+        // No handleDocumentChange called, message should remain
+        assert.equal(state.message, "Sequence loaded");
+        assert.equal(mockMessage.textContent, "Sequence loaded");
+        // Also verify addStep clears message (structural change)
+        state.message = "Sequence saved";
+        state.messageError = false;
+        editor.clearDocumentMessage();
+        assert.equal(state.message, "");
+        assert.equal(state.messageError, false);
+        ''',
+    )

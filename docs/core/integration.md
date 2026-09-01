@@ -229,6 +229,11 @@ names are intended for package consumers and tests:
 - `interruptible_wait`
 - `load_sequence_document`
 - `normalize_sequence_document`
+- `SEQUENCE_ACTIONS`
+- `SEQUENCE_MAX_ARTIFACT_STEPS`
+- `SEQUENCE_MAX_LOOPS`
+- `SEQUENCE_MAX_STEPS`
+- `SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS`
 - `TriggeredMeasureLoopRequest`
 - `TriggeredCaptureSeriesRequest`
 - `MeasureUntilRequest`

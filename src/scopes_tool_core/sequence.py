@@ -130,25 +130,35 @@ class _SequenceStepCancelled(Exception):
     pass
 
 
+def parse_sequence_document(text: str) -> SequenceDocument:
+    """Strictly parse and normalize one JSON Sequence v1 document from text."""
+
+    try:
+        payload = json.loads(
+            text,
+            object_pairs_hook=_strict_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ParameterValidationError(f"invalid sequence JSON: {exc}") from exc
+    return normalize_sequence_document(payload)
+
+
 def load_sequence_document(path: str | Path) -> SequenceDocument:
     """Load and strictly normalize one JSON Sequence v1 document."""
 
     input_path = Path(path)
     try:
         text = input_path.read_text(encoding="utf-8")
-        payload = json.loads(
-            text,
-            object_pairs_hook=_strict_json_object,
-            parse_constant=_reject_json_constant,
-        )
     except OSError as exc:
         reason = exc.strerror or str(exc)
         raise OscilloscopeError(f"could not read sequence file {input_path}: {reason}") from exc
-    except (json.JSONDecodeError, ValueError) as exc:
+    try:
+        return parse_sequence_document(text)
+    except ParameterValidationError as exc:
         raise ParameterValidationError(
             f"invalid sequence JSON in {input_path}: {exc}"
         ) from exc
-    return normalize_sequence_document(payload)
 
 
 def normalize_sequence_document(payload: Mapping[str, object]) -> SequenceDocument:

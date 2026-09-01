@@ -139,6 +139,17 @@ export class SequenceEditor {
     this.render();
   }
 
+  clearDocumentMessage() {
+    const state = this.state();
+    state.message = "";
+    state.messageError = false;
+  }
+
+  handleDocumentChange() {
+    this.clearDocumentMessage();
+    this.updateValidity();
+  }
+
   addStep() {
     const state = this.state();
     const maximum = this.metadata().limits.step_count;
@@ -147,7 +158,7 @@ export class SequenceEditor {
       return false;
     }
     state.steps.push({ action: "wait", parameters: { seconds: "0" }, expanded: true });
-    state.message = "";
+    this.clearDocumentMessage();
     this.render();
     return true;
   }
@@ -159,7 +170,7 @@ export class SequenceEditor {
       return false;
     }
     state.steps.splice(index, 1);
-    state.message = "";
+    this.clearDocumentMessage();
     this.render();
     return true;
   }
@@ -169,6 +180,7 @@ export class SequenceEditor {
     const target = index + offset;
     if (target < 0 || target >= state.steps.length) return false;
     [state.steps[index], state.steps[target]] = [state.steps[target], state.steps[index]];
+    this.clearDocumentMessage();
     this.render();
     return true;
   }
@@ -186,7 +198,7 @@ export class SequenceEditor {
     step.action = action;
     step.parameters = this.defaultParameters(action);
     step.expanded = true;
-    state.message = "";
+    this.clearDocumentMessage();
     this.render();
     return true;
   }
@@ -234,8 +246,7 @@ export class SequenceEditor {
     this.loopInput.value = state.loopCount;
     this.loopInput.addEventListener("input", () => {
       state.loopCount = this.loopInput.value;
-      state.message = "";
-      this.updateValidity();
+      this.handleDocumentChange();
     });
     loopLabel.append(loopText, this.loopInput);
     this.stepUsage = document.createElement("strong");
@@ -337,6 +348,7 @@ export class SequenceEditor {
         }
         step.parameters[field.name] = input.value;
         this.ensureVisibleDefaults(step);
+        this.clearDocumentMessage();
         this.render();
       });
     } else if (field.type === "multi-enum") {
@@ -362,7 +374,7 @@ export class SequenceEditor {
             .filter((item) => item.checked)
             .map((item) => item.value === "all" ? "all" : Number(item.value));
           step.parameters[field.name] = values;
-          this.updateValidity();
+          this.handleDocumentChange();
         });
         const text = document.createElement("span");
         text.textContent = option === "all"
@@ -377,7 +389,7 @@ export class SequenceEditor {
       input.checked = Boolean(step.parameters[field.name]);
       input.addEventListener("change", () => {
         step.parameters[field.name] = input.checked;
-        this.updateValidity();
+        this.handleDocumentChange();
       });
     } else {
       input = document.createElement("input");
@@ -390,7 +402,7 @@ export class SequenceEditor {
       input.value = String(step.parameters[field.name] ?? "");
       input.addEventListener("input", () => {
         step.parameters[field.name] = input.value;
-        this.updateValidity();
+        this.handleDocumentChange();
       });
     }
     input.dataset.sequenceParameter = `${index + 1}:${field.name}`;
@@ -498,7 +510,23 @@ export class SequenceEditor {
   async loadFile(file) {
     if (!file) return false;
     try {
-      const payload = JSON.parse(await file.text());
+      const text = await file.text();
+      if (this.hooks.validateSequenceText) {
+        const validated = await this.hooks.validateSequenceText(text);
+        const state = this.state();
+        state.loopCount = String(validated.document.loop_count);
+        state.steps = validated.document.steps.map((step) => ({
+          action: step.action,
+          parameters: clone(step.parameters),
+          expanded: false,
+        }));
+        state.filename = file.name;
+        state.message = translate("sequence.editor.loaded");
+        state.messageError = false;
+        this.render();
+        return true;
+      }
+      const payload = JSON.parse(text);
       return await this.loadDocument(payload, file.name);
     } catch (error) {
       this.setMessage(translate("sequence.editor.loadFailed", { error: error.message }));

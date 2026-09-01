@@ -1,4 +1,4 @@
-import { getCommands, getHealth, openPcOutputFolder, selectPcOutputFolder, validateSequence } from "/static/api.js";
+import { getCommands, getHealth, openPcOutputFolder, selectPcOutputFolder, validateSequence, validateSequenceText } from "/static/api.js";
 import { bindBasicControls } from "/static/basic-controls.js";
 import { CommandCatalog } from "/static/command-catalog.js";
 import { CommandForm } from "/static/command-form.js";
@@ -240,6 +240,7 @@ async function initialize() {
   sequenceEditor = new SequenceEditor(elements.sequenceEditor, catalog, {
     executeCommand,
     validateSequence,
+    validateSequenceText,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
     isAvailable: () => {

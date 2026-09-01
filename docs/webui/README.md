@@ -79,7 +79,7 @@ browser-session state only and is snapshotted when each job is submitted.
 The setting applies to host-side artifacts created by `screenshot`, `capture`,
 `serial-lister-export`, `segmented-capture`, `capture-batch`, `capture-until`,
 `capture-monitor`, `measure-log`, `measure-until`,
-`triggered-measure-loop`, and `triggered-capture-series`.
+`triggered-measure-loop`, `triggered-capture-series`, and `sequence`.
 Their command workspaces show the current shared folder but do not add another
 path control. Serial Lister Export accepts a filename only; its WebUI field
 cannot select or escape the shared folder.

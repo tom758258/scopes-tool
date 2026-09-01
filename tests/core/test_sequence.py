@@ -80,6 +80,17 @@ def test_sequence_loader_rejects_non_standard_json_numbers(tmp_path):
         sequence.load_sequence_document(path)
 
 
+def test_sequence_strict_parser_rejects_duplicate_keys(tmp_path):
+    duplicate_text = '{"version": 1, "loop_count": 1, "loop_count": 2, "steps": [{"action": "wait", "parameters": {"seconds": 0}}]}'
+    with pytest.raises(ParameterValidationError, match="duplicate object field"):
+        sequence.parse_sequence_document(duplicate_text)
+
+    path = tmp_path / "duplicate.json"
+    path.write_text(duplicate_text, encoding="utf-8")
+    with pytest.raises(ParameterValidationError, match="duplicate object field"):
+        sequence.load_sequence_document(path)
+
+
 def test_sequence_product_limits_accept_maximum_boundaries():
     steps = [_step("wait", seconds=0) for _ in range(245)]
     steps.extend(_step("capture", channels=[1]) for _ in range(5))

@@ -21,6 +21,10 @@ export async function validateSequence(document) {
   return requestJson(SEQUENCE_VALIDATE_PATH, "POST", document);
 }
 
+export async function validateSequenceText(text) {
+  return requestJson("/api/sequence/validate-text", "POST", { text });
+}
+
 export async function selectPcOutputFolder() {
   return requestJson(PC_OUTPUT_FOLDER_PATH, "POST", {});
 }

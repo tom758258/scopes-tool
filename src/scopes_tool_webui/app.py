@@ -87,6 +87,21 @@ async def validate_sequence(payload: dict[str, Any] = Body(...)) -> dict[str, An
     return {"ok": True, "document": document.to_json()}
 
 
+@app.post("/api/sequence/validate-text")
+async def validate_sequence_text(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    raw_text = payload.get("text")
+    if not isinstance(raw_text, str):
+        raise HTTPException(status_code=400, detail="text must be a string")
+    try:
+        # Use Core strict parser directly to keep lexical JSON contract centralized.
+        from scopes_tool_core.sequence import parse_sequence_document
+
+        document = parse_sequence_document(raw_text)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "document": document.to_json()}
+
+
 @app.post("/api/pc-output/select-folder")
 def select_pc_output_folder() -> dict[str, Any]:
     try:
