@@ -314,7 +314,7 @@ SEQUENCE_EDITOR_VALIDATION_MESSAGE_HARNESS = r'''
   const state = { loopCount: "1", filename: "test.sequence.json", message: "", messageError: false, steps: [{ action: "wait", parameters: { seconds: "0" }, expanded: true }] };
   const mockMessage = { textContent: "", hidden: true, className: "", setAttribute: () => {} };
   const mockLoopInput = { value: state.loopCount, setCustomValidity: (msg) => { mockLoopInput._msg = msg; } };
-  const mockContainer = { querySelectorAll: () => [] };
+  const mockContainer = { replaceChildren: () => {}, querySelectorAll: () => [], append: () => {} };
   const saveButton = { disabled: false, dataset: {} };
   const executeButton = { disabled: false };
   const headerActions = { append: () => {} };
@@ -407,5 +407,38 @@ def test_sequence_editor_validation_message_clears_success_on_invalid_mutation()
         editor.clearDocumentMessage();
         assert.equal(state.message, "");
         assert.equal(state.messageError, false);
+        ''',
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_sequence_editor_loadfile_uses_raw_text_fail_closed() -> None:
+    run_validation_message_behavior(
+        r'''
+        const rawDuplicate = '{"version":1,"loop_count":1,"loop_count":2,"steps":[{"action":"wait","parameters":{"seconds":0}}]}';
+        let receivedText = null;
+        editor.hooks.validateSequenceText = async (text) => {
+          receivedText = text;
+          throw new Error("duplicate object field: loop_count");
+        };
+        const fakeFile = {
+          name: "dup.sequence.json",
+          text: async () => rawDuplicate,
+        };
+        const result = await editor.loadFile(fakeFile);
+        assert.equal(result, false);
+        assert.equal(receivedText, rawDuplicate);
+        assert.ok(state.message.length > 0);
+        assert.notEqual(state.message, "Sequence loaded");
+        // Also verify fail-closed when hook missing
+        delete editor.hooks.validateSequenceText;
+        const fakeFile2 = {
+          name: "dup2.sequence.json",
+          text: async () => rawDuplicate,
+        };
+        const result2 = await editor.loadFile(fakeFile2);
+        assert.equal(result2, false);
+        assert.ok(state.message.length > 0);
+        assert.notEqual(state.message, "Sequence loaded");
         ''',
     )

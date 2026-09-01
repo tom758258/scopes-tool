@@ -130,15 +130,21 @@ class _SequenceStepCancelled(Exception):
     pass
 
 
+def _parse_sequence_json(text: str) -> object:
+    """Strictly parse JSON text with duplicate-key and non-standard constant rejection."""
+
+    return json.loads(
+        text,
+        object_pairs_hook=_strict_json_object,
+        parse_constant=_reject_json_constant,
+    )
+
+
 def parse_sequence_document(text: str) -> SequenceDocument:
     """Strictly parse and normalize one JSON Sequence v1 document from text."""
 
     try:
-        payload = json.loads(
-            text,
-            object_pairs_hook=_strict_json_object,
-            parse_constant=_reject_json_constant,
-        )
+        payload = _parse_sequence_json(text)
     except (json.JSONDecodeError, ValueError) as exc:
         raise ParameterValidationError(f"invalid sequence JSON: {exc}") from exc
     return normalize_sequence_document(payload)
@@ -154,11 +160,12 @@ def load_sequence_document(path: str | Path) -> SequenceDocument:
         reason = exc.strerror or str(exc)
         raise OscilloscopeError(f"could not read sequence file {input_path}: {reason}") from exc
     try:
-        return parse_sequence_document(text)
-    except ParameterValidationError as exc:
+        payload = _parse_sequence_json(text)
+    except (json.JSONDecodeError, ValueError) as exc:
         raise ParameterValidationError(
             f"invalid sequence JSON in {input_path}: {exc}"
         ) from exc
+    return normalize_sequence_document(payload)
 
 
 def normalize_sequence_document(payload: Mapping[str, object]) -> SequenceDocument:

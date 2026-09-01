@@ -510,24 +510,23 @@ export class SequenceEditor {
   async loadFile(file) {
     if (!file) return false;
     try {
-      const text = await file.text();
-      if (this.hooks.validateSequenceText) {
-        const validated = await this.hooks.validateSequenceText(text);
-        const state = this.state();
-        state.loopCount = String(validated.document.loop_count);
-        state.steps = validated.document.steps.map((step) => ({
-          action: step.action,
-          parameters: clone(step.parameters),
-          expanded: false,
-        }));
-        state.filename = file.name;
-        state.message = translate("sequence.editor.loaded");
-        state.messageError = false;
-        this.render();
-        return true;
+      if (typeof this.hooks.validateSequenceText !== "function") {
+        throw new Error("Sequence text validation is unavailable.");
       }
-      const payload = JSON.parse(text);
-      return await this.loadDocument(payload, file.name);
+      const text = await file.text();
+      const validated = await this.hooks.validateSequenceText(text);
+      const state = this.state();
+      state.loopCount = String(validated.document.loop_count);
+      state.steps = validated.document.steps.map((step) => ({
+        action: step.action,
+        parameters: clone(step.parameters),
+        expanded: false,
+      }));
+      state.filename = file.name;
+      state.message = translate("sequence.editor.loaded");
+      state.messageError = false;
+      this.render();
+      return true;
     } catch (error) {
       this.setMessage(translate("sequence.editor.loadFailed", { error: error.message }));
       return false;

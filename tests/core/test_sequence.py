@@ -91,6 +91,19 @@ def test_sequence_strict_parser_rejects_duplicate_keys(tmp_path):
         sequence.load_sequence_document(path)
 
 
+def test_load_sequence_document_preserves_semantic_error_without_json_prefix(tmp_path):
+    path = tmp_path / "semantic_invalid.json"
+    path.write_text(
+        '{"version": 1, "loop_count": 0, "steps": [{"action": "wait", "parameters": {"seconds": 0}}]}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ParameterValidationError) as exc_info:
+        sequence.load_sequence_document(path)
+    message = str(exc_info.value)
+    assert "sequence loop_count must be at least 1" in message
+    assert "invalid sequence JSON in" not in message
+
+
 def test_sequence_product_limits_accept_maximum_boundaries():
     steps = [_step("wait", seconds=0) for _ in range(245)]
     steps.extend(_step("capture", channels=[1]) for _ in range(5))
