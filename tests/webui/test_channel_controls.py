@@ -614,3 +614,183 @@ def test_channel_commands_keep_groups_order_and_presentation_labels() -> None:
     # Search and shared basic group remains intact
     assert '"group.basic": "基本"' in zh
     assert '"group.basic": "Basic"' in en
+
+
+@pytest.mark.skipif(
+    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_capture_multi_enum_channel_options_use_channel_translation() -> None:
+    capture_fields = next(
+        entry["fields"] for entry in command_catalog() if entry["id"] == "capture"
+    )
+    capture_channels = next(field for field in capture_fields if field["name"] == "channels")
+    assert capture_channels["option_label"] == "channel"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeEl {
+          constructor(tag){
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.attributes = {};
+            this.style = {};
+            this.className = "";
+            this.textContent = "";
+            this.hidden = false;
+            this.disabled = false;
+            this.checked = false;
+            this.type = "";
+            this.multiple = false;
+            this.required = false;
+            this.validity = {};
+            this._value = "";
+            this.options = [];
+            this.selectedOptions = [];
+            this.parentElement = null;
+            const classes = new Set();
+            this.classList = {
+              add: (...names) => names.forEach((name) => classes.add(name)),
+              contains: (name) => classes.has(name),
+            };
+          }
+          get value(){ return this._value; }
+          set value(v){
+            this._value = String(v);
+            if(this.tagName==="SELECT"){
+              for(const o of this.options) o.selected = (o.value===this._value);
+              this.selectedOptions = this.options.filter(o=>o.selected);
+            }
+          }
+          append(...nodes){
+            for(const n of nodes){
+              this.children.push(n);
+              n.parentElement = this;
+              if(n.tagName==="OPTION"){
+                this.options.push(n);
+                if(n.selected) this.selectedOptions.push(n);
+              }
+            }
+          }
+          replaceChildren(...nodes){
+            this.children = [];
+            this.options = [];
+            this.selectedOptions = [];
+            if(nodes.length) this.append(...nodes);
+          }
+          setAttribute(k,v){ this.attributes[k]=String(v); }
+          getAttribute(k){ return this.attributes[k]; }
+          addEventListener(){}
+          dispatchEvent(){ return true; }
+          closest(sel){
+            if(sel==='[data-visible-if-hidden="true"]'){
+              let node = this;
+              while(node){
+                if(node.dataset?.visibleIfHidden === "true") return node;
+                node = node.parentElement;
+              }
+            }
+            return null;
+          }
+          setCustomValidity(){}
+          checkValidity(){ return true; }
+          reportValidity(){}
+          querySelector(sel){ return this.querySelectorAll(sel)[0]||null; }
+          querySelectorAll(sel){
+            const out=[];
+            const isDataField = sel==="[data-field]" || sel.startsWith('[data-field="');
+            const isMultiFor = sel==="[data-multi-for]";
+            const mField = sel.match(/^\[data-field="([^"]+)"\]$/);
+            const walk=(node)=>{
+              if(!node) return;
+              if(isDataField && node.dataset && "field" in node.dataset){
+                if(sel==="[data-field]") out.push(node);
+                else if(mField && node.dataset.field===mField[1]) out.push(node);
+              }
+              if(isMultiFor && node.dataset && "multiFor" in node.dataset) out.push(node);
+              for(const c of node.children||[]) walk(c);
+              for(const o of node.options||[]) {
+                if(isDataField && o.dataset && "field" in o.dataset) {
+                  if(sel==="[data-field]") out.push(o);
+                  else if(mField && o.dataset.field===mField[1]) out.push(o);
+                }
+              }
+            };
+            for(const w of this.children) walk(w);
+            return out;
+          }
+        }
+        function makeContainer(){
+          const c=new FakeEl("div");
+          return c;
+        }
+        globalThis.document = { createElement(tag){ return new FakeEl(tag); } };
+        globalThis.Option = function(text, value){
+          const o=new FakeEl("option");
+          o.textContent=text; o.value=String(value); o.selected=false; return o;
+        };
+        globalThis.Event = class Event { constructor(t){ this.type=t; } };
+        globalThis.HTMLElement = FakeEl;
+
+        const translations = {
+          "enum.channel1":"Channel 1","enum.channel2":"Channel 2","enum.channel3":"Channel 3","enum.channel4":"Channel 4",
+          "field.capture.channels":"Channels",
+        };
+        globalThis.hasTranslation = k=> k in translations;
+        globalThis.translate = (k, values={})=>{
+          let text = translations[k] || k;
+          for(const [name,value] of Object.entries(values)) text=text.replaceAll(`{{${name}}}`, String(value));
+          return text;
+        };
+
+        const catalog = {
+          fieldsFor: (cmd)=> cmd.fields,
+          optionsFor: (f)=> f.options||[],
+        };
+
+        const captureFields = __CAPTURE_FIELDS__;
+
+        let source = [
+          fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/numeric-input.js"),"utf8"),
+          fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/command-form.js"),"utf8"),
+        ].join("\n");
+        source = source.replace(/^import[^\n]*\r?\n/gm,"").replace(/^export /gm,"");
+        source += "\nglobalThis.CommandForm=CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const CommandForm = globalThis.CommandForm;
+
+        const cont = makeContainer();
+        const form = new CommandForm(cont, catalog);
+        const cmd = { id:"capture", fields:captureFields, presentation:{ kind:"command", action:"capture" } };
+        form.render(cmd);
+        const sel = cont.querySelector('[data-field="channels"]');
+        assert.ok(sel, "channels should be SELECT");
+        assert.equal(sel.tagName, "SELECT");
+        assert.equal(sel.multiple, true);
+        // options should be Channel N, not bare numbers
+        assert.equal(sel.options[0].textContent, "Channel 1");
+        assert.equal(sel.options[1].textContent, "Channel 2");
+        assert.equal(sel.options[2].textContent, "Channel 3");
+        assert.equal(sel.options[3].textContent, "Channel 4");
+        assert.equal(sel.options[0].value, "1");
+
+        // multi-choice checkboxes should also use channel labels
+        const boxes = cont.querySelectorAll("[data-multi-for]");
+        const boxLabels = boxes.map(b=> b.parentElement.children[1].textContent);
+        assert.deepEqual(boxLabels, ["Channel 1","Channel 2","Channel 3","Channel 4"]);
+
+        console.log("capture multi-enum channel translation passed");
+        '''
+    ).replace("__CAPTURE_FIELDS__", json.dumps(capture_fields))
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout

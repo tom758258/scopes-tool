@@ -246,7 +246,14 @@ export class CommandForm {
       }
       const options = actionChoices || this.catalog.optionsFor(field);
       options.forEach((option) => {
-        input.append(new Option(translateEnum(option, field.option_label), String(option)));
+        let label;
+        if (field.option_label === "channel") {
+          const channelKey = `enum.channel${option}`;
+          label = hasTranslation(channelKey) ? translate(channelKey) : String(option);
+        } else {
+          label = translateEnum(option, field.option_label);
+        }
+        input.append(new Option(label, String(option)));
       });
       if (input.multiple) {
         input.size = Math.min(Math.max(options.length, 2), 6);

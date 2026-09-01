@@ -683,12 +683,21 @@ def _validate_parameter_shapes(
             continue
         elif field_type == "multi-enum":
             if isinstance(value, str):
+                if field.get("required") is True and not value.strip():
+                    raise WebUIRequestError(f"{name} is required")
                 continue
-            if isinstance(value, (list, tuple)) and all(
-                isinstance(item, (str, int, float)) and not isinstance(item, bool)
-                for item in value
-            ):
-                continue
+
+            if isinstance(value, (list, tuple)):
+                if field.get("required") is True and not any(
+                    str(item).strip() for item in value
+                ):
+                    raise WebUIRequestError(f"{name} is required")
+                if all(
+                    isinstance(item, (str, int, float)) and not isinstance(item, bool)
+                    for item in value
+                ):
+                    continue
+
             raise WebUIRequestError(f"{name} must be a comma-separated string or list")
         else:
             continue

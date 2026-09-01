@@ -2008,3 +2008,48 @@ def test_check_error_execution_passes_max_reads_and_preserves_entries(tmp_path: 
     assert [entry["code"] for entry in result["result"]["entries"]] == [-113, -221, 0]
     assert result["result"]["system_error"] == result["result"]["entries"][-1]
     assert result["exit_code"] == 1
+
+
+def test_capture_multi_channel_catalog_contract() -> None:
+    capture = next(
+        entry for entry in TestClient(app).get("/api/commands").json()
+        if entry["id"] == "capture"
+    )
+    field = next(entry for entry in capture["fields"] if entry["name"] == "channels")
+    assert field["type"] == "multi-enum"
+    assert field["options"] == [1, 2, 3, 4]
+    assert field["default"] == [1]
+    assert field["serialize"] == "csv"
+    assert field["required"] is True
+    assert field["option_label"] == "channel"
+    assert field["label_key"] == "capture.channels"
+    assert field["help_key"] == "capture.channels"
+
+
+def test_capture_multi_channel_simulate_and_dry_run() -> None:
+    client = TestClient(app)
+    simulate = submit(client, "capture", "simulate", {"channels": "1,2", "points": 1000, "format": "byte"})
+    assert simulate["status"] == "completed"
+    assert simulate["result"]["result"]["channels"] == [1, 2]
+    assert any(artifact["kind"] == "csv" for artifact in simulate["artifacts"])
+    assert any(artifact["kind"] == "metadata" for artifact in simulate["artifacts"])
+
+    dry_run = submit(client, "capture", "dry-run", {"channels": "1,2", "points": 1000, "format": "byte"})
+    assert dry_run["status"] == "completed"
+    assert dry_run["result"]["result"]["channels"] == [1, 2]
+
+
+@pytest.mark.parametrize("channels", ["", "   ", [], ()])
+def test_live_capture_rejects_empty_required_channels_before_queue(channels) -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/jobs",
+        json={
+            "command": "capture",
+            "mode": "live",
+            "resource": "USB::TEST::INSTR",
+            "parameters": {"channels": channels, "points": 1000, "format": "byte"},
+        },
+    )
+    assert response.status_code == 400
+    assert "channels is required" in response.json()["detail"]
