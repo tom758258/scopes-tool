@@ -48,6 +48,7 @@ def test_live_workflow_script_preserves_fixture_and_trigger_boundary() -> None:
     assert "Disconnect unknown or sensitive DUT" in text
     assert "existing trigger setup reliably triggers" in text
     assert "does not reset, preset, autoscale, or reconfigure the trigger mode" in text
+    assert "If acquisition is initially stopped, the validator starts it for workflow validation and restores the original Running/Stopped state during cleanup." in text
     assert '-Command "trigger-edge"' not in text
     assert '-Command "trigger-sweep"' not in text
 
@@ -74,6 +75,19 @@ def test_live_workflow_script_restores_acquisition_and_requires_clean_queue() ->
     assert '"stop-acquisition"' in text
     assert 'Get-ErrorDrain -Stage "final-error-queue"' in text
     assert '-Name "final-error-queue" -Status "PASS"' in text
+    assert 'function Ensure-WorkflowAcquisitionRunning' in text
+    assert 'Ensure-WorkflowAcquisitionRunning -WasRunning $wasRunning' in text
+    assert 'Acquisition was stopped; started for workflow validation.' in text
+    assert 'Acquisition was running.' in text
+    assert '"acquisition-precondition-run"' in text
+    assert '"acquisition-precondition-status"' in text
+    call = "Ensure-WorkflowAcquisitionRunning -WasRunning $wasRunning"
+    snapshot_index = text.index('Invoke-LiveCli -Stage "snapshot-operation-status"')
+    call_index = text.index(call, snapshot_index)
+    workflow_index = text.index(
+        'Invoke-WorkflowCase -Name "measure-sweep"', call_index
+    )
+    assert snapshot_index < call_index < workflow_index
 
 
 def test_live_workflow_script_uses_qualification_status_vocabulary() -> None:

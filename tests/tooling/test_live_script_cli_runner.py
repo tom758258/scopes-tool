@@ -4438,6 +4438,143 @@ function Invoke-Scenario {
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+def test_workflow_acquisition_run_precondition(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-workflow-check.ps1"
+    harness_path = tmp_path / "workflow-acquisition-precondition-harness.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse workflow live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @("Get-RequiredResultValue", "Ensure-WorkflowAcquisitionRunning")) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$script:OperationConditionRunMask = 8
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+
+function Invoke-LiveCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Stage,
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+        [string[]] $Arguments = @()
+    )
+
+    $script:Invocations.Add([pscustomobject]@{
+        stage = $Stage
+        command = $Command
+        arguments = @($Arguments)
+    })
+    if ($Command -eq "run") {
+        return [pscustomobject]@{ ok = $true }
+    }
+    if ($Command -eq "system-operation-status") {
+        return [pscustomobject]@{
+            result = [pscustomobject]@{ value = 8 }
+        }
+    }
+    throw "Unexpected live command: ${Command}"
+}
+
+# Case 1 - originally running: helper should return without invoking CLI
+$script:Invocations.Clear()
+$runningError = ""
+try {
+    Ensure-WorkflowAcquisitionRunning -WasRunning $true
+} catch {
+    $runningError = $_.Exception.Message
+}
+$runningCalls = @($script:Invocations | ForEach-Object {
+    [ordered]@{ command = $_.command; arguments = @($_.arguments) }
+})
+
+# Case 2 - originally stopped: helper should issue run + status query
+$script:Invocations.Clear()
+$stoppedError = ""
+try {
+    Ensure-WorkflowAcquisitionRunning -WasRunning $false
+} catch {
+    $stoppedError = $_.Exception.Message
+}
+$stoppedCalls = @($script:Invocations | ForEach-Object {
+    [ordered]@{ command = $_.command; arguments = @($_.arguments) }
+})
+
+[ordered]@{
+    running_error = $runningError
+    running_calls = @($runningCalls)
+    running_count = $runningCalls.Count
+    stopped_error = $stoppedError
+    stopped_calls = @($stoppedCalls)
+    stopped_count = $stoppedCalls.Count
+} | ConvertTo-Json -Depth 8 -Compress
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    # Case 1 - originally running: no CLI invocation
+    assert result["running_error"] == ""
+    assert result["running_count"] == 0
+    assert result["running_calls"] == []
+
+    # Case 2 - originally stopped: exactly run + status query
+    assert result["stopped_error"] == ""
+    assert result["stopped_count"] == 2
+    assert result["stopped_calls"][0]["command"] == "run"
+    assert result["stopped_calls"][0]["arguments"] == []
+    assert result["stopped_calls"][1]["command"] == "system-operation-status"
+    assert result["stopped_calls"][1]["arguments"] == ["--query"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 
 
 def test_baseline_save_settings_owns_mutations_and_partial_rollback(

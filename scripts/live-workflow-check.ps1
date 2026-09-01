@@ -610,6 +610,28 @@ function Invoke-HardwareFreePreflight {
     }
 }
 
+function Ensure-WorkflowAcquisitionRunning {
+    param(
+        [Parameter(Mandatory = $true)]
+        [bool] $WasRunning
+    )
+
+    if ($WasRunning) {
+        return
+    }
+
+    Invoke-LiveCli -Stage "acquisition-precondition-run" -Command "run" | Out-Null
+
+    $operationStatus = Invoke-LiveCli -Stage "acquisition-precondition-status" `
+        -Command "system-operation-status" -Arguments @("--query")
+    $operationValue = [int](Get-RequiredResultValue -Payload $operationStatus `
+        -Name "value" -Stage "Acquisition precondition")
+    $isRunning = ($operationValue -band $script:OperationConditionRunMask) -ne 0
+    if (-not $isRunning) {
+        throw "Acquisition precondition RUN readback is false after run."
+    }
+}
+
 function Restore-AcquisitionState {
     param(
         [Parameter(Mandatory = $true)]
@@ -737,6 +759,7 @@ Write-Host "  - Confirm a stable waveform is present on CH1."
 Write-Host "  - Confirm the existing trigger setup reliably triggers from that CH1 waveform;"
 Write-Host "    an Edge trigger on CH1 with a level inside the waveform is recommended."
 Write-Host "  - The script does not reset, preset, autoscale, or reconfigure the trigger mode."
+Write-Host "  - If acquisition is initially stopped, the validator starts it for workflow validation and restores the original Running/Stopped state during cleanup."
 Write-Host "  - Workflow artifacts are written under the run directory shown above."
 Write-Host "  - Triggered workflow cases use Single acquisition and the original Running/Stopped"
 Write-Host "    acquisition state is restored at cleanup."
@@ -754,7 +777,8 @@ try {
         -Name "value" -Stage "Acquisition state snapshot")
     $wasRunning = ($operationValue -band $script:OperationConditionRunMask) -ne 0
     $snapshotTaken = $true
-    $snapshotDetail = if ($wasRunning) { "Acquisition was running." } else { "Acquisition was stopped." }
+    Ensure-WorkflowAcquisitionRunning -WasRunning $wasRunning
+    $snapshotDetail = if ($wasRunning) { "Acquisition was running." } else { "Acquisition was stopped; started for workflow validation." }
     Add-CaseResult -Name "state-snapshot" -Status "PASS" -Detail $snapshotDetail
 } catch {
     $script:FunctionalFailed = $true
