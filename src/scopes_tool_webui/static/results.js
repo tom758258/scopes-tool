@@ -24,7 +24,10 @@ export function renderError(summaryContainer, detailContainer, message, command 
 
 function isInvalidMeasurementSentinel(job) {
   const result = jobResultPayload(job);
-  return result?.valid === false && result?.reason === "invalid measurement sentinel";
+  return job?.status === "failed"
+    && job?.command === "measure"
+    && result?.valid === false
+    && result?.reason === "invalid measurement sentinel";
 }
 
 export function renderJob(summaryContainer, job, detailContainer) {

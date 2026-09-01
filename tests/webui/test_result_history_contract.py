@@ -118,7 +118,7 @@ def test_result_history_runtime_behaviour() -> None:
         globalThis.testLocale = "en";
         const labels = {
           en: {
-            identify: "Read device information", run: "Run", screenshot: "Screenshot", capture: "Capture", listResources: "List resources", completed: "Completed", failed: "Failed", queued: "Queued", running: "Running",
+            identify: "Read device information", run: "Run", screenshot: "Screenshot", capture: "Capture", listResources: "List resources", completed: "Completed", failed: "Failed", queued: "Queued", running: "Running", cancelled: "Cancelled",
             queuedSummary: "Waiting to run...", runningSummary: "Executing command...", completedSummary: "Command completed successfully", screenshotCaptured: "Screenshot captured", resourceNone: "No resources found", resourceMany: "4 resources found",
             serial: "serial {{serial}}", firmware: "firmware {{firmware}}", empty: "No command has been run yet.",
             period: "Period", phase: "Phase", channel1: "Channel 1", channel2: "Channel 2",
@@ -126,7 +126,7 @@ def test_result_history_runtime_behaviour() -> None:
             noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value",
           },
           "zh-TW": {
-            identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d",
+            identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d", cancelled: "\u5df2\u53d6\u6d88",
             queuedSummary: "\u7b49\u5f85\u57f7\u884c", runningSummary: "\u6b63\u5728\u57f7\u884c\u6307\u4ee4", completedSummary: "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210", screenshotCaptured: "\u756b\u9762\u5df2\u64f7\u53d6", resourceNone: "\u627e\u4e0d\u5230\u8cc7\u6e90", resourceMany: "\u627e\u5230 4 \u500b\u8cc7\u6e90",
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
             period: "Period", phase: "Phase", channel1: "Channel 1", channel2: "Channel 2",
@@ -145,6 +145,7 @@ def test_result_history_runtime_behaviour() -> None:
                       : key === "status.failed" ? locale.failed
                         : key === "status.queued" ? locale.queued
                           : key === "status.running" ? locale.running
+                            : key === "status.cancelled" ? locale.cancelled
                             : key === "results.summary.queued" ? locale.queuedSummary
                               : key === "results.summary.running" ? locale.runningSummary
                                 : key === "results.summary.completed" ? locale.completedSummary
@@ -328,7 +329,7 @@ def test_result_history_runtime_behaviour() -> None:
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("invalid-measure-job", "measure", "failed", {
           error: "Core command returned a non-zero exit code.",
-          result: { result: { item: "vpp", channel: 1, valid: false, reason: "invalid measurement sentinel", value: null, raw_value: "+99E+36", unit: "V", system_error: { code: 0, is_error: false, message: "No error" } } },
+          result: { exit_code: 1, result: { item: "vpp", channel: 1, valid: false, reason: "invalid measurement sentinel", value: null, raw_value: "+99E+36", unit: "V" }, system_error: { code: 0, is_error: false, message: "No error" } },
         }), detail);
         assert.equal(summary.children[0].children[1].className, "badge badge-warning");
         assert.equal(summary.children[0].children[1].textContent, "No valid measurement");
@@ -337,6 +338,16 @@ def test_result_history_runtime_behaviour() -> None:
         assert.equal(detail.children[0].className, "result-block");
         assert.match(detail.children[0].textContent, /\+99E\+36/);
         assert.match(detail.children[0].textContent, /No error/);
+        // Cancelled job must not be presented as invalid measurement warning
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("cancelled-measure-job", "measure", "cancelled", {
+          result: { exit_code: 1, result: { item: "vpp", channel: 1, valid: false, reason: "invalid measurement sentinel", value: null, raw_value: "+99E+36", unit: "V" }, system_error: { code: 0, is_error: false, message: "No error" } },
+        }), detail);
+        assert.equal(summary.children[0].children[1].className, "badge badge-cancelled");
+        assert.equal(summary.children[0].children[1].textContent, "Cancelled");
+        assert.equal(summary.children[0].children[2].textContent, "Cancelled");
+        assert.equal(detail.children.length, 1);
+        assert.equal(detail.children[0].className, "result-block");
         // Generic failed job still shows error block
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("generic-failed-job", "measure", "failed", {
