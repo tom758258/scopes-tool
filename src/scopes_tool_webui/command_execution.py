@@ -549,10 +549,17 @@ def _execute_scope_command(
             "save", scope.save_waveform(parameters["filename"]).to_json()
         )
     if command == "check-error":
-        entry = scope.query_system_error()
+        max_reads = int(parameters.get("max_reads", 20))
+        entries = scope.drain_system_errors(max_reads=max_reads)
+        entry_json = [_jsonable(entry) for entry in entries]
         return {
-            "exit_code": 1 if entry.is_error else 0,
-            "result": {"system_error": _jsonable(entry)},
+            "exit_code": 1 if any(entry.is_error for entry in entries) else 0,
+            "result": {
+                "drain": True,
+                "max_reads": max_reads,
+                "entries": entry_json,
+                "system_error": entry_json[-1] if entry_json else None,
+            },
             "artifacts": [],
         }
     if command == "system-status-byte":

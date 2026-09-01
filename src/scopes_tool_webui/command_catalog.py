@@ -743,7 +743,16 @@ COMMANDS = (
         "category": "System",
         "label": "System error",
         "modes": ("live", "simulate"),
-        "fields": (),
+        "fields": (
+            {
+                "name": "max_reads",
+                "type": "integer",
+                "minimum": 1,
+                "default": 20,
+                "label_key": "check-error.max_reads",
+                "help_key": "check-error.max_reads",
+            },
+        ),
     },
     {
         "id": "system-status-byte",

@@ -1159,6 +1159,11 @@ def _validate_parameters(
                 _reject_query_parameters(parameters, names, command)
     elif command == "math-clear":
         parameters["function"] = _integer(parameters.get("function", 1), "function")
+    elif command == "check-error":
+        max_reads = _integer(parameters.get("max_reads", 20), "max_reads")
+        if max_reads < 1:
+            raise WebUIRequestError("max_reads must be at least 1")
+        parameters["max_reads"] = max_reads
     elif command == "measure":
         try:
             parameters["item"] = normalize_measurement_item(parameters.get("item", "vpp"))
