@@ -121,8 +121,9 @@ The Command workbench exposes:
   `system-options`
 - DVM: `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`,
   `dvm-current`, `dvm-query`
-- FFT / MATH: basic `fft`, `math-display`, `math-vertical`, `math-operator`,
-  `math-composite-source`, `math-clear`
+- FFT / MATH: capability-driven `fft` with basic controls on all supported
+  models and Advanced FFT controls on 4000X, plus `math-display`,
+  `math-vertical`, `math-operator`, `math-composite-source`, `math-clear`
 - Trigger: a dedicated Trigger editor over the existing Edge, external,
   glitch/pulse-width, runt, transition, delay, setup/hold, edge-burst, TV,
   pattern/OR, sweep, reject, coupling, and holdoff commands
@@ -333,9 +334,11 @@ modes instead of requiring a magic string.
 
 The added instrument-setting commands use Live or Simulate mode and the
 existing Core capability and validation boundaries. They do not add new
-WebUI-specific SCPI behavior. The basic FFT and Math commands use flat forms;
-operation-dependent Math transform, filter, and visualization controls remain
-outside the current command workbench.
+WebUI-specific SCPI behavior. FFT and the basic Math commands use flat forms.
+The 4000X FFT form projects the Core-owned operation, start/stop, gate, phase
+reference, and detector controls by capability. Operation-dependent Math
+transform, filter, and visualization controls remain outside the current
+command workbench.
 
 Dry-run is intentionally limited to host VISA discovery plus Core-planned
 acquisition **query**, measurement, measurement sweep, and waveform capture
@@ -432,11 +435,11 @@ Advanced or diagnostic CLI paths are not automatically browser commands.
 Current intentional omissions include direct SCPI sending, setup recall/save,
 autoscale and broad cleanup operations, worker/doctor/hardware-report tooling,
 Cursor and Annotation editors, WGEN controls,
-advanced measurement statistics and advanced FFT/Math
-transform/filter/visualization controls. Acquisition points, record length,
-sample rate, and similar low-level information remain CLI/Core paths until a
-coherent WebUI presentation is defined. These omissions avoid exposing a Core
-operation without an appropriate interaction, capability, and result model.
+advanced measurement statistics and advanced Math transform/filter/visualization
+controls. Acquisition points, record length, acquisition sample-rate controls,
+and similar low-level information remain CLI/Core paths until a coherent WebUI
+presentation is defined. These omissions avoid exposing a Core operation without
+an appropriate interaction, capability, and result model.
 Basic FFT unit and window values remain Core-validated text until Core exposes
 public option metadata that the WebUI can project without duplicating it.
 
@@ -449,8 +452,8 @@ remain unchanged.
 
 The WebUI does not include remote access, authentication, multi-instrument
 sessions, WebSockets/SSE, general live waveform streaming, automatic Live Data
-polling, dark mode, Electron/onedir packaging, advanced FFT/Math
-transform/filter/visualization editors, or conditional
-editors for features not exposed by the current Core APIs. Dry-run remains
+polling, dark mode, Electron/onedir packaging, a dedicated FFT editor, advanced
+Math transform/filter/visualization editors, or conditional editors for features
+not exposed by the current Core APIs. Dry-run remains
 limited to commands with existing Core planners; `capture-batch` and
 `measure-log` are Live/Simulate only.

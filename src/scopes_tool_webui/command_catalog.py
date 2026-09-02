@@ -17,6 +17,12 @@ from scopes_tool_core import (
 from scopes_tool_core.cleanup import CLEANUP_PROFILES
 from scopes_tool_core.identity import PHYSICAL_MODEL_REGISTRY
 from scopes_tool_core.dvm import DVM_MODES
+from scopes_tool_core.fft import (
+    FFT_DETECTION_TYPES,
+    FFT_GATES,
+    FFT_OPERATIONS,
+    FFT_PHASE_REFERENCES,
+)
 from scopes_tool_core.math import (
     MATH_COMPOSITE_OPERATIONS,
     MATH_OPERATIONS,
@@ -88,6 +94,17 @@ _ANALOG_CHANNEL_FIELDS = frozenset(
         "trigger_channel",
         "clock_channel",
         "data_channel",
+    }
+)
+_ADVANCED_FFT_FIELDS = frozenset(
+    {
+        "fft_operation",
+        "start_hz",
+        "stop_hz",
+        "gate",
+        "phase_reference",
+        "detection_type",
+        "detection_points",
     }
 )
 COMMANDS = (
@@ -895,6 +912,51 @@ COMMANDS = (
             {"name": "window", "type": "string", "help_key": "fft.window"},
             {"name": "center_hz", "type": "number", "minimum": 0, "help_key": "fft.center_hz"},
             {"name": "span_hz", "type": "number", "exclusive_minimum": 0, "help_key": "fft.span_hz"},
+            {
+                "name": "fft_operation",
+                "type": "enum",
+                "options": FFT_OPERATIONS,
+                "default": "fft",
+                "label_key": "fft.operation",
+                "option_label": "fft-operation",
+                "help_key": "fft.operation",
+            },
+            {"name": "start_hz", "type": "number", "label_key": "fft.start_hz", "help_key": "fft.start_hz"},
+            {"name": "stop_hz", "type": "number", "label_key": "fft.stop_hz", "help_key": "fft.stop_hz"},
+            {
+                "name": "gate",
+                "type": "enum",
+                "options": FFT_GATES,
+                "label_key": "fft.gate",
+                "option_label": "fft-gate",
+                "help_key": "fft.gate",
+            },
+            {
+                "name": "phase_reference",
+                "type": "enum",
+                "options": FFT_PHASE_REFERENCES,
+                "label_key": "fft.phase_reference",
+                "option_label": "fft-phase-reference",
+                "visible_if": [
+                    {"field": "action", "equals": "set"},
+                    {"field": "fft_operation", "equals": "fft-phase"},
+                ],
+                "help_key": "fft.phase_reference",
+            },
+            {
+                "name": "detection_type",
+                "type": "enum",
+                "options": FFT_DETECTION_TYPES,
+                "label_key": "fft.detection_type",
+                "option_label": "fft-detection-type",
+                "help_key": "fft.detection_type",
+            },
+            {
+                "name": "detection_points",
+                "type": "integer",
+                "label_key": "fft.detection_points",
+                "help_key": "fft.detection_points",
+            },
             {"name": "display", "type": "boolean", "help_key": "fft.display"},
         ),
     },
@@ -1384,6 +1446,7 @@ _SETTING_QUERY_FIELDS = {
 }
 
 _SETTING_READBACK_FIELDS = {
+    "fft": {"fft_operation": "operation_canonical"},
     "measure-source": {"source_channel": "source1_channel"},
     "math-vertical": {"range_value": "range"},
     "dvm-auto-range": {"enabled": "auto_range_enabled"},
@@ -1637,6 +1700,8 @@ def _model_command_presentation(
                 if option != "gate" or capabilities.series == "4000X"
             )
         if entry["id"] == "measure-show" and name == "enabled" and capabilities.series != "4000X":
+            override["hidden"] = True
+        if entry["id"] == "fft" and name in _ADVANCED_FFT_FIELDS and not capabilities.supports_advanced_fft:
             override["hidden"] = True
         if name == "pair_items" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(

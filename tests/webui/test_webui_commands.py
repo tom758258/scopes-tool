@@ -9,6 +9,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from scopes_tool_core.dvm import DVM_MODES
+from scopes_tool_core.fft import (
+    FFT_DETECTION_TYPES,
+    FFT_GATES,
+    FFT_OPERATIONS,
+    FFT_PHASE_REFERENCES,
+)
 from scopes_tool_core.math import MATH_COMPOSITE_OPERATIONS, MATH_OPERATIONS, MATH_SOURCES
 from scopes_tool_core.measurements import (
     MEASUREMENT_WINDOW_CHOICES,
@@ -896,6 +902,111 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
     assert next(field for field in math_composite["fields"] if field["name"] == "operation")["options"] == list(
         MATH_COMPOSITE_OPERATIONS
     )
+
+
+def test_fft_catalog_projects_advanced_fields_by_model_capability() -> None:
+    fft = next(
+        entry for entry in TestClient(app).get("/api/commands").json()
+        if entry["id"] == "fft"
+    )
+    fields = {field["name"]: field for field in fft["fields"]}
+    advanced_fields = {
+        "fft_operation",
+        "start_hz",
+        "stop_hz",
+        "gate",
+        "phase_reference",
+        "detection_type",
+        "detection_points",
+    }
+
+    assert fields["fft_operation"]["options"] == list(FFT_OPERATIONS)
+    assert fields["fft_operation"]["default"] == "fft"
+    assert fields["gate"]["options"] == list(FFT_GATES)
+    assert fields["phase_reference"]["options"] == list(FFT_PHASE_REFERENCES)
+    assert fields["detection_type"]["options"] == list(FFT_DETECTION_TYPES)
+    assert fields["phase_reference"]["visible_if"] == [
+        {"field": "action", "equals": "set"},
+        {"field": "fft_operation", "equals": "fft-phase"},
+    ]
+    basic = fft["presentation"]["models"]["keysight-dsox2004a"]["fields"]
+    advanced = fft["presentation"]["models"][MODEL_ID]["fields"]
+    assert all(basic[name]["hidden"] is True for name in advanced_fields)
+    assert advanced_fields.isdisjoint(advanced)
+
+
+def test_fft_advanced_validation_reuses_core_range_mode_rule() -> None:
+    with pytest.raises(
+        WebUIRequestError,
+        match="--center-hz/--span-hz cannot be combined with --start-hz/--stop-hz",
+    ):
+        validate_job_request({
+            "command": "fft",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {
+                "action": "set",
+                "function": 1,
+                "source_channel": 1,
+                "center_hz": 1_000,
+                "start_hz": 100,
+            },
+        })
+
+
+def test_execute_fft_passes_advanced_parameters_and_preserves_query_state() -> None:
+    received: dict[str, object] = {}
+
+    class FakeScope:
+        def configure_fft(self, function, source_channel, **kwargs):  # type: ignore[no-untyped-def]
+            received.update(function=function, source_channel=source_channel, **kwargs)
+
+        def query_fft(self, function):  # type: ignore[no-untyped-def]
+            return {
+                "function": function,
+                "bin_size_hz": 125.0,
+                "sample_rate_hz": 1_000_000.0,
+                "resolution_bandwidth_hz": 250.0,
+            }
+
+    result = command_execution_module._execute_fft(
+        FakeScope(),
+        {
+            "action": "set",
+            "function": 2,
+            "source_channel": 1,
+            "fft_operation": "fft-phase",
+            "start_hz": 100.0,
+            "stop_hz": 1_000_000.0,
+            "gate": "zoom",
+            "phase_reference": "display",
+            "detection_type": "average",
+            "detection_points": 4096,
+        },
+    )
+
+    assert received == {
+        "function": 2,
+        "source_channel": 1,
+        "units": None,
+        "window": None,
+        "center_hz": None,
+        "span_hz": None,
+        "display": None,
+        "fft_operation": "fft-phase",
+        "start_hz": 100.0,
+        "stop_hz": 1_000_000.0,
+        "gate": "zoom",
+        "phase_reference": "display",
+        "detection_type": "average",
+        "detection_points": 4096,
+    }
+    assert result["result"]["fft"] == {
+        "function": 2,
+        "bin_size_hz": 125.0,
+        "sample_rate_hz": 1_000_000.0,
+        "resolution_bandwidth_hz": 250.0,
+    }
 
 
 def test_commands_expose_reference_and_save_subset() -> None:

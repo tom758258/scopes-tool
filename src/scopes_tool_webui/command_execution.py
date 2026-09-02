@@ -1074,6 +1074,13 @@ def _execute_fft(scope: Any, parameters: Mapping[str, Any]) -> dict[str, Any]:
             center_hz=parameters.get("center_hz"),
             span_hz=parameters.get("span_hz"),
             display=parameters.get("display"),
+            fft_operation=parameters.get("fft_operation", "fft"),
+            start_hz=parameters.get("start_hz"),
+            stop_hz=parameters.get("stop_hz"),
+            gate=parameters.get("gate"),
+            phase_reference=parameters.get("phase_reference"),
+            detection_type=parameters.get("detection_type"),
+            detection_points=parameters.get("detection_points"),
         )
     return _state_scope_result("fft", scope.query_fft(function))
 

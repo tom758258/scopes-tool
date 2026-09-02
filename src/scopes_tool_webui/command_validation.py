@@ -26,7 +26,7 @@ from scopes_tool_core.channel import (
 )
 from scopes_tool_core.display import validate_display_intensity, validate_display_persistence
 from scopes_tool_core.dvm import normalize_dvm_mode
-from scopes_tool_core.fft import normalize_fft_units, normalize_fft_window
+from scopes_tool_core.fft import fft_configure_commands
 from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.math import (
     normalize_math_composite_operation,
@@ -1234,32 +1234,56 @@ def _validate_parameters(
         parameters["function"] = _integer(parameters.get("function", 1), "function")
         if action == "set":
             _require_parameter(parameters, "source_channel", command)
-            parameters["source_channel"] = validate_analog_channel(
-                _integer(parameters["source_channel"], "source_channel"), capabilities
-            )
-            for name in ("center_hz", "span_hz"):
-                if name in parameters:
-                    parameters[name] = _finite_number(parameters[name], name)
-            if "center_hz" in parameters and parameters["center_hz"] < 0:
-                raise WebUIRequestError("center_hz must be non-negative")
-            if "span_hz" in parameters and parameters["span_hz"] <= 0:
-                raise WebUIRequestError("span_hz must be greater than zero")
-            if "units" in parameters:
-                try:
-                    normalize_fft_units(parameters["units"])
-                except Exception as exc:
-                    raise WebUIRequestError(str(exc)) from exc
-            if "window" in parameters:
-                try:
-                    normalize_fft_window(parameters["window"])
-                except Exception as exc:
-                    raise WebUIRequestError(str(exc)) from exc
-            if "display" in parameters:
-                _require_boolean(parameters["display"], "display")
+            try:
+                parameters["source_channel"] = validate_analog_channel(
+                    _integer(parameters["source_channel"], "source_channel"), capabilities
+                )
+                for name in ("center_hz", "span_hz", "start_hz", "stop_hz"):
+                    if name in parameters:
+                        parameters[name] = _finite_number(parameters[name], name)
+                if "detection_points" in parameters:
+                    parameters["detection_points"] = _integer(
+                        parameters["detection_points"], "detection_points"
+                    )
+                if "display" in parameters:
+                    _require_boolean(parameters["display"], "display")
+                fft_configure_commands(
+                    parameters["function"],
+                    parameters["source_channel"],
+                    units=parameters.get("units"),
+                    window=parameters.get("window"),
+                    center_hz=parameters.get("center_hz"),
+                    span_hz=parameters.get("span_hz"),
+                    display=parameters.get("display"),
+                    fft_operation=parameters.get("fft_operation", "fft"),
+                    start_hz=parameters.get("start_hz"),
+                    stop_hz=parameters.get("stop_hz"),
+                    gate=parameters.get("gate"),
+                    phase_reference=parameters.get("phase_reference"),
+                    detection_type=parameters.get("detection_type"),
+                    detection_points=parameters.get("detection_points"),
+                    capabilities=capabilities,
+                )
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
         else:
             _reject_query_parameters(
                 parameters,
-                ("source_channel", "units", "window", "center_hz", "span_hz", "display"),
+                (
+                    "source_channel",
+                    "units",
+                    "window",
+                    "center_hz",
+                    "span_hz",
+                    "display",
+                    "fft_operation",
+                    "start_hz",
+                    "stop_hz",
+                    "gate",
+                    "phase_reference",
+                    "detection_type",
+                    "detection_points",
+                ),
                 command,
             )
     elif command in {"math-display", "math-vertical", "math-operator", "math-composite-source"}:
