@@ -28,10 +28,7 @@ def test_expected_commands_use_the_dedicated_workflow_editor() -> None:
     assert commands["triggered-measure-loop"]["editor"] == "workflow"
     assert commands["capture-batch"]["editor"] == "workflow"
     assert commands["measure-until"]["editor"] == "workflow"
-    for command_id in (
-        "triggered-capture-series",
-    ):
-        assert "editor" not in commands[command_id]
+    assert commands["triggered-capture-series"]["editor"] == "workflow"
 
 
 def test_workflow_choices_reuse_catalog_and_model_capability_projection() -> None:
@@ -561,3 +558,80 @@ def test_workflow_editor_condition_locale_exists() -> None:
 
     assert '"workflow.editor.condition": "Condition"' in english
     assert '"workflow.editor.condition": "條件"' in chinese
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_editor_renders_triggered_capture_series_and_serializes() -> None:
+    run_editor_behavior(
+        r'''
+        const tcsFields = [
+          { name: "channels", type: "multi-enum", options: [1, 2, 3, 4], serialize: "csv", required: true },
+          { name: "count", type: "integer", minimum: 1, required: true },
+          { name: "trigger_timeout_seconds", type: "number", exclusive_minimum: 0, required: true },
+          { name: "points", type: "integer", options: [1000, 5000, 10000], default: 1000 },
+          { name: "format", type: "enum", options: ["byte", "word"], default: "byte" },
+          { name: "interval_seconds", type: "number", minimum: 0, default: 0 },
+        ];
+        definitions.push({ id: "triggered-capture-series", editor: "workflow", fields: tcsFields });
+        env.selectedId = "triggered-capture-series";
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        assert.ok(editor.controls.channels, "channels should render");
+        assert.ok(editor.controls.points, "points should render");
+        assert.ok(editor.controls.format, "format should render");
+        assert.ok(editor.controls.count, "count should render");
+        assert.ok(editor.controls.trigger_timeout_seconds, "trigger_timeout_seconds should render");
+        assert.ok(editor.controls.interval_seconds, "interval_seconds should render");
+        assert.equal(editor.controls.points.value, "1000");
+        assert.equal(editor.controls.format.value, "byte");
+        assert.equal(editor.controls.interval_seconds.value, "0");
+        assert.equal(editor.controls.count.required, true);
+        assert.equal(editor.controls.trigger_timeout_seconds.required, true);
+        editor.controls.channels.find((input) => input.value === "1").checked = true;
+        editor.controls.count.value = "";
+        await editor.submit();
+        assert.equal(submissions.length, 0);
+        editor.controls.count.value = "3";
+        editor.controls.trigger_timeout_seconds.value = "";
+        await editor.submit();
+        assert.equal(submissions.length, 0);
+        editor.controls.trigger_timeout_seconds.value = "0";
+        await editor.submit();
+        assert.equal(submissions.length, 0);
+        assert.equal(editor.controls.trigger_timeout_seconds.customValidity, "form.greaterThan");
+        editor.controls.channels.find((input) => input.value === "2").checked = true;
+        editor.controls.points.value = "5000";
+        editor.controls.format.value = "word";
+        editor.controls.count.value = "3";
+        editor.controls.trigger_timeout_seconds.value = "4.5";
+        editor.controls.interval_seconds.value = "0.25";
+        editor.rerender();
+        await settle();
+        assert.equal(editor.controls.channels.find((input) => input.value === "1").checked, true);
+        assert.equal(editor.controls.channels.find((input) => input.value === "2").checked, true);
+        assert.equal(editor.controls.points.value, "5000");
+        assert.equal(editor.controls.format.value, "word");
+        assert.equal(editor.controls.count.value, "3");
+        assert.equal(editor.controls.trigger_timeout_seconds.value, "4.5");
+        assert.equal(editor.controls.interval_seconds.value, "0.25");
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.equal(submissions[0].command, "triggered-capture-series");
+        assert.deepEqual(submissions[0].parameters, {
+          channels: "1,2",
+          points: 5000,
+          format: "word",
+          count: 3,
+          trigger_timeout_seconds: 4.5,
+          interval_seconds: 0.25,
+        });
+        assert.deepEqual(submissions[0].options, { intent: "command" });
+        assert.equal(Object.hasOwn(submissions[0].options, "formRevision"), false);
+        assert.equal(submissions[0].parameters.save_results, undefined);
+        editor.controls.channels.find((input) => input.value === "1").checked = false;
+        editor.controls.channels.find((input) => input.value === "2").checked = false;
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        ''',
+    )

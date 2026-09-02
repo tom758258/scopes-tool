@@ -106,7 +106,7 @@ export class WorkflowEditor {
       this.renderMeasureUntilWorkflow(definition, fields, draft);
       return;
     }
-    if (["capture-batch", "capture-until", "capture-monitor"].includes(definition.id)) {
+    if (["capture-batch", "capture-until", "capture-monitor", "triggered-capture-series"].includes(definition.id)) {
       this.renderWaveformWorkflow(definition, fields, draft);
       return;
     }
@@ -332,7 +332,9 @@ export class WorkflowEditor {
       ? ["threshold", "count", "timeout_seconds", "interval_seconds"]
       : definition.id === "capture-batch"
         ? ["count", "interval_seconds"]
-        : ["count", "interval_seconds", "retention_points"];
+        : definition.id === "triggered-capture-series"
+          ? ["count", "trigger_timeout_seconds", "interval_seconds"]
+          : ["count", "interval_seconds", "retention_points"];
     for (const name of enumNames) {
       const field = fieldByName(fields, name);
       const control = this.buildEnumField(field, draft[name]);
@@ -483,6 +485,18 @@ export class WorkflowEditor {
       this.drafts.set(this.renderedKey, draft);
       return;
     }
+    if (definition?.id === "triggered-capture-series") {
+      const draft = {
+        channels: this.checkedValues("channels"),
+        points: this.controls.points?.value || "",
+        format: this.controls.format?.value || "",
+        count: this.controls.count?.value || "",
+        trigger_timeout_seconds: this.controls.trigger_timeout_seconds?.value || "",
+        interval_seconds: this.controls.interval_seconds?.value || "",
+      };
+      this.drafts.set(this.renderedKey, draft);
+      return;
+    }
     if (definition?.id === "measure-until") {
       const draft = {
         channel: this.controls.channel?.value || "",
@@ -543,7 +557,7 @@ export class WorkflowEditor {
     const definition = this.selectedDefinition();
     const draft = this.drafts.get(this.currentKey());
     if (!definition || !draft) return null;
-    if (["capture-batch", "capture-until", "capture-monitor"].includes(definition.id)) {
+    if (["capture-batch", "capture-until", "capture-monitor", "triggered-capture-series"].includes(definition.id)) {
       return this.waveformWorkflowValues(definition, draft);
     }
     if (definition.id === "measure-until") {
@@ -617,7 +631,9 @@ export class WorkflowEditor {
       ? ["threshold", "count", "timeout_seconds", "interval_seconds"]
       : definition.id === "capture-batch"
         ? ["count", "interval_seconds"]
-        : ["count", "interval_seconds", "retention_points"];
+        : definition.id === "triggered-capture-series"
+          ? ["count", "trigger_timeout_seconds", "interval_seconds"]
+          : ["count", "interval_seconds", "retention_points"];
     for (const name of numberNames) {
       const input = this.controls[name];
       input?.setCustomValidity?.("");
@@ -648,6 +664,8 @@ export class WorkflowEditor {
         threshold: Number(draft.threshold),
         timeout_seconds: Number(draft.timeout_seconds),
       });
+    } else if (definition.id === "triggered-capture-series") {
+      parameters.trigger_timeout_seconds = Number(draft.trigger_timeout_seconds);
     } else if (definition.id === "capture-monitor") {
       parameters.retention_points = Number(draft.retention_points);
       parameters.save_results = draft.save_results !== false;
