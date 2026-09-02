@@ -405,6 +405,13 @@ without creating them. Both absolute and relative roots are accepted and created
 when an output command needs them; creation or write failures are reported
 instead of falling back.
 
+During finite workflow execution, the central Result History shows the current
+completed work and elapsed time for the active job. When a workflow has a fixed
+total, it additionally shows the completed/total count in the same summary. The
+`capture-monitor` workflow keeps its own waveform and metrics runtime
+presentation, and Generic Sequence keeps its own step-execution progress; these
+remain separate from the generic workflow progress shown in Result History.
+
 ## Core coverage boundary
 
 The Command workbench intentionally exposes operator-facing settings,
