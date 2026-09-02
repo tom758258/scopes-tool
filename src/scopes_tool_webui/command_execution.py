@@ -871,6 +871,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 resource,
                 _capture_batch_request(parameters, output_dir),
                 stop_requested=stop_requested,
+                progress_reporter=progress_reporter,
             )
         )
     if command == "capture-until":
@@ -881,6 +882,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 resource,
                 _capture_until_request(parameters, output_dir),
                 stop_requested=stop_requested,
+                progress_reporter=progress_reporter,
             )
         )
     if command == "capture-monitor":
@@ -906,6 +908,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 resource,
                 _measure_log_request(parameters, output_dir),
                 stop_requested=stop_requested,
+                progress_reporter=progress_reporter,
             )
         )
     if command == "measure-until":
@@ -916,6 +919,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 resource,
                 _measure_until_request(parameters, output_dir),
                 stop_requested=stop_requested,
+                progress_reporter=progress_reporter,
             )
         )
     if command == "triggered-measure-loop":
@@ -926,6 +930,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 resource,
                 _triggered_measure_loop_request(parameters, output_dir),
                 stop_requested=stop_requested,
+                progress_reporter=progress_reporter,
             )
         )
     if command == "triggered-capture-series":
@@ -936,6 +941,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 resource,
                 _triggered_capture_series_request(parameters, output_dir),
                 stop_requested=stop_requested,
+                progress_reporter=progress_reporter,
             )
         )
     if command == "sequence":

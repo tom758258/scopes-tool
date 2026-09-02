@@ -10,6 +10,7 @@ import pytest
 
 from scopes_tool_webui.jobs import Job, JobManager
 from scopes_tool_core.workflow import WorkflowProgress
+import scopes_tool_webui.command_execution as command_execution
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -130,6 +131,133 @@ def test_locale_contains_workflow_progress_keys() -> None:
     ):
         assert f'"{key}":' in en, key
         assert f'"{key}":' in zh, key
+
+
+@pytest.mark.parametrize(
+    ("command", "parameters", "runner_name"),
+    [
+        (
+            "measure-log",
+            {
+                "channels": [1],
+                "items": ["vpp"],
+                "pairs": [],
+                "pair_items": ["phase"],
+                "interval_seconds": 0,
+                "count": 1,
+                "save_results": True,
+            },
+            "run_measure_log",
+        ),
+        (
+            "measure-until",
+            {
+                "channel": 1,
+                "item": "vpp",
+                "operator": "gt",
+                "threshold": 1.0,
+                "timeout_seconds": 1,
+                "interval_seconds": 0,
+                "save_results": True,
+            },
+            "run_measure_until",
+        ),
+        (
+            "triggered-measure-loop",
+            {
+                "channels": [1],
+                "items": ["vpp"],
+                "pairs": [],
+                "pair_items": ["phase"],
+                "count": 1,
+                "trigger_timeout_seconds": 1,
+                "interval_seconds": 0,
+                "save_results": True,
+            },
+            "run_triggered_measure_loop",
+        ),
+        (
+            "capture-batch",
+            {
+                "channels": [1],
+                "points": 1000,
+                "format": "byte",
+                "count": 1,
+                "interval_seconds": 0,
+            },
+            "run_capture_batch",
+        ),
+        (
+            "capture-until",
+            {
+                "channels": [1],
+                "condition_channel": 1,
+                "points": 1000,
+                "format": "byte",
+                "metric": "max",
+                "operator": "gt",
+                "threshold": 1.0,
+                "count": 1,
+                "timeout_seconds": 1,
+                "interval_seconds": 0,
+            },
+            "run_capture_until",
+        ),
+        (
+            "triggered-capture-series",
+            {
+                "channels": [1],
+                "count": 1,
+                "trigger_timeout_seconds": 1,
+                "points": 1000,
+                "format": "byte",
+                "interval_seconds": 0,
+            },
+            "run_triggered_capture_series",
+        ),
+    ],
+)
+def test_command_execution_forwards_progress_reporter_to_core_runner(
+    monkeypatch, tmp_path, command, parameters, runner_name
+):
+    sentinel = object()
+    received: dict[str, object] = {}
+
+    def fake_runner(*args, **kwargs):
+        received["progress_reporter"] = kwargs.get("progress_reporter")
+        from scopes_tool_core import OperationResult
+
+        return OperationResult(
+            exit_code=0,
+            result={},
+            files=[],
+            system_error=None,
+            human_lines=[],
+            idn=None,
+            backend=None,
+            timeout_ms=None,
+        )
+
+    monkeypatch.setattr(command_execution, runner_name, fake_runner)
+
+    class FakeScope:
+        capabilities = object()
+
+        def query_idn(self):
+            return None
+
+    scope = FakeScope()
+    result = command_execution._execute_trigger_search_serial_segmented_workflow_command(
+        scope,
+        command,
+        "SIM::TEST::INSTR",
+        parameters,
+        tmp_path,
+        stop_requested=lambda: False,
+        progress_reporter=sentinel,
+    )
+    assert received["progress_reporter"] is sentinel
+    assert result["exit_code"] == 0
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

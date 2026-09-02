@@ -657,7 +657,7 @@ export const en = {
   "command.serial-lister-export": "Export Serial Lister",
   "command.segmented-memory": "Segmented memory",
   "command.segmented-capture": "Segmented capture",
-  "command.capture-batch": "Capture batch",
+  "command.capture-batch": "Periodic Capture",
   "command.capture-until": "Capture until",
   "command.capture-monitor": "Capture monitor",
   "command.measure-log": "Measurement log",

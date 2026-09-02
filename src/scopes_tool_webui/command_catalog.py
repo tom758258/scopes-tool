@@ -1205,7 +1205,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1, help_key="capture.channel"), _command_field("segments", "integer", minimum=2, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
     },
     {
-        "id": "capture-batch", "category": "Workflow", "label": "Capture batch", "modes": ("live", "simulate"),
+        "id": "capture-batch", "category": "Workflow", "label": "Periodic Capture", "modes": ("live", "simulate"),
         "group": "capture",
         "editor": "workflow",
         "fields": (_command_field("channels", "multi-enum", options=(1, 2, 3, 4), serialize="csv", required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("count", "integer", minimum=1, default=1), _command_field("interval_seconds", "number", minimum=0, default=0)),

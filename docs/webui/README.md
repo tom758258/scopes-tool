@@ -299,8 +299,9 @@ The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field
 groups. For `measure-log` and `triggered-measure-loop`, the dedicated Workflow
 editor provides structured Source and Reference pair rows and shared
-pair-measurement choices. `capture-batch`, `measure-until`, and
-`triggered-capture-series` remain metadata-driven Generic Forms. Trigger,
+pair-measurement choices. Periodic Capture (`capture-batch`) uses the dedicated
+Workflow editor. `measure-until` and `triggered-capture-series` remain
+metadata-driven Generic Forms. Trigger,
 Search, Serial, Segmented Memory, and Workflow commands use only the
 conditional visibility needed by their existing Core parameter semantics.
 
