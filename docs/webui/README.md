@@ -166,9 +166,10 @@ through the normal foreground execution path.
 
 Selecting `measure-log`, `triggered-measure-loop`, `capture-batch`,
 `measure-until`, `capture-until`, `capture-monitor`, or
-`triggered-capture-series` opens the dedicated Workflow editor. Measurement
-workflows provide model-projected channel and measurement choices, channel-pair
-rows, shared pair measurements, and the command's existing run limits.
+`triggered-capture-series` opens the dedicated Workflow editor. `measure-log`
+and `triggered-measure-loop` provide model-projected channel and measurement
+choices, channel-pair rows, shared pair measurements, and the command's existing
+run limits.
 `capture-batch`, `measure-until`, and `triggered-capture-series` use the same
 dedicated editor with their workflow-specific configuration panels. Capture
 Until provides selected capture channels, a condition channel limited to that
