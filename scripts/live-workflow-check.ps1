@@ -585,7 +585,7 @@ function Invoke-HardwareFreePreflight {
     $captureUntil = Invoke-ModeCli -Stage "preflight-capture-until" `
         -Command "capture-until" -ModeArguments $simulate -Arguments @(
             "--channel", "1", "--condition-channel", "1", "--points", "1000", "--format", "byte",
-            "--metric", "max", "--operator", "gt", "--threshold", "-1e9",
+            "--metric", "max", "--operator", "gt", "--threshold=-1e9",
             "--count", "1", "--timeout-seconds", "1", "--interval-seconds", "0",
             "--output-dir", $captureUntilDir
         )
@@ -963,7 +963,7 @@ if (-not $script:FunctionalFailed) {
         $payload = Invoke-LiveCli -Stage "capture-until" -Command "capture-until" `
             -Arguments @(
                 "--channel", "1", "--condition-channel", "1", "--points", "1000", "--format", "byte",
-                "--metric", "max", "--operator", "gt", "--threshold", "-1e9",
+                "--metric", "max", "--operator", "gt", "--threshold=-1e9",
                 "--count", "2", "--timeout-seconds", "10", "--interval-seconds", "0",
                 "--output-dir", $outputDir
             )
@@ -992,11 +992,33 @@ if (-not $script:FunctionalFailed) {
             )
         Assert-ResultEquals -Payload $payload -Name "status" -Expected "completed" -Stage "capture-monitor"
         Assert-ResultEquals -Payload $payload -Name "completed_count" -Expected 5 -Stage "capture-monitor"
-        Assert-ResultEquals -Payload $payload -Name "total_observed_points" -Expected 5000 -Stage "capture-monitor"
-        Assert-ResultEquals -Payload $payload -Name "retained_points" -Expected 2000 -Stage "capture-monitor"
-        Assert-ResultEquals -Payload $payload -Name "dropped_points" -Expected 3000 -Stage "capture-monitor"
-        Assert-ResultEquals -Payload $payload -Name "first_retained_capture_index" -Expected 4 -Stage "capture-monitor"
         Assert-ResultEquals -Payload $payload -Name "last_retained_capture_index" -Expected 5 -Stage "capture-monitor"
+        $totalObservedPoints = [int](Get-RequiredResultValue -Payload $payload -Name "total_observed_points" -Stage "capture-monitor")
+        $retainedPoints = [int](Get-RequiredResultValue -Payload $payload -Name "retained_points" -Stage "capture-monitor")
+        $droppedPoints = [int](Get-RequiredResultValue -Payload $payload -Name "dropped_points" -Stage "capture-monitor")
+        $firstRetainedCaptureIndex = [int](Get-RequiredResultValue -Payload $payload -Name "first_retained_capture_index" -Stage "capture-monitor")
+        $lastRetainedCaptureIndex = [int](Get-RequiredResultValue -Payload $payload -Name "last_retained_capture_index" -Stage "capture-monitor")
+        if ($totalObservedPoints -le 0) {
+            throw "capture-monitor total_observed_points is $totalObservedPoints, expected >0."
+        }
+        if ($retainedPoints -le 0) {
+            throw "capture-monitor retained_points is $retainedPoints, expected >0."
+        }
+        if ($retainedPoints -gt 2000) {
+            throw "capture-monitor retained_points is $retainedPoints, expected <=2000."
+        }
+        if ($droppedPoints -le 0) {
+            throw "capture-monitor dropped_points is $droppedPoints, expected >0."
+        }
+        if (($retainedPoints + $droppedPoints) -ne $totalObservedPoints) {
+            throw "capture-monitor retained_points ($retainedPoints) + dropped_points ($droppedPoints) != total_observed_points ($totalObservedPoints)."
+        }
+        if ($firstRetainedCaptureIndex -lt 1) {
+            throw "capture-monitor first_retained_capture_index is $firstRetainedCaptureIndex, expected >=1."
+        }
+        if ($firstRetainedCaptureIndex -gt $lastRetainedCaptureIndex) {
+            throw "capture-monitor first_retained_capture_index ($firstRetainedCaptureIndex) > last_retained_capture_index ($lastRetainedCaptureIndex)."
+        }
         Assert-ExpectedFiles -OutputDir $outputDir `
             -Names @("retained_waveforms.csv", "manifest.json", "scpi.log") -Stage "capture-monitor"
         $csvPath = Join-Path $outputDir "retained_waveforms.csv"
@@ -1005,12 +1027,23 @@ if (-not $script:FunctionalFailed) {
             throw "capture-monitor CSV header unexpected: $header"
         }
         $rows = Import-Csv -LiteralPath $csvPath
-        if ($rows.Count -ne 2000) {
-            throw "capture-monitor CSV row count is $($rows.Count), expected 2000."
+        if ($rows.Count -ne $retainedPoints) {
+            throw "capture-monitor CSV row count is $($rows.Count), expected $retainedPoints (retained_points)."
         }
-        $indices = @($rows | Select-Object -ExpandProperty capture_index | Sort-Object -Unique)
-        if (($indices -join ",") -ne "4,5") {
-            throw "capture-monitor CSV capture_index values are $($indices -join ','), expected 4,5."
+        $indices = @($rows | Select-Object -ExpandProperty capture_index | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+        if ($indices.Count -eq 0) {
+            throw "capture-monitor CSV capture_index values are empty, expected at least one retained capture."
+        }
+        if ($indices[0] -ne $firstRetainedCaptureIndex) {
+            throw "capture-monitor CSV minimum capture_index is $($indices[0]), expected $firstRetainedCaptureIndex (first_retained_capture_index)."
+        }
+        if ($indices[-1] -ne $lastRetainedCaptureIndex) {
+            throw "capture-monitor CSV maximum capture_index is $($indices[-1]), expected $lastRetainedCaptureIndex (last_retained_capture_index)."
+        }
+        for ($i = 1; $i -lt $indices.Count; $i++) {
+            if ($indices[$i] -ne ($indices[$i - 1] + 1)) {
+                throw "capture-monitor CSV capture_index values are $($indices -join ','), expected contiguous suffix."
+            }
         }
     }
 }

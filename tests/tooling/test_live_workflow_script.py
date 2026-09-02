@@ -159,3 +159,45 @@ if ($errors.Count -ne 0) {
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_live_workflow_script_uses_unambiguous_negative_threshold_argument() -> None:
+    text = _script_text()
+
+    assert text.count('"--threshold=-1e9"') == 2
+    assert '"--threshold", "-1e9"' not in text
+
+
+def _live_capture_monitor_block(text: str) -> str:
+    start = text.index('Invoke-WorkflowCase -Name "capture-monitor"')
+    end = text.index('Invoke-WorkflowCase -Name "triggered-measure-loop"', start)
+    return text[start:end]
+
+
+def test_live_workflow_script_capture_monitor_live_uses_actual_point_invariants() -> None:
+    text = _script_text()
+    block = _live_capture_monitor_block(text)
+
+    # A. Forbidden exact hardware assumptions must not reappear in live block.
+    assert 'total_observed_points" -Expected 5000' not in block
+    assert 'retained_points" -Expected 2000' not in block
+    assert 'dropped_points" -Expected 3000' not in block
+    assert 'first_retained_capture_index" -Expected 4' not in block
+    assert '$rows.Count -ne 2000' not in block
+    assert '($indices -join ",") -ne "4,5"' not in block
+
+    # B. Live rollover workload stays
+    assert '"--points", "1000"' in block
+    assert '"--count", "5"' in block
+    assert '"--retention-points", "2000"' in block
+
+    # C. Actual-point accounting invariant
+    assert '$retainedPoints + $droppedPoints' in block
+
+    # D. CSV rows == retained_points
+    assert '$rows.Count -ne $retainedPoints' in block
+
+    # E. Retained capture indices
+    assert '$indices[0] -ne $firstRetainedCaptureIndex' in block
+    assert '$indices[-1] -ne $lastRetainedCaptureIndex' in block
+    assert '+ 1' in block
