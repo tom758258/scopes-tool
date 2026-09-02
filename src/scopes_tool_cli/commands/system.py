@@ -179,7 +179,7 @@ def _cmd_force_trigger(args: argparse.Namespace) -> int:
             return 1
 
         print("Planned change: force one trigger event")
-        scope.scpi.write(force_trigger_command())
+        scope.force_trigger()
         runtime._json_update_result(
             operation="force-trigger",
             forced=True,

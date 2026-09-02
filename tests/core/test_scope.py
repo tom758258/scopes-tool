@@ -93,8 +93,9 @@ def test_scope_control_methods_send_one_command_each():
     scope.stop()
     scope.run()
     scope.single()
+    scope.force_trigger()
 
-    assert backend.history == [":STOP", ":RUN", ":SINGle"]
+    assert backend.history == [":STOP", ":RUN", ":SINGle", ":TRIGger:FORCe"]
 
 
 def test_scope_drains_system_errors_until_no_error():

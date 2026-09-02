@@ -232,6 +232,19 @@ def test_live_context_and_controls_use_detected_identity() -> None:
     assert '"description.identify": "讀取儀器識別資訊"' in chinese
 
 
+def test_basic_controls_expose_force_trigger_shared_command_shortcut() -> None:
+    html = read_static("index.html")
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+
+    assert html.count('data-command="force-trigger"') == 1
+    assert 'data-i18n="basic.forceTrigger"' in html
+    assert '"basic.forceTrigger": "Force Trigger"' in english
+    assert '"basic.forceTrigger": "強制觸發"' in chinese
+    assert '"command.force-trigger": "Force Trigger"' in english
+    assert '"command.force-trigger": "強制觸發"' in chinese
+
+
 def test_identify_uses_the_shared_workspace_result_area() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")

@@ -161,6 +161,13 @@ COMMANDS = (
         "fields": (),
     },
     {
+        "id": "force-trigger",
+        "category": "Acquisition",
+        "label": "Force Trigger",
+        "modes": ("live", "simulate"),
+        "fields": (),
+    },
+    {
         "id": "acquisition",
         "category": "Acquisition",
         "label": "Acquisition",

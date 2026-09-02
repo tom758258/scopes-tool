@@ -67,7 +67,7 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 
 ## Basic Controls and Commands
 
-Basic Controls provides Run, Stop, Single, and Screenshot. These are
+Basic Controls provides Run, Stop, Single, Force Trigger, and Screenshot. These are
 shortcuts that submit the same command jobs used by the Command workbench.
 It also owns the WebUI's single **PC output folder** setting. A blank input uses
 the default `data` root. **Select Folder** opens the Windows folder picker and
@@ -87,7 +87,7 @@ cannot select or escape the shared folder.
 The Command workbench exposes:
 
 - Identity: `identify` (Read device information)
-- Acquisition: `run`, `single`, `stop-acquisition`, `acquisition`
+- Acquisition: `run`, `single`, `stop-acquisition`, `force-trigger`, `acquisition`
 - Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`
 - Channel: `channel-display`, `channel-scale`, `channel-summary`,
   `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,

@@ -90,6 +90,7 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     command_ids = {entry["id"] for entry in response.json()}
     assert {
         "identify",
+        "force-trigger",
         "acquisition",
         "channel-display",
         "channel-scale",
@@ -102,6 +103,12 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     } <= command_ids
     assert "trigger" not in command_ids
     acquisition = next(entry for entry in response.json() if entry["id"] == "acquisition")
+    force_trigger = next(
+        entry for entry in response.json() if entry["id"] == "force-trigger"
+    )
+    assert force_trigger["category"] == "Acquisition"
+    assert force_trigger["fields"] == []
+    assert force_trigger["modes"] == ["live", "simulate"]
     action = next(field for field in acquisition["fields"] if field["name"] == "action")
     assert action["mode_options"]["dry-run"] == ["query"]
     acquisition_type = next(field for field in acquisition["fields"] if field["name"] == "type")
@@ -115,6 +122,31 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     measure = next(entry for entry in response.json() if entry["id"] == "measure")
     item = next(field for field in measure["fields"] if field["name"] == "item")
     assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)
+
+
+def test_execute_force_trigger_calls_core_action(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def force_trigger(self) -> None:
+            calls.append("force-trigger")
+
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        "force-trigger",
+        "SIM::INSTR",
+        {},
+        tmp_path,
+    )
+
+    assert calls == ["force-trigger"]
+    assert result == {
+        "exit_code": 0,
+        "result": {"action": "force-trigger"},
+        "artifacts": [],
+    }
 
 
 def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:

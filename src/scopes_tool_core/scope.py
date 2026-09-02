@@ -168,6 +168,7 @@ from .trigger import (
     TriggerSweepState,
     TvTriggerController,
     TvTriggerState,
+    force_trigger_command,
 )
 from .visa_backend import VisaBackend
 from .waveform import MultiChannelWaveformCapture, WaveformCapture, WaveformController
@@ -277,6 +278,11 @@ class Oscilloscope:
         """Start one single acquisition without waiting for completion."""
 
         self.scpi.write(":SINGle")
+
+    def force_trigger(self) -> None:
+        """Force one trigger event without changing acquisition state."""
+
+        self.scpi.write(force_trigger_command())
 
     def set_channel_display(self, channel: int, enabled: bool) -> None:
         """Turn one analog channel display on or off."""

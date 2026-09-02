@@ -314,6 +314,9 @@ def _execute_scope_command(
     if command == "stop-acquisition":
         scope.stop()
         return _simple_scope_result("stop-acquisition")
+    if command == "force-trigger":
+        scope.force_trigger()
+        return _simple_scope_result("force-trigger")
     if command == "acquisition":
         return _execute_acquisition(scope, parameters)
     if command == "timebase-scale":
