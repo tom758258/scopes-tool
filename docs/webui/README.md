@@ -164,11 +164,14 @@ Selection is passive; explicit Refresh reads only display and label state for
 the selected waveform. Display, Label, and Clear remain independent actions
 through the normal foreground execution path.
 
-Selecting `measure-log`, `triggered-measure-loop`, `capture-until`, or
-`capture-monitor` opens the dedicated Workflow editor. Measurement workflows
-provide model-projected channel and measurement choices, channel-pair rows,
-shared pair measurements, and the command's existing run limits. Capture Until
-provides selected capture channels, a condition channel limited to that
+Selecting `measure-log`, `triggered-measure-loop`, `capture-batch`,
+`measure-until`, `capture-until`, `capture-monitor`, or
+`triggered-capture-series` opens the dedicated Workflow editor. Measurement
+workflows provide model-projected channel and measurement choices, channel-pair
+rows, shared pair measurements, and the command's existing run limits.
+`capture-batch`, `measure-until`, and `triggered-capture-series` use the same
+dedicated editor with their workflow-specific configuration panels. Capture
+Until provides selected capture channels, a condition channel limited to that
 selection, points, format, one metric/operator/threshold, `1..255` matches, one
 whole-workflow timeout, and a relative interval. A match saves the exact
 multi-channel acquisition that was evaluated; it does not capture again.
@@ -181,8 +184,7 @@ the plot and saved CSV cover only retained history, and repeated acquisitions
 are not a continuous time-domain waveform. Saving is enabled by default;
 disabling it runs without host-side workflow artifacts. Selection and editing
 are browser-local and passive; Run submits one job through shared foreground
-execution admission. The `capture-batch`, `measure-until`, and
-`triggered-capture-series` commands keep their metadata-driven Generic Form.
+execution admission.
 
 Selecting Sequence under Workflow / Automation opens the Generic Sequence v1
 editor. It loads and saves `.sequence.json`/JSON documents and edits the seven
