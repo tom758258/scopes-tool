@@ -415,7 +415,7 @@ export const zhTW = {
   "description.run": "讓示波器持續進行波形擷取，直到停止或執行其他擷取命令。",
   "description.single": "等待一次符合觸發條件的擷取，取得波形後自動停止。",
   "description.stop-acquisition": "停止目前的波形擷取，讓目前畫面保持在停止狀態。",
-  "description.force-trigger": "強制產生一次觸發事件，不改變目前的擷取狀態。",
+  "description.force-trigger": "即使目前尚未符合觸發條件，也強制產生一次觸發事件。",
   "description.acquisition": "設定或讀取擷取類型與平均相關設定。",
   "description.channel-display": "控制指定類比通道的波形是否顯示在儀器畫面上。",
   "description.channel-scale": "設定或讀取指定類比通道的垂直刻度。",

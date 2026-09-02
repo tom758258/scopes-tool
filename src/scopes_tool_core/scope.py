@@ -280,7 +280,7 @@ class Oscilloscope:
         self.scpi.write(":SINGle")
 
     def force_trigger(self) -> None:
-        """Force one trigger event without changing acquisition state."""
+        """Force one trigger event without waiting for the configured trigger condition."""
 
         self.scpi.write(force_trigger_command())
 
