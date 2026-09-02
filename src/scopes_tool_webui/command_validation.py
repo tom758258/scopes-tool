@@ -36,8 +36,10 @@ from scopes_tool_core.math import (
     validate_positive,
 )
 from scopes_tool_core.measurements import (
+    measurement_query,
     normalize_measurement_item,
     normalize_measurement_window,
+    pair_measurement_query,
     validate_statistics_items,
 )
 from scopes_tool_core.planning import (
@@ -245,6 +247,30 @@ def _workflow_pairs(value: Any, capabilities: Any) -> list[str]:
     except Exception as exc:
         raise WebUIRequestError(str(exc)) from exc
     return values
+
+
+def _validate_measure_sweep_parameters(
+    parameters: dict[str, Any], capabilities: Any
+) -> None:
+    parameters["channels"] = _workflow_channels(
+        parameters.get("channels"), capabilities, required=False
+    )
+    parameters["items"] = _validated_direct_measurement_items(
+        parameters.get("items", "vpp,frequency,period,vrms")
+    )
+    parameters["pairs"] = _workflow_pairs(parameters.get("pairs"), capabilities)
+    try:
+        pair_items = parse_measurement_item_list(
+            ",".join(_csv_values(parameters.get("pair_items", "phase,delay"))),
+            allow_pair=True,
+        )
+        for item in parameters["items"].split(","):
+            measurement_query(item, 1, capabilities=capabilities)
+        for item in pair_items:
+            pair_measurement_query(item, 1, 2, capabilities=capabilities)
+    except Exception as exc:
+        raise WebUIRequestError(str(exc)) from exc
+    parameters["pair_items"] = ",".join(pair_items)
 
 
 def _capture_channels(value: Any, capabilities: Any) -> list[int]:
@@ -824,6 +850,9 @@ def _validate_parameters(
     if model_id is None:
         raise WebUIRequestError("detected model identity is required for live validation")
     capabilities = capabilities_for_model_id(model_id)
+    if command == "measure-sweep":
+        _validate_measure_sweep_parameters(parameters, capabilities)
+        return
     if command in _TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_IDS:
         _validate_trigger_search_serial_segmented_workflow_parameters(command, parameters, mode, model_id)
         return

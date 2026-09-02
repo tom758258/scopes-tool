@@ -305,8 +305,9 @@ async function initialize() {
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
     const selected = catalog.selected();
-    if (selected?.id === "measure" && editorKindFor(selected) === "measurement") {
-      void measurementEditor?.runMeasurement();
+    if (editorKindFor(selected) === "measurement") {
+      if (selected?.id === "measure") void measurementEditor?.runMeasurement();
+      if (selected?.id === "measure-sweep") void measurementEditor?.runMeasureSweep();
       return;
     }
     const parameters = commandForm.values();
@@ -799,7 +800,8 @@ function isExecutionBusy() {
 
 function syncWorkspaceHeaderActions(editorKind) {
   const selected = catalog?.selected();
-  const measurementRun = selected?.id === "measure" && editorKind === "measurement";
+  const measurementRun = ["measure", "measure-sweep"].includes(selected?.id)
+    && editorKind === "measurement";
   elements.refresh.hidden = !selected || editorKind !== null || !commandForm?.isSettingEditor();
   elements.execute.hidden = !selected || (editorKind !== null && !measurementRun);
   if (referenceEditor?.refreshButton) {

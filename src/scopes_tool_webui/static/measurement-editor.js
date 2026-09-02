@@ -1,5 +1,22 @@
 import { CommandForm } from "/static/command-form.js";
-import { translate } from "/static/i18n.js";
+import { hasTranslation, translate } from "/static/i18n.js";
+
+function fieldByName(fields, name) {
+  return fields.find((field) => field.name === name) || {};
+}
+
+function defaultChoices(field) {
+  if (Array.isArray(field.default)) return field.default.map(String);
+  if (typeof field.default === "string") {
+    return field.default.split(",").map((value) => value.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function choiceLabel(value) {
+  const key = `enum.${String(value)}`;
+  return hasTranslation(key) ? translate(key) : String(value);
+}
 
 function measurementPayload(job) {
   return job?.result?.result?.measurements || job?.result?.measurements || null;
@@ -20,6 +37,10 @@ export class MeasurementEditor {
     this.contextKey = null;
     this.renderedKey = null;
     this.measureDraft = null;
+    this.sweepDrafts = new Map();
+    this.sweepRenderedKey = null;
+    this.sweepControls = {};
+    this.sweepPairRows = [];
     this.windowCurrent = "";
     this.windowReadback = "";
     this.windowDirty = false;
@@ -65,6 +86,7 @@ export class MeasurementEditor {
 
   rerender() {
     if (this.measureForm) this.measureDraft = this.measureForm.draft();
+    this.captureSweepDraft();
     this.renderedKey = null;
     this.schedulePresentation();
   }
@@ -81,9 +103,11 @@ export class MeasurementEditor {
     const key = `${this.contextKey}|${selected.id}`;
     if (key !== this.renderedKey) {
       if (this.measureForm) this.measureDraft = this.measureForm.draft();
+      this.captureSweepDraft();
       this.renderedKey = key;
       if (selected.id === "measure") this.renderSettings();
-      else this.renderFrontPanel();
+      else if (selected.id === "measure-sweep") this.renderSweep(key);
+      else if (selected.id === "front-panel-measurements") this.renderFrontPanel();
     }
     this.applyBusyState();
   }
@@ -179,6 +203,212 @@ export class MeasurementEditor {
     }
     if (requestedContext !== this.contextKey) return;
     await this.hooks.executeCommand("measure", parameters);
+  }
+
+  renderSweep(key) {
+    const fields = this.catalog.fieldsFor(this.definition("measure-sweep"));
+    const draft = this.sanitizeSweepDraft(
+      this.sweepDrafts.get(key) || this.defaultSweepDraft(fields),
+      fields,
+    );
+    this.sweepDrafts.set(key, draft);
+    this.sweepRenderedKey = key;
+    this.sweepControls = {};
+    this.sweepPairRows = [];
+    this.container.replaceChildren(
+      this.buildSweepChoiceSection(
+        "workflow.editor.channels",
+        "channels",
+        fieldByName(fields, "channels").options || [],
+        draft.channels,
+      ),
+      this.buildSweepChoiceSection(
+        "workflow.editor.measurements",
+        "items",
+        fieldByName(fields, "items").options || [],
+        draft.items,
+      ),
+      this.buildSweepPairsSection(
+        (fieldByName(fields, "channels").options || []).map(String),
+        draft.pairs,
+      ),
+      this.buildSweepChoiceSection(
+        "workflow.editor.pairMeasurements",
+        "pair_items",
+        fieldByName(fields, "pair_items").options || [],
+        draft.pair_items,
+      ),
+    );
+  }
+
+  defaultSweepDraft(fields) {
+    return {
+      channels: defaultChoices(fieldByName(fields, "channels")),
+      items: defaultChoices(fieldByName(fields, "items")),
+      pairs: [],
+      pair_items: defaultChoices(fieldByName(fields, "pair_items")),
+    };
+  }
+
+  sanitizeSweepDraft(draft, fields) {
+    const channels = new Set((fieldByName(fields, "channels").options || []).map(String));
+    const items = new Set((fieldByName(fields, "items").options || []).map(String));
+    const pairItems = new Set(
+      (fieldByName(fields, "pair_items").options || []).map(String),
+    );
+    return {
+      channels: (draft.channels || []).map(String).filter((value) => channels.has(value)),
+      items: (draft.items || []).map(String).filter((value) => items.has(value)),
+      pairs: (draft.pairs || []).filter(
+        (pair) => channels.has(String(pair.source))
+          && channels.has(String(pair.reference)),
+      ).map((pair) => ({
+        source: String(pair.source),
+        reference: String(pair.reference),
+      })),
+      pair_items: (draft.pair_items || []).map(String).filter(
+        (value) => pairItems.has(value),
+      ),
+    };
+  }
+
+  buildSweepSection(titleKey) {
+    const section = document.createElement("section");
+    section.className = "workflow-editor-section";
+    const heading = document.createElement("strong");
+    heading.className = "workflow-editor-heading";
+    heading.textContent = translate(titleKey);
+    section.append(heading);
+    return section;
+  }
+
+  buildSweepChoiceSection(titleKey, name, options, selected) {
+    const section = this.buildSweepSection(titleKey);
+    const choices = document.createElement("div");
+    choices.className = "workflow-editor-choices";
+    const selectedValues = new Set((selected || []).map(String));
+    this.sweepControls[name] = [];
+    for (const option of options) {
+      const choice = document.createElement("label");
+      choice.className = "multi-choice-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = String(option);
+      input.checked = selectedValues.has(input.value);
+      const text = document.createElement("span");
+      text.textContent = name === "channels" ? `CH${option}` : choiceLabel(option);
+      choice.append(input, text);
+      choices.append(choice);
+      this.sweepControls[name].push(input);
+      input.addEventListener("change", () => this.captureSweepDraft());
+    }
+    section.append(choices);
+    return section;
+  }
+
+  buildSweepPairsSection(channels, pairs) {
+    const section = this.buildSweepSection("workflow.editor.pairs");
+    this.sweepPairsHost = document.createElement("div");
+    this.sweepPairsHost.className = "workflow-editor-pairs";
+    section.append(this.sweepPairsHost);
+    for (const pair of pairs) this.appendSweepPairRow(channels, pair);
+    this.sweepAddPairButton = document.createElement("button");
+    this.sweepAddPairButton.type = "button";
+    this.sweepAddPairButton.className = "secondary trigger-editor-action";
+    this.sweepAddPairButton.textContent = translate("workflow.editor.addPair");
+    this.sweepAddPairButton.addEventListener("click", () => {
+      const source = channels[0] || "";
+      const reference = channels.find((channel) => channel !== source) || source;
+      this.appendSweepPairRow(channels, { source, reference });
+      this.captureSweepDraft();
+      this.applyBusyState();
+    });
+    section.append(this.sweepAddPairButton);
+    return section;
+  }
+
+  appendSweepPairRow(channels, pair) {
+    const row = document.createElement("div");
+    row.className = "workflow-editor-pair";
+    const source = this.buildSweepChannelSelect("source_channel", channels, pair.source);
+    const reference = this.buildSweepChannelSelect(
+      "reference_channel", channels, pair.reference,
+    );
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary workflow-editor-pair-remove";
+    remove.textContent = translate("workflow.editor.removePair");
+    remove.setAttribute("aria-label", translate("workflow.editor.removePair"));
+    const entry = { row, source: source.input, reference: reference.input, remove };
+    remove.addEventListener("click", () => {
+      row.remove();
+      this.sweepPairRows = this.sweepPairRows.filter((item) => item !== entry);
+      this.captureSweepDraft();
+    });
+    source.input.addEventListener("change", () => this.captureSweepDraft());
+    reference.input.addEventListener("change", () => this.captureSweepDraft());
+    row.append(source.wrapper, reference.wrapper, remove);
+    this.sweepPairRows.push(entry);
+    this.sweepPairsHost.append(row);
+  }
+
+  buildSweepChannelSelect(name, channels, selected) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "field";
+    const label = document.createElement("span");
+    label.textContent = translate(`field.${name}`);
+    const input = document.createElement("select");
+    for (const channel of channels) input.append(new Option(`CH${channel}`, channel));
+    input.value = String(selected || "");
+    wrapper.append(label, input);
+    return { wrapper, input };
+  }
+
+  captureSweepDraft() {
+    if (!this.sweepRenderedKey) return;
+    const checked = (name) => (this.sweepControls[name] || [])
+      .filter((input) => input.checked)
+      .map((input) => input.value);
+    this.sweepDrafts.set(this.sweepRenderedKey, {
+      channels: checked("channels"),
+      items: checked("items"),
+      pairs: this.sweepPairRows.map((row) => ({
+        source: row.source.value,
+        reference: row.reference.value,
+      })),
+      pair_items: checked("pair_items"),
+    });
+  }
+
+  sweepValues() {
+    this.captureSweepDraft();
+    const draft = this.sweepDrafts.get(this.sweepRenderedKey);
+    if (!draft || !draft.items.length || !draft.pair_items.length) return null;
+    for (const row of this.sweepPairRows) {
+      row.reference.setCustomValidity("");
+      if (row.source.value === row.reference.value) {
+        row.reference.setCustomValidity(translate("workflow.editor.distinctPair"));
+        row.reference.reportValidity?.();
+        return null;
+      }
+    }
+    const parameters = {
+      items: draft.items.join(","),
+      pair_items: draft.pair_items.join(","),
+    };
+    if (draft.channels.length) parameters.channels = draft.channels.join(",");
+    if (draft.pairs.length) {
+      parameters.pairs = draft.pairs.map(
+        (pair) => `${pair.source}:${pair.reference}`,
+      );
+    }
+    return parameters;
+  }
+
+  async runMeasureSweep() {
+    const parameters = this.sweepValues();
+    if (parameters === null || !this.hooks.isCommandAvailable("measure-sweep")) return;
+    await this.hooks.executeCommand("measure-sweep", parameters);
   }
 
   renderFrontPanel() {
@@ -359,6 +589,15 @@ export class MeasurementEditor {
     const busy = this.hooks.isExecutionBusy();
     this.measureForm?.setDisabled(busy);
     this.windowForm?.setDisabled(busy);
+    for (const inputs of Object.values(this.sweepControls)) {
+      for (const input of inputs) input.disabled = busy;
+    }
+    for (const row of this.sweepPairRows) {
+      row.source.disabled = busy;
+      row.reference.disabled = busy;
+      row.remove.disabled = busy;
+    }
+    if (this.sweepAddPairButton) this.sweepAddPairButton.disabled = busy;
     if (this.controls.windowRefresh) {
       this.controls.windowRefresh.disabled = busy
         || !this.hooks.isCommandAvailable("measure-window");

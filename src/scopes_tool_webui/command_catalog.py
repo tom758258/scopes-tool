@@ -479,6 +479,19 @@ COMMANDS = (
         ),
     },
     {
+        "id": "measure-sweep",
+        "category": "Measurement",
+        "label": "Measure Sweep",
+        "editor": "measurement",
+        "modes": ("live", "simulate", "dry-run"),
+        "fields": (
+            {"name": "channels", "type": "multi-enum", "options": (1, 2, 3, 4), "serialize": "csv"},
+            {"name": "items", "type": "multi-enum", "options": _DIRECT_MEASUREMENT_ITEMS, "serialize": "csv", "default": ("vpp", "frequency", "period", "vrms")},
+            {"name": "pairs", "type": "string", "help": "Example: 1:2, 3:4"},
+            {"name": "pair_items", "type": "multi-enum", "options": PAIR_MEASUREMENT_ITEMS, "serialize": "csv", "default": ("phase", "delay")},
+        ),
+    },
+    {
         "id": "measure-results",
         "category": "Measurement",
         "label": "Front-panel measurement results",

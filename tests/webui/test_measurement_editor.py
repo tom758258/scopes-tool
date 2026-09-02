@@ -35,8 +35,10 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         "function syncEditorPresentation(editorKind)", 1
     )[0]
     assert 'selected?.id === "measure"' in execute_handler
+    assert 'selected?.id === "measure-sweep"' in execute_handler
     assert "measurementEditor?.runMeasurement()" in execute_handler
-    assert 'selected?.id === "measure" && editorKind === "measurement"' in header_actions
+    assert "measurementEditor?.runMeasureSweep()" in execute_handler
+    assert '["measure", "measure-sweep"].includes(selected?.id)' in header_actions
     assert "measurement-editor-action" not in editor_source
     assert 'button.className = className;' in editor_source
     assert '["frontPanelHide", "measure-show"]' in editor_source
@@ -46,6 +48,10 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         'measurement list as a batch. Use Measurement settings to obtain individual measurement '
         'values."' in english
     )
+    assert '"command.measure-sweep": "Measure Sweep"' in english
+    assert '"description.measure-sweep":' in english
+    assert '"command.measure-sweep": "量測掃描"' in chinese
+    assert '"description.measure-sweep":' in chinese
     assert (
         '"measurement.frontPanel.resultsUnsupported": "此型號無法一次讀取前面板量測清單；'
         '若要取得量測值，請使用「量測設定」。"' in chinese
@@ -76,7 +82,10 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         globalThis.translate = (key) => key;
         globalThis.commandSupported = () => true;
         globalThis.commandSupportReason = () => "";
-        globalThis.fieldsForModel = (command) => command.fields || [];
+        globalThis.fieldsForModel = (command, modelId) => (command.fields || []).map((field) => ({
+          ...field,
+          ...(command.presentation?.models?.[modelId]?.fields?.[field.name] || {}),
+        }));
         globalThis.CommandForm = class CommandForm {};
 
         let catalogSource = fs.readFileSync(
@@ -97,7 +106,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           catalog.availableCommands()
             .filter((command) => command.category === "Measurement")
             .map((command) => command.id),
-          ["measure", "front-panel-measurements"],
+          ["measure", "measure-sweep", "front-panel-measurements"],
         );
         assert.deepEqual(
           catalog.availableCommands()
@@ -116,14 +125,14 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           catalog.availableCommands()
             .filter((command) => command.category === "Measurement")
             .map((command) => command.id),
-          ["measure", "front-panel-measurements"],
+          ["measure", "measure-sweep", "front-panel-measurements"],
         );
         catalog.activeMode = "dry-run";
         assert.deepEqual(
           catalog.availableCommands()
             .filter((command) => command.category === "Measurement")
             .map((command) => command.id),
-          ["measure"],
+          ["measure", "measure-sweep"],
         );
 
         let editorSource = fs.readFileSync(
@@ -138,6 +147,57 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const freshEditor = new globalThis.MeasurementEditor(null, null, {});
         assert.deepEqual(freshEditor.frontPanelState, { kind: "unread", payload: null });
         assert.equal(freshEditor.frontPanelReadError, null);
+
+        const sweepDefinition = catalog.commands.find((command) => command.id === "measure-sweep");
+        assert.equal(sweepDefinition.editor, "measurement");
+        catalog.activeModelId = "keysight-dsox4024a";
+        const sweepFields4000 = catalog.fieldsFor(sweepDefinition);
+        const channels4000 = sweepFields4000.find((field) => field.name === "channels");
+        assert.deepEqual(channels4000.options, [1, 2, 3, 4]);
+        assert.deepEqual(
+          freshEditor.sanitizeSweepDraft(
+            freshEditor.defaultSweepDraft(sweepFields4000), sweepFields4000,
+          ),
+          {
+            channels: [],
+            items: ["vpp", "frequency", "period", "vrms"],
+            pairs: [],
+            pair_items: ["phase", "delay"],
+          },
+        );
+        catalog.activeModelId = "keysight-dsox2004a";
+        const sweepFields2000 = catalog.fieldsFor(sweepDefinition);
+        const projected2000 = freshEditor.sanitizeSweepDraft({
+          channels: ["1", "5"],
+          items: ["vpp", "area"],
+          pairs: [{ source: "1", reference: "5" }],
+          pair_items: ["phase", "delay"],
+        }, sweepFields2000);
+        assert.deepEqual(projected2000, {
+          channels: ["1"],
+          items: ["vpp"],
+          pairs: [],
+          pair_items: ["phase"],
+        });
+
+        let presented = sweepDefinition;
+        const presentationCalls = [];
+        const presentationEditor = new globalThis.MeasurementEditor(
+          new FakeNode("div"), catalog, {
+            contextKey: () => "simulate||keysight-dsox4024a",
+            selectedCommand: () => presented,
+            isExecutionBusy: () => false,
+            isCommandAvailable: () => true,
+          },
+        );
+        presentationEditor.renderSettings = () => presentationCalls.push("measure");
+        presentationEditor.renderSweep = () => presentationCalls.push("measure-sweep");
+        presentationEditor.renderFrontPanel = () => presentationCalls.push("front-panel");
+        presentationEditor.present();
+        assert.deepEqual(presentationCalls, ["measure-sweep"]);
+        presented = catalog.commands.find((command) => command.id === "front-panel-measurements");
+        presentationEditor.present();
+        assert.deepEqual(presentationCalls, ["measure-sweep", "front-panel"]);
 
         let activeContext = "simulate||keysight-dsox4024a";
         let mode = "simulate";
@@ -173,7 +233,73 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           renderFrontPanelReadback: () => {},
           present: () => {},
           controls: {},
+          sweepControls: {},
+          sweepPairRows: [],
         });
+
+        const sweepCalls = [];
+        let sweepBusy = false;
+        const validControl = (value, checked = true) => ({
+          value, checked, disabled: false,
+          setCustomValidity() {},
+          checkValidity: () => true,
+          reportValidity() {},
+        });
+        const sweepEditor = new globalThis.MeasurementEditor(null, null, {
+          contextKey: () => "simulate||keysight-dsox4024a",
+          selectedCommand: () => sweepDefinition,
+          isExecutionBusy: () => sweepBusy,
+          isCommandAvailable: () => true,
+          executeCommand: async (command, parameters) => {
+            sweepCalls.push([command, parameters]);
+            return { status: "completed" };
+          },
+        });
+        sweepEditor.sweepRenderedKey = "simulate||keysight-dsox4024a|measure-sweep";
+        sweepEditor.sweepControls = {
+          channels: [validControl("1"), validControl("2"), validControl("3", false)],
+          items: [
+            validControl("vpp"), validControl("frequency"),
+            validControl("period"), validControl("vrms"),
+          ],
+          pair_items: [validControl("phase"), validControl("delay")],
+        };
+        sweepEditor.sweepPairRows = [{
+          source: validControl("1"),
+          reference: validControl("2"),
+          remove: validControl("remove"),
+        }];
+        sweepEditor.sweepAddPairButton = validControl("add");
+        await sweepEditor.runMeasureSweep();
+        assert.deepEqual(sweepCalls, [["measure-sweep", {
+          channels: "1,2",
+          items: "vpp,frequency,period,vrms",
+          pairs: ["1:2"],
+          pair_items: "phase,delay",
+        }]]);
+        assert.deepEqual(
+          sweepEditor.sweepDrafts.get(sweepEditor.sweepRenderedKey),
+          {
+            channels: ["1", "2"],
+            items: ["vpp", "frequency", "period", "vrms"],
+            pairs: [{ source: "1", reference: "2" }],
+            pair_items: ["phase", "delay"],
+          },
+        );
+        const savedSweepDraft = sweepEditor.sweepDrafts.get(sweepEditor.sweepRenderedKey);
+        sweepEditor.schedulePresentation = () => {};
+        sweepEditor.rerender();
+        assert.deepEqual(
+          sweepEditor.sweepDrafts.get(sweepEditor.sweepRenderedKey),
+          savedSweepDraft,
+        );
+        sweepBusy = true;
+        sweepEditor.applyBusyState();
+        assert(sweepEditor.sweepControls.channels.every((input) => input.disabled));
+        assert.equal(sweepEditor.sweepPairRows[0].source.disabled, true);
+        assert.equal(sweepEditor.sweepPairRows[0].reference.disabled, true);
+        assert.equal(sweepEditor.sweepPairRows[0].remove.disabled, true);
+        assert.equal(sweepEditor.sweepAddPairButton.disabled, true);
 
         activeContext = "simulate||keysight-dsox2004a";
         assert.equal(editor.syncContext(), true);

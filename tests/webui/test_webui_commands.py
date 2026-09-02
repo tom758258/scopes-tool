@@ -270,6 +270,121 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
         assert f'"enum.measure-window.window.{option}":' in chinese
 
 
+def test_measure_sweep_validation_normalizes_core_request_fields() -> None:
+    request = validate_job_request(
+        {
+            "command": "measure-sweep",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {
+                "channels": "1,2",
+                "items": ["vpp", "frequency", "period", "vrms"],
+                "pairs": ["1:2"],
+                "pair_items": ["phase", "delay"],
+            },
+        }
+    )
+
+    assert request["parameters"] == {
+        "channels": [1, 2],
+        "items": "vpp,frequency,period,vrms",
+        "pairs": ["1:2"],
+        "pair_items": "phase,delay",
+    }
+    defaults = validate_job_request(
+        {
+            "command": "measure-sweep",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {},
+        }
+    )
+    assert defaults["parameters"] == {
+        "channels": None,
+        "items": "vpp,frequency,period,vrms",
+        "pairs": [],
+        "pair_items": "phase,delay",
+    }
+
+
+def test_measure_sweep_validation_rejects_unsupported_pair_measurement() -> None:
+    with pytest.raises(WebUIRequestError, match="delay pair measurement is not supported"):
+        validate_job_request(
+            {
+                "command": "measure-sweep",
+                "mode": "simulate",
+                "model_id": "keysight-dsox2004a",
+                "parameters": {"pair_items": "phase,delay"},
+            }
+        )
+
+
+def test_measure_sweep_execution_delegates_to_core_request(monkeypatch, tmp_path: Path) -> None:
+    received = []
+
+    def fake_run_measure_sweep(scope, resource, request):  # type: ignore[no-untyped-def]
+        received.append((scope, resource, request))
+        return command_execution_module.OperationResult(
+            exit_code=0,
+            result={"measurements": [], "summary": {"valid_count": 0}},
+        )
+
+    monkeypatch.setattr(
+        command_execution_module, "run_measure_sweep", fake_run_measure_sweep
+    )
+    scope = type("FakeScope", (), {"capabilities": object()})()
+    result = command_execution_module._execute_scope_command(
+        scope,
+        "measure-sweep",
+        "USB0::TEST::INSTR",
+        {
+            "channels": [1, 2],
+            "items": "vpp,frequency,period,vrms",
+            "pairs": ["1:2"],
+            "pair_items": "phase,delay",
+        },
+        tmp_path,
+    )
+
+    assert result["exit_code"] == 0
+    assert len(received) == 1
+    assert received[0][0] is scope
+    assert received[0][1] == "USB0::TEST::INSTR"
+    request = received[0][2]
+    assert request.channels == [1, 2]
+    assert request.items == "vpp,frequency,period,vrms"
+    assert request.pairs == ["1:2"]
+    assert request.pair_items == "phase,delay"
+
+
+def test_measure_sweep_dry_run_uses_core_planner(monkeypatch, tmp_path: Path) -> None:
+    received = []
+    real_planner = command_execution_module.plan_measure_sweep
+
+    def recording_planner(request, capabilities):  # type: ignore[no-untyped-def]
+        received.append(request)
+        return real_planner(request, capabilities)
+
+    monkeypatch.setattr(command_execution_module, "plan_measure_sweep", recording_planner)
+    result = command_execution_module._execute_dry_run(
+        "measure-sweep",
+        {
+            "channels": [1, 2],
+            "items": "vpp,frequency,period,vrms",
+            "pairs": ["1:2"],
+            "pair_items": "phase,delay",
+        },
+        MODEL_ID,
+        tmp_path,
+    )
+
+    assert len(received) == 1
+    assert received[0].channels == [1, 2]
+    assert received[0].pairs == ["1:2"]
+    assert result["result"]["status"] == "planned"
+    assert result["result"]["channels"] == [1, 2]
+
+
 def test_live_data_snapshot_is_hidden_and_runs_through_simulated_jobs() -> None:
     client = TestClient(app)
 

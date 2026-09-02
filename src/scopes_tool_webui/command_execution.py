@@ -13,6 +13,7 @@ from scopes_tool_core import (
     CaptureUntilRequest,
     MeasureLogRequest,
     MeasureRequest,
+    MeasureSweepRequest,
     MeasureUntilRequest,
     OperationResult,
     ResolvedRunConfig,
@@ -28,6 +29,7 @@ from scopes_tool_core import (
     plan_capture_monitor,
     plan_capture_until,
     plan_measure,
+    plan_measure_sweep,
     plan_measure_until,
     plan_sequence,
     plan_triggered_capture_series,
@@ -39,6 +41,7 @@ from scopes_tool_core import (
     run_capture_until,
     run_measure,
     run_measure_log,
+    run_measure_sweep,
     run_measure_until,
     run_sequence,
     run_triggered_capture_series,
@@ -62,6 +65,7 @@ from scopes_tool_core.planning import (
     AcquisitionCheckPlanRequest,
     CapturePlanRequest,
     MeasurePlanRequest,
+    MeasureSweepPlanRequest,
 )
 from scopes_tool_core.segmented_capture import (
     SEGMENTED_CAPTURE_DEFAULT_BASE_DIR,
@@ -167,6 +171,17 @@ def _execute_dry_run(
                 level=request.level,
                 slope=request.slope,
                 occurrence=request.occurrence,
+            ),
+            capabilities,
+        )
+    elif command == "measure-sweep":
+        request = _measure_sweep_request(parameters)
+        plan = plan_measure_sweep(
+            MeasureSweepPlanRequest(
+                channels=request.channels,
+                items=request.items,
+                pairs=request.pairs,
+                pair_items=request.pair_items,
             ),
             capabilities,
         )
@@ -459,6 +474,9 @@ def _execute_scope_command(
         return _state_scope_result("vectors", {"enabled": enabled, "raw": raw})
     if command == "measure":
         result = run_measure(scope, resource, _measure_request(parameters))
+        return _operation_payload(result)
+    if command == "measure-sweep":
+        result = run_measure_sweep(scope, resource, _measure_sweep_request(parameters))
         return _operation_payload(result)
     if command == "measure-results":
         return _state_scope_result("measurements", scope.query_measurement_results())
@@ -1160,6 +1178,15 @@ def _measure_request(parameters: Mapping[str, Any]) -> MeasureRequest:
         level=parameters.get("level"),
         slope=parameters.get("slope"),
         occurrence=parameters.get("occurrence"),
+    )
+
+
+def _measure_sweep_request(parameters: Mapping[str, Any]) -> MeasureSweepRequest:
+    return MeasureSweepRequest(
+        channels=parameters.get("channels"),
+        items=parameters.get("items", "vpp,frequency,period,vrms"),
+        pairs=parameters.get("pairs", ()),
+        pair_items=parameters.get("pair_items", "phase,delay"),
     )
 
 

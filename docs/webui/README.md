@@ -96,7 +96,9 @@ The Command workbench exposes:
 - Display: `display-label`, `display-clear`, `display-persistence`,
   `display-intensity`, `display-vectors`
 - Measurement: Measurement settings combines `measure` with the persistent
-  `measure-window` setting. Front-panel measurements combines
+  `measure-window` setting. Measure Sweep runs selected measurements across
+  model-projected analog channels and optional channel pairs, with Dry-run
+  using the existing Core planner. Front-panel measurements combines
   `measure-results`, `measure-show`, and `measure-clear` for reading and
   managing the instrument's displayed measurements and measurement markers.
   Measurement markers are always on for 2000X/3000X models; 4000X models
@@ -300,12 +302,14 @@ instrument-side `:SAVE:*` behavior.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field
-groups. For `measure-log` and `triggered-measure-loop`, the dedicated Workflow
-editor provides structured Source and Reference pair rows and shared
-pair-measurement choices. Periodic Capture (`capture-batch`), Measure Until,
-and Triggered Capture Series use the dedicated Workflow editor. Trigger,
-Search, Serial, Segmented Memory, and Workflow commands use only the
-conditional visibility needed by their existing Core parameter semantics.
+groups. Measure Sweep uses the Measurement editor for model-projected channel
+and measurement choices, structured Source and Reference pair rows, and shared
+pair-measurement choices. For `measure-log` and `triggered-measure-loop`, the
+dedicated Workflow editor provides the corresponding workflow controls.
+Periodic Capture (`capture-batch`), Measure Until, and Triggered Capture Series
+use the dedicated Workflow editor. Trigger, Search, Serial, Segmented Memory,
+and Workflow commands use only the conditional visibility needed by their
+existing Core parameter semantics.
 
 Commands that expose the existing Core `query` / `set` contract as an
 instrument setting use a read-edit-Apply workflow in the browser. Command
@@ -334,7 +338,8 @@ operation-dependent Math transform, filter, and visualization controls remain
 outside the current command workbench.
 
 Dry-run is intentionally limited to host VISA discovery plus Core-planned
-acquisition **query**, measurement, and waveform capture operations. Dry-run
+acquisition **query**, measurement, measurement sweep, and waveform capture
+operations. Dry-run
 acquisition `set` is rejected before a job is queued. The additional instrument
 commands are not advertised in Dry-run because no corresponding Core planner
 exists. Dry-run does not open an instrument backend. Simulate uses Core's
@@ -427,7 +432,7 @@ Advanced or diagnostic CLI paths are not automatically browser commands.
 Current intentional omissions include direct SCPI sending, setup recall/save,
 autoscale and broad cleanup operations, worker/doctor/hardware-report tooling,
 Cursor and Annotation editors, WGEN controls,
-advanced measurement sweeps/statistics, and advanced FFT/Math
+advanced measurement statistics and advanced FFT/Math
 transform/filter/visualization controls. Acquisition points, record length,
 sample rate, and similar low-level information remain CLI/Core paths until a
 coherent WebUI presentation is defined. These omissions avoid exposing a Core
