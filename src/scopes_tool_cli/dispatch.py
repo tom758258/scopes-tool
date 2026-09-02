@@ -40,6 +40,8 @@ def _dispatch_command(
         return system._cmd_control(args)
     if args.command == "force-trigger":
         return system._cmd_force_trigger(args)
+    if args.command == "single-wait":
+        return system._cmd_single_wait(args, stop_requested=stop_requested)
     if args.command == "channel-summary":
         return channel_display._cmd_channel_summary(args)
     if args.command == "channel-display":

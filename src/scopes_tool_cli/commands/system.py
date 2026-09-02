@@ -11,7 +11,8 @@ from scopes_tool_core.status import (
     system_standard_event_query,
     system_status_byte_query,
 )
-from scopes_tool_core.trigger import force_trigger_command
+from scopes_tool_core.trigger import TriggerWaitConfig, force_trigger_command
+from scopes_tool_core.workflow import StopRequested
 
 from .. import runtime
 
@@ -190,6 +191,35 @@ def _cmd_force_trigger(args: argparse.Namespace) -> int:
         runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
+
+
+def _cmd_single_wait(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
+    resource = runtime._require_resource(args)
+    if resource is None:
+        return 2
+
+    runtime._configure_scpi_logging(args)
+    config = TriggerWaitConfig(
+        timeout_ms=args.trigger_timeout_ms,
+        poll_interval_ms=args.trigger_poll_interval_ms,
+        force_on_timeout=args.force_trigger_on_timeout,
+    )
+
+    with runtime._open_scope(args, resource) as scope:
+        idn = scope.query_idn()
+        runtime._json_record_scope(scope, idn)
+        runtime._print_session_header(scope, resource)
+        result = scope.single_wait(config, stop_requested=stop_requested)
+        runtime._json_update_result(operation="single-wait", **result.to_json(config))
+        print(f"Trigger wait outcome: {result.outcome}")
+        entry = scope.query_system_error()
+        runtime._json_record_system_error(entry)
+        print(f"System error: {entry.format()}")
+        return 0 if not entry.is_error and result.outcome in {"natural", "forced"} else 1
 
 
 def _print_capabilities(capabilities: ScopeCapabilities | None) -> None:

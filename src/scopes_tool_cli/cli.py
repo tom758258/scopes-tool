@@ -282,6 +282,8 @@ from scopes_tool_core.timebase import (
     validate_timebase_scale,
 )
 from scopes_tool_core.trigger import (
+    TriggerWaitConfig,
+    TriggerWaitResult,
     delay_trigger_configure_commands,
     delay_trigger_query_commands,
     edge_burst_trigger_configure_commands,
@@ -730,6 +732,25 @@ def _utc_timestamp() -> str:
 
 def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
     command = args.command
+    if command == "single-wait":
+        config = TriggerWaitConfig(
+            timeout_ms=args.trigger_timeout_ms,
+            poll_interval_ms=args.trigger_poll_interval_ms,
+            force_on_timeout=args.force_trigger_on_timeout,
+        )
+        planned = ["*IDN?", single_command(), operation_condition_query()]
+        if config.force_on_timeout:
+            planned.extend([force_trigger_command(), operation_condition_query()])
+        planned.append(":SYSTem:ERRor?")
+        result = TriggerWaitResult(
+            outcome="unknown",
+            forced=False,
+            timed_out=False,
+            poll_count=0,
+            elapsed_ms=0.0,
+            capture_block_reason="dry_run",
+        ).to_json(config)
+        return planned, [], {"operation": "single-wait", **result}
     if command == "capture-until":
         plan = plan_capture_until(
             CaptureUntilRequest(

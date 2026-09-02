@@ -109,6 +109,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "doctor",
     "run",
     "single",
+    "single-wait",
     "stop-acquisition",
     "force-trigger",
     "acquisition",

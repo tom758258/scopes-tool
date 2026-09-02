@@ -214,6 +214,12 @@ Discovery and identification:
 Control and setup:
 
 - `run`, `stop-acquisition`, `single`: `action`, `command`.
+- `single-wait`: `operation: "single-wait"` plus the existing trigger-wait
+  fields: `wait_enabled`, `arm_command`, `poll_source`, `poll_command`,
+  `timeout_ms`, `poll_interval_ms`, `force_on_timeout`, `force_command`,
+  `outcome`, `forced`, `timed_out`, `poll_count`, `elapsed_ms`,
+  `condition_values`, `raw_values`, `capture_allowed`,
+  `capture_block_reason`, and `error`. It has no files or artifacts.
 - `force-trigger`: `operation`, `forced`, `scpi_command`, and
   `human_output`.
 - `channel-*`: `channel`, `operation`, `command`, and the setting value such as

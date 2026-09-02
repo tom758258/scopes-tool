@@ -110,6 +110,7 @@ from scopes_tool_core.timebase import (
     validate_timebase_scale,
 )
 from scopes_tool_core.trigger import (
+    TriggerWaitConfig,
     normalize_delay_slope,
     normalize_edge_burst_slope,
     normalize_edge_slope,
@@ -142,6 +143,7 @@ from scopes_tool_core.trigger import (
     validate_trigger_time,
     validate_tv_line,
     validate_tv_source_channel,
+    validate_trigger_wait_config,
 )
 
 from .command_catalog import (
@@ -204,6 +206,8 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise WebUIRequestError("live execution requires an explicit VISA resource")
 
     normalized = dict(parameters)
+    if command == "single-wait":
+        _single_wait_config(normalized)
     _validate_exclusive_minimum_fields(command, normalized)
     if mode == "live" and command != "list-resources":
         _validate_parameter_shapes(command, normalized, mode)
@@ -870,6 +874,9 @@ def _validate_parameters(
     if model_id is None:
         raise WebUIRequestError("detected model identity is required for live validation")
     capabilities = capabilities_for_model_id(model_id)
+    if command == "single-wait":
+        _single_wait_config(parameters)
+        return
     if command == "measure-sweep":
         _validate_measure_sweep_parameters(parameters, capabilities)
         return
@@ -1501,6 +1508,34 @@ def _finite_number(value: Any, name: str) -> float:
     if not math.isfinite(parsed):
         raise WebUIRequestError(f"{name} must be finite")
     return parsed
+
+
+def _single_wait_config(parameters: dict[str, Any]) -> TriggerWaitConfig:
+    try:
+        timeout_seconds = _finite_number(
+            parameters.setdefault("trigger_timeout_seconds", 5.0),
+            "trigger_timeout_seconds",
+        )
+        if timeout_seconds <= 0:
+            raise WebUIRequestError("trigger_timeout_seconds must be greater than 0")
+        poll_interval_ms = _integer(
+            parameters.setdefault("trigger_poll_interval_ms", 100),
+            "trigger_poll_interval_ms",
+        )
+        force_on_timeout = parameters.setdefault("force_trigger_on_timeout", False)
+        _require_boolean(force_on_timeout, "force_trigger_on_timeout")
+        parameters["trigger_timeout_seconds"] = timeout_seconds
+        parameters["trigger_poll_interval_ms"] = poll_interval_ms
+        config = TriggerWaitConfig(
+            timeout_ms=max(1, int(round(timeout_seconds * 1000.0))),
+            poll_interval_ms=poll_interval_ms,
+            force_on_timeout=force_on_timeout,
+        )
+        return validate_trigger_wait_config(config)
+    except WebUIRequestError:
+        raise
+    except Exception as exc:
+        raise WebUIRequestError(str(exc)) from exc
 
 
 def _action(parameters: dict[str, Any], command: str) -> str:

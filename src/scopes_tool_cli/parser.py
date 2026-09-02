@@ -302,6 +302,29 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_scope_connection_args(force_trigger_parser)
 
+    single_wait_parser = subparsers.add_parser(
+        "single-wait",
+        help="start one single acquisition and wait finitely for trigger completion",
+    )
+    _add_scope_connection_args(single_wait_parser)
+    single_wait_parser.add_argument(
+        "--trigger-timeout-ms",
+        type=_positive_int,
+        default=5000,
+        help="finite trigger wait timeout in milliseconds; defaults to 5000",
+    )
+    single_wait_parser.add_argument(
+        "--trigger-poll-interval-ms",
+        type=_positive_int,
+        default=100,
+        help="trigger wait polling interval in milliseconds; defaults to 100",
+    )
+    single_wait_parser.add_argument(
+        "--force-trigger-on-timeout",
+        action="store_true",
+        help="after timeout, send :TRIGger:FORCe and continue finite polling",
+    )
+
     channel_summary_parser = subparsers.add_parser(
         "channel-summary",
         help="query common setup fields for all analog channels",

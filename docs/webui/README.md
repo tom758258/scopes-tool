@@ -67,8 +67,10 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 
 ## Basic Controls and Commands
 
-Basic Controls provides Run, Stop, Single, Force Trigger, and Screenshot. These are
-shortcuts that submit the same command jobs used by the Command workbench.
+Basic Controls provides Run, Stop, Single, Single + Wait, Force Trigger, and
+Screenshot. These are shortcuts that submit the same command jobs used by the
+Command workbench. The Single + Wait shortcut uses the command defaults: 5.0 s
+timeout, 100 ms polling, and force-on-timeout disabled.
 It also owns the WebUI's single **PC output folder** setting. A blank input uses
 the default `data` root. **Select Folder** opens the Windows folder picker and
 leaves the current value unchanged when cancelled. **Open Folder** creates the
@@ -84,10 +86,19 @@ Their command workspaces show the current shared folder but do not add another
 path control. Serial Lister Export accepts a filename only; its WebUI field
 cannot select or escape the shared folder.
 
+Command Workbench Single + Wait supports Live and Simulate. Trigger timeout is
+shown in seconds and defaults to 5.0 s; force-on-timeout is an unchecked
+checkbox. The Advanced disclosure is closed by default and contains only the
+100 ms poll interval. Validation requires a finite positive timeout that maps
+to at least 1 ms and a positive poll interval no greater than the timeout. The
+result is command status using the existing trigger-wait fields and has no
+artifacts.
+
 The Command workbench exposes:
 
 - Identity: `identify` (Read device information)
-- Acquisition: `run`, `single`, `stop-acquisition`, `force-trigger`, `acquisition`
+- Acquisition: `run`, `single`, `single-wait`, `stop-acquisition`,
+  `force-trigger`, `acquisition`
 - Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`
 - Channel: `channel-display`, `channel-scale`, `channel-summary`,
   `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,

@@ -245,6 +245,26 @@ def test_basic_controls_expose_force_trigger_shared_command_shortcut() -> None:
     assert '"command.force-trigger": "強制觸發"' in chinese
 
 
+def test_single_wait_uses_shared_shortcut_and_closed_advanced_disclosure() -> None:
+    html = read_static("index.html")
+    form = read_static("command-form.js")
+    basic_controls = read_static("basic-controls.js")
+    app_source = read_static("app.js")
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+
+    assert html.count('data-command="single-wait"') == 1
+    assert 'data-i18n="basic.singleWait"' in html
+    assert "execute(button.dataset.command, {})" in basic_controls
+    assert "bindBasicControls(elements.basic, executeCommand, basicAvailable)" in app_source
+    assert 'document.createElement("details")' in form
+    assert "fields.filter((field) => field.advanced)" in form
+    assert 'summary.textContent = translate("form.advanced")' in form
+    assert "disclosure.open" not in form
+    assert '"form.advanced": "Advanced"' in english
+    assert '"form.advanced": "進階"' in chinese
+
+
 def test_identify_uses_the_shared_workspace_result_area() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")

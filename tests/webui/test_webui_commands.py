@@ -30,6 +30,7 @@ from scopes_tool_core.measurements import (
     SUPPORTED_MEASUREMENT_ITEMS,
     validate_statistics_items,
 )
+from scopes_tool_core.trigger import TriggerWaitResult
 import scopes_tool_webui.app as app_module
 import scopes_tool_webui.command_execution as command_execution_module
 import scopes_tool_webui.commands as commands_module
@@ -91,6 +92,7 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     assert {
         "identify",
         "force-trigger",
+        "single-wait",
         "acquisition",
         "channel-display",
         "channel-scale",
@@ -109,6 +111,16 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     assert force_trigger["category"] == "Acquisition"
     assert force_trigger["fields"] == []
     assert force_trigger["modes"] == ["live", "simulate"]
+    single_wait = next(
+        entry for entry in response.json() if entry["id"] == "single-wait"
+    )
+    single_wait_fields = {field["name"]: field for field in single_wait["fields"]}
+    assert single_wait["category"] == "Acquisition"
+    assert single_wait["modes"] == ["live", "simulate"]
+    assert single_wait_fields["trigger_timeout_seconds"]["default"] == 5.0
+    assert single_wait_fields["force_trigger_on_timeout"]["default"] is False
+    assert single_wait_fields["trigger_poll_interval_ms"]["default"] == 100
+    assert single_wait_fields["trigger_poll_interval_ms"]["advanced"] is True
     action = next(field for field in acquisition["fields"] if field["name"] == "action")
     assert action["mode_options"]["dry-run"] == ["query"]
     acquisition_type = next(field for field in acquisition["fields"] if field["name"] == "type")
@@ -147,6 +159,55 @@ def test_execute_force_trigger_calls_core_action(tmp_path: Path) -> None:
         "result": {"action": "force-trigger"},
         "artifacts": [],
     }
+
+
+def test_single_wait_validation_and_execution_use_core_config(tmp_path: Path) -> None:
+    request = validate_job_request({
+        "command": "single-wait",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {},
+    })
+    assert request["parameters"] == {
+        "trigger_timeout_seconds": 5.0,
+        "trigger_poll_interval_ms": 100,
+        "force_trigger_on_timeout": False,
+    }
+
+    calls = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def single_wait(self, config, *, stop_requested=None):
+            calls.append((config, stop_requested))
+            return TriggerWaitResult(
+                outcome="natural",
+                forced=False,
+                timed_out=False,
+                poll_count=1,
+                elapsed_ms=10.0,
+                capture_allowed=True,
+            )
+
+    stop_requested = lambda: False
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        "single-wait",
+        "SIM::INSTR",
+        request["parameters"],
+        tmp_path,
+        stop_requested=stop_requested,
+    )
+
+    config, callback = calls[0]
+    assert config.timeout_ms == 5000
+    assert config.poll_interval_ms == 100
+    assert config.force_on_timeout is False
+    assert callback is stop_requested
+    assert result["result"]["operation"] == "single-wait"
+    assert result["result"]["outcome"] == "natural"
+    assert result["artifacts"] == []
 
 
 def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:

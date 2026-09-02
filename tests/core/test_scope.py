@@ -1,6 +1,7 @@
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.errors import ParameterValidationError
+from scopes_tool_core.trigger import TriggerWaitConfig
 
 
 def test_scope_queries_idn_and_loads_capabilities():
@@ -96,6 +97,20 @@ def test_scope_control_methods_send_one_command_each():
     scope.force_trigger()
 
     assert backend.history == [":STOP", ":RUN", ":SINGle", ":TRIGger:FORCe"]
+
+
+def test_scope_single_wait_delegates_to_existing_trigger_wait_path():
+    backend = FakeBackend(responses={
+        "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20",
+        ":OPERegister:CONDition?": "48",
+    })
+    scope = Oscilloscope(backend)
+
+    scope.query_idn()
+    result = scope.single_wait(TriggerWaitConfig(timeout_ms=100))
+
+    assert result.outcome == "natural"
+    assert backend.history == ["*IDN?", ":SINGle", ":OPERegister:CONDition?"]
 
 
 def test_scope_drains_system_errors_until_no_error():

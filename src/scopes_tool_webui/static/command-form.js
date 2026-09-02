@@ -39,7 +39,21 @@ export class CommandForm {
     const fields = this.catalog.fieldsFor ? this.catalog.fieldsFor(command) : command.fields;
     const visibleFields = fields.filter((field) => !this.isManagedActionField(field));
     if (!visibleFields.length) this.appendEmpty("form.noParameters");
-    fields.forEach((field) => this.container.append(this.field(field)));
+    fields.filter((field) => !field.advanced).forEach(
+      (field) => this.container.append(this.field(field)),
+    );
+    const advancedFields = fields.filter((field) => field.advanced);
+    if (advancedFields.length) {
+      const disclosure = document.createElement("details");
+      disclosure.className = "command-form-advanced";
+      const summary = document.createElement("summary");
+      summary.textContent = translate("form.advanced");
+      const fieldsHost = document.createElement("div");
+      fieldsHost.className = "command-form-advanced-fields";
+      advancedFields.forEach((field) => fieldsHost.append(this.field(field)));
+      disclosure.append(summary, fieldsHost);
+      this.container.append(disclosure);
+    }
     if (options.draft) this.restoreDraft(options.draft);
     this.container.querySelectorAll("[data-field]").forEach((input) => {
       if (input.type === "hidden") return;

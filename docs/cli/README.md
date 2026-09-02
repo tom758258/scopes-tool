@@ -493,6 +493,23 @@ command. The CLI control commands additionally perform a transparent post-check
 by querying one `:SYSTem:ERRor?` entry and printing the result. The
 `:SYSTem:ERRor?` query removes the returned entry from the instrument error
 
+Start one single acquisition and wait for trigger completion:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe single-wait --resource "$env:SCOPES_TOOL_RESOURCE"
+.\.venv\Scripts\scopes-tool.exe single-wait --simulate --json
+.\.venv\Scripts\scopes-tool.exe single-wait --dry-run --json --force-trigger-on-timeout
+```
+
+`single-wait` sends `:SINGle` and uses the existing finite Operation Condition
+trigger wait. The defaults are a 5000 ms timeout, 100 ms polling interval, and
+force-on-timeout disabled. `--trigger-timeout-ms` and
+`--trigger-poll-interval-ms` must be positive, and the poll interval cannot
+exceed the timeout. `--force-trigger-on-timeout` uses the existing conditional
+`:TRIGger:FORCe` timeout path. The structured response uses the existing
+trigger-wait result fields and creates no waveform, measurement, or artifact
+output.
+
 Force one trigger event explicitly:
 
 ```powershell
@@ -524,6 +541,7 @@ Worker usage:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command force-trigger --arguments-json "{}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command single-wait --arguments-json '{"trigger_timeout_ms":5000,"trigger_poll_interval_ms":100,"force_trigger_on_timeout":false}' --json
 ```
 
 Configure or query acquisition type and average count:

@@ -79,6 +79,7 @@ from .command_catalog import _TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMAND_I
 from .command_validation import (
     WebUIRequestError,
     _segmented_capture_request,
+    _single_wait_config,
     _validate_parameters,
 )
 
@@ -311,6 +312,14 @@ def _execute_scope_command(
     if command == "single":
         scope.single()
         return _simple_scope_result("single")
+    if command == "single-wait":
+        config = _single_wait_config(dict(parameters))
+        result = scope.single_wait(config, stop_requested=stop_requested)
+        return {
+            "exit_code": 0 if result.outcome in {"natural", "forced"} else 1,
+            "result": {"operation": "single-wait", **result.to_json(config)},
+            "artifacts": [],
+        }
     if command == "stop-acquisition":
         scope.stop()
         return _simple_scope_result("stop-acquisition")

@@ -154,6 +154,35 @@ COMMANDS = (
         "fields": (),
     },
     {
+        "id": "single-wait",
+        "category": "Acquisition",
+        "label": "Single + Wait",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {
+                "name": "trigger_timeout_seconds",
+                "type": "number",
+                "exclusive_minimum": 0,
+                "default": 5.0,
+                "required": True,
+            },
+            {
+                "name": "force_trigger_on_timeout",
+                "type": "boolean",
+                "default": False,
+                "help_key": "single-wait.force_trigger_on_timeout",
+            },
+            {
+                "name": "trigger_poll_interval_ms",
+                "type": "integer",
+                "minimum": 1,
+                "default": 100,
+                "required": True,
+                "advanced": True,
+            },
+        ),
+    },
+    {
         "id": "stop-acquisition",
         "category": "Acquisition",
         "label": "Stop",

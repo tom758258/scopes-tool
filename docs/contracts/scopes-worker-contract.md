@@ -174,7 +174,7 @@ Worker `/command` supports the existing Scopes capability surface:
 - `system-clear-status`, `system-opc`, `system-status-byte`,
   `system-standard-event`, `system-operation-status`, `system-options`
 - `cleanup`
-- `run`, `single`, `stop-acquisition`, `force-trigger`
+- `run`, `single`, `single-wait`, `stop-acquisition`, `force-trigger`
 - `acquisition`, `acquisition-check`, `sample-rate`, `acquisition-points`,
   `record-length`, `segmented-memory`, `segmented-capture`
 - `capture`, `capture-batch`, `capture-until`, `capture-monitor`,
@@ -612,6 +612,28 @@ remains unsupported. `check-error` remains the command for reading or draining
 ```json
 {"command": "force-trigger", "arguments": {}}
 ```
+
+`single-wait` is an acquisition-control command using the existing trigger-wait
+implementation:
+
+```json
+{
+  "command": "single-wait",
+  "arguments": {
+    "trigger_timeout_ms": 5000,
+    "trigger_poll_interval_ms": 100,
+    "force_trigger_on_timeout": false
+  }
+}
+```
+
+All three arguments are optional and default to the values shown. Timeout and
+poll interval must be positive, and poll interval cannot exceed timeout. The
+command sends `:SINGle`, polls Operation Condition, and conditionally uses
+`:TRIGger:FORCe` only when force-on-timeout is enabled. It returns the existing
+trigger-wait result schema and creates no artifacts. It uses the normal domain
+command dispatch and does not add an endpoint or change the Worker schema
+version.
 
 `trigger-edge` is accepted only as the canonical Edge trigger command. It uses
 the underlying Keysight `:TRIGger:MODE EDGE` and `:TRIGger:EDGE:*` SCPI family:

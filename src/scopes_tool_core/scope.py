@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Callable, Sequence
 
 from .acquisition import AcquisitionConfig, AcquisitionController
 from .cursor import (
@@ -166,9 +166,12 @@ from .trigger import (
     TriggerRejectState,
     TriggerSweepController,
     TriggerSweepState,
+    TriggerWaitConfig,
+    TriggerWaitResult,
     TvTriggerController,
     TvTriggerState,
     force_trigger_command,
+    wait_for_trigger_completion,
 )
 from .visa_backend import VisaBackend
 from .waveform import MultiChannelWaveformCapture, WaveformCapture, WaveformController
@@ -278,6 +281,31 @@ class Oscilloscope:
         """Start one single acquisition without waiting for completion."""
 
         self.scpi.write(":SINGle")
+
+    def single_wait(
+        self,
+        config: TriggerWaitConfig,
+        *,
+        stop_requested: Callable[[], bool] | None = None,
+    ) -> TriggerWaitResult:
+        """Start one single acquisition and wait finitely for completion."""
+
+        if getattr(self.backend, "backend", None) == "Keysight simulator":
+            classifier_profile = "simulator"
+        elif self.capabilities is not None and self.capabilities.series in {
+            "2000X",
+            "3000X",
+            "4000X",
+        }:
+            classifier_profile = self.capabilities.series.lower()
+        else:
+            classifier_profile = "live"
+        return wait_for_trigger_completion(
+            self.scpi,
+            config,
+            classifier_profile=classifier_profile,
+            stop_requested=stop_requested,
+        )
 
     def force_trigger(self) -> None:
         """Force one trigger event without waiting for the configured trigger condition."""

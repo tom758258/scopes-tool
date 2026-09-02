@@ -115,6 +115,7 @@ from scopes_tool_core.screenshot import (
     normalize_screenshot_options,
 )
 from scopes_tool_core.trigger import (
+    TriggerWaitConfig,
     normalize_edge_burst_slope,
     normalize_delay_slope,
     normalize_glitch_qualifier,
@@ -136,6 +137,7 @@ from scopes_tool_core.trigger import (
     validate_setup_hold_trigger_time,
     validate_trigger_level,
     validate_trigger_time,
+    validate_trigger_wait_config,
 )
 def _screenshot_options(args: argparse.Namespace) -> ScreenshotOptions:
     return normalize_screenshot_options(
@@ -258,6 +260,14 @@ def _segmented_capture_request(args: argparse.Namespace) -> SegmentedCaptureRequ
     )
 
 def _validate_pre_open_args(args: argparse.Namespace) -> None:
+    if getattr(args, "command", None) == "single-wait":
+        validate_trigger_wait_config(
+            TriggerWaitConfig(
+                timeout_ms=args.trigger_timeout_ms,
+                poll_interval_ms=args.trigger_poll_interval_ms,
+                force_on_timeout=args.force_trigger_on_timeout,
+            )
+        )
     if getattr(args, "command", None) == "acquisition":
         if (
             getattr(args, "acq_count", None) is not None

@@ -86,6 +86,22 @@ def _live_runtime():
     )
 
 
+def test_worker_maps_single_wait_arguments_to_domain_command():
+    parsed = worker.parse_domain_command(
+        "single-wait",
+        {
+            "trigger_timeout_ms": 2500,
+            "trigger_poll_interval_ms": 50,
+            "force_trigger_on_timeout": True,
+        },
+        _runtime(),
+    )
+
+    assert parsed.command == "single-wait"
+    assert parsed.trigger_timeout_ms == 2500
+    assert parsed.trigger_poll_interval_ms == 50
+    assert parsed.force_trigger_on_timeout is True
+
 
 @pytest.mark.parametrize("model", ("keysight-dsox2004a", "keysight-dsox3024a"))
 def test_worker_rejects_record_length_on_unsupported_series(model):
