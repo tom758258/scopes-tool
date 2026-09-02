@@ -15,7 +15,16 @@ from scopes_tool_core.fft import (
     FFT_OPERATIONS,
     FFT_PHASE_REFERENCES,
 )
-from scopes_tool_core.math import MATH_COMPOSITE_OPERATIONS, MATH_OPERATIONS, MATH_SOURCES
+from scopes_tool_core.math import (
+    MATH_COMPOSITE_OPERATIONS,
+    MATH_FILTER_OPERATIONS,
+    MATH_OPERATIONS,
+    MATH_SOURCES,
+    MATH_TRANSFORMS,
+    MATH_TRANSFORM_SOURCES,
+    MATH_TREND_MEASUREMENTS,
+    MATH_VISUALIZATION_OPERATIONS,
+)
 from scopes_tool_core.measurements import (
     MEASUREMENT_WINDOW_CHOICES,
     SUPPORTED_MEASUREMENT_ITEMS,
@@ -865,6 +874,9 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
         "math-display",
         "math-vertical",
         "math-operator",
+        "math-transform",
+        "math-filter",
+        "math-visualization",
         "math-composite-source",
         "math-clear",
     } <= command_ids
@@ -883,7 +895,7 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
     )
     assert composite["presentation_only"] is True
     assert composite["editor"] == "measurement"
-    assert {"trigger", "math-transform", "math-filter", "math-visualization"}.isdisjoint(command_ids)
+    assert "trigger" not in command_ids
 
     dvm_mode = next(entry for entry in response.json() if entry["id"] == "dvm-mode")
     assert next(field for field in dvm_mode["fields"] if field["name"] == "mode")["options"] == list(DVM_MODES)
@@ -937,6 +949,221 @@ def test_fft_catalog_projects_advanced_fields_by_model_capability() -> None:
     assert advanced["units"]["visible_if"] == [
         {"field": "fft_operation", "equals": "fft"},
     ]
+
+
+def test_advanced_math_catalog_exposes_operation_specific_fields() -> None:
+    commands = {
+        entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()
+    }
+    transform = {field["name"]: field for field in commands["math-transform"]["fields"]}
+    math_filter = {field["name"]: field for field in commands["math-filter"]["fields"]}
+    visualization = {
+        field["name"]: field for field in commands["math-visualization"]["fields"]
+    }
+
+    assert transform["operation"]["options"] == list(MATH_TRANSFORMS)
+    assert transform["input_offset"]["visible_if"][-1] == {
+        "field": "operation", "equals": "integrate"
+    }
+    assert transform["gain"]["visible_if"][-1] == {
+        "field": "operation", "equals": "linear"
+    }
+    assert transform["linear_offset"]["visible_if"][-1] == {
+        "field": "operation", "equals": "linear"
+    }
+    assert math_filter["operation"]["options"] == list(MATH_FILTER_OPERATIONS)
+    assert math_filter["cutoff_hz"]["visible_if"][-1] == {
+        "field": "operation", "in": ["low-pass", "high-pass"]
+    }
+    assert math_filter["average_count"]["visible_if"][-1] == {
+        "field": "operation", "equals": "average"
+    }
+    assert visualization["operation"]["options"] == list(
+        MATH_VISUALIZATION_OPERATIONS
+    )
+    assert visualization["measurement"]["options"] == list(MATH_TREND_MEASUREMENTS)
+    assert visualization["source2"]["visible_if"][-1] == {
+        "field": "measurement", "equals": "vratio"
+    }
+
+
+def test_advanced_math_catalog_projects_model_capabilities_and_trend_fields() -> None:
+    commands = {
+        entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()
+    }
+    basic_id = "keysight-dsox2004a"
+    advanced_id = "keysight-dsox4034a"
+
+    transform_models = commands["math-transform"]["presentation"]["models"]
+    assert transform_models[basic_id]["fields"]["source"]["options"] == [
+        *MATH_SOURCES, "composite"
+    ]
+    assert transform_models[advanced_id]["fields"]["source"]["options"] == [
+        option for option in MATH_TRANSFORM_SOURCES if option != "composite"
+    ]
+
+    filter_models = commands["math-filter"]["presentation"]["models"]
+    assert filter_models[basic_id]["fields"]["operation"]["options"] == [
+        "low-pass", "high-pass"
+    ]
+    assert filter_models[advanced_id]["fields"]["operation"]["options"] == list(
+        MATH_FILTER_OPERATIONS
+    )
+
+    visualization_models = commands["math-visualization"]["presentation"]["models"]
+    basic = visualization_models[basic_id]["fields"]
+    advanced = visualization_models[advanced_id]["fields"]
+    assert basic["operation"]["options"] == ["magnify", "trend"]
+    assert basic["measurement_slot"]["hidden"] is True
+    assert advanced["operation"]["options"] == list(MATH_VISUALIZATION_OPERATIONS)
+    assert advanced["measurement"]["hidden"] is True
+    assert advanced["source2"]["hidden"] is True
+    assert advanced["measurement_slot"]["required_if"] == [
+        {"field": "action", "equals": "set"},
+        {"field": "operation", "equals": "trend"},
+    ]
+    assert advanced["source"]["required_if"][-1] == {
+        "field": "operation",
+        "in": ["magnify", "maximum", "minimum", "peak", "max-hold", "min-hold"],
+    }
+
+
+def test_advanced_math_validation_reuses_core_series_rules() -> None:
+    basic_trend = validate_job_request({
+        "command": "math-visualization",
+        "mode": "simulate",
+        "model_id": "keysight-dsox2004a",
+        "parameters": {
+            "action": "set",
+            "function": 1,
+            "operation": "trend",
+            "source": "channel1",
+            "measurement": "vavg",
+        },
+    })
+    assert basic_trend["parameters"]["measurement"] == "vavg"
+
+    advanced_trend = validate_job_request({
+        "command": "math-visualization",
+        "mode": "simulate",
+        "model_id": "keysight-dsox4034a",
+        "parameters": {
+            "action": "set",
+            "function": 2,
+            "operation": "trend",
+            "measurement_slot": 3,
+        },
+    })
+    assert advanced_trend["parameters"]["measurement_slot"] == 3
+
+    cascade = validate_job_request({
+        "command": "math-filter",
+        "mode": "simulate",
+        "model_id": "keysight-dsox4034a",
+        "parameters": {
+            "action": "set",
+            "function": 2,
+            "operation": "average",
+            "source": "math1",
+            "average_count": 64,
+        },
+    })
+    assert cascade["parameters"]["source"] == "math1"
+
+    with pytest.raises(WebUIRequestError, match="only valid for 4000X Trend"):
+        validate_job_request({
+            "command": "math-visualization",
+            "mode": "simulate",
+            "model_id": "keysight-dsox2004a",
+            "parameters": {
+                "action": "set",
+                "function": 1,
+                "operation": "trend",
+                "measurement_slot": 3,
+            },
+        })
+    with pytest.raises(WebUIRequestError, match="does not accept --source"):
+        validate_job_request({
+            "command": "math-visualization",
+            "mode": "simulate",
+            "model_id": "keysight-dsox4034a",
+            "parameters": {
+                "action": "set",
+                "function": 2,
+                "operation": "trend",
+                "source": "channel1",
+                "measurement_slot": 3,
+            },
+        })
+
+
+def test_execute_advanced_math_set_and_query_paths_call_core() -> None:
+    calls: list[tuple] = []
+
+    class FakeScope:
+        def configure_math_transform(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(("transform-set", args, kwargs))
+
+        def query_math_transform(self, function):  # type: ignore[no-untyped-def]
+            calls.append(("transform-query", function))
+            return {"function": function, "operation": "linear", "gain": 2.0}
+
+        def configure_math_filter(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(("filter-set", args, kwargs))
+
+        def query_math_filter(self, function):  # type: ignore[no-untyped-def]
+            calls.append(("filter-query", function))
+            return {"function": function, "operation": "average", "average_count": 64}
+
+        def configure_math_visualization(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(("visualization-set", args, kwargs))
+
+        def query_math_visualization(self, function):  # type: ignore[no-untyped-def]
+            calls.append(("visualization-query", function))
+            return {"function": function, "operation": "trend", "measurement_slot": 3}
+
+    scope = FakeScope()
+    transform = command_execution_module._execute_math_transform(scope, {
+        "action": "set", "function": 2, "operation": "linear", "source": "math1",
+        "gain": 2.0, "linear_offset": -1.0,
+    })
+    command_execution_module._execute_math_transform(
+        scope, {"action": "query", "function": 2}
+    )
+    math_filter = command_execution_module._execute_math_filter(scope, {
+        "action": "set", "function": 2, "operation": "average", "source": "math1",
+        "average_count": 64,
+    })
+    command_execution_module._execute_math_filter(
+        scope, {"action": "query", "function": 2}
+    )
+    visualization = command_execution_module._execute_math_visualization(scope, {
+        "action": "set", "function": 2, "operation": "trend", "measurement_slot": 3,
+    })
+    command_execution_module._execute_math_visualization(
+        scope, {"action": "query", "function": 2}
+    )
+
+    assert calls == [
+        ("transform-set", (2, "linear", "math1"), {
+            "input_offset": None, "gain": 2.0, "linear_offset": -1.0,
+        }),
+        ("transform-query", 2),
+        ("transform-query", 2),
+        ("filter-set", (2, "average", "math1"), {
+            "cutoff_hz": None, "average_count": 64, "smooth_points": None,
+        }),
+        ("filter-query", 2),
+        ("filter-query", 2),
+        ("visualization-set", (2, "trend"), {
+            "source": None, "source2": None, "measurement": None, "measurement_slot": 3,
+        }),
+        ("visualization-query", 2),
+        ("visualization-query", 2),
+    ]
+    assert transform["result"]["math_transform"]["gain"] == 2.0
+    assert math_filter["result"]["math_filter"]["average_count"] == 64
+    assert visualization["result"]["math_visualization"]["measurement_slot"] == 3
 
 
 def test_fft_advanced_validation_reuses_core_range_mode_rule() -> None:
@@ -1290,16 +1517,17 @@ def test_channel_display_dvm_math_and_fft_invalid_and_unsupported_requests_are_r
     assert fft_query.status_code == 400
     assert "cannot include" in fft_query.json()["detail"]
 
-    deferred = client.post(
+    invalid_math_query = client.post(
         "/api/jobs",
         json={
             "command": "math-transform",
             "mode": "simulate",
             "model_id": MODEL_ID,
-            "parameters": {"function": 1},
+            "parameters": {"action": "query", "function": 1, "source": "channel1"},
         },
     )
-    assert deferred.status_code == 400
+    assert invalid_math_query.status_code == 400
+    assert "query cannot include source" in invalid_math_query.json()["detail"]
 
 
 def test_channel_display_dvm_math_and_fft_capability_rejection_remains_core_owned() -> None:

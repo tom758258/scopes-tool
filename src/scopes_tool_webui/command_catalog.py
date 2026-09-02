@@ -25,8 +25,13 @@ from scopes_tool_core.fft import (
 )
 from scopes_tool_core.math import (
     MATH_COMPOSITE_OPERATIONS,
+    MATH_FILTER_OPERATIONS,
     MATH_OPERATIONS,
     MATH_SOURCES,
+    MATH_TRANSFORMS,
+    MATH_TRANSFORM_SOURCES,
+    MATH_TREND_MEASUREMENTS,
+    MATH_VISUALIZATION_OPERATIONS,
 )
 from scopes_tool_core.measurements import (
     MEASUREMENT_WINDOW_CHOICES,
@@ -998,6 +1003,51 @@ COMMANDS = (
         ),
     },
     {
+        "id": "math-transform",
+        "category": "FFT / MATH",
+        "label": "Math transform",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "operation", "type": "enum", "options": MATH_TRANSFORMS, "option_label": "math-transform", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "source", "type": "enum", "options": MATH_TRANSFORM_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "advanced-math.source"},
+            {"name": "input_offset", "type": "number", "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "integrate"}], "help_key": "math-transform.input_offset"},
+            {"name": "gain", "type": "number", "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "linear"}], "help_key": "math-transform.gain"},
+            {"name": "linear_offset", "type": "number", "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "linear"}], "help_key": "math-transform.linear_offset"},
+        ),
+    },
+    {
+        "id": "math-filter",
+        "category": "FFT / MATH",
+        "label": "Math filter",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "operation", "type": "enum", "options": MATH_FILTER_OPERATIONS, "option_label": "math-filter", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "source", "type": "enum", "options": MATH_TRANSFORM_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "advanced-math.source"},
+            {"name": "cutoff_hz", "type": "number", "exclusive_minimum": 0, "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "in": ["low-pass", "high-pass"]}], "help_key": "math-filter.cutoff_hz"},
+            {"name": "average_count", "type": "integer", "minimum": 2, "maximum": 65536, "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "average"}], "help_key": "math-filter.average_count"},
+            {"name": "smooth_points", "type": "integer", "minimum": 3, "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "smooth"}], "help_key": "math-filter.smooth_points"},
+        ),
+    },
+    {
+        "id": "math-visualization",
+        "category": "FFT / MATH",
+        "label": "Math visualization",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "operation", "type": "enum", "options": MATH_VISUALIZATION_OPERATIONS, "option_label": "math-visualization", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "source", "type": "enum", "options": MATH_TRANSFORM_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "advanced-math.source"},
+            {"name": "source2", "type": "enum", "options": MATH_SOURCES, "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "trend"}, {"field": "measurement", "equals": "vratio"}], "required_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "trend"}, {"field": "measurement", "equals": "vratio"}], "help_key": "math-visualization.source2"},
+            {"name": "measurement", "type": "enum", "options": MATH_TREND_MEASUREMENTS, "option_label": "math-trend-measurement", "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "trend"}], "required_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "trend"}], "help_key": "math-visualization.measurement"},
+            {"name": "measurement_slot", "type": "integer", "minimum": 1, "maximum": 10, "help_key": "math-visualization.measurement_slot"},
+        ),
+    },
+    {
         "id": "math-composite-source",
         "category": "FFT / MATH",
         "label": "Math composite source",
@@ -1426,6 +1476,9 @@ _SETTING_QUERY_FIELDS = {
     "math-display": ("function",),
     "math-vertical": ("function",),
     "math-operator": ("function",),
+    "math-transform": ("function",),
+    "math-filter": ("function",),
+    "math-visualization": ("function",),
     "trigger-edge-level": ("source_channel",),
     **{
         command_id: ("bus",)
@@ -1708,6 +1761,48 @@ def _model_command_presentation(
             override["hidden"] = True
         if entry["id"] == "fft" and name == "units" and capabilities.supports_advanced_fft:
             override["visible_if"] = [{"field": "fft_operation", "equals": "fft"}]
+        if entry["id"] in {"math-transform", "math-filter", "math-visualization"} and name == "source":
+            override["options"] = tuple(
+                option for option in MATH_TRANSFORM_SOURCES
+                if option in MATH_SOURCES
+                or (option == "composite" and capabilities.supports_math_goft)
+                or (option.startswith("math") and capabilities.supports_math_cascade)
+            )
+        if entry["id"] == "math-filter" and name == "operation":
+            override["options"] = tuple(
+                option for option in MATH_FILTER_OPERATIONS
+                if option in capabilities.math_filter_operations
+            )
+        if entry["id"] == "math-visualization" and name == "operation":
+            override["options"] = tuple(
+                option for option in MATH_VISUALIZATION_OPERATIONS
+                if option in capabilities.math_visualization_operations
+            )
+        if entry["id"] == "math-visualization":
+            if capabilities.series == "4000X":
+                non_trend_operations = tuple(
+                    option for option in MATH_VISUALIZATION_OPERATIONS
+                    if option in capabilities.math_visualization_operations
+                    and option != "trend"
+                )
+                if name == "source":
+                    conditions = [
+                        {"field": "action", "equals": "set"},
+                        {"field": "operation", "in": non_trend_operations},
+                    ]
+                    override["visible_if"] = conditions
+                    override["required_if"] = conditions
+                elif name in {"source2", "measurement"}:
+                    override["hidden"] = True
+                elif name == "measurement_slot":
+                    conditions = [
+                        {"field": "action", "equals": "set"},
+                        {"field": "operation", "equals": "trend"},
+                    ]
+                    override["visible_if"] = conditions
+                    override["required_if"] = conditions
+            elif name == "measurement_slot":
+                override["hidden"] = True
         if name == "pair_items" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"

@@ -29,6 +29,12 @@ from scopes_tool_core.dvm import normalize_dvm_mode
 from scopes_tool_core.fft import fft_configure_commands
 from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.math import (
+    math_filter_commands,
+    math_filter_query_commands,
+    math_transform_commands,
+    math_transform_query_commands,
+    math_visualization_commands,
+    math_visualization_query_commands,
     normalize_math_composite_operation,
     normalize_math_operation,
     normalize_math_source,
@@ -1290,7 +1296,15 @@ def _validate_parameters(
                 ),
                 command,
             )
-    elif command in {"math-display", "math-vertical", "math-operator", "math-composite-source"}:
+    elif command in {
+        "math-display",
+        "math-vertical",
+        "math-operator",
+        "math-transform",
+        "math-filter",
+        "math-visualization",
+        "math-composite-source",
+    }:
         action = _action(parameters, command)
         if command != "math-composite-source":
             parameters["function"] = _integer(parameters.get("function", 1), "function")
@@ -1336,7 +1350,7 @@ def _validate_parameters(
                     raise WebUIRequestError(str(exc)) from exc
             else:
                 _reject_query_parameters(parameters, names, command)
-        else:
+        elif command == "math-composite-source":
             names = ("operation", "source1", "source2")
             if action == "set":
                 for name in names:
@@ -1353,6 +1367,73 @@ def _validate_parameters(
                     raise WebUIRequestError(str(exc)) from exc
             else:
                 _reject_query_parameters(parameters, names, command)
+        else:
+            names = {
+                "math-transform": (
+                    "operation", "source", "input_offset", "gain", "linear_offset"
+                ),
+                "math-filter": (
+                    "operation", "source", "cutoff_hz", "average_count", "smooth_points"
+                ),
+                "math-visualization": (
+                    "operation", "source", "source2", "measurement", "measurement_slot"
+                ),
+            }[command]
+            try:
+                if action == "query":
+                    _reject_query_parameters(parameters, names, command)
+                    query = {
+                        "math-transform": math_transform_query_commands,
+                        "math-filter": math_filter_query_commands,
+                        "math-visualization": math_visualization_query_commands,
+                    }[command]
+                    query(parameters["function"], capabilities=capabilities)
+                else:
+                    _require_parameter(parameters, "operation", command)
+                    if command in {"math-transform", "math-filter"}:
+                        _require_parameter(parameters, "source", command)
+                    for name in (
+                        "input_offset", "gain", "linear_offset", "cutoff_hz"
+                    ):
+                        if name in parameters:
+                            parameters[name] = _finite_number(parameters[name], name)
+                    for name in ("average_count", "smooth_points", "measurement_slot"):
+                        if name in parameters:
+                            parameters[name] = _integer(parameters[name], name)
+                    if command == "math-transform":
+                        math_transform_commands(
+                            parameters["function"],
+                            parameters["operation"],
+                            parameters["source"],
+                            input_offset=parameters.get("input_offset"),
+                            gain=parameters.get("gain"),
+                            linear_offset=parameters.get("linear_offset"),
+                            capabilities=capabilities,
+                        )
+                    elif command == "math-filter":
+                        math_filter_commands(
+                            parameters["function"],
+                            parameters["operation"],
+                            parameters["source"],
+                            cutoff_hz=parameters.get("cutoff_hz"),
+                            average_count=parameters.get("average_count"),
+                            smooth_points=parameters.get("smooth_points"),
+                            capabilities=capabilities,
+                        )
+                    else:
+                        math_visualization_commands(
+                            parameters["function"],
+                            parameters["operation"],
+                            source=parameters.get("source"),
+                            source2=parameters.get("source2"),
+                            measurement=parameters.get("measurement"),
+                            measurement_slot=parameters.get("measurement_slot"),
+                            capabilities=capabilities,
+                        )
+            except WebUIRequestError:
+                raise
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
     elif command == "math-clear":
         parameters["function"] = _integer(parameters.get("function", 1), "function")
     elif command == "check-error":

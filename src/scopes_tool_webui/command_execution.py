@@ -659,6 +659,12 @@ def _execute_scope_command(
         return _execute_math_vertical(scope, parameters)
     if command == "math-operator":
         return _execute_math_operator(scope, parameters)
+    if command == "math-transform":
+        return _execute_math_transform(scope, parameters)
+    if command == "math-filter":
+        return _execute_math_filter(scope, parameters)
+    if command == "math-visualization":
+        return _execute_math_visualization(scope, parameters)
     if command == "math-composite-source":
         return _execute_math_composite_source(scope, parameters)
     if command == "math-clear":
@@ -1118,6 +1124,50 @@ def _execute_math_operator(scope: Any, parameters: Mapping[str, Any]) -> dict[st
             parameters["source2"],
         )
     return _state_scope_result("math_operator", scope.query_math_operator(function))
+
+
+def _execute_math_transform(scope: Any, parameters: Mapping[str, Any]) -> dict[str, Any]:
+    function = parameters["function"]
+    if parameters["action"] == "set":
+        scope.configure_math_transform(
+            function,
+            parameters["operation"],
+            parameters["source"],
+            input_offset=parameters.get("input_offset"),
+            gain=parameters.get("gain"),
+            linear_offset=parameters.get("linear_offset"),
+        )
+    return _state_scope_result("math_transform", scope.query_math_transform(function))
+
+
+def _execute_math_filter(scope: Any, parameters: Mapping[str, Any]) -> dict[str, Any]:
+    function = parameters["function"]
+    if parameters["action"] == "set":
+        scope.configure_math_filter(
+            function,
+            parameters["operation"],
+            parameters["source"],
+            cutoff_hz=parameters.get("cutoff_hz"),
+            average_count=parameters.get("average_count"),
+            smooth_points=parameters.get("smooth_points"),
+        )
+    return _state_scope_result("math_filter", scope.query_math_filter(function))
+
+
+def _execute_math_visualization(scope: Any, parameters: Mapping[str, Any]) -> dict[str, Any]:
+    function = parameters["function"]
+    if parameters["action"] == "set":
+        scope.configure_math_visualization(
+            function,
+            parameters["operation"],
+            source=parameters.get("source"),
+            source2=parameters.get("source2"),
+            measurement=parameters.get("measurement"),
+            measurement_slot=parameters.get("measurement_slot"),
+        )
+    return _state_scope_result(
+        "math_visualization", scope.query_math_visualization(function)
+    )
 
 
 def _execute_math_composite_source(scope: Any, parameters: Mapping[str, Any]) -> dict[str, Any]:

@@ -3822,3 +3822,30 @@ def test_fft_result_field_localization() -> None:
     ):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
+
+
+def test_advanced_math_form_and_result_localization() -> None:
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+    for key in (
+        "command.math-transform",
+        "command.math-filter",
+        "command.math-visualization",
+        "description.math-transform",
+        "description.math-filter",
+        "description.math-visualization",
+        "field.input_offset",
+        "field.gain",
+        "field.linear_offset",
+        "field.cutoff_hz",
+        "field.average_count",
+        "field.smooth_points",
+        "field.measurement_slot",
+        "help.advanced-math.source",
+        "help.math-visualization.measurement_slot",
+        "results.field.input_offset",
+        "results.field.cutoff_hz",
+        "results.field.measurement_slot",
+    ):
+        assert f'"{key}":' in english, key
+        assert f'"{key}":' in chinese, key
