@@ -1416,11 +1416,22 @@ def test_long_workflows_receive_existing_core_stop_callback(
     parameters,
 ) -> None:
     stop_requested = lambda: True
-    received = []
+    received_stop = []
+    received_progress = []
 
-    def fake_runner(_scope, _resource, _request, *, stop_requested=None):
-        received.append(stop_requested)
-        return command_execution_module.OperationResult(exit_code=0, result={"status": "cancelled"})
+    def fake_runner(
+        _scope,
+        _resource,
+        _request,
+        *,
+        stop_requested=None,
+        progress_reporter=None,
+    ):
+        received_stop.append(stop_requested)
+        received_progress.append(progress_reporter)
+        return command_execution_module.OperationResult(
+            exit_code=0, result={"status": "cancelled"}
+        )
 
     monkeypatch.setattr(command_execution_module, runner_name, fake_runner)
 
@@ -1433,7 +1444,8 @@ def test_long_workflows_receive_existing_core_stop_callback(
         stop_requested=stop_requested,
     )
 
-    assert received == [stop_requested]
+    assert received_stop == [stop_requested]
+    assert received_progress == [None]
 
 
 def test_commands_expose_trigger_search_serial_segmented_and_workflow_families() -> None:
