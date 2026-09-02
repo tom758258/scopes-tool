@@ -476,7 +476,9 @@ def _execute_scope_command(
         result = run_measure(scope, resource, _measure_request(parameters))
         return _operation_payload(result)
     if command == "measure-sweep":
-        result = run_measure_sweep(scope, resource, _measure_sweep_request(parameters))
+        result = run_measure_sweep(
+            scope, resource, _measure_sweep_request(parameters), stop_requested=stop_requested
+        )
         return _operation_payload(result)
     if command == "measure-results":
         return _state_scope_result("measurements", scope.query_measurement_results())

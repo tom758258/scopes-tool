@@ -3,7 +3,7 @@ import json
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model
-from scopes_tool_core.errors import OscilloscopeError
+from scopes_tool_core.errors import OscilloscopeError, VisaBackendError
 from scopes_tool_core.operations import (
     AcquisitionCheckRequest,
     CaptureRequest,
@@ -231,6 +231,84 @@ def test_run_measure_sweep_summary_counts_invalid():
         "invalid_count": 1,
         "error_count": 0,
     }
+
+
+def test_run_measure_sweep_cancellation_stops_after_current_query():
+    call_count = 0
+    original_query = None
+
+    def fake_query_measurement(channel, item, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return original_query(channel, item, **kwargs)
+
+    with _scope() as scope:
+        original_query = scope.query_measurement
+
+        def counting_query(channel, item, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # delegate to simulator's real query
+            return original_query(channel, item, **kwargs)
+
+        # patch after capturing original
+        scope.query_measurement = counting_query  # type: ignore[method-assign]
+
+        # stop after first measurement
+        calls = {"n": 0}
+
+        def stop_requested():
+            return calls["n"] >= 1
+
+        # wrap counting to increment stops tracking
+        real_counting = scope.query_measurement
+
+        def tracked_query(channel, item, **kwargs):
+            result = real_counting(channel, item, **kwargs)
+            calls["n"] += 1
+            return result
+
+        scope.query_measurement = tracked_query  # type: ignore[method-assign]
+
+        result = run_measure_sweep(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            MeasureSweepRequest(channels=(1, 2, 3, 4), items="vpp,frequency"),
+            stop_requested=stop_requested,
+        )
+
+    # 4 channels *2 items =8 would run without cancellation
+    assert len(result.result["measurements"]) == 1
+    assert result.exit_code == 130
+    assert result.result["summary"]["valid_count"] == 1
+    assert "Sweep cancelled." in result.human_lines
+    # ensure schema unchanged (no status field)
+    assert "status" not in result.result
+    assert set(result.result.keys()) == {"channels", "items", "pairs", "pair_items", "measurements", "summary"}
+
+
+def test_run_measure_sweep_transport_error_stops_sweep():
+    with _scope() as scope:
+        original = scope.query_measurement
+
+        def failing_query(channel, item, **kwargs):
+            raise VisaBackendError("VI_ERROR_TMO")
+
+        scope.query_measurement = failing_query  # type: ignore[method-assign]
+
+        result = run_measure_sweep(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            MeasureSweepRequest(channels=(1, 2), items="vpp,frequency"),
+        )
+
+    # first VisaBackendError should produce one error record then stop, not 4
+    assert len(result.result["measurements"]) == 1
+    assert result.result["measurements"][0]["error"]["type"] == "VisaBackendError"
+    assert result.exit_code == 1
+    assert result.result["summary"] == {"valid_count": 0, "invalid_count": 0, "error_count": 1}
+    assert "Sweep stopped after transport error." in result.human_lines
+    assert "status" not in result.result
 
 
 def test_run_measure_log_returns_structured_result_without_console_output(tmp_path, capsys):

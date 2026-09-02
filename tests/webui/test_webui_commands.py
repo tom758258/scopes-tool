@@ -361,7 +361,7 @@ def test_live_measurement_pairs_prequeue_rejects_invalid_types(invalid_pairs) ->
 def test_measure_sweep_execution_delegates_to_core_request(monkeypatch, tmp_path: Path) -> None:
     received = []
 
-    def fake_run_measure_sweep(scope, resource, request):  # type: ignore[no-untyped-def]
+    def fake_run_measure_sweep(scope, resource, request, **kwargs):  # type: ignore[no-untyped-def]
         received.append((scope, resource, request))
         return command_execution_module.OperationResult(
             exit_code=0,
@@ -394,6 +394,37 @@ def test_measure_sweep_execution_delegates_to_core_request(monkeypatch, tmp_path
     assert request.items == "vpp,frequency,period,vrms"
     assert request.pairs == ["1:2"]
     assert request.pair_items == "phase,delay"
+
+
+def test_measure_sweep_execution_forwards_stop_requested(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_measure_sweep(scope, resource, request, *, stop_requested=None):  # type: ignore[no-untyped-def]
+        captured["stop_requested"] = stop_requested
+        return command_execution_module.OperationResult(
+            exit_code=0,
+            result={"measurements": [], "summary": {"valid_count": 0}},
+        )
+
+    monkeypatch.setattr(command_execution_module, "run_measure_sweep", fake_run_measure_sweep)
+    scope = type("FakeScope", (), {"capabilities": object()})()
+    sentinel = lambda: False
+    result = command_execution_module._execute_scope_command(
+        scope,
+        "measure-sweep",
+        "USB0::TEST::INSTR",
+        {
+            "channels": [1],
+            "items": "vpp",
+            "pairs": [],
+            "pair_items": "phase,delay",
+        },
+        tmp_path,
+        stop_requested=sentinel,
+    )
+
+    assert result["exit_code"] == 0
+    assert captured["stop_requested"] is sentinel
 
 
 def test_measure_sweep_dry_run_uses_core_planner(monkeypatch, tmp_path: Path) -> None:

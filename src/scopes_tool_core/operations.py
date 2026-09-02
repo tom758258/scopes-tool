@@ -736,6 +736,8 @@ def run_measure_sweep(
     scope: Oscilloscope,
     resource: str,
     request: MeasureSweepRequest,
+    *,
+    stop_requested: StopRequested | None = None,
 ) -> OperationResult:
     """Run a multi-channel measurement sweep."""
 
@@ -758,33 +760,49 @@ def run_measure_sweep(
         human.append(f"Pre-operation stale system error drained: {_entry.format()}")
     measurements: list[dict[str, object]] = []
     human.append(f"Planned sweep: {_format_channel_list(channels)}; items {', '.join(items)}")
+    cancelled = False
+    transport_failed = False
     for channel in channels:
         for item in items:
+            if stop_requested is not None and stop_requested():
+                cancelled = True
+                break
             command = measurement_query(item, channel, capabilities=scope.capabilities)
             human.append(f"Command: {command}")
-            measurements.append(_run_sweep_measurement(scope, command, channel, item))
-    for source_channel, reference_channel in pairs:
-        for item in pair_items:
-            try:
-                command = pair_measurement_query(
-                    item,
-                    source_channel,
-                    reference_channel,
-                    capabilities=scope.capabilities,
-                )
-                human.append(f"Command: {command}")
-                measurements.append(
-                    _run_sweep_pair_measurement(
+            record = _run_sweep_measurement(scope, command, channel, item)
+            measurements.append(record)
+            if record.get("error", {}).get("type") == "VisaBackendError":  # type: ignore[union-attr]
+                transport_failed = True
+                break
+        if cancelled or transport_failed:
+            break
+    if not cancelled and not transport_failed:
+        for source_channel, reference_channel in pairs:
+            for item in pair_items:
+                if stop_requested is not None and stop_requested():
+                    cancelled = True
+                    break
+                try:
+                    command = pair_measurement_query(
+                        item,
+                        source_channel,
+                        reference_channel,
+                        capabilities=scope.capabilities,
+                    )
+                    human.append(f"Command: {command}")
+                    record = _run_sweep_pair_measurement(
                         scope,
                         command,
                         source_channel,
                         reference_channel,
                         item,
                     )
-                )
-            except OscilloscopeError as exc:
-                measurements.append(
-                    _sweep_error_record(
+                    measurements.append(record)
+                    if record.get("error", {}).get("type") == "VisaBackendError":  # type: ignore[union-attr]
+                        transport_failed = True
+                        break
+                except OscilloscopeError as exc:
+                    record = _sweep_error_record(
                         item=item,
                         channel=source_channel,
                         reference_channel=reference_channel,
@@ -792,8 +810,17 @@ def run_measure_sweep(
                         exc=exc,
                         system_error=None,
                     )
-                )
+                    measurements.append(record)
+                    if record.get("error", {}).get("type") == "VisaBackendError":  # type: ignore[union-attr]
+                        transport_failed = True
+                        break
+            if cancelled or transport_failed:
+                break
     summary = measure_sweep_summary(measurements)
+    if cancelled:
+        human.append("Sweep cancelled.")
+    if transport_failed:
+        human.append("Sweep stopped after transport error.")
     human.append(
         "Summary: "
         f"{summary['valid_count']} valid, "
@@ -811,6 +838,14 @@ def run_measure_sweep(
         "measurements": measurements,
         "summary": summary,
     }
+    if cancelled:
+        return OperationResult(
+            130,
+            result,
+            human_lines=human,
+            idn=idn,
+            **_scope_backend_json(scope),
+        )
     return OperationResult(
         1 if summary["invalid_count"] or summary["error_count"] else 0,
         result,

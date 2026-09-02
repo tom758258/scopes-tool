@@ -214,6 +214,7 @@ export const en = {
   "status.cancelled": "Cancelled",
   "status.running": "Running",
   "status.queued": "Queued",
+  "status.busy": "Another command is still running.",
   "status.noCommands": "No commands are available for this mode.",
   "status.scanFailed": "Resource scan failed",
   "status.identifyFailed": "Device identification failed",

@@ -460,7 +460,10 @@ function renderCollapseLabels() {
 }
 
 async function executeCommand(command, parameters, options = {}) {
-  if (isExecutionBusy()) return null;
+  if (isExecutionBusy()) {
+    elements.deviceStatus.textContent = translate("status.busy");
+    return null;
+  }
   const definition = commands.find((item) => item.id === command) || INTERNAL_COMMANDS[command];
   if (!definition || definition.presentation_only || !definition.modes.includes(context.mode)) {
     elements.deviceStatus.textContent = translate("status.noCommands");

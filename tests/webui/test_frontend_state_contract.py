@@ -3591,3 +3591,12 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+def test_execute_command_busy_shows_explicit_message() -> None:
+    app = read_static('app.js')
+    english = read_static('locale_en.js')
+    chinese = read_static('locale_zh_tw.js')
+    assert 'if (isExecutionBusy())' in app
+    assert 'translate("status.busy")' in app
+    assert 'elements.deviceStatus.textContent = translate("status.busy")' in app
+    assert '"status.busy": "Another command is still running."' in english
+    assert '"status.busy": "目前仍有指令正在執行。"' in chinese
