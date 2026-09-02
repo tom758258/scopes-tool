@@ -21,13 +21,13 @@ def read_static(name: str) -> str:
     return (STATIC_ROOT / name).read_text(encoding="utf-8")
 
 
-def test_only_e1_workflows_use_the_dedicated_editor() -> None:
+def test_expected_commands_use_the_dedicated_workflow_editor() -> None:
     commands = {entry["id"]: entry for entry in command_catalog()}
 
     assert commands["measure-log"]["editor"] == "workflow"
     assert commands["triggered-measure-loop"]["editor"] == "workflow"
+    assert commands["capture-batch"]["editor"] == "workflow"
     for command_id in (
-        "capture-batch",
         "measure-until",
         "triggered-capture-series",
     ):
@@ -425,5 +425,59 @@ def test_workflow_drafts_survive_locale_rerender_but_not_context_switch_or_stale
         assert.equal(env.selectedId, "triggered-measure-loop");
         assert.equal(editor.controls.count.value, "9");
         assert.equal(editor.drafts.get(editor.currentKey()).count, "9");
+        ''',
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_editor_renders_capture_batch_and_serializes() -> None:
+    run_editor_behavior(
+        r'''
+        const captureBatchFields = [
+          { name: "channels", type: "multi-enum", options: [1, 2, 3, 4], serialize: "csv", required: true },
+          { name: "points", type: "integer", options: [1000, 5000, 10000], default: 1000 },
+          { name: "format", type: "enum", options: ["byte", "word"], default: "byte" },
+          { name: "count", type: "integer", minimum: 1, default: 1 },
+          { name: "interval_seconds", type: "number", minimum: 0, default: 0 },
+        ];
+        definitions.push({ id: "capture-batch", editor: "workflow", fields: captureBatchFields });
+        env.selectedId = "capture-batch";
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        assert.ok(editor.controls.channels, "channels should render");
+        assert.ok(editor.controls.points, "points should render");
+        assert.ok(editor.controls.format, "format should render");
+        assert.ok(editor.controls.count, "count should render");
+        assert.ok(editor.controls.interval_seconds, "interval_seconds should render");
+        assert.equal(editor.controls.points.value, "1000");
+        assert.equal(editor.controls.format.value, "byte");
+        assert.equal(editor.controls.count.value, "1");
+        assert.equal(editor.controls.interval_seconds.value, "0");
+        editor.controls.channels.find((input) => input.value === "1").checked = true;
+        editor.controls.channels.find((input) => input.value === "2").checked = true;
+        editor.controls.points.value = "5000";
+        editor.controls.format.value = "word";
+        editor.controls.count.value = "3";
+        editor.controls.interval_seconds.value = "0.5";
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.equal(submissions[0].command, "capture-batch");
+        assert.deepEqual(submissions[0].parameters, {
+          channels: "1,2",
+          points: 5000,
+          format: "word",
+          count: 3,
+          interval_seconds: 0.5,
+        });
+        assert.deepEqual(submissions[0].options, { intent: "command" });
+        env.executionBusy = true;
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        env.executionBusy = false;
+        editor.controls.count.value = "4";
+        await editor.submit();
+        assert.equal(submissions.length, 2);
+        assert.equal(submissions[1].parameters.count, 4);
         ''',
     )
