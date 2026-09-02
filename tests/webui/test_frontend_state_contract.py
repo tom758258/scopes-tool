@@ -3693,14 +3693,14 @@ def test_fft_frequency_readback_dirty_only_submission() -> None:
         assert.equal(values.start_hz, 500000);
         assert.equal(values.stop_hz, 1500000);
 
-        // Non-FFT command must not apply dirty-only filter
-        form.command = { id: "channel-scale" };
+        // Non-FFT synthetic command: dirty-only filter must not apply globally
+        form.command = { id: "synthetic-setting" };
         delete center.dataset.dirty;
         delete span.dataset.dirty;
         delete start.dataset.dirty;
         delete stop.dataset.dirty;
         values = form.values();
-        assert.equal(values.function, 1);
+        assert.equal(values.center_hz, 1000000);
         '''
     )
     completed = subprocess.run(
