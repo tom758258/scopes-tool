@@ -818,6 +818,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             load_sequence_document(args.sequence_file),
             output_dir=args.output_dir,
             log_scpi=bool(args.log_scpi),
+            save_results=not args.no_save,
         )
         plan = plan_sequence(request, capabilities)
         return list(plan.planned_scpi), list(plan.files), plan.result

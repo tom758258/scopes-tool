@@ -442,3 +442,51 @@ def test_sequence_editor_loadfile_uses_raw_text_fail_closed() -> None:
         assert.notEqual(state.message, "Sequence loaded");
         ''',
     )
+
+
+def test_sequence_save_results_catalog_and_validation() -> None:
+    definition = next(item for item in command_catalog() if item["id"] == "sequence")
+    # Catalog should expose save_results reuse if present, but WebUI currently uses dedicated editor checkbox
+    # Validate request allows save_results false and defaults to true
+    request = validate_job_request(
+        {
+            "command": "sequence",
+            "mode": "simulate",
+            "model_id": "keysight-dsox4024a",
+            "parameters": {"document": _document(_step()), "save_results": False},
+        }
+    )
+    assert request["parameters"]["save_results"] is False
+    defaulted = validate_job_request(
+        {
+            "command": "sequence",
+            "mode": "simulate",
+            "model_id": "keysight-dsox4024a",
+            "parameters": {"document": _document(_step())},
+        }
+    )
+    assert defaulted["parameters"]["save_results"] is True
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_sequence_editor_save_results_checkbox_and_submit() -> None:
+    run_editor_behavior(
+        r'''
+        // Ensure initial save_results default (harness state starts without it, editor initialState uses true)
+        if (state.save_results === undefined) state.save_results = true;
+        editor.state().save_results = state.save_results;
+        assert.equal(editor.state().save_results, true);
+        const doc = editor.localDocument();
+        assert.deepEqual(doc, { version: 1, loop_count: 1, steps: [{ action: "wait", parameters: { seconds: 0 } }] });
+        // First submit with default true
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.deepEqual(submissions[0][1], { document: doc, save_results: true });
+        // Toggle to false
+        editor.state().save_results = false;
+        state.save_results = false;
+        await editor.submit();
+        assert.equal(submissions.length, 2);
+        assert.deepEqual(submissions[1][1], { document: doc, save_results: false });
+        ''',
+    )

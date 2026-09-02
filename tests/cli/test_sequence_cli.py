@@ -130,3 +130,45 @@ def test_sequence_json_uses_one_shot_envelope(tmp_path, capsys):
     assert payload["result"]["completed_step_executions"] == 1
     assert payload["error"] is None
     assert any(item["kind"] == "manifest" for item in payload["files"])
+
+
+def test_sequence_no_save_cli_creates_no_directory(tmp_path, capsys):
+    document = tmp_path / "workflow.json"
+    _write_sequence(document, steps=[{"action": "wait", "parameters": {"seconds": 0}}])
+    output_dir = tmp_path / "no-save-run"
+
+    code = cli.main(
+        [
+            "sequence",
+            "--simulate",
+            "--file",
+            str(document),
+            "--no-save",
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert code == 0
+    assert not output_dir.exists()
+    assert "Result file saving: disabled" in capsys.readouterr().out
+
+
+def test_sequence_no_save_rejects_artifact_steps_cli(tmp_path, capsys):
+    document = tmp_path / "workflow.json"
+    _write_sequence(
+        document, steps=[{"action": "capture", "parameters": {"channels": [1]}}]
+    )
+
+    code = cli.main(
+        [
+            "sequence",
+            "--simulate",
+            "--file",
+            str(document),
+            "--no-save",
+        ]
+    )
+
+    assert code == 1
+    assert "save_results=False is not supported" in capsys.readouterr().err

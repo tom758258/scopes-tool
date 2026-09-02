@@ -400,6 +400,75 @@ def test_screenshot_dry_run_planned_scpi_does_not_include_conditional_inksaver_w
     assert ":HARDcopy:INKSaver OFF" not in plan.planned_scpi
 
 
+def test_sequence_no_save_pure_wait_creates_no_directory(tmp_path):
+    scope = _scope()
+    scope.query_idn()
+    document = _document(_step("wait", seconds=0))
+    output_dir = tmp_path / "no-save"
+    plan = sequence.plan_sequence(
+        sequence.SequenceRequest(document, save_results=False), scope.capabilities
+    )
+    assert tuple(plan.files) == ()
+    assert plan.result["output_dir"] is None
+    assert plan.result["manifest_path"] is None
+    assert plan.result["scpi_log_path"] is None
+    assert plan.result["files"] == []
+
+    result = sequence.run_sequence(
+        scope,
+        RESOURCE,
+        sequence.SequenceRequest(document, output_dir=output_dir, save_results=False),
+    )
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["output_dir"] is None
+    assert result.result["manifest_path"] is None
+    assert result.result["scpi_log_path"] is None
+    assert result.files == []
+    assert result.result["files"] == []
+    assert not output_dir.exists()
+    assert (tmp_path / "scpi.log") not in [item.get("path") for item in result.files]
+
+
+@pytest.mark.parametrize("action", ["capture", "screenshot"])
+def test_sequence_no_save_rejects_artifact_steps_before_hardware(tmp_path, action):
+    scope = _scope()
+    output_dir = tmp_path / "should-not-exist"
+    if action == "screenshot":
+        document = _document(_step("screenshot", background="black"))
+    else:
+        document = _document(_step("capture", channels=[1]))
+
+    with pytest.raises(ParameterValidationError, match="save_results=False is not supported"):
+        sequence.plan_sequence(
+            sequence.SequenceRequest(document, save_results=False), scope.capabilities
+        )
+    with pytest.raises(ParameterValidationError, match="save_results=False is not supported"):
+        sequence.run_sequence(
+            scope,
+            RESOURCE,
+            sequence.SequenceRequest(document, output_dir=output_dir, save_results=False),
+        )
+    assert not output_dir.exists()
+    assert scope.backend.history == []
+
+
+def test_sequence_save_results_must_be_boolean(tmp_path):
+    scope = _scope()
+    scope.query_idn()
+    document = _document(_step("wait", seconds=0))
+    with pytest.raises(ParameterValidationError, match="save_results must be a boolean"):
+        sequence.plan_sequence(
+            sequence.SequenceRequest(document, save_results="true"), scope.capabilities  # type: ignore[arg-type]
+        )
+    with pytest.raises(ParameterValidationError, match="save_results must be a boolean"):
+        sequence.run_sequence(
+            scope,
+            RESOURCE,
+            sequence.SequenceRequest(document, output_dir=tmp_path / "x", save_results="true"),  # type: ignore[arg-type]
+        )
+
+
 def test_pre_start_cancellation_performs_zero_hardware_io_and_creates_no_directory(tmp_path):
     scope = _scope()
     output_dir = tmp_path / "cancelled_pre_start"

@@ -196,8 +196,12 @@ Core actions `wait`, `single`, `wait-trigger`, `measure`, `capture`,
 `screenshot`, and `cleanup`. Load, Save, and Execute validate through Core;
 dry-run delegates to `plan_sequence()`, while Live and Simulate delegate to
 `run_sequence()` through the normal job, progress, cancellation, result, and
-artifact infrastructure. The editor does not execute steps itself and does not
-provide arbitrary SCPI.
+artifact infrastructure. The editor exposes `Save results to files` (default
+enabled, using `field.save_results`); when disabled no host-side run
+directory, manifest, or `scpi.log` is created and the result shows no `Files`,
+`Output dir`, `Manifest`, or `SCPI log` paths. This disabled mode is not
+supported when the document contains `capture` or `screenshot` steps. The editor
+does not execute steps itself and does not provide arbitrary SCPI.
 
 Documents use `1..255` steps and `loop_count` `1..255`, with at most 65,025
 total step executions. A document may contain at most 10 combined capture and

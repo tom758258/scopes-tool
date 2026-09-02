@@ -753,6 +753,7 @@ def _cmd_sequence(
                 document,
                 output_dir=args.output_dir,
                 log_scpi=bool(args.log_scpi),
+                save_results=not args.no_save,
             ),
             stop_requested=stop_requested,
         )

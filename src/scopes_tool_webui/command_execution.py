@@ -152,10 +152,12 @@ def _execute_dry_run(
 ) -> dict[str, Any]:
     capabilities = capabilities_for_model_id(model_id)
     if command == "sequence":
+        save_results = parameters.get("save_results", True)
         plan = plan_sequence(
             SequenceRequest(
                 normalize_sequence_document(parameters["document"]),
-                output_dir=_workflow_output_dir(command, artifact_dir),
+                output_dir=_workflow_output_dir(command, artifact_dir) if save_results else None,
+                save_results=save_results,
             ),
             capabilities,
         )
@@ -965,13 +967,15 @@ def _execute_trigger_search_serial_segmented_workflow_command(
             )
         )
     if command == "sequence":
+        save_results = parameters.get("save_results", True)
         return _operation_payload(
             run_sequence(
                 scope,
                 resource,
                 SequenceRequest(
                     normalize_sequence_document(parameters["document"]),
-                    output_dir=_workflow_output_dir(command, artifact_dir),
+                    output_dir=_workflow_output_dir(command, artifact_dir) if save_results else None,
+                    save_results=save_results,
                 ),
                 stop_requested=stop_requested,
                 progress_reporter=progress_reporter,

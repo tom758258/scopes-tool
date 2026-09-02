@@ -69,6 +69,7 @@ export class SequenceEditor {
       filename: null,
       message: "",
       messageError: false,
+      save_results: true,
       steps: [{ action: "wait", parameters: { seconds: "0" }, expanded: true }],
     };
   }
@@ -265,10 +266,23 @@ export class SequenceEditor {
     this.message.textContent = state.message;
     this.message.hidden = !state.message;
 
+    const saveWrapper = document.createElement("label");
+    saveWrapper.className = "field field-boolean workflow-editor-save";
+    const saveLabel = document.createElement("span");
+    saveLabel.textContent = translate("field.save_results");
+    this.saveInput = document.createElement("input");
+    this.saveInput.type = "checkbox";
+    this.saveInput.checked = state.save_results !== false;
+    this.saveInput.addEventListener("change", () => {
+      state.save_results = this.saveInput.checked;
+      this.clearDocumentMessage();
+    });
+    saveWrapper.append(saveLabel, this.saveInput);
+
     this.stepsHost = document.createElement("div");
     this.stepsHost.className = "sequence-editor-steps";
     state.steps.forEach((step, index) => this.stepsHost.append(this.renderStep(step, index)));
-    this.container.append(toolbar, overview, this.message, this.stepsHost);
+    this.container.append(toolbar, overview, saveWrapper, this.message, this.stepsHost);
     this.updateValidity();
   }
 
@@ -586,9 +600,10 @@ export class SequenceEditor {
     this.setBusy(true);
     try {
       const validated = await this.hooks.validateSequence(documentValue);
+      const saveResults = this.state().save_results !== false;
       return await this.hooks.executeCommand(
         "sequence",
-        { document: validated.document },
+        { document: validated.document, save_results: saveResults },
         { intent: "command" },
       );
     } catch (error) {

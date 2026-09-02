@@ -1328,7 +1328,10 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         "modes": ("live", "simulate", "dry-run"),
         "group": "automation",
         "editor": "sequence",
-        "fields": ({"name": "document", "type": "object", "required": True},),
+        "fields": (
+            {"name": "document", "type": "object", "required": True},
+            {"name": "save_results", "type": "boolean", "default": True, "help_key": "workflow.save_results"},
+        ),
         "sequence": {
             "version": 1,
             "actions": SEQUENCE_ACTIONS,

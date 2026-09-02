@@ -545,7 +545,7 @@ artifact shape.
 Generic Sequence uses `load_sequence_document()`, `plan_sequence()`, and
 `run_sequence()` to run existing Core operations in strict finite order. The
 Core request is `SequenceRequest`, containing a normalized `SequenceDocument`,
-optional `output_dir`, and `log_scpi`.
+optional `output_dir`, `log_scpi`, and `save_results` (default `true`).
 
 Sequence documents are strict JSON. `version` must be the JSON integer `1`,
 `loop_count` defaults to `1` and must be in `1..255`, and documents must contain
@@ -577,16 +577,21 @@ model before creating the run directory. Execution is single-threaded and
 fail-fast, with no conditions, variables, retries, parallel or nested steps,
 arbitrary SCPI, shell execution, or automatic cleanup.
 
-Runtime writes `manifest.json` and `scpi.log`. Capture and screenshot files use
-deterministic loop and step paths. The manifest uses independent
-`schema_version: 1`, stores normalized input and completed execution records,
-and preserves partial artifacts without counting incomplete steps as complete.
-Cooperative cancellation is checked at workflow and step boundaries and during
-host or trigger waits. Pre-start cancellation occurs before hardware I/O and
-run-directory creation, creates no runtime artifacts, and keeps `output_dir`,
-`manifest_path`, and `scpi_log_path` null. Reporters run after the completed
-step record is persisted; `WorkflowProgress.total_count` is
-`loop_count * step_count`.
+By default saving remains enabled and runtime writes `manifest.json` and
+`scpi.log`; capture and screenshot files use deterministic loop and step paths.
+With `save_results=false` no host-side run directory, manifest, or `scpi.log`
+is created and `files` is empty; `output_dir`, `manifest_path`, and
+`scpi_log_path` are `null`. This mode is not supported when the document
+contains `capture` or `screenshot` steps. `--log-scpi` remains a diagnostic
+echo to `stderr` and does not create a log file when saving is disabled. The
+manifest uses independent `schema_version: 1`, stores normalized input and
+completed execution records, and preserves partial artifacts without counting
+incomplete steps as complete. Cooperative cancellation is checked at workflow
+and step boundaries and during host or trigger waits. Pre-start cancellation
+occurs before hardware I/O and run-directory creation, creates no runtime
+artifacts, and keeps `output_dir`, `manifest_path`, and `scpi_log_path` null.
+Reporters run after the completed step record is persisted;
+`WorkflowProgress.total_count` is `loop_count * step_count`.
 
 Planning writes no runtime artifacts and reports normalized steps, loop and
 execution counts, artifact templates, and a bounded one-pass SCPI plan.

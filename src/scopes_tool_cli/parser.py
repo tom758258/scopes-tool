@@ -2529,6 +2529,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "If provided, it must not exist or must be empty"
         ),
     )
+    sequence_parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="disable host-side sequence result files (manifest, scpi.log); not compatible with capture or screenshot steps",
+    )
 
     screenshot_parser = subparsers.add_parser(
         "screenshot",

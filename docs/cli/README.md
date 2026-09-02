@@ -2197,12 +2197,16 @@ executions. These are Scopes Tool product limits, not oscilloscope hardware
 limits.
 `wait-trigger` waits for an acquisition already started by an earlier
 `single`; it does not arm or force a trigger. Execution is single-threaded and
-fail-fast, and cancellation never runs cleanup automatically. Every runtime
-run writes `manifest.json` and `scpi.log`; capture and screenshot files use
-deterministic loop/step paths. Dry-run validates the whole document without
-opening VISA or writing runtime artifacts. See
-[`Core Integration`](../core/integration.md#generic-sequence-v1) for the
-complete public schema and semantics.
+fail-fast, and cancellation never runs cleanup automatically. By default saving
+remains enabled and every runtime run writes `manifest.json` and `scpi.log`;
+capture and screenshot files use deterministic loop/step paths. With `--no-save`
+(`save_results=false`) no host-side run directory, manifest, or `scpi.log` is
+created and `files` is empty; this mode is not supported when the document
+contains `capture` or `screenshot` steps. `--log-scpi` remains a diagnostic
+echo to stderr and does not create a log file when saving is disabled. Dry-run
+validates the whole document without opening VISA or writing runtime
+artifacts. See [`Core Integration`](../core/integration.md#generic-sequence-v1)
+for the complete public schema and semantics.
 
 Run a capture-safe smoke check:
 

@@ -180,6 +180,7 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
             "measure-until",
             "triggered-measure-loop",
             "capture-monitor",
+            "sequence",
         }
         and parameters.get("save_results") is False
     )
@@ -760,6 +761,8 @@ def _validate_parameter_shapes(
             normalize_sequence_document(parameters.get("document"))
         except Exception as exc:
             raise WebUIRequestError(str(exc)) from exc
+        if "save_results" in parameters:
+            _require_boolean(parameters["save_results"], "save_results")
         return
     fields = {field["name"]: field for field in _COMMAND_BY_ID[command]["fields"]}
     for name, field in fields.items():
@@ -852,6 +855,7 @@ def _validate_parameters(
             ).to_json()
         except Exception as exc:
             raise WebUIRequestError(str(exc)) from exc
+        _require_boolean(parameters.setdefault("save_results", True), "save_results")
         return
     if command == "list-resources":
         parameters.setdefault("live_only", False)
