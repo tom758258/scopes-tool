@@ -215,7 +215,6 @@ export const zhTW = {
   "status.cancelled": "已取消",
   "status.running": "執行中",
   "status.queued": "排隊中",
-  "status.busy": "目前仍有指令正在執行。",
   "status.noCommands": "此模式沒有可用指令。",
   "status.scanFailed": "資源掃描失敗",
   "status.identifyFailed": "裝置識別失敗",
