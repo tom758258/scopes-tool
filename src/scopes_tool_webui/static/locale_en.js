@@ -1013,4 +1013,10 @@ export const en = {
   "results.artifacts": "Artifacts",
   "results.summary.sequenceProgress": "{{completed}} / {{total}} step executions completed",
   "results.summary.sequenceCompleted": "{{completed}} / {{total}} step executions completed; {{loops}} loop(s), {{steps}} step(s)",
+  "results.summary.workflowProgressKnown": "{{completed}} / {{total}} {{unit}} completed \u00b7 {{elapsed}} s elapsed",
+  "results.summary.workflowProgressUnknown": "{{completed}} {{unit}} completed \u00b7 {{elapsed}} s elapsed",
+  "results.progress.rows": "rows",
+  "results.progress.samples": "samples",
+  "results.progress.cycles": "cycles",
+  "results.progress.captures": "captures",
 };

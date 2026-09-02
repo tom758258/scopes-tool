@@ -131,10 +131,64 @@ function jobSummary(job) {
         total: job.progress.total_count,
       });
     }
+    if (job.progress && isWorkflowProgressCommand(job.command)) {
+      return workflowProgressSummary(job);
+    }
     return translate("results.summary.running");
   }
   if (job.status !== "completed") return translateJobStatus(job.status);
   return successfulJobSummary(job);
+}
+
+function isWorkflowProgressCommand(command) {
+  return (
+    command === "measure-log" ||
+    command === "measure-until" ||
+    command === "triggered-measure-loop" ||
+    command === "capture-batch" ||
+    command === "capture-until" ||
+    command === "triggered-capture-series"
+  );
+}
+
+function workflowProgressUnit(command) {
+  if (command === "measure-log") return translate("results.progress.rows");
+  if (command === "measure-until") return translate("results.progress.samples");
+  if (command === "triggered-measure-loop") return translate("results.progress.cycles");
+  if (
+    command === "capture-batch" ||
+    command === "capture-until" ||
+    command === "triggered-capture-series"
+  ) {
+    return translate("results.progress.captures");
+  }
+  return "";
+}
+
+function formatElapsed(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value)) return "0.0";
+  return value.toFixed(1);
+}
+
+function workflowProgressSummary(job) {
+  const unit = workflowProgressUnit(job.command);
+  const elapsed = formatElapsed(job.progress.elapsed_seconds);
+  const completed = job.progress.completed_count;
+  const total = job.progress.total_count;
+  if (total === null || total === undefined) {
+    return translate("results.summary.workflowProgressUnknown", {
+      completed,
+      unit,
+      elapsed,
+    });
+  }
+  return translate("results.summary.workflowProgressKnown", {
+    completed,
+    total,
+    unit,
+    elapsed,
+  });
 }
 
 function jobErrorSummary(job) {

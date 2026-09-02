@@ -19,6 +19,18 @@ from .commands import ScopeSessionCloseError, execute_command
 JOB_STATUSES = frozenset({"queued", "running", "completed", "failed", "cancelled"})
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 
+_RESULT_PROGRESS_COMMANDS = frozenset(
+    {
+        "sequence",
+        "measure-log",
+        "measure-until",
+        "triggered-measure-loop",
+        "capture-batch",
+        "capture-until",
+        "triggered-capture-series",
+    }
+)
+
 
 class JobManagerShuttingDown(RuntimeError):
     """Raised when a job is submitted after shutdown has started."""
@@ -247,13 +259,13 @@ class JobManager:
                         artifact_dir=job.pc_output_root,
                         stop_requested=lambda: job.cancel_requested,
                         sample_reporter=(
-                            lambda update: self._append_monitor_update(job, update)
+                            (lambda update: self._append_monitor_update(job, update))
                             if job.command == "capture-monitor"
                             else None
                         ),
                         progress_reporter=(
-                            lambda progress: self._set_progress(job, progress)
-                            if job.command == "sequence"
+                            (lambda progress: self._set_progress(job, progress))
+                            if job.command in _RESULT_PROGRESS_COMMANDS
                             else None
                         ),
                     )
@@ -355,9 +367,10 @@ class JobManager:
 
     def _set_progress(self, job: Job, progress: Any) -> None:
         with job.lock:
+            total_count = getattr(progress, "total_count")
             job.progress = {
                 "completed_count": int(getattr(progress, "completed_count")),
-                "total_count": int(getattr(progress, "total_count") or 0),
+                "total_count": None if total_count is None else int(total_count),
                 "elapsed_seconds": float(getattr(progress, "elapsed_seconds")),
             }
 

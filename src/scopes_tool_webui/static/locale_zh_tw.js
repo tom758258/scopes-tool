@@ -1013,4 +1013,10 @@ export const zhTW = {
   "results.artifacts": "輸出檔案",
   "results.summary.sequenceProgress": "已完成 {{completed}} / {{total}} 次步驟執行",
   "results.summary.sequenceCompleted": "已完成 {{completed}} / {{total}} 次步驟執行；{{loops}} 輪、每輪 {{steps}} 個步驟",
+  "results.summary.workflowProgressKnown": "{{completed}} / {{total}} 個{{unit}}已完成 \u00b7 {{elapsed}} 秒",
+  "results.summary.workflowProgressUnknown": "已完成 {{completed}} 個{{unit}} \u00b7 {{elapsed}} 秒",
+  "results.progress.rows": "列",
+  "results.progress.samples": "樣本",
+  "results.progress.cycles": "週期",
+  "results.progress.captures": "次擷取",
 };
