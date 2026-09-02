@@ -102,6 +102,10 @@ export class WorkflowEditor {
     this.pairRows = [];
     this.container.replaceChildren();
 
+    if (definition.id === "measure-until") {
+      this.renderMeasureUntilWorkflow(definition, fields, draft);
+      return;
+    }
     if (["capture-batch", "capture-until", "capture-monitor"].includes(definition.id)) {
       this.renderWaveformWorkflow(definition, fields, draft);
       return;
@@ -141,12 +145,19 @@ export class WorkflowEditor {
       pair_items: defaultChoices(fieldByName(fields, "pair_items")),
     };
     for (const name of [
-      "count", "duration_seconds", "trigger_timeout_seconds", "interval_seconds",
+      "channel", "item", "count", "duration_seconds", "trigger_timeout_seconds", "interval_seconds",
       "condition_channel", "points", "format", "metric", "operator",
       "threshold", "timeout_seconds", "retention_points",
     ]) {
       const value = fieldByName(fields, name).default;
       values[name] = value === undefined ? "" : String(value);
+    }
+    if (values.channel === "" && fieldByName(fields, "channel").options) {
+      const opts = fieldByName(fields, "channel").options.map(String);
+      values.channel = opts[0] || "1";
+    }
+    if (values.item === "" && fieldByName(fields, "item").options) {
+      values.item = String(fieldByName(fields, "item").options[0] || "vpp");
     }
     values.stop_on_error = Boolean(fieldByName(fields, "stop_on_error").default);
     values.save_results = fieldByName(fields, "save_results").default !== false;
@@ -163,7 +174,15 @@ export class WorkflowEditor {
     const pairItemOptions = new Set(
       (fieldByName(fields, "pair_items").options || []).map(String),
     );
-    return {
+    const singleChannelField = fieldByName(fields, "channel");
+    const singleChannelOptions = new Set(
+      (singleChannelField.options || []).map(String),
+    );
+    const singleItemField = fieldByName(fields, "item");
+    const singleItemOptions = new Set(
+      (singleItemField.options || []).map(String),
+    );
+    const sanitized = {
       ...draft,
       channels: (draft.channels || []).map(String).filter((value) => channelOptions.has(value)),
       items: (draft.items || []).map(String).filter((value) => itemOptions.has(value)),
@@ -178,6 +197,19 @@ export class WorkflowEditor {
         (value) => pairItemOptions.has(value),
       ),
     };
+    if (singleChannelField.options) {
+      const raw = String(draft.channel || "");
+      sanitized.channel = singleChannelOptions.has(raw)
+        ? raw
+        : String(singleChannelField.default ?? singleChannelField.options[0] ?? "1");
+    }
+    if (singleItemField.options) {
+      const raw = String(draft.item || "");
+      sanitized.item = singleItemOptions.has(raw)
+        ? raw
+        : String(singleItemField.default ?? singleItemField.options[0] ?? "vpp");
+    }
+    return sanitized;
   }
 
   buildSection(titleKey) {
@@ -437,7 +469,7 @@ export class WorkflowEditor {
   }
 
   captureDraft() {
-    if (!this.renderedKey || !this.controls.channels) return;
+    if (!this.renderedKey || (!this.controls.channels && !this.controls.channel)) return;
     const definition = this.selectedDefinition();
     if (definition?.id === "capture-batch") {
       const draft = {
@@ -446,6 +478,19 @@ export class WorkflowEditor {
         format: this.controls.format?.value || "",
         count: this.controls.count?.value || "",
         interval_seconds: this.controls.interval_seconds?.value || "",
+      };
+      this.drafts.set(this.renderedKey, draft);
+      return;
+    }
+    if (definition?.id === "measure-until") {
+      const draft = {
+        channel: this.controls.channel?.value || "",
+        item: this.controls.item?.value || "",
+        operator: this.controls.operator?.value || "",
+        threshold: this.controls.threshold?.value || "",
+        timeout_seconds: this.controls.timeout_seconds?.value || "",
+        interval_seconds: this.controls.interval_seconds?.value || "",
+        save_results: this.controls.save_results?.checked !== false,
       };
       this.drafts.set(this.renderedKey, draft);
       return;
@@ -499,6 +544,9 @@ export class WorkflowEditor {
     if (!definition || !draft) return null;
     if (["capture-batch", "capture-until", "capture-monitor"].includes(definition.id)) {
       return this.waveformWorkflowValues(definition, draft);
+    }
+    if (definition.id === "measure-until") {
+      return this.measureUntilValues(definition, draft);
     }
     for (const name of [
       "count", "duration_seconds", "trigger_timeout_seconds", "interval_seconds",
@@ -604,6 +652,97 @@ export class WorkflowEditor {
       parameters.save_results = draft.save_results !== false;
     }
     return parameters;
+  }
+
+  measureUntilValues(definition, draft) {
+    const numberNames = ["threshold", "timeout_seconds", "interval_seconds"];
+    for (const name of numberNames) {
+      const input = this.controls[name];
+      input?.setCustomValidity?.("");
+      if (input && input.value !== "" && input.dataset.exclusiveMinimum !== undefined
+          && Number(input.value) <= Number(input.dataset.exclusiveMinimum)) {
+        input.setCustomValidity(translate("form.greaterThan", {
+          value: input.dataset.exclusiveMinimum,
+        }));
+      }
+      if (input && !input.checkValidity()) {
+        input.reportValidity?.();
+        return null;
+      }
+    }
+    if (!draft.channel || !draft.item || !draft.operator || draft.threshold === "" || draft.timeout_seconds === "") {
+      const missing = !draft.channel ? this.controls.channel
+        : !draft.item ? this.controls.item
+          : !draft.operator ? this.controls.operator
+            : draft.threshold === "" ? this.controls.threshold
+              : this.controls.timeout_seconds;
+      missing?.reportValidity?.();
+      return null;
+    }
+    return {
+      channel: Number(draft.channel),
+      item: draft.item,
+      operator: draft.operator,
+      threshold: Number(draft.threshold),
+      timeout_seconds: Number(draft.timeout_seconds),
+      interval_seconds: draft.interval_seconds === "" ? 1 : Number(draft.interval_seconds),
+      save_results: draft.save_results !== false,
+    };
+  }
+
+  renderMeasureUntilWorkflow(definition, fields, draft) {
+    const channelField = fieldByName(fields, "channel");
+    const channels = (channelField.options || []).map(String);
+    const channelControl = this.buildChannelSelect("channel", channels, draft.channel);
+    this.controls.channel = channelControl.input;
+    const channelSection = this.buildSection("workflow.editor.channels");
+    channelSection.append(channelControl.wrapper);
+    this.container.append(channelSection);
+
+    const itemField = fieldByName(fields, "item");
+    const itemControl = this.buildEnumField(itemField, draft.item);
+    this.controls.item = itemControl.input;
+    const measurementSection = this.buildSection("workflow.editor.measurements");
+    measurementSection.append(itemControl.wrapper);
+    this.container.append(measurementSection);
+
+    const conditionSection = this.buildSection("workflow.editor.condition");
+    const conditionGrid = document.createElement("div");
+    conditionGrid.className = "workflow-editor-limits";
+    const operatorField = fieldByName(fields, "operator");
+    const thresholdField = fieldByName(fields, "threshold");
+    const operatorControl = this.buildEnumField(operatorField, draft.operator);
+    const thresholdControl = this.buildNumberField(thresholdField, draft.threshold);
+    this.controls.operator = operatorControl.input;
+    this.controls.threshold = thresholdControl.input;
+    conditionGrid.append(operatorControl.wrapper, thresholdControl.wrapper);
+    conditionSection.append(conditionGrid);
+    this.container.append(conditionSection);
+
+    const limitsSection = this.buildSection("workflow.editor.runLimits");
+    const limitsGrid = document.createElement("div");
+    limitsGrid.className = "workflow-editor-limits";
+    const timeoutField = fieldByName(fields, "timeout_seconds");
+    const intervalField = fieldByName(fields, "interval_seconds");
+    const timeoutControl = this.buildNumberField(timeoutField, draft.timeout_seconds);
+    const intervalControl = this.buildNumberField(intervalField, draft.interval_seconds);
+    this.controls.timeout_seconds = timeoutControl.input;
+    this.controls.interval_seconds = intervalControl.input;
+    limitsGrid.append(timeoutControl.wrapper, intervalControl.wrapper);
+
+    const saveWrapper = document.createElement("label");
+    saveWrapper.className = "field field-boolean workflow-editor-save";
+    const saveLabel = document.createElement("span");
+    saveLabel.textContent = translate("field.save_results");
+    const saveInput = document.createElement("input");
+    saveInput.type = "checkbox";
+    saveInput.checked = draft.save_results !== false;
+    saveInput.addEventListener("change", () => this.captureDraft());
+    saveWrapper.append(saveLabel, saveInput);
+    this.controls.save_results = saveInput;
+    limitsGrid.append(saveWrapper);
+    limitsSection.append(limitsGrid);
+    this.container.append(limitsSection);
   }
 
   handleJobUpdate(job) {

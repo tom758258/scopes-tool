@@ -27,8 +27,8 @@ def test_expected_commands_use_the_dedicated_workflow_editor() -> None:
     assert commands["measure-log"]["editor"] == "workflow"
     assert commands["triggered-measure-loop"]["editor"] == "workflow"
     assert commands["capture-batch"]["editor"] == "workflow"
+    assert commands["measure-until"]["editor"] == "workflow"
     for command_id in (
-        "measure-until",
         "triggered-capture-series",
     ):
         assert "editor" not in commands[command_id]
@@ -479,5 +479,70 @@ def test_workflow_editor_renders_capture_batch_and_serializes() -> None:
         await editor.submit();
         assert.equal(submissions.length, 2);
         assert.equal(submissions[1].parameters.count, 4);
+        ''',
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_editor_renders_measure_until_and_serializes() -> None:
+    run_editor_behavior(
+        r'''
+        const measureUntilFields = [
+          { name: "channel", type: "integer", minimum: 1, maximum: 4, default: 1, options: [1, 2, 3, 4] },
+          { name: "item", type: "enum", options: ["vpp", "frequency"], default: "vpp" },
+          { name: "operator", type: "enum", options: ["gt", "gte", "lt", "lte"] },
+          { name: "threshold", type: "number", required: true },
+          { name: "timeout_seconds", type: "number", exclusive_minimum: 0, required: true },
+          { name: "interval_seconds", type: "number", minimum: 0, default: 1 },
+          { name: "save_results", type: "boolean", default: true },
+        ];
+        definitions.push({ id: "measure-until", editor: "workflow", fields: measureUntilFields });
+        env.selectedId = "measure-until";
+        const editor = buildEditor();
+        editor.schedulePresentation();
+        await settle();
+        assert.ok(editor.controls.channel, "channel should render");
+        assert.ok(editor.controls.item, "item should render");
+        assert.ok(editor.controls.operator, "operator should render");
+        assert.ok(editor.controls.threshold, "threshold should render");
+        assert.ok(editor.controls.timeout_seconds, "timeout_seconds should render");
+        assert.ok(editor.controls.interval_seconds, "interval_seconds should render");
+        assert.ok(editor.controls.save_results, "save_results should render");
+        assert.equal(editor.controls.channel.value, "1");
+        assert.equal(editor.controls.item.value, "vpp");
+        assert.equal(editor.controls.interval_seconds.value, "1");
+        editor.controls.channel.value = "2";
+        editor.controls.item.value = "frequency";
+        editor.controls.operator.value = "gte";
+        editor.controls.threshold.value = "1000";
+        editor.controls.timeout_seconds.value = "10";
+        editor.controls.interval_seconds.value = "0.25";
+        editor.controls.save_results.checked = true;
+        editor.rerender();
+        await settle();
+        assert.equal(editor.controls.channel.value, "2");
+        assert.equal(editor.controls.item.value, "frequency");
+        assert.equal(editor.controls.operator.value, "gte");
+        assert.equal(editor.controls.threshold.value, "1000");
+        assert.equal(editor.controls.timeout_seconds.value, "10");
+        assert.equal(editor.controls.interval_seconds.value, "0.25");
+        editor.controls.timeout_seconds.value = "0";
+        await editor.submit();
+        assert.equal(submissions.length, 0);
+        assert.equal(editor.controls.timeout_seconds.customValidity, "form.greaterThan");
+        editor.controls.timeout_seconds.value = "10";
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.equal(submissions[0].command, "measure-until");
+        assert.deepEqual(submissions[0].parameters, {
+          channel: 2,
+          item: "frequency",
+          operator: "gte",
+          threshold: 1000,
+          timeout_seconds: 10,
+          interval_seconds: 0.25,
+          save_results: true,
+        });
+        assert.deepEqual(submissions[0].options, { intent: "command" });
         ''',
     )

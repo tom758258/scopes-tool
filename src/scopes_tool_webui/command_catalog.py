@@ -1231,6 +1231,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     {
         "id": "measure-until", "category": "Workflow", "label": "Measure until", "modes": ("live", "simulate", "dry-run"),
         "group": "measurement",
+        "editor": "workflow",
         "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1), _command_field("item", "enum", options=_DIRECT_MEASUREMENT_ITEMS, default="vpp"), _command_field("operator", "enum", options=("gt", "gte", "lt", "lte"), required=True), _command_field("threshold", "number", required=True), _command_field("timeout_seconds", "number", exclusive_minimum=0, required=True), _command_field("interval_seconds", "number", minimum=0, default=1), _command_field("save_results", "boolean", default=True, help_key="workflow.save_results")),
     },
     {
