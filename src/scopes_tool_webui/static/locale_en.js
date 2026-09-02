@@ -948,6 +948,7 @@ export const en = {
   "workflow.editor.pairMeasurements": "Pair measurements (shared by all pairs)",
   "workflow.editor.runLimits": "Run limits",
   "workflow.editor.captureSettings": "Waveform settings and limits",
+  "workflow.editor.condition": "Condition",
   "workflow.monitor.retentionWarning": "Only the newest retention window is plotted and saved; overflow drops oldest complete captures. Metrics cover all observed samples. Repeated captures are not one continuous time-domain acquisition and may contain acquisition or communication gaps.",
   "workflow.monitor.plot": "Retained waveform by global sample index",
   "workflow.monitor.waiting": "Waiting for waveform captures.",

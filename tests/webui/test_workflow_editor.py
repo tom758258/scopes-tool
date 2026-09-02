@@ -490,7 +490,7 @@ def test_workflow_editor_renders_measure_until_and_serializes() -> None:
         const measureUntilFields = [
           { name: "channel", type: "integer", minimum: 1, maximum: 4, default: 1, options: [1, 2, 3, 4] },
           { name: "item", type: "enum", options: ["vpp", "frequency"], default: "vpp" },
-          { name: "operator", type: "enum", options: ["gt", "gte", "lt", "lte"] },
+          { name: "operator", type: "enum", options: ["gt", "gte", "lt", "lte"], required: true },
           { name: "threshold", type: "number", required: true },
           { name: "timeout_seconds", type: "number", exclusive_minimum: 0, required: true },
           { name: "interval_seconds", type: "number", minimum: 0, default: 1 },
@@ -526,6 +526,13 @@ def test_workflow_editor_renders_measure_until_and_serializes() -> None:
         assert.equal(editor.controls.threshold.value, "1000");
         assert.equal(editor.controls.timeout_seconds.value, "10");
         assert.equal(editor.controls.interval_seconds.value, "0.25");
+        assert.equal(editor.controls.operator.required, true);
+        editor.controls.operator.value = "";
+        assert.equal(editor.controls.operator.checkValidity(), false);
+        await editor.submit();
+        assert.equal(submissions.length, 0);
+        editor.controls.operator.value = "gte";
+        assert.equal(editor.controls.operator.checkValidity(), true);
         editor.controls.timeout_seconds.value = "0";
         await editor.submit();
         assert.equal(submissions.length, 0);
@@ -546,3 +553,11 @@ def test_workflow_editor_renders_measure_until_and_serializes() -> None:
         assert.deepEqual(submissions[0].options, { intent: "command" });
         ''',
     )
+
+
+def test_workflow_editor_condition_locale_exists() -> None:
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+
+    assert '"workflow.editor.condition": "Condition"' in english
+    assert '"workflow.editor.condition": "條件"' in chinese

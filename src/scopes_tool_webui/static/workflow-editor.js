@@ -393,6 +393,7 @@ export class WorkflowEditor {
       input.append(new Option(text, option));
     }
     input.value = String(value ?? field.default ?? "");
+    input.required = field.required === true;
     input.addEventListener("change", () => this.captureDraft());
     wrapper.append(label, input);
     return { wrapper, input };

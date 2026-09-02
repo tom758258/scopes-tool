@@ -948,6 +948,7 @@ export const zhTW = {
   "workflow.editor.pairMeasurements": "配對量測（所有配對共用）",
   "workflow.editor.runLimits": "執行限制",
   "workflow.editor.captureSettings": "波形設定與限制",
+  "workflow.editor.condition": "條件",
   "workflow.monitor.retentionWarning": "繪圖與儲存只包含最新保留視窗；超過上限時淘汰最舊的完整擷取。指標涵蓋全部已觀測樣本。重複擷取不是一筆連續時域波形，且擷取與通訊之間可能有間隙。",
   "workflow.monitor.plot": "以全域樣本索引顯示保留波形",
   "workflow.monitor.waiting": "等待波形擷取。",
