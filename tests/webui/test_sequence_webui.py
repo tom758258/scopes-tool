@@ -490,3 +490,78 @@ def test_sequence_editor_save_results_checkbox_and_submit() -> None:
         assert.deepEqual(submissions[1][1], { document: doc, save_results: false });
         ''',
     )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_sequence_no_save_workspace_result_hides_files() -> None:
+    results_path = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "results.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.translate = (key, values = {}) => Object.entries(values).reduce((t, [k, v]) => t.replaceAll(`{{${k}}}`, String(v)), key);
+        globalThis.hasTranslation = (key) => false;
+        globalThis.translateJobStatus = (s) => s;
+        globalThis.document = {
+          createElement: (tag) => {
+            const el = {
+              tagName: tag,
+              className: "",
+              textContent: "",
+              children: [],
+              append: function(...c){ this.children.push(...c); },
+              replaceChildren: function(...c){ this.children = c; },
+              setAttribute: function(){},
+            };
+            el.append = function(...c){ this.children.push(...c); };
+            return el;
+          },
+        };
+        const source = fs.readFileSync(process.argv[1], "utf8")
+          .replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export /gm, "");
+        const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(source + "\nglobalThis.resultsApi = { renderWorkspaceResult };")}`;
+        await import(moduleUrl);
+        const { renderWorkspaceResult } = globalThis.resultsApi;
+
+        const makeContainer = () => {
+          const children = [];
+          return {
+            children,
+            append: function(...c){ children.push(...c); },
+            replaceChildren: function(...c){ children.length = 0; children.push(...c); },
+          };
+        };
+
+        const container = makeContainer();
+        const job = {
+          command: "sequence",
+          status: "completed",
+          result: { result: { status: "completed", version: 1, loop_count: 1, step_count: 1, total_step_executions: 1, completed_loops: 1, completed_step_executions: 1, files: [], output_dir: null, manifest_path: null, scpi_log_path: null, error: null } },
+        };
+        renderWorkspaceResult(container, job, {});
+        const text = JSON.stringify(container.children.map((c) => c.children?.map((x) => x.textContent) || c.textContent));
+        assert.equal(text.includes("Files"), false);
+        assert.equal(text.includes("Output dir"), false);
+        assert.equal(text.includes("Manifest"), false);
+        assert.equal(text.includes("SCPI log"), false);
+
+        const container2 = makeContainer();
+        const job2 = {
+          command: "sequence",
+          status: "completed",
+          result: { result: { status: "completed", version: 1, loop_count: 1, step_count: 1, total_step_executions: 1, completed_loops: 1, completed_step_executions: 1, files: [{ kind: "manifest", path: "manifest.json" }], output_dir: "data/sequences/x", manifest_path: "data/sequences/x/manifest.json", scpi_log_path: "data/sequences/x/scpi.log", error: null } },
+        };
+        renderWorkspaceResult(container2, job2, {});
+        const text2 = JSON.stringify(container2.children.map((c) => c.children?.map((x) => x.textContent) || c.textContent));
+        assert.equal(text2.includes("Files"), true);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(results_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

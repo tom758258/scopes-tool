@@ -608,9 +608,13 @@ Measurement and artifact-producing flows:
   `total_step_executions`, `completed_loops`,
   `completed_step_executions`, nullable `failed_step`, bounded per-document
   `steps` summaries, `files`, `output_dir`, `manifest_path`, `scpi_log_path`,
-  and nullable `error`. `failed_step` identifies the one-based loop and step,
-  action, and a structured error. Repeated execution records remain in the
-  sequence manifest rather than expanding the one-shot result.
+  and nullable `error`. By default saving remains enabled and `files` contains
+  `manifest` and `scpi.log`; with `save_results=false` / `--no-save` `files` is
+  `[]` and `output_dir`, `manifest_path`, and `scpi_log_path` are `null`. A
+  sequence containing `capture` or `screenshot` steps does not accept
+  `save_results=false` / `--no-save`. `failed_step` identifies the one-based
+  loop and step, action, and a structured error. Repeated execution records
+  remain in the sequence manifest rather than expanding the one-shot result.
 - `screenshot` capture: `format`, `palette`, `background`, `ink_saver`,
   `layout`, canonical `options`, `byte_count`, `timeout_ms`, `image_path`,
   optional `png_path`, and `files`. Query-only `--query-hardcopy` instead

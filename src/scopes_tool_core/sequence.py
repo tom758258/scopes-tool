@@ -829,8 +829,6 @@ def _finish_sequence(
         human.append(f"Manifest: {manifest_path}")
     if scpi_log_path is not None:
         human.append(f"SCPI log: {scpi_log_path}")
-    if output_dir is not None:
-        human.append(f"Output directory: {output_dir}")
     result = {
         "status": status,
         "version": SEQUENCE_VERSION,
@@ -1108,19 +1106,18 @@ def _validate_and_normalize_request(request: SequenceRequest) -> SequenceDocumen
         raise ParameterValidationError("sequence document must be a SequenceDocument")
     if not isinstance(request.save_results, bool):
         raise ParameterValidationError("sequence save_results must be a boolean")
-    if not isinstance(request.log_scpi, bool):
-        raise ParameterValidationError("sequence log_scpi must be a boolean")
-    if request.save_results is False:
-        for step in request.document.steps:
-            if step.action in {"capture", "screenshot"}:
-                raise ParameterValidationError(
-                    "sequence save_results=False is not supported when capture or screenshot steps are present"
-                )
     try:
         payload = request.document.to_json()
     except (AttributeError, TypeError, ValueError) as exc:
         raise ParameterValidationError(f"invalid sequence document: {exc}") from exc
-    return normalize_sequence_document(payload)
+    normalized = normalize_sequence_document(payload)
+    if request.save_results is False:
+        for step in normalized.steps:
+            if step.action in {"capture", "screenshot"}:
+                raise ParameterValidationError(
+                    "sequence save_results=False is not supported when capture or screenshot steps are present"
+                )
+    return normalized
 
 
 def _pre_start_cancelled_result(document: SequenceDocument) -> OperationResult:

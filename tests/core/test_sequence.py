@@ -469,6 +469,26 @@ def test_sequence_save_results_must_be_boolean(tmp_path):
         )
 
 
+def test_sequence_no_save_malformed_document_does_not_leak_attribute_error(tmp_path):
+    scope = _scope()
+    scope.query_idn()
+    malformed = sequence.SequenceDocument(
+        version=1,
+        loop_count=1,
+        steps=(object(),),  # type: ignore[arg-type]
+    )
+    with pytest.raises(ParameterValidationError):
+        sequence.plan_sequence(
+            sequence.SequenceRequest(malformed, save_results=False), scope.capabilities
+        )
+    with pytest.raises(ParameterValidationError):
+        sequence.run_sequence(
+            scope,
+            RESOURCE,
+            sequence.SequenceRequest(malformed, output_dir=tmp_path / "x", save_results=False),
+        )
+
+
 def test_pre_start_cancellation_performs_zero_hardware_io_and_creates_no_directory(tmp_path):
     scope = _scope()
     output_dir = tmp_path / "cancelled_pre_start"

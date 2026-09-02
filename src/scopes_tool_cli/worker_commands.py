@@ -383,7 +383,6 @@ def _validate_required_worker_outputs(
         "measure-until",
         "triggered-measure-loop",
         "capture-monitor",
-        "sequence",
     }:
         if arguments.get("save_results", True) is False:
             return
@@ -486,7 +485,6 @@ def _normalize_optional_persistence_worker_arguments(
         "measure-until",
         "triggered-measure-loop",
         "capture-monitor",
-        "sequence",
     }:
         return arguments
     values = dict(arguments)

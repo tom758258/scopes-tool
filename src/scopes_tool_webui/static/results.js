@@ -292,7 +292,18 @@ export function renderWorkspaceResult(container, job, context = {}) {
   }
   if (result && typeof result === "object") {
     const display = unwrapStructuredResult(result);
-    const fields = Object.entries(display).filter(([name]) => !isRawDiagnosticField(name));
+    const fields = Object.entries(display).filter(([name, value]) => {
+      if (isRawDiagnosticField(name)) return false;
+      if (
+        job.command === "sequence"
+        && name === "files"
+        && Array.isArray(value)
+        && value.length === 0
+      ) {
+        return false;
+      }
+      return true;
+    });
     if (fields.length) {
       appendWorkspaceFields(container, fields);
       return;
