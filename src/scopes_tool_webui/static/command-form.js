@@ -2,6 +2,7 @@ import { hasTranslation, translate } from "/static/i18n.js";
 import { applyNumericFieldConstraints } from "/static/numeric-input.js";
 
 const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+const FFT_FREQUENCY_FIELDS = new Set(["center_hz", "span_hz", "start_hz", "stop_hz"]);
 
 function translateEnum(value, optionLabel = null) {
   const scopedKey = optionLabel ? `enum.${optionLabel}.${String(value)}` : null;
@@ -93,6 +94,13 @@ export class CommandForm {
     const values = {};
     for (const element of this.container.querySelectorAll("[data-field]")) {
       if (element.closest?.("[data-visible-if-hidden=\"true\"]")) continue;
+      if (
+        this.command?.id === "fft"
+        && FFT_FREQUENCY_FIELDS.has(element.dataset.field)
+        && element.dataset.dirty !== "true"
+      ) {
+        continue;
+      }
       element.setCustomValidity?.("");
       const rawValue = typeof element.value === "string" ? element.value.trim() : element.value;
       if (element.validity?.badInput || (element.required && rawValue === "")) {

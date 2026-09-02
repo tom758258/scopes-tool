@@ -933,6 +933,10 @@ def test_fft_catalog_projects_advanced_fields_by_model_capability() -> None:
     advanced = fft["presentation"]["models"][MODEL_ID]["fields"]
     assert all(basic[name]["hidden"] is True for name in advanced_fields)
     assert advanced_fields.isdisjoint(advanced)
+    assert "units" not in basic
+    assert advanced["units"]["visible_if"] == [
+        {"field": "fft_operation", "equals": "fft"},
+    ]
 
 
 def test_fft_advanced_validation_reuses_core_range_mode_rule() -> None:

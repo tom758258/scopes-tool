@@ -1703,6 +1703,8 @@ def _model_command_presentation(
             override["hidden"] = True
         if entry["id"] == "fft" and name in _ADVANCED_FFT_FIELDS and not capabilities.supports_advanced_fft:
             override["hidden"] = True
+        if entry["id"] == "fft" and name == "units" and capabilities.supports_advanced_fft:
+            override["visible_if"] = [{"field": "fft_operation", "equals": "fft"}]
         if name == "pair_items" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"

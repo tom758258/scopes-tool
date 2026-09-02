@@ -3591,3 +3591,234 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_fft_frequency_readback_dirty_only_submission() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.formApi = { CommandForm };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const makeField = (name, type, value) => ({
+          value: value ?? "",
+          type: type === "boolean" ? "checkbox" : "text",
+          checked: false,
+          dataset: { field: name, type },
+          validity: { badInput: false },
+          closest: () => null,
+          setCustomValidity() {},
+          checkValidity() { return true; },
+          reportValidity() {},
+        });
+
+        const action = makeField("action", "enum", "set");
+        action.type = "hidden";
+        const func = makeField("function", "integer", "1");
+        const sourceChannel = makeField("source_channel", "integer", "1");
+        const center = makeField("center_hz", "number", "1000000");
+        const span = makeField("span_hz", "number", "100000");
+        const start = makeField("start_hz", "number", "500000");
+        const stop = makeField("stop_hz", "number", "1500000");
+        const gate = makeField("gate", "enum", "none");
+
+        const fields = [action, func, sourceChannel, center, span, start, stop, gate];
+        const container = {
+          querySelectorAll(selector) {
+            if (selector === "[data-field]") return fields;
+            if (selector === "[data-visible-if]") return [];
+            if (selector === "[data-help-by-value]") return [];
+            return [];
+          },
+          querySelector(selector) {
+            const match = selector.match(/^\[data-field="(.+)"\]$/);
+            return fields.find((f) => f.dataset.field === match?.[1]) ?? null;
+          },
+          replaceChildren() {},
+        };
+
+        const form = new globalThis.formApi.CommandForm(container, { optionsFor: () => [] });
+        form.command = { id: "fft" };
+        form.presentation = { kind: "setting", action_field: "action", apply_value: "set", query_value: "query" };
+
+        // Readback state: four frequency fields have values but are pristine
+        // Only gate is dirty (user edited unrelated field)
+        gate.dataset.dirty = "true";
+        let values = form.values();
+        assert.deepEqual(values, { action: "set", function: 1, source_channel: 1, gate: "none" });
+        assert.equal("center_hz" in values, false);
+        assert.equal("span_hz" in values, false);
+        assert.equal("start_hz" in values, false);
+        assert.equal("stop_hz" in values, false);
+
+        // Center dirty only -> should send only center
+        delete gate.dataset.dirty;
+        center.dataset.dirty = "true";
+        values = form.values();
+        assert.equal(values.center_hz, 1000000);
+        assert.equal("span_hz" in values, false);
+        assert.equal("start_hz" in values, false);
+        assert.equal("stop_hz" in values, false);
+
+        // Start+Stop dirty -> should send both, no center/span
+        delete center.dataset.dirty;
+        start.dataset.dirty = "true";
+        stop.dataset.dirty = "true";
+        values = form.values();
+        assert.equal(values.start_hz, 500000);
+        assert.equal(values.stop_hz, 1500000);
+        assert.equal("center_hz" in values, false);
+        assert.equal("span_hz" in values, false);
+
+        // User explicitly dirties both ranges -> both sent, Core authoritative validation will reject
+        center.dataset.dirty = "true";
+        span.dataset.dirty = "true";
+        values = form.values();
+        assert.equal(values.center_hz, 1000000);
+        assert.equal(values.span_hz, 100000);
+        assert.equal(values.start_hz, 500000);
+        assert.equal(values.stop_hz, 1500000);
+
+        // Non-FFT command must not apply dirty-only filter
+        form.command = { id: "channel-scale" };
+        delete center.dataset.dirty;
+        delete span.dataset.dirty;
+        delete start.dataset.dirty;
+        delete stop.dataset.dirty;
+        values = form.values();
+        assert.equal(values.function, 1);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_fft_phase_units_visibility_and_submission() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.formApi = { CommandForm };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const makeField = (name, type, value) => ({
+          value: value ?? "",
+          type: type === "boolean" ? "checkbox" : "text",
+          checked: false,
+          dataset: { field: name, type },
+          validity: { badInput: false },
+          closest: () => null,
+          setCustomValidity() {},
+          checkValidity() { return true; },
+          reportValidity() {},
+        });
+
+        const action = makeField("action", "enum", "set");
+        action.type = "hidden";
+        const func = makeField("function", "integer", "1");
+        const sourceChannel = makeField("source_channel", "integer", "1");
+        const fftOp = makeField("fft_operation", "enum", "fft-phase");
+        const units = makeField("units", "string", "vrms");
+        const gate = makeField("gate", "enum", "zoom");
+        const phaseRef = makeField("phase_reference", "enum", "display");
+        const detectionType = makeField("detection_type", "enum", "average");
+        const detectionPoints = makeField("detection_points", "integer", "4096");
+
+        // Units hidden when fft-phase
+        units.closest = (selector) => {
+          if (selector === "[data-visible-if-hidden=\"true\"]" && fftOp.value === "fft-phase") return {};
+          return null;
+        };
+
+        const fields = [action, func, sourceChannel, fftOp, units, gate, phaseRef, detectionType, detectionPoints];
+        const container = {
+          querySelectorAll(selector) {
+            if (selector === "[data-field]") return fields;
+            if (selector === "[data-visible-if]") return [];
+            if (selector === "[data-help-by-value]") return [];
+            return [];
+          },
+          querySelector(selector) {
+            const match = selector.match(/^\[data-field="(.+)"\]$/);
+            return fields.find((f) => f.dataset.field === match?.[1]) ?? null;
+          },
+          replaceChildren() {},
+        };
+
+        const form = new globalThis.formApi.CommandForm(container, { optionsFor: () => [] });
+        form.command = { id: "fft" };
+        form.presentation = { kind: "setting", action_field: "action", apply_value: "set", query_value: "query" };
+
+        // Phase: units hidden -> not submitted, phase controls still submitted
+        gate.dataset.dirty = "true";
+        phaseRef.dataset.dirty = "true";
+        let values = form.values();
+        assert.equal("units" in values, false);
+        assert.equal(values.phase_reference, "display");
+        assert.equal(values.gate, "zoom");
+
+        // Switch to magnitude -> units visible
+        fftOp.value = "fft";
+        units.value = "vrms";
+        values = form.values();
+        assert.equal(values.units, "vrms");
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_fft_result_field_localization() -> None:
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+    for key in (
+        "results.field.operation_canonical",
+        "results.field.start_hz",
+        "results.field.stop_hz",
+        "results.field.gate",
+        "results.field.phase_reference",
+        "results.field.detection_type",
+        "results.field.detection_points",
+        "results.field.bin_size_hz",
+        "results.field.sample_rate_hz",
+        "results.field.resolution_bandwidth_hz",
+    ):
+        assert f'"{key}":' in english, key
+        assert f'"{key}":' in chinese, key
