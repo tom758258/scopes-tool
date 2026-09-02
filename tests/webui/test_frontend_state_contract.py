@@ -6,6 +6,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+import re
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -3808,6 +3809,16 @@ def test_fft_phase_units_visibility_and_submission() -> None:
 def test_fft_result_field_localization() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
+
+    def locale_value(source: str, key: str) -> str:
+        match = re.search(
+            rf'"{re.escape(key)}":\s*"((?:[^"\\]|\\.)*)"',
+            source,
+        )
+        if not match:
+            raise AssertionError(f"locale key not found: {key}")
+        return match.group(1)
+
     for key in (
         "results.field.operation_canonical",
         "results.field.start_hz",
@@ -3822,6 +3833,36 @@ def test_fft_result_field_localization() -> None:
     ):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
+
+    # Semantic assertions: canonical operation must contain FFT and differ from generic operation
+    en_op_canonical = locale_value(english, "results.field.operation_canonical")
+    zh_op_canonical = locale_value(chinese, "results.field.operation_canonical")
+    assert "FFT" in en_op_canonical, f"EN operation_canonical missing FFT: {en_op_canonical}"
+    assert "FFT" in zh_op_canonical, f"ZH operation_canonical missing FFT: {zh_op_canonical}"
+
+    en_op_generic = locale_value(english, "results.field.operation")
+    zh_op_generic = locale_value(chinese, "results.field.operation")
+    assert en_op_canonical != en_op_generic, "operation_canonical must differ from generic operation"
+    assert zh_op_canonical != zh_op_generic, "operation_canonical must differ from generic operation"
+
+    # Frequency-domain labels must retain Hz
+    for key in (
+        "results.field.start_hz",
+        "results.field.stop_hz",
+        "results.field.bin_size_hz",
+        "results.field.sample_rate_hz",
+        "results.field.resolution_bandwidth_hz",
+    ):
+        en_label = locale_value(english, key)
+        zh_label = locale_value(chinese, key)
+        assert "Hz" in en_label, f"EN {key} missing Hz: {en_label}"
+        assert "Hz" in zh_label, f"ZH {key} missing Hz: {zh_label}"
+
+    # Gate should contain FFT when available (optional but preferred)
+    en_gate = locale_value(english, "results.field.gate")
+    zh_gate = locale_value(chinese, "results.field.gate")
+    assert "FFT" in en_gate, f"EN gate missing FFT: {en_gate}"
+    assert "FFT" in zh_gate, f"ZH gate missing FFT: {zh_gate}"
 
 
 def test_advanced_math_form_and_result_localization() -> None:
