@@ -425,7 +425,7 @@ def test_math_integrate_and_linear_simulator_round_trip():
         ("multiply", "MULTiply"),
     ],
 )
-def test_math_p4_goft_operation_mapping(operation, token):
+def test_math_goft_operation_mapping(operation, token):
     capabilities = capabilities_for_model("DSOX2004A")
 
     assert math_composite_source_commands(
@@ -435,7 +435,7 @@ def test_math_p4_goft_operation_mapping(operation, token):
         capabilities=capabilities,
     )[0] == f":FUNCtion:GOFT:OPERation {token}"
 
-def test_math_p4_goft_simulator_configure_query_state():
+def test_math_goft_simulator_configure_query_state():
     backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
     scope = Oscilloscope(backend)
     scope.query_idn()
@@ -459,7 +459,7 @@ def test_math_p4_goft_simulator_configure_query_state():
     ]
     assert parse_math_composite_operation(" mUlT ") == "multiply"
 
-def test_math_p4_transform_composite_source_commands_and_query_parse():
+def test_math_transform_composite_source_commands_and_query_parse():
     capabilities = capabilities_for_model("DSOX3024A")
 
     assert math_transform_commands(
@@ -487,7 +487,7 @@ def test_math_p4_transform_composite_source_commands_and_query_parse():
     assert state.source == "composite"
     assert state.source_raw == "GOFT"
 
-def test_math_p4_4000x_lower_function_cascade_source():
+def test_math_4000x_lower_function_cascade_source():
     capabilities = capabilities_for_model("DSOX4034A")
 
     assert math_transform_commands(
@@ -518,7 +518,7 @@ def test_math_p4_4000x_lower_function_cascade_source():
     assert state.source == "math1"
     assert state.source_raw == "FUNCtion1"
 
-def test_math_p4_operator_rejects_math_function_source():
+def test_math_operator_rejects_math_function_source():
     capabilities = capabilities_for_model("DSOX4034A")
 
     with pytest.raises(ParameterValidationError, match="channel1"):
@@ -530,7 +530,7 @@ def test_math_p4_operator_rejects_math_function_source():
             capabilities=capabilities,
         )
 
-def test_math_p4_simulator_rejects_arithmetic_cascade_source():
+def test_math_simulator_rejects_arithmetic_cascade_source():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
 
     backend.write(":FUNCtion2:OPERation ADD")
@@ -538,7 +538,7 @@ def test_math_p4_simulator_rejects_arithmetic_cascade_source():
         backend.write(":FUNCtion2:SOURce1 FUNCtion1")
 
 @pytest.mark.parametrize("source", ["math2", "math3"])
-def test_math_p4_rejects_self_and_forward_cascade_sources(source):
+def test_math_rejects_self_and_forward_cascade_sources(source):
     capabilities = capabilities_for_model("DSOX4034A")
 
     with pytest.raises(ParameterValidationError, match="lower than"):
@@ -549,7 +549,7 @@ def test_math_p4_rejects_self_and_forward_cascade_sources(source):
             capabilities=capabilities,
         )
 
-def test_math_p4_source_capabilities_fail_closed():
+def test_math_source_capabilities_fail_closed():
     single_function = capabilities_for_model("DSOX2004A")
     four_functions = capabilities_for_model("DSOX4034A")
 
@@ -589,7 +589,7 @@ def test_math_p4_source_capabilities_fail_closed():
         ("envelope", "ENVelope", ("ENV", "ENVELOPE")),
     ],
 )
-def test_math_p5_filter_mapping_and_readback(operation, token, readbacks):
+def test_math_filter_mapping_and_readback(operation, token, readbacks):
     capabilities = capabilities_for_model("DSOX4024A")
 
     assert math_filter_commands(
@@ -609,7 +609,7 @@ def test_math_p5_filter_mapping_and_readback(operation, token, readbacks):
         ("DSOX4024A", 2, ":FUNCtion2"),
     ],
 )
-def test_math_p5_filter_commands_use_series_dialect(model, function, prefix):
+def test_math_filter_commands_use_series_dialect(model, function, prefix):
     capabilities = capabilities_for_model(model)
 
     assert math_filter_commands(
@@ -630,7 +630,7 @@ def test_math_p5_filter_commands_use_series_dialect(model, function, prefix):
         f"{prefix}:SOURce1?",
     ]
 
-def test_math_p5_filter_reuses_composite_and_cascade_sources():
+def test_math_filter_reuses_composite_and_cascade_sources():
     single_function = capabilities_for_model("DSOX2004A")
     four_functions = capabilities_for_model("DSOX4034A")
 
@@ -649,7 +649,7 @@ def test_math_p5_filter_reuses_composite_and_cascade_sources():
         capabilities=four_functions,
     )[1] == ":FUNCtion2:SOURce1 FUNCtion1"
 
-def test_math_p5_filter_validation():
+def test_math_filter_validation():
     single_function = capabilities_for_model("DSOX2004A")
     four_functions = capabilities_for_model("DSOX4024A")
 
@@ -713,7 +713,7 @@ def test_math_p5_filter_validation():
         capabilities=four_functions,
     )[-1] == ":FUNCtion1:SMOoth:POINts 9"
 
-def test_math_p5_simulator_round_trips_filters_and_clear():
+def test_math_simulator_round_trips_filters_and_clear():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
     scope = Oscilloscope(backend)
     scope.query_idn()
@@ -776,7 +776,7 @@ def test_math_p5_simulator_round_trips_filters_and_clear():
         ),
     ],
 )
-def test_math_p5_filter_rejects_invalid_integer_readbacks(
+def test_math_filter_rejects_invalid_integer_readbacks(
     operation, query_command, response, message
 ):
     backend = SimulatorBackend(
@@ -805,7 +805,7 @@ def test_math_p5_filter_rejects_invalid_integer_readbacks(
         ("min-hold", "MINHold", "MINH"),
     ],
 )
-def test_math_p6_visualization_mapping(operation, token, readback):
+def test_math_visualization_mapping(operation, token, readback):
     capabilities = capabilities_for_model("DSOX4024A")
     options = (
         {"measurement_slot": 1}
@@ -830,7 +830,7 @@ def test_math_p6_visualization_mapping(operation, token, readback):
         ("DSOX3024A", ":FUNCtion"),
     ],
 )
-def test_math_p6_common_magnify_uses_unindexed_composite_source(model, prefix):
+def test_math_common_magnify_uses_unindexed_composite_source(model, prefix):
     capabilities = capabilities_for_model(model)
 
     assert math_visualization_commands(
@@ -843,7 +843,7 @@ def test_math_p6_common_magnify_uses_unindexed_composite_source(model, prefix):
         f"{prefix}:SOURce1 GOFT",
     ]
 
-def test_math_p6_4000x_visualization_cascade_and_capability_rejection():
+def test_math_4000x_visualization_cascade_and_capability_rejection():
     four_functions = capabilities_for_model("DSOX4034A")
     single_function = capabilities_for_model("DSOX2004A")
     hold_only = replace(
@@ -870,7 +870,7 @@ def test_math_p6_4000x_visualization_cascade_and_capability_rejection():
         )
     assert math_clear_command(2, capabilities=hold_only) == ":FUNCtion2:CLEar"
 
-def test_math_p6_trend_commands_keep_series_paths_explicit():
+def test_math_trend_commands_keep_series_paths_explicit():
     single_function = capabilities_for_model("DSOX3024A")
     four_functions = capabilities_for_model("DSOX4024A")
 
@@ -898,7 +898,7 @@ def test_math_p6_trend_commands_keep_series_paths_explicit():
     ]
     assert parse_math_trend_measurement(" vRaT ") == "vratio"
 
-def test_math_p6_visualization_query_parses_trend_variants():
+def test_math_visualization_query_parses_trend_variants():
     single_backend = SimulatorBackend(
         physical_model_id="keysight-dsox2004a",
         query_overrides={
@@ -956,7 +956,7 @@ def test_math_p6_visualization_query_parses_trend_variants():
     with pytest.raises(ChannelResponseError, match="'MAX'"):
         inappropriate_scope.query_math_visualization(1)
 
-def test_math_p6_visualization_rejects_inapplicable_arguments():
+def test_math_visualization_rejects_inapplicable_arguments():
     single_function = capabilities_for_model("DSOX2004A")
     four_functions = capabilities_for_model("DSOX4024A")
 

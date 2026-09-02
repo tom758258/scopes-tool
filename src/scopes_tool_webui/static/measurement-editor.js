@@ -243,7 +243,7 @@ export class MeasurementEditor {
 
   defaultSweepDraft(fields) {
     return {
-      channels: defaultChoices(fieldByName(fields, "channels")),
+      channels: (fieldByName(fields, "channels").options || []).map(String),
       items: defaultChoices(fieldByName(fields, "items")),
       pairs: [],
       pair_items: defaultChoices(fieldByName(fields, "pair_items")),

@@ -194,7 +194,7 @@ def test_math_profile_operation_and_dialect_consistency_gate():
             )[0] == f"{prefix}:OPERation FFTPhase"
 
 
-def test_math_cli_worker_schema_and_p8_absence_consistency_gate():
+def test_math_cli_worker_schema_absence_consistency_gate():
     command_parsers = _subcommand_parsers()
     connection_parser = argparse.ArgumentParser(add_help=False)
     cli_parser._add_scope_connection_args(connection_parser)

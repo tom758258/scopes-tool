@@ -780,6 +780,16 @@ def _validate_parameter_shapes(
             _require_boolean(value, name)
             continue
         elif field_type == "string":
+            if name == "pairs":
+                if isinstance(value, str):
+                    continue
+                if isinstance(value, (list, tuple)) and all(
+                    isinstance(item, str) for item in value
+                ):
+                    continue
+                raise WebUIRequestError(
+                    "pairs must be a comma-separated string or list of strings"
+                )
             if not isinstance(value, str):
                 raise WebUIRequestError(f"{name} must be a string")
             continue

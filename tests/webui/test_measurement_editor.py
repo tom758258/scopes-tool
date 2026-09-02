@@ -159,7 +159,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
             freshEditor.defaultSweepDraft(sweepFields4000), sweepFields4000,
           ),
           {
-            channels: [],
+            channels: ["1", "2", "3", "4"],
             items: ["vpp", "frequency", "period", "vrms"],
             pairs: [],
             pair_items: ["phase", "delay"],
@@ -167,6 +167,29 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         );
         catalog.activeModelId = "keysight-dsox2004a";
         const sweepFields2000 = catalog.fieldsFor(sweepDefinition);
+        assert.deepEqual(
+          freshEditor.sanitizeSweepDraft(
+            freshEditor.defaultSweepDraft(sweepFields2000), sweepFields2000,
+          ),
+          {
+            channels: ["1", "2", "3", "4"],
+            items: ["vpp", "frequency", "period", "vrms"],
+            pairs: [],
+            pair_items: ["phase"],
+          },
+        );
+        const syntheticFields2ch = sweepFields4000.map((field) => field.name === "channels" ? { ...field, options: [1, 2] } : field);
+        assert.deepEqual(
+          freshEditor.sanitizeSweepDraft(
+            freshEditor.defaultSweepDraft(syntheticFields2ch), syntheticFields2ch,
+          ),
+          {
+            channels: ["1", "2"],
+            items: ["vpp", "frequency", "period", "vrms"],
+            pairs: [],
+            pair_items: ["phase", "delay"],
+          },
+        );
         const projected2000 = freshEditor.sanitizeSweepDraft({
           channels: ["1", "5"],
           items: ["vpp", "area"],

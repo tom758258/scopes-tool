@@ -319,6 +319,45 @@ def test_measure_sweep_validation_rejects_unsupported_pair_measurement() -> None
         )
 
 
+def test_live_measurement_pairs_prequeue_accepts_csv_and_list() -> None:
+    # Live prequeue shape should accept both csv string and list of pair strings for all workflows using pairs.
+    for command, extra in [
+        ("measure-sweep", {}),
+        ("measure-log", {"count": 1}),
+        (
+            "triggered-measure-loop",
+            {"count": 1, "trigger_timeout_seconds": 1},
+        ),
+    ]:
+        for pairs_value in ["1:2,3:4", ["1:2", "3:4"], ["1:2"]]:
+            request = validate_job_request(
+                {
+                    "command": command,
+                    "mode": "live",
+                    "resource": "USB0::TEST::INSTR",
+                    "parameters": {"pairs": pairs_value, **extra},
+                }
+            )
+            # prequeue must not reject shape; pairs preserved for backend/Core validation
+            assert request["parameters"]["pairs"] == pairs_value
+
+
+@pytest.mark.parametrize(
+    "invalid_pairs",
+    [123, {"a": 1}, [1, 2], ["1:2", 2]],
+)
+def test_live_measurement_pairs_prequeue_rejects_invalid_types(invalid_pairs) -> None:
+    with pytest.raises(WebUIRequestError, match="pairs must be a comma-separated string or list of strings"):
+        validate_job_request(
+            {
+                "command": "measure-sweep",
+                "mode": "live",
+                "resource": "USB0::TEST::INSTR",
+                "parameters": {"pairs": invalid_pairs},
+            }
+        )
+
+
 def test_measure_sweep_execution_delegates_to_core_request(monkeypatch, tmp_path: Path) -> None:
     received = []
 
