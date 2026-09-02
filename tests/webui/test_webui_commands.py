@@ -1486,6 +1486,36 @@ def test_representative_channel_display_dvm_math_and_fft_simulated_commands_comp
                 "source2": "channel2",
             },
         ),
+        (
+            "math-transform",
+            {
+                "action": "set",
+                "function": 1,
+                "operation": "linear",
+                "source": "channel1",
+                "gain": 2.0,
+                "linear_offset": -1.0,
+            },
+        ),
+        (
+            "math-filter",
+            {
+                "action": "set",
+                "function": 1,
+                "operation": "average",
+                "source": "channel1",
+                "average_count": 64,
+            },
+        ),
+        (
+            "math-visualization",
+            {
+                "action": "set",
+                "function": 1,
+                "operation": "trend",
+                "measurement_slot": 3,
+            },
+        ),
     ):
         job = submit(client, command, "simulate", parameters)
         assert job["status"] == "completed", (command, job)
