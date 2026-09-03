@@ -517,18 +517,21 @@ export class MeasurementEditor {
     if (notes.children.length) actions.append(notes);
     this.container.append(actions);
     this.frontPanelContent = null;
-    if (!this.hooks.isCommandAvailable("measure-results")) return;
-    const result = document.createElement("section");
-    result.className = "measurement-front-panel-results";
-    const heading = document.createElement("strong");
-    heading.textContent = translate("measurement.frontPanel.resultsTitle");
-    this.frontPanelContent = document.createElement("div");
-    this.frontPanelContent.className = "measurement-front-panel-content";
-    this.frontPanelContent.setAttribute("aria-live", "polite");
-    result.append(heading, this.frontPanelContent);
-    this.container.append(result);
-    this.renderFrontPanelReadback();
-    if (this.hooks.isCommandAvailable("measurement-statistics")) {
+    const resultsDefinition = this.definition("measure-results");
+    if (resultsDefinition && this.catalog.supported(resultsDefinition)) {
+      const result = document.createElement("section");
+      result.className = "measurement-front-panel-results";
+      const heading = document.createElement("strong");
+      heading.textContent = translate("measurement.frontPanel.resultsTitle");
+      this.frontPanelContent = document.createElement("div");
+      this.frontPanelContent.className = "measurement-front-panel-content";
+      this.frontPanelContent.setAttribute("aria-live", "polite");
+      result.append(heading, this.frontPanelContent);
+      this.container.append(result);
+      this.renderFrontPanelReadback();
+    }
+    const statisticsDefinition = this.definition("measurement-statistics");
+    if (statisticsDefinition && this.catalog.supported(statisticsDefinition)) {
       this.container.append(this.buildStatisticsSection());
       this.renderStatisticsReadback();
     }

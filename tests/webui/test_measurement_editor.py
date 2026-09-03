@@ -535,6 +535,9 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           const available = new Set(modelId === "keysight-dsox2004a"
             ? ["measure-clear"]
             : ["measure-results", "measure-show", "measure-clear", "measurement-statistics"]);
+          const supported = new Set(modelId === "keysight-dsox2004a"
+            ? []
+            : ["measure-results", "measurement-statistics"]);
           const markerCatalog = {
             activeModelId: modelId,
             commands: ["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
@@ -542,6 +545,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
               ? [{ name: "action" }, { name: "enabled" }]
               : [{ name: "action" }],
             supportReason: (definition) => available.has(definition.id) ? "" : "generic unsupported",
+            supported: (definition) => supported.has(definition.id),
           };
           const instance = new globalThis.MeasurementEditor(new FakeNode("div"), markerCatalog, {
             isExecutionBusy: () => false,
@@ -664,19 +668,35 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           (node) => node.className.includes("measurement-statistics-section"),
         ), false);
 
+        const unknownCalls = [];
+        const frontPanelDefinition = catalog.commands.find(
+          (command) => command.id === "front-panel-measurements",
+        );
         const unknownCatalog = {
           activeModelId: null,
-          commands: ["measure-results", "measure-show", "measure-clear"].map((id) => ({ id })),
+          commands: ["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
           fieldsFor: () => [{ name: "action" }],
           supportReason: () => "",
+          supported: () => true,
         };
         const unknownModel = new globalThis.MeasurementEditor(new FakeNode("div"), unknownCatalog, {
+          contextKey: () => "live|TEST::INSTR|",
+          selectedCommand: () => frontPanelDefinition,
           isExecutionBusy: () => false,
           isCommandAvailable: () => false,
-          executeCommand: async () => ({ status: "completed" }),
+          executeCommand: async (command, parameters) => {
+            unknownCalls.push([command, parameters]);
+            return { status: "completed" };
+          },
         });
-        unknownModel.renderFrontPanel();
-        unknownModel.applyBusyState();
+        unknownModel.present();
+        assert.deepEqual(unknownCalls, []);
+        assert(unknownModel.container.children.some(
+          (node) => node.className === "measurement-front-panel-results",
+        ));
+        assert(unknownModel.container.children.some(
+          (node) => node.className.includes("measurement-statistics-section"),
+        ));
         assert(unknownModel.controls.frontPanelRefresh);
         assert(unknownModel.controls.frontPanelShow);
         assert(unknownModel.controls.frontPanelHide);
@@ -687,6 +707,19 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(unknownModel.controls.frontPanelClear.disabled, true);
         assert.equal(unknownModel.controls.frontPanelShow.className, "secondary");
         assert.equal(unknownModel.controls.frontPanelHide.className, "secondary");
+        assert(unknownModel.controls.statisticsRefresh);
+        assert(unknownModel.controls.statisticsReset);
+        assert(unknownModel.controls.statisticsApply);
+        assert.equal(unknownModel.controls.statisticsRefresh.disabled, true);
+        assert.equal(unknownModel.controls.statisticsReset.disabled, true);
+        assert.equal(unknownModel.controls.statisticsApply.disabled, true);
+        await unknownModel.refreshFrontPanel();
+        await unknownModel.refreshStatistics();
+        await unknownModel.runStatisticsAction("reset");
+        await unknownModel.showFrontPanel(true);
+        await unknownModel.showFrontPanel(false);
+        await unknownModel.clearFrontPanel();
+        assert.deepEqual(unknownCalls, []);
         const collectText = (node) => {
           const texts = [];
           if (node.textContent) texts.push(node.textContent);
