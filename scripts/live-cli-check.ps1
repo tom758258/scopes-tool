@@ -3969,12 +3969,12 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
             try {
                 $install = Invoke-LiveCli -Stage "measure-install" `
                     -Command "measure-install" -Arguments @(
-                        "--source-channel", "1", "--item", "frequency"
+                        "--source-channel", "1", "--item", "ac_rms"
                     )
                 Assert-ScpiSent -Payload $install -Label "Measurement install" `
                     -ExpectedCommands @(
                         ":MEASure:SOURce CHANnel1",
-                        ":MEASure:FREQuency"
+                        ":MEASure:VRMS DISPlay,AC"
                     )
                 if (@($install.scpi.sent) -contains ":MEASure:CLEar") {
                     throw "measure-install unexpectedly cleared existing measurements."

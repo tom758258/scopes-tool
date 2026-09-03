@@ -85,9 +85,9 @@ def test_measure_controls_validates_public_install_without_auto_clear() -> None:
     controls = _case_block(script, "measure-controls", "cursor-lifecycle")
 
     assert '-Command "measure-install"' in controls
-    assert '"--source-channel", "1", "--item", "frequency"' in controls
+    assert '"--source-channel", "1", "--item", "ac_rms"' in controls
     assert '":MEASure:SOURce CHANnel1"' in controls
-    assert '":MEASure:FREQuency"' in controls
+    assert '":MEASure:VRMS DISPlay,AC"' in controls
     # The no-clear assertion must be scoped to the install invocation because
     # the same case intentionally runs measure-clear afterwards.
     assert "@($install.scpi.sent) -contains" in controls
