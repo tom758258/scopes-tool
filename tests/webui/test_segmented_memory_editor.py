@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from scopes_tool_webui import command_execution as command_execution_module
+from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 from scopes_tool_webui.commands import COMMANDS, command_catalog
 
 
@@ -26,9 +28,17 @@ def test_segmented_memory_uses_dedicated_editor_and_existing_command_contract() 
     )
 
     assert definition["editor"] == "segmented"
-    assert [field["name"] for field in definition["fields"]] == ["action", "segments"]
+    assert [field["name"] for field in definition["fields"]] == [
+        "action",
+        "segments",
+        "index",
+    ]
     assert projected["presentation"]["query_value"] == "query"
-    assert projected["presentation"]["action_choices"] == ["enable", "disable"]
+    assert projected["presentation"]["action_choices"] == [
+        "enable",
+        "disable",
+        "select",
+    ]
 
 
 def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
@@ -48,6 +58,11 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
         "segmented.editor.mode",
         "segmented.editor.configuredSegments",
         "segmented.editor.acquiredSegments",
+        "segmented.editor.segment",
+        "segmented.editor.previous",
+        "segmented.editor.next",
+        "segmented.editor.select",
+        "segmented.editor.timeTag",
         "segmented.editor.enter",
         "segmented.editor.exit",
         "segmented.editor.unavailable",
@@ -125,6 +140,7 @@ EDITOR_HARNESS = r'''
           fields: [
             { name: "action", type: "enum" },
             { name: "segments", type: "integer", minimum: 2, maximum: 250 },
+            { name: "index", type: "integer", minimum: 1 },
           ],
         };
         let supported = true;
@@ -259,6 +275,174 @@ def test_segmented_editor_rerender_preserves_segment_count() -> None:
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
 )
+def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
+    script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        editor.schedulePresentation();
+        await settle();
+
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+            selected_segment: 37, time_tag_s: 0.00128472,
+          } } },
+        });
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(editor.segmentBrowser.hidden, false);
+        assert.equal(editor.segmentInput.value, "37");
+        assert.equal(editor.segmentInput.min, "1");
+        assert.equal(editor.segmentInput.max, "63");
+        assert.equal(editor.segmentTotal.textContent, "/ 63");
+        assert.equal(editor.timeTagOutput.textContent, "0.00128472 s");
+        assert.equal(editor.previousButton.disabled, false);
+        assert.equal(editor.nextButton.disabled, false);
+
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+            selected_segment: 36, time_tag_s: 0.0012,
+          } } },
+        });
+        editor.previousButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.at(-1), {
+          command: "segmented-memory",
+          parameters: { action: "select", index: 36 },
+          intent: "apply",
+        });
+        assert.equal(editor.segmentInput.value, "36");
+        assert.equal(editor.timeTagOutput.textContent, "0.0012 s");
+
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+            selected_segment: 37, time_tag_s: 0.00128472,
+          } } },
+        });
+        editor.nextButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.at(-1).parameters, { action: "select", index: 37 });
+
+        const countBeforeInput = submitted.length;
+        editor.segmentInput.value = "20";
+        editor.segmentInput.dispatch("input");
+        await settle();
+        assert.equal(submitted.length, countBeforeInput);
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+            selected_segment: 20, time_tag_s: 0.00075,
+          } } },
+        });
+        editor.selectButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.at(-1).parameters, { action: "select", index: 20 });
+        assert.equal(editor.segmentInput.value, "20");
+        assert.equal(editor.timeTagOutput.textContent, "0.00075 s");
+
+        editor.acceptJob({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+            selected_segment: 1, time_tag_s: 0,
+          } } },
+        }, true);
+        editor.applyBusyState();
+        assert.equal(editor.previousButton.disabled, true);
+        assert.equal(editor.nextButton.disabled, false);
+
+        editor.acceptJob({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+            selected_segment: 63, time_tag_s: 0.062,
+          } } },
+        }, true);
+        editor.applyBusyState();
+        assert.equal(editor.previousButton.disabled, false);
+        assert.equal(editor.nextButton.disabled, true);
+
+        editor.acceptJob({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 0,
+            selected_segment: null, time_tag_s: null,
+          } } },
+        }, true);
+        editor.applyBusyState();
+        assert.equal(editor.segmentBrowser.hidden, true);
+        const countWithoutSegments = submitted.length;
+        editor.previousButton.dispatch("click");
+        editor.nextButton.dispatch("click");
+        editor.selectButton.dispatch("click");
+        await settle();
+        assert.equal(submitted.length, countWithoutSegments);
+        ''',
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_segmented_memory_select_validation_and_execution_use_core(tmp_path: Path) -> None:
+    request = validate_job_request({
+        "command": "segmented-memory",
+        "mode": "simulate",
+        "model_id": "keysight-dsox4024a",
+        "parameters": {"action": "select", "index": 20},
+    })
+    assert request["parameters"] == {"action": "select", "index": 20}
+
+    with pytest.raises(WebUIRequestError, match="index must be an integer"):
+        validate_job_request({
+            "command": "segmented-memory",
+            "mode": "simulate",
+            "model_id": "keysight-dsox4024a",
+            "parameters": {"action": "select", "index": "20"},
+        })
+
+    calls: list[tuple[str, int | None]] = []
+
+    class FakeScope:
+        def select_segmented_memory(self, index: int) -> None:
+            calls.append(("select", index))
+
+        def query_segmented_memory(self) -> dict[str, object]:
+            calls.append(("query", None))
+            return {
+                "mode": "segmented",
+                "configured_segments": 100,
+                "acquired_segments": 63,
+                "selected_segment": 20,
+                "time_tag_s": 0.00075,
+            }
+
+    result = command_execution_module._execute_trigger_search_serial_segmented_workflow_command(
+        FakeScope(),
+        "segmented-memory",
+        "SIM::INSTR",
+        request["parameters"],
+        tmp_path,
+    )
+
+    assert calls == [("select", 20), ("query", None)]
+    assert result["result"]["segmented"]["selected_segment"] == 20
+    assert result["result"]["segmented"]["time_tag_s"] == 0.00075
+
+
+@pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="Node.js is required for frontend behavior checks",
+)
 def test_segmented_editor_enter_exit_and_capability_gating() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -305,6 +489,9 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
         await settle();
         assert.equal(editor.unavailableNote.hidden, false);
         assert.equal(editor.readouts.hidden, true);
+        assert.equal(editor.segmentBrowser.hidden, true);
+        assert.equal(editor.segmentInput.value, "");
+        assert.equal(editor.timeTagOutput.textContent, "");
         assert.equal(editor.refreshButton.disabled, true);
         editor.refreshButton.dispatch("click");
         editor.enterButton.dispatch("click");

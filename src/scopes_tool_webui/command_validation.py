@@ -326,14 +326,18 @@ def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, 
     capabilities = capabilities_for_model_id(model_id)
     if command == "segmented-memory":
         action = parameters.setdefault("action", "query")
-        if action not in {"query", "enable", "disable"}:
-            raise WebUIRequestError("segmented-memory action must be query, enable, or disable")
+        if action not in {"query", "enable", "disable", "select"}:
+            raise WebUIRequestError(
+                "segmented-memory action must be query, enable, disable, or select"
+            )
         if action == "enable":
             parameters["segments"] = _integer(parameters.get("segments"), "segments")
-        elif action == "query":
+            _reject_query_parameters(parameters, ("index",), command)
+        elif action == "select":
+            parameters["index"] = _integer(parameters.get("index"), "index")
             _reject_query_parameters(parameters, ("segments",), command)
         else:
-            _reject_query_parameters(parameters, ("segments",), command)
+            _reject_query_parameters(parameters, ("segments", "index"), command)
         return
     if command == "segmented-capture":
         parameters["channel"] = validate_analog_channel(_integer(parameters.get("channel", 1), "channel"), capabilities)

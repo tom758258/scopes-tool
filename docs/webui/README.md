@@ -146,8 +146,9 @@ The Command workbench exposes:
   Mode, Serial Display, UART/I2C/SPI/CAN configuration and triggers, and a
   protocol-independent Serial Lister section (display, reference, and
   host-side export), plus `serial-query`
-- Segmented Memory: a dedicated state view for explicit Refresh, Enter, and
-  Exit controls over `segmented-memory`, plus `segmented-capture`
+- Segmented Memory: a dedicated state view for explicit Refresh, Enter, Exit,
+  segment selection, and current Time Tag readback over `segmented-memory`,
+  plus `segmented-capture`
 - Workflow: `capture-batch`, `capture-until`, `capture-monitor`, `measure-log`,
   `measure-until`, `triggered-measure-loop`, and
   `triggered-capture-series`, plus Generic Sequence v1 under Automation

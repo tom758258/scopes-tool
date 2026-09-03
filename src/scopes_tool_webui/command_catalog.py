@@ -1360,7 +1360,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     {
         "id": "segmented-memory", "category": "Segmented Memory", "label": "Segmented memory", "modes": ("live", "simulate"),
         "editor": "segmented",
-        "fields": ({"name": "action", "type": "enum", "options": ("query", "enable", "disable"), "default": "query"}, _command_field("segments", "integer", minimum=2, visible_if=[{"field": "action", "equals": "enable"}], required_if=[{"field": "action", "equals": "enable"}])),
+        "fields": ({"name": "action", "type": "enum", "options": ("query", "enable", "disable", "select"), "default": "query"}, _command_field("segments", "integer", minimum=2, visible_if=[{"field": "action", "equals": "enable"}], required_if=[{"field": "action", "equals": "enable"}]), _command_field("index", "integer", minimum=1, visible_if=[{"field": "action", "equals": "select"}], required_if=[{"field": "action", "equals": "select"}])),
     },
     {
         "id": "segmented-capture", "category": "Segmented Memory", "label": "Segmented capture", "modes": ("live", "simulate", "dry-run"),
@@ -1712,12 +1712,14 @@ def _command_presentation(entry: Mapping[str, Any]) -> dict[str, Any]:
         if readback_fields:
             presentation["readback_fields"] = readback_fields
         return presentation
-    if action_options == {"query", "enable", "disable"}:
+    if entry["id"] == "segmented-memory" and action_options == {
+        "query", "enable", "disable", "select"
+    }:
         return {
             "kind": "setting",
             "action": "apply",
             "action_field": "action",
-            "action_choices": ("enable", "disable"),
+            "action_choices": ("enable", "disable", "select"),
             "query_value": "query",
             "query_fields": (),
         }

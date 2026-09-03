@@ -893,6 +893,8 @@ def _execute_trigger_search_serial_segmented_workflow_command(
             scope.enable_segmented_memory(parameters["segments"])
         elif action == "disable":
             scope.disable_segmented_memory()
+        elif action == "select":
+            scope.select_segmented_memory(parameters["index"])
         return _state_scope_result("segmented", scope.query_segmented_memory())
     if command == "segmented-capture":
         output_dir = _workflow_output_dir(command, artifact_dir)

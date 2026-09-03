@@ -344,6 +344,13 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .segmented-editor-state dd { margin: 0; font-weight: 600; }
 .segmented-editor-count { max-width: 220px; }
 .segmented-editor-status { font-size: 12px; }
+.segmented-editor-browser { display: grid; gap: 8px; }
+.segmented-editor-browser-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.segmented-editor-browser-controls input { width: 90px; }
+.segmented-editor-segment-total { font-weight: 600; }
+.segmented-editor-browser-readout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 18px; margin: 0; }
+.segmented-editor-browser-readout dt { color: var(--muted); font-size: 12px; }
+.segmented-editor-browser-readout dd { margin: 0; font-weight: 600; }
 .workflow-editor { display: grid; gap: 14px; padding-top: 12px; }
 .workflow-editor-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 .workflow-editor-section:first-child { padding-top: 0; border-top: 0; }

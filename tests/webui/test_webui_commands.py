@@ -666,7 +666,7 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
     segmented = commands["segmented-memory"]["presentation"]
     assert segmented["kind"] == "setting"
     assert segmented["query_value"] == "query"
-    assert segmented["action_choices"] == ["enable", "disable"]
+    assert segmented["action_choices"] == ["enable", "disable", "select"]
     assert commands["math-vertical"]["presentation"]["readback_fields"] == {
         "range_value": "range"
     }
