@@ -123,7 +123,7 @@ export class SegmentedEditor {
   rerender() {
     const value = this.countInput?.value || "";
     this.buildDom();
-    if (this.dirty) this.countInput.value = value;
+    if (value !== "") this.countInput.value = value;
     this.present();
   }
 

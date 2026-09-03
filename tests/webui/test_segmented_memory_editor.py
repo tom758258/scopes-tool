@@ -215,6 +215,50 @@ def test_segmented_editor_refresh_renders_realtime_and_segmented_state() -> None
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
 )
+def test_segmented_editor_rerender_preserves_segment_count() -> None:
+    script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        editor.schedulePresentation();
+        await settle();
+
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+          } } },
+        });
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(editor.countInput.value, "100");
+        assert.equal(editor.dirty, false);
+        assert.equal(editor.configuredRow.output.textContent, "100");
+
+        editor.rerender();
+        await settle();
+        assert.equal(editor.countInput.value, "100");
+        assert.equal(editor.configuredRow.output.textContent, "100");
+
+        editor.countInput.value = "80";
+        editor.countInput.dispatch("input");
+        assert.equal(editor.dirty, true);
+        editor.rerender();
+        await settle();
+        assert.equal(editor.countInput.value, "80");
+        ''',
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="Node.js is required for frontend behavior checks",
+)
 def test_segmented_editor_enter_exit_and_capability_gating() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
