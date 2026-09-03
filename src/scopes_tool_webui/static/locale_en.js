@@ -1136,6 +1136,8 @@ export const en = {
   "workflow.editor.removePair": "Remove pair",
   "workflow.editor.distinctPair": "Source and reference channels must be different.",
   "workflow.editor.pairMeasurementRequired": "Select at least one pair measurement.",
+  "workflow.editor.pairMeasurementsHelper": "Phase and delay compare two channels. Select a pair measurement first, then add a source/reference channel pair.",
+  "workflow.editor.channelPairRequired": "Add at least one channel pair for the selected pair measurements.",
   "workflow.editor.limitRequired": "Enter a count, a duration, or both.",
   "sequence.editor.title": "Sequence",
   "sequence.editor.description": "Edit a Generic Sequence v1 document and run it through the shared Core sequence operation.",

@@ -52,6 +52,10 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert '"description.measure-sweep":' in english
     assert '"command.measure-sweep": "量測掃描"' in chinese
     assert '"description.measure-sweep":' in chinese
+    assert '"workflow.editor.pairMeasurementsHelper"' in english
+    assert '"workflow.editor.channelPairRequired"' in english
+    assert '"workflow.editor.pairMeasurementsHelper"' in chinese
+    assert '"workflow.editor.channelPairRequired"' in chinese
     assert (
         '"measurement.frontPanel.resultsUnsupported": "此型號無法一次讀取前面板量測清單；'
         '若要取得量測值，請使用「量測設定」。"' in chinese
@@ -170,7 +174,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
             channels: ["1", "2", "3", "4"],
             items: ["vpp", "frequency", "period", "vrms"],
             pairs: [],
-            pair_items: ["phase", "delay"],
+            pair_items: [],
           },
         );
         const sweepUi = new globalThis.MeasurementEditor(
@@ -180,11 +184,28 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           },
         );
         sweepUi.renderSweep("simulate||keysight-dsox4024a|measure-sweep");
-        assert.equal(sweepUi.sweepPairItemsSection.hidden, true);
-        sweepUi.sweepAddPairButton.handler();
         assert.equal(sweepUi.sweepPairItemsSection.hidden, false);
+        assert.deepEqual(
+          sweepUi.container.children.map((section) => section.children[0].textContent),
+          ["workflow.editor.channels", "workflow.editor.measurements", "workflow.editor.pairMeasurements", "workflow.editor.pairs"],
+        );
+        assert.equal(
+          sweepUi.sweepPairItemsSection.children[1].textContent,
+          "workflow.editor.pairMeasurementsHelper",
+        );
+        assert.equal(sweepUi.sweepAddPairButton.disabled, true);
+        sweepUi.sweepControls.pair_items[0].checked = true;
+        sweepUi.sweepControls.pair_items[0].handler();
+        assert.equal(sweepUi.sweepAddPairButton.disabled, false);
+        sweepUi.sweepAddPairButton.handler();
+        assert.equal(sweepUi.sweepPairRows.length, 1);
+        sweepUi.sweepControls.pair_items[0].checked = false;
+        sweepUi.sweepControls.pair_items[0].handler();
+        assert.equal(sweepUi.sweepPairRows.length, 1);
+        assert.equal(sweepUi.sweepAddPairButton.disabled, true);
         sweepUi.sweepPairRows[0].remove.handler();
-        assert.equal(sweepUi.sweepPairItemsSection.hidden, true);
+        assert.equal(sweepUi.sweepPairRows.length, 0);
+        assert.equal(sweepUi.sweepPairItemsSection.hidden, false);
         catalog.activeModelId = "keysight-dsox2004a";
         const sweepFields2000 = catalog.fieldsFor(sweepDefinition);
         assert.deepEqual(
@@ -195,7 +216,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
             channels: ["1", "2", "3", "4"],
             items: ["vpp", "frequency", "period", "vrms"],
             pairs: [],
-            pair_items: ["phase"],
+            pair_items: [],
           },
         );
         const syntheticFields2ch = sweepFields4000.map((field) => field.name === "channels" ? { ...field, options: [1, 2] } : field);
@@ -207,7 +228,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
             channels: ["1", "2"],
             items: ["vpp", "frequency", "period", "vrms"],
             pairs: [],
-            pair_items: ["phase", "delay"],
+            pair_items: [],
           },
         );
         const projected2000 = freshEditor.sanitizeSweepDraft({
@@ -356,6 +377,16 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         }]]);
 
         sweepCalls.length = 0;
+        for (const input of sweepEditor.sweepControls.pair_items) input.checked = true;
+        await sweepEditor.runMeasureSweep();
+        assert.deepEqual(sweepCalls, []);
+        assert.equal(
+          sweepEditor.sweepControls.pair_items[0].customValidity,
+          "workflow.editor.channelPairRequired",
+        );
+
+        sweepCalls.length = 0;
+        for (const input of sweepEditor.sweepControls.pair_items) input.checked = false;
         sweepEditor.sweepPairRows = [{
           source: validControl("1"),
           reference: validControl("2"),

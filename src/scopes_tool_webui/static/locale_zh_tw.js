@@ -1136,6 +1136,8 @@ export const zhTW = {
   "workflow.editor.removePair": "移除配對",
   "workflow.editor.distinctPair": "來源與參考通道必須不同。",
   "workflow.editor.pairMeasurementRequired": "請至少選擇一個配對量測項目。",
+  "workflow.editor.pairMeasurementsHelper": "相位與延遲需要比較兩個通道。請先選擇配對量測項目，再新增來源與參考通道配對。",
+  "workflow.editor.channelPairRequired": "已選擇配對量測項目，請至少新增一組通道配對。",
   "workflow.editor.limitRequired": "請輸入次數、持續時間，或兩者皆輸入。",
   "sequence.editor.title": "序列",
   "sequence.editor.description": "編輯 Generic Sequence v1 文件，並透過共用的 Core Sequence 操作執行。",

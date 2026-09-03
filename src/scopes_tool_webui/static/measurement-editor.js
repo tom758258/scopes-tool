@@ -220,6 +220,7 @@ export class MeasurementEditor {
       "pair_items",
       fieldByName(fields, "pair_items").options || [],
       draft.pair_items,
+      "workflow.editor.pairMeasurementsHelper",
     );
     this.container.replaceChildren(
       this.buildSweepChoiceSection(
@@ -234,13 +235,13 @@ export class MeasurementEditor {
         fieldByName(fields, "items").options || [],
         draft.items,
       ),
+      this.sweepPairItemsSection,
       this.buildSweepPairsSection(
         (fieldByName(fields, "channels").options || []).map(String),
         draft.pairs,
       ),
-      this.sweepPairItemsSection,
     );
-    this.updateSweepPairItemsVisibility();
+    this.updateSweepAddPairState();
   }
 
   defaultSweepDraft(fields) {
@@ -248,7 +249,7 @@ export class MeasurementEditor {
       channels: (fieldByName(fields, "channels").options || []).map(String),
       items: defaultChoices(fieldByName(fields, "items")),
       pairs: [],
-      pair_items: defaultChoices(fieldByName(fields, "pair_items")),
+      pair_items: [],
     };
   }
 
@@ -284,8 +285,14 @@ export class MeasurementEditor {
     return section;
   }
 
-  buildSweepChoiceSection(titleKey, name, options, selected) {
+  buildSweepChoiceSection(titleKey, name, options, selected, noteKey = null) {
     const section = this.buildSweepSection(titleKey);
+    if (noteKey) {
+      const note = document.createElement("p");
+      note.className = "compact-note measurement-editor-note";
+      note.textContent = translate(noteKey);
+      section.append(note);
+    }
     const choices = document.createElement("div");
     choices.className = "workflow-editor-choices";
     const selectedValues = new Set((selected || []).map(String));
@@ -302,7 +309,13 @@ export class MeasurementEditor {
       choice.append(input, text);
       choices.append(choice);
       this.sweepControls[name].push(input);
-      input.addEventListener("change", () => this.captureSweepDraft());
+      input.addEventListener("change", () => {
+        this.captureSweepDraft();
+        if (name === "pair_items") {
+          this.sweepControls.pair_items?.[0]?.setCustomValidity?.("");
+          this.updateSweepAddPairState();
+        }
+      });
     }
     section.append(choices);
     return section;
@@ -323,7 +336,7 @@ export class MeasurementEditor {
       const reference = channels.find((channel) => channel !== source) || source;
       this.appendSweepPairRow(channels, { source, reference });
       this.captureSweepDraft();
-      this.updateSweepPairItemsVisibility();
+      this.sweepControls.pair_items?.[0]?.setCustomValidity?.("");
       this.applyBusyState();
     });
     section.append(this.sweepAddPairButton);
@@ -347,7 +360,6 @@ export class MeasurementEditor {
       row.remove();
       this.sweepPairRows = this.sweepPairRows.filter((item) => item !== entry);
       this.captureSweepDraft();
-      this.updateSweepPairItemsVisibility();
     });
     source.input.addEventListener("change", () => this.captureSweepDraft());
     reference.input.addEventListener("change", () => this.captureSweepDraft());
@@ -356,10 +368,10 @@ export class MeasurementEditor {
     this.sweepPairsHost.append(row);
   }
 
-  updateSweepPairItemsVisibility() {
-    if (this.sweepPairItemsSection) {
-      this.sweepPairItemsSection.hidden = this.sweepPairRows.length === 0;
-    }
+  updateSweepAddPairState() {
+    if (!this.sweepAddPairButton) return;
+    const hasPairItem = (this.sweepControls.pair_items || []).some((input) => input.checked);
+    this.sweepAddPairButton.disabled = this.hooks.isExecutionBusy() || !hasPairItem;
   }
 
   buildSweepChannelSelect(name, channels, selected) {
@@ -407,6 +419,13 @@ export class MeasurementEditor {
     if (draft.pairs.length && !draft.pair_items.length) {
       pairItemControl?.setCustomValidity?.(
         translate("workflow.editor.pairMeasurementRequired"),
+      );
+      pairItemControl?.reportValidity?.();
+      return null;
+    }
+    if (!draft.pairs.length && draft.pair_items.length) {
+      pairItemControl?.setCustomValidity?.(
+        translate("workflow.editor.channelPairRequired"),
       );
       pairItemControl?.reportValidity?.();
       return null;
@@ -619,7 +638,7 @@ export class MeasurementEditor {
       row.reference.disabled = busy;
       row.remove.disabled = busy;
     }
-    if (this.sweepAddPairButton) this.sweepAddPairButton.disabled = busy;
+    this.updateSweepAddPairState();
     if (this.controls.windowRefresh) {
       this.controls.windowRefresh.disabled = busy
         || !this.hooks.isCommandAvailable("measure-window");
