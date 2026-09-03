@@ -1096,9 +1096,9 @@ def _validate_parameters(
         except Exception as exc:
             raise WebUIRequestError(str(exc)) from exc
         action = parameters.setdefault("action", "query")
-        if action not in {"query", "set", "reset", "increment"}:
+        if action not in {"query", "set", "reset"}:
             raise WebUIRequestError(
-                "measurement-statistics action must be query, set, reset, or increment"
+                "measurement-statistics action must be query, set, or reset"
             )
         setting_names = (
             "mode",
@@ -1117,6 +1117,10 @@ def _validate_parameters(
                 _require_parameter(parameters, name, command)
             try:
                 parameters["mode"] = normalize_statistics_mode(parameters["mode"])
+                if parameters["mode"] != "all":
+                    raise WebUIRequestError(
+                        "measurement-statistics mode must be all"
+                    )
                 _require_boolean(parameters["display_enabled"], "display_enabled")
                 _require_boolean(
                     parameters["relative_stddev_enabled"],

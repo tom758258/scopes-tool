@@ -15,6 +15,7 @@ from scopes_tool_core.measurements import (
     pair_measurement_query,
     parse_measurement_results_dump,
     parse_measurement_result,
+    parse_statistics_mode,
     parse_statistics_results,
     statistics_install_command,
     statistics_mode_scpi,
@@ -301,6 +302,14 @@ def test_statistics_install_command_uses_measure_command_without_query_suffix():
 
 def test_statistics_all_mode_uses_keysight_on_keyword():
     assert statistics_mode_scpi("all") == "ON"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    (("STDD", "stddev"), ("COUN", "count")),
+)
+def test_parse_statistics_mode_accepts_canonical_keysight_readback(raw, expected):
+    assert parse_statistics_mode(raw) == expected
 
 
 def test_parse_statistics_results_with_item_labels():

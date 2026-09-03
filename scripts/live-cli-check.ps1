@@ -3736,15 +3736,197 @@ if ($snapshotComplete) {
 
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_measure_statistics) {
         Invoke-BaselineCase -Name "measure-stats" -Action {
-            $stats = Invoke-LiveCli -Stage "measure-stats" -Command "measure-stats" -Arguments @(
-                "--channel", "1", "--items", "vpp,frequency", "--mode", "all", "--reset"
+            $statisticsProgram = @'
+import json
+import sys
+
+from scopes_tool_core.scope import Oscilloscope
+
+
+resource, backend, expected_model = sys.argv[1:]
+visa_library = "@py" if backend == "@py" else None
+scope = Oscilloscope.open(resource, visa_library=visa_library)
+snapshot = None
+failure = None
+summary = {}
+
+def require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+try:
+    identity = scope.query_idn()
+    require(identity.model_id == expected_model, "Live statistics model does not match the target.")
+    snapshot = scope.query_measurement_statistics_state()
+
+    scope.configure_measurement_statistics_mode("all")
+    all_state = scope.query_measurement_statistics_state()
+    require(all_state.mode == "all", "All-mode statistics readback failed.")
+
+    scope.configure_measurement_statistics_mode("stddev")
+    stddev_state = scope.query_measurement_statistics_state()
+    require(stddev_state.mode == "stddev" and stddev_state.raw_mode.upper() == "STDD",
+            "Stddev statistics mode did not read back as canonical STDD.")
+
+    display_target = not snapshot.display_enabled
+    scope.configure_measurement_statistics_display(display_target)
+    display_state = scope.query_measurement_statistics_state()
+    require(display_state.display_enabled == display_target,
+            "Statistics display setting readback failed.")
+
+    scope.configure_measurement_statistics_max_count(2000)
+    numeric_state = scope.query_measurement_statistics_state()
+    require(numeric_state.max_count == 2000,
+            "Numeric statistics max-count readback failed.")
+
+    scope.configure_measurement_statistics_max_count(None)
+    infinite_state = scope.query_measurement_statistics_state()
+    require(infinite_state.max_count is None,
+            "Infinite statistics max-count readback failed.")
+
+    rsd_target = not snapshot.relative_stddev_enabled
+    scope.configure_measurement_statistics_relative_stddev(rsd_target)
+    rsd_state = scope.query_measurement_statistics_state()
+    require(rsd_state.relative_stddev_enabled == rsd_target,
+            "Relative standard deviation setting readback failed.")
+
+    scope.reset_measurement_statistics()
+    error = scope.query_system_error()
+    require(not error.is_error, f"Statistics validation reported {error.format()}.")
+    summary = {
+        "mode": stddev_state.mode,
+        "raw_mode": stddev_state.raw_mode,
+        "display": display_state.display_enabled,
+        "numeric_max_count": numeric_state.max_count,
+        "infinite_max_count": infinite_state.max_count,
+        "relative_stddev": rsd_state.relative_stddev_enabled,
+        "reset": True,
+        "snapshot_mode": snapshot.mode,
+        "snapshot_display": snapshot.display_enabled,
+        "snapshot_max_count": snapshot.max_count,
+        "snapshot_relative_stddev": snapshot.relative_stddev_enabled,
+    }
+except BaseException as exc:
+    failure = exc
+finally:
+    restore_failure = None
+    if snapshot is not None:
+        try:
+            scope.configure_measurement_statistics_mode(snapshot.mode)
+            scope.configure_measurement_statistics_display(snapshot.display_enabled)
+            scope.configure_measurement_statistics_max_count(snapshot.max_count)
+            scope.configure_measurement_statistics_relative_stddev(
+                snapshot.relative_stddev_enabled
             )
-            Assert-ScpiSent -Payload $stats -Label "Measurement statistics" -ExpectedCommands @(
-                ":MEASure:CLEar", ":MEASure:VPP", ":MEASure:FREQuency"
+            restored = scope.query_measurement_statistics_state()
+            require(
+                (
+                    restored.mode,
+                    restored.display_enabled,
+                    restored.max_count,
+                    restored.relative_stddev_enabled,
+                )
+                == (
+                    snapshot.mode,
+                    snapshot.display_enabled,
+                    snapshot.max_count,
+                    snapshot.relative_stddev_enabled,
+                ),
+                "Statistics state restore readback failed.",
             )
-            if ([int]$stats.result.channel -ne 1 -or
-                [string]$stats.result.mode -ne "all") {
-                throw "Measurement statistics result metadata is invalid."
+            restore_error = scope.query_system_error()
+            require(not restore_error.is_error,
+                    f"Statistics restore reported {restore_error.format()}.")
+        except BaseException as restore_exc:
+            restore_failure = restore_exc
+    scope.close()
+
+if restore_failure is not None:
+    if failure is not None:
+        raise RuntimeError(
+            f"Statistics validation failed: {failure}; restore failed: {restore_failure}"
+        ) from restore_failure
+    raise restore_failure
+if failure is not None:
+    raise failure
+print(json.dumps(summary, separators=(",", ":")))
+'@
+            $statisticsBackend = if ([string]::IsNullOrEmpty($Backend)) { "system" } else { $Backend }
+            $script:HardwareTouched = $true
+            $statisticsOutput = @(
+                & $Python -c $statisticsProgram $Resource $statisticsBackend $script:Target 2>&1
+            )
+            if ($LASTEXITCODE -ne 0) {
+                throw "Measurement statistics validation failed: $($statisticsOutput -join ' ')"
+            }
+            $statistics = ($statisticsOutput -join [Environment]::NewLine) |
+                ConvertFrom-Json -ErrorAction Stop
+            if ([string]$statistics.mode -ne "stddev" -or
+                ([string]$statistics.raw_mode).ToUpperInvariant() -ne "STDD" -or
+                [int]$statistics.numeric_max_count -ne 2000 -or
+                $null -ne $statistics.infinite_max_count -or
+                $statistics.reset -ne $true) {
+                throw "Measurement statistics validation metadata is invalid."
+            }
+
+            $statisticsRestoreProgram = @'
+import sys
+
+from scopes_tool_core.scope import Oscilloscope
+
+
+resource, backend, expected_model, mode, display, max_count, rsd = sys.argv[1:]
+visa_library = "@py" if backend == "@py" else None
+with Oscilloscope.open(resource, visa_library=visa_library) as scope:
+    identity = scope.query_idn()
+    if identity.model_id != expected_model:
+        raise RuntimeError("Live statistics restore model does not match the target.")
+    scope.configure_measurement_statistics_mode(mode)
+    scope.configure_measurement_statistics_display(display == "1")
+    scope.configure_measurement_statistics_max_count(
+        None if max_count == "INFinite" else int(max_count)
+    )
+    scope.configure_measurement_statistics_relative_stddev(rsd == "1")
+    restored = scope.query_measurement_statistics_state()
+    expected_max_count = None if max_count == "INFinite" else int(max_count)
+    if (
+        restored.mode,
+        restored.display_enabled,
+        restored.max_count,
+        restored.relative_stddev_enabled,
+    ) != (mode, display == "1", expected_max_count, rsd == "1"):
+        raise RuntimeError("Statistics state restore readback failed after CLI validation.")
+    error = scope.query_system_error()
+    if error.is_error:
+        raise RuntimeError(f"Statistics restore reported {error.format()}.")
+'@
+            $snapshotDisplay = if ([bool]$statistics.snapshot_display) { "1" } else { "0" }
+            $snapshotMaxCount = if ($null -eq $statistics.snapshot_max_count) {
+                "INFinite"
+            } else {
+                [string][int]$statistics.snapshot_max_count
+            }
+            $snapshotRsd = if ([bool]$statistics.snapshot_relative_stddev) { "1" } else { "0" }
+            try {
+                $stats = Invoke-LiveCli -Stage "measure-stats" -Command "measure-stats" -Arguments @(
+                    "--channel", "1", "--items", "vpp,frequency", "--mode", "all", "--reset"
+                )
+                Assert-ScpiSent -Payload $stats -Label "Measurement statistics" -ExpectedCommands @(
+                    ":MEASure:CLEar", ":MEASure:VPP", ":MEASure:FREQuency"
+                )
+                if ([int]$stats.result.channel -ne 1 -or
+                    [string]$stats.result.mode -ne "all") {
+                    throw "Measurement statistics result metadata is invalid."
+                }
+            } finally {
+                $restoreOutput = @(
+                    & $Python -c $statisticsRestoreProgram $Resource $statisticsBackend `
+                        $script:Target ([string]$statistics.snapshot_mode) $snapshotDisplay `
+                        $snapshotMaxCount $snapshotRsd 2>&1
+                )
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Measurement statistics restore failed: $($restoreOutput -join ' ')"
+                }
             }
         }
     } elseif (-not $script:FunctionalFailed) {

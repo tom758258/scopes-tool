@@ -113,10 +113,11 @@ The Command workbench exposes:
   `measure-results`, `measure-show`, and `measure-clear` for reading and
   managing the instrument's displayed measurements and measurement markers.
   On capability-supported 3000X and 4000X models, the same workspace also
-  exposes Advanced Measurement Statistics: results mode, independent
-  instrument statistics display, Infinite or 2..2000 maximum count, relative
-  standard deviation, reset, manual increment, explicit refresh, and the
-  instrument-accumulated statistics table. It does not poll automatically or
+  exposes Advanced Measurement Statistics with Results Mode fixed to All:
+  independent instrument statistics display, Infinite or 2..2000 maximum
+  count, relative standard deviation, reset, explicit refresh, and the
+  instrument-accumulated statistics table. Refresh is read-only, and Apply is
+  available after a successful readback. It does not poll automatically or
   compute statistics in the browser. The 2000X profile does not expose this
   section.
   Measurement markers are always on for 2000X/3000X models; 4000X models

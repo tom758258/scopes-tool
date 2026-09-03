@@ -52,7 +52,21 @@ def test_measure_statistics_uses_capability_gate() -> None:
     assert "Add-NotApplicableCase" in script
     assert 'Add-NotApplicableCase -Name "measure-stats"' in script
     assert "Measurement statistics are unsupported by the detected instrument." in script
-    assert "measure-stats" in stats
+    assert "query_measurement_statistics_state" in stats
+    assert '-Command "measure-stats"' in stats
+    assert '"--mode", "all", "--reset"' in stats
+    assert 'configure_measurement_statistics_mode("stddev")' in stats
+    assert 'raw_mode.upper() == "STDD"' in stats
+    assert "configure_measurement_statistics_display" in stats
+    assert "configure_measurement_statistics_max_count(2000)" in stats
+    assert "configure_measurement_statistics_max_count(None)" in stats
+    assert "configure_measurement_statistics_relative_stddev" in stats
+    assert "reset_measurement_statistics" in stats
+    assert "increment_measurement_statistics" not in stats
+    assert "finally:" in stats
+    assert "snapshot_mode" in stats
+    assert "$statisticsRestoreProgram" in stats
+    assert "Statistics state restore readback failed." in stats
 
 
 def test_pair_measurements_remain_strict() -> None:

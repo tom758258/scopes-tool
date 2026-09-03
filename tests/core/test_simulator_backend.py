@@ -508,6 +508,30 @@ def test_simulator_common_display_roundtrip():
     ]
 
 
+def test_simulator_measurement_statistics_uses_canonical_mode_readbacks():
+    backend = SimulatorBackend()
+
+    backend.write(":MEASure:STATistics STDDev")
+    assert backend.query(":MEASure:STATistics?") == "STDD"
+    backend.write(":MEASure:STATistics COUNt")
+    assert backend.query(":MEASure:STATistics?") == "COUN"
+
+
+def test_simulator_measurement_results_shape_follows_statistics_mode():
+    backend = SimulatorBackend()
+    backend.measurement_statistics_items = ["vpp", "frequency"]
+
+    backend.write(":MEASure:STATistics ON")
+    all_tokens = backend.query(":MEASure:RESults?").split(",")
+    assert len(all_tokens) == 14
+    assert all_tokens[::7] == ["vpp", "frequency"]
+
+    backend.write(":MEASure:STATistics CURRent")
+    current_tokens = backend.query(":MEASure:RESults?").split(",")
+    assert len(current_tokens) == 2
+    assert all(float(token) for token in current_tokens)
+
+
 def test_simulator_rejects_old_display_intensity_path():
     backend = SimulatorBackend()
 

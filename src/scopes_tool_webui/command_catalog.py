@@ -587,13 +587,13 @@ COMMANDS = (
             {
                 "name": "action",
                 "type": "enum",
-                "options": ("query", "set", "reset", "increment"),
+                "options": ("query", "set", "reset"),
                 "default": "query",
             },
             {
                 "name": "mode",
                 "type": "enum",
-                "options": ("all", "current", "min", "max", "mean", "stddev", "count"),
+                "options": ("all",),
                 "required_if": [{"field": "action", "equals": "set"}],
             },
             {

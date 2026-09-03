@@ -1482,6 +1482,34 @@ def test_measurement_statistics_validation_and_reset_execution(tmp_path: Path) -
             "parameters": {"action": "query"},
         })
 
+    for parameters, message in (
+        ({"action": "increment"}, "query, set, or reset"),
+        ({
+            "action": "set",
+            "mode": "current",
+            "display_enabled": False,
+            "max_count_mode": "infinite",
+            "relative_stddev_enabled": False,
+        }, "mode must be all"),
+    ):
+        with pytest.raises(WebUIRequestError, match=message):
+            validate_job_request({
+                "command": "measurement-statistics",
+                "mode": "simulate",
+                "model_id": MODEL_ID,
+                "parameters": parameters,
+            })
+
+    statistics_definition = next(
+        entry for entry in commands_module.COMMANDS
+        if entry["id"] == "measurement-statistics"
+    )
+    statistics_fields = {
+        field["name"]: field for field in statistics_definition["fields"]
+    }
+    assert statistics_fields["action"]["options"] == ("query", "set", "reset")
+    assert statistics_fields["mode"]["options"] == ("all",)
+
     request = validate_job_request({
         "command": "measurement-statistics",
         "mode": "simulate",

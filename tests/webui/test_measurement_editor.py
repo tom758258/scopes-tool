@@ -72,7 +72,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     )
     assert '"measurement.frontPanel.markersAlwaysOn"' in editor_source
     assert '"measurement.statistics.title"' in editor_source
-    assert '"measurement.statistics.increment"' in editor_source
+    assert '"measurement.statistics.increment"' not in editor_source
     assert '"measurement.frontPanel.readFailedEmpty"' in editor_source
     assert '"measurement.frontPanel.readFailedCleared"' in editor_source
     assert '"danger"' in editor_source
@@ -601,6 +601,35 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert(model3000x.container.children.some(
           (node) => node.className.includes("measurement-statistics-section"),
         ));
+        assert.equal(model3000x.controls.statisticsMode.value.textContent, "all");
+        assert.equal(model3000x.controls.statisticsMode.input, undefined);
+        assert.equal(model3000x.controls.statisticsIncrement, undefined);
+        assert.equal(model3000x.controls.statisticsApply.disabled, true);
+        const statisticsCalls = [];
+        await model3000x.applyStatistics();
+        assert.deepEqual(statisticsCalls, []);
+        model3000x.hooks.executeCommand = async (command, parameters) => {
+          statisticsCalls.push([command, parameters]);
+          return {
+            status: "completed",
+            result: { result: { statistics: {
+              settings: {
+                mode: "current", display_enabled: false, max_count: null,
+                relative_stddev_enabled: true,
+              },
+              results: { items: [{ label: "1.2", value: 3.4 }], statistics_items: [] },
+            } } },
+          };
+        };
+        await model3000x.refreshStatistics();
+        assert.equal(model3000x.statisticsState.kind, "mode-required");
+        assert.equal(model3000x.controls.statisticsApply.disabled, false);
+        assert.equal(
+          model3000x.statisticsContent.children[0].textContent,
+          "measurement.statistics.allRequired",
+        );
+        await model3000x.applyStatistics();
+        assert.equal(statisticsCalls.at(-1)[1].mode, "all");
         model3000x.statisticsState = {
           kind: "results",
           payload: {
@@ -627,6 +656,9 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(toggleMarkers.controls.frontPanelClear.disabled, false);
         assert(toggleMarkers.container.children.some(
           (node) => node.className === "measurement-front-panel-results",
+        ));
+        assert(toggleMarkers.container.children.some(
+          (node) => node.className.includes("measurement-statistics-section"),
         ));
         assert.equal(model2000x.container.children.some(
           (node) => node.className.includes("measurement-statistics-section"),

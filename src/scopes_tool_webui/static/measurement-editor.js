@@ -542,9 +542,8 @@ export class MeasurementEditor {
     const form = document.createElement("div");
     form.className = "measurement-statistics-form";
 
-    this.controls.statisticsMode = this.statisticsSelect(
-      "measurement.statistics.mode",
-      ["all", "current", "min", "max", "mean", "stddev", "count"],
+    this.controls.statisticsMode = this.statisticsFixedValue(
+      "measurement.statistics.mode", choiceLabel("all"),
     );
     this.controls.statisticsDisplay = this.statisticsCheckbox(
       "measurement.statistics.display",
@@ -583,7 +582,6 @@ export class MeasurementEditor {
       ["statisticsApply", "actions.apply", "primary", () => this.applyStatistics()],
       ["statisticsRefresh", "actions.refresh", "secondary", () => this.refreshStatistics()],
       ["statisticsReset", "measurement.statistics.reset", "secondary", () => this.runStatisticsAction("reset")],
-      ["statisticsIncrement", "measurement.statistics.increment", "secondary", () => this.runStatisticsAction("increment")],
     ]) {
       const button = document.createElement("button");
       button.type = "button";
@@ -612,6 +610,17 @@ export class MeasurementEditor {
     return { wrapper, input };
   }
 
+  statisticsFixedValue(labelKey, text) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "field";
+    const label = document.createElement("span");
+    label.textContent = translate(labelKey);
+    const value = document.createElement("strong");
+    value.textContent = text;
+    wrapper.append(label, value);
+    return { wrapper, value };
+  }
+
   statisticsCheckbox(labelKey) {
     const wrapper = document.createElement("label");
     wrapper.className = "field measurement-statistics-checkbox";
@@ -633,7 +642,7 @@ export class MeasurementEditor {
     const maxCountMode = this.controls.statisticsMaxCountMode.input.value;
     const parameters = {
       action: "set",
-      mode: this.controls.statisticsMode.input.value,
+      mode: "all",
       display_enabled: this.controls.statisticsDisplay.input.checked,
       max_count_mode: maxCountMode,
       relative_stddev_enabled: this.controls.statisticsRsd.input.checked,
@@ -649,6 +658,7 @@ export class MeasurementEditor {
   }
 
   async applyStatistics() {
+    if (this.statisticsState.kind === "unread") return;
     const parameters = this.statisticsParameters();
     if (!parameters) return;
     await this.executeStatistics(parameters);
@@ -672,16 +682,21 @@ export class MeasurementEditor {
     } else {
       const payload = statisticsPayload(job);
       const rows = payload?.results?.statistics_items || [];
-      this.statisticsState = { kind: rows.length ? "results" : "empty", payload };
+      this.statisticsState = {
+        kind: payload?.settings?.mode && payload.settings.mode !== "all"
+          ? "mode-required"
+          : (rows.length ? "results" : "empty"),
+        payload,
+      };
       this.statisticsReadError = null;
       this.applyStatisticsReadback(payload?.settings);
     }
     this.renderStatisticsReadback();
+    this.applyBusyState();
   }
 
   applyStatisticsReadback(settings) {
-    if (!settings || !this.controls.statisticsMode) return;
-    this.controls.statisticsMode.input.value = settings.mode || "all";
+    if (!settings || !this.controls.statisticsDisplay) return;
     this.controls.statisticsDisplay.input.checked = Boolean(settings.display_enabled);
     this.controls.statisticsMaxCountMode.input.value = settings.max_count == null
       ? "infinite" : "numeric";
@@ -708,6 +723,8 @@ export class MeasurementEditor {
       note.textContent = translate(
         this.statisticsState.kind === "empty"
           ? "measurement.statistics.empty"
+          : this.statisticsState.kind === "mode-required"
+            ? "measurement.statistics.allRequired"
           : "measurement.statistics.unread",
       );
       this.statisticsContent.append(note);
@@ -859,14 +876,14 @@ export class MeasurementEditor {
       ["statisticsApply", "measurement-statistics"],
       ["statisticsRefresh", "measurement-statistics"],
       ["statisticsReset", "measurement-statistics"],
-      ["statisticsIncrement", "measurement-statistics"],
     ]) {
       if (this.controls[name]) {
-        this.controls[name].disabled = busy || !this.hooks.isCommandAvailable(command);
+        this.controls[name].disabled = busy
+          || !this.hooks.isCommandAvailable(command)
+          || (name === "statisticsApply" && this.statisticsState.kind === "unread");
       }
     }
     for (const control of [
-      this.controls.statisticsMode?.input,
       this.controls.statisticsDisplay?.input,
       this.controls.statisticsMaxCountMode?.input,
       this.controls.statisticsRsd?.input,

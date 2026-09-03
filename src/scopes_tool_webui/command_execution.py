@@ -518,8 +518,6 @@ def _execute_scope_command(
             )
         elif action == "reset":
             scope.reset_measurement_statistics()
-        elif action == "increment":
-            scope.increment_measurement_statistics()
         return _state_scope_result(
             "statistics",
             {

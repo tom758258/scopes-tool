@@ -618,8 +618,10 @@ def parse_statistics_mode(raw: str) -> str:
         "MAX": "max",
         "MEAN": "mean",
         "STDDEV": "stddev",
+        "STDD": "stddev",
         "SDEV": "stddev",
         "COUNT": "count",
+        "COUN": "count",
     }
     try:
         return aliases[normalized]

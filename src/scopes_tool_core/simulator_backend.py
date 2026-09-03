@@ -1239,7 +1239,27 @@ class SimulatorBackend:
         elif upper == ":MEASURE:STATISTICS:INCREMENT":
             pass
         elif upper.startswith(":MEASURE:STATISTICS "):
-            self.measurement_statistics_mode = command.rsplit(" ", 1)[1].upper()
+            token = command.rsplit(" ", 1)[1].strip().upper()
+            canonical = {
+                "ON": "ON",
+                "1": "ON",
+                "ALL": "ON",
+                "CURRENT": "CURR",
+                "CURR": "CURR",
+                "MINIMUM": "MIN",
+                "MIN": "MIN",
+                "MAXIMUM": "MAX",
+                "MAX": "MAX",
+                "MEAN": "MEAN",
+                "STDDEV": "STDD",
+                "STDD": "STDD",
+                "SDEV": "STDD",
+                "COUNT": "COUN",
+                "COUN": "COUN",
+            }.get(token)
+            if canonical is None:
+                raise SimulatorBackendError(f"Unsupported simulator write: {command}")
+            self.measurement_statistics_mode = canonical
         elif self._apply_measurement_install(command):
             pass
         elif re.fullmatch(r":WMEMORY[12]:SAVE CHANNEL\d+", upper):
@@ -2371,17 +2391,28 @@ class SimulatorBackend:
             minimum = value * 0.98
             maximum = value * 1.02
             stddev = abs(value) * 0.005
-            parts.extend(
-                [
-                    item,
-                    f"{value:.6E}",
-                    f"{minimum:.6E}",
-                    f"{maximum:.6E}",
-                    f"{value:.6E}",
-                    f"{stddev:.6E}",
-                    "16",
-                ]
-            )
+            values = {
+                "CURR": f"{value:.6E}",
+                "MIN": f"{minimum:.6E}",
+                "MAX": f"{maximum:.6E}",
+                "MEAN": f"{value:.6E}",
+                "STDD": f"{stddev:.6E}",
+                "COUN": "16",
+            }
+            if self.measurement_statistics_mode == "ON":
+                parts.extend(
+                    [
+                        item,
+                        values["CURR"],
+                        values["MIN"],
+                        values["MAX"],
+                        values["MEAN"],
+                        values["STDD"],
+                        values["COUN"],
+                    ]
+                )
+            else:
+                parts.append(values[self.measurement_statistics_mode])
         return ",".join(parts)
 
     def _apply_fft_write(self, command: str) -> bool:
