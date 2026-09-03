@@ -105,6 +105,8 @@ def test_result_history_has_powers_like_viewport_and_item_presentation() -> None
 def test_result_history_runtime_behaviour() -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+    assert '"enum.vpp": "Vp-p"' in english
+    assert '"enum.vpp": "Vp-p"' in chinese
     assert '"results.status.planned": "Planned"' in english
     assert '"results.status.instrument_error": "Instrument error"' in english
     assert '"results.status.planned": "已規劃"' in chinese
@@ -127,16 +129,18 @@ def test_result_history_runtime_behaviour() -> None:
             identify: "Read device information", run: "Run", screenshot: "Screenshot", capture: "Capture", listResources: "List resources", completed: "Completed", failed: "Failed", queued: "Queued", running: "Running", cancelled: "Cancelled",
             queuedSummary: "Waiting to run...", runningSummary: "Executing command...", completedSummary: "Command completed successfully", screenshotCaptured: "Screenshot captured", resourceNone: "No resources found", resourceMany: "4 resources found",
             serial: "serial {{serial}}", firmware: "firmware {{firmware}}", empty: "No command has been run yet.",
-            period: "Period", phase: "Phase", channel1: "Channel 1", channel2: "Channel 2",
-            measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", result: "Result", plannedScpi: "Planned SCPI",
+            period: "Period", phase: "Phase", vpp: "Vp-p", channel1: "Channel 1", channel2: "Channel 2",
+            measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", value: "Value", unit: "Unit", status: "Status", result: "Result", plannedScpi: "Planned SCPI",
+            validCount: "Valid count", invalidCount: "Invalid count", errorCount: "Error count", valid: "Valid", invalid: "Invalid", error: "Error",
             noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value", planned: "Planned", instrumentError: "Instrument error", integrate: "Integrate", fftPhase: "FFT phase", fftZoom: "Zoom",
           },
           "zh-TW": {
             identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d", cancelled: "\u5df2\u53d6\u6d88",
             queuedSummary: "\u7b49\u5f85\u57f7\u884c", runningSummary: "\u6b63\u5728\u57f7\u884c\u6307\u4ee4", completedSummary: "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210", screenshotCaptured: "\u756b\u9762\u5df2\u64f7\u53d6", resourceNone: "\u627e\u4e0d\u5230\u8cc7\u6e90", resourceMany: "\u627e\u5230 4 \u500b\u8cc7\u6e90",
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
-            period: "Period", phase: "Phase", channel1: "Channel 1", channel2: "Channel 2",
-            measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", result: "Result", plannedScpi: "Planned SCPI",
+            period: "Period", phase: "Phase", vpp: "Vp-p", channel1: "Channel 1", channel2: "Channel 2",
+            measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", value: "Value", unit: "Unit", status: "Status", result: "Result", plannedScpi: "Planned SCPI",
+            validCount: "Valid count", invalidCount: "Invalid count", errorCount: "Error count", valid: "Valid", invalid: "Invalid", error: "Error",
             noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c", planned: "\u5df2\u898f\u5283", instrumentError: "\u5100\u5668\u932f\u8aa4", integrate: "\u7a4d\u5206", fftPhase: "FFT \u76f8\u4f4d", fftZoom: "\u7e2e\u653e\u8996\u7a97",
           },
         };
@@ -164,7 +168,8 @@ def test_result_history_runtime_behaviour() -> None:
                                           : key === "results.summary.firmware" ? locale.firmware
                                          : key === "results.empty" ? locale.empty
                                            : key === "enum.period" ? locale.period
-                                             : key === "enum.phase" ? locale.phase
+                                            : key === "enum.phase" ? locale.phase
+                                              : key === "enum.vpp" ? locale.vpp
                                                : key === "enum.channel1" ? locale.channel1
                                                : key === "enum.channel2" ? locale.channel2
                                                  : key === "enum.math-transform.integrate" ? locale.integrate
@@ -172,10 +177,19 @@ def test_result_history_runtime_behaviour() -> None:
                                                      : key === "enum.fft-gate.zoom" ? locale.fftZoom
                                                    : key === "results.field.measurement" ? locale.measurement
                                                      : key === "results.field.channel" ? locale.channel
-                                                       : key === "results.field.reference_channel" ? locale.referenceChannel
+                                                        : key === "results.field.reference_channel" ? locale.referenceChannel
+                                                          : key === "results.field.value" ? locale.value
+                                                            : key === "results.field.unit" ? locale.unit
+                                                              : key === "results.field.status" ? locale.status
+                                                                : key === "results.field.valid_count" ? locale.validCount
+                                                                  : key === "results.field.invalid_count" ? locale.invalidCount
+                                                                    : key === "results.field.error_count" ? locale.errorCount
                                                          : key === "results.field.result" ? locale.result
                             : key === "results.field.planned_scpi" ? locale.plannedScpi
-                              : key === "results.status.noValidMeasurement" ? locale.noValidStatus
+                               : key === "results.status.noValidMeasurement" ? locale.noValidStatus
+                                 : key === "results.status.valid" ? locale.valid
+                                   : key === "results.status.invalid" ? locale.invalid
+                                     : key === "results.status.error" ? locale.error
                                 : key === "results.summary.noValidMeasurement" ? locale.noValidSummary
                                                               : key;
           return Object.entries(values).reduce(
@@ -185,11 +199,11 @@ def test_result_history_runtime_behaviour() -> None:
         };
         const hasTranslation = (key) => [
           "command.identify", "command.run", "command.screenshot", "command.capture", "command.list-resources",
-          "enum.period", "enum.phase", "enum.channel1", "enum.channel2",
+          "enum.period", "enum.phase", "enum.vpp", "enum.channel1", "enum.channel2",
           "enum.math-transform.integrate", "enum.fft-operation.fft-phase", "enum.fft-gate.zoom",
           "results.status.planned", "results.status.instrument_error", "status.completed",
-          "results.field.measurement", "results.field.channel", "results.field.reference_channel", "results.field.result", "results.field.planned_scpi",
-          "results.status.noValidMeasurement", "results.summary.noValidMeasurement",
+          "results.field.measurement", "results.field.channel", "results.field.reference_channel", "results.field.value", "results.field.unit", "results.field.status", "results.field.valid_count", "results.field.invalid_count", "results.field.error_count", "results.field.result", "results.field.planned_scpi",
+          "results.status.noValidMeasurement", "results.status.valid", "results.status.invalid", "results.status.error", "results.summary.noValidMeasurement",
         ].includes(key);
         const translateJobStatus = (status) => translate(`status.${status}`);
         globalThis.testTranslate = translate;
@@ -441,6 +455,37 @@ def test_result_history_runtime_behaviour() -> None:
           ["Phase", "Measurement"], ["Channel 1", "Channel"],
           ["Channel 2", "Reference channel"], ["32.4 deg", "Result"],
         ]);
+        const sweep = new FakeNode("div");
+        api.renderWorkspaceResult(sweep, makeJob("sweep", "measure-sweep", "completed", {
+          result: { result: {
+            channels: [1], items: ["vpp"], pairs: [], pair_items: [],
+            summary: { valid_count: 1, invalid_count: 1, error_count: 1 },
+            measurements: [
+              { item: "vpp", channel: 1, reference_channel: null, value: 3.2, unit: "V", valid: true, command: ":MEASure:VPP? CHANnel1" },
+              { item: "phase", channel: 1, reference_channel: 2, value: null, unit: "deg", valid: false, system_error: { code: 0 } },
+              { item: "phase", channel: 2, reference_channel: 1, value: null, unit: "deg", valid: false, error: { type: "VisaBackendError" }, command: ":MEASure:PHASe?" },
+            ],
+          } },
+        }));
+        assert.deepEqual(fieldTexts(sweep).slice(0, 3), [
+          ["1", "Valid count"], ["1", "Invalid count"], ["1", "Error count"],
+        ]);
+        const table = sweep.children[3];
+        assert.equal(table.tagName, "TABLE");
+        assert.deepEqual(table.children[0].children[0].children.map((cell) => cell.textContent), [
+          "Measurement", "Channel", "Reference channel", "Value", "Unit", "Status",
+        ]);
+        const rows = table.children[1].children.map(
+          (row) => row.children.map((cell) => cell.textContent),
+        );
+        assert.deepEqual(rows, [
+          ["Vp-p", "CH1", "—", "3.2", "V", "Valid"],
+          ["Phase", "CH1", "CH2", "—", "deg", "Invalid"],
+          ["Phase", "CH2", "CH1", "—", "deg", "Error"],
+        ]);
+        const simpleTableText = JSON.stringify(rows);
+        assert.equal(simpleTableText.includes(":MEASure:"), false);
+        assert.equal(simpleTableText.includes("system_error"), false);
         const dryRunMeasurement = new FakeNode("div");
         api.renderWorkspaceResult(dryRunMeasurement, measurementJob({
           planned_scpi: [":MEASure:PERiod? CHANnel1"],

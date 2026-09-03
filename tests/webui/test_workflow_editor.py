@@ -353,7 +353,7 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_workflow_run_requires_pair_measurements_without_pair_rows() -> None:
+def test_workflow_pair_measurements_are_required_only_with_pair_rows() -> None:
     run_editor_behavior(
         r'''
         const editor = buildEditor();
@@ -362,10 +362,37 @@ def test_workflow_run_requires_pair_measurements_without_pair_rows() -> None:
         editor.controls.count.value = "1";
         for (const input of editor.controls.pair_items) input.checked = false;
         assert.equal(editor.pairRows.length, 0);
+        assert.equal(editor.pairItemsSection.hidden, true);
         assert.equal(editor.checkedValues("items").length > 0, true);
 
         await editor.submit();
-        assert.equal(submissions.length, 0);
+        assert.equal(submissions.length, 1);
+        assert.equal(submissions[0].parameters.pair_items, "phase");
+
+        editor.addPairButton.dispatch("click");
+        assert.equal(editor.pairItemsSection.hidden, false);
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.equal(
+          editor.controls.pair_items[0].customValidity,
+          "workflow.editor.pairMeasurementRequired",
+        );
+
+        editor.controls.pair_items[0].checked = true;
+        editor.pairRows[0].reference.value = editor.pairRows[0].source.value;
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.equal(
+          editor.pairRows[0].reference.customValidity,
+          "workflow.editor.distinctPair",
+        );
+
+        editor.pairRows[0].remove.dispatch("click");
+        assert.equal(editor.pairRows.length, 0);
+        assert.equal(editor.pairItemsSection.hidden, true);
+        await editor.submit();
+        assert.equal(submissions.length, 2);
+        assert.equal(submissions[1].parameters.pair_items, "phase");
 
         env.selectedId = "triggered-measure-loop";
         editor.schedulePresentation();
@@ -377,7 +404,8 @@ def test_workflow_run_requires_pair_measurements_without_pair_rows() -> None:
         assert.equal(editor.checkedValues("items").length > 0, true);
 
         await editor.submit();
-        assert.equal(submissions.length, 0);
+        assert.equal(submissions.length, 3);
+        assert.equal(submissions[2].parameters.pair_items, "phase");
         ''',
     )
 

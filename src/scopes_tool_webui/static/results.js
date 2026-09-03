@@ -290,6 +290,10 @@ export function renderWorkspaceResult(container, job, context = {}) {
     renderMeasurementWorkspaceResult(container, result);
     return;
   }
+  if (job.command === "measure-sweep" && Array.isArray(result?.measurements)) {
+    renderMeasureSweepWorkspaceResult(container, result);
+    return;
+  }
   if (result && typeof result === "object") {
     const { display, context: resultContext } = structuredResultDisplay(result);
     const fields = Object.entries(display).filter(([name, value]) => {
@@ -430,6 +434,56 @@ function renderMeasurementWorkspaceResult(container, result) {
   const value = measurementResultValue(result);
   if (value) fields.push(["result", value]);
   appendWorkspaceFields(container, fields);
+}
+
+function renderMeasureSweepWorkspaceResult(container, result) {
+  const summary = result.summary || {};
+  appendWorkspaceFields(container, [
+    ["valid_count", summary.valid_count ?? 0],
+    ["invalid_count", summary.invalid_count ?? 0],
+    ["error_count", summary.error_count ?? 0],
+  ]);
+
+  const table = document.createElement("table");
+  table.className = "measurement-results-table workspace-result-field-wide";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const name of ["measurement", "channel", "reference_channel", "value", "unit", "status"]) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = resultFieldLabel(name);
+    headRow.append(cell);
+  }
+  head.append(headRow);
+
+  const body = document.createElement("tbody");
+  for (const record of result.measurements) {
+    const hasError = Boolean(record?.error);
+    const status = hasError
+      ? translate("results.status.error")
+      : translate(record?.valid ? "results.status.valid" : "results.status.invalid");
+    const values = [
+      measurementItemLabel(record?.item),
+      record?.channel === null || record?.channel === undefined ? "—" : `CH${record.channel}`,
+      record?.reference_channel === null || record?.reference_channel === undefined
+        ? "—"
+        : `CH${record.reference_channel}`,
+      record?.value === null || record?.value === undefined ? "—" : String(record.value),
+      record?.unit === null || record?.unit === undefined || record.unit === ""
+        ? "—"
+        : String(record.unit),
+      status,
+    ];
+    const row = document.createElement("tr");
+    for (const value of values) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.append(cell);
+    }
+    body.append(row);
+  }
+  table.append(head, body);
+  container.append(table);
 }
 
 function channelSummaryFieldLabel(name) {

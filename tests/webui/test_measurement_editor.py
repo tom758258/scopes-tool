@@ -75,8 +75,16 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           replaceChildren(...nodes) { this.children = [...nodes]; }
           addEventListener(_name, handler) { this.handler = handler; }
           setAttribute() {}
+          remove() {}
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.Option = class Option extends FakeNode {
+          constructor(label, value) {
+            super("option");
+            this.textContent = label;
+            this.value = String(value);
+          }
+        };
 
         globalThis.hasTranslation = () => false;
         globalThis.translate = (key) => key;
@@ -165,6 +173,18 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
             pair_items: ["phase", "delay"],
           },
         );
+        const sweepUi = new globalThis.MeasurementEditor(
+          new FakeNode("div"), catalog, {
+            isExecutionBusy: () => false,
+            isCommandAvailable: () => true,
+          },
+        );
+        sweepUi.renderSweep("simulate||keysight-dsox4024a|measure-sweep");
+        assert.equal(sweepUi.sweepPairItemsSection.hidden, true);
+        sweepUi.sweepAddPairButton.handler();
+        assert.equal(sweepUi.sweepPairItemsSection.hidden, false);
+        sweepUi.sweepPairRows[0].remove.handler();
+        assert.equal(sweepUi.sweepPairItemsSection.hidden, true);
         catalog.activeModelId = "keysight-dsox2004a";
         const sweepFields2000 = catalog.fieldsFor(sweepDefinition);
         assert.deepEqual(
@@ -263,8 +283,8 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const sweepCalls = [];
         let sweepBusy = false;
         const validControl = (value, checked = true) => ({
-          value, checked, disabled: false,
-          setCustomValidity() {},
+          value, checked, disabled: false, customValidity: "",
+          setCustomValidity(message) { this.customValidity = message; },
           checkValidity: () => true,
           reportValidity() {},
         });
@@ -323,6 +343,39 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(sweepEditor.sweepPairRows[0].reference.disabled, true);
         assert.equal(sweepEditor.sweepPairRows[0].remove.disabled, true);
         assert.equal(sweepEditor.sweepAddPairButton.disabled, true);
+
+        sweepBusy = false;
+        sweepCalls.length = 0;
+        sweepEditor.sweepPairRows = [];
+        for (const input of sweepEditor.sweepControls.pair_items) input.checked = false;
+        await sweepEditor.runMeasureSweep();
+        assert.deepEqual(sweepCalls, [["measure-sweep", {
+          channels: "1,2",
+          items: "vpp,frequency,period,vrms",
+          pair_items: "phase",
+        }]]);
+
+        sweepCalls.length = 0;
+        sweepEditor.sweepPairRows = [{
+          source: validControl("1"),
+          reference: validControl("2"),
+          remove: validControl("remove"),
+        }];
+        await sweepEditor.runMeasureSweep();
+        assert.deepEqual(sweepCalls, []);
+        assert.equal(
+          sweepEditor.sweepControls.pair_items[0].customValidity,
+          "workflow.editor.pairMeasurementRequired",
+        );
+
+        sweepEditor.sweepControls.pair_items[0].checked = true;
+        sweepEditor.sweepPairRows[0].reference.value = "1";
+        await sweepEditor.runMeasureSweep();
+        assert.deepEqual(sweepCalls, []);
+        assert.equal(
+          sweepEditor.sweepPairRows[0].reference.customValidity,
+          "workflow.editor.distinctPair",
+        );
 
         activeContext = "simulate||keysight-dsox2004a";
         assert.equal(editor.syncContext(), true);

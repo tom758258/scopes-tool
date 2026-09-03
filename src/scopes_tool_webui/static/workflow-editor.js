@@ -113,6 +113,12 @@ export class WorkflowEditor {
 
     const channelField = fieldByName(fields, "channels");
     const channels = (channelField.options || []).map(String);
+    this.pairItemsSection = this.buildChoiceSection(
+      "workflow.editor.pairMeasurements",
+      "pair_items",
+      fieldByName(fields, "pair_items").options || [],
+      draft.pair_items,
+    );
     this.container.append(
       this.buildChoiceSection(
         "workflow.editor.channels",
@@ -127,14 +133,10 @@ export class WorkflowEditor {
         draft.items,
       ),
       this.buildPairsSection(channels, draft.pairs),
-      this.buildChoiceSection(
-        "workflow.editor.pairMeasurements",
-        "pair_items",
-        fieldByName(fields, "pair_items").options || [],
-        draft.pair_items,
-      ),
+      this.pairItemsSection,
       this.buildLimitsSection(definition, fields, draft),
     );
+    this.updatePairItemsVisibility();
   }
 
   defaultDraft(fields) {
@@ -265,6 +267,7 @@ export class WorkflowEditor {
       const reference = channels.find((channel) => channel !== source) || source;
       this.appendPairRow(channels, { source, reference });
       this.captureDraft();
+      this.updatePairItemsVisibility();
       this.applyBusyState();
     });
     section.append(this.addPairButton);
@@ -288,12 +291,19 @@ export class WorkflowEditor {
       row.remove();
       this.pairRows = this.pairRows.filter((item) => item !== entry);
       this.captureDraft();
+      this.updatePairItemsVisibility();
     });
     source.input.addEventListener("change", () => this.captureDraft());
     reference.input.addEventListener("change", () => this.captureDraft());
     row.append(source.wrapper, reference.wrapper, remove);
     this.pairRows.push(entry);
     this.pairsHost.append(row);
+  }
+
+  updatePairItemsVisibility() {
+    if (this.pairItemsSection) {
+      this.pairItemsSection.hidden = this.pairRows.length === 0;
+    }
   }
 
   buildChannelSelect(name, channels, selected) {
@@ -593,18 +603,21 @@ export class WorkflowEditor {
       }
     }
     if (!draft.items.length) return null;
-    const pairItemControl = this.controls.pair_items[0];
+    const pairItemControl = this.controls.pair_items?.[0];
     pairItemControl?.setCustomValidity?.("");
-    if (!draft.pair_items.length) {
+    if (draft.pairs.length && !draft.pair_items.length) {
       pairItemControl?.setCustomValidity?.(
         translate("workflow.editor.pairMeasurementRequired"),
       );
       pairItemControl?.reportValidity?.();
       return null;
     }
+    const pairItems = draft.pair_items.length
+      ? draft.pair_items
+      : (this.controls.pair_items || []).slice(0, 1).map((input) => input.value);
     const parameters = {
       items: draft.items.join(","),
-      pair_items: draft.pair_items.join(","),
+      pair_items: pairItems.join(","),
       save_results: draft.save_results !== false,
     };
     if (draft.interval_seconds !== "") {

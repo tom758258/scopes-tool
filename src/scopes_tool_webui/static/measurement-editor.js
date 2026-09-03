@@ -215,6 +215,12 @@ export class MeasurementEditor {
     this.sweepRenderedKey = key;
     this.sweepControls = {};
     this.sweepPairRows = [];
+    this.sweepPairItemsSection = this.buildSweepChoiceSection(
+      "workflow.editor.pairMeasurements",
+      "pair_items",
+      fieldByName(fields, "pair_items").options || [],
+      draft.pair_items,
+    );
     this.container.replaceChildren(
       this.buildSweepChoiceSection(
         "workflow.editor.channels",
@@ -232,13 +238,9 @@ export class MeasurementEditor {
         (fieldByName(fields, "channels").options || []).map(String),
         draft.pairs,
       ),
-      this.buildSweepChoiceSection(
-        "workflow.editor.pairMeasurements",
-        "pair_items",
-        fieldByName(fields, "pair_items").options || [],
-        draft.pair_items,
-      ),
+      this.sweepPairItemsSection,
     );
+    this.updateSweepPairItemsVisibility();
   }
 
   defaultSweepDraft(fields) {
@@ -321,6 +323,7 @@ export class MeasurementEditor {
       const reference = channels.find((channel) => channel !== source) || source;
       this.appendSweepPairRow(channels, { source, reference });
       this.captureSweepDraft();
+      this.updateSweepPairItemsVisibility();
       this.applyBusyState();
     });
     section.append(this.sweepAddPairButton);
@@ -344,12 +347,19 @@ export class MeasurementEditor {
       row.remove();
       this.sweepPairRows = this.sweepPairRows.filter((item) => item !== entry);
       this.captureSweepDraft();
+      this.updateSweepPairItemsVisibility();
     });
     source.input.addEventListener("change", () => this.captureSweepDraft());
     reference.input.addEventListener("change", () => this.captureSweepDraft());
     row.append(source.wrapper, reference.wrapper, remove);
     this.sweepPairRows.push(entry);
     this.sweepPairsHost.append(row);
+  }
+
+  updateSweepPairItemsVisibility() {
+    if (this.sweepPairItemsSection) {
+      this.sweepPairItemsSection.hidden = this.sweepPairRows.length === 0;
+    }
   }
 
   buildSweepChannelSelect(name, channels, selected) {
@@ -383,7 +393,7 @@ export class MeasurementEditor {
   sweepValues() {
     this.captureSweepDraft();
     const draft = this.sweepDrafts.get(this.sweepRenderedKey);
-    if (!draft || !draft.items.length || !draft.pair_items.length) return null;
+    if (!draft || !draft.items.length) return null;
     for (const row of this.sweepPairRows) {
       row.reference.setCustomValidity("");
       if (row.source.value === row.reference.value) {
@@ -392,9 +402,21 @@ export class MeasurementEditor {
         return null;
       }
     }
+    const pairItemControl = this.sweepControls.pair_items?.[0];
+    pairItemControl?.setCustomValidity?.("");
+    if (draft.pairs.length && !draft.pair_items.length) {
+      pairItemControl?.setCustomValidity?.(
+        translate("workflow.editor.pairMeasurementRequired"),
+      );
+      pairItemControl?.reportValidity?.();
+      return null;
+    }
+    const pairItems = draft.pair_items.length
+      ? draft.pair_items
+      : (this.sweepControls.pair_items || []).slice(0, 1).map((input) => input.value);
     const parameters = {
       items: draft.items.join(","),
-      pair_items: draft.pair_items.join(","),
+      pair_items: pairItems.join(","),
     };
     if (draft.channels.length) parameters.channels = draft.channels.join(",");
     if (draft.pairs.length) {
