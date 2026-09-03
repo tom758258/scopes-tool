@@ -3909,10 +3909,12 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
             $snapshotRsd = if ([bool]$statistics.snapshot_relative_stddev) { "1" } else { "0" }
             try {
                 $stats = Invoke-LiveCli -Stage "measure-stats" -Command "measure-stats" -Arguments @(
-                    "--channel", "1", "--items", "vpp,frequency", "--mode", "all", "--reset"
+                    "--channel", "1", "--items", "vpp,frequency", "--mode", "all", "--reset",
+                    "--max-count", "2000"
                 )
                 Assert-ScpiSent -Payload $stats -Label "Measurement statistics" -ExpectedCommands @(
-                    ":MEASure:CLEar", ":MEASure:VPP", ":MEASure:FREQuency"
+                    ":MEASure:CLEar", ":MEASure:VPP", ":MEASure:FREQuency",
+                    ":MEASure:STATistics:MCOUnt 2000"
                 )
                 if ([int]$stats.result.channel -ne 1 -or
                     [string]$stats.result.mode -ne "all") {

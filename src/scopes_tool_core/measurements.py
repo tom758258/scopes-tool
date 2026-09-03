@@ -1076,15 +1076,53 @@ def parse_statistics_results(
 ) -> MeasurementStatisticsResult:
     """Parse :MEASure:RESults? into one row per requested item.
 
-    Keysight returns comma-separated front-panel statistics. The simulator and
-    common firmware shape are item/current/min/max/mean/stddev/count repeated.
-    If the instrument omits item labels, requested item order is used.
+    All mode returns item/current/min/max/mean/stddev/count records. Other
+    modes return one value per requested item in requested order.
     """
 
+    normalized_mode = normalize_statistics_mode(mode)
     tokens = tuple(token.strip().strip('"') for token in raw.split(",") if token.strip())
+    requested = tuple(items)
+    if normalized_mode != "all":
+        if not tokens:
+            return MeasurementStatisticsResult(
+                channel=channel,
+                mode=normalized_mode,
+                records=(),
+                raw_response=raw,
+            )
+        if len(tokens) != len(requested):
+            raise MeasurementResponseError(
+                f"Could not parse measurement statistics response: {raw!r}"
+            )
+
+        records = []
+        for item, value in zip(requested, tokens):
+            count = _parse_optional_count(value) if normalized_mode == "count" else None
+            statistic = (
+                None if normalized_mode == "count" else _parse_optional_float(value)
+            )
+            records.append(
+                MeasurementStatisticsRecord(
+                    item=item,
+                    current=statistic if normalized_mode == "current" else None,
+                    minimum=statistic if normalized_mode == "min" else None,
+                    maximum=statistic if normalized_mode == "max" else None,
+                    mean=statistic if normalized_mode == "mean" else None,
+                    stddev=statistic if normalized_mode == "stddev" else None,
+                    count=count,
+                    raw_values=(value,),
+                )
+            )
+        return MeasurementStatisticsResult(
+            channel=channel,
+            mode=normalized_mode,
+            records=tuple(records),
+            raw_response=raw,
+        )
+
     records: list[MeasurementStatisticsRecord] = []
     index = 0
-    requested = tuple(items)
     while index < len(tokens):
         remaining = len(tokens) - index
         item = requested[len(records)] if len(records) < len(requested) else f"item_{len(records) + 1}"
@@ -1113,7 +1151,7 @@ def parse_statistics_results(
         )
     return MeasurementStatisticsResult(
         channel=channel,
-        mode=normalize_statistics_mode(mode),
+        mode=normalized_mode,
         records=tuple(records),
         raw_response=raw,
     )

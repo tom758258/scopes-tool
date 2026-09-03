@@ -23,6 +23,8 @@ from scopes_tool_core.measurements import (
     validate_statistics_items,
 )
 from scopes_tool_core.scpi import SCPIClient
+from scopes_tool_core.scope import Oscilloscope
+from scopes_tool_core.simulator_backend import SimulatorBackend
 
 
 def test_measurement_query_uses_keysight_measure_syntax():
@@ -344,6 +346,67 @@ def test_parse_statistics_results_accepts_keysight_front_panel_labels():
     assert result.records[1].current == pytest.approx(1000.0)
     assert result.records[1].minimum is None
     assert result.records[1].count == 1
+
+
+def test_parse_statistics_results_maps_stddev_values_by_requested_order():
+    result = parse_statistics_results(
+        "1.2E-3,4.5E+1",
+        channel=1,
+        items=("vpp", "frequency"),
+        mode="stddev",
+    )
+
+    assert [record.item for record in result.records] == ["vpp", "frequency"]
+    assert [record.stddev for record in result.records] == pytest.approx([0.0012, 45.0])
+    for record in result.records:
+        assert record.current is None
+        assert record.minimum is None
+        assert record.maximum is None
+        assert record.mean is None
+        assert record.count is None
+    assert [record.raw_values for record in result.records] == [
+        ("1.2E-3",),
+        ("4.5E+1",),
+    ]
+
+
+def test_parse_statistics_results_count_preserves_integer_and_sentinel_conventions():
+    result = parse_statistics_results(
+        "12,9.9E+37",
+        channel=1,
+        items=("vpp", "frequency"),
+        mode="count",
+    )
+
+    assert [record.count for record in result.records] == [12, None]
+
+
+def test_parse_statistics_results_rejects_non_all_value_count_mismatch():
+    with pytest.raises(MeasurementResponseError):
+        parse_statistics_results(
+            "1.2E-3",
+            channel=1,
+            items=("vpp", "frequency"),
+            mode="stddev",
+        )
+
+
+def test_measurement_statistics_parses_simulator_non_all_response():
+    scope = Oscilloscope(
+        SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    )
+    scope.query_idn()
+
+    result = scope.query_measurement_statistics(
+        1,
+        ("vpp", "frequency"),
+        mode="stddev",
+    )
+
+    assert [record.item for record in result.records] == ["vpp", "frequency"]
+    assert all(record.stddev is not None for record in result.records)
+    assert all(len(record.raw_values) == 1 for record in result.records)
+    assert all(record.current is None for record in result.records)
 
 
 def test_measurement_controller_queries_vpp_for_channel():

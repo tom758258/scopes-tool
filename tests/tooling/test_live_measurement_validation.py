@@ -55,6 +55,8 @@ def test_measure_statistics_uses_capability_gate() -> None:
     assert "query_measurement_statistics_state" in stats
     assert '-Command "measure-stats"' in stats
     assert '"--mode", "all", "--reset"' in stats
+    assert '"--max-count", "2000"' in stats
+    assert '":MEASure:STATistics:MCOUnt 2000"' in stats
     assert 'configure_measurement_statistics_mode("stddev")' in stats
     assert 'raw_mode.upper() == "STDD"' in stats
     assert "configure_measurement_statistics_display" in stats
