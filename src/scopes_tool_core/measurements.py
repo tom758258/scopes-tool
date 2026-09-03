@@ -729,6 +729,9 @@ def measurement_install_command(
         raise ParameterValidationError(
             f"{item} cannot be installed as a single-channel front-panel measurement."
         )
+    if item == "ac_rms":
+        # Explicit DISPlay,AC is required: omitting the RMS type defaults to DC.
+        return ":MEASure:VRMS DISPlay,AC"
     query = _MEASUREMENT_QUERY_TEMPLATES[item]
     command = query.replace("?", "", 1).split(" ", 1)[0]
     return command

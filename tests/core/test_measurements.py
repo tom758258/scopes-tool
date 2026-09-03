@@ -300,6 +300,8 @@ def test_statistics_helpers_reject_parameterized_or_pair_items():
 
 def test_measurement_install_command_uses_measure_command_without_query_suffix():
     assert measurement_install_command("frequency") == ":MEASure:FREQuency"
+    assert measurement_install_command("vrms") == ":MEASure:VRMS"
+    assert measurement_install_command("ac_rms") == ":MEASure:VRMS DISPlay,AC"
     with pytest.raises(ParameterValidationError, match="area measurement is not supported"):
         measurement_install_command(
             "area", capabilities=capabilities_for_model("DSOX2004A")

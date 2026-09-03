@@ -80,6 +80,23 @@ def test_measure_statistics_uses_capability_gate() -> None:
     assert "$snapshotMaxCount $snapshotRsd 2>&1" in stats
 
 
+def test_measure_controls_validates_public_install_without_auto_clear() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+    controls = _case_block(script, "measure-controls", "cursor-lifecycle")
+
+    assert '-Command "measure-install"' in controls
+    assert '"--source-channel", "1", "--item", "frequency"' in controls
+    assert '":MEASure:SOURce CHANnel1"' in controls
+    assert '":MEASure:FREQuency"' in controls
+    # The no-clear assertion must be scoped to the install invocation because
+    # the same case intentionally runs measure-clear afterwards.
+    assert "@($install.scpi.sent) -contains" in controls
+    assert "measure-install unexpectedly cleared existing measurements." in controls
+    assert controls.index('-Command "measure-install"') < controls.index(
+        '-Command "measure-clear"'
+    )
+
+
 def test_pair_measurements_remain_strict() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 

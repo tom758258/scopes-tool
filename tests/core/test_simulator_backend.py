@@ -517,6 +517,17 @@ def test_simulator_measurement_statistics_uses_canonical_mode_readbacks():
     assert backend.query(":MEASure:STATistics?") == "COUN"
 
 
+def test_simulator_installs_explicit_rms_type_without_widening_generic_installs():
+    backend = SimulatorBackend()
+
+    backend.write(":MEASure:VRMS DISPlay,AC")
+    backend.write(":MEASure:VRMS DISPlay,DC")
+
+    assert backend.measurement_statistics_items == ["ac_rms", "vrms"]
+    with pytest.raises(SimulatorBackendError, match="Unsupported simulator write"):
+        backend.write(":MEASure:VPP DISPlay,AC")
+
+
 def test_simulator_measurement_results_shape_follows_statistics_mode():
     backend = SimulatorBackend()
     backend.measurement_statistics_items = ["vpp", "frequency"]

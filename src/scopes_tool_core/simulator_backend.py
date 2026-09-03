@@ -2374,6 +2374,17 @@ class SimulatorBackend:
         return items.get(normalized)
 
     def _apply_measurement_install(self, command: str) -> bool:
+        rms_match = re.fullmatch(
+            r":MEASure:VRMS\s+DISPlay\s*,\s*(AC|DC)",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if rms_match:
+            item = self._single_measurement_item("VRMS", rms_match.group(1))
+            if item is None:
+                return False
+            self.measurement_statistics_items.append(item)
+            return True
         match = re.fullmatch(r":MEASure:([A-Za-z]+)", command, flags=re.IGNORECASE)
         if not match:
             return False
