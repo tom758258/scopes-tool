@@ -334,6 +334,7 @@ def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
         assert.equal(submitted.length, countBeforeInput);
 
         const countBeforeRerender = submitted.length;
+        editor.schedulePresentation();
         editor.rerender();
         await settle();
         assert.equal(editor.segmentInput.value, "20");
@@ -404,6 +405,7 @@ def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
         editor.segmentInput.dispatch("input");
         contextKey = "simulate||keysight-dsox3024a";
         const countBeforeContextRerender = submitted.length;
+        editor.schedulePresentation();
         editor.rerender();
         await settle();
         assert.equal(editor.segmentInput.value, "");

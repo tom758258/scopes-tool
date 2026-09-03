@@ -179,14 +179,16 @@ export class SegmentedEditor {
     this.buildDom();
     if (countValue !== "") this.countInput.value = countValue;
     this.present();
-    if (
-      segmentValue !== ""
-      && contextKey === this.contextKey
-      && this.browserAvailable()
-    ) {
-      this.segmentInput.value = segmentValue;
-      this.applyBusyState();
-    }
+    queueMicrotask(() => {
+      if (
+        segmentValue !== ""
+        && contextKey === this.contextKey
+        && this.browserAvailable()
+      ) {
+        this.segmentInput.value = segmentValue;
+        this.applyBusyState();
+      }
+    });
   }
 
   present() {
