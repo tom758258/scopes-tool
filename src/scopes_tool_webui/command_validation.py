@@ -24,7 +24,16 @@ from scopes_tool_core.channel import (
     validate_probe_ratio,
     validate_probe_skew,
 )
-from scopes_tool_core.display import validate_display_intensity, validate_display_persistence
+from scopes_tool_core.display import (
+    normalize_annotation_background,
+    normalize_annotation_color,
+    validate_annotation_slot,
+    validate_annotation_text,
+    validate_annotation_x,
+    validate_annotation_y,
+    validate_display_intensity,
+    validate_display_persistence,
+)
 from scopes_tool_core.dvm import normalize_dvm_mode
 from scopes_tool_core.fft import fft_configure_commands
 from scopes_tool_core.identity import physical_model_for_id
@@ -148,6 +157,13 @@ from scopes_tool_core.trigger import (
     validate_tv_line,
     validate_tv_source_channel,
     validate_trigger_wait_config,
+)
+from scopes_tool_core.wgen import (
+    validate_wgen_amplitude,
+    validate_wgen_frequency,
+    validate_wgen_function,
+    validate_wgen_load,
+    validate_wgen_offset,
 )
 
 from .command_catalog import (
@@ -1231,6 +1247,129 @@ def _validate_parameters(
             )
         except Exception as exc:
             raise WebUIRequestError(str(exc)) from exc
+    elif command == "cursor":
+        action = parameters.setdefault("action", "query")
+        if action not in {"query", "set", "off"}:
+            raise WebUIRequestError("cursor action must be query, set, or off")
+        if action == "set":
+            for name in ("source_channel", "x1", "x2"):
+                _require_parameter(parameters, name, command)
+            try:
+                parameters["source_channel"] = validate_analog_channel(
+                    _integer(parameters["source_channel"], "source_channel"),
+                    capabilities,
+                )
+                parameters["x1"] = _finite_number(parameters["x1"], "x1")
+                parameters["x2"] = _finite_number(parameters["x2"], "x2")
+                if parameters.get("y1") is not None:
+                    parameters["y1"] = _finite_number(parameters["y1"], "y1")
+                if parameters.get("y2") is not None:
+                    parameters["y2"] = _finite_number(parameters["y2"], "y2")
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            unexpected = next(
+                (
+                    name
+                    for name in ("source_channel", "x1", "x2", "y1", "y2")
+                    if name in parameters
+                ),
+                None,
+            )
+            if unexpected is not None:
+                raise WebUIRequestError(f"cursor {action} cannot include {unexpected}")
+    elif command == "annotation":
+        action = parameters.setdefault("action", "query")
+        if action not in {"query", "set", "on", "off", "clear"}:
+            raise WebUIRequestError(
+                "annotation action must be query, set, on, off, or clear"
+            )
+        try:
+            parameters["slot"] = validate_annotation_slot(
+                _integer(parameters.get("slot", 1), "slot"), capabilities
+            )
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
+        setter_names = ("text", "color", "background", "x", "y")
+        if action == "set":
+            provided = [
+                name for name in setter_names if parameters.get(name) is not None
+            ]
+            if not provided:
+                raise WebUIRequestError(
+                    "annotation set requires at least one of text, color, background, x, or y"
+                )
+            try:
+                if parameters.get("text") is not None:
+                    parameters["text"] = validate_annotation_text(parameters["text"])
+                if parameters.get("color") is not None:
+                    parameters["color"] = normalize_annotation_color(parameters["color"])
+                if parameters.get("background") is not None:
+                    parameters["background"] = normalize_annotation_background(
+                        parameters["background"]
+                    )
+                if parameters.get("x") is not None:
+                    parameters["x"] = validate_annotation_x(
+                        _integer(parameters["x"], "x")
+                    )
+                if parameters.get("y") is not None:
+                    parameters["y"] = validate_annotation_y(
+                        _integer(parameters["y"], "y")
+                    )
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            unexpected = next(
+                (name for name in setter_names if name in parameters), None
+            )
+            if unexpected is not None:
+                raise WebUIRequestError(
+                    f"annotation {action} cannot include {unexpected}"
+                )
+    elif command in {
+        "wgen-output",
+        "wgen-function",
+        "wgen-frequency",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-load",
+    }:
+        action = _action(parameters, command)
+        value_name = {
+            "wgen-output": "enabled",
+            "wgen-function": "function",
+            "wgen-frequency": "frequency_hz",
+            "wgen-voltage": "amplitude",
+            "wgen-offset": "offset_volts",
+            "wgen-load": "load",
+        }[command]
+        if action == "set":
+            _require_parameter(parameters, value_name, command)
+            try:
+                if command == "wgen-output":
+                    _require_boolean(parameters[value_name], value_name)
+                elif command == "wgen-function":
+                    parameters[value_name] = validate_wgen_function(
+                        parameters[value_name]
+                    )
+                elif command == "wgen-frequency":
+                    parameters[value_name] = validate_wgen_frequency(
+                        _finite_number(parameters[value_name], value_name)
+                    )
+                elif command == "wgen-voltage":
+                    parameters[value_name] = validate_wgen_amplitude(
+                        _finite_number(parameters[value_name], value_name)
+                    )
+                elif command == "wgen-offset":
+                    parameters[value_name] = validate_wgen_offset(
+                        _finite_number(parameters[value_name], value_name)
+                    )
+                else:
+                    parameters[value_name] = validate_wgen_load(parameters[value_name])
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            _reject_query_parameters(parameters, (value_name,), command)
     elif command in {
         "save-pwd",
         "save-filename",

@@ -73,6 +73,7 @@ from scopes_tool_core.serial import (
     UART_TRIGGER_TYPES,
 )
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
+from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS
 
 
 _DIRECT_MEASUREMENT_ITEMS = INSTALLABLE_MEASUREMENT_ITEMS
@@ -1161,6 +1162,120 @@ COMMANDS = (
             {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
         ),
     },
+    {
+        "id": "cursor",
+        "category": "Cursor",
+        "label": "Cursor",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set", "off"), "default": "query"},
+            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.source_channel"},
+            {"name": "x1", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.x1"},
+            {"name": "x2", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.x2"},
+            {"name": "y1", "type": "number", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.y1"},
+            {"name": "y2", "type": "number", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.y2"},
+        ),
+        "group": "cursor",
+        "editor": "cursor",
+    },
+    {
+        "id": "annotation",
+        "category": "Annotation",
+        "label": "Annotation",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set", "on", "off", "clear"), "default": "query"},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 10, "options": (1,), "default": 1, "label_key": "annotation.slot", "option_label": "annotation-slot", "help_key": "annotation.slot"},
+            {"name": "text", "type": "string", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.text"},
+            {"name": "color", "type": "string", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.color"},
+            {"name": "background", "type": "string", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.background"},
+            {"name": "x", "type": "integer", "minimum": 0, "maximum": 800, "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.x"},
+            {"name": "y", "type": "integer", "minimum": 0, "maximum": 480, "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.y"},
+        ),
+        "group": "annotation",
+        "editor": "annotation",
+    },
+    {
+        "id": "wgen-query",
+        "category": "WGEN",
+        "label": "Waveform generator state",
+        "modes": ("live", "simulate"),
+        "fields": (),
+        "group": "wgen",
+        "editor": "wgen",
+    },
+    {
+        "id": "wgen-output",
+        "category": "WGEN",
+        "label": "Generator output",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-output.enabled"},
+        ),
+        "group": "wgen",
+        "editor": "wgen",
+    },
+    {
+        "id": "wgen-function",
+        "category": "WGEN",
+        "label": "Generator function",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "function", "type": "enum", "options": WGEN_FUNCTIONS, "option_label": "wgen-function", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-function.function"},
+        ),
+        "group": "wgen",
+        "editor": "wgen",
+    },
+    {
+        "id": "wgen-frequency",
+        "category": "WGEN",
+        "label": "Generator frequency",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "frequency_hz", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-frequency.frequency_hz"},
+        ),
+        "group": "wgen",
+        "editor": "wgen",
+    },
+    {
+        "id": "wgen-voltage",
+        "category": "WGEN",
+        "label": "Generator amplitude",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "amplitude", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-voltage.amplitude"},
+        ),
+        "group": "wgen",
+        "editor": "wgen",
+    },
+    {
+        "id": "wgen-offset",
+        "category": "WGEN",
+        "label": "Generator offset",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "offset_volts", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-offset.offset_volts"},
+        ),
+        "group": "wgen",
+        "editor": "wgen",
+    },
+    {
+        "id": "wgen-load",
+        "category": "WGEN",
+        "label": "Generator load",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "load", "type": "enum", "options": WGEN_LOADS, "option_label": "wgen-load", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-load.load"},
+        ),
+        "group": "wgen",
+        "editor": "wgen",
+    },
 )
 
 
@@ -1646,6 +1761,7 @@ _READ_COMMANDS = frozenset(
         "system-options",
         "dvm-current",
         "dvm-query",
+        "wgen-query",
         "external-trigger-settings",
         "search-count",
         "serial-query",
@@ -1824,6 +1940,13 @@ def _model_command_presentation(
         if name == "slot" and capabilities.reference_waveforms:
             override["maximum"] = capabilities.reference_waveforms
             override["options"] = tuple(range(1, capabilities.reference_waveforms + 1))
+        if entry["id"] == "annotation" and name == "slot" and capabilities.annotation_slots:
+            override["maximum"] = capabilities.annotation_slots
+            override["options"] = tuple(range(1, capabilities.annotation_slots + 1))
+            if capabilities.annotation_slots <= 1:
+                override["hidden"] = True
+        if entry["id"] == "annotation" and name in ("x", "y") and not capabilities.supports_annotation_position:
+            override["hidden"] = True
         if entry["id"] == "channel-impedance" and name == "impedance":
             override["options"] = (
                 ("one_meg", "fifty")
@@ -1935,6 +2058,10 @@ def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: A
         return capabilities.supports_serial_decode and capabilities.serial_bus_count > 0
     if category == "Segmented Memory":
         return capabilities.supports_segmented_memory
+    if category == "Annotation":
+        return capabilities.supports_annotation
+    if category == "WGEN":
+        return capabilities.supports_wgen
     if category == "FFT / MATH":
         if command_id == "math-composite-source":
             return capabilities.supports_math_goft

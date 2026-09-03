@@ -160,6 +160,15 @@ The Command workbench exposes:
 - Segmented Memory: a dedicated state view for explicit Refresh, Enter, Exit,
   segment selection, and current Time Tag readback over `segmented-memory`,
   plus `segmented-capture`
+- Cursor: a dedicated Cursor editor for explicit Refresh, manual cursor
+  configuration over `cursor` (query, set, off), and current state readback
+- Annotation: a dedicated Annotation editor for explicit Refresh, annotation
+  text/color/background editing, on/off/clear actions, and current state
+  readback over `annotation`, with slot and position controls projected from
+  Core capabilities
+- WGEN: a dedicated Waveform Generator editor for explicit Refresh through the
+  aggregate `wgen-query` and independent output, function, frequency,
+  amplitude, offset, and load settings; settings never switch the output on
 - Workflow: `capture-batch`, `capture-until`, `capture-monitor`, `measure-log`,
   `measure-until`, `triggered-measure-loop`, and
   `triggered-capture-series`, plus Generic Sequence v1 under Automation
@@ -168,7 +177,8 @@ Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
 
 The Command Browser keeps Category as its first level. Categories with group
-metadata (Trigger, Search, Serial, and Workflow) show
+metadata (Trigger, Search, Serial, Workflow, Cursor, Annotation, and WGEN)
+show
 Category → Group → Commands sections, while categories without group metadata
 keep the plain Category → Commands list. Groups start expanded and can be
 collapsed and reopened; collapse state lives only in the current page session
@@ -307,6 +317,21 @@ the existing host-side raw CSV retrieval with its registered job artifact. Its
 filename-only field writes under the PC output folder selected in Basic
 Controls and fails rather than overwriting an existing file with that name.
 
+Selecting a Cursor, Annotation, or WGEN command opens the matching dedicated
+editor instead of a plain command form. The Command Browser remains the only
+navigation; the editors add no second tab layer. Cursor offers explicit
+Refresh, manual cursor configuration (source channel, X1/X2, optional Y1/Y2),
+Off, and current state readback (mode, positions, deltas, and DYDX where the
+instrument reports it). Annotation offers explicit Refresh, text/color/
+background editing, on/off/clear actions, and current state readback; the slot
+selector is hidden on single-slot models and X/Y position controls appear only
+where Core capabilities report position support. WGEN Refresh reads the whole
+generator state through the single aggregate `wgen-query`; output, function,
+frequency, amplitude, offset, and load each keep an independent Apply over
+their existing command, and applying a setting never switches the output on.
+Unsupported commands stay disabled in the Command Browser with the existing
+capability reason.
+
 Selecting Save / Export opens one workspace with Default save location, Image,
 and Waveform sections. The underlying commands remain available to the
 workspace but are hidden from the Command Browser. Selection is
@@ -338,8 +363,8 @@ pair-measurement choices. For `measure-log` and `triggered-measure-loop`, the
 dedicated Workflow editor provides the corresponding workflow controls.
 Periodic Capture (`capture-batch`), Measure Until, and Triggered Capture Series
 use the dedicated Workflow editor. Trigger, Search, Serial, Segmented Memory,
-and Workflow commands use only the conditional visibility needed by their
-existing Core parameter semantics.
+Workflow, Cursor, Annotation, and WGEN commands use only the conditional
+visibility needed by their existing Core parameter semantics.
 
 Commands that expose the existing Core `query` / `set` contract as an
 instrument setting use a read-edit-Apply workflow in the browser. Command
@@ -465,8 +490,8 @@ information command.
 
 Advanced or diagnostic CLI paths are not automatically browser commands.
 Current intentional omissions include direct SCPI sending, setup recall/save,
-autoscale and broad cleanup operations, worker/doctor/hardware-report tooling,
-Cursor and Annotation editors, and WGEN controls. Acquisition points, record
+autoscale and broad cleanup operations, and worker/doctor/hardware-report
+tooling. Acquisition points, record
 length, acquisition sample-rate controls,
 and similar low-level information remain CLI/Core paths until a coherent WebUI
 presentation is defined. These omissions avoid exposing a Core operation without

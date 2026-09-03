@@ -13,7 +13,10 @@ import {
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { renderInstrumentSummary } from "/static/live-data.js";
+import { AnnotationEditor } from "/static/annotation-editor.js";
+import { CursorEditor } from "/static/cursor-editor.js";
 import { MeasurementEditor } from "/static/measurement-editor.js";
+import { WgenEditor } from "/static/wgen-editor.js";
 import {
   pcOutputContext,
   pcOutputDirectory,
@@ -81,6 +84,9 @@ const elements = {
   workflowEditor: document.querySelector("#workflow-editor"),
   sequenceEditor: document.querySelector("#sequence-editor"),
   measurementEditor: document.querySelector("#measurement-editor"),
+  cursorEditor: document.querySelector("#cursor-editor"),
+  annotationEditor: document.querySelector("#annotation-editor"),
+  wgenEditor: document.querySelector("#wgen-editor"),
   workspaceHeaderActions: document.querySelector("#workspace-header-actions"),
   refresh: document.querySelector("#refresh-button"),
   execute: document.querySelector("#execute-button"),
@@ -119,6 +125,9 @@ let segmentedEditor;
 let workflowEditor;
 let sequenceEditor;
 let measurementEditor;
+let cursorEditor;
+let annotationEditor;
+let wgenEditor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -144,6 +153,9 @@ const EDITOR_RENDERERS = {
   workflow: () => workflowEditor,
   sequence: () => sequenceEditor,
   measurement: () => measurementEditor,
+  cursor: () => cursorEditor,
+  annotation: () => annotationEditor,
+  wgen: () => wgenEditor,
 };
 
 function editorKindFor(command) {
@@ -271,6 +283,39 @@ async function initialize() {
     isCommandAvailable: commandAvailable,
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     mode: () => context.mode,
+    selectedCommand: () => catalog.selected(),
+  });
+  cursorEditor = new CursorEditor(elements.cursorEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  annotationEditor = new AnnotationEditor(elements.annotationEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  wgenEditor = new WgenEditor(elements.wgenEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     selectedCommand: () => catalog.selected(),
   });
   catalog.render();
@@ -719,6 +764,9 @@ document.addEventListener("localechange", () => {
   workflowEditor?.rerender();
   sequenceEditor?.rerender();
   measurementEditor?.rerender();
+  cursorEditor?.rerender();
+  annotationEditor?.rerender();
+  wgenEditor?.rerender();
   syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
 });
@@ -746,6 +794,9 @@ function syncCommandSelection(draft = null) {
   elements.workflowEditor.hidden = editorKind !== "workflow";
   if (elements.sequenceEditor) elements.sequenceEditor.hidden = editorKind !== "sequence";
   elements.measurementEditor.hidden = editorKind !== "measurement";
+  elements.cursorEditor.hidden = editorKind !== "cursor";
+  elements.annotationEditor.hidden = editorKind !== "annotation";
+  elements.wgenEditor.hidden = editorKind !== "wgen";
   syncWorkspaceHeaderActions(editorKind);
   elements.selectedCommand.textContent = selected
     ? editorOwned
@@ -834,6 +885,9 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = editorKind !== "segmented";
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
   if (sequenceEditor?.executeButton) sequenceEditor.executeButton.hidden = editorKind !== "sequence";
+  if (cursorEditor?.refreshButton) cursorEditor.refreshButton.hidden = editorKind !== "cursor";
+  if (annotationEditor?.refreshButton) annotationEditor.refreshButton.hidden = editorKind !== "annotation";
+  if (wgenEditor?.refreshButton) wgenEditor.refreshButton.hidden = editorKind !== "wgen";
 }
 
 function syncEditorPresentation(editorKind) {
@@ -846,6 +900,9 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "workflow") workflowEditor?.schedulePresentation();
   if (editorKind === "sequence") sequenceEditor?.schedulePresentation();
   if (editorKind === "measurement") measurementEditor?.schedulePresentation();
+  if (editorKind === "cursor") cursorEditor?.schedulePresentation();
+  if (editorKind === "annotation") annotationEditor?.schedulePresentation();
+  if (editorKind === "wgen") wgenEditor?.schedulePresentation();
 }
 
 function commandAction(command) {

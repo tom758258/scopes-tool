@@ -593,6 +593,66 @@ def _execute_scope_command(
         return _state_scope_result(
             "reference", scope.query_reference_waveform(parameters["slot"])
         )
+    if command == "cursor":
+        action = parameters["action"]
+        if action == "set":
+            scope.configure_cursor(
+                parameters["source_channel"],
+                parameters["x1"],
+                parameters["x2"],
+                y1_volts=parameters.get("y1"),
+                y2_volts=parameters.get("y2"),
+            )
+        elif action == "off":
+            scope.cursor_off()
+        return _state_scope_result("cursor", scope.query_cursor())
+    if command == "annotation":
+        action = parameters["action"]
+        slot = parameters["slot"]
+        if action == "set":
+            if parameters.get("text") is not None:
+                scope.set_annotation_text(parameters["text"], slot=slot)
+            if parameters.get("color") is not None:
+                scope.set_annotation_color(parameters["color"], slot=slot)
+            if parameters.get("background") is not None:
+                scope.set_annotation_background(parameters["background"], slot=slot)
+            if parameters.get("x") is not None or parameters.get("y") is not None:
+                scope.set_annotation_position(
+                    parameters.get("x"), parameters.get("y"), slot=slot
+                )
+        elif action == "on":
+            scope.set_annotation_enabled(True, slot=slot)
+        elif action == "off":
+            scope.set_annotation_enabled(False, slot=slot)
+        elif action == "clear":
+            scope.clear_annotation(slot=slot)
+        return _state_scope_result("annotation", scope.query_annotation(slot=slot))
+    if command == "wgen-query":
+        return _state_scope_result("wgen", scope.query_wgen())
+    if command == "wgen-output":
+        if parameters["action"] == "set":
+            scope.configure_wgen_output(parameters["enabled"])
+        return _state_scope_result("output", scope.query_wgen_output())
+    if command == "wgen-function":
+        if parameters["action"] == "set":
+            scope.configure_wgen_function(parameters["function"])
+        return _state_scope_result("function", scope.query_wgen_function())
+    if command == "wgen-frequency":
+        if parameters["action"] == "set":
+            scope.configure_wgen_frequency(parameters["frequency_hz"])
+        return _state_scope_result("frequency", scope.query_wgen_frequency())
+    if command == "wgen-voltage":
+        if parameters["action"] == "set":
+            scope.configure_wgen_voltage(parameters["amplitude"])
+        return _state_scope_result("voltage", scope.query_wgen_voltage())
+    if command == "wgen-offset":
+        if parameters["action"] == "set":
+            scope.configure_wgen_offset(parameters["offset_volts"])
+        return _state_scope_result("offset", scope.query_wgen_offset())
+    if command == "wgen-load":
+        if parameters["action"] == "set":
+            scope.configure_wgen_load(parameters["load"])
+        return _state_scope_result("load", scope.query_wgen_load())
     if command == "save-pwd":
         return _execute_state_setting(
             parameters, scope.configure_save_pwd, scope.query_save_pwd, "path"
