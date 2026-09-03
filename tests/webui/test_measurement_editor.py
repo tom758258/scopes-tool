@@ -56,6 +56,16 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert '"workflow.editor.channelPairRequired"' in english
     assert '"workflow.editor.pairMeasurementsHelper"' in chinese
     assert '"workflow.editor.channelPairRequired"' in chinese
+    english_helper = next(
+        line for line in english.splitlines() if '"workflow.editor.pairMeasurementsHelper"' in line
+    )
+    chinese_helper = next(
+        line for line in chinese.splitlines() if '"workflow.editor.pairMeasurementsHelper"' in line
+    )
+    assert "phase" not in english_helper.lower()
+    assert "delay" not in english_helper.lower()
+    assert "相位" not in chinese_helper
+    assert "延遲" not in chinese_helper
     assert (
         '"measurement.frontPanel.resultsUnsupported": "此型號無法一次讀取前面板量測清單；'
         '若要取得量測值，請使用「量測設定」。"' in chinese
@@ -206,6 +216,38 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         sweepUi.sweepPairRows[0].remove.handler();
         assert.equal(sweepUi.sweepPairRows.length, 0);
         assert.equal(sweepUi.sweepPairItemsSection.hidden, false);
+        sweepUi.sweepControls.pair_items[0].checked = true;
+        sweepUi.sweepControls.pair_items[0].handler();
+        sweepUi.sweepAddPairButton.handler();
+        sweepUi.sweepAddPairButton.handler();
+        assert.equal(sweepUi.sweepPairRows.length, 2);
+        sweepUi.sweepControls.pair_items[0].checked = false;
+        sweepUi.sweepControls.pair_items[0].handler();
+        for (const row of sweepUi.sweepPairRows) {
+          row.reference.setCustomValidity = () => {};
+        }
+        let stalePairValidity = "";
+        sweepUi.sweepControls.pair_items[0].setCustomValidity = (message) => {
+          stalePairValidity = message;
+        };
+        assert.equal(sweepUi.sweepValues(), null);
+        assert.equal(stalePairValidity, "workflow.editor.pairMeasurementRequired");
+        const firstPairRow = sweepUi.sweepPairRows[0];
+        const secondPairRow = sweepUi.sweepPairRows[1];
+        firstPairRow.remove.handler();
+        assert.equal(sweepUi.sweepPairRows.length, 1);
+        assert.equal(stalePairValidity, "workflow.editor.pairMeasurementRequired");
+        secondPairRow.remove.handler();
+        assert.equal(sweepUi.sweepPairRows.length, 0);
+        assert.equal(stalePairValidity, "");
+        const ordinarySweep = sweepUi.sweepValues();
+        assert(ordinarySweep);
+        assert.equal("pairs" in ordinarySweep, false);
+        assert.equal(
+          ordinarySweep.pair_items, sweepUi.sweepControls.pair_items[0].value,
+        );
+        assert.deepEqual(sweepUi.sweepDrafts.get(sweepUi.sweepRenderedKey).pairs, []);
+        assert.deepEqual(sweepUi.sweepDrafts.get(sweepUi.sweepRenderedKey).pair_items, []);
         catalog.activeModelId = "keysight-dsox2004a";
         const sweepFields2000 = catalog.fieldsFor(sweepDefinition);
         assert.deepEqual(

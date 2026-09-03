@@ -360,6 +360,9 @@ export class MeasurementEditor {
       row.remove();
       this.sweepPairRows = this.sweepPairRows.filter((item) => item !== entry);
       this.captureSweepDraft();
+      if (this.sweepPairRows.length === 0) {
+        this.sweepControls.pair_items?.[0]?.setCustomValidity?.("");
+      }
     });
     source.input.addEventListener("change", () => this.captureSweepDraft());
     reference.input.addEventListener("change", () => this.captureSweepDraft());
