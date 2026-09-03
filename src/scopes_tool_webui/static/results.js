@@ -290,7 +290,11 @@ export function renderWorkspaceResult(container, job, context = {}) {
     renderMeasurementWorkspaceResult(container, result);
     return;
   }
-  if (job.command === "measure-sweep" && Array.isArray(result?.measurements) && result?.status !== "planned") {
+  if (
+    job.command === "measure-sweep"
+    && context.mode !== "dry-run"
+    && Array.isArray(result?.measurements)
+  ) {
     renderMeasureSweepWorkspaceResult(container, result);
     return;
   }

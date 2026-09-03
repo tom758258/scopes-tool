@@ -913,20 +913,24 @@ def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
           job_id: "sweep-dry-run", command: "measure-sweep", status: "completed",
           result: { exit_code: 0, result: {
             status: "planned",
-            planned_scpi: [":MEASure:VPP? CHANnel1", ":SYSTem:ERRor?"],
+            model_id: "keysight-dsox4024a",
+            planned_scpi: [":MEASure:VPP? CHANnel1"],
+            channels: [1],
+            items: ["vpp"],
+            pairs: [],
+            pair_items: [],
             measurements: [],
             summary: { valid_count: 0, invalid_count: 0, error_count: 0 },
           } },
-        });
+        }, { mode: "dry-run" });
         const text = JSON.stringify(workspace.children.map((field) => field.children.map((node) => node.textContent)));
+        assert(text.includes("Planned"), "dry-run must show localized planned status");
+        assert(text.includes("keysight-dsox4024a"), "dry-run must show model ID");
         assert(text.includes("Planned SCPI"), "dry-run must show planned SCPI");
         assert(text.includes(":MEASure:VPP? CHANnel1"), "dry-run must show planned commands");
         const hasTable = (node) => node.tagName === "TABLE"
           || (node.children || []).some((child) => hasTable(child));
-        assert.equal(hasTable(workspace), false, "dry-run must not render the 0/0/0 measurement table");
-        const hasSweepTableWrap = (node) => node.className === "workspace-result-table-wrap"
-          || (node.children || []).some((child) => hasSweepTableWrap(child));
-        assert.equal(hasSweepTableWrap(workspace), false, "dry-run must not use the sweep measurement table");
+        assert.equal(hasTable(workspace), false, "dry-run must not render the dedicated measurement table");
         """
     )
     completed = subprocess.run(
