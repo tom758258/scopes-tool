@@ -332,6 +332,13 @@ def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
         editor.segmentInput.dispatch("input");
         await settle();
         assert.equal(submitted.length, countBeforeInput);
+
+        const countBeforeRerender = submitted.length;
+        editor.rerender();
+        await settle();
+        assert.equal(editor.segmentInput.value, "20");
+        assert.equal(submitted.length, countBeforeRerender);
+
         responses.push({
           status: "completed",
           result: { result: { segmented: {
@@ -382,6 +389,25 @@ def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
         editor.selectButton.dispatch("click");
         await settle();
         assert.equal(submitted.length, countWithoutSegments);
+
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+            selected_segment: 37, time_tag_s: 0.00128472,
+          } } },
+        });
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(editor.segmentInput.value, "37");
+        editor.segmentInput.value = "20";
+        editor.segmentInput.dispatch("input");
+        contextKey = "simulate||keysight-dsox3024a";
+        const countBeforeContextRerender = submitted.length;
+        editor.rerender();
+        await settle();
+        assert.equal(editor.segmentInput.value, "");
+        assert.equal(submitted.length, countBeforeContextRerender);
         ''',
     )
     completed = subprocess.run(

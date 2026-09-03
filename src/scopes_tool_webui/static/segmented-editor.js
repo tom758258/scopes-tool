@@ -173,10 +173,20 @@ export class SegmentedEditor {
   }
 
   rerender() {
-    const value = this.countInput?.value || "";
+    const countValue = this.countInput?.value || "";
+    const segmentValue = this.segmentInput?.value || "";
+    const contextKey = this.contextKey;
     this.buildDom();
-    if (value !== "") this.countInput.value = value;
+    if (countValue !== "") this.countInput.value = countValue;
     this.present();
+    if (
+      segmentValue !== ""
+      && contextKey === this.contextKey
+      && this.browserAvailable()
+    ) {
+      this.segmentInput.value = segmentValue;
+      this.applyBusyState();
+    }
   }
 
   present() {
