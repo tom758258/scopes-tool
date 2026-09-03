@@ -28,6 +28,20 @@ function timestampFilename() {
   return `scopes-tool-sequence-${date.getFullYear()}${part(date.getMonth() + 1)}${part(date.getDate())}-${part(date.getHours())}${part(date.getMinutes())}${part(date.getSeconds())}.sequence.json`;
 }
 
+function sequenceParameterLabel(name) {
+  return translate(`sequence.parameter.${name}`);
+}
+
+function sequenceValueLabel(name, value) {
+  if (["channel", "source_channel", "reference_channel"].includes(name)) {
+    return `CH${value}`;
+  }
+  if (typeof value === "boolean") return translate(`enum.${value}`);
+  const key = `enum.${value}`;
+  const translated = translate(key);
+  return translated === key ? String(value) : translated;
+}
+
 export class SequenceEditor {
   constructor(container, catalog, hooks) {
     this.container = container;
@@ -348,12 +362,15 @@ export class SequenceEditor {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     const label = document.createElement("span");
-    label.textContent = translate(`sequence.parameter.${field.name}`);
+    label.textContent = sequenceParameterLabel(field.name);
     let input;
     if (field.type === "enum" || (field.type === "integer" && field.options)) {
       input = document.createElement("select");
       for (const option of field.options || []) {
-        input.append(new Option(String(option), String(option)));
+        const display = field.type === "enum"
+          ? sequenceValueLabel(field.name, option)
+          : String(option);
+        input.append(new Option(display, String(option)));
       }
       input.value = String(step.parameters[field.name] ?? "");
       input.addEventListener("change", () => {
@@ -427,7 +444,12 @@ export class SequenceEditor {
   stepSummary(step) {
     const values = Object.entries(step.parameters).filter(([, value]) => value !== "");
     if (!values.length) return translate(`sequence.action.${step.action}`);
-    const detail = values.map(([name, value]) => `${name}=${Array.isArray(value) ? value.join(",") : value}`).join("; ");
+    const detail = values.map(([name, value]) => {
+      const display = Array.isArray(value)
+        ? value.map((item) => sequenceValueLabel(name, item)).join(", ")
+        : sequenceValueLabel(name, value);
+      return `${sequenceParameterLabel(name)}: ${display}`;
+    }).join("; ");
     return `${translate(`sequence.action.${step.action}`)} — ${detail}`;
   }
 
@@ -480,7 +502,10 @@ export class SequenceEditor {
           && predicatesMatch(field.required_if, step.parameters)
         );
         if (required && (value === undefined || value === "" || (Array.isArray(value) && !value.length))) {
-          return translate("sequence.editor.invalidParameter", { index: index + 1, name: field.name });
+          return translate("sequence.editor.invalidParameter", {
+            index: index + 1,
+            name: sequenceParameterLabel(field.name),
+          });
         }
         if (field.type === "number" || (field.type === "integer" && !field.options)) {
           if ((value === undefined || value === "") && !required) continue;
@@ -490,7 +515,10 @@ export class SequenceEditor {
               || (field.minimum !== undefined && number < field.minimum)
               || (field.maximum !== undefined && number > field.maximum)
               || (field.exclusive_minimum !== undefined && number <= field.exclusive_minimum)) {
-            return translate("sequence.editor.invalidParameter", { index: index + 1, name: field.name });
+            return translate("sequence.editor.invalidParameter", {
+              index: index + 1,
+              name: sequenceParameterLabel(field.name),
+            });
           }
         }
       }

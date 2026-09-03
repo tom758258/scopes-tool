@@ -48,15 +48,19 @@ def extract_css_rule(source: str, selector: str) -> str:
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     live_data_path = STATIC_ROOT / "live-data.js"
+    assert '"live_data.type.glitch": "突波"' in read_static("locale_zh_tw.js")
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
         import fs from "node:fs";
+        globalThis.document = {
+          createElement: (tag) => ({ tagName: tag, className: "", textContent: "" }),
+        };
         const source = fs.readFileSync(process.argv[1], "utf8")
           .replaceAll("export function ", "function ")
-          + "\nglobalThis.liveDataApi = { formatEngineering };";
+          + "\nglobalThis.liveDataApi = { formatEngineering, renderInstrumentSummary };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
-        const { formatEngineering } = globalThis.liveDataApi;
+        const { formatEngineering, renderInstrumentSummary } = globalThis.liveDataApi;
 
         assert.equal(formatEngineering(0.5, "V", { perDivision: true }), "500 mV/div");
         assert.equal(formatEngineering(2, "A", { perDivision: true }), "2.00 A/div");
@@ -64,6 +68,28 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         assert.equal(formatEngineering(null, "V"), "—");
         assert.equal(formatEngineering(undefined, "V"), "—");
         assert.equal(formatEngineering(0, "V", { signed: true }), "+0.00 V");
+
+        const node = () => ({
+          hidden: false,
+          textContent: "",
+          title: "",
+          children: [],
+          append: function(...children) { this.children.push(...children); },
+          replaceChildren: function(...children) { this.children = [...children]; },
+        });
+        const elements = {
+          status: node(), channels: node(), timebaseScale: node(), timebasePosition: node(),
+          triggerType: node(), triggerSource: node(), triggerLevel: node(), triggerSlope: node(),
+          triggerSweep: node(),
+        };
+        const translate = (key) => key === "live_data.type.glitch" ? "\u7a81\u6ce2" : key;
+        renderInstrumentSummary(elements, {
+          channels: [],
+          timebase: {},
+          trigger: { type: "glitch" },
+        }, translate);
+        assert.equal(elements.triggerType.textContent, "\u7a81\u6ce2");
+        assert.notEqual(elements.triggerType.textContent, "Glitch");
         '''
     )
     completed = subprocess.run(

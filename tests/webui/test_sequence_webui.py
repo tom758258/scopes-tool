@@ -137,9 +137,29 @@ def test_sequence_backend_delegates_dry_run_and_execution_to_core(monkeypatch, t
 SEQUENCE_EDITOR_HARNESS = r'''
   import assert from "node:assert/strict";
   import fs from "node:fs";
+  const translations = {
+    "sequence.action.measure": "\u91cf\u6e2c",
+    "sequence.parameter.item": "\u91cf\u6e2c\u9805\u76ee",
+    "sequence.parameter.source_channel": "\u4f86\u6e90\u901a\u9053",
+    "sequence.parameter.slope": "\u659c\u7387",
+    "sequence.editor.invalidParameter": "\u6b65\u9a5f {{index}} \u7684 {{name}} \u503c\u7121\u6548\u3002",
+    "enum.vpp": "VPP",
+    "enum.positive": "\u6b63\u5411",
+    "enum.negative": "\u8ca0\u5411",
+  };
   globalThis.translate = (key, values = {}) => Object.entries(values).reduce(
-    (text, [name, value]) => text.replaceAll(`{{${name}}}`, String(value)), key,
+    (text, [name, value]) => text.replaceAll(`{{${name}}}`, String(value)), translations[key] || key,
   );
+  globalThis.document = {
+    createElement: (tag) => ({
+      tagName: tag,
+      children: [],
+      dataset: {},
+      append: function(...children) { this.children.push(...children); },
+      addEventListener: function() {},
+    }),
+  };
+  globalThis.Option = function(text, value) { this.text = text; this.value = value; };
   globalThis.queueMicrotask ||= (callback) => Promise.resolve().then(callback);
   const source = fs.readFileSync(process.argv[1], "utf8")
     .replace(/^import[^\n]*\r?\n/gm, "")
@@ -153,7 +173,12 @@ SEQUENCE_EDITOR_HARNESS = r'''
       wait: [{ name: "seconds", type: "number", minimum: 0, default: 0, required: true }],
       single: [],
       "wait-trigger": [{ name: "timeout_seconds", type: "number", exclusive_minimum: 0, default: 1, required: true }],
-      measure: [{ name: "item", type: "enum", options: ["vpp"], default: "vpp", required: true }, { name: "channel", type: "integer", options: [1, 2, 3, 4], default: 1 }],
+      measure: [
+        { name: "item", type: "enum", options: ["vpp"], default: "vpp", required: true },
+        { name: "channel", type: "integer", options: [1, 2, 3, 4], default: 1 },
+        { name: "source_channel", type: "integer", minimum: 1, maximum: 4 },
+        { name: "slope", type: "enum", options: ["positive", "negative"], default: "positive" },
+      ],
       capture: [{ name: "channels", type: "multi-enum", options: ["all", 1, 2, 3, 4], default: [1], required: true }, { name: "allow_time_axis_tolerance", type: "boolean", default: false }],
       screenshot: [{ name: "background", type: "enum", options: ["black", "white"], default: "black" }],
       cleanup: [{ name: "profile", type: "enum", options: ["minimal", "safe"], default: "minimal" }],
@@ -239,6 +264,51 @@ def test_sequence_editor_boundaries_load_and_invalid_submission() -> None:
         assert.equal(await editor.save(), false);
         await editor.submit();
         assert.equal(submissions.length, 0);
+        ''',
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -> None:
+    run_editor_behavior(
+        r'''
+        const slopeField = metadata.parameters.measure.find((field) => field.name === "slope");
+        const step = {
+          action: "measure",
+          parameters: { item: "vpp", source_channel: "1", slope: "positive" },
+          expanded: true,
+        };
+        const rendered = editor.renderParameter(step, 0, slopeField);
+        const select = rendered.children[1];
+        assert.equal(select.children[0].text, "\u6b63\u5411");
+        assert.equal(select.children[0].value, "positive");
+
+        const summary = editor.stepSummary(step);
+        assert(summary.includes("\u4f86\u6e90\u901a\u9053: CH1"));
+        assert(summary.includes("\u659c\u7387: \u6b63\u5411"));
+        assert.equal(summary.includes("source_channel="), false);
+        assert.equal(summary.includes("slope=positive"), false);
+
+        state.steps = [{
+          action: "measure",
+          parameters: { item: "vpp", channel: "1", slope: "positive" },
+          expanded: true,
+        }];
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.deepEqual(submissions[0][1].document.steps[0].parameters, {
+          item: "vpp",
+          channel: 1,
+          slope: "positive",
+        });
+
+        state.steps = [{
+          action: "measure",
+          parameters: { item: "vpp", source_channel: "invalid", slope: "positive" },
+          expanded: true,
+        }];
+        assert(editor.validationError().includes("\u4f86\u6e90\u901a\u9053"));
+        assert.equal(editor.validationError().includes("source_channel"), false);
         ''',
     )
 

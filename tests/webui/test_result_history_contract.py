@@ -407,6 +407,13 @@ def test_result_history_runtime_behaviour() -> None:
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_channel_summary_workspace_result_focused_behavior() -> None:
+    english = LOCALE_EN_JS.read_text(encoding="utf-8")
+    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+    assert '"results.field.termination_reason": "Termination reason"' in english
+    assert '"results.field.completed_count": "完成數量"' in chinese
+    assert '"results.field.last_measurement": "最後量測"' in chinese
+    assert '"results.field.index": "索引"' in chinese
+    assert '"results.field.matched": "符合"' in chinese
     script = textwrap.dedent(
         r"""
         import assert from "node:assert/strict";
@@ -429,6 +436,14 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "enum.channel2": "Channel 2",
           "status.enabled": "Enabled",
           "status.disabled": "Disabled",
+          "status.yes": "Yes",
+          "status.no": "No",
+          "enum.query": "Query",
+          "enum.normal": "Normal",
+          "results.field.completed_count": "Completed count",
+          "results.field.last_measurement": "Last measurement",
+          "results.field.index": "Index",
+          "results.field.matched": "Matched",
           "results.field.scale": "Scale",
           "results.field.impedance": "Impedance",
           "results.field.probe_ratio": "Probe ratio",
@@ -437,6 +452,14 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "results.channelSummary.field.scale": "Vertical scale",
         };
         const zhLabels = {
+          "status.yes": "\u662f",
+          "status.no": "\u5426",
+          "enum.query": "\u67e5\u8a62",
+          "enum.normal": "\u6b63\u5e38",
+          "results.field.completed_count": "\u5b8c\u6210\u6578\u91cf",
+          "results.field.last_measurement": "\u6700\u5f8c\u91cf\u6e2c",
+          "results.field.index": "\u7d22\u5f15",
+          "results.field.matched": "\u7b26\u5408",
           "command.channel-summary": "通道設定摘要",
           "enum.channel1": "通道 1",
           "status.enabled": "已啟用",
@@ -541,6 +564,8 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         const workflowWorkspace = new FakeNode("div");
         api.renderWorkspaceResult(workflowWorkspace, makeJob("measure-until", {
           status: "completed",
+          action: "query",
+          enabled: true,
           completed_count: 2,
           last_measurement: { index: 2, value: "4", matched: true },
         }));
@@ -549,6 +574,25 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         );
         assert(workflowText.includes("2"), "completed count");
         assert(workflowText.some((text) => text.includes("Index: 2")), "last measurement");
+        assert(workflowText.includes("Query"), "canonical enum is localized in English");
+        assert(workflowText.includes("Enabled"), "enabled boolean keeps enabled semantics");
+        assert(workflowText.some((text) => text.includes("Matched: Yes")), "generic boolean uses neutral semantics");
+
+        globalThis.testLocale = "zh-TW";
+        const zhWorkflowWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(zhWorkflowWorkspace, makeJob("measure-until", {
+          action: "query",
+          enabled: false,
+          completed_count: 2,
+          last_measurement: { index: 2, value: "4", matched: true },
+        }));
+        const zhWorkflowText = zhWorkflowWorkspace.children.flatMap((field) =>
+          field.children.map((node) => node.textContent)
+        );
+        assert(zhWorkflowText.includes("\u67e5\u8a62"), "canonical enum is localized in zh-TW");
+        assert(zhWorkflowText.includes(zhLabels["status.disabled"]), "enabled boolean keeps zh-TW disabled semantics");
+        assert(zhWorkflowText.some((text) => text.includes("\u7b26\u5408: \u662f")), "generic boolean uses zh-TW yes/no");
+        globalThis.testLocale = "en";
 
         // A. command-scoped dispatch: non-channel-summary command must not use card renderer
         // even when result contains a channels array

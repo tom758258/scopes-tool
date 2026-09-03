@@ -458,7 +458,7 @@ function appendWorkspaceFields(container, fields) {
     const label = document.createElement("small");
     label.textContent = resultFieldLabel(name);
     const content = document.createElement("span");
-    content.textContent = formatWorkspaceValue(value);
+    content.textContent = formatWorkspaceValue(name, value);
     field.append(content, label);
     container.append(field);
   });
@@ -472,16 +472,39 @@ function resultFieldLabel(name) {
   return String(name).replaceAll("_", " ").replace(/^./, (value) => value.toUpperCase());
 }
 
-function formatWorkspaceValue(value) {
-  if (typeof value === "boolean") return translate(value ? "status.enabled" : "status.disabled");
+function isLiteralWorkspaceField(name) {
+  return isRawDiagnosticField(name)
+    || /(^|_)(file|files|filename|filenames|name|path|paths|resource|resources|model|models|scpi|protocol|protocols|artifact|artifacts|id)$/.test(name)
+    || /^(file|path|resource|model|scpi|protocol|artifact)_/.test(name);
+}
+
+function isProtocolIdentifier(value) {
+  return ["uart", "i2c", "spi", "can", "serial1", "serial2"].includes(value.toLowerCase());
+}
+
+function isEnabledWorkspaceField(name) {
+  return name === "enabled" || name === "display" || name.endsWith("_enabled");
+}
+
+function formatWorkspaceValue(name, value) {
+  if (typeof value === "boolean") {
+    if (isEnabledWorkspaceField(name)) {
+      return translate(value ? "status.enabled" : "status.disabled");
+    }
+    return translate(value ? "status.yes" : "status.no");
+  }
   if (Array.isArray(value)) {
-    return value.map((item) => formatWorkspaceValue(item)).join("; ");
+    return value.map((item) => formatWorkspaceValue(name, item)).join("; ");
   }
   if (value && typeof value === "object") {
     return Object.entries(value)
       .filter(([name]) => !isRawDiagnosticField(name))
-      .map(([name, item]) => `${resultFieldLabel(name)}: ${formatWorkspaceValue(item)}`)
+      .map(([itemName, item]) => `${resultFieldLabel(itemName)}: ${formatWorkspaceValue(itemName, item)}`)
       .join("; ");
+  }
+  if (typeof value === "string" && !isLiteralWorkspaceField(name) && !isProtocolIdentifier(value)) {
+    const key = `enum.${value}`;
+    if (hasTranslation(key)) return translate(key);
   }
   return String(value);
 }
