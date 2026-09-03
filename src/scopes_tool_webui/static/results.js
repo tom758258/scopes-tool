@@ -528,6 +528,7 @@ function resultFieldLabel(name) {
 
 function isLiteralWorkspaceField(name) {
   return isRawDiagnosticField(name)
+    || name === "output"
     || /(^|_)(file|files|filename|filenames|name|label|text|path|paths|resource|resources|model|models|scpi|protocol|protocols|artifact|artifacts|id)$/.test(name)
     || /^(file|path|resource|model|scpi|protocol|artifact)_/.test(name);
 }

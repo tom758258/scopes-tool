@@ -764,3 +764,83 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_output_filename_stays_literal_in_zh_tw() -> None:
+    english = LOCALE_EN_JS.read_text(encoding="utf-8")
+    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+    assert '"enum.normal": "Normal"' in english
+    assert '"enum.normal": "正常"' in chinese
+    script = textwrap.dedent(
+        r"""
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
+          }
+          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
+          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.testLocale = "zh-TW";
+
+        const labels = {
+          "command.serial-lister-export": "匯出串列 Lister",
+          "status.completed": "完成",
+          "results.summary.completed": "指令已成功完成",
+          "field.output": "輸出檔名",
+          "enum.normal": "正常",
+        };
+
+        const translate = (key, values = {}) => {
+          const text = labels[key] || key;
+          return Object.entries(values).reduce(
+            (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
+            text,
+          );
+        };
+        const hasTranslation = (key) => key in labels;
+        const translateJobStatus = (status) => translate(`status.${status}`);
+        globalThis.testTranslate = translate;
+        globalThis.testHasTranslation = hasTranslation;
+        globalThis.testTranslateJobStatus = translateJobStatus;
+
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          "const translateJobStatus = globalThis.testTranslateJobStatus;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
+          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob, renderWorkspaceResult };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const api = globalThis.resultApi;
+        const summary = new FakeNode("div");
+        const detail = new FakeNode("div");
+        const workspace = new FakeNode("div");
+        const job = {
+          job_id: "output-literal", command: "serial-lister-export", status: "completed",
+          result: { exit_code: 0, result: { output: "normal" } },
+        };
+
+        api.renderJob(summary, job, detail);
+        const row = summary.children[0].children.map((node) => node.textContent);
+        assert.equal(row[2], "normal", "Result History summary must keep output filename literal");
+
+        api.renderWorkspaceResult(workspace, job);
+        const fields = workspace.children.map((field) => field.children.map((node) => node.textContent));
+        assert.equal(fields.length, 1);
+        assert.equal(fields[0][0], "normal", "Workspace Result must keep output filename literal");
+        """
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
