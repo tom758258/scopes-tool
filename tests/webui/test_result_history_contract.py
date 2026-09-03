@@ -470,7 +470,10 @@ def test_result_history_runtime_behaviour() -> None:
         assert.deepEqual(fieldTexts(sweep).slice(0, 3), [
           ["1", "Valid count"], ["1", "Invalid count"], ["1", "Error count"],
         ]);
-        const table = sweep.children[3];
+        const tableWrap = sweep.children[3];
+        assert.equal(tableWrap.tagName, "DIV");
+        assert.equal(tableWrap.className, "workspace-result-table-wrap");
+        const table = tableWrap.children[0];
         assert.equal(table.tagName, "TABLE");
         assert.deepEqual(table.children[0].children[0].children.map((cell) => cell.textContent), [
           "Measurement", "Channel", "Reference channel", "Value", "Unit", "Status",
@@ -835,6 +838,95 @@ def test_output_filename_stays_literal_in_zh_tw() -> None:
         const fields = workspace.children.map((field) => field.children.map((node) => node.textContent));
         assert.equal(fields.length, 1);
         assert.equal(fields[0][0], "normal", "Workspace Result must keep output filename literal");
+        """
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_measure_sweep_table_has_horizontal_scroll_wrapper() -> None:
+    source = RESULTS_JS.read_text(encoding="utf-8")
+    styles = STYLES_CSS.read_text(encoding="utf-8")
+
+    assert "workspace-result-table-wrap" in source
+    assert ".workspace-result-table-wrap {" in styles
+    wrapper = styles.split(".workspace-result-table-wrap {", 1)[1].split("}", 1)[0]
+    assert "grid-column: 1 / -1;" in wrapper
+    assert "overflow-x: auto;" in wrapper
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
+    script = textwrap.dedent(
+        r"""
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
+          }
+          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
+          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+
+        const labels = {
+          "command.measure-sweep": "Measure Sweep",
+          "status.completed": "Completed",
+          "results.status.planned": "Planned",
+          "results.field.status": "Status",
+          "results.field.planned_scpi": "Planned SCPI",
+        };
+
+        const translate = (key, values = {}) => {
+          const text = labels[key] || key;
+          return Object.entries(values).reduce(
+            (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
+            text,
+          );
+        };
+        const hasTranslation = (key) => key in labels;
+        const translateJobStatus = (status) => translate(`status.${status}`);
+        globalThis.testTranslate = translate;
+        globalThis.testHasTranslation = hasTranslation;
+        globalThis.testTranslateJobStatus = translateJobStatus;
+
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          "const translateJobStatus = globalThis.testTranslateJobStatus;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
+          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob, renderWorkspaceResult };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const api = globalThis.resultApi;
+        const workspace = new FakeNode("div");
+        api.renderWorkspaceResult(workspace, {
+          job_id: "sweep-dry-run", command: "measure-sweep", status: "completed",
+          result: { exit_code: 0, result: {
+            status: "planned",
+            planned_scpi: [":MEASure:VPP? CHANnel1", ":SYSTem:ERRor?"],
+            measurements: [],
+            summary: { valid_count: 0, invalid_count: 0, error_count: 0 },
+          } },
+        });
+        const text = JSON.stringify(workspace.children.map((field) => field.children.map((node) => node.textContent)));
+        assert(text.includes("Planned SCPI"), "dry-run must show planned SCPI");
+        assert(text.includes(":MEASure:VPP? CHANnel1"), "dry-run must show planned commands");
+        const hasTable = (node) => node.tagName === "TABLE"
+          || (node.children || []).some((child) => hasTable(child));
+        assert.equal(hasTable(workspace), false, "dry-run must not render the 0/0/0 measurement table");
+        const hasSweepTableWrap = (node) => node.className === "workspace-result-table-wrap"
+          || (node.children || []).some((child) => hasSweepTableWrap(child));
+        assert.equal(hasSweepTableWrap(workspace), false, "dry-run must not use the sweep measurement table");
         """
     )
     completed = subprocess.run(

@@ -290,7 +290,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
     renderMeasurementWorkspaceResult(container, result);
     return;
   }
-  if (job.command === "measure-sweep" && Array.isArray(result?.measurements)) {
+  if (job.command === "measure-sweep" && Array.isArray(result?.measurements) && result?.status !== "planned") {
     renderMeasureSweepWorkspaceResult(container, result);
     return;
   }
@@ -444,8 +444,10 @@ function renderMeasureSweepWorkspaceResult(container, result) {
     ["error_count", summary.error_count ?? 0],
   ]);
 
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "workspace-result-table-wrap";
   const table = document.createElement("table");
-  table.className = "measurement-results-table workspace-result-field-wide";
+  table.className = "measurement-results-table";
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
   for (const name of ["measurement", "channel", "reference_channel", "value", "unit", "status"]) {
@@ -483,7 +485,8 @@ function renderMeasureSweepWorkspaceResult(container, result) {
     body.append(row);
   }
   table.append(head, body);
-  container.append(table);
+  tableWrap.append(table);
+  container.append(tableWrap);
 }
 
 function channelSummaryFieldLabel(name) {
