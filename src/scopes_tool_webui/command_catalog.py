@@ -1359,6 +1359,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
 
     {
         "id": "segmented-memory", "category": "Segmented Memory", "label": "Segmented memory", "modes": ("live", "simulate"),
+        "editor": "segmented",
         "fields": ({"name": "action", "type": "enum", "options": ("query", "enable", "disable"), "default": "query"}, _command_field("segments", "integer", minimum=2, visible_if=[{"field": "action", "equals": "enable"}], required_if=[{"field": "action", "equals": "enable"}])),
     },
     {

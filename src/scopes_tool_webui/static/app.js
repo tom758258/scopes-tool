@@ -23,6 +23,7 @@ import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/sta
 import { ReferenceEditor } from "/static/reference-editor.js";
 import { SaveExportEditor } from "/static/save-export-editor.js";
 import { SearchEditor } from "/static/search-editor.js";
+import { SegmentedEditor } from "/static/segmented-editor.js";
 import { SerialEditor } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
 import { TriggerEditor } from "/static/trigger-editor.js";
@@ -76,6 +77,7 @@ const elements = {
   serialEditor: document.querySelector("#serial-editor"),
   triggerEditor: document.querySelector("#trigger-editor"),
   searchEditor: document.querySelector("#search-editor"),
+  segmentedEditor: document.querySelector("#segmented-editor"),
   workflowEditor: document.querySelector("#workflow-editor"),
   sequenceEditor: document.querySelector("#sequence-editor"),
   measurementEditor: document.querySelector("#measurement-editor"),
@@ -113,6 +115,7 @@ let saveExportEditor;
 let serialEditor;
 let triggerEditor;
 let searchEditor;
+let segmentedEditor;
 let workflowEditor;
 let sequenceEditor;
 let measurementEditor;
@@ -137,6 +140,7 @@ const EDITOR_RENDERERS = {
   serial: () => serialEditor,
   trigger: () => triggerEditor,
   search: () => searchEditor,
+  segmented: () => segmentedEditor,
   workflow: () => workflowEditor,
   sequence: () => sequenceEditor,
   measurement: () => measurementEditor,
@@ -216,6 +220,17 @@ async function initialize() {
     selectedCommand: () => catalog.selected(),
   });
   searchEditor = new SearchEditor(elements.searchEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  segmentedEditor = new SegmentedEditor(elements.segmentedEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
@@ -700,6 +715,7 @@ document.addEventListener("localechange", () => {
   serialEditor?.rerender();
   triggerEditor?.rerender();
   searchEditor?.rerender();
+  segmentedEditor?.rerender();
   workflowEditor?.rerender();
   sequenceEditor?.rerender();
   measurementEditor?.rerender();
@@ -726,6 +742,7 @@ function syncCommandSelection(draft = null) {
   elements.serialEditor.hidden = editorKind !== "serial";
   elements.triggerEditor.hidden = editorKind !== "trigger";
   elements.searchEditor.hidden = editorKind !== "search";
+  elements.segmentedEditor.hidden = editorKind !== "segmented";
   elements.workflowEditor.hidden = editorKind !== "workflow";
   if (elements.sequenceEditor) elements.sequenceEditor.hidden = editorKind !== "sequence";
   elements.measurementEditor.hidden = editorKind !== "measurement";
@@ -782,6 +799,7 @@ function updateAvailability() {
   elements.liveDataRefresh.disabled = busy || liveDataSnapshot.loading || !commandAvailable("live-data-snapshot");
   triggerEditor?.applyBusyState();
   searchEditor?.applyBusyState();
+  segmentedEditor?.applyBusyState();
   referenceEditor?.applyBusyState();
   saveExportEditor?.applyBusyState();
   serialEditor?.render(serialEditor.controller.state);
@@ -813,6 +831,7 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (serialEditor?.refreshButton) serialEditor.refreshButton.hidden = editorKind !== "serial";
   if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
   if (searchEditor?.refreshButton) searchEditor.refreshButton.hidden = editorKind !== "search";
+  if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = editorKind !== "segmented";
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
   if (sequenceEditor?.executeButton) sequenceEditor.executeButton.hidden = editorKind !== "sequence";
 }
@@ -823,6 +842,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "serial") serialEditor?.schedulePresentation();
   if (editorKind === "trigger") triggerEditor?.schedulePresentation();
   if (editorKind === "search") searchEditor?.schedulePresentation();
+  if (editorKind === "segmented") segmentedEditor?.schedulePresentation();
   if (editorKind === "workflow") workflowEditor?.schedulePresentation();
   if (editorKind === "sequence") sequenceEditor?.schedulePresentation();
   if (editorKind === "measurement") measurementEditor?.schedulePresentation();

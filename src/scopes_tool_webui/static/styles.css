@@ -336,6 +336,14 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .search-editor-action { justify-self: start; min-height: var(--control-h); }
 .search-editor-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 12px; }
 .search-editor-row select { min-width: 110px; }
+.segmented-editor { display: grid; gap: 14px; padding-top: 12px; }
+.segmented-editor-head, .segmented-editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.segmented-editor-head { justify-content: space-between; }
+.segmented-editor-state { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 18px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); }
+.segmented-editor-state dt { color: var(--muted); font-size: 12px; }
+.segmented-editor-state dd { margin: 0; font-weight: 600; }
+.segmented-editor-count { max-width: 220px; }
+.segmented-editor-status { font-size: 12px; }
 .workflow-editor { display: grid; gap: 14px; padding-top: 12px; }
 .workflow-editor-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 .workflow-editor-section:first-child { padding-top: 0; border-top: 0; }
