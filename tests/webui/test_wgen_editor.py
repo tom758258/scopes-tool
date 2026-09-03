@@ -240,13 +240,16 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         globalThis.CommandForm = class CommandForm {
           constructor(container, _catalog) { this.container = container; this.command = null; this.disabled = false; }
           render(command) { this.command = command; }
-          values() { return { action: "set", frequency_hz: 1000 }; }
+          values() {
+            if (this.command?.id === "wgen-load") return { action: "set", load: "one-meg" };
+            return { action: "set", frequency_hz: 1000 };
+          }
           setDisabled(disabled) { this.disabled = disabled; }
           clearDirty() {}
         };
 
         const calls = [];
-        const aggregate = {
+        let aggregate = {
           enabled: false, output_raw: "0", function: "sine",
           function_scpi: "SINusoid", function_raw: "SIN",
           frequency_hz: 1000, frequency_raw: "1.0E+3",
@@ -265,6 +268,13 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
             calls.push([id, parameters]);
             if (id === "wgen-query") {
               return { status: "completed", result: { result: { wgen: aggregate } } };
+            }
+            if (id === "wgen-load") {
+              aggregate = {
+                ...aggregate, load: "one-meg", load_scpi: "ONEMeg", load_raw: "ONEM",
+                amplitude_volts: 2.0, voltage_raw: "2.0E+0",
+              };
+              return { status: "completed", result: { result: { load: { load: "one-meg" } } } };
             }
             return { status: "completed", result: { result: { frequency: { frequency_hz: 1000 } } } };
           },
@@ -321,6 +331,17 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         await editor.submit(queryEntry);
         const querySubmitCalls = calls.slice(beforeQuerySubmit).filter((call) => call[0] === "wgen-query");
         assert.equal(querySubmitCalls.length, 1);
+
+        const load = editor.entryFor("wgen-load");
+        const beforeLoad = calls.length;
+        await editor.submit(load);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(calls.slice(beforeLoad), [
+          ["wgen-load", { action: "set", load: "one-meg" }],
+          ["wgen-query", {}],
+        ]);
+        assert.deepEqual(panelText("wgen-load"), [["wgen.state.load", "one-meg"]]);
+        assert.deepEqual(panelText("wgen-voltage"), [["wgen.state.amplitude", "2"]]);
 
         console.log(JSON.stringify({ ok: true }));
         '''
