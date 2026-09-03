@@ -551,6 +551,8 @@ Measurement and artifact-producing flows:
 
 - `measure`: `item`, `channel`, optional `reference_channel`, `value`, `unit`,
   `valid`, `raw_value`, `reason`, `parameters`, and `command`.
+- `measure-install`: `operation: "install"`, ordered `commands`, canonical
+  `item`, and `source_channel`.
 - `measure-results`: `operation: "query"`, `command` set to
   `":MEASure:RESults?"`, preserved `raw`, and best-effort `items` containing
   `label` and numeric-or-string `value`. Recognized

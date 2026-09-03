@@ -66,6 +66,7 @@ from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 from scopes_tool_core.measurements import (
     MeasurementStatisticsResult,
     measurement_clear_command,
+    measurement_install_command,
     measurement_results_query,
     measurement_show_command,
     measurement_show_query,
@@ -73,7 +74,7 @@ from scopes_tool_core.measurements import (
     measurement_source_query,
     measurement_window_command,
     measurement_window_query,
-    statistics_install_command,
+    normalize_measurement_item,
     statistics_mode_scpi,
     validate_statistics_items,
     validate_statistics_max_count,
@@ -125,6 +126,22 @@ def _measurement_control_plan(
     if args.command == "measure-clear":
         command = measurement_clear_command()
         return [command], {"operation": "clear", "command": command}
+    if args.command == "measure-install":
+        channel = validate_analog_channel(args.source_channel, capabilities)
+        item = normalize_measurement_item(args.item)
+        source_command = measurement_source_command(
+            channel, capabilities=capabilities
+        )
+        install_command = measurement_install_command(
+            item, capabilities=capabilities
+        )
+        commands = [source_command, install_command]
+        return commands, {
+            "operation": "install",
+            "commands": commands,
+            "source_channel": channel,
+            "item": item,
+        }
     if args.command == "measure-show":
         command = measurement_show_query() if args.query else measurement_show_command()
         return [command], {
@@ -227,7 +244,7 @@ def _measure_stats_planned_scpi(
     max_count: int | None = None,
 ) -> list[str]:
     commands = [":MEASure:CLEar", f":MEASure:SOURce CHANnel{channel}"]
-    commands.extend(statistics_install_command(item) for item in items)
+    commands.extend(measurement_install_command(item) for item in items)
     if reset:
         commands.append(":MEASure:STATistics:RESet")
     if max_count is not None:
@@ -274,6 +291,8 @@ def _cmd_measurement_control(args: argparse.Namespace) -> int:
         commands, result = _measurement_control_plan(args, scope.capabilities)
         if args.command == "measure-clear":
             scope.clear_measurements()
+        elif args.command == "measure-install":
+            scope.install_measurement(args.source_channel, args.item)
         elif args.command == "measure-show":
             if args.query:
                 state = scope.query_measurement_show()

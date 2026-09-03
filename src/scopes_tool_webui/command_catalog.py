@@ -34,12 +34,11 @@ from scopes_tool_core.math import (
     MATH_VISUALIZATION_OPERATIONS,
 )
 from scopes_tool_core.measurements import (
+    INSTALLABLE_MEASUREMENT_ITEMS,
     MEASUREMENT_WINDOW_CHOICES,
     PAIR_MEASUREMENT_ITEMS,
     SUPPORTED_MEASUREMENT_ITEMS,
-    validate_statistics_items,
 )
-from scopes_tool_core.errors import ParameterValidationError
 from scopes_tool_core.save_export import (
     SAVE_IMAGE_FORMATS,
     SAVE_IMAGE_PALETTES,
@@ -76,19 +75,7 @@ from scopes_tool_core.serial import (
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 
 
-def _direct_measurement_items() -> tuple[str, ...]:
-    """Project Core's statistics validation contract for simple workflows."""
-
-    choices: list[str] = []
-    for item in SUPPORTED_MEASUREMENT_ITEMS:
-        try:
-            choices.extend(validate_statistics_items((item,)))
-        except ParameterValidationError:
-            continue
-    return tuple(dict.fromkeys(choices))
-
-
-_DIRECT_MEASUREMENT_ITEMS = _direct_measurement_items()
+_DIRECT_MEASUREMENT_ITEMS = INSTALLABLE_MEASUREMENT_ITEMS
 _ANALOG_CHANNEL_FIELDS = frozenset(
     {
         "channel",
@@ -547,6 +534,31 @@ COMMANDS = (
             {"name": "items", "type": "multi-enum", "options": _DIRECT_MEASUREMENT_ITEMS, "serialize": "csv", "default": ("vpp", "frequency", "period", "vrms")},
             {"name": "pairs", "type": "string", "help": "Example: 1:2, 3:4"},
             {"name": "pair_items", "type": "multi-enum", "options": PAIR_MEASUREMENT_ITEMS, "serialize": "csv", "default": ("phase", "delay")},
+        ),
+    },
+    {
+        "id": "measure-install",
+        "category": "Measurement",
+        "label": "Install front-panel measurement",
+        "browser_hidden": True,
+        "modes": ("live", "simulate"),
+        "fields": (
+            {
+                "name": "source_channel",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4,
+                "default": 1,
+                "required": True,
+            },
+            {
+                "name": "item",
+                "type": "enum",
+                "options": INSTALLABLE_MEASUREMENT_ITEMS,
+                "default": "vpp",
+                "required": True,
+                "label_key": "measure.item",
+            },
         ),
     },
     {

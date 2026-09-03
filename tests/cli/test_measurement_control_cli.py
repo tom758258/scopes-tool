@@ -28,6 +28,38 @@ def test_measurement_control_json_modes(argv, target, mode, capsys):
     assert payload["result"]["command"] == target
 
 
+@pytest.mark.parametrize("mode", ["--dry-run", "--simulate"])
+def test_measure_install_plans_one_front_panel_measurement(mode, capsys):
+    assert cli.main([
+        "measure-install",
+        "--source-channel", "1",
+        "--item", "frequency",
+        mode,
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    scpi_key = "planned" if mode == "--dry-run" else "sent"
+
+    assert payload["ok"] is True
+    assert payload["result"]["operation"] == "install"
+    assert payload["result"]["commands"] == [
+        ":MEASure:SOURce CHANnel1",
+        ":MEASure:FREQuency",
+    ]
+    assert payload["result"]["source_channel"] == 1
+    assert payload["result"]["item"] == "frequency"
+    commands = payload["scpi"][scpi_key]
+    assert commands == [
+        "*IDN?",
+        ":MEASure:SOURce CHANnel1",
+        ":MEASure:FREQuency",
+        ":SYSTem:ERRor?",
+    ]
+    assert not any(
+        command.endswith("?") and "FREQuency" in command for command in commands
+    )
+
+
 @pytest.mark.parametrize(
     "argv",
     [

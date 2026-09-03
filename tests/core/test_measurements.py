@@ -8,6 +8,7 @@ from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.measurements import (
     INVALID_MEASUREMENT_REASON,
     MeasurementController,
+    measurement_install_command,
     measurement_query,
     measurement_statistics_max_count_command,
     measurement_unit,
@@ -17,7 +18,6 @@ from scopes_tool_core.measurements import (
     parse_measurement_result,
     parse_statistics_mode,
     parse_statistics_results,
-    statistics_install_command,
     statistics_mode_scpi,
     validate_statistics_max_count,
     validate_statistics_items,
@@ -298,8 +298,32 @@ def test_statistics_helpers_reject_parameterized_or_pair_items():
         validate_statistics_items(("phase",))
 
 
-def test_statistics_install_command_uses_measure_command_without_query_suffix():
-    assert statistics_install_command("frequency") == ":MEASure:FREQuency"
+def test_measurement_install_command_uses_measure_command_without_query_suffix():
+    assert measurement_install_command("frequency") == ":MEASure:FREQuency"
+    with pytest.raises(ParameterValidationError, match="area measurement is not supported"):
+        measurement_install_command(
+            "area", capabilities=capabilities_for_model("DSOX2004A")
+        )
+
+
+def test_measurement_controller_installs_supported_item_and_rejects_pair_item():
+    backend = FakeBackend()
+    controller = MeasurementController(
+        SCPIClient(backend), capabilities_for_model("DSOX4024A")
+    )
+
+    controller.install(1, "frequency")
+
+    assert backend.history == [
+        ":MEASure:SOURce CHANnel1",
+        ":MEASure:FREQuency",
+    ]
+    with pytest.raises(ParameterValidationError, match="cannot be installed"):
+        controller.install(1, "phase")
+    assert backend.history == [
+        ":MEASure:SOURce CHANnel1",
+        ":MEASure:FREQuency",
+    ]
 
 
 def test_statistics_all_mode_uses_keysight_on_keyword():
@@ -407,6 +431,25 @@ def test_measurement_statistics_parses_simulator_non_all_response():
     assert all(record.stddev is not None for record in result.records)
     assert all(len(record.raw_values) == 1 for record in result.records)
     assert all(record.current is None for record in result.records)
+
+
+def test_measurement_statistics_uses_generalized_install_command():
+    backend = FakeBackend(
+        responses={
+            ":MEASure:RESults?": "frequency,1.0,0.9,1.1,1.0,0.01,10",
+        }
+    )
+    controller = MeasurementController(
+        SCPIClient(backend), capabilities_for_model("DSOX4024A")
+    )
+
+    controller.statistics(1, ("frequency",))
+
+    assert backend.history[:3] == [
+        ":MEASure:CLEar",
+        ":MEASure:SOURce CHANnel1",
+        measurement_install_command("frequency"),
+    ]
 
 
 def test_measurement_controller_queries_vpp_for_channel():

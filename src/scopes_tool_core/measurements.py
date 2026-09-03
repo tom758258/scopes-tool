@@ -147,9 +147,15 @@ _MEASUREMENT_UNITS = {
 SINGLE_CHANNEL_MEASUREMENT_ITEMS = (
     tuple(_MEASUREMENT_QUERY_TEMPLATES) + _PARAMETERIZED_MEASUREMENT_ITEMS
 )
+INSTALLABLE_MEASUREMENT_ITEMS = tuple(_MEASUREMENT_QUERY_TEMPLATES)
 PAIR_MEASUREMENT_ITEMS = tuple(_PAIR_MEASUREMENT_QUERY_TEMPLATES)
 SUPPORTED_MEASUREMENT_ITEMS = SINGLE_CHANNEL_MEASUREMENT_ITEMS + PAIR_MEASUREMENT_ITEMS
 MEASUREMENT_ITEM_CHOICES = SUPPORTED_MEASUREMENT_ITEMS + tuple(_MEASUREMENT_ALIASES)
+MEASUREMENT_INSTALL_ITEM_CHOICES = INSTALLABLE_MEASUREMENT_ITEMS + tuple(
+    alias
+    for alias, item in _MEASUREMENT_ALIASES.items()
+    if item in _MEASUREMENT_QUERY_TEMPLATES
+)
 MEASUREMENT_WINDOW_CHOICES = ("main", "zoom", "auto", "gate")
 
 
@@ -257,7 +263,7 @@ class MeasurementWindowState:
 
 
 class MeasurementController:
-    """Read-only measurement query controls."""
+    """Measurement query and front-panel controls."""
 
     def __init__(self, scpi: SCPIClient, capabilities: ScopeCapabilities) -> None:
         self.scpi = scpi
@@ -368,6 +374,16 @@ class MeasurementController:
             self.scpi.query(measurement_results_query())
         )
 
+    def install(self, channel: int, item: str) -> None:
+        """Install one single-channel measurement on the front panel."""
+
+        channel = validate_analog_channel(channel, self.capabilities)
+        command = measurement_install_command(item, capabilities=self.capabilities)
+        self.scpi.write(
+            measurement_source_command(channel, capabilities=self.capabilities)
+        )
+        self.scpi.write(command)
+
     def statistics(
         self,
         channel: int,
@@ -390,7 +406,7 @@ class MeasurementController:
         self.scpi.write(":MEASure:CLEar")
         self.scpi.write(f":MEASure:SOURce CHANnel{channel}")
         for item in normalized_items:
-            self.scpi.write(statistics_install_command(item))
+            self.scpi.write(measurement_install_command(item))
         if reset:
             self.scpi.write(":MEASure:STATistics:RESet")
         if max_count is not None:
@@ -697,11 +713,21 @@ def parse_statistics_boolean(raw: str, setting: str) -> bool:
     )
 
 
-def statistics_install_command(item: str) -> str:
+def measurement_install_command(
+    item: str,
+    *,
+    capabilities: ScopeCapabilities | None = None,
+) -> str:
+    """Build a command that installs one front-panel measurement item."""
+
     item = normalize_measurement_item(item)
+    if capabilities is not None:
+        validate_measurements_supported(capabilities)
+    if item == "area":
+        _validate_area_measurement_supported(capabilities)
     if item not in _MEASUREMENT_QUERY_TEMPLATES:
         raise ParameterValidationError(
-            f"{item} cannot be installed as a single-channel statistics measurement."
+            f"{item} cannot be installed as a single-channel front-panel measurement."
         )
     query = _MEASUREMENT_QUERY_TEMPLATES[item]
     command = query.replace("?", "", 1).split(" ", 1)[0]

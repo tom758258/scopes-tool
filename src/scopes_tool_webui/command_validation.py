@@ -42,6 +42,7 @@ from scopes_tool_core.math import (
     validate_positive,
 )
 from scopes_tool_core.measurements import (
+    measurement_install_command,
     measurement_query,
     normalize_measurement_item,
     normalize_statistics_mode,
@@ -1090,6 +1091,17 @@ def _validate_parameters(
                 else ((value_name,) if value_name else ())
             )
             _reject_query_parameters(parameters, query_names, command)
+    elif command == "measure-install":
+        _require_parameter(parameters, "source_channel", command)
+        _require_parameter(parameters, "item", command)
+        try:
+            parameters["source_channel"] = validate_analog_channel(
+                _integer(parameters["source_channel"], "source_channel"), capabilities
+            )
+            parameters["item"] = normalize_measurement_item(parameters["item"])
+            measurement_install_command(parameters["item"], capabilities=capabilities)
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
     elif command == "measurement-statistics":
         try:
             validate_measure_statistics_supported(capabilities)

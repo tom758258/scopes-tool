@@ -81,6 +81,7 @@ def _dispatch_command(
         return channel_display._cmd_display_common(args)
     if args.command in {
         "measure-clear",
+        "measure-install",
         "measure-show",
         "measure-source",
         "measure-window",

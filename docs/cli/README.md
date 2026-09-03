@@ -142,6 +142,9 @@ Current implemented scope:
 - Dump the currently displayed front-panel measurement results without
   clearing, installing, or reconfiguring measurements with `measure-results`
   on 3000X and 4000X.
+- Install one supported simple measurement on the front panel with
+  `measure-install`; this does not clear existing measurements or query a
+  measurement value.
 - Rebuild front-panel quick measurements and query measurement statistics with
   `measure-stats` on 3000X and 4000X.
 - Control common measurement subsystem state with `measure-clear`,
@@ -1597,6 +1600,7 @@ Control common measurement subsystem state:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe measure-clear --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-install --source-channel 1 --item frequency --simulate --json
 .\.venv\Scripts\scopes-tool.exe measure-show --on --simulate --json
 .\.venv\Scripts\scopes-tool.exe measure-show --query --simulate --json
 .\.venv\Scripts\scopes-tool.exe measure-source --source-channel 1 --source2-channel 2 --simulate --json
@@ -1605,6 +1609,10 @@ Control common measurement subsystem state:
 .\.venv\Scripts\scopes-tool.exe measure-window --query --simulate --json
 ```
 
+`measure-install` sets the selected analog source and installs exactly one
+supported simple measurement with a non-query `:MEASure` command. It neither
+clears the existing front-panel list nor queries the value. Pair,
+parameterized, and power measurements are not accepted by this command.
 `measure-clear` clears installed screen measurements. `measure-show` supports
 ON and query only; OFF is intentionally not exposed because the common
 2000X/3000X behavior documents always-on measurement markers. `measure-source`
@@ -1994,6 +2002,10 @@ values rather than normal measurements. It does not clear or install measurement
 measurement sources, or change statistics mode. The command is supported on
 3000X and 4000X only; 2000X users should use individual `measure` queries.
 This parser is unrelated to Counter or `measure-counter`.
+
+The separate `measure` command queries one value and does not install or
+change the front-panel measurement list. Use `measure-install` when the intent
+is to add a real front-panel measurement.
 
 The measurement command supports `vpp`, `frequency` (`freq` alias),
 `period`, `vavg`, `vrms`, `ac_rms` (`acrms` and `vrms_ac` aliases),

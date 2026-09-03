@@ -494,6 +494,9 @@ def _execute_scope_command(
             scope, resource, _measure_sweep_request(parameters), stop_requested=stop_requested
         )
         return _operation_payload(result)
+    if command == "measure-install":
+        scope.install_measurement(parameters["source_channel"], parameters["item"])
+        return _simple_scope_result("measure-install")
     if command == "measure-results":
         return _state_scope_result("measurements", scope.query_measurement_results())
     if command == "measure-clear":

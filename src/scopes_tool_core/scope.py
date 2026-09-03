@@ -1449,6 +1449,11 @@ class Oscilloscope:
 
         return self._measurement_controller().query_results()
 
+    def install_measurement(self, channel: int, item: str) -> None:
+        """Install one measurement on the instrument front panel."""
+
+        self._measurement_controller().install(channel, item)
+
     def clear_measurements(self) -> None:
         self._measurement_controller().clear()
 

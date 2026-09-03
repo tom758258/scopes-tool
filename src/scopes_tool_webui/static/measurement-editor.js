@@ -516,6 +516,10 @@ export class MeasurementEditor {
     actions.append(buttons);
     if (notes.children.length) actions.append(notes);
     this.container.append(actions);
+    const installDefinition = this.definition("measure-install");
+    if (installDefinition && this.catalog.supported(installDefinition)) {
+      this.container.append(this.buildInstallSection(installDefinition));
+    }
     this.frontPanelContent = null;
     const resultsDefinition = this.definition("measure-results");
     if (resultsDefinition && this.catalog.supported(resultsDefinition)) {
@@ -535,6 +539,28 @@ export class MeasurementEditor {
       this.container.append(this.buildStatisticsSection());
       this.renderStatisticsReadback();
     }
+  }
+
+  buildInstallSection(definition) {
+    const section = document.createElement("section");
+    section.className = "measurement-editor-section measurement-install-section";
+    const heading = document.createElement("strong");
+    heading.textContent = translate("measurement.frontPanel.add");
+    const form = document.createElement("form");
+    form.className = "command-form measurement-install-form";
+    this.installForm = new CommandForm(form, this.catalog);
+    this.installForm.render(definition);
+    const actions = document.createElement("div");
+    actions.className = "measurement-front-panel-buttons";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "primary";
+    button.textContent = translate("measurement.frontPanel.add");
+    button.addEventListener("click", () => void this.addFrontPanelMeasurement());
+    this.controls.frontPanelInstall = button;
+    actions.append(button);
+    section.append(heading, form, actions);
+    return section;
   }
 
   buildStatisticsSection() {
@@ -763,6 +789,18 @@ export class MeasurementEditor {
     this.renderFrontPanelReadback();
   }
 
+  async addFrontPanelMeasurement() {
+    if (!this.hooks.isCommandAvailable("measure-install")) return;
+    const requestedContext = this.contextKey;
+    const job = await this.hooks.executeCommand(
+      "measure-install", this.installForm.values(),
+    );
+    if (requestedContext !== this.contextKey || job?.status !== "completed") return;
+    if (this.hooks.isCommandAvailable("measure-results")) {
+      await this.refreshFrontPanel();
+    }
+  }
+
   async showFrontPanel(enabled = true) {
     if (!this.hooks.isCommandAvailable("measure-show")) return;
     await this.hooks.executeCommand("measure-show", { action: "set", enabled });
@@ -873,6 +911,7 @@ export class MeasurementEditor {
     }
     for (const [name, command] of [
       ["frontPanelRefresh", "measure-results"],
+      ["frontPanelInstall", "measure-install"],
       ["frontPanelShow", "measure-show"],
       ["frontPanelHide", "measure-show"],
       ["frontPanelClear", "measure-clear"],
@@ -886,6 +925,9 @@ export class MeasurementEditor {
           || (name === "statisticsApply" && this.statisticsState.kind === "unread");
       }
     }
+    this.installForm?.setDisabled(
+      busy || !this.hooks.isCommandAvailable("measure-install"),
+    );
     for (const control of [
       this.controls.statisticsDisplay?.input,
       this.controls.statisticsMaxCountMode?.input,

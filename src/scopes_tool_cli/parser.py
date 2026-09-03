@@ -33,6 +33,7 @@ from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS
 from scopes_tool_core.dvm import DVM_MODES
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.measurements import (
+    MEASUREMENT_INSTALL_ITEM_CHOICES,
     MEASUREMENT_ITEM_CHOICES,
     MEASUREMENT_WINDOW_CHOICES,
 )
@@ -646,6 +647,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "measure-clear", help="clear installed screen measurements"
     )
     _add_scope_connection_args(measure_clear_parser)
+
+    measure_install_parser = subparsers.add_parser(
+        "measure-install", help="install one front-panel measurement"
+    )
+    _add_scope_connection_args(measure_install_parser)
+    measure_install_parser.add_argument(
+        "--source-channel", type=_positive_int, required=True
+    )
+    measure_install_parser.add_argument(
+        "--item", choices=MEASUREMENT_INSTALL_ITEM_CHOICES, required=True
+    )
 
     measure_show_parser = subparsers.add_parser(
         "measure-show", help="turn measurement markers on or query their state"

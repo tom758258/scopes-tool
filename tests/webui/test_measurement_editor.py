@@ -110,7 +110,16 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           ...field,
           ...(command.presentation?.models?.[modelId]?.fields?.[field.name] || {}),
         }));
-        globalThis.CommandForm = class CommandForm {};
+        globalThis.CommandForm = class CommandForm {
+          constructor(_container, _catalog) { this.command = null; this.disabled = false; }
+          render(command) { this.command = command; }
+          values() {
+            return Object.fromEntries(
+              (this.command?.fields || []).map((field) => [field.name, field.default]),
+            );
+          }
+          setDisabled(disabled) { this.disabled = disabled; }
+        };
 
         let catalogSource = fs.readFileSync(
           path.join(process.cwd(), "src/scopes_tool_webui/static/command-catalog.js"),
@@ -313,6 +322,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const jobs = {
           "measure-window": { status: "completed", result: { result: { window: { window: "AUTO" } } } },
           "measure": { status: "completed" },
+          "measure-install": { status: "completed" },
           "measure-results": {
             status: "completed",
             result: { result: { measurements: { items: [{ label: "VPP CH1", value: "3.28" }] } } },
@@ -341,6 +351,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           renderFrontPanelReadback: () => {},
           present: () => {},
           controls: {},
+          installForm: { values: () => ({ source_channel: 2, item: "frequency" }) },
           sweepControls: {},
           sweepPairRows: [],
         });
@@ -522,6 +533,15 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const callCount = calls.length;
         await editor.refreshFrontPanel();
         assert.equal(calls.length, callCount);
+        await editor.addFrontPanelMeasurement();
+        assert.deepEqual(calls.at(-1), [
+          "measure-install", { source_channel: 2, item: "frequency" },
+        ]);
+        unavailable.delete("measure-results");
+        await editor.addFrontPanelMeasurement();
+        assert.deepEqual(calls.slice(-2).map(([command]) => command), [
+          "measure-install", "measure-results",
+        ]);
         await editor.showFrontPanel(true);
         assert.deepEqual(calls.at(-1), ["measure-show", { action: "set", enabled: true }]);
         await editor.showFrontPanel(false);
@@ -533,15 +553,27 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
 
         const frontPanelEditor = (modelId) => {
           const available = new Set(modelId === "keysight-dsox2004a"
-            ? ["measure-clear"]
-            : ["measure-results", "measure-show", "measure-clear", "measurement-statistics"]);
+            ? ["measure-install", "measure-clear"]
+            : ["measure-install", "measure-results", "measure-show", "measure-clear", "measurement-statistics"]);
           const supported = new Set(modelId === "keysight-dsox2004a"
-            ? []
-            : ["measure-results", "measurement-statistics"]);
+            ? ["measure-install"]
+            : ["measure-install", "measure-results", "measurement-statistics"]);
+          const installDefinition = {
+            id: "measure-install",
+            fields: [
+              { name: "source_channel", options: [1, 2, 3, 4], default: 1 },
+              { name: "item", options: ["vpp", "frequency"], default: "vpp" },
+            ],
+          };
           const markerCatalog = {
             activeModelId: modelId,
-            commands: ["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
-            fieldsFor: () => modelId === "keysight-dsox4024a"
+            commands: [
+              installDefinition,
+              ...["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
+            ],
+            fieldsFor: (definition) => definition.id === "measure-install"
+              ? definition.fields
+              : modelId === "keysight-dsox4024a"
               ? [{ name: "action" }, { name: "enabled" }]
               : [{ name: "action" }],
             supportReason: (definition) => available.has(definition.id) ? "" : "generic unsupported",
@@ -559,6 +591,11 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const model2000x = frontPanelEditor("keysight-dsox2004a");
         assert.equal(model2000x.controls.frontPanelRefresh.disabled, true);
         assert.equal(model2000x.controls.frontPanelClear.disabled, false);
+        assert.equal(model2000x.controls.frontPanelInstall.disabled, false);
+        assert.deepEqual(model2000x.installForm.values(), {
+          source_channel: 1, item: "vpp",
+        });
+        assert.equal(model2000x.installForm.disabled, false);
         assert.equal(model2000x.controls.frontPanelShow, undefined);
         assert.equal(model2000x.controls.frontPanelHide, undefined);
         const actions2000x = model2000x.container.children[0];
@@ -674,8 +711,17 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         );
         const unknownCatalog = {
           activeModelId: null,
-          commands: ["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
-          fieldsFor: () => [{ name: "action" }],
+          commands: [
+            {
+              id: "measure-install",
+              fields: [
+                { name: "source_channel", options: [1], default: 1 },
+                { name: "item", options: ["vpp"], default: "vpp" },
+              ],
+            },
+            ...["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
+          ],
+          fieldsFor: (definition) => definition.fields || [{ name: "action" }],
           supportReason: () => "",
           supported: () => true,
         };
@@ -698,10 +744,13 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           (node) => node.className.includes("measurement-statistics-section"),
         ));
         assert(unknownModel.controls.frontPanelRefresh);
+        assert(unknownModel.controls.frontPanelInstall);
         assert(unknownModel.controls.frontPanelShow);
         assert(unknownModel.controls.frontPanelHide);
         assert(unknownModel.controls.frontPanelClear);
         assert.equal(unknownModel.controls.frontPanelRefresh.disabled, true);
+        assert.equal(unknownModel.controls.frontPanelInstall.disabled, true);
+        assert.equal(unknownModel.installForm.disabled, true);
         assert.equal(unknownModel.controls.frontPanelShow.disabled, true);
         assert.equal(unknownModel.controls.frontPanelHide.disabled, true);
         assert.equal(unknownModel.controls.frontPanelClear.disabled, true);

@@ -304,6 +304,8 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     assert '"command.front-panel-measurements": "前面板量測"' in chinese
     assert '"command.measure-results": "Front-panel measurement results"' in english
     assert '"command.measure-results": "前面板量測結果"' in chinese
+    assert '"measurement.frontPanel.add": "Add measurement"' in english
+    assert '"measurement.frontPanel.add": "新增量測"' in chinese
     assert '"command.measure-show": "Measurement marker display"' in english
     assert '"command.measure-show": "量測標記顯示"' in chinese
     assert '"measurement.frontPanel.show": "Show measurement markers"' in english
@@ -949,6 +951,7 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
         "display-persistence",
         "display-intensity",
         "display-vectors",
+        "measure-install",
         "measure-results",
         "measure-clear",
         "measure-show",
@@ -978,7 +981,8 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
     helpers = {
         entry["id"]: entry for entry in response.json()
         if entry["id"] in {
-            "measure-results", "measure-clear", "measure-show", "measure-window"
+            "measure-install", "measure-results", "measure-clear", "measure-show",
+            "measure-window",
         }
     }
     assert all(entry["browser_hidden"] is True for entry in helpers.values())
@@ -1457,7 +1461,7 @@ def test_query_only_commands_do_not_default_set_only_channels() -> None:
 def test_measure_source_remains_in_backend_validation_contract() -> None:
     backend_ids = {entry["id"] for entry in commands_module.COMMANDS}
     assert {
-        "measure", "measure-results", "measure-clear", "measure-show",
+        "measure", "measure-install", "measure-results", "measure-clear", "measure-show",
         "measure-source", "measure-window", "measurement-statistics",
     } <= backend_ids
     assert "front-panel-measurements" not in commands_module._COMMAND_BY_ID
@@ -1471,6 +1475,47 @@ def test_measure_source_remains_in_backend_validation_contract() -> None:
 
     assert request["command"] == "measure-source"
     assert request["parameters"] == {"action": "query"}
+
+
+def test_measure_install_validation_and_execution_use_core_path(tmp_path: Path) -> None:
+    request = validate_job_request({
+        "command": "measure-install",
+        "mode": "simulate",
+        "model_id": "keysight-dsox2004a",
+        "parameters": {"source_channel": 2, "item": "frequency"},
+    })
+
+    assert request["parameters"] == {"source_channel": 2, "item": "frequency"}
+    with pytest.raises(WebUIRequestError, match="front-panel measurement"):
+        validate_job_request({
+            "command": "measure-install",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"source_channel": 1, "item": "phase"},
+        })
+
+    calls = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def install_measurement(self, source_channel: int, item: str) -> None:
+            calls.append((source_channel, item))
+
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        "measure-install",
+        "SIM::INSTR",
+        request["parameters"],
+        tmp_path,
+    )
+
+    assert calls == [(2, "frequency")]
+    assert result == {
+        "exit_code": 0,
+        "result": {"action": "measure-install"},
+        "artifacts": [],
+    }
 
 
 def test_measurement_statistics_validation_and_reset_execution(tmp_path: Path) -> None:

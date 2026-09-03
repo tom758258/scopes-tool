@@ -110,8 +110,11 @@ The Command workbench exposes:
   `measure-window` setting. Measure Sweep runs selected measurements across
   model-projected analog channels and optional channel pairs, with Dry-run
   using the existing Core planner. Front-panel measurements combines
-  `measure-results`, `measure-show`, and `measure-clear` for reading and
-  managing the instrument's displayed measurements and measurement markers.
+  `measure-install`, `measure-results`, `measure-show`, and `measure-clear` for
+  installing one measurement at a time and managing the instrument's displayed
+  measurements and measurement markers. A successful install refreshes the
+  displayed results when batch result queries are supported; installation
+  remains available on models without that query capability.
   On capability-supported 3000X and 4000X models, the same workspace also
   exposes Advanced Measurement Statistics with Results Mode fixed to All:
   independent instrument statistics display, Infinite or 2..2000 maximum
