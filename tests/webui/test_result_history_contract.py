@@ -103,6 +103,12 @@ def test_result_history_has_powers_like_viewport_and_item_presentation() -> None
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_result_history_runtime_behaviour() -> None:
+    english = LOCALE_EN_JS.read_text(encoding="utf-8")
+    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+    assert '"results.status.planned": "Planned"' in english
+    assert '"results.status.instrument_error": "Instrument error"' in english
+    assert '"results.status.planned": "已規劃"' in chinese
+    assert '"results.status.instrument_error": "儀器錯誤"' in chinese
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -123,7 +129,7 @@ def test_result_history_runtime_behaviour() -> None:
             serial: "serial {{serial}}", firmware: "firmware {{firmware}}", empty: "No command has been run yet.",
             period: "Period", phase: "Phase", channel1: "Channel 1", channel2: "Channel 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", result: "Result", plannedScpi: "Planned SCPI",
-            noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value",
+            noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value", planned: "Planned", instrumentError: "Instrument error", integrate: "Integrate", fftPhase: "FFT phase", fftZoom: "Zoom",
           },
           "zh-TW": {
             identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d", cancelled: "\u5df2\u53d6\u6d88",
@@ -131,7 +137,7 @@ def test_result_history_runtime_behaviour() -> None:
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
             period: "Period", phase: "Phase", channel1: "Channel 1", channel2: "Channel 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", result: "Result", plannedScpi: "Planned SCPI",
-            noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c",
+            noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c", planned: "\u5df2\u898f\u5283", instrumentError: "\u5100\u5668\u932f\u8aa4", integrate: "\u7a4d\u5206", fftPhase: "FFT \u76f8\u4f4d", fftZoom: "\u7e2e\u653e\u8996\u7a97",
           },
         };
         const translate = (key, values = {}) => {
@@ -142,6 +148,8 @@ def test_result_history_runtime_behaviour() -> None:
                 : key === "command.capture" ? locale.capture
                   : key === "command.list-resources" ? locale.listResources
                     : key === "status.completed" ? locale.completed
+                      : key === "results.status.planned" ? locale.planned
+                        : key === "results.status.instrument_error" ? locale.instrumentError
                       : key === "status.failed" ? locale.failed
                         : key === "status.queued" ? locale.queued
                           : key === "status.running" ? locale.running
@@ -158,7 +166,10 @@ def test_result_history_runtime_behaviour() -> None:
                                            : key === "enum.period" ? locale.period
                                              : key === "enum.phase" ? locale.phase
                                                : key === "enum.channel1" ? locale.channel1
-                                                 : key === "enum.channel2" ? locale.channel2
+                                               : key === "enum.channel2" ? locale.channel2
+                                                 : key === "enum.math-transform.integrate" ? locale.integrate
+                                                   : key === "enum.fft-operation.fft-phase" ? locale.fftPhase
+                                                     : key === "enum.fft-gate.zoom" ? locale.fftZoom
                                                    : key === "results.field.measurement" ? locale.measurement
                                                      : key === "results.field.channel" ? locale.channel
                                                        : key === "results.field.reference_channel" ? locale.referenceChannel
@@ -175,6 +186,8 @@ def test_result_history_runtime_behaviour() -> None:
         const hasTranslation = (key) => [
           "command.identify", "command.run", "command.screenshot", "command.capture", "command.list-resources",
           "enum.period", "enum.phase", "enum.channel1", "enum.channel2",
+          "enum.math-transform.integrate", "enum.fft-operation.fft-phase", "enum.fft-gate.zoom",
+          "results.status.planned", "results.status.instrument_error", "status.completed",
           "results.field.measurement", "results.field.channel", "results.field.reference_channel", "results.field.result", "results.field.planned_scpi",
           "results.status.noValidMeasurement", "results.summary.noValidMeasurement",
         ].includes(key);
@@ -370,6 +383,46 @@ def test_result_history_runtime_behaviour() -> None:
 
         const measurementJob = (result) => makeJob("measurement-job", "measure", "completed", { result: { result } });
         const fieldTexts = (container) => container.children.map((field) => field.children.map((node) => node.textContent));
+        globalThis.testLocale = "zh-TW";
+        api.renderEmpty(summary, detail);
+        const plannedStatusJob = makeJob("planned-status", "run", "completed", {
+          result: { result: { status: "planned" } },
+        });
+        api.renderJob(summary, plannedStatusJob, detail);
+        assert.equal(rowTexts()[0][2], "\u5df2\u898f\u5283");
+        const plannedStatus = new FakeNode("div");
+        api.renderWorkspaceResult(plannedStatus, plannedStatusJob);
+        assert.equal(fieldTexts(plannedStatus)[0][0], "\u5df2\u898f\u5283");
+
+        const instrumentError = new FakeNode("div");
+        api.renderWorkspaceResult(instrumentError, makeJob("instrument-error", "capture", "completed", {
+          result: { result: { status: "instrument_error" } },
+        }));
+        assert.equal(fieldTexts(instrumentError)[0][0], "\u5100\u5668\u932f\u8aa4");
+
+        const completedStatus = new FakeNode("div");
+        api.renderWorkspaceResult(completedStatus, makeJob("completed-status", "capture", "completed", {
+          result: { result: { status: "completed" } },
+        }));
+        assert.equal(fieldTexts(completedStatus)[0][0], "\u5b8c\u6210");
+
+        const mathTransform = new FakeNode("div");
+        const mathTransformJob = makeJob("math-transform", "math-transform", "completed", {
+          result: { result: { math_transform: { operation: "integrate", operation_raw: "INTegRate" } } },
+        });
+        api.renderWorkspaceResult(mathTransform, mathTransformJob);
+        assert.deepEqual(fieldTexts(mathTransform), [["\u7a4d\u5206", "Operation"]]);
+        api.renderJob(summary, mathTransformJob, detail);
+        assert.match(detail.children[0].textContent, /"operation": "integrate"/);
+        assert.match(detail.children[0].textContent, /"operation_raw": "INTegRate"/);
+
+        const fft = new FakeNode("div");
+        api.renderWorkspaceResult(fft, makeJob("fft", "fft", "completed", {
+          result: { result: { fft: { operation: "FFTPhase", operation_canonical: "fft-phase", gate: "zoom" } } },
+        }));
+        assert.deepEqual(fieldTexts(fft).map((field) => field[0]), ["FFTPhase", "FFT \u76f8\u4f4d", "\u7e2e\u653e\u8996\u7a97"]);
+
+        globalThis.testLocale = "en";
         const singleMeasurement = new FakeNode("div");
         api.renderWorkspaceResult(singleMeasurement, measurementJob({
           item: "period", channel: 1, reference_channel: null, value: 0.001, unit: "s", valid: true,

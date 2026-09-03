@@ -291,7 +291,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
     return;
   }
   if (result && typeof result === "object") {
-    const display = unwrapStructuredResult(result);
+    const { display, context: resultContext } = structuredResultDisplay(result);
     const fields = Object.entries(display).filter(([name, value]) => {
       if (isRawDiagnosticField(name)) return false;
       if (
@@ -305,7 +305,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
       return true;
     });
     if (fields.length) {
-      appendWorkspaceFields(container, fields);
+      appendWorkspaceFields(container, fields, resultContext);
       return;
     }
   }
@@ -437,7 +437,7 @@ function channelSummaryFieldLabel(name) {
   return hasTranslation(key) ? translate(key) : resultFieldLabel(name);
 }
 
-function unwrapStructuredResult(result) {
+function structuredResultDisplay(result) {
   const entries = Object.entries(result);
   if (
     entries.length === 1
@@ -445,12 +445,12 @@ function unwrapStructuredResult(result) {
     && typeof entries[0][1] === "object"
     && !Array.isArray(entries[0][1])
   ) {
-    return entries[0][1];
+    return { display: entries[0][1], context: entries[0][0] };
   }
-  return result;
+  return { display: result, context: null };
 }
 
-function appendWorkspaceFields(container, fields) {
+function appendWorkspaceFields(container, fields, resultContext = null) {
   fields.forEach(([name, value]) => {
     if (value === undefined || value === null || value === "") return;
     const field = document.createElement("div");
@@ -458,7 +458,7 @@ function appendWorkspaceFields(container, fields) {
     const label = document.createElement("small");
     label.textContent = resultFieldLabel(name);
     const content = document.createElement("span");
-    content.textContent = formatWorkspaceValue(name, value);
+    content.textContent = formatWorkspaceValue(name, value, resultContext);
     field.append(content, label);
     container.append(field);
   });
@@ -486,7 +486,22 @@ function isEnabledWorkspaceField(name) {
   return name === "enabled" || name === "display" || name.endsWith("_enabled");
 }
 
-function formatWorkspaceValue(name, value) {
+const RESULT_ENUM_CONTEXTS = {
+  fft: {
+    operation_canonical: "fft-operation",
+    gate: "fft-gate",
+    phase_reference: "fft-phase-reference",
+    detection_type: "fft-detection-type",
+  },
+  math_transform: { operation: "math-transform" },
+  math_filter: { operation: "math-filter" },
+  math_visualization: {
+    operation: "math-visualization",
+    measurement: "math-trend-measurement",
+  },
+};
+
+function formatWorkspaceValue(name, value, resultContext = null) {
   if (typeof value === "boolean") {
     if (isEnabledWorkspaceField(name)) {
       return translate(value ? "status.enabled" : "status.disabled");
@@ -494,16 +509,20 @@ function formatWorkspaceValue(name, value) {
     return translate(value ? "status.yes" : "status.no");
   }
   if (Array.isArray(value)) {
-    return value.map((item) => formatWorkspaceValue(name, item)).join("; ");
+    return value.map((item) => formatWorkspaceValue(name, item, resultContext)).join("; ");
   }
   if (value && typeof value === "object") {
     return Object.entries(value)
       .filter(([name]) => !isRawDiagnosticField(name))
-      .map(([itemName, item]) => `${resultFieldLabel(itemName)}: ${formatWorkspaceValue(itemName, item)}`)
+      .map(([itemName, item]) => `${resultFieldLabel(itemName)}: ${formatWorkspaceValue(itemName, item, resultContext)}`)
       .join("; ");
   }
   if (typeof value === "string" && !isLiteralWorkspaceField(name) && !isProtocolIdentifier(value)) {
-    const keys = name === "status" ? [`status.${value}`, `enum.${value}`] : [`enum.${value}`];
+    if (resultContext === "fft" && name === "operation") return String(value);
+    const scopedEnum = RESULT_ENUM_CONTEXTS[resultContext]?.[name];
+    const keys = name === "status"
+      ? [`results.status.${value}`, `status.${value}`, `enum.${value}`]
+      : [scopedEnum ? `enum.${scopedEnum}.${value}` : null, `enum.${value}`].filter(Boolean);
     if (name === "action") keys.push(`actions.${value}`, `command.${value}`);
     const key = keys.find((candidate) => hasTranslation(candidate));
     if (key) return translate(key);
@@ -542,9 +561,10 @@ function scalarResultSummary(result) {
   if (typeof result !== "object") return "";
   const entries = Object.entries(result);
   if (entries.length !== 1 || entries[0][0] === "action") return "";
+  const name = entries[0][0];
   const value = entries[0][1];
   return value !== null && ["string", "number", "boolean"].includes(typeof value)
-    ? String(value)
+    ? formatWorkspaceValue(name, value)
     : "";
 }
 
