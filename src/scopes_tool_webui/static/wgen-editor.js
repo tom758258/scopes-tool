@@ -198,6 +198,10 @@ export class WgenEditor {
     const payload = job?.result?.result !== undefined ? job.result.result : job?.result;
     const state = payload?.wgen || null;
     if (!state) return;
+    this.renderAggregateState(state);
+  }
+
+  renderAggregateState(state) {
     for (const [resultKey, commandId, labelSuffix] of STATE_MAPPING) {
       const entry = this.entryFor(commandId);
       if (!entry || entry.epoch !== this.epoch) continue;
@@ -215,6 +219,37 @@ export class WgenEditor {
       row.append(label, shown);
       entry.panel.append(row);
     }
+  }
+
+  setterValueFor(entryId, payload) {
+    if (!payload) return undefined;
+    switch (entryId) {
+      case "wgen-output": return payload?.output?.enabled;
+      case "wgen-function": return payload?.function?.function;
+      case "wgen-frequency": return payload?.frequency?.frequency_hz;
+      case "wgen-voltage": return payload?.voltage?.amplitude_volts;
+      case "wgen-offset": return payload?.offset?.offset_volts;
+      case "wgen-load": return payload?.load?.load;
+      default: return undefined;
+    }
+  }
+
+  renderSetterState(entry, payload) {
+    const found = STATE_MAPPING.find(([, commandId]) => commandId === entry.id);
+    if (!found) return;
+    const value = this.setterValueFor(entry.id, payload);
+    if (value === undefined || value === null) return;
+    entry.panel.replaceChildren();
+    const row = document.createElement("div");
+    row.className = "wgen-editor-state-row";
+    const label = document.createElement("span");
+    label.textContent = translate(`wgen.state.${found[2]}`);
+    const shown = document.createElement("span");
+    shown.textContent = typeof value === "boolean"
+      ? translate(value ? "enum.enable" : "enum.disable")
+      : String(value);
+    row.append(label, shown);
+    entry.panel.append(row);
   }
 
   async submit(entry) {
@@ -239,8 +274,14 @@ export class WgenEditor {
         && entry.epoch === this.epoch
         && submissionKey === this.currentStateKey()
       ) {
-        if (isSetting) entry.form.clearDirty();
-        this.pendingRefresh = true;
+        const payload = job?.result?.result !== undefined ? job.result.result : job?.result;
+        if (isSetting) {
+          entry.form.clearDirty();
+          this.renderSetterState(entry, payload);
+        } else if (entry.id === "wgen-query") {
+          const state = payload?.wgen || null;
+          if (state) this.renderAggregateState(state);
+        }
       }
     } finally {
       this.setBusy(false);

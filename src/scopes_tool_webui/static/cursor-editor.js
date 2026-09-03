@@ -217,7 +217,6 @@ export class CursorEditor {
       ) {
         entry.form.clearDirty();
         this.renderState(this.statePayload(job));
-        this.pendingRefresh = true;
       }
     } finally {
       this.setBusy(false);

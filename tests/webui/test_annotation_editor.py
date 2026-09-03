@@ -96,6 +96,16 @@ def test_annotation_set_validation_requires_at_least_one_setter() -> None:
         })
 
 
+def test_annotation_position_rejected_before_execution_on_unsupported_model() -> None:
+    with pytest.raises(WebUIRequestError, match="annotation position is not supported"):
+        validate_job_request({
+            "command": "annotation",
+            "mode": "simulate",
+            "model_id": "keysight-dsox2004a",
+            "parameters": {"action": "set", "slot": 1, "text": "hello", "x": 10},
+        })
+
+
 def test_annotation_execution_applies_only_provided_setters(tmp_path: Path) -> None:
     calls: list[tuple] = []
 
@@ -211,7 +221,10 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         globalThis.CommandForm = class CommandForm {
           constructor(container, _catalog) { this.container = container; this.command = null; this.disabled = false; }
           render(command) { this.command = command; }
-          values() { return { action: submittedAction, slot: 3, text: "note" }; }
+          values() {
+            if (submittedAction === "set") return { action: "set", slot: 3, text: "note" };
+            return { action: submittedAction, slot: 3 };
+          }
           setDisabled(disabled) { this.disabled = disabled; }
           clearDirty() {}
         };
@@ -269,9 +282,18 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
 
         const beforeSubmit = calls.length;
         await editor.submit();
-        const submitted = calls.slice(beforeSubmit).find((call) => call[1].action === "set");
-        assert.deepEqual(submitted[0], "annotation");
-        assert.equal(submitted[1].slot, 3);
+        const submittedCalls = calls.slice(beforeSubmit);
+        assert.equal(submittedCalls.length, 1);
+        assert.deepEqual(submittedCalls[0], ["annotation", { action: "set", slot: 3, text: "note" }]);
+
+        for (const action of ["on", "off", "clear"]) {
+          submittedAction = action;
+          const beforeAction = calls.length;
+          await editor.submit();
+          const actionCalls = calls.slice(beforeAction);
+          assert.equal(actionCalls.length, 1);
+          assert.deepEqual(actionCalls[0], ["annotation", { action, slot: 3 }]);
+        }
 
         console.log(JSON.stringify({ ok: true }));
         '''

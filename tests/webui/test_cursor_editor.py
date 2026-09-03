@@ -199,7 +199,11 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         globalThis.CommandForm = class CommandForm {
           constructor(container, _catalog) { this.container = container; this.command = null; this.disabled = false; }
           render(command) { this.command = command; }
-          values() { return { action: submittedAction, source_channel: 1, x1: 0, x2: 0.001 }; }
+          values() {
+            if (submittedAction === "query") return { action: "query" };
+            if (submittedAction === "off") return { action: "off" };
+            return { action: submittedAction, source_channel: 1, x1: 0, x2: 0.001 };
+          }
           setDisabled(disabled) { this.disabled = disabled; }
           clearDirty() {}
         };
@@ -267,9 +271,16 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         submittedAction = "off";
         const beforeSubmit = calls.length;
         await editor.submit();
-        const submitted = calls.slice(beforeSubmit).find((call) => call[1].action === "off");
-        assert.deepEqual(submitted[0], "cursor");
-        assert.equal(submitted[1].source_channel, 1);
+        const submittedCalls = calls.slice(beforeSubmit);
+        assert.equal(submittedCalls.length, 1);
+        assert.deepEqual(submittedCalls[0], ["cursor", { action: "off" }]);
+
+        submittedAction = "set";
+        const beforeSet = calls.length;
+        await editor.submit();
+        const setCalls = calls.slice(beforeSet);
+        assert.equal(setCalls.length, 1);
+        assert.deepEqual(setCalls[0], ["cursor", { action: "set", source_channel: 1, x1: 0, x2: 0.001 }]);
 
         console.log(JSON.stringify({ ok: true }));
         '''

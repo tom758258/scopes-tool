@@ -1292,6 +1292,13 @@ def _validate_parameters(
             raise WebUIRequestError(str(exc)) from exc
         setter_names = ("text", "color", "background", "x", "y")
         if action == "set":
+            if (
+                parameters.get("x") is not None
+                or parameters.get("y") is not None
+            ) and not capabilities.supports_annotation_position:
+                raise WebUIRequestError(
+                    "annotation position is not supported by this model"
+                )
             provided = [
                 name for name in setter_names if parameters.get(name) is not None
             ]

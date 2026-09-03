@@ -301,9 +301,26 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         const frequency = editor.entryFor("wgen-frequency");
         const beforeSubmit = calls.length;
         await editor.submit(frequency);
-        const submitted = calls.slice(beforeSubmit).find((call) => call[0] === "wgen-frequency");
-        assert.deepEqual(submitted[1], { action: "set", frequency_hz: 1000 });
+        const setterCalls = calls.slice(beforeSubmit);
+        assert.equal(setterCalls.length, 1);
+        assert.deepEqual(setterCalls[0], ["wgen-frequency", { action: "set", frequency_hz: 1000 }]);
         assert.ok(!calls.slice(beforeSubmit).some((call) => call[0] === "wgen-output"));
+        assert.ok(!calls.slice(beforeSubmit).some((call) => call[0] === "wgen-query"));
+        const frequencyPanel = editor.entryFor("wgen-frequency").panel.children.map(
+          (row) => [row.children[0].textContent, row.children[1].textContent],
+        );
+        assert.deepEqual(frequencyPanel, [["wgen.state.frequency", "1000"]]);
+
+        const beforeRefresh = calls.length;
+        await editor.refresh(true, true);
+        const refreshCalls = calls.slice(beforeRefresh).filter((call) => call[0] === "wgen-query");
+        assert.equal(refreshCalls.length, 1);
+
+        const queryEntry = editor.entryFor("wgen-query");
+        const beforeQuerySubmit = calls.length;
+        await editor.submit(queryEntry);
+        const querySubmitCalls = calls.slice(beforeQuerySubmit).filter((call) => call[0] === "wgen-query");
+        assert.equal(querySubmitCalls.length, 1);
 
         console.log(JSON.stringify({ ok: true }));
         '''
