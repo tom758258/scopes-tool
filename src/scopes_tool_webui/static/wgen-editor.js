@@ -278,7 +278,10 @@ export class WgenEditor {
         if (isSetting) {
           entry.form.clearDirty();
           this.renderSetterState(entry, payload);
-          if (entry.id === "wgen-load") {
+          if (
+            entry.id === "wgen-load"
+            && this.hooks.mode?.() === "live"
+          ) {
             this.pendingRefresh = true;
           }
         } else if (entry.id === "wgen-query") {

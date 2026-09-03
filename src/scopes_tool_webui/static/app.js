@@ -316,6 +316,7 @@ async function initialize() {
       return Boolean(selected && commandAvailable(selected.id));
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    mode: () => context.mode,
     selectedCommand: () => catalog.selected(),
   });
   catalog.render();

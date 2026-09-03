@@ -237,11 +237,13 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         globalThis.queueMicrotask = (fn) => { fn(); };
 
         globalThis.translate = (key) => key;
+        let currentMode = "live";
+        let submittedLoad = "one-meg";
         globalThis.CommandForm = class CommandForm {
           constructor(container, _catalog) { this.container = container; this.command = null; this.disabled = false; }
           render(command) { this.command = command; }
           values() {
-            if (this.command?.id === "wgen-load") return { action: "set", load: "one-meg" };
+            if (this.command?.id === "wgen-load") return { action: "set", load: submittedLoad };
             return { action: "set", frequency_hz: 1000 };
           }
           setDisabled(disabled) { this.disabled = disabled; }
@@ -259,7 +261,8 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         };
         const hooks = {
           calls,
-          contextKey: () => "simulate||keysight-dsox4024a",
+          contextKey: () => `${currentMode}||keysight-dsox4024a`,
+          mode: () => currentMode,
           selectedCommand: () => ({ id: "wgen-frequency", editor: "wgen", group: "wgen" }),
           isAvailable: () => true,
           isExecutionBusy: () => false,
@@ -271,10 +274,10 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
             }
             if (id === "wgen-load") {
               aggregate = {
-                ...aggregate, load: "one-meg", load_scpi: "ONEMeg", load_raw: "ONEM",
+                ...aggregate, load: parameters.load,
                 amplitude_volts: 2.0, voltage_raw: "2.0E+0",
               };
-              return { status: "completed", result: { result: { load: { load: "one-meg" } } } };
+              return { status: "completed", result: { result: { load: { load: parameters.load } } } };
             }
             return { status: "completed", result: { result: { frequency: { frequency_hz: 1000 } } } };
           },
@@ -342,6 +345,16 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         ]);
         assert.deepEqual(panelText("wgen-load"), [["wgen.state.load", "one-meg"]]);
         assert.deepEqual(panelText("wgen-voltage"), [["wgen.state.amplitude", "2"]]);
+
+        currentMode = "simulate";
+        submittedLoad = "fifty";
+        const beforeSimulateLoad = calls.length;
+        await editor.submit(load);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(calls.slice(beforeSimulateLoad), [
+          ["wgen-load", { action: "set", load: "fifty" }],
+        ]);
+        assert.deepEqual(panelText("wgen-load"), [["wgen.state.load", "fifty"]]);
 
         console.log(JSON.stringify({ ok: true }));
         '''
