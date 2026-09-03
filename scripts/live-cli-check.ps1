@@ -3854,7 +3854,8 @@ print(json.dumps(summary, separators=(",", ":")))
             $statisticsBackend = if ([string]::IsNullOrEmpty($Backend)) { "system" } else { $Backend }
             $script:HardwareTouched = $true
             $statisticsOutput = @(
-                & $Python -c $statisticsProgram $Resource $statisticsBackend $script:Target 2>&1
+                $statisticsProgram |
+                    & $Python - $Resource $statisticsBackend $script:Target 2>&1
             )
             if ($LASTEXITCODE -ne 0) {
                 throw "Measurement statistics validation failed: $($statisticsOutput -join ' ')"
@@ -3922,9 +3923,10 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 }
             } finally {
                 $restoreOutput = @(
-                    & $Python -c $statisticsRestoreProgram $Resource $statisticsBackend `
-                        $script:Target ([string]$statistics.snapshot_mode) $snapshotDisplay `
-                        $snapshotMaxCount $snapshotRsd 2>&1
+                    $statisticsRestoreProgram |
+                        & $Python - $Resource $statisticsBackend `
+                            $script:Target ([string]$statistics.snapshot_mode) $snapshotDisplay `
+                            $snapshotMaxCount $snapshotRsd 2>&1
                 )
                 if ($LASTEXITCODE -ne 0) {
                     throw "Measurement statistics restore failed: $($restoreOutput -join ' ')"

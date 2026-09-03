@@ -69,6 +69,15 @@ def test_measure_statistics_uses_capability_gate() -> None:
     assert "snapshot_mode" in stats
     assert "$statisticsRestoreProgram" in stats
     assert "Statistics state restore readback failed." in stats
+    # Embedded statistics programs must run via stdin, not `python -c`,
+    # so multiline source avoids Windows native argv quote marshalling.
+    assert "& $Python -c $statisticsProgram" not in stats
+    assert "& $Python -c $statisticsRestoreProgram" not in stats
+    assert "$statisticsProgram |" in stats
+    assert "& $Python - $Resource $statisticsBackend $script:Target 2>&1" in stats
+    assert "$statisticsRestoreProgram |" in stats
+    assert "& $Python - $Resource $statisticsBackend" in stats
+    assert "$snapshotMaxCount $snapshotRsd 2>&1" in stats
 
 
 def test_pair_measurements_remain_strict() -> None:
