@@ -503,6 +503,30 @@ def _execute_scope_command(
         if parameters["action"] == "set":
             scope.configure_measurement_show(parameters.get("enabled", True))
         return _state_scope_result("show", scope.query_measurement_show())
+    if command == "measurement-statistics":
+        action = parameters["action"]
+        if action == "set":
+            scope.configure_measurement_statistics_mode(parameters["mode"])
+            scope.configure_measurement_statistics_display(parameters["display_enabled"])
+            scope.configure_measurement_statistics_max_count(
+                parameters.get("max_count")
+                if parameters["max_count_mode"] == "numeric"
+                else None
+            )
+            scope.configure_measurement_statistics_relative_stddev(
+                parameters["relative_stddev_enabled"]
+            )
+        elif action == "reset":
+            scope.reset_measurement_statistics()
+        elif action == "increment":
+            scope.increment_measurement_statistics()
+        return _state_scope_result(
+            "statistics",
+            {
+                "settings": scope.query_measurement_statistics_state(),
+                "results": scope.query_measurement_results(),
+            },
+        )
     if command == "measure-source":
         if parameters["action"] == "set":
             scope.configure_measurement_source(

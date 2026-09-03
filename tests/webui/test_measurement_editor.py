@@ -71,6 +71,8 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         '若要取得量測值，請使用「量測設定」。"' in chinese
     )
     assert '"measurement.frontPanel.markersAlwaysOn"' in editor_source
+    assert '"measurement.statistics.title"' in editor_source
+    assert '"measurement.statistics.increment"' in editor_source
     assert '"measurement.frontPanel.readFailedEmpty"' in editor_source
     assert '"measurement.frontPanel.readFailedCleared"' in editor_source
     assert '"danger"' in editor_source
@@ -532,10 +534,10 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const frontPanelEditor = (modelId) => {
           const available = new Set(modelId === "keysight-dsox2004a"
             ? ["measure-clear"]
-            : ["measure-results", "measure-show", "measure-clear"]);
+            : ["measure-results", "measure-show", "measure-clear", "measurement-statistics"]);
           const markerCatalog = {
             activeModelId: modelId,
-            commands: ["measure-results", "measure-show", "measure-clear"].map((id) => ({ id })),
+            commands: ["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
             fieldsFor: () => modelId === "keysight-dsox4024a"
               ? [{ name: "action" }, { name: "enabled" }]
               : [{ name: "action" }],
@@ -596,6 +598,26 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           results3000x.children[1].children[0].textContent,
           "measurement.frontPanel.unread",
         );
+        assert(model3000x.container.children.some(
+          (node) => node.className.includes("measurement-statistics-section"),
+        ));
+        model3000x.statisticsState = {
+          kind: "results",
+          payload: {
+            results: {
+              statistics_items: [{
+                label: "Vpp(1)", current: 1.2, minimum: 1.0, maximum: 1.4,
+                mean: 1.2, stddev: 0.1, count: 8,
+              }],
+            },
+          },
+        };
+        model3000x.renderStatisticsReadback();
+        const statisticsTable = model3000x.statisticsContent.children[0];
+        assert.deepEqual(
+          statisticsTable.children[1].children[0].children.map((cell) => cell.textContent),
+          ["Vpp(1)", "1.2", "1", "1.4", "1.2", "0.1", "8"],
+        );
 
         const toggleMarkers = frontPanelEditor("keysight-dsox4024a");
         assert.equal(toggleMarkers.controls.frontPanelRefresh.disabled, false);
@@ -606,6 +628,9 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert(toggleMarkers.container.children.some(
           (node) => node.className === "measurement-front-panel-results",
         ));
+        assert.equal(model2000x.container.children.some(
+          (node) => node.className.includes("measurement-statistics-section"),
+        ), false);
 
         const unknownCatalog = {
           activeModelId: null,

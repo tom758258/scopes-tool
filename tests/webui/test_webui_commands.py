@@ -1458,7 +1458,7 @@ def test_measure_source_remains_in_backend_validation_contract() -> None:
     backend_ids = {entry["id"] for entry in commands_module.COMMANDS}
     assert {
         "measure", "measure-results", "measure-clear", "measure-show",
-        "measure-source", "measure-window",
+        "measure-source", "measure-window", "measurement-statistics",
     } <= backend_ids
     assert "front-panel-measurements" not in commands_module._COMMAND_BY_ID
 
@@ -1471,6 +1471,56 @@ def test_measure_source_remains_in_backend_validation_contract() -> None:
 
     assert request["command"] == "measure-source"
     assert request["parameters"] == {"action": "query"}
+
+
+def test_measurement_statistics_validation_and_reset_execution(tmp_path: Path) -> None:
+    with pytest.raises(WebUIRequestError, match="not supported"):
+        validate_job_request({
+            "command": "measurement-statistics",
+            "mode": "simulate",
+            "model_id": "keysight-dsox2004a",
+            "parameters": {"action": "query"},
+        })
+
+    request = validate_job_request({
+        "command": "measurement-statistics",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {
+            "action": "set",
+            "mode": "all",
+            "display_enabled": False,
+            "max_count_mode": "numeric",
+            "max_count": 2000,
+            "relative_stddev_enabled": True,
+        },
+    })
+    assert request["parameters"]["max_count"] == 2000
+
+    calls = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def reset_measurement_statistics(self):
+            calls.append("reset")
+
+        def query_measurement_statistics_state(self):
+            return {"mode": "all", "max_count": None}
+
+        def query_measurement_results(self):
+            return {"statistics_items": [{"label": "Vpp(1)", "current": 1.0}]}
+
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        "measurement-statistics",
+        "SIM::INSTR",
+        {"action": "reset"},
+        tmp_path,
+    )
+
+    assert calls == ["reset"]
+    assert result["result"]["statistics"]["results"]["statistics_items"][0]["label"] == "Vpp(1)"
 
 
 @pytest.mark.parametrize(

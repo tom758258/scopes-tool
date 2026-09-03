@@ -112,6 +112,13 @@ The Command workbench exposes:
   using the existing Core planner. Front-panel measurements combines
   `measure-results`, `measure-show`, and `measure-clear` for reading and
   managing the instrument's displayed measurements and measurement markers.
+  On capability-supported 3000X and 4000X models, the same workspace also
+  exposes Advanced Measurement Statistics: results mode, independent
+  instrument statistics display, Infinite or 2..2000 maximum count, relative
+  standard deviation, reset, manual increment, explicit refresh, and the
+  instrument-accumulated statistics table. It does not poll automatically or
+  compute statistics in the browser. The 2000X profile does not expose this
+  section.
   Measurement markers are always on for 2000X/3000X models; 4000X models
   support showing or hiding them. The `measure-source`
   backend helper remains available to existing API clients but is not shown in
@@ -455,8 +462,8 @@ information command.
 Advanced or diagnostic CLI paths are not automatically browser commands.
 Current intentional omissions include direct SCPI sending, setup recall/save,
 autoscale and broad cleanup operations, worker/doctor/hardware-report tooling,
-Cursor and Annotation editors, WGEN controls, and advanced measurement
-statistics. Acquisition points, record length, acquisition sample-rate controls,
+Cursor and Annotation editors, and WGEN controls. Acquisition points, record
+length, acquisition sample-rate controls,
 and similar low-level information remain CLI/Core paths until a coherent WebUI
 presentation is defined. These omissions avoid exposing a Core operation without
 an appropriate interaction, capability, and result model.

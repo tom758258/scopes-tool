@@ -70,7 +70,8 @@ Core groups the instrument surface into these feature families:
   handling.
 - Channels, display, annotations, timebase, cursors, acquisition, and
   read-only instrument state summaries.
-- Measurements, waveform capture, screenshots, reference waveforms, and
+- Measurements, capability-gated advanced measurement statistics settings and
+  results, waveform capture, screenshots, reference waveforms, and
   instrument-side or host-side save/export helpers.
 - Trigger families, common trigger settings, one-shot trigger control, and
   finite trigger wait/capture helpers.

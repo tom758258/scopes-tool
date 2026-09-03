@@ -9,6 +9,7 @@ from scopes_tool_core.measurements import (
     INVALID_MEASUREMENT_REASON,
     MeasurementController,
     measurement_query,
+    measurement_statistics_max_count_command,
     measurement_unit,
     normalize_measurement_item,
     pair_measurement_query,
@@ -17,6 +18,7 @@ from scopes_tool_core.measurements import (
     parse_statistics_results,
     statistics_install_command,
     statistics_mode_scpi,
+    validate_statistics_max_count,
     validate_statistics_items,
 )
 from scopes_tool_core.scpi import SCPIClient
@@ -429,8 +431,59 @@ def test_parse_measurement_results_dump_accepts_live_invalid_sentinel():
     assert result.raw == raw
     assert result.items == ()
     assert len(result.statistics_items) == 2
-    assert result.statistics_items[0].current == 9.9e37
+    assert result.statistics_items[0].current is None
     assert result.statistics_items[1].count == 0
+
+
+def test_advanced_statistics_state_and_actions_use_documented_scpi_family():
+    responses = {
+        ":MEASure:STATistics?": "ON",
+        ":MEASure:STATistics:DISPlay?": "1",
+        ":MEASure:STATistics:MCOUnt?": "INFinite",
+        ":MEASure:STATistics:RSDeviation?": "0",
+    }
+    backend = FakeBackend(responses=responses)
+    controller = MeasurementController(
+        SCPIClient(backend), capabilities_for_model("DSOX4024A")
+    )
+
+    state = controller.query_statistics_state()
+    controller.set_statistics_mode("mean")
+    controller.set_statistics_display(False)
+    controller.set_statistics_max_count(2000)
+    controller.set_statistics_max_count(None)
+    controller.set_statistics_relative_stddev(True)
+    controller.reset_statistics()
+    controller.increment_statistics()
+
+    assert state.mode == "all"
+    assert state.display_enabled is True
+    assert state.max_count is None
+    assert state.relative_stddev_enabled is False
+    assert backend.history == [
+        ":MEASure:STATistics?",
+        ":MEASure:STATistics:DISPlay?",
+        ":MEASure:STATistics:MCOUnt?",
+        ":MEASure:STATistics:RSDeviation?",
+        ":MEASure:STATistics MEAN",
+        ":MEASure:STATistics:DISPlay OFF",
+        ":MEASure:STATistics:MCOUnt 2000",
+        ":MEASure:STATistics:MCOUnt INFinite",
+        ":MEASure:STATistics:RSDeviation ON",
+        ":MEASure:STATistics:RESet",
+        ":MEASure:STATistics:INCRement",
+    ]
+
+
+def test_statistics_max_count_accepts_numeric_and_infinite_and_rejects_boundaries():
+    assert validate_statistics_max_count(2) == 2
+    assert measurement_statistics_max_count_command(None) == (
+        ":MEASure:STATistics:MCOUnt INFinite"
+    )
+    with pytest.raises(ParameterValidationError, match="between 2 and 2000"):
+        validate_statistics_max_count(1)
+    with pytest.raises(ParameterValidationError, match="between 2 and 2000"):
+        validate_statistics_max_count(2001)
 
 
 def test_parse_measurement_results_dump_preserves_malformed_statistics_layout():

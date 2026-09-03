@@ -1989,7 +1989,8 @@ Query the measurement results already displayed on the front panel:
 identity detection. It preserves the raw response; simple alternating
 label/value responses populate `items`, while statistics-style
 `label,current,min,max,mean,stddev,count` responses may populate
-`statistics_items`. It does not clear or install measurements, change
+`statistics_items`. Invalid statistics sentinels are represented as null
+values rather than normal measurements. It does not clear or install measurements, change
 measurement sources, or change statistics mode. The command is supported on
 3000X and 4000X only; 2000X users should use individual `measure` queries.
 This parser is unrelated to Counter or `measure-counter`.
@@ -2397,6 +2398,11 @@ Additional DSO-X 4024A controls:
 .\.venv\Scripts\scopes-tool.exe math-visualization --resource "$env:SCOPES_TOOL_RESOURCE" --function 2 --query --json --log-scpi
 .\.venv\Scripts\scopes-tool.exe math-clear --resource "$env:SCOPES_TOOL_RESOURCE" --function 1 --log-scpi
 ```
+
+`measure-stats --max-count` accepts integers from 2 through 2000 and uses the
+instrument's `:MEASure:STATistics:MCOUnt` setting. The CLI command remains the
+existing rebuild-and-query workflow; the WebUI exposes the independent
+instrument statistics settings without clearing installed measurements.
 
 The existing `fft`, `math-display`, `math-vertical`, `math-operator`, and
 `math-transform`, `math-filter`, `math-visualization`, and `math-clear`

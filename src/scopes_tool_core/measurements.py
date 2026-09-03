@@ -180,12 +180,12 @@ class MeasurementResultsStatisticsItem:
     """One parsed front-panel measurement statistics result."""
 
     label: str
-    current: float
-    minimum: float
-    maximum: float
-    mean: float
-    stddev: float
-    count: int
+    current: float | None
+    minimum: float | None
+    maximum: float | None
+    mean: float | None
+    stddev: float | None
+    count: int | None
 
 
 @dataclass(frozen=True)
@@ -219,6 +219,20 @@ class MeasurementStatisticsResult:
     mode: str
     records: tuple[MeasurementStatisticsRecord, ...]
     raw_response: str
+
+
+@dataclass(frozen=True)
+class MeasurementStatisticsState:
+    """Instrument-side advanced measurement statistics settings."""
+
+    mode: str
+    display_enabled: bool
+    max_count: int | None
+    relative_stddev_enabled: bool
+    raw_mode: str
+    raw_display_enabled: str
+    raw_max_count: str
+    raw_relative_stddev_enabled: str
 
 
 @dataclass(frozen=True)
@@ -380,7 +394,7 @@ class MeasurementController:
         if reset:
             self.scpi.write(":MEASure:STATistics:RESet")
         if max_count is not None:
-            self.scpi.write(f":MEASure:STATistics:COUNt {max_count}")
+            self.scpi.write(measurement_statistics_max_count_command(max_count))
         self.scpi.write(f":MEASure:STATistics {statistics_mode_scpi(mode)}")
         if settle_seconds:
             time.sleep(settle_seconds)
@@ -391,6 +405,47 @@ class MeasurementController:
             items=normalized_items,
             mode=mode,
         )
+
+    def query_statistics_state(self) -> MeasurementStatisticsState:
+        validate_measure_statistics_supported(self.capabilities)
+        raw_mode = self.scpi.query(measurement_statistics_mode_query()).strip()
+        raw_display = self.scpi.query(measurement_statistics_display_query()).strip()
+        raw_max_count = self.scpi.query(measurement_statistics_max_count_query()).strip()
+        raw_rsd = self.scpi.query(measurement_statistics_relative_stddev_query()).strip()
+        return MeasurementStatisticsState(
+            mode=parse_statistics_mode(raw_mode),
+            display_enabled=parse_statistics_boolean(raw_display, "display"),
+            max_count=parse_statistics_max_count(raw_max_count),
+            relative_stddev_enabled=parse_statistics_boolean(raw_rsd, "RSDeviation"),
+            raw_mode=raw_mode,
+            raw_display_enabled=raw_display,
+            raw_max_count=raw_max_count,
+            raw_relative_stddev_enabled=raw_rsd,
+        )
+
+    def set_statistics_mode(self, mode: str) -> None:
+        validate_measure_statistics_supported(self.capabilities)
+        self.scpi.write(measurement_statistics_mode_command(mode))
+
+    def set_statistics_display(self, enabled: bool) -> None:
+        validate_measure_statistics_supported(self.capabilities)
+        self.scpi.write(measurement_statistics_display_command(enabled))
+
+    def set_statistics_max_count(self, value: int | None) -> None:
+        validate_measure_statistics_supported(self.capabilities)
+        self.scpi.write(measurement_statistics_max_count_command(value))
+
+    def set_statistics_relative_stddev(self, enabled: bool) -> None:
+        validate_measure_statistics_supported(self.capabilities)
+        self.scpi.write(measurement_statistics_relative_stddev_command(enabled))
+
+    def reset_statistics(self) -> None:
+        validate_measure_statistics_supported(self.capabilities)
+        self.scpi.write(":MEASure:STATistics:RESet")
+
+    def increment_statistics(self) -> None:
+        validate_measure_statistics_supported(self.capabilities)
+        self.scpi.write(":MEASure:STATistics:INCRement")
 
 
 def measurement_clear_command() -> str:
@@ -550,6 +605,96 @@ def statistics_mode_scpi(mode: str) -> str:
     }[normalize_statistics_mode(mode)]
 
 
+def parse_statistics_mode(raw: str) -> str:
+    normalized = raw.strip().upper()
+    aliases = {
+        "ON": "all",
+        "ALL": "all",
+        "CURRENT": "current",
+        "CURR": "current",
+        "MINIMUM": "min",
+        "MIN": "min",
+        "MAXIMUM": "max",
+        "MAX": "max",
+        "MEAN": "mean",
+        "STDDEV": "stddev",
+        "SDEV": "stddev",
+        "COUNT": "count",
+    }
+    try:
+        return aliases[normalized]
+    except KeyError as exc:
+        raise MeasurementResponseError(
+            f"Could not parse measurement statistics mode response: {raw!r}"
+        ) from exc
+
+
+def measurement_statistics_mode_command(mode: str) -> str:
+    return f":MEASure:STATistics {statistics_mode_scpi(mode)}"
+
+
+def measurement_statistics_mode_query() -> str:
+    return ":MEASure:STATistics?"
+
+
+def measurement_statistics_display_command(enabled: bool) -> str:
+    if not isinstance(enabled, bool):
+        raise ParameterValidationError("statistics display enabled value must be a boolean.")
+    return f":MEASure:STATistics:DISPlay {'ON' if enabled else 'OFF'}"
+
+
+def measurement_statistics_display_query() -> str:
+    return ":MEASure:STATistics:DISPlay?"
+
+
+def measurement_statistics_max_count_command(value: int | None) -> str:
+    token = "INFinite" if value is None else str(validate_statistics_max_count(value))
+    return f":MEASure:STATistics:MCOUnt {token}"
+
+
+def measurement_statistics_max_count_query() -> str:
+    return ":MEASure:STATistics:MCOUnt?"
+
+
+def parse_statistics_max_count(raw: str) -> int | None:
+    normalized = raw.strip().upper()
+    if normalized in {"INF", "INFINITE", "INFINITY"}:
+        return None
+    try:
+        value = int(normalized)
+    except ValueError as exc:
+        raise MeasurementResponseError(
+            f"Could not parse measurement statistics maximum count response: {raw!r}"
+        ) from exc
+    try:
+        return validate_statistics_max_count(value)
+    except ParameterValidationError as exc:
+        raise MeasurementResponseError(
+            f"Could not parse measurement statistics maximum count response: {raw!r}"
+        ) from exc
+
+
+def measurement_statistics_relative_stddev_command(enabled: bool) -> str:
+    if not isinstance(enabled, bool):
+        raise ParameterValidationError("RSDeviation enabled value must be a boolean.")
+    return f":MEASure:STATistics:RSDeviation {'ON' if enabled else 'OFF'}"
+
+
+def measurement_statistics_relative_stddev_query() -> str:
+    return ":MEASure:STATistics:RSDeviation?"
+
+
+def parse_statistics_boolean(raw: str, setting: str) -> bool:
+    normalized = raw.strip().upper()
+    if normalized in {"1", "+1", "ON"}:
+        return True
+    if normalized in {"0", "+0", "OFF"}:
+        return False
+    raise MeasurementResponseError(
+        f"Could not parse measurement statistics {setting} response: {raw!r}"
+    )
+
+
 def statistics_install_command(item: str) -> str:
     item = normalize_measurement_item(item)
     if item not in _MEASUREMENT_QUERY_TEMPLATES:
@@ -562,8 +707,10 @@ def statistics_install_command(item: str) -> str:
 
 
 def validate_statistics_max_count(value: int) -> int:
-    if value < 1:
-        raise ParameterValidationError("--max-count must be at least 1.")
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ParameterValidationError("maximum statistics count must be an integer.")
+    if not 2 <= value <= 2000:
+        raise ParameterValidationError("maximum statistics count must be between 2 and 2000.")
     return value
 
 
@@ -858,13 +1005,9 @@ def _parse_measurement_results_statistics(
         if not label:
             return None
         try:
-            values = tuple(float(token) for token in tokens[index + 1 : index + 6])
-            count_value = float(tokens[index + 6])
-        except ValueError:
-            return None
-        if not all(math.isfinite(value) for value in values):
-            return None
-        if not math.isfinite(count_value) or not count_value.is_integer():
+            values = tuple(_parse_optional_float(token) for token in tokens[index + 1 : index + 6])
+            count_value = _parse_optional_count(tokens[index + 6])
+        except (ValueError, MeasurementResponseError):
             return None
         items.append(
             MeasurementResultsStatisticsItem(
@@ -874,7 +1017,7 @@ def _parse_measurement_results_statistics(
                 maximum=values[2],
                 mean=values[3],
                 stddev=values[4],
-                count=int(count_value),
+                count=count_value,
             )
         )
     return tuple(items)
@@ -1005,4 +1148,8 @@ def _parse_optional_count(value: str) -> int | None:
     parsed = _parse_optional_float(value)
     if parsed is None:
         return None
+    if not parsed.is_integer():
+        raise MeasurementResponseError(
+            f"Could not parse measurement statistics count: {value!r}"
+        )
     return int(parsed)

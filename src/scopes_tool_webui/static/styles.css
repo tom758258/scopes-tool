@@ -390,6 +390,10 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .measurement-front-panel-results { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); }
 .measurement-front-panel-results > strong { display: block; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .measurement-front-panel-content { overflow-x: auto; padding: 10px; }
+.measurement-statistics-section { margin-top: 12px; }
+.measurement-statistics-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.measurement-statistics-checkbox { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
+.measurement-statistics-checkbox input { width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; }
 .measurement-front-panel-content > .muted,
 .measurement-front-panel-error { margin: 0; }
 .measurement-front-panel-error { color: var(--danger); font-size: 12px; }

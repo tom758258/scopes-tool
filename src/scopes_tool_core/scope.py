@@ -58,6 +58,7 @@ from .measurements import (
     MeasurementShowState,
     MeasurementSourceState,
     MeasurementStatisticsResult,
+    MeasurementStatisticsState,
     MeasurementWindowState,
 )
 from .reference import ReferenceWaveformController, ReferenceWaveformState
@@ -1543,6 +1544,27 @@ class Oscilloscope:
             max_count=max_count,
             settle_seconds=settle_seconds,
         )
+
+    def query_measurement_statistics_state(self) -> MeasurementStatisticsState:
+        return self._measurement_controller().query_statistics_state()
+
+    def configure_measurement_statistics_mode(self, mode: str) -> None:
+        self._measurement_controller().set_statistics_mode(mode)
+
+    def configure_measurement_statistics_display(self, enabled: bool) -> None:
+        self._measurement_controller().set_statistics_display(enabled)
+
+    def configure_measurement_statistics_max_count(self, value: int | None) -> None:
+        self._measurement_controller().set_statistics_max_count(value)
+
+    def configure_measurement_statistics_relative_stddev(self, enabled: bool) -> None:
+        self._measurement_controller().set_statistics_relative_stddev(enabled)
+
+    def reset_measurement_statistics(self) -> None:
+        self._measurement_controller().reset_statistics()
+
+    def increment_measurement_statistics(self) -> None:
+        self._measurement_controller().increment_statistics()
 
     def autoscale(
         self,

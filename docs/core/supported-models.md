@@ -107,6 +107,11 @@ operations, CLI choices, Worker commands, Core builders, and simulator behavior.
   conditional on the zoomed timebase already being displayed; AUTO is safer
   when that state is unknown. A source1-only write may preserve source2 in
   instrument readback.
+- Advanced measurement statistics are capability-gated to 3000X and 4000X.
+  Core queries instrument-accumulated current, minimum, maximum, mean,
+  standard-deviation, and count results and controls statistics mode, LCD
+  display, maximum count, relative standard deviation, reset, and manual
+  increment. The 2000X profile does not advertise this capability.
 - Reference waveform helpers for runtime-managed reference waveform
   slots 1 and 2. The instrument may turn off one slot's display when the other
   is enabled.

@@ -578,6 +578,51 @@ COMMANDS = (
         ),
     },
     {
+        "id": "measurement-statistics",
+        "category": "Measurement",
+        "label": "Advanced Measurement Statistics",
+        "browser_hidden": True,
+        "modes": ("live", "simulate"),
+        "fields": (
+            {
+                "name": "action",
+                "type": "enum",
+                "options": ("query", "set", "reset", "increment"),
+                "default": "query",
+            },
+            {
+                "name": "mode",
+                "type": "enum",
+                "options": ("all", "current", "min", "max", "mean", "stddev", "count"),
+                "required_if": [{"field": "action", "equals": "set"}],
+            },
+            {
+                "name": "display_enabled",
+                "type": "boolean",
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "measurement-statistics.display-enabled",
+            },
+            {
+                "name": "max_count_mode",
+                "type": "enum",
+                "options": ("infinite", "numeric"),
+                "required_if": [{"field": "action", "equals": "set"}],
+            },
+            {
+                "name": "max_count",
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 2000,
+            },
+            {
+                "name": "relative_stddev_enabled",
+                "type": "boolean",
+                "required_if": [{"field": "action", "equals": "set"}],
+                "help_key": "measurement-statistics.relative-stddev-enabled",
+            },
+        ),
+    },
+    {
         "id": "measure-source",
         "category": "Measurement",
         "label": "Measurement source",
@@ -1862,6 +1907,8 @@ def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: A
     category = entry["category"]
     if command_id == "measure-results":
         return capabilities.supports_measure_results_dump
+    if command_id == "measurement-statistics":
+        return capabilities.supports_measure_statistics
     if category == "Measurement":
         return capabilities.supports_measurements
     if command_id == "channel-label":

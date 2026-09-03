@@ -231,7 +231,9 @@ def _measure_stats_planned_scpi(
     if reset:
         commands.append(":MEASure:STATistics:RESet")
     if max_count is not None:
-        commands.append(f":MEASure:STATistics:COUNt {validate_statistics_max_count(max_count)}")
+        commands.append(
+            f":MEASure:STATistics:MCOUnt {validate_statistics_max_count(max_count)}"
+        )
     commands.extend([f":MEASure:STATistics {statistics_mode_scpi(mode)}", ":MEASure:RESults?"])
     return commands
 

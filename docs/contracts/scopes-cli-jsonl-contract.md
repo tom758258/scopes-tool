@@ -555,7 +555,8 @@ Measurement and artifact-producing flows:
   `":MEASure:RESults?"`, preserved `raw`, and best-effort `items` containing
   `label` and numeric-or-string `value`. Recognized
   `label,current,min,max,mean,stddev,count` responses additionally populate
-  `statistics_items` with numeric statistics and an integer `count`.
+  `statistics_items` with numeric-or-null statistics and an integer-or-null
+  `count`; invalid instrument sentinel values normalize to null.
 - `measure-stats`: `channel`, `items`, `mode`, `reset`, `max_count`,
   `settle_seconds`, and `records`.
 - `measure-sweep`: `channels`, `items`, `pairs`, `pair_items`,

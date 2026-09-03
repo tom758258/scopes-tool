@@ -22,6 +22,10 @@ function measurementPayload(job) {
   return job?.result?.result?.measurements || job?.result?.measurements || null;
 }
 
+function statisticsPayload(job) {
+  return job?.result?.result?.statistics || job?.result?.statistics || null;
+}
+
 function windowValue(job) {
   const value = job?.result?.result?.window?.window
     ?? job?.result?.window?.window
@@ -46,6 +50,8 @@ export class MeasurementEditor {
     this.windowDirty = false;
     this.frontPanelState = { kind: "unread", payload: null };
     this.frontPanelReadError = null;
+    this.statisticsState = { kind: "unread", payload: null };
+    this.statisticsReadError = null;
     this.controls = {};
   }
 
@@ -76,6 +82,8 @@ export class MeasurementEditor {
     this.windowDirty = false;
     this.frontPanelState = { kind: "unread", payload: null };
     this.frontPanelReadError = null;
+    this.statisticsState = { kind: "unread", payload: null };
+    this.statisticsReadError = null;
     this.renderedKey = null;
     return true;
   }
@@ -520,6 +528,203 @@ export class MeasurementEditor {
     result.append(heading, this.frontPanelContent);
     this.container.append(result);
     this.renderFrontPanelReadback();
+    if (this.hooks.isCommandAvailable("measurement-statistics")) {
+      this.container.append(this.buildStatisticsSection());
+      this.renderStatisticsReadback();
+    }
+  }
+
+  buildStatisticsSection() {
+    const section = document.createElement("section");
+    section.className = "measurement-editor-section measurement-statistics-section";
+    const heading = document.createElement("strong");
+    heading.textContent = translate("measurement.statistics.title");
+    const form = document.createElement("div");
+    form.className = "measurement-statistics-form";
+
+    this.controls.statisticsMode = this.statisticsSelect(
+      "measurement.statistics.mode",
+      ["all", "current", "min", "max", "mean", "stddev", "count"],
+    );
+    this.controls.statisticsDisplay = this.statisticsCheckbox(
+      "measurement.statistics.display",
+    );
+    this.controls.statisticsMaxCountMode = this.statisticsSelect(
+      "measurement.statistics.maximumCount",
+      ["infinite", "numeric"],
+    );
+    this.controls.statisticsMaxCount = document.createElement("input");
+    this.controls.statisticsMaxCount.type = "number";
+    this.controls.statisticsMaxCount.min = "2";
+    this.controls.statisticsMaxCount.max = "2000";
+    this.controls.statisticsMaxCount.value = "2";
+    const maxCountField = document.createElement("label");
+    maxCountField.className = "field";
+    const maxCountLabel = document.createElement("span");
+    maxCountLabel.textContent = translate("measurement.statistics.numericCount");
+    maxCountField.append(maxCountLabel, this.controls.statisticsMaxCount);
+    this.controls.statisticsRsd = this.statisticsCheckbox(
+      "measurement.statistics.relativeStddev",
+    );
+    form.append(
+      this.controls.statisticsMode.wrapper,
+      this.controls.statisticsDisplay.wrapper,
+      this.controls.statisticsMaxCountMode.wrapper,
+      maxCountField,
+      this.controls.statisticsRsd.wrapper,
+    );
+    this.controls.statisticsMaxCountMode.input.addEventListener(
+      "change", () => this.updateStatisticsMaxCountState(),
+    );
+
+    const actions = document.createElement("div");
+    actions.className = "measurement-front-panel-buttons";
+    for (const [name, key, className, handler] of [
+      ["statisticsApply", "actions.apply", "primary", () => this.applyStatistics()],
+      ["statisticsRefresh", "actions.refresh", "secondary", () => this.refreshStatistics()],
+      ["statisticsReset", "measurement.statistics.reset", "secondary", () => this.runStatisticsAction("reset")],
+      ["statisticsIncrement", "measurement.statistics.increment", "secondary", () => this.runStatisticsAction("increment")],
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = className;
+      button.textContent = translate(key);
+      button.addEventListener("click", () => void handler());
+      this.controls[name] = button;
+      actions.append(button);
+    }
+    this.statisticsContent = document.createElement("div");
+    this.statisticsContent.className = "measurement-front-panel-content";
+    this.statisticsContent.setAttribute("aria-live", "polite");
+    section.append(heading, form, actions, this.statisticsContent);
+    this.updateStatisticsMaxCountState();
+    return section;
+  }
+
+  statisticsSelect(labelKey, options) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "field";
+    const label = document.createElement("span");
+    label.textContent = translate(labelKey);
+    const input = document.createElement("select");
+    for (const value of options) input.append(new Option(choiceLabel(value), value));
+    wrapper.append(label, input);
+    return { wrapper, input };
+  }
+
+  statisticsCheckbox(labelKey) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "field measurement-statistics-checkbox";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    const label = document.createElement("span");
+    label.textContent = translate(labelKey);
+    wrapper.append(input, label);
+    return { wrapper, input };
+  }
+
+  updateStatisticsMaxCountState() {
+    if (!this.controls.statisticsMaxCountMode) return;
+    const numeric = this.controls.statisticsMaxCountMode.input.value === "numeric";
+    this.controls.statisticsMaxCount.disabled = this.hooks.isExecutionBusy() || !numeric;
+  }
+
+  statisticsParameters() {
+    const maxCountMode = this.controls.statisticsMaxCountMode.input.value;
+    const parameters = {
+      action: "set",
+      mode: this.controls.statisticsMode.input.value,
+      display_enabled: this.controls.statisticsDisplay.input.checked,
+      max_count_mode: maxCountMode,
+      relative_stddev_enabled: this.controls.statisticsRsd.input.checked,
+    };
+    if (maxCountMode === "numeric") {
+      if (!this.controls.statisticsMaxCount.checkValidity?.()) {
+        this.controls.statisticsMaxCount.reportValidity?.();
+        return null;
+      }
+      parameters.max_count = Number(this.controls.statisticsMaxCount.value);
+    }
+    return parameters;
+  }
+
+  async applyStatistics() {
+    const parameters = this.statisticsParameters();
+    if (!parameters) return;
+    await this.executeStatistics(parameters);
+  }
+
+  async refreshStatistics() {
+    await this.executeStatistics({ action: "query" });
+  }
+
+  async runStatisticsAction(action) {
+    await this.executeStatistics({ action });
+  }
+
+  async executeStatistics(parameters) {
+    if (!this.hooks.isCommandAvailable("measurement-statistics")) return;
+    const requestedContext = this.contextKey;
+    const job = await this.hooks.executeCommand("measurement-statistics", parameters);
+    if (requestedContext !== this.contextKey) return;
+    if (job?.status !== "completed") {
+      this.statisticsReadError = "measurement.statistics.readFailed";
+    } else {
+      const payload = statisticsPayload(job);
+      const rows = payload?.results?.statistics_items || [];
+      this.statisticsState = { kind: rows.length ? "results" : "empty", payload };
+      this.statisticsReadError = null;
+      this.applyStatisticsReadback(payload?.settings);
+    }
+    this.renderStatisticsReadback();
+  }
+
+  applyStatisticsReadback(settings) {
+    if (!settings || !this.controls.statisticsMode) return;
+    this.controls.statisticsMode.input.value = settings.mode || "all";
+    this.controls.statisticsDisplay.input.checked = Boolean(settings.display_enabled);
+    this.controls.statisticsMaxCountMode.input.value = settings.max_count == null
+      ? "infinite" : "numeric";
+    if (settings.max_count != null) {
+      this.controls.statisticsMaxCount.value = String(settings.max_count);
+    }
+    this.controls.statisticsRsd.input.checked = Boolean(settings.relative_stddev_enabled);
+    this.updateStatisticsMaxCountState();
+  }
+
+  renderStatisticsReadback() {
+    if (!this.statisticsContent) return;
+    this.statisticsContent.replaceChildren();
+    if (this.statisticsReadError) {
+      const error = document.createElement("p");
+      error.className = "measurement-front-panel-error";
+      error.textContent = translate(this.statisticsReadError);
+      this.statisticsContent.append(error);
+      if (this.statisticsState.kind !== "results") return;
+    }
+    if (this.statisticsState.kind !== "results") {
+      const note = document.createElement("p");
+      note.className = "muted";
+      note.textContent = translate(
+        this.statisticsState.kind === "empty"
+          ? "measurement.statistics.empty"
+          : "measurement.statistics.unread",
+      );
+      this.statisticsContent.append(note);
+      return;
+    }
+    this.statisticsContent.append(this.resultTable(
+      this.statisticsState.payload.results.statistics_items,
+      [
+        ["label", "measurement"],
+        ["current", "current"],
+        ["minimum", "minimum"],
+        ["maximum", "maximum"],
+        ["mean", "mean"],
+        ["stddev", "stddev"],
+        ["count", "count"],
+      ],
+    ));
   }
 
   async refreshFrontPanel() {
@@ -651,10 +856,23 @@ export class MeasurementEditor {
       ["frontPanelShow", "measure-show"],
       ["frontPanelHide", "measure-show"],
       ["frontPanelClear", "measure-clear"],
+      ["statisticsApply", "measurement-statistics"],
+      ["statisticsRefresh", "measurement-statistics"],
+      ["statisticsReset", "measurement-statistics"],
+      ["statisticsIncrement", "measurement-statistics"],
     ]) {
       if (this.controls[name]) {
         this.controls[name].disabled = busy || !this.hooks.isCommandAvailable(command);
       }
     }
+    for (const control of [
+      this.controls.statisticsMode?.input,
+      this.controls.statisticsDisplay?.input,
+      this.controls.statisticsMaxCountMode?.input,
+      this.controls.statisticsRsd?.input,
+    ]) {
+      if (control) control.disabled = busy;
+    }
+    this.updateStatisticsMaxCountState();
   }
 }

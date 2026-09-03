@@ -44,8 +44,11 @@ from scopes_tool_core.math import (
 from scopes_tool_core.measurements import (
     measurement_query,
     normalize_measurement_item,
+    normalize_statistics_mode,
     normalize_measurement_window,
     pair_measurement_query,
+    validate_measure_statistics_supported,
+    validate_statistics_max_count,
     validate_statistics_items,
 )
 from scopes_tool_core.planning import (
@@ -1087,6 +1090,55 @@ def _validate_parameters(
                 else ((value_name,) if value_name else ())
             )
             _reject_query_parameters(parameters, query_names, command)
+    elif command == "measurement-statistics":
+        try:
+            validate_measure_statistics_supported(capabilities)
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
+        action = parameters.setdefault("action", "query")
+        if action not in {"query", "set", "reset", "increment"}:
+            raise WebUIRequestError(
+                "measurement-statistics action must be query, set, reset, or increment"
+            )
+        setting_names = (
+            "mode",
+            "display_enabled",
+            "max_count_mode",
+            "max_count",
+            "relative_stddev_enabled",
+        )
+        if action == "set":
+            for name in (
+                "mode",
+                "display_enabled",
+                "max_count_mode",
+                "relative_stddev_enabled",
+            ):
+                _require_parameter(parameters, name, command)
+            try:
+                parameters["mode"] = normalize_statistics_mode(parameters["mode"])
+                _require_boolean(parameters["display_enabled"], "display_enabled")
+                _require_boolean(
+                    parameters["relative_stddev_enabled"],
+                    "relative_stddev_enabled",
+                )
+                if parameters["max_count_mode"] not in {"infinite", "numeric"}:
+                    raise WebUIRequestError(
+                        "max_count_mode must be infinite or numeric"
+                    )
+                if parameters["max_count_mode"] == "numeric":
+                    _require_parameter(parameters, "max_count", command)
+                    parameters["max_count"] = validate_statistics_max_count(
+                        _integer(parameters["max_count"], "max_count")
+                    )
+                else:
+                    parameters.pop("max_count", None)
+            except WebUIRequestError:
+                raise
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            _reject_query_parameters(parameters, setting_names, command)
     elif command in {"measure-show", "measure-source", "measure-window"}:
         action = _action(parameters, command)
         if command == "measure-show":

@@ -346,7 +346,10 @@ class SimulatorBackend:
     measurement_source2: int | None = None
     measurement_show: bool = True
     measurement_window: str = "MAIN"
-    measurement_statistics_mode: str = "ALL"
+    measurement_statistics_mode: str = "ON"
+    measurement_statistics_display: bool = True
+    measurement_statistics_max_count: int | None = None
+    measurement_statistics_relative_stddev: bool = False
     measurement_statistics_items: list[str] = field(default_factory=list)
     reference_saved_source: dict[int, int | None] = field(
         default_factory=lambda: {1: None, 2: None}
@@ -1216,9 +1219,24 @@ class SimulatorBackend:
             if value not in {"MAIN", "ZOOM", "AUTO", "GATE"}:
                 raise SimulatorBackendError(f"Unsupported simulator write: {command}")
             self.measurement_window = value
-        elif upper.startswith(":MEASURE:STATISTICS:COUNT "):
-            pass
+        elif upper.startswith(":MEASURE:STATISTICS:MCOUNT "):
+            token = command.rsplit(" ", 1)[1].strip().upper()
+            self.measurement_statistics_max_count = (
+                None if token in {"INF", "INFINITE"} else int(token)
+            )
+        elif upper in {
+            ":MEASURE:STATISTICS:DISPLAY ON",
+            ":MEASURE:STATISTICS:DISPLAY OFF",
+        }:
+            self.measurement_statistics_display = upper.endswith(" ON")
+        elif upper in {
+            ":MEASURE:STATISTICS:RSDEVIATION ON",
+            ":MEASURE:STATISTICS:RSDEVIATION OFF",
+        }:
+            self.measurement_statistics_relative_stddev = upper.endswith(" ON")
         elif upper == ":MEASURE:STATISTICS:RESET":
+            pass
+        elif upper == ":MEASURE:STATISTICS:INCREMENT":
             pass
         elif upper.startswith(":MEASURE:STATISTICS "):
             self.measurement_statistics_mode = command.rsplit(" ", 1)[1].upper()
@@ -1658,6 +1676,18 @@ class SimulatorBackend:
             return "9.9E+37" if dx == 0 else f"{((self.marker_y2 - self.marker_y1) / dx):.12g}"
         if upper == ":MEASURE:RESULTS?":
             return self._measurement_statistics_results()
+        if upper == ":MEASURE:STATISTICS?":
+            return self.measurement_statistics_mode
+        if upper == ":MEASURE:STATISTICS:DISPLAY?":
+            return "1" if self.measurement_statistics_display else "0"
+        if upper == ":MEASURE:STATISTICS:MCOUNT?":
+            return (
+                "INFinite"
+                if self.measurement_statistics_max_count is None
+                else str(self.measurement_statistics_max_count)
+            )
+        if upper == ":MEASURE:STATISTICS:RSDEVIATION?":
+            return "1" if self.measurement_statistics_relative_stddev else "0"
         fft_response = self._query_fft(command)
         if fft_response is not None:
             return fft_response
