@@ -195,7 +195,97 @@ function jobErrorSummary(job) {
   const result = jobResultPayload(job);
   if (typeof result?.error === "string") return result.error;
   if (typeof result?.error?.message === "string") return result.error.message;
+
+  const structuredSummary = commandErrorSummary(job.command, result);
+  if (structuredSummary) return structuredSummary;
+
+  const systemError = job?.result?.system_error;
+  if (supportsOuterSystemError(job.command) && systemError?.is_error === true) {
+    if (typeof systemError.message === "string" && systemError.message.trim()) {
+      return systemError.message.trim();
+    }
+    return translate("results.summary.instrumentError");
+  }
   return job.error || translate("results.summary.failed");
+}
+
+function commandErrorSummary(command, result) {
+  if (command === "measure-sweep") return measureSweepErrorSummary(result);
+  if (command === "single-wait") return triggerWaitErrorSummary(result, false);
+  if (command === "capture") return triggerWaitErrorSummary(result?.trigger, true);
+  return null;
+}
+
+function supportsOuterSystemError(command) {
+  return command === "measure" || command === "capture" || command === "capture-batch";
+}
+
+function structuredErrorMessage(error) {
+  if (typeof error === "string") return error;
+  return typeof error?.message === "string" ? error.message : null;
+}
+
+function conciseStructuredError(message) {
+  if (typeof message !== "string") return null;
+  const firstLine = message.trim().split(/\r?\n/, 1)[0].replace(/\s+/g, " ");
+  if (!firstLine || /(?:\bVISA\b|\bSCPI\b|\bVI_ERROR_)/i.test(firstLine)) return null;
+  return firstLine.length > 160 ? `${firstLine.slice(0, 157)}...` : firstLine;
+}
+
+function isTimeoutMessage(message) {
+  return typeof message === "string"
+    && /timed?\s*out|timeout|VI_ERROR_TMO/i.test(message);
+}
+
+function measureSweepErrorSummary(result) {
+  if (!Array.isArray(result?.measurements)) return null;
+  const failed = result.measurements.find((measurement) => structuredErrorMessage(measurement?.error));
+  if (failed) {
+    const message = structuredErrorMessage(failed.error);
+    const channel = failed.reference_channel === null || failed.reference_channel === undefined
+      ? `CH${failed.channel}`
+      : `CH${failed.channel}/CH${failed.reference_channel}`;
+    const values = { channel, measurement: measurementItemLabel(failed.item) };
+    if (isTimeoutMessage(message) || isTimeoutMessage(failed.reason)) {
+      return translate("results.summary.measurementTimedOut", values);
+    }
+    const conciseMessage = conciseStructuredError(message);
+    if (conciseMessage) {
+      return translate("results.summary.measurementFailedWithReason", {
+        ...values,
+        message: conciseMessage,
+      });
+    }
+    return translate("results.summary.measurementFailed", values);
+  }
+
+  const summary = result.summary;
+  if (summary?.invalid_count > 0 && summary?.error_count === 0) {
+    return translate("results.summary.measureSweepInvalid", {
+      valid: summary.valid_count ?? 0,
+      invalid: summary.invalid_count,
+    });
+  }
+  return null;
+}
+
+function triggerWaitErrorSummary(trigger, capture) {
+  const message = structuredErrorMessage(trigger?.error);
+  if (message) {
+    return conciseStructuredError(message) || translate("results.summary.triggerWaitFailed");
+  }
+  if (
+    trigger?.outcome === "timeout"
+    || trigger?.timed_out === true
+    || trigger?.capture_block_reason === "timeout"
+  ) {
+    return translate(
+      capture
+        ? "results.summary.captureTriggerTimedOut"
+        : "results.summary.triggerWaitTimedOut",
+    );
+  }
+  return null;
 }
 
 function successfulJobSummary(job) {

@@ -111,6 +111,8 @@ def test_result_history_runtime_behaviour() -> None:
     assert '"results.status.instrument_error": "Instrument error"' in english
     assert '"results.status.planned": "已規劃"' in chinese
     assert '"results.status.instrument_error": "儀器錯誤"' in chinese
+    assert '"results.summary.triggerWaitTimedOut": "Trigger wait timed out."' in english
+    assert '"results.summary.triggerWaitTimedOut": "等待觸發逾時。"' in chinese
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -132,7 +134,7 @@ def test_result_history_runtime_behaviour() -> None:
             period: "Period", phase: "Phase", vpp: "Vp-p", channel1: "Channel 1", channel2: "Channel 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", value: "Value", unit: "Unit", status: "Status", result: "Result", plannedScpi: "Planned SCPI",
             validCount: "Valid count", invalidCount: "Invalid count", errorCount: "Error count", valid: "Valid", invalid: "Invalid", error: "Error",
-            noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value", planned: "Planned", instrumentError: "Instrument error", integrate: "Integrate", fftPhase: "FFT phase", fftZoom: "Zoom",
+            noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value", measurementTimedOut: "{{channel}} {{measurement}} measurement timed out.", measurementFailed: "{{channel}} {{measurement}} measurement failed.", measurementFailedWithReason: "{{channel}} {{measurement}} measurement failed: {{message}}", sweepInvalid: "Measurement sweep contains invalid results: {{valid}} valid, {{invalid}} invalid.", triggerWaitTimedOut: "Trigger wait timed out.", captureTriggerTimedOut: "Trigger wait timed out; waveform was not captured.", triggerWaitFailed: "Trigger wait failed.", reportedInstrumentError: "The instrument reported an error.", planned: "Planned", instrumentError: "Instrument error", integrate: "Integrate", fftPhase: "FFT phase", fftZoom: "Zoom",
           },
           "zh-TW": {
             identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d", cancelled: "\u5df2\u53d6\u6d88",
@@ -141,7 +143,7 @@ def test_result_history_runtime_behaviour() -> None:
             period: "Period", phase: "Phase", vpp: "Vp-p", channel1: "Channel 1", channel2: "Channel 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", value: "Value", unit: "Unit", status: "Status", result: "Result", plannedScpi: "Planned SCPI",
             validCount: "Valid count", invalidCount: "Invalid count", errorCount: "Error count", valid: "Valid", invalid: "Invalid", error: "Error",
-            noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c", planned: "\u5df2\u898f\u5283", instrumentError: "\u5100\u5668\u932f\u8aa4", integrate: "\u7a4d\u5206", fftPhase: "FFT \u76f8\u4f4d", fftZoom: "\u7e2e\u653e\u8996\u7a97",
+            noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c", measurementTimedOut: "{{channel}} {{measurement}} \u91cf\u6e2c\u67e5\u8a62\u903e\u6642\u3002", measurementFailed: "{{channel}} {{measurement}} \u91cf\u6e2c\u5931\u6557\u3002", measurementFailedWithReason: "{{channel}} {{measurement}} \u91cf\u6e2c\u5931\u6557\uff1a{{message}}", sweepInvalid: "\u91cf\u6e2c\u6383\u63cf\u5305\u542b\u7121\u6548\u7d50\u679c\uff1a{{valid}} \u7b46\u6709\u6548\uff0c{{invalid}} \u7b46\u7121\u6548\u3002", triggerWaitTimedOut: "\u7b49\u5f85\u89f8\u767c\u903e\u6642\u3002", captureTriggerTimedOut: "\u7b49\u5f85\u89f8\u767c\u903e\u6642\uff0c\u672a\u64f7\u53d6\u6ce2\u5f62\u3002", triggerWaitFailed: "\u7b49\u5f85\u89f8\u767c\u5931\u6557\u3002", reportedInstrumentError: "\u5100\u5668\u56de\u5831\u932f\u8aa4\u3002", planned: "\u5df2\u898f\u5283", instrumentError: "\u5100\u5668\u932f\u8aa4", integrate: "\u7a4d\u5206", fftPhase: "FFT \u76f8\u4f4d", fftZoom: "\u7e2e\u653e\u8996\u7a97",
           },
         };
         const translate = (key, values = {}) => {
@@ -190,7 +192,15 @@ def test_result_history_runtime_behaviour() -> None:
                                  : key === "results.status.valid" ? locale.valid
                                    : key === "results.status.invalid" ? locale.invalid
                                      : key === "results.status.error" ? locale.error
-                                : key === "results.summary.noValidMeasurement" ? locale.noValidSummary
+                                 : key === "results.summary.noValidMeasurement" ? locale.noValidSummary
+                                   : key === "results.summary.measurementTimedOut" ? locale.measurementTimedOut
+                                     : key === "results.summary.measurementFailed" ? locale.measurementFailed
+                                       : key === "results.summary.measurementFailedWithReason" ? locale.measurementFailedWithReason
+                                         : key === "results.summary.measureSweepInvalid" ? locale.sweepInvalid
+                                           : key === "results.summary.triggerWaitTimedOut" ? locale.triggerWaitTimedOut
+                                             : key === "results.summary.captureTriggerTimedOut" ? locale.captureTriggerTimedOut
+                                               : key === "results.summary.triggerWaitFailed" ? locale.triggerWaitFailed
+                                                 : key === "results.summary.instrumentError" ? locale.reportedInstrumentError
                                                               : key;
           return Object.entries(values).reduce(
             (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
@@ -377,14 +387,14 @@ def test_result_history_runtime_behaviour() -> None:
         assert.equal(summary.children[0].children[2].textContent, "Cancelled");
         assert.equal(detail.children.length, 1);
         assert.equal(detail.children[0].className, "result-block");
-        // Invalid sentinel with real system error must not be presented as warning
+        // Invalid sentinel with real system error must use the instrument error
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("invalid-measure-system-error-job", "measure", "failed", {
           error: "Core command returned a non-zero exit code.",
           result: { exit_code: 1, result: { item: "vpp", channel: 1, valid: false, reason: "invalid measurement sentinel", value: null, raw_value: "+99E+36", unit: "V" }, system_error: { code: -113, is_error: true, message: "Undefined header" } },
         }), detail);
         assert.equal(summary.children[0].children[1].className, "badge badge-failed");
-        assert.equal(summary.children[0].children[2].textContent, "Core command returned a non-zero exit code.");
+        assert.equal(summary.children[0].children[2].textContent, "Undefined header");
         assert.equal(detail.children[0].className, "error-block");
         // Generic failed job still shows error block
         api.renderEmpty(summary, detail);
@@ -394,6 +404,71 @@ def test_result_history_runtime_behaviour() -> None:
         }), detail);
         assert.equal(summary.children[0].children[1].className, "badge badge-failed");
         assert.equal(detail.children[0].className, "error-block");
+
+        // Structured command failures should take precedence over the generic job error
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("sweep-timeout", "measure-sweep", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: {
+            measurements: [{ item: "vpp", channel: 1, reference_channel: null, valid: false, reason: "VISA query failed", error: { type: "VisaBackendError", message: "VISA query failed for ':MEASure:VPP? CHANnel1': VI_ERROR_TMO (-1073807339): Timeout expired before operation completed." } }],
+            summary: { valid_count: 0, invalid_count: 0, error_count: 1 },
+          } },
+        }), detail);
+        assert.equal(rowTexts()[0][2], "CH1 Vp-p measurement timed out.");
+        assert.doesNotMatch(rowTexts()[0][2], /VISA|SCPI|VI_ERROR_TMO/);
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("sweep-invalid", "measure-sweep", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: {
+            measurements: [{ item: "vpp", channel: 2, valid: false, reason: "invalid measurement sentinel", error: null }],
+            summary: { valid_count: 15, invalid_count: 1, error_count: 0 },
+          } },
+        }), detail);
+        assert.equal(rowTexts()[0][2], "Measurement sweep contains invalid results: 15 valid, 1 invalid.");
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("single-wait-timeout", "single-wait", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: { outcome: "timeout", timed_out: true, capture_block_reason: "timeout", error: null } },
+        }), detail);
+        assert.equal(rowTexts()[0][2], "Trigger wait timed out.");
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("capture-timeout", "capture", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: { files: [], trigger: { outcome: "timeout", timed_out: true, capture_allowed: false, capture_block_reason: "timeout", error: null } } },
+        }), detail);
+        assert.equal(rowTexts()[0][2], "Trigger wait timed out; waveform was not captured.");
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("capture-trigger-error", "capture", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: { files: [], trigger: { outcome: "unknown", timed_out: false, capture_allowed: false, capture_block_reason: "unknown", error: "configured query failure" } }, system_error: { code: -113, is_error: true, message: "Undefined header" } },
+        }), detail);
+        assert.equal(rowTexts()[0][2], "configured query failure");
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("outer-system-error", "capture-batch", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: { status: "instrument_error" }, system_error: { code: -113, is_error: true, message: "Undefined header" } },
+        }), detail);
+        assert.equal(rowTexts()[0][2], "Undefined header");
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("root-error-precedence", "capture", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: { error: { message: "Root capture failure" }, files: [], trigger: { outcome: "timeout", timed_out: true, capture_allowed: false, capture_block_reason: "timeout", error: null } }, system_error: { code: -113, is_error: true, message: "Undefined header" } },
+        }), detail);
+        assert.equal(rowTexts()[0][2], "Root capture failure");
+
+        globalThis.testLocale = "zh-TW";
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("single-wait-timeout-zh", "single-wait", "failed", {
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: { outcome: "timeout", timed_out: true, capture_block_reason: "timeout", error: null } },
+        }), detail);
+        assert.equal(rowTexts()[0][2], "\u7b49\u5f85\u89f8\u767c\u903e\u6642\u3002");
 
         const measurementJob = (result) => makeJob("measurement-job", "measure", "completed", { result: { result } });
         const fieldTexts = (container) => container.children.map((field) => field.children.map((node) => node.textContent));
