@@ -421,6 +421,97 @@ def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
+@pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
+    script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const captureDefinition = {
+          id: "segmented-capture",
+          fields: [
+            { name: "channel", type: "integer", minimum: 1, maximum: 4, default: 1 },
+            { name: "segments", type: "integer", minimum: 2, maximum: 5000 },
+            { name: "points", type: "integer", options: [1000, 5000, 10000], default: 1000 },
+            { name: "format", type: "enum", options: ["byte", "word"], default: "byte" },
+          ],
+        };
+        catalog.commands = [definition, captureDefinition];
+        editor.buildDom();
+        editor.present();
+        await settle();
+
+        assert.equal(editor.captureSection.hidden, false);
+        assert.equal(editor.captureChannelInput.value, "1");
+        assert.equal(editor.captureSegmentsInput.value, "2");
+        assert.equal(editor.capturePointsSelect.value, "1000");
+        assert.equal(editor.captureFormatSelect.value, "byte");
+        assert.equal(editor.segmentBrowser.hidden, true);
+
+        const countBeforeInput = submitted.length;
+        editor.captureChannelInput.value = "2";
+        editor.captureSegmentsInput.value = "5";
+        editor.capturePointsSelect.value = "5000";
+        editor.captureFormatSelect.value = "word";
+        await settle();
+        assert.equal(submitted.length, countBeforeInput);
+
+        responses.push({ status: "completed", result: { result: {} } });
+        editor.captureButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.at(-1), {
+          command: "segmented-capture",
+          parameters: { channel: 2, segments: 5, points: 5000, format: "word" },
+          intent: "command",
+        });
+        assert.equal("timeout_ms" in submitted.at(-1).parameters, false);
+        assert.equal("poll_interval_ms" in submitted.at(-1).parameters, false);
+
+        editor.setBusy(true);
+        assert.equal(editor.captureButton.disabled, true);
+        editor.setBusy(false);
+        assert.equal(editor.captureButton.disabled, false);
+
+        const countBeforeRerender = submitted.length;
+        editor.schedulePresentation();
+        editor.rerender();
+        await settle();
+        assert.equal(editor.captureChannelInput.value, "2");
+        assert.equal(editor.captureSegmentsInput.value, "5");
+        assert.equal(editor.capturePointsSelect.value, "5000");
+        assert.equal(editor.captureFormatSelect.value, "word");
+        assert.equal(submitted.length, countBeforeRerender);
+
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.captureChannelInput.value, "2");
+        assert.equal(editor.captureSegmentsInput.value, "5");
+        assert.equal(editor.capturePointsSelect.value, "5000");
+        assert.equal(editor.captureFormatSelect.value, "word");
+
+        captureDefinition.fields.find((field) => field.name === "channel").maximum = 2;
+        captureDefinition.fields.find((field) => field.name === "segments").maximum = 1000;
+        contextKey = "simulate||keysight-dsox3024a";
+        const countBeforeContextRerender = submitted.length;
+        editor.schedulePresentation();
+        editor.rerender();
+        await settle();
+        assert.equal(editor.captureChannelInput.max, "2");
+        assert.equal(editor.captureSegmentsInput.max, "1000");
+        assert.equal(editor.captureChannelInput.value, "1");
+        assert.equal(submitted.length, countBeforeContextRerender);
+        ''',
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def test_segmented_memory_select_validation_and_execution_use_core(tmp_path: Path) -> None:
     request = validate_job_request({
         "command": "segmented-memory",

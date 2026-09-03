@@ -128,6 +128,56 @@ export class SegmentedEditor {
     this.exitButton.addEventListener("click", () => void this.exit());
     actions.append(this.enterButton, this.exitButton);
 
+    this.captureSection = document.createElement("section");
+    this.captureSection.className = "segmented-editor-browser";
+    const captureHeading = document.createElement("strong");
+    captureHeading.textContent = translate("command.segmented-capture");
+    const captureChannelField = document.createElement("label");
+    captureChannelField.className = "field";
+    const captureChannelLabel = document.createElement("span");
+    captureChannelLabel.textContent = translate("field.channel");
+    this.captureChannelInput = document.createElement("input");
+    this.captureChannelInput.type = "number";
+    this.captureChannelInput.step = "1";
+    this.captureChannelInput.required = true;
+    captureChannelField.append(captureChannelLabel, this.captureChannelInput);
+    const captureSegmentsField = document.createElement("label");
+    captureSegmentsField.className = "field";
+    const captureSegmentsLabel = document.createElement("span");
+    captureSegmentsLabel.textContent = translate("field.segments");
+    this.captureSegmentsInput = document.createElement("input");
+    this.captureSegmentsInput.type = "number";
+    this.captureSegmentsInput.step = "1";
+    this.captureSegmentsInput.required = true;
+    captureSegmentsField.append(captureSegmentsLabel, this.captureSegmentsInput);
+    const capturePointsField = document.createElement("label");
+    capturePointsField.className = "field";
+    const capturePointsLabel = document.createElement("span");
+    capturePointsLabel.textContent = translate("field.points");
+    this.capturePointsSelect = document.createElement("select");
+    this.capturePointsSelect.required = true;
+    capturePointsField.append(capturePointsLabel, this.capturePointsSelect);
+    const captureFormatField = document.createElement("label");
+    captureFormatField.className = "field";
+    const captureFormatLabel = document.createElement("span");
+    captureFormatLabel.textContent = translate("field.format");
+    this.captureFormatSelect = document.createElement("select");
+    this.captureFormatSelect.required = true;
+    captureFormatField.append(captureFormatLabel, this.captureFormatSelect);
+    this.captureButton = document.createElement("button");
+    this.captureButton.type = "button";
+    this.captureButton.className = "primary";
+    this.captureButton.textContent = translate("actions.capture");
+    this.captureButton.addEventListener("click", () => void this.capture());
+    this.captureSection.append(
+      captureHeading,
+      captureChannelField,
+      captureSegmentsField,
+      capturePointsField,
+      captureFormatField,
+      this.captureButton,
+    );
+
     this.unavailableNote = document.createElement("p");
     this.unavailableNote.className = "muted compact-note";
     this.unavailableNote.textContent = translate("segmented.editor.unavailable");
@@ -137,9 +187,11 @@ export class SegmentedEditor {
       this.readouts,
       countField,
       this.segmentBrowser,
+      this.captureSection,
       actions,
     );
     this.applyDefinition();
+    this.applyCaptureDefinition(true);
     this.renderState();
   }
 
@@ -154,6 +206,83 @@ export class SegmentedEditor {
   definition() {
     const selected = this.hooks.selectedCommand?.();
     return selected?.editor === "segmented" ? selected : null;
+  }
+
+  captureDefinition() {
+    const commands = this.catalog?.commands;
+    if (!Array.isArray(commands)) return null;
+    return commands.find((command) => command.id === "segmented-capture") || null;
+  }
+
+  captureSupported() {
+    const definition = this.captureDefinition();
+    return Boolean(definition) && this.catalog.supported(definition);
+  }
+
+  applyCaptureDefinition(contextChanged = false) {
+    const definition = this.captureDefinition();
+    const fields = definition ? this.catalog.fieldsFor(definition) : [];
+    const fieldByName = (name) => fields.find((field) => field.name === name);
+    const channelField = fieldByName("channel");
+    const segmentsField = fieldByName("segments");
+    const pointsField = fieldByName("points");
+    const formatField = fieldByName("format");
+    if (channelField) {
+      if (channelField.minimum !== undefined) {
+        this.captureChannelInput.min = String(channelField.minimum);
+      }
+      if (channelField.maximum !== undefined) {
+        this.captureChannelInput.max = String(channelField.maximum);
+      }
+      if (contextChanged || !this.captureChannelInput.value) {
+        const initial = channelField.default ?? channelField.minimum ?? "";
+        this.captureChannelInput.value = initial === "" ? "" : String(initial);
+      }
+    }
+    if (segmentsField) {
+      if (segmentsField.minimum !== undefined) {
+        this.captureSegmentsInput.min = String(segmentsField.minimum);
+      }
+      if (segmentsField.maximum !== undefined) {
+        this.captureSegmentsInput.max = String(segmentsField.maximum);
+      }
+      if (contextChanged || !this.captureSegmentsInput.value) {
+        const initial = segmentsField.default ?? segmentsField.minimum ?? "";
+        this.captureSegmentsInput.value = initial === "" ? "" : String(initial);
+      }
+    }
+    if (pointsField) {
+      const options = (pointsField.options || []).map(String);
+      const previous = this.capturePointsSelect.value;
+      this.capturePointsSelect.replaceChildren(...options.map((option) => {
+        const item = document.createElement("option");
+        item.value = option;
+        item.textContent = option;
+        return item;
+      }));
+      if (!contextChanged && options.includes(previous)) {
+        this.capturePointsSelect.value = previous;
+      } else {
+        const initial = pointsField.default ?? options[0] ?? "";
+        this.capturePointsSelect.value = initial === "" ? "" : String(initial);
+      }
+    }
+    if (formatField) {
+      const options = (formatField.options || []).map(String);
+      const previous = this.captureFormatSelect.value;
+      this.captureFormatSelect.replaceChildren(...options.map((option) => {
+        const item = document.createElement("option");
+        item.value = option;
+        item.textContent = option.toUpperCase();
+        return item;
+      }));
+      if (!contextChanged && options.includes(previous)) {
+        this.captureFormatSelect.value = previous;
+      } else {
+        const initial = formatField.default ?? options[0] ?? "";
+        this.captureFormatSelect.value = initial === "" ? "" : String(initial);
+      }
+    }
   }
 
   applyDefinition() {
@@ -175,31 +304,54 @@ export class SegmentedEditor {
   rerender() {
     const countValue = this.countInput?.value || "";
     const segmentValue = this.segmentInput?.value || "";
+    const captureChannel = this.captureChannelInput?.value || "";
+    const captureSegments = this.captureSegmentsInput?.value || "";
+    const capturePoints = this.capturePointsSelect?.value || "";
+    const captureFormat = this.captureFormatSelect?.value || "";
     const contextKey = this.contextKey;
     this.buildDom();
     if (countValue !== "") this.countInput.value = countValue;
     this.present();
     queueMicrotask(() => {
-      if (
-        segmentValue !== ""
-        && contextKey === this.contextKey
-        && this.browserAvailable()
-      ) {
+      if (contextKey !== this.contextKey) return;
+      let restored = false;
+      if (segmentValue !== "" && this.browserAvailable()) {
         this.segmentInput.value = segmentValue;
-        this.applyBusyState();
+        restored = true;
       }
+      if (this.captureSupported()) {
+        if (captureChannel !== "") {
+          this.captureChannelInput.value = captureChannel;
+          restored = true;
+        }
+        if (captureSegments !== "") {
+          this.captureSegmentsInput.value = captureSegments;
+          restored = true;
+        }
+        if (capturePoints !== "") {
+          this.capturePointsSelect.value = capturePoints;
+          restored = true;
+        }
+        if (captureFormat !== "") {
+          this.captureFormatSelect.value = captureFormat;
+          restored = true;
+        }
+      }
+      if (restored) this.applyBusyState();
     });
   }
 
   present() {
     const key = this.hooks.contextKey();
-    if (key !== this.contextKey) {
+    const contextChanged = key !== this.contextKey;
+    if (contextChanged) {
       this.contextKey = key;
       this.state = null;
       this.dirty = false;
       this.countInput.value = "";
     }
     this.applyDefinition();
+    this.applyCaptureDefinition(contextChanged);
     this.renderState();
     this.applyBusyState();
   }
@@ -258,6 +410,42 @@ export class SegmentedEditor {
         { intent: "apply" },
       );
       this.acceptJob(job, true, submittedContextKey);
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  canCapture() {
+    return this.captureSupported()
+      && this.canExecute()
+      && this.captureChannelInput?.value !== ""
+      && this.captureSegmentsInput?.value !== ""
+      && this.capturePointsSelect?.value !== ""
+      && this.captureFormatSelect?.value !== ""
+      && this.captureChannelInput?.checkValidity()
+      && this.captureSegmentsInput?.checkValidity();
+  }
+
+  async capture() {
+    if (!this.canCapture()) {
+      this.captureChannelInput?.reportValidity?.();
+      this.captureSegmentsInput?.reportValidity?.();
+      return;
+    }
+    const channel = Number(this.captureChannelInput.value);
+    const segments = Number(this.captureSegmentsInput.value);
+    const points = Number(this.capturePointsSelect.value);
+    const format = String(this.captureFormatSelect.value).toLowerCase();
+    if (!Number.isInteger(channel) || !Number.isInteger(segments) || !Number.isInteger(points)) {
+      return;
+    }
+    this.setBusy(true);
+    try {
+      await this.hooks.executeCommand(
+        "segmented-capture",
+        { channel, segments, points, format },
+        { intent: "command" },
+      );
     } finally {
       this.setBusy(false);
     }
@@ -363,6 +551,7 @@ export class SegmentedEditor {
     this.countInput.parentNode.hidden = unsupported;
     this.enterButton.parentNode.hidden = unsupported;
     if (unsupported) this.segmentBrowser.hidden = true;
+    this.captureSection.hidden = unsupported || !this.captureSupported();
   }
 
   browserAvailable() {
@@ -396,5 +585,11 @@ export class SegmentedEditor {
     this.selectButton.disabled = disabled
       || !browserAvailable
       || !this.segmentInput.checkValidity();
+    const captureDisabled = disabled || !this.captureSupported();
+    this.captureChannelInput.disabled = captureDisabled;
+    this.captureSegmentsInput.disabled = captureDisabled;
+    this.capturePointsSelect.disabled = captureDisabled;
+    this.captureFormatSelect.disabled = captureDisabled;
+    this.captureButton.disabled = !this.canCapture();
   }
 }
