@@ -48,7 +48,10 @@ def extract_css_rule(source: str, selector: str) -> str:
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     live_data_path = STATIC_ROOT / "live-data.js"
-    assert '"live_data.type.glitch": "突波"' in read_static("locale_zh_tw.js")
+    chinese = read_static("locale_zh_tw.js")
+    assert '"live_data.type.glitch": "毛刺"' in chinese
+    assert '"live_data.type.runt": "欠幅"' in chinese
+    assert '"live_data.source.line": "線路"' in chinese
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -82,14 +85,18 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
           triggerType: node(), triggerSource: node(), triggerLevel: node(), triggerSlope: node(),
           triggerSweep: node(),
         };
-        const translate = (key) => key === "live_data.type.glitch" ? "\u7a81\u6ce2" : key;
+        const translate = (key) => ({
+          "live_data.type.glitch": "\u6bdb\u523a",
+          "live_data.source.line": "\u7dda\u8def",
+        })[key] || key;
         renderInstrumentSummary(elements, {
           channels: [],
           timebase: {},
-          trigger: { type: "glitch" },
+          trigger: { type: "glitch", source: "line" },
         }, translate);
-        assert.equal(elements.triggerType.textContent, "\u7a81\u6ce2");
+        assert.equal(elements.triggerType.textContent, "\u6bdb\u523a");
         assert.notEqual(elements.triggerType.textContent, "Glitch");
+        assert.equal(elements.triggerSource.textContent, "\u7dda\u8def");
         '''
     )
     completed = subprocess.run(

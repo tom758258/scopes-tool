@@ -474,7 +474,7 @@ function resultFieldLabel(name) {
 
 function isLiteralWorkspaceField(name) {
   return isRawDiagnosticField(name)
-    || /(^|_)(file|files|filename|filenames|name|path|paths|resource|resources|model|models|scpi|protocol|protocols|artifact|artifacts|id)$/.test(name)
+    || /(^|_)(file|files|filename|filenames|name|label|text|path|paths|resource|resources|model|models|scpi|protocol|protocols|artifact|artifacts|id)$/.test(name)
     || /^(file|path|resource|model|scpi|protocol|artifact)_/.test(name);
 }
 
@@ -503,8 +503,10 @@ function formatWorkspaceValue(name, value) {
       .join("; ");
   }
   if (typeof value === "string" && !isLiteralWorkspaceField(name) && !isProtocolIdentifier(value)) {
-    const key = `enum.${value}`;
-    if (hasTranslation(key)) return translate(key);
+    const keys = name === "status" ? [`status.${value}`, `enum.${value}`] : [`enum.${value}`];
+    if (name === "action") keys.push(`actions.${value}`, `command.${value}`);
+    const key = keys.find((candidate) => hasTranslation(candidate));
+    if (key) return translate(key);
   }
   return String(value);
 }

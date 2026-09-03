@@ -146,6 +146,8 @@ SEQUENCE_EDITOR_HARNESS = r'''
     "enum.vpp": "VPP",
     "enum.positive": "\u6b63\u5411",
     "enum.negative": "\u8ca0\u5411",
+    "enum.minimal": "\u6700\u5c0f\u6e05\u7406",
+    "enum.safe": "\u5b89\u5168\u6e05\u7406",
   };
   globalThis.translate = (key, values = {}) => Object.entries(values).reduce(
     (text, [name, value]) => text.replaceAll(`{{${name}}}`, String(value)), translations[key] || key,
@@ -289,14 +291,29 @@ def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -
         assert.equal(summary.includes("source_channel="), false);
         assert.equal(summary.includes("slope=positive"), false);
 
+        const profileField = metadata.parameters.cleanup[0];
+        const cleanupStep = {
+          action: "cleanup",
+          parameters: { profile: "minimal" },
+          expanded: true,
+        };
+        const cleanupSelect = editor.renderParameter(cleanupStep, 0, profileField).children[1];
+        assert.equal(cleanupSelect.children[0].text, "\u6700\u5c0f\u6e05\u7406");
+        assert.equal(cleanupSelect.children[0].value, "minimal");
+
+        state.steps = [cleanupStep];
+        await editor.submit();
+        assert.equal(submissions.length, 1);
+        assert.deepEqual(submissions[0][1].document.steps[0].parameters, { profile: "minimal" });
+
         state.steps = [{
           action: "measure",
           parameters: { item: "vpp", channel: "1", slope: "positive" },
           expanded: true,
         }];
         await editor.submit();
-        assert.equal(submissions.length, 1);
-        assert.deepEqual(submissions[0][1].document.steps[0].parameters, {
+        assert.equal(submissions.length, 2);
+        assert.deepEqual(submissions[1][1].document.steps[0].parameters, {
           item: "vpp",
           channel: 1,
           slope: "positive",

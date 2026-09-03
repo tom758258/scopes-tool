@@ -410,6 +410,8 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
     assert '"results.field.termination_reason": "Termination reason"' in english
+    assert '"results.field.acquisition": "擷取"' in chinese
+    assert '"enum.condition_met": "條件成立"' in chinese
     assert '"results.field.completed_count": "完成數量"' in chinese
     assert '"results.field.last_measurement": "最後量測"' in chinese
     assert '"results.field.index": "索引"' in chinese
@@ -440,6 +442,10 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "status.no": "No",
           "enum.query": "Query",
           "enum.normal": "Normal",
+          "actions.run": "Run",
+          "status.completed": "Completed",
+          "enum.condition_met": "Condition met",
+          "results.field.acquisition": "Acquisition",
           "results.field.completed_count": "Completed count",
           "results.field.last_measurement": "Last measurement",
           "results.field.index": "Index",
@@ -456,6 +462,10 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "status.no": "\u5426",
           "enum.query": "\u67e5\u8a62",
           "enum.normal": "\u6b63\u5e38",
+          "actions.run": "\u57f7\u884c",
+          "status.completed": "\u5df2\u5b8c\u6210",
+          "enum.condition_met": "\u689d\u4ef6\u6210\u7acb",
+          "results.field.acquisition": "\u64f7\u53d6",
           "results.field.completed_count": "\u5b8c\u6210\u6578\u91cf",
           "results.field.last_measurement": "\u6700\u5f8c\u91cf\u6e2c",
           "results.field.index": "\u7d22\u5f15",
@@ -592,6 +602,33 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         assert(zhWorkflowText.includes("\u67e5\u8a62"), "canonical enum is localized in zh-TW");
         assert(zhWorkflowText.includes(zhLabels["status.disabled"]), "enabled boolean keeps zh-TW disabled semantics");
         assert(zhWorkflowText.some((text) => text.includes("\u7b26\u5408: \u662f")), "generic boolean uses zh-TW yes/no");
+
+        const acquisitionWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(acquisitionWorkspace, makeJob("acquisition", {
+          action: "run",
+          acquisition: { type: "normal", count: 8 },
+          text: "normal",
+          label: "query",
+        }));
+        const acquisitionFields = acquisitionWorkspace.children.map((field) =>
+          field.children.map((node) => node.textContent)
+        );
+        assert.deepEqual(acquisitionFields[0], ["\u57f7\u884c", "Action"]);
+        assert(acquisitionFields[1][0].includes("\u6b63\u5e38"), "acquisition type is localized");
+        assert.equal(acquisitionFields[1][1], "\u64f7\u53d6");
+        assert.deepEqual(acquisitionFields[2], ["normal", "Text"]);
+        assert.deepEqual(acquisitionFields[3], ["query", zhLabels["results.field.label"]]);
+
+        const terminatedWorkflow = new FakeNode("div");
+        api.renderWorkspaceResult(terminatedWorkflow, makeJob("measure-until", {
+          status: "completed",
+          termination_reason: "condition_met",
+        }));
+        const terminatedText = terminatedWorkflow.children.flatMap((field) =>
+          field.children.map((node) => node.textContent)
+        );
+        assert(terminatedText.includes("\u5df2\u5b8c\u6210"));
+        assert(terminatedText.includes("\u689d\u4ef6\u6210\u7acb"));
         globalThis.testLocale = "en";
 
         // A. command-scoped dispatch: non-channel-summary command must not use card renderer
