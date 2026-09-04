@@ -34,6 +34,7 @@ from scopes_tool_core import (
     plan_sequence,
     plan_triggered_capture_series,
     plan_triggered_measure_loop,
+    query_acquisition_readouts,
     query_instrument_summary,
     run_capture,
     run_capture_batch,
@@ -47,15 +48,7 @@ from scopes_tool_core import (
     run_triggered_capture_series,
     run_triggered_measure_loop,
 )
-from scopes_tool_core.acquisition import (
-    AcquisitionResponseError,
-    acquisition_points_query,
-    parse_acquisition_points,
-    parse_record_length,
-    parse_sample_rate,
-    record_length_query,
-    sample_rate_query,
-)
+
 from scopes_tool_core.batch import BATCH_DEFAULT_BASE_DIR, default_batch_output_dir
 from scopes_tool_core.discovery import discover_visa_resources
 from scopes_tool_core.measure_logger import (
@@ -319,21 +312,10 @@ def _execute_scope_command(
         idn = scope.idn or scope.query_idn()
         idn_payload = _jsonable(idn)
         idn_payload["model_id"] = idn.model_id
-        # Acquisition readouts: try each query; unsupported or parse/query errors
-        # return None (frontend shows Unavailable). Real non-query errors propagate.
-        def _read_acquisition_value(query_str, parser) -> float | int | None:
-            try:
-                raw = scope.scpi.query(query_str)
-                return parser(raw)
-            except AcquisitionResponseError:
-                return None
+        acquisition_readouts = query_acquisition_readouts(scope)
         result = {
             "idn": idn_payload,
-            "acquisition": {
-                "sample_rate": _read_acquisition_value(sample_rate_query(), parse_sample_rate),
-                "acquisition_points": _read_acquisition_value(acquisition_points_query(), parse_acquisition_points),
-                "record_length": _read_acquisition_value(record_length_query(), parse_record_length),
-            },
+            "acquisition": acquisition_readouts,
         }
         return {"exit_code": 0, "result": result, "artifacts": []}
     if command == "run":

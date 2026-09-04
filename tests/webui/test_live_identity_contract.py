@@ -133,12 +133,13 @@ def test_planning_modes_keep_registered_model_selection() -> None:
         assert request["model_id"] == "keysight-dsox2004a"
 
 
-def test_list_resources_is_hidden_but_identify_remains_user_facing() -> None:
+def test_list_resources_is_hidden_and_identify_hidden_from_catalog() -> None:
     catalog = {entry["id"]: entry for entry in commands.command_catalog()}
 
     assert "list-resources" not in catalog
-    assert catalog["identify"]["label"] == "Read device information"
-    assert catalog["identify"]["description"] == "Read instrument identification information"
+    assert "identify" not in catalog
+    # System snapshot is also hidden from presentation (internal command only).
+    assert "system-information-snapshot" not in catalog
     request = commands.validate_job_request(
         {"command": "list-resources", "mode": "live", "parameters": {"live_only": True}}
     )

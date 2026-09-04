@@ -366,6 +366,10 @@ async function initialize() {
     state.executionContext = nextContext;
     if (catalog) catalog.updateMode(context.mode);
     if (!updateCommandSupport()) syncCommandSelection();
+    const newSystemKey = systemInformationContextKey();
+    if (systemSnapshot.contextKey !== null && systemSnapshot.contextKey !== newSystemKey) {
+      systemSnapshot = { contextKey: null, value: null, loading: false, error: null };
+    }
     renderLiveData();
     renderSystemInformation();
   }, (scanState) => {
@@ -1148,18 +1152,24 @@ function renderLiveData() {
   );
 }
 
-let systemSnapshot = { value: null, loading: false, error: null };
+let systemSnapshot = { contextKey: null, value: null, loading: false, error: null };
+
+function systemInformationContextKey() {
+  return `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`;
+}
 
 async function refreshSystemInformationSnapshot() {
   if (isExecutionBusy() || !commandAvailable("system-information-snapshot")) return;
-  systemSnapshot = { value: null, loading: true, error: null };
+  const submittedContextKey = systemInformationContextKey();
+  systemSnapshot = { contextKey: submittedContextKey, value: null, loading: true, error: null };
   renderSystemInformation();
   updateAvailability();
   const job = await executeCommand("system-information-snapshot", {});
+  if (submittedContextKey !== systemInformationContextKey()) return;
   if (job?.status === "completed" && job.result?.result) {
-    systemSnapshot = { value: job.result.result, loading: false, error: null };
+    systemSnapshot = { contextKey: submittedContextKey, value: job.result.result, loading: false, error: null };
   } else {
-    systemSnapshot = { value: null, loading: false, error: job?.error || translate("system.readFailed") };
+    systemSnapshot = { contextKey: submittedContextKey, value: null, loading: false, error: job?.error || translate("system.readFailed") };
   }
   renderSystemInformation();
   updateAvailability();
@@ -1186,9 +1196,20 @@ function renderSystemInformation() {
   setText(elements.sysResource, context.resource || null, "—");
 
   const hasLoaded = systemSnapshot.value !== null;
-  setText(elements.sysSampleRate, acquisition.sample_rate, hasLoaded ? "Unavailable" : "—");
-  setText(elements.sysAcquisitionPoints, acquisition.acquisition_points, hasLoaded ? "Unavailable" : "—");
-  setText(elements.sysRecordLength, acquisition.record_length, hasLoaded ? "Unavailable" : "—");
+  function formatSampleRate(hz) {
+    if (hz === null || hz === undefined) return null;
+    if (hz >= 1e9) return (hz / 1e9).toFixed(2) + " GSa/s";
+    if (hz >= 1e6) return (hz / 1e6).toFixed(2) + " MSa/s";
+    if (hz >= 1e3) return (hz / 1e3).toFixed(2) + " kSa/s";
+    return String(hz) + " Sa/s";
+  }
+  function formatPoints(points) {
+    if (points === null || points === undefined) return null;
+    return Number(points).toLocaleString();
+  }
+  setText(elements.sysSampleRate, formatSampleRate(acquisition.sample_rate), hasLoaded ? "Unavailable" : "—");
+  setText(elements.sysAcquisitionPoints, formatPoints(acquisition.acquisition_points) ? formatPoints(acquisition.acquisition_points) + " pts" : (hasLoaded ? "Unavailable" : "—"), hasLoaded ? "Unavailable" : "—");
+  setText(elements.sysRecordLength, formatPoints(acquisition.record_length) ? formatPoints(acquisition.record_length) + " pts" : (hasLoaded ? "Unavailable" : "—"), hasLoaded ? "Unavailable" : "—");
 }
 
 function setStateIndicator(indicator, text, stateClass, title = "") {

@@ -11,11 +11,18 @@ import time
 from typing import Callable, Mapping, Sequence
 
 from .acquisition import (
+    AcquisitionResponseError,
     acquisition_count_command,
     acquisition_count_query,
+    acquisition_points_query,
     acquisition_type_command,
     acquisition_type_query,
     normalize_acquisition_type,
+    parse_acquisition_points,
+    parse_record_length,
+    parse_sample_rate,
+    record_length_query,
+    sample_rate_query,
     validate_acquisition_count,
 )
 from .batch import (
@@ -1585,6 +1592,27 @@ def query_instrument_summary(scope: Oscilloscope) -> dict[str, object]:
         },
         "trigger": trigger,
     }
+
+
+def query_acquisition_readouts(scope: Oscilloscope) -> dict[str, float | int | None]:
+    """Read low-level acquisition readouts with capability-aware routing."""
+    result: dict[str, float | int | None] = {
+        "sample_rate": None,
+        "acquisition_points": None,
+        "record_length": None,
+    }
+    raw_rate = scope.scpi.query(sample_rate_query())
+    result["sample_rate"] = parse_sample_rate(raw_rate)
+    raw_points = scope.scpi.query(acquisition_points_query())
+    result["acquisition_points"] = parse_acquisition_points(raw_points)
+    # Record length: only 4000X profile supports this query.
+    if scope.capabilities is not None and getattr(scope.capabilities, "series", None) == "4000X":
+        raw_length = scope.scpi.query(record_length_query())
+        result["record_length"] = parse_record_length(raw_length)
+    else:
+        # Unsupported: do not send query, do not catch as error.
+        result["record_length"] = None
+    return result
 
 
 def measure_sweep_summary(measurements: Sequence[dict[str, object]]) -> dict[str, int]:

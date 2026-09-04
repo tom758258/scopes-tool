@@ -312,3 +312,57 @@ class TestScopeAcquisitionMethods:
         assert config.type == "normal"
         assert config.count == 16
         assert backend.history == ["*IDN?", ":ACQuire:TYPE?", ":ACQuire:COUNt?"]
+
+
+from scopes_tool_core.operations import query_acquisition_readouts
+
+
+def test_query_acquisition_readouts_2000X_no_record_length() -> None:
+    """2000X profile: record_length unsupported (None); sample_rate and points queried."""
+    # 2000X model: DSOX2004A
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX2004A,MY1,07.20",
+            ":ACQuire:SRATe?": "5.0E+09",
+            ":ACQuire:POINts?": "4000000",
+        },
+    )
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    readouts = query_acquisition_readouts(scope)
+    assert readouts["sample_rate"] == 5.0e9
+    assert readouts["acquisition_points"] == 4000000
+    assert readouts["record_length"] is None
+    assert ":ACQuire:RLENgth?" not in backend.history
+
+
+def test_query_acquisition_readouts_4000X_record_length_supported() -> None:
+    """4000X profile: record_length queried and parsed."""
+    # 4000X model: DSOX4024A
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20",
+            ":ACQuire:SRATe?": "2.5E+09",
+            ":ACQuire:POINts?": "2000000",
+            ":ACQuire:RLENgth?": "2000000",
+        },
+    )
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    readouts = query_acquisition_readouts(scope)
+    assert readouts["record_length"] == 2000000
+    assert ":ACQuire:RLENgth?" in backend.history
+
+
+def test_query_acquisition_readouts_parser_failure_propagates() -> None:
+    """Malformed acquisition response propagates as AcquisitionResponseError, not masked as None."""
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,MY1,07.20",
+            ":ACQuire:SRATe?": "BAD",
+        },
+    )
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    with pytest.raises(AcquisitionResponseError):
+        query_acquisition_readouts(scope)

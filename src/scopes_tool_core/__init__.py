@@ -121,6 +121,7 @@ from .operations import (
     MeasureSweepRequest,
     OperationResult,
     SmokeRequest,
+    query_acquisition_readouts,
     query_instrument_summary,
     run_acquisition_check,
     run_capture,
