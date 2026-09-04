@@ -630,7 +630,8 @@ Measurement and artifact-producing flows:
   returns `operation: "query"`
   and `hardcopy` with canonical and raw area, ink saver, palette, layout, and
   format fields; it returns no files.
-- `smoke`: `status`, `output_dir`, `report_path`, `scpi_log_path`, `files`,
+- `smoke`: `status`, `save_artifacts`, `output_dir`, `report_path`,
+  `scpi_log_path`, `files`,
   `doctor`, `measurements`, `capture`, `screenshot`, `warnings`, and optional
   `error`.
 - `acquisition-check`: `status`, `output_dir`, `report_path`, `scpi_log_path`,
@@ -738,9 +739,9 @@ text:
   use `cancelled` for cooperative cancellation and `interrupted` for
   `KeyboardInterrupt` without changing their schema version.
 - Smoke `report.json` is independently versioned at `schema_version: 2` and
-  records status, resource, backend, IDN, doctor data, measurement records,
-  capture metadata including `vertical_unit`, screenshot metadata, warnings,
-  files, and errors.
+  records status, `save_artifacts`, resource, backend, IDN, doctor data,
+  measurement records, capture metadata including `vertical_unit`, screenshot
+  metadata, warnings, files, and errors.
 - Acquisition-check `report.json` remains independently versioned at
   `schema_version: 1` and records status,
   resource, backend, IDN, initial/final acquisition state, restore metadata,

@@ -141,8 +141,9 @@ The Command workbench exposes:
   backend helper remains available to existing API clients but is not shown in
   the normal workbench.
 - Capture: `screenshot`, `capture`
-- Diagnostics: one Diagnostics editor for the read-only `doctor` operation and
-  the full `smoke` workflow
+- Diagnostics: one Diagnostics editor for the `doctor` operation, which does
+  not change scope configuration but performs one final system-error check,
+  and the full `smoke` workflow
 - Reference: a single Reference waveform workspace over `reference-save`,
   `reference-display`, `reference-label`, `reference-clear`, and
   `reference-query`
@@ -462,9 +463,11 @@ measurement in Result. Their complete sample history is not copied into the
 terminal job result; when saving is enabled, existing workflow files retain
 their persistence role.
 
-Diagnostics uses the existing Doctor and Smoke Core operations. Doctor is
-read-only. Smoke always runs its doctor snapshot, CH1 measurements, 1000-point
-BYTE waveform transfer, screenshot transfer, and final system error check.
+Diagnostics uses the existing Doctor and Smoke Core operations. Doctor does
+not change scope configuration and performs one final system-error check.
+Smoke drains stale system errors before validation and always runs its doctor
+snapshot, CH1 measurements, 1000-point BYTE waveform transfer, screenshot
+transfer, and final system error check.
 The WebUI defaults to not saving Smoke artifacts; this still keeps the compact
 structured result in Result History but creates no Smoke output directory or
 files. Enabling **Save diagnostic artifacts** writes the existing Smoke report,

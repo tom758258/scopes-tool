@@ -2828,10 +2828,11 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
         const headerActions = new FakeNode();
         const submitted = [];
         const selected = { id: "diagnostics", editor: "diagnostics" };
+        let contextKey = "simulate|";
         const editor = new DiagnosticsEditor(container, {}, {
           headerActions,
           selectedCommand: () => selected,
-          contextKey: () => "simulate|",
+          contextKey: () => contextKey,
           isExecutionBusy: () => false,
           isAvailable: () => true,
           executeCommand: async (command, parameters) => {
@@ -2858,6 +2859,19 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
         editor.saveArtifactsInput.dispatch("change");
         await editor.submit();
         assert.deepEqual(submitted[2], { command: "smoke", parameters: { save_artifacts: true } });
+
+        selected.editor = "other";
+        editor.present();
+        selected.editor = "diagnostics";
+        editor.present();
+        assert.equal(editor.modeSelect.value, "smoke");
+        assert.equal(editor.saveArtifactsInput.checked, true);
+
+        contextKey = "live|RESOURCE|MODEL";
+        editor.present();
+        assert.equal(editor.modeSelect.value, "doctor");
+        assert.equal(editor.saveArtifactsInput.checked, false);
+        assert.equal(editor.saveArtifactsField.hidden, true);
         '''
     )
     completed = subprocess.run(

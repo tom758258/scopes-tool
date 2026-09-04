@@ -9,6 +9,7 @@ export class DiagnosticsEditor {
     this.saveArtifacts = false;
     this.busy = false;
     this.renderedKey = null;
+    this.renderedContextKey = null;
     this.buildHeaderAction();
   }
 
@@ -28,8 +29,8 @@ export class DiagnosticsEditor {
     return selected?.editor === "diagnostics" ? selected : null;
   }
 
-  currentKey() {
-    return `${this.hooks.contextKey?.() || ""}|${this.selectedDefinition()?.id || ""}`;
+  currentKey(contextKey = this.hooks.contextKey?.() || "") {
+    return `${contextKey}|${this.selectedDefinition()?.id || ""}`;
   }
 
   schedulePresentation() {
@@ -43,6 +44,13 @@ export class DiagnosticsEditor {
   }
 
   present() {
+    const contextKey = this.hooks.contextKey?.() || "";
+    if (this.renderedContextKey !== null && contextKey !== this.renderedContextKey) {
+      this.mode = "doctor";
+      this.saveArtifacts = false;
+    }
+    this.renderedContextKey = contextKey;
+
     const definition = this.selectedDefinition();
     if (!definition) {
       this.renderedKey = null;
@@ -50,7 +58,7 @@ export class DiagnosticsEditor {
       this.applyBusyState();
       return;
     }
-    const key = this.currentKey();
+    const key = this.currentKey(contextKey);
     if (key !== this.renderedKey) {
       this.renderedKey = key;
       this.buildWorkspace();
