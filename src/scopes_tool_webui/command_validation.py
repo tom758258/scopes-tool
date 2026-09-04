@@ -270,6 +270,29 @@ def _workflow_channels(value: Any, capabilities: Any, *, required: bool) -> list
         raise WebUIRequestError(str(exc)) from exc
 
 
+def _autoscale_channels(value: Any, capabilities: Any) -> list[int] | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    tokens = _csv_values(value)
+    if not tokens:
+        return None
+    channels = []
+    for token in tokens:
+        if token.lower() == "all":
+            raise WebUIRequestError(
+                "autoscale channels must contain analog channel numbers, not all"
+            )
+        if not token.isdigit():
+            raise WebUIRequestError(f"invalid autoscale channel: {token}")
+        channels.append(int(token))
+    try:
+        return [validate_analog_channel(channel, capabilities) for channel in channels]
+    except WebUIRequestError:
+        raise
+    except Exception as exc:
+        raise WebUIRequestError(str(exc)) from exc
+
+
 def _workflow_pairs(value: Any, capabilities: Any) -> list[str]:
     if value is None or (isinstance(value, str) and not value.strip()):
         return []
@@ -1729,8 +1752,8 @@ def _validate_parameters(
         if parameters["background"] not in {"black", "white"}:
             raise WebUIRequestError("background must be black or white")
     elif command == "autoscale":
-        parameters["channels"] = _workflow_channels(
-            parameters.get("channels"), capabilities, required=False
+        parameters["channels"] = _autoscale_channels(
+            parameters.get("channels"), capabilities
         )
         if "acquire_mode" in parameters and parameters["acquire_mode"] not in {
             "normal",

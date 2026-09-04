@@ -291,6 +291,33 @@ def test_autoscale_validation_normalizes_and_execution_forwards_parameters(
         })
 
 
+def test_autoscale_rejects_non_source_channel_aliases_and_empty_selection() -> None:
+    normalized = validate_job_request({
+        "command": "autoscale",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {"channels": []},
+    })["parameters"]
+
+    assert normalized["channels"] is None
+
+    with pytest.raises(WebUIRequestError):
+        validate_job_request({
+            "command": "autoscale",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"channels": "all"},
+        })
+
+    with pytest.raises(WebUIRequestError):
+        validate_job_request({
+            "command": "autoscale",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"channels": "ch1"},
+        })
+
+
 def test_setup_save_recall_catalog_and_slot_presentation() -> None:
     commands = {
         entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()
