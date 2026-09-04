@@ -581,6 +581,68 @@ def test_run_smoke_measurement_timeout_keeps_partial_and_stops():
     assert any("timed out" in line for line in partial.human_lines)
 
 
+def test_run_smoke_partial_preserves_vpp_when_vrms_times_out():
+    sent: list[str] = []
+    late_calls: list[str] = []
+    with _scope() as scope:
+        real_query = scope.scpi.query
+
+        def mixed_transport(command, **kwargs):
+            sent.append(command)
+            if ":MEASure:VRMS?" in command:
+                raise VisaBackendError(
+                    "VISA query failed for ':MEASure:VRMS? CHANnel1': "
+                    "VI_ERROR_TMO (-1073807339): Timeout expired before operation completed."
+                )
+            return real_query(command, **kwargs)
+
+        def unexpected_capture(*args, **kwargs):
+            late_calls.append("capture")
+            raise AssertionError("capture must not run after measurement timeout")
+
+        def unexpected_screenshot(*args, **kwargs):
+            late_calls.append("screenshot")
+            raise AssertionError("screenshot must not run after measurement timeout")
+
+        scope.scpi.query = mixed_transport  # type: ignore[method-assign]
+        scope.capture_waveform_byte = unexpected_capture  # type: ignore[method-assign]
+        scope.capture_screenshot_png = unexpected_screenshot  # type: ignore[method-assign]
+        with pytest.raises(_OperationError) as excinfo:
+            run_smoke(
+                scope,
+                "SIM::keysight-dsox4024a::INSTR",
+                SmokeRequest(save_artifacts=False),
+            )
+
+        vpp_commands = [cmd for cmd in sent if ":MEASure:VPP?" in cmd]
+        assert len(vpp_commands) == 1
+        vrms_commands = [cmd for cmd in sent if ":MEASure:VRMS?" in cmd]
+        assert len(vrms_commands) == 1
+        vrms_index = sent.index(vrms_commands[0])
+        # After VRMS timeout, no waveform capture, screenshot query, or final system error query
+        after = sent[vrms_index + 1:]
+        assert not any(":WAVeform" in cmd for cmd in after)
+        assert not any(":DISPlay:DATA?" in cmd for cmd in after)
+        assert not any(":SYSTem:ERRor?" in cmd for cmd in after)
+        assert late_calls == []
+
+    partial = excinfo.value.result
+    assert partial.exit_code == 1
+    assert partial.files == []
+    assert partial.result["status"] == "error"
+    assert partial.result["doctor"] is not None
+    assert len(partial.result.get("measurements", [])) == 1
+    measurement = partial.result["measurements"][0]
+    assert measurement.get("command") == ":MEASure:VPP? CHANnel1"
+    assert measurement.get("valid") is True
+    assert measurement.get("value") == 0.5
+    assert measurement.get("unit") == "V"
+    assert partial.result["capture"] is None
+    assert partial.result["screenshot"] is None
+    assert "timed out" in partial.result.get("error", "")
+    assert "may not be ready" in partial.result.get("error", "")
+
+
 def test_run_acquisition_check_check_only_and_restore(tmp_path):
     with _scope("keysight-dsox4034a") as scope:
         check_only = run_acquisition_check(

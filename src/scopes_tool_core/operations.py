@@ -1104,6 +1104,7 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
             doctor = doctor_snapshot(scope)
             report["doctor"] = doctor
             measurements = []
+            report["measurements"] = measurements
             for item in ("vpp", "vrms"):
                 command = measurement_query(item, 1, capabilities=scope.capabilities)
                 human.append(f"Command: {command}")
@@ -1132,7 +1133,6 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
                         warnings.append(
                             f"CH1 {item} measurement invalid: {record.get('reason')}"
                         )
-            report["measurements"] = measurements
             human.append("Planned capture: CH1, 1000 points, BYTE format")
             capture = scope.capture_waveform_byte(1, points=1000)
             written_csv = (

@@ -539,7 +539,7 @@ function renderSmokeWorkspaceResult(container, job, result) {
   if (result.doctor && typeof result.doctor === "object") {
     renderDoctorWorkspaceResult(container, result.doctor);
   }
-  for (const name of ["measurements", "capture", "screenshot", "warnings", "error"]) {
+  for (const name of ["measurements", "capture", "screenshot", "warnings"]) {
     const value = result[name];
     if (value === undefined || value === null || value === "") continue;
     if (Array.isArray(value) && value.length === 0) continue;
