@@ -1395,9 +1395,7 @@ def _validate_parameters(
                 if command == "demo-output":
                     _require_boolean(parameters[value_name], value_name)
                 elif command == "demo-function":
-                    parameters[value_name] = validate_demo_function(
-                        parameters[value_name], capabilities
-                    )
+                    validate_demo_function(parameters[value_name], capabilities)
                 else:
                     parameters[value_name] = validate_demo_phase(
                         _finite_number(parameters[value_name], value_name)

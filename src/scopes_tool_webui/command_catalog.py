@@ -1325,7 +1325,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "degrees", "type": "number", "minimum": 0, "maximum": 360, "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "demo-phase.degrees"},
+            {"name": "degrees", "type": "number", "minimum": 0, "maximum": 360, "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "label_key": "demo-phase.degrees", "help_key": "demo-phase.degrees"},
         ),
         "group": "demo",
         "editor": "demo",

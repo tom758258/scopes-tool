@@ -200,6 +200,36 @@ def test_demo_output_set_does_not_touch_function(tmp_path: Path) -> None:
     assert result_phase["result"]["phase"]["phase_degrees"] == 90
 
 
+def test_demo_function_canonical_preserved_through_validation_and_execution(tmp_path: Path) -> None:
+    request = validate_job_request({
+        "command": "demo-function",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {"action": "set", "function": "sine"},
+    })
+    assert request["parameters"]["function"] == "sine"
+
+    result = command_execution_module.execute_command(
+        "demo-function",
+        mode="simulate",
+        resource=None,
+        model_id=MODEL_ID,
+        parameters=request["parameters"],
+        artifact_dir=tmp_path,
+    )
+    assert result["result"]["function"]["function"] == "sine"
+
+
+def test_demo_localization_keys() -> None:
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+    assert '"field.demo-phase.degrees": "Phase (degrees)"' in english
+    assert '"field.demo-phase.degrees": "相位（度）"' in chinese
+    for key in ("sine", "phase", "setup-hold", "i2c", "can-lin"):
+        assert f'"enum.demo-function.{key}":' in english, key
+        assert f'"enum.demo-function.{key}":' in chinese, key
+
+
 @pytest.mark.skipif(
     subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
     reason="Node.js is required for frontend behavior checks",

@@ -148,9 +148,6 @@ The Command workbench exposes:
   models and Advanced FFT controls on 4000X, plus `math-display`,
   `math-vertical`, `math-operator`, `math-transform`, `math-filter`,
   `math-visualization`, `math-composite-source`, and `math-clear`
-- DEMO: a dedicated Demo Signals editor over `demo-query`, `demo-output`,
-  `demo-function`, and `demo-phase`; function options are projected from
-  `demo_functions`
 - Trigger: a dedicated Trigger editor over the existing Edge, external,
   glitch/pulse-width, runt, transition, delay, setup/hold, edge-burst, TV,
   pattern/OR, sweep, reject, coupling, and holdoff commands
