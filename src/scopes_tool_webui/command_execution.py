@@ -19,6 +19,7 @@ from scopes_tool_core import (
     ResolvedRunConfig,
     RunModeOptions,
     SequenceRequest,
+    SmokeRequest,
     TriggeredCaptureSeriesRequest,
     TriggeredMeasureLoopRequest,
     capabilities_for_model_id,
@@ -40,10 +41,12 @@ from scopes_tool_core import (
     run_capture_batch,
     run_capture_monitor,
     run_capture_until,
+    run_doctor,
     run_measure,
     run_measure_log,
     run_measure_sweep,
     run_measure_until,
+    run_smoke,
     run_sequence,
     run_triggered_capture_series,
     run_triggered_measure_loop,
@@ -318,6 +321,18 @@ def _execute_scope_command(
             "acquisition": acquisition_readouts,
         }
         return {"exit_code": 0, "result": result, "artifacts": []}
+    if command == "doctor":
+        return _operation_payload(run_doctor(scope, resource))
+    if command == "smoke":
+        save_artifacts = parameters.get("save_artifacts", False)
+        output_dir = _workflow_output_dir(command, artifact_dir) if save_artifacts else None
+        return _operation_payload(
+            run_smoke(
+                scope,
+                resource,
+                SmokeRequest(output_dir=output_dir, save_artifacts=save_artifacts),
+            )
+        )
     if command == "run":
         scope.run()
         return _simple_scope_result("run")
@@ -1437,6 +1452,7 @@ def _workflow_output_dir(command: str, output_root: Path) -> Path:
         "triggered-capture-series": TRIGGERED_CAPTURE_SERIES_DEFAULT_BASE_DIR,
         "segmented-capture": SEGMENTED_CAPTURE_DEFAULT_BASE_DIR,
         "sequence": Path("sequences"),
+        "smoke": Path("hardware_smoke"),
     }
     return default_batch_output_dir(
         base_dir=output_root / base_dirs[command].name,

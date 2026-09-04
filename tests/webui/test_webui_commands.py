@@ -136,6 +136,107 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)
 
 
+def test_diagnostics_catalog_and_validation_contract() -> None:
+    client = TestClient(app)
+    commands = {entry["id"]: entry for entry in client.get("/api/commands").json()}
+
+    diagnostics = commands["diagnostics"]
+    assert diagnostics["category"] == "Diagnostics"
+    assert diagnostics["editor"] == "diagnostics"
+    assert diagnostics["presentation_only"] is True
+    assert diagnostics["modes"] == ["live", "simulate"]
+    assert "doctor" not in commands
+    assert "smoke" not in commands
+
+    default_request = validate_job_request({
+        "command": "smoke",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {},
+    })
+    assert default_request["parameters"] == {"save_artifacts": False}
+    saved_request = validate_job_request({
+        "command": "smoke",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {"save_artifacts": True},
+    })
+    assert saved_request["parameters"] == {"save_artifacts": True}
+    validate_job_request({
+        "command": "doctor",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {},
+    })
+    with pytest.raises(WebUIRequestError):
+        validate_job_request({
+            "command": "smoke",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"save_artifacts": "true"},
+        })
+    with pytest.raises(WebUIRequestError):
+        validate_job_request({
+            "command": "smoke",
+            "mode": "dry-run",
+            "model_id": MODEL_ID,
+            "parameters": {},
+        })
+
+
+def test_simulated_diagnostics_jobs_preserve_results_and_artifacts(tmp_path: Path) -> None:
+    client = TestClient(app)
+    no_artifact_root = tmp_path / "no-artifacts"
+    doctor_job = submit(
+        client,
+        "doctor",
+        "simulate",
+        {},
+        pc_output_dir=no_artifact_root,
+    )
+
+    assert doctor_job["status"] == "completed"
+    assert doctor_job["result"]["result"]["acquisition"]
+    assert doctor_job["artifacts"] == []
+    assert no_artifact_root.exists() is False
+
+    no_artifact_job = submit(
+        client,
+        "smoke",
+        "simulate",
+        {},
+        pc_output_dir=no_artifact_root,
+    )
+
+    assert no_artifact_job["status"] == "completed"
+    assert no_artifact_job["artifacts"] == []
+    assert no_artifact_root.exists() is False
+    no_artifact_result = no_artifact_job["result"]["result"]
+    assert no_artifact_result["save_artifacts"] is False
+    assert no_artifact_result["files"] == []
+    assert no_artifact_result["capture"]["captures"][0]["actual_points"] == 1000
+    assert no_artifact_result["screenshot"]["byte_count"] > 0
+
+    artifact_root = tmp_path / "artifacts"
+    artifact_job = submit(
+        client,
+        "smoke",
+        "simulate",
+        {"save_artifacts": True},
+        pc_output_dir=artifact_root,
+    )
+
+    assert artifact_job["status"] == "completed"
+    assert {item["name"] for item in artifact_job["artifacts"]} == {
+        "report.json",
+        "scpi.log",
+        "capture.csv",
+        "capture_meta.json",
+        "screen.png",
+    }
+    assert artifact_job["result"]["result"]["save_artifacts"] is True
+
+
 def test_execute_force_trigger_calls_core_action(tmp_path: Path) -> None:
     calls: list[str] = []
 

@@ -138,6 +138,26 @@ COMMANDS = (
         "fields": (),
     },
     {
+        "id": "doctor",
+        "category": "Diagnostics",
+        "label": "Doctor",
+        "description": "Read the current instrument diagnostics snapshot",
+        "hidden": True,
+        "modes": ("live", "simulate"),
+        "fields": (),
+    },
+    {
+        "id": "smoke",
+        "category": "Diagnostics",
+        "label": "Smoke",
+        "description": "Run the capture-safe instrument smoke workflow",
+        "hidden": True,
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "save_artifacts", "type": "boolean", "default": False},
+        ),
+    },
+    {
         "id": "run",
         "category": "Acquisition",
         "label": "Run",
@@ -1772,6 +1792,7 @@ PC_OUTPUT_COMMAND_IDS = frozenset(
         "triggered-measure-loop",
         "triggered-capture-series",
         "sequence",
+        "smoke",
     }
 )
 
@@ -1869,6 +1890,7 @@ _ONE_WAY_ACTIONS = {
 
 _READ_COMMANDS = frozenset(
     {
+        "doctor",
         "identify",
         "channel-summary",
         "measure-results",
@@ -1946,6 +1968,15 @@ def command_catalog() -> list[dict[str, Any]]:
                 "category": "Save / Export",
                 "label": "Save / Export",
                 "editor": "save-export",
+                "presentation_only": True,
+                "modes": ("live", "simulate"),
+                "fields": (),
+            },
+            {
+                "id": "diagnostics",
+                "category": "Diagnostics",
+                "label": "Diagnostics",
+                "editor": "diagnostics",
                 "presentation_only": True,
                 "modes": ("live", "simulate"),
                 "fields": (),

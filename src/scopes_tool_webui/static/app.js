@@ -16,6 +16,7 @@ import { renderInstrumentSummary } from "/static/live-data.js";
 import { AnnotationEditor } from "/static/annotation-editor.js";
 import { CursorEditor } from "/static/cursor-editor.js";
 import { DemoEditor } from "/static/demo-editor.js";
+import { DiagnosticsEditor } from "/static/diagnostics-editor.js";
 import { MeasurementEditor } from "/static/measurement-editor.js";
 import { WgenEditor } from "/static/wgen-editor.js";
 import {
@@ -89,6 +90,7 @@ const elements = {
   annotationEditor: document.querySelector("#annotation-editor"),
   wgenEditor: document.querySelector("#wgen-editor"),
   demoEditor: document.querySelector("#demo-editor"),
+  diagnosticsEditor: document.querySelector("#diagnostics-editor"),
   workspaceHeaderActions: document.querySelector("#workspace-header-actions"),
   refresh: document.querySelector("#refresh-button"),
   execute: document.querySelector("#execute-button"),
@@ -141,6 +143,7 @@ let cursorEditor;
 let annotationEditor;
 let wgenEditor;
 let demoEditor;
+let diagnosticsEditor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -155,6 +158,8 @@ let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: fa
 const INTERNAL_COMMANDS = {
   "live-data-snapshot": { id: "live-data-snapshot", modes: ["live", "simulate"], internal: true },
   "system-information-snapshot": { id: "system-information-snapshot", modes: ["live", "simulate"], internal: true },
+  doctor: { id: "doctor", modes: ["live", "simulate"], internal: true },
+  smoke: { id: "smoke", modes: ["live", "simulate"], internal: true },
 };
 
 const EDITOR_RENDERERS = {
@@ -171,6 +176,7 @@ const EDITOR_RENDERERS = {
   annotation: () => annotationEditor,
   wgen: () => wgenEditor,
   demo: () => demoEditor,
+  diagnostics: () => diagnosticsEditor,
 };
 
 function editorKindFor(command) {
@@ -344,6 +350,14 @@ async function initialize() {
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     mode: () => context.mode,
+    selectedCommand: () => catalog.selected(),
+  });
+  diagnosticsEditor = new DiagnosticsEditor(elements.diagnosticsEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: (command) => commandAvailable(command),
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     selectedCommand: () => catalog.selected(),
   });
   catalog.render();
@@ -814,6 +828,7 @@ document.addEventListener("localechange", () => {
   annotationEditor?.rerender();
   wgenEditor?.rerender();
   demoEditor?.rerender();
+  diagnosticsEditor?.rerender();
   syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
   renderSystemInformation();
@@ -847,6 +862,7 @@ function syncCommandSelection(draft = null) {
   elements.annotationEditor.hidden = editorKind !== "annotation";
   elements.wgenEditor.hidden = editorKind !== "wgen";
   elements.demoEditor.hidden = editorKind !== "demo";
+  if (elements.diagnosticsEditor) elements.diagnosticsEditor.hidden = editorKind !== "diagnostics";
   syncWorkspaceHeaderActions(editorKind);
   elements.selectedCommand.textContent = selected
     ? editorOwned
@@ -910,6 +926,7 @@ function updateAvailability() {
   workflowEditor?.applyBusyState();
   sequenceEditor?.applyBusyState();
   measurementEditor?.applyBusyState();
+  if (typeof diagnosticsEditor !== "undefined") diagnosticsEditor?.applyBusyState();
   deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
   updateBasicAvailability();
 }
@@ -947,6 +964,9 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (annotationEditor?.refreshButton) annotationEditor.refreshButton.hidden = editorKind !== "annotation";
   if (wgenEditor?.refreshButton) wgenEditor.refreshButton.hidden = editorKind !== "wgen";
   if (demoEditor?.refreshButton) demoEditor.refreshButton.hidden = editorKind !== "demo";
+  if (typeof diagnosticsEditor !== "undefined" && diagnosticsEditor?.runButton) {
+    diagnosticsEditor.runButton.hidden = editorKind !== "diagnostics";
+  }
 }
 
 function syncEditorPresentation(editorKind) {
@@ -963,6 +983,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "annotation") annotationEditor?.schedulePresentation();
   if (editorKind === "wgen") wgenEditor?.schedulePresentation();
   if (editorKind === "demo") demoEditor?.schedulePresentation();
+  if (editorKind === "diagnostics") diagnosticsEditor?.schedulePresentation();
 }
 
 function commandAction(command) {

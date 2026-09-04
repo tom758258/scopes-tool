@@ -171,6 +171,7 @@ class MeasureLogRequest:
 class SmokeRequest:
     output_dir: str | Path | None = None
     log_scpi: bool = False
+    save_artifacts: bool = True
 
 
 @dataclass(frozen=True)
@@ -1040,18 +1041,28 @@ def run_measure_log(
 
 
 def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> OperationResult:
-    """Run the capture-safe smoke workflow and write its report."""
+    """Run the capture-safe smoke workflow, optionally writing its report."""
 
-    output_dir = _prepare_output_dir(
-        Path(request.output_dir) if request.output_dir is not None else _default_output_dir("hardware_smoke")
-    )
-    report_path = output_dir / "report.json"
-    scpi_log_path = output_dir / "scpi.log"
-    capture_csv_path = output_dir / "capture.csv"
-    capture_meta_path = output_dir / "capture_meta.json"
-    screenshot_path = output_dir / "screen.png"
-    files = _smoke_file_list(output_dir)
+    if request.save_artifacts:
+        output_dir = _prepare_output_dir(
+            Path(request.output_dir) if request.output_dir is not None else _default_output_dir("hardware_smoke")
+        )
+        report_path = output_dir / "report.json"
+        scpi_log_path = output_dir / "scpi.log"
+        capture_csv_path = output_dir / "capture.csv"
+        capture_meta_path = output_dir / "capture_meta.json"
+        screenshot_path = output_dir / "screen.png"
+        files = _smoke_file_list(output_dir)
+    else:
+        output_dir = None
+        report_path = None
+        scpi_log_path = None
+        capture_csv_path = None
+        capture_meta_path = None
+        screenshot_path = None
+        files = []
     report = _smoke_report(resource, files)
+    report["save_artifacts"] = request.save_artifacts
     human: list[str] = []
     idn = None
     try:
@@ -1088,23 +1099,35 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
             report["measurements"] = measurements
             human.append("Planned capture: CH1, 1000 points, BYTE format")
             capture = scope.capture_waveform_byte(1, points=1000)
-            written_csv = write_capture_csv_file(capture, capture_csv_path)
-            written_meta = write_capture_metadata_file(
-                capture,
-                capture_meta_path,
-                idn=idn,
-                resource=resource,
+            written_csv = (
+                write_capture_csv_file(capture, capture_csv_path)
+                if capture_csv_path is not None
+                else None
+            )
+            written_meta = (
+                write_capture_metadata_file(
+                    capture,
+                    capture_meta_path,
+                    idn=idn,
+                    resource=resource,
+                )
+                if capture_meta_path is not None
+                else None
             )
             report["capture"] = {
-                "csv": str(written_csv),
-                "metadata": str(written_meta),
+                "csv": str(written_csv) if written_csv is not None else None,
+                "metadata": str(written_meta) if written_meta is not None else None,
                 **_waveform_capture_summary(capture),
             }
             human.append("Planned capture: current screen PNG image with black background")
             screenshot = scope.capture_screenshot_png(background="black")
-            written_png = write_screenshot_png_file(screenshot, screenshot_path)
+            written_png = (
+                write_screenshot_png_file(screenshot, screenshot_path)
+                if screenshot_path is not None
+                else None
+            )
             report["screenshot"] = {
-                "png_path": str(written_png),
+                "png_path": str(written_png) if written_png is not None else None,
                 "format": screenshot.format_name,
                 "palette": screenshot.palette,
                 "background": screenshot.background,
@@ -1115,20 +1138,22 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
             report["post_check_error"] = system_error
             report["status"] = "instrument_error" if entry.is_error else "completed"
             report["end_time"] = batch_iso_timestamp()
-            write_json_file(report, report_path, file_kind="smoke report JSON")
-            human.extend(
-                [
-                    f"Output directory: {output_dir}",
-                    f"Report: {report_path}",
-                    f"SCPI log: {scpi_log_path}",
-                    f"System error: {entry.format()}",
-                ]
-            )
+            if report_path is not None:
+                write_json_file(report, report_path, file_kind="smoke report JSON")
+                human.extend(
+                    [
+                        f"Output directory: {output_dir}",
+                        f"Report: {report_path}",
+                        f"SCPI log: {scpi_log_path}",
+                    ]
+                )
+            human.append(f"System error: {entry.format()}")
             result = {
                 "status": report["status"],
-                "output_dir": str(output_dir),
-                "report_path": str(report_path),
-                "scpi_log_path": str(scpi_log_path),
+                "save_artifacts": request.save_artifacts,
+                "output_dir": str(output_dir) if output_dir is not None else None,
+                "report_path": str(report_path) if report_path is not None else None,
+                "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
                 "files": files,
                 "doctor": doctor,
                 "measurements": measurements,
@@ -1149,12 +1174,14 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
         report["status"] = "error"
         report["end_time"] = batch_iso_timestamp()
         report["error"] = str(exc)
-        write_json_file_best_effort(report, report_path)
+        if report_path is not None:
+            write_json_file_best_effort(report, report_path)
         result = {
             "status": report["status"],
-            "output_dir": str(output_dir),
-            "report_path": str(report_path),
-            "scpi_log_path": str(scpi_log_path),
+            "save_artifacts": request.save_artifacts,
+            "output_dir": str(output_dir) if output_dir is not None else None,
+            "report_path": str(report_path) if report_path is not None else None,
+            "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
             "files": files,
             "warnings": report["warnings"],
             "error": str(exc),

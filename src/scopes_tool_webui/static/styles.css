@@ -367,6 +367,11 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .sequence-editor-overview { justify-content: space-between; }
 .sequence-editor-loop { max-width: 160px; }
 .sequence-editor-steps { display: grid; gap: 10px; }
+.diagnostics-editor { display: grid; gap: 12px; padding-top: 12px; }
+.diagnostics-editor-field { display: grid; gap: 6px; max-width: 260px; }
+.diagnostics-editor-checkbox { display: inline-flex; align-items: center; gap: 8px; width: fit-content; }
+.diagnostics-editor-checkbox input { width: auto; min-width: 0; height: auto; min-height: 0; accent-color: var(--accent); }
+.diagnostics-editor-help { margin: 0; max-width: 720px; }
 .sequence-step-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
 .sequence-step-toggle { flex: 1 1 360px; text-align: left; }
 .sequence-step-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 10px; }

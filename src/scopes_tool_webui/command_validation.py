@@ -227,6 +227,8 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise WebUIRequestError("live execution requires an explicit VISA resource")
 
     normalized = dict(parameters)
+    if command == "smoke":
+        normalized.setdefault("save_artifacts", False)
     if command == "single-wait":
         _single_wait_config(normalized)
     _validate_exclusive_minimum_fields(command, normalized)
@@ -918,6 +920,11 @@ def _validate_parameters(
     if command == "list-resources":
         parameters.setdefault("live_only", False)
         _require_boolean(parameters["live_only"], "live_only")
+        return
+    if command == "doctor":
+        return
+    if command == "smoke":
+        _require_boolean(parameters.setdefault("save_artifacts", False), "save_artifacts")
         return
     if model_id is None:
         raise WebUIRequestError("detected model identity is required for live validation")

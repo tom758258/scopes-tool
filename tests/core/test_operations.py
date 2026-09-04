@@ -485,6 +485,47 @@ def test_run_smoke_writes_report(tmp_path):
     assert result.files[0]["kind"] == "report"
 
 
+def test_smoke_request_saves_artifacts_by_default():
+    assert SmokeRequest().save_artifacts is True
+
+
+def test_run_smoke_without_artifacts_keeps_capture_results_in_memory(tmp_path):
+    ignored_output = tmp_path / "not-a-directory"
+    ignored_output.write_text("caller supplied path", encoding="utf-8")
+
+    with _scope() as scope:
+        result = run_smoke(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SmokeRequest(
+                output_dir=ignored_output,
+                log_scpi=True,
+                save_artifacts=False,
+            ),
+        )
+
+    assert result.exit_code == 0
+    assert result.files == []
+    assert result.result["save_artifacts"] is False
+    assert result.result["output_dir"] is None
+    assert result.result["report_path"] is None
+    assert result.result["scpi_log_path"] is None
+    assert result.result["capture"]["csv"] is None
+    assert result.result["capture"]["metadata"] is None
+    assert result.result["capture"]["captures"][0]["actual_points"] == 1000
+    assert result.result["capture"]["captures"][0]["format"] == "BYTE"
+    assert result.result["capture"]["captures"][0]["vertical_unit"] == "V"
+    assert result.result["screenshot"]["png_path"] is None
+    assert result.result["screenshot"]["format"] == "PNG"
+    assert result.result["screenshot"]["byte_count"] > 0
+    assert result.system_error["is_error"] is False
+    assert ":WAVeform:DATA?" in scope.backend.history
+    assert any(command.startswith(":DISPlay:DATA?") for command in scope.backend.history)
+    for name in ("report.json", "scpi.log", "capture.csv", "capture_meta.json", "screen.png"):
+        assert not (tmp_path / name).exists()
+    assert ignored_output.read_text(encoding="utf-8") == "caller supplied path"
+
+
 def test_run_acquisition_check_check_only_and_restore(tmp_path):
     with _scope("keysight-dsox4034a") as scope:
         check_only = run_acquisition_check(

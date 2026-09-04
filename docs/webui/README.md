@@ -81,7 +81,9 @@ browser-session state only and is snapshotted when each job is submitted.
 The setting applies to host-side artifacts created by `screenshot`, `capture`,
 `serial-lister-export`, `segmented-capture`, `capture-batch`, `capture-until`,
 `capture-monitor`, `measure-log`, `measure-until`,
-`triggered-measure-loop`, `triggered-capture-series`, and `sequence`.
+`triggered-measure-loop`, `triggered-capture-series`, and `sequence`. `smoke`
+uses this root only when its Diagnostics option to save diagnostic artifacts
+is enabled.
 Their command workspaces show the current shared folder but do not add another
 path control. Serial Lister Export accepts a filename only; its WebUI field
 cannot select or escape the shared folder.
@@ -139,6 +141,8 @@ The Command workbench exposes:
   backend helper remains available to existing API clients but is not shown in
   the normal workbench.
 - Capture: `screenshot`, `capture`
+- Diagnostics: one Diagnostics editor for the read-only `doctor` operation and
+  the full `smoke` workflow
 - Reference: a single Reference waveform workspace over `reference-save`,
   `reference-display`, `reference-label`, `reference-clear`, and
   `reference-query`
@@ -458,6 +462,15 @@ measurement in Result. Their complete sample history is not copied into the
 terminal job result; when saving is enabled, existing workflow files retain
 their persistence role.
 
+Diagnostics uses the existing Doctor and Smoke Core operations. Doctor is
+read-only. Smoke always runs its doctor snapshot, CH1 measurements, 1000-point
+BYTE waveform transfer, screenshot transfer, and final system error check.
+The WebUI defaults to not saving Smoke artifacts; this still keeps the compact
+structured result in Result History but creates no Smoke output directory or
+files. Enabling **Save diagnostic artifacts** writes the existing Smoke report,
+SCPI log, waveform CSV and metadata, and screenshot under the shared PC output
+root.
+
 While `capture-monitor` runs, the existing job polling path requests only
 transient updates newer than the browser's last sequence. Each normal update
 contains one completed capture chunk plus compact counters and all-session
@@ -522,8 +535,8 @@ remains responsible for resource/model detection and capability gating.
 
 Advanced or diagnostic CLI paths are not automatically browser commands.
 Current intentional omissions include direct SCPI sending, broad cleanup
-operations, and worker/doctor/hardware-report
-tooling. Acquisition settings/controls (sample-rate setters, memory-depth
+operations, and worker/hardware-report tooling. Acquisition settings/controls
+(sample-rate setters, memory-depth
 setters, and similar low-level controls) remain CLI/Core paths and are not
 exposed in the WebUI. Read-only System Information (identity readback) and
 low-level Acquisition Information (current sample rate, acquisition points,

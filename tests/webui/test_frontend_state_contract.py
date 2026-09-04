@@ -2774,8 +2774,99 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 12
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 13
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
+    editor_path = STATIC_ROOT / "diagnostics-editor.js"
+    app_source = read_static("app.js")
+    html = read_static("index.html")
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+    assert 'import { DiagnosticsEditor } from "/static/diagnostics-editor.js";' in app_source
+    assert 'id="diagnostics-editor" class="diagnostics-editor" hidden' in html
+    assert '"diagnostics.saveArtifacts": "Save diagnostic artifacts"' in english
+    assert '"diagnostics.saveArtifacts": "儲存診斷檔案"' in chinese
+
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.value = "";
+            this.checked = false;
+            this.className = "";
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) { this.children.push(...nodes); }
+          setAttribute() {}
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.Option = function Option(text, value) {
+          return { textContent: text, value: String(value) };
+        };
+        globalThis.translate = (key) => key;
+
+        const source = fs.readFileSync(process.argv[1], "utf8")
+          .replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export /gm, "")
+          + "\nglobalThis.diagnosticsApi = { DiagnosticsEditor };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { DiagnosticsEditor } = globalThis.diagnosticsApi;
+        const container = new FakeNode();
+        const headerActions = new FakeNode();
+        const submitted = [];
+        const selected = { id: "diagnostics", editor: "diagnostics" };
+        const editor = new DiagnosticsEditor(container, {}, {
+          headerActions,
+          selectedCommand: () => selected,
+          contextKey: () => "simulate|",
+          isExecutionBusy: () => false,
+          isAvailable: () => true,
+          executeCommand: async (command, parameters) => {
+            submitted.push({ command, parameters });
+            return { status: "completed" };
+          },
+        });
+
+        editor.present();
+        assert.equal(headerActions.children.length, 1);
+        assert.equal(editor.modeSelect.value, "doctor");
+        assert.equal(editor.saveArtifactsInput.checked, false);
+        assert.equal(editor.saveArtifactsField.hidden, true);
+        await editor.submit();
+        assert.deepEqual(submitted[0], { command: "doctor", parameters: {} });
+
+        editor.modeSelect.value = "smoke";
+        editor.modeSelect.dispatch("change");
+        assert.equal(editor.saveArtifactsField.hidden, false);
+        await editor.submit();
+        assert.deepEqual(submitted[1], { command: "smoke", parameters: { save_artifacts: false } });
+
+        editor.saveArtifactsInput.checked = true;
+        editor.saveArtifactsInput.dispatch("change");
+        await editor.submit();
+        assert.deepEqual(submitted[2], { command: "smoke", parameters: { save_artifacts: true } });
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(editor_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 def test_command_panels_use_fixed_desktop_height_and_internal_overflow() -> None:
