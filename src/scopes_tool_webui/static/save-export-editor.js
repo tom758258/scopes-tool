@@ -245,6 +245,7 @@ export class SaveExportEditor {
     if (!this.selectedDefinition()) return;
 
     const modeConfig = SAVE_EXPORT_MODES[this.mode] || SAVE_EXPORT_MODES.image;
+    this.refreshButton.hidden = modeConfig.id === "setup";
     if (modeConfig.id === "setup") {
       this.entries = [];
       this.pathEntry = null;

@@ -474,6 +474,17 @@ def test_setup_save_recall_execution_routes_to_core(
     }
 
 
+def test_setup_save_recall_simulate_jobs_complete_without_artifacts() -> None:
+    client = TestClient(app)
+    target = {"target": "file", "file": "\\usb\\baseline.scp"}
+
+    for command in ("setup-save", "setup-recall"):
+        job = submit(client, command, "simulate", dict(target))
+        assert job["status"] == "completed", (command, job)
+        assert job["result"]["result"] == {"action": command}
+        assert job["artifacts"] == []
+
+
 def test_measure_menu_calls_core_action(tmp_path: Path) -> None:
     calls: list[str] = []
 

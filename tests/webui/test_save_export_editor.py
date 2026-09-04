@@ -1026,6 +1026,7 @@ def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
         assert.equal(editor.mode, "setup");
         await editor.refresh(false, true);
         assert.equal(submitted.length, 0);
+        assert.equal(editor.refreshButton.hidden, true);
         assert.deepEqual(editor.entries, []);
         assert.equal(editor.pathEntry, null);
         assert.equal(editor.filenameEntry, null);
@@ -1034,6 +1035,10 @@ def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
         assert.ok(editor.setupRecallButton);
         assert.ok(editor.sectionsHost.textContent.includes("Setup storage note"));
         assert.ok(!editor.sectionsHost.textContent.includes("Maximum waveform length mode"));
+        editor.modeButtons[0].dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(editor.mode, "image");
+        assert.equal(editor.refreshButton.hidden, false);
         '''
     )
     completed = run_node(script)

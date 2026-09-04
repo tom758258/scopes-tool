@@ -132,13 +132,15 @@ The Command workbench exposes:
 - Reference: a single Reference waveform workspace over `reference-save`,
   `reference-display`, `reference-label`, `reference-clear`, and
   `reference-query`
-- Save / Export: a single workspace with Path / Filename, Image, and Waveform
-  sections over `save-pwd`, `save-filename`, `save-image-format`,
+- Save / Export: a single workspace with Path / Filename, Image, Waveform,
+  and Setup sections over `save-pwd`, `save-filename`, `save-image-format`,
   `save-image-palette`, `save-image-ink-saver`, `save-image-factors`,
-  `save-image`, `save-waveform-format`, `save-waveform-length`, and
-  `save-waveform` (`save-waveform-length-max` remains an underlying
+  `save-image`, `save-waveform-format`, `save-waveform-length`,
+  `save-waveform`, `setup-save`, and `setup-recall`
+  (`save-waveform-length-max` remains an underlying
   query-only operation; the WebUI does not query or configure it and only
-  displays the maximum-length-mode limitation)
+  displays the maximum-length-mode limitation; `setup-save` and `setup-recall`
+  remain hidden from the Command Browser and are owned by the workspace)
 - System: `check-error`, `system-status-byte`, `system-operation-status`,
   `system-clear-status`, `system-opc`, `system-standard-event`,
   `system-options`
@@ -341,12 +343,15 @@ Unsupported commands stay disabled in the Command Browser with the existing
 capability reason.
 
 Selecting Save / Export opens one workspace with Default save location, Image,
-and Waveform sections. The underlying commands remain available to the
+Waveform, and Setup sections. The underlying commands remain available to the
 workspace but are hidden from the Command Browser. Selection is
 presentation-only. Explicit Refresh serially reads every readable setting
-in all three sections without running Save Image or Save Waveform
+in the Default save location, Image, and Waveform sections without running
+Save Image or Save Waveform
 (`save-waveform-length-max` is not queried; the WebUI only displays the
-maximum-length-mode limitation). Each setting
+maximum-length-mode limitation). Setup has no readback. Entering Setup
+performs no instrument I/O, and Reload instrument settings is unavailable
+in Setup mode. Each setting
 keeps an independent Apply over its existing command, and a successful Apply
 is followed by its existing group readback that preserves unapplied sibling
 edits. The editor shows readback progress and identifies settings whose current
@@ -362,6 +367,12 @@ WebUI download artifacts. Screenshot and Capture remain separate host-side
 retrieval paths that register downloadable artifacts. The Basic Controls PC
 output folder does not change `save-pwd`, `save-filename`, or any other
 instrument-side `:SAVE:*` behavior.
+
+Setup targets an instrument slot (0 through 9) or an instrument-side file
+such as `\usb\baseline.scp`. Setup files do not use the shared Save PWD or
+Filename. Save Setup is an explicit action. Recall Setup asks for
+confirmation first because it replaces the oscilloscope's current setup.
+Like other saves, setup targets are instrument-side storage, not PC downloads.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field
