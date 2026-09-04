@@ -1742,6 +1742,18 @@ def _validate_parameters(
             "displayed",
         }:
             raise WebUIRequestError("channels_mode must be all or displayed")
+    elif command in {"setup-save", "setup-recall"}:
+        target = parameters.get("target")
+        if target == "slot":
+            parameters["slot"] = _integer(parameters.get("slot"), "slot")
+            parameters.pop("file", None)
+        elif target == "file":
+            file_spec = parameters.get("file")
+            if not isinstance(file_spec, str) or not file_spec.strip():
+                raise WebUIRequestError(f"{command} file target requires a file path")
+            parameters.pop("slot", None)
+        else:
+            raise WebUIRequestError(f"{command} target must be slot or file")
 
 
 def _normalize_acquisition_type(value: Any) -> str:

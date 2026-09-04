@@ -497,8 +497,8 @@ clear browser interaction. Resource discovery uses the hidden
 information command.
 
 Advanced or diagnostic CLI paths are not automatically browser commands.
-Current intentional omissions include direct SCPI sending, setup recall/save,
-and broad cleanup operations, and worker/doctor/hardware-report
+Current intentional omissions include direct SCPI sending, broad cleanup
+operations, and worker/doctor/hardware-report
 tooling. Acquisition points, record
 length, acquisition sample-rate controls,
 and similar low-level information remain CLI/Core paths until a coherent WebUI

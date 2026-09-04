@@ -907,6 +907,32 @@ COMMANDS = (
         ),
     },
     {
+        "id": "setup-save",
+        "category": "Save / Export",
+        "label": "Save setup",
+        "browser_hidden": True,
+        "modes": ("live", "simulate"),
+        "editor": "save-export",
+        "fields": (
+            {"name": "target", "type": "enum", "options": ("slot", "file"), "required": True, "option_label": "setup-target", "label_key": "setup.target", "help_key": "setup.target"},
+            {"name": "slot", "type": "integer", "options": (0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "visible_if": [{"field": "target", "equals": "slot"}], "required_if": [{"field": "target", "equals": "slot"}], "label_key": "setup.slot", "help_key": "setup.slot"},
+            {"name": "file", "type": "string", "visible_if": [{"field": "target", "equals": "file"}], "required_if": [{"field": "target", "equals": "file"}], "label_key": "setup.file", "help_key": "setup.file"},
+        ),
+    },
+    {
+        "id": "setup-recall",
+        "category": "Save / Export",
+        "label": "Recall setup",
+        "browser_hidden": True,
+        "modes": ("live", "simulate"),
+        "editor": "save-export",
+        "fields": (
+            {"name": "target", "type": "enum", "options": ("slot", "file"), "required": True, "option_label": "setup-target", "label_key": "setup.target", "help_key": "setup.target"},
+            {"name": "slot", "type": "integer", "options": (0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "visible_if": [{"field": "target", "equals": "slot"}], "required_if": [{"field": "target", "equals": "slot"}], "label_key": "setup.slot", "help_key": "setup.slot"},
+            {"name": "file", "type": "string", "visible_if": [{"field": "target", "equals": "file"}], "required_if": [{"field": "target", "equals": "file"}], "label_key": "setup.file", "help_key": "setup.file"},
+        ),
+    },
+    {
         "id": "capture",
         "category": "Capture",
         "label": "Waveform capture",
@@ -2024,7 +2050,7 @@ def _model_command_presentation(
             override["maximum"] = capabilities.math_function_count
         if field.get("type") == "integer" and name == "bus":
             override["maximum"] = capabilities.serial_bus_count
-        if name == "slot" and capabilities.reference_waveforms:
+        if entry["category"] == "Reference" and name == "slot" and capabilities.reference_waveforms:
             override["maximum"] = capabilities.reference_waveforms
             override["options"] = tuple(range(1, capabilities.reference_waveforms + 1))
         if entry["id"] == "annotation" and name == "slot" and capabilities.annotation_slots:

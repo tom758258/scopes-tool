@@ -733,6 +733,12 @@ def _execute_scope_command(
         return _state_scope_result(
             "save", scope.save_waveform(parameters["filename"]).to_json()
         )
+    if command == "setup-save":
+        scope.save_setup(slot=parameters.get("slot"), file_spec=parameters.get("file"))
+        return _simple_scope_result("setup-save")
+    if command == "setup-recall":
+        scope.recall_setup(slot=parameters.get("slot"), file_spec=parameters.get("file"))
+        return _simple_scope_result("setup-recall")
     if command == "check-error":
         max_reads = int(parameters.get("max_reads", 20))
         entries = scope.drain_system_errors(max_reads=max_reads)

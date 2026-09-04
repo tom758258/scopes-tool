@@ -291,6 +291,162 @@ def test_autoscale_validation_normalizes_and_execution_forwards_parameters(
         })
 
 
+def test_setup_save_recall_catalog_and_slot_presentation() -> None:
+    commands = {
+        entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()
+    }
+
+    for command_id, label in (
+        ("setup-save", "Save setup"),
+        ("setup-recall", "Recall setup"),
+    ):
+        entry = commands[command_id]
+        assert entry["category"] == "Save / Export"
+        assert entry["label"] == label
+        assert entry["modes"] == ["live", "simulate"]
+        assert entry["browser_hidden"] is True
+        assert entry["editor"] == "save-export"
+        assert "group" not in entry
+        fields = {field["name"]: field for field in entry["fields"]}
+        assert set(fields) == {"target", "slot", "file"}
+        assert fields["target"]["type"] == "enum"
+        assert fields["target"]["options"] == ["slot", "file"]
+        assert fields["target"].get("required") is True
+        assert fields["slot"]["type"] == "integer"
+        assert fields["slot"]["options"] == list(range(10))
+        assert fields["slot"]["visible_if"] == [{"field": "target", "equals": "slot"}]
+        assert fields["slot"]["required_if"] == [{"field": "target", "equals": "slot"}]
+        assert fields["file"]["type"] == "string"
+        assert fields["file"]["visible_if"] == [{"field": "target", "equals": "file"}]
+        assert fields["file"]["required_if"] == [{"field": "target", "equals": "file"}]
+        for model in entry["presentation"]["models"].values():
+            assert "slot" not in model["fields"]
+
+    reference_slot = commands["reference-save"]["presentation"]["models"][MODEL_ID][
+        "fields"
+    ]["slot"]
+    assert reference_slot["options"] == [1, 2]
+
+
+@pytest.mark.parametrize(
+    ("command", "parameters", "expected"),
+    [
+        ("setup-save", {"target": "slot", "slot": 1}, {"target": "slot", "slot": 1}),
+        ("setup-recall", {"target": "slot", "slot": 0}, {"target": "slot", "slot": 0}),
+        (
+            "setup-save",
+            {"target": "file", "file": "\\usb\\baseline.scp"},
+            {"target": "file", "file": "\\usb\\baseline.scp"},
+        ),
+        (
+            "setup-recall",
+            {"target": "file", "file": "\\usb\\baseline.scp"},
+            {"target": "file", "file": "\\usb\\baseline.scp"},
+        ),
+        (
+            "setup-save",
+            {"target": "slot", "slot": 2, "file": "\\usb\\stale.scp"},
+            {"target": "slot", "slot": 2},
+        ),
+        (
+            "setup-recall",
+            {"target": "file", "file": "\\usb\\baseline.scp", "slot": 3},
+            {"target": "file", "file": "\\usb\\baseline.scp"},
+        ),
+    ],
+)
+def test_setup_save_recall_validation_normalizes_target(
+    command: str, parameters: dict, expected: dict
+) -> None:
+    normalized = validate_job_request({
+        "command": command,
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": dict(parameters),
+    })["parameters"]
+
+    assert normalized == expected
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {},
+        {"target": "bogus"},
+        {"target": "slot"},
+        {"target": "file"},
+        {"target": "file", "file": "   "},
+    ],
+)
+def test_setup_save_recall_validation_rejects_bad_target(parameters: dict) -> None:
+    with pytest.raises(WebUIRequestError):
+        validate_job_request({
+            "command": "setup-save",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": dict(parameters),
+        })
+
+
+@pytest.mark.parametrize(
+    ("command", "method", "parameters", "expected"),
+    [
+        ("setup-save", "save_setup", {"target": "slot", "slot": 1}, (1, None)),
+        (
+            "setup-save",
+            "save_setup",
+            {"target": "file", "file": "\\usb\\baseline.scp"},
+            (None, "\\usb\\baseline.scp"),
+        ),
+        ("setup-recall", "recall_setup", {"target": "slot", "slot": 0}, (0, None)),
+        (
+            "setup-recall",
+            "recall_setup",
+            {"target": "file", "file": "\\usb\\baseline.scp"},
+            (None, "\\usb\\baseline.scp"),
+        ),
+    ],
+)
+def test_setup_save_recall_execution_routes_to_core(
+    command: str,
+    method: str,
+    parameters: dict,
+    expected: tuple,
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple] = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def save_setup(self, *, slot=None, file_spec=None) -> None:
+            calls.append(("save_setup", slot, file_spec))
+
+        def recall_setup(self, *, slot=None, file_spec=None) -> None:
+            calls.append(("recall_setup", slot, file_spec))
+
+    normalized = validate_job_request({
+        "command": command,
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": dict(parameters),
+    })["parameters"]
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        command,
+        "SIM::INSTR",
+        normalized,
+        tmp_path,
+    )
+
+    assert calls == [(method, *expected)]
+    assert result == {
+        "exit_code": 0,
+        "result": {"action": command},
+        "artifacts": [],
+    }
+
+
 def test_measure_menu_calls_core_action(tmp_path: Path) -> None:
     calls: list[str] = []
 

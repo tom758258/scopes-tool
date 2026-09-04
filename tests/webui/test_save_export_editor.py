@@ -106,6 +106,12 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           "field.save-waveform.filename": "Waveform file name",
           "save-export.editor.saveImage": "Save image",
           "save-export.editor.saveWaveform": "Save waveform",
+          "save-export.editor.mode.setup": "Setup",
+          "save-export.editor.setupNote": "Setup storage note",
+          "save-export.editor.saveSetup": "Save Setup",
+          "save-export.editor.recallSetup": "Recall Setup",
+          "save-export.editor.setupSlotTarget": "slot {{slot}}",
+          "save-export.editor.recallSetupConfirm": "Recall setup from {{target}}? Confirm.",
         };
         globalThis.translate = (key, values = {}) => {
           let text = translations[key] || key;
@@ -172,6 +178,8 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
             { id: "save-waveform-length", editor: "save-export", category: "Save / Export", label: "Waveform length", group: "waveform", presentation: { kind: "setting", action: "apply", action_field: "action", query_value: "query", apply_value: "set" }, fields: [{ name: "action", type: "enum" }, { name: "points", type: "integer" }] },
             { id: "save-waveform-length-max", editor: "save-export", category: "Save / Export", label: "Max waveform length", group: "waveform", presentation: { kind: "command", action: "read" }, fields: [] },
             { id: "save-waveform", editor: "save-export", category: "Save / Export", label: "Save waveform", group: "waveform", presentation: { kind: "command", action: "save" }, fields: [{ name: "filename", type: "string" }] },
+            { id: "setup-save", editor: "save-export", category: "Save / Export", label: "Save setup", presentation: { kind: "command", action: "run" }, fields: [{ name: "target", type: "enum" }, { name: "slot", type: "integer" }, { name: "file", type: "string" }] },
+            { id: "setup-recall", editor: "save-export", category: "Save / Export", label: "Recall setup", presentation: { kind: "command", action: "run" }, fields: [{ name: "target", type: "enum" }, { name: "slot", type: "integer" }, { name: "file", type: "string" }] },
             { id: "save-export", editor: "save-export", category: "Save / Export", label: "Save / Export", presentation_only: true, presentation: { kind: "command", action: "run" }, fields: [] },
           ];
           return {
@@ -1002,6 +1010,84 @@ def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> 
         editor.filenameEntry.form.valuesResult = { filename: "D:\\captures\\trace.csv" };
         editor.filenameEntry.form.notifyDirty();
         assert.equal(editor.destinationPreview.textContent, "D:\\captures\\trace.csv");
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const { editor, submitted } = buildEditor();
+        editor.modeButtons[2].dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(editor.mode, "setup");
+        await editor.refresh(false, true);
+        assert.equal(submitted.length, 0);
+        assert.deepEqual(editor.entries, []);
+        assert.equal(editor.pathEntry, null);
+        assert.equal(editor.filenameEntry, null);
+        assert.ok(editor.setupEntry);
+        assert.ok(editor.setupSaveButton);
+        assert.ok(editor.setupRecallButton);
+        assert.ok(editor.sectionsHost.textContent.includes("Setup storage note"));
+        assert.ok(!editor.sectionsHost.textContent.includes("Maximum waveform length mode"));
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_setup_save_submits_target_parameters() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const { editor, submitted } = buildEditor();
+        editor.mode = "setup";
+        editor.rebuildSections("ctx|save-export:setup");
+        editor.setupEntry.form.valuesResult = { target: "slot", slot: 1 };
+        editor.setupSaveButton.dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        editor.setupEntry.form.valuesResult = { target: "file", file: "\\usb\\baseline.scp" };
+        editor.setupSaveButton.dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(submitted.map((entry) => entry.command), ["setup-save", "setup-save"]);
+        assert.deepEqual(submitted[0].parameters, { target: "slot", slot: 1 });
+        assert.deepEqual(submitted[1].parameters, { target: "file", file: "\\usb\\baseline.scp" });
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_setup_recall_confirms_before_executing() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const confirmMessages = [];
+        globalThis.window = { confirm: (message) => { confirmMessages.push(message); return true; } };
+        const { editor, submitted } = buildEditor();
+        editor.mode = "setup";
+        editor.rebuildSections("ctx|save-export:setup");
+        editor.setupEntry.form.valuesResult = { target: "slot", slot: 1 };
+        editor.setupRecallButton.dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(submitted.length, 1);
+        assert.equal(submitted[0].command, "setup-recall");
+        assert.deepEqual(submitted[0].parameters, { target: "slot", slot: 1 });
+        assert.ok(confirmMessages[0].includes("slot 1"));
+        editor.setupEntry.form.valuesResult = { target: "file", file: "\\usb\\baseline.scp" };
+        editor.setupRecallButton.dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(submitted.length, 2);
+        assert.ok(confirmMessages[1].includes("\\usb\\baseline.scp"));
+        globalThis.window = { confirm: (message) => { confirmMessages.push(message); return false; } };
+        editor.setupRecallButton.dispatch("click");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(submitted.length, 2);
+        assert.equal(confirmMessages.length, 3);
         '''
     )
     completed = run_node(script)

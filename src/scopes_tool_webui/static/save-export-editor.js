@@ -22,6 +22,13 @@ const SAVE_EXPORT_MODES = {
     ],
     saveCommandId: "save-waveform",
   },
+  setup: {
+    id: "setup",
+    labelKey: "save-export.editor.mode.setup",
+    settingIds: [],
+    setupSaveCommandId: "setup-save",
+    setupRecallCommandId: "setup-recall",
+  },
 };
 
 function determineFileExtension(mode, formatValue) {
@@ -60,6 +67,9 @@ export class SaveExportEditor {
     this.pathEntry = null;
     this.filenameEntry = null;
     this.advancedEntry = null;
+    this.setupEntry = null;
+    this.setupSaveButton = null;
+    this.setupRecallButton = null;
     this.saveButton = null;
     this.destinationPreview = null;
     this.modeButtons = [];
@@ -215,6 +225,9 @@ export class SaveExportEditor {
     this.pathEntry = null;
     this.filenameEntry = null;
     this.advancedEntry = null;
+    this.setupEntry = null;
+    this.setupSaveButton = null;
+    this.setupRecallButton = null;
     this.saveButton = null;
     this.sectionsHost.replaceChildren();
     this.groupHeading.textContent = "";
@@ -232,6 +245,16 @@ export class SaveExportEditor {
     if (!this.selectedDefinition()) return;
 
     const modeConfig = SAVE_EXPORT_MODES[this.mode] || SAVE_EXPORT_MODES.image;
+    if (modeConfig.id === "setup") {
+      this.entries = [];
+      this.pathEntry = null;
+      this.filenameEntry = null;
+      this.advancedEntry = null;
+      this.saveButton = null;
+      this.destinationPreview = null;
+      this.buildSetupSection(modeConfig);
+      return;
+    }
     this.pathEntry = this.buildSharedPathForm();
     this.filenameEntry = this.buildModeFilenameForm(modeConfig.saveCommandId);
     this.sectionsHost.append(this.pathEntry.section, this.filenameEntry.section);
@@ -327,6 +350,59 @@ export class SaveExportEditor {
     return { section, form };
   }
 
+  buildSetupSection(modeConfig) {
+    const section = document.createElement("section");
+    section.className = "trigger-editor-section";
+    const heading = document.createElement("strong");
+    heading.className = "trigger-editor-heading";
+    heading.textContent = translate(modeConfig.labelKey);
+    const note = document.createElement("p");
+    note.className = "muted compact-note";
+    note.textContent = translate("save-export.editor.setupNote");
+    const formHost = document.createElement("div");
+    const command = this.commandForId(modeConfig.setupSaveCommandId);
+    const form = new CommandForm(formHost, this.catalog);
+    form.render(command);
+    this.setupEntry = { form };
+    this.setupSaveButton = document.createElement("button");
+    this.setupSaveButton.type = "button";
+    this.setupSaveButton.className = "primary trigger-editor-action";
+    this.setupSaveButton.textContent = translate("save-export.editor.saveSetup");
+    this.setupSaveButton.addEventListener("click", () => {
+      void this.submitSetup(modeConfig.setupSaveCommandId, false);
+    });
+    this.setupRecallButton = document.createElement("button");
+    this.setupRecallButton.type = "button";
+    this.setupRecallButton.className = "secondary trigger-editor-action";
+    this.setupRecallButton.textContent = translate("save-export.editor.recallSetup");
+    this.setupRecallButton.addEventListener("click", () => {
+      void this.submitSetup(modeConfig.setupRecallCommandId, true);
+    });
+    section.append(heading, note, formHost, this.setupSaveButton, this.setupRecallButton);
+    this.sectionsHost.append(section);
+    this.applyBusyState();
+  }
+
+  async submitSetup(commandId, needsConfirm) {
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
+    const form = this.setupEntry?.form;
+    const values = form?.values?.();
+    if (values === null || values === undefined) return;
+    if (needsConfirm) {
+      const target = values.target === "file"
+        ? String(values.file || "")
+        : translate("save-export.editor.setupSlotTarget", { slot: values.slot });
+      if (!window.confirm(translate("save-export.editor.recallSetupConfirm", { target }))) return;
+    }
+    this.setBusy(true);
+    try {
+      const job = await this.hooks.executeCommand(commandId, values, { intent: "command" });
+      if (job?.status === "completed") form.clearDirty();
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
   buildSettingEntry(command, container) {
     const section = document.createElement("section");
     section.className = "trigger-editor-section";
@@ -412,6 +488,7 @@ export class SaveExportEditor {
   }
 
   async readWorkspace() {
+    if (this.mode === "setup") return true;
     const ids = ["save-pwd", "save-filename", ...this.modeConfig().settingIds];
     const entries = ids
       .map((id) => ({ id, entry: this.entryForId(id) }))
@@ -616,6 +693,9 @@ export class SaveExportEditor {
     });
     if (this.pathEntry?.form) this.pathEntry.form.setDisabled(disabled);
     if (this.filenameEntry?.form) this.filenameEntry.form.setDisabled(disabled);
+    if (this.setupEntry?.form) this.setupEntry.form.setDisabled(disabled);
+    if (this.setupSaveButton) this.setupSaveButton.disabled = disabled;
+    if (this.setupRecallButton) this.setupRecallButton.disabled = disabled;
     if (this.advancedEntry?.form) this.advancedEntry.form.setDisabled(disabled);
     if (this.advancedEntry?.button) {
       this.advancedEntry.button.disabled = disabled || !this.isDirty(this.advancedEntry.form);
