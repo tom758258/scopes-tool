@@ -44,6 +44,10 @@ def test_reference_editor_wiring_and_localization() -> None:
     assert '"save-export.editor.title": "Save / Export"' in english
     assert '"reference.editor.title": "參考波形"' in chinese
     assert '"save-export.editor.title": "儲存 / 匯出"' in chinese
+    assert '"help.reference-label.label": "Set the stored name' in english
+    assert "it does not show or hide the waveform itself." in english
+    assert '"help.reference-label.label": "設定參考波形的儲存名稱' in chinese
+    assert "不會顯示或隱藏波形本身。" in chinese
 
 
 REFERENCE_EDITOR_HARNESS = r'''

@@ -2949,6 +2949,13 @@ def test_numeric_inputs_share_spinner_presentation_rules() -> None:
     assert "-moz-appearance: textfield;" in styles
 
 
+def test_boolean_field_help_spans_full_row() -> None:
+    styles = read_static("styles.css")
+    boolean_help = extract_css_rule(styles, ".command-form .field-boolean .field-help")
+
+    assert "grid-column: 1 / -1;" in boolean_help
+
+
 def test_summary_uses_only_scopes_supported_states() -> None:
     english = read_static("locale_en.js")
 

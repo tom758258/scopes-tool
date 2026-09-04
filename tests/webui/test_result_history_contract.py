@@ -16,6 +16,35 @@ LOCALE_EN_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "locale_en.j
 LOCALE_ZH_TW_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "locale_zh_tw.js"
 
 
+def test_single_wait_and_screenshot_result_fields_have_zh_tw_labels() -> None:
+    english = LOCALE_EN_JS.read_text(encoding="utf-8")
+    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+    expected = {
+        "results.field.wait_enabled": ("Wait enabled", "啟用等待"),
+        "results.field.arm_command": ("Arm command", "啟動指令"),
+        "results.field.poll_source": ("Poll source", "輪詢來源"),
+        "results.field.poll_command": ("Poll command", "輪詢指令"),
+        "results.field.timeout_ms": ("Timeout ms", "逾時時間（毫秒）"),
+        "results.field.poll_interval_ms": ("Poll interval ms", "輪詢間隔（毫秒）"),
+        "results.field.force_on_timeout": ("Force on timeout", "逾時時強制觸發"),
+        "results.field.force_command": ("Force command", "強制觸發指令"),
+        "results.field.outcome": ("Outcome", "結果狀態"),
+        "results.field.forced": ("Forced", "已強制觸發"),
+        "results.field.timed_out": ("Timed out", "已逾時"),
+        "results.field.poll_count": ("Poll count", "輪詢次數"),
+        "results.field.elapsed_ms": ("Elapsed ms", "經過時間（毫秒）"),
+        "results.field.condition_values": ("Condition values", "條件值"),
+        "results.field.raw_values": ("Raw values", "原始值"),
+        "results.field.capture_allowed": ("Capture allowed", "允許擷取"),
+        "results.field.capture_block_reason": ("Capture block reason", "禁止擷取原因"),
+        "results.field.artifact": ("Artifact", "檔案"),
+        "results.field.source_kind": ("Source kind", "來源種類"),
+    }
+    for key, (en_value, zh_value) in expected.items():
+        assert f'"{key}": "{en_value}"' in english, key
+        assert f'"{key}": "{zh_value}"' in chinese, key
+
+
 def test_result_panel_preserves_powers_style_bounded_job_history() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
 
