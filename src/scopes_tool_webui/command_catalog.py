@@ -111,6 +111,14 @@ COMMANDS = (
         "fields": (),
     },
     {
+        "id": "system-information-snapshot",
+        "category": "System",
+        "label": "System Information snapshot",
+        "hidden": True,
+        "modes": ("live", "simulate"),
+        "fields": (),
+    },
+    {
         "id": "list-resources",
         "category": "Device",
         "label": "List resources",
@@ -125,6 +133,7 @@ COMMANDS = (
         "category": "Identity",
         "label": "Read device information",
         "description": "Read instrument identification information",
+        "hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
     },

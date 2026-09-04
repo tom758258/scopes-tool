@@ -514,17 +514,22 @@ remain separate from the generic workflow progress shown in Result History.
 The Command workbench intentionally exposes operator-facing settings,
 captures, finite workflows, and structured information commands that have a
 clear browser interaction. Resource discovery uses the hidden
-`list-resources` helper, while `identify` remains the visible Read device
-information command.
+`list-resources` helper. System identity (`identify`) is read through the
+System Information section (not through a standalone command card); the
+underlying identity backend remains available for resource/model detection
+and capability gating.
 
 Advanced or diagnostic CLI paths are not automatically browser commands.
 Current intentional omissions include direct SCPI sending, broad cleanup
 operations, and worker/doctor/hardware-report
-tooling. Acquisition points, record
-length, acquisition sample-rate controls,
-and similar low-level information remain CLI/Core paths until a coherent WebUI
-presentation is defined. These omissions avoid exposing a Core operation without
-an appropriate interaction, capability, and result model.
+tooling. Acquisition settings/controls (sample-rate setters, memory-depth
+setters, and similar low-level controls) remain CLI/Core paths and are not
+exposed in the WebUI. Read-only System Information (identity readback) and
+low-level Acquisition Information (current sample rate, acquisition points,
+record length) are now presented directly in the System Information section,
+but settings and control interfaces for these values remain unexposed. These
+omissions avoid exposing a Core operation without an appropriate interaction,
+capability, and result model.
 Basic FFT unit and window values remain Core-validated text until Core exposes
 public option metadata that the WebUI can project without duplicating it.
 

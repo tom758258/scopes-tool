@@ -108,6 +108,15 @@ const elements = {
   pcOutputOpen: document.querySelector("#pc-output-open"),
   pcOutputStatus: document.querySelector("#pc-output-status"),
   pcOutputCommandNote: document.querySelector("#pc-output-command-note"),
+  systemRefresh: document.querySelector("#system-refresh"),
+  sysManufacturer: document.querySelector("#sys-manufacturer"),
+  sysModel: document.querySelector("#sys-model"),
+  sysSerial: document.querySelector("#sys-serial"),
+  sysFirmware: document.querySelector("#sys-firmware"),
+  sysResource: document.querySelector("#sys-resource"),
+  sysSampleRate: document.querySelector("#sys-sample-rate"),
+  sysAcquisitionPoints: document.querySelector("#sys-acquisition-points"),
+  sysRecordLength: document.querySelector("#sys-record-length"),
 };
 
 let commands = [];
@@ -144,6 +153,7 @@ let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: fa
 
 const INTERNAL_COMMANDS = {
   "live-data-snapshot": { id: "live-data-snapshot", modes: ["live", "simulate"], internal: true },
+  "system-information-snapshot": { id: "system-information-snapshot", modes: ["live", "simulate"], internal: true },
 };
 
 const EDITOR_RENDERERS = {
@@ -357,6 +367,7 @@ async function initialize() {
     if (catalog) catalog.updateMode(context.mode);
     if (!updateCommandSupport()) syncCommandSelection();
     renderLiveData();
+    renderSystemInformation();
   }, (scanState) => {
     setCommandState(scanState);
   }, (scanJob) => {
@@ -378,6 +389,9 @@ async function initialize() {
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   bindPcOutputControls();
   elements.liveDataRefresh.addEventListener("click", refreshLiveDataSnapshot);
+  if (elements.systemRefresh) {
+    elements.systemRefresh.addEventListener("click", refreshSystemInformationSnapshot);
+  }
   updateAvailability();
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
@@ -620,6 +634,7 @@ function updateIdentity(job, commandContext) {
   updateCommandSupport();
   renderWorkspace();
   renderLiveData();
+  renderSystemInformation();
   if (typeof updateAvailability === "function") updateAvailability();
 }
 
@@ -867,6 +882,9 @@ function updateAvailability() {
   elements.execute.disabled = busy || !selected || !commandAvailable(selected.id);
   elements.refresh.disabled = busy || !selected || !commandAvailable(selected.id);
   elements.liveDataRefresh.disabled = busy || liveDataSnapshot.loading || !commandAvailable("live-data-snapshot");
+  if (elements.systemRefresh) {
+    elements.systemRefresh.disabled = busy || systemSnapshot.loading || !commandAvailable("system-information-snapshot");
+  }
   triggerEditor?.applyBusyState();
   searchEditor?.applyBusyState();
   segmentedEditor?.applyBusyState();
@@ -1130,6 +1148,49 @@ function renderLiveData() {
   );
 }
 
+let systemSnapshot = { value: null, loading: false, error: null };
+
+async function refreshSystemInformationSnapshot() {
+  if (isExecutionBusy() || !commandAvailable("system-information-snapshot")) return;
+  systemSnapshot = { value: null, loading: true, error: null };
+  renderSystemInformation();
+  updateAvailability();
+  const job = await executeCommand("system-information-snapshot", {});
+  if (job?.status === "completed" && job.result?.result) {
+    systemSnapshot = { value: job.result.result, loading: false, error: null };
+  } else {
+    systemSnapshot = { value: null, loading: false, error: job?.error || translate("system.readFailed") };
+  }
+  renderSystemInformation();
+  updateAvailability();
+}
+
+function renderSystemInformation() {
+  const result = systemSnapshot.value || {};
+  const idn = result.idn || {};
+  const acquisition = result.acquisition || {};
+
+  const setText = (element, value, unavailableText) => {
+    if (!element) return;
+    if (value === null || value === undefined) {
+      element.textContent = unavailableText || "Unavailable";
+    } else {
+      element.textContent = typeof value === "number" ? String(value) : String(value);
+    }
+  };
+
+  setText(elements.sysManufacturer, idn.vendor, "—");
+  setText(elements.sysModel, idn.model, "—");
+  setText(elements.sysSerial, idn.serial, "—");
+  setText(elements.sysFirmware, idn.firmware, "—");
+  setText(elements.sysResource, context.resource || null, "—");
+
+  const hasLoaded = systemSnapshot.value !== null;
+  setText(elements.sysSampleRate, acquisition.sample_rate, hasLoaded ? "Unavailable" : "—");
+  setText(elements.sysAcquisitionPoints, acquisition.acquisition_points, hasLoaded ? "Unavailable" : "—");
+  setText(elements.sysRecordLength, acquisition.record_length, hasLoaded ? "Unavailable" : "—");
+}
+
 function setStateIndicator(indicator, text, stateClass, title = "") {
   if (!indicator) return;
   ["state-ok", "state-warning", "state-error", "state-idle"].forEach((name) => {
@@ -1144,4 +1205,5 @@ initialize().catch((error) => {
   healthState = { status: "error", version: null, error: error.message };
   renderVersion();
   renderLiveData();
+  renderSystemInformation();
 });

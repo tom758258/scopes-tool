@@ -90,7 +90,6 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     assert response.status_code == 200
     command_ids = {entry["id"] for entry in response.json()}
     assert {
-        "identify",
         "force-trigger",
         "single-wait",
         "acquisition",
@@ -103,6 +102,7 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
         "system-status-byte",
         "system-operation-status",
     } <= command_ids
+    assert "identify" not in command_ids
     assert "trigger" not in command_ids
     acquisition = next(entry for entry in response.json() if entry["id"] == "acquisition")
     force_trigger = next(
@@ -3199,3 +3199,46 @@ def test_live_capture_rejects_empty_required_channels_before_queue(channels) -> 
     )
     assert response.status_code == 400
     assert "channels is required" in response.json()["detail"]
+
+
+def test_system_information_snapshot_returns_idn_and_acquisition_readouts() -> None:
+    """Snapshot combines existing identify and acquisition readouts in one session."""
+    client = TestClient(app)
+    response = client.post(
+        "/api/jobs",
+        json={
+            "command": "system-information-snapshot",
+            "mode": "simulate",
+            "parameters": {},
+        },
+    )
+    assert response.status_code == 202
+    job = client.get(f"/api/jobs/{response.json()['job_id']}").json()
+    assert job["status"] in ("completed", "running", "queued")
+    # When completed, result must contain both idn and acquisition keys.
+    if job.get("status") == "completed":
+        result = job.get("result", {}).get("result", {})
+        assert "idn" in result
+        assert "acquisition" in result
+        acq = result.get("acquisition", {})
+        assert "sample_rate" in acq or acq.get("sample_rate") is None
+        assert "acquisition_points" in acq or acq.get("acquisition_points") is None
+        assert "record_length" in acq or acq.get("record_length") is None
+
+
+def test_identify_hidden_from_catalog_but_backend_preserved() -> None:
+    """Identify is hidden from browser presentation; backend execution remains."""
+    client = TestClient(app)
+    catalog_response = client.get("/api/commands")
+    command_ids = {entry["id"] for entry in catalog_response.json()}
+    assert "identify" not in command_ids
+    # Backend execution of identify must still work through direct API call.
+    response = client.post(
+        "/api/jobs",
+        json={
+            "command": "identify",
+            "mode": "simulate",
+            "parameters": {},
+        },
+    )
+    assert response.status_code == 202
