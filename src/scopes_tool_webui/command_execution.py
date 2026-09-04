@@ -326,6 +326,13 @@ def _execute_scope_command(
     if command == "force-trigger":
         scope.force_trigger()
         return _simple_scope_result("force-trigger")
+    if command == "autoscale":
+        scope.autoscale(
+            parameters.get("channels"),
+            acquire_mode=parameters.get("acquire_mode"),
+            channels_mode=parameters.get("channels_mode"),
+        )
+        return _simple_scope_result("autoscale")
     if command == "acquisition":
         return _execute_acquisition(scope, parameters)
     if command == "timebase-scale":

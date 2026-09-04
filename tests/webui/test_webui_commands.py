@@ -161,6 +161,136 @@ def test_execute_force_trigger_calls_core_action(tmp_path: Path) -> None:
     }
 
 
+def test_autoscale_catalog_exposes_optional_parameters() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/commands")
+
+    assert response.status_code == 200
+    autoscale = next(entry for entry in response.json() if entry["id"] == "autoscale")
+    assert autoscale["category"] == "Acquisition"
+    assert autoscale["label"] == "Autoscale"
+    assert autoscale["modes"] == ["live", "simulate"]
+    assert "editor" not in autoscale
+    fields = {field["name"]: field for field in autoscale["fields"]}
+    assert set(fields) == {"channels", "acquire_mode", "channels_mode"}
+    channels = fields["channels"]
+    assert channels["type"] == "multi-enum"
+    assert channels["options"] == [1, 2, 3, 4]
+    assert channels.get("required") is not True
+    assert "default" not in channels
+    assert "required_if" not in channels
+    acquire_mode = fields["acquire_mode"]
+    assert acquire_mode["type"] == "enum"
+    assert acquire_mode["options"] == ["normal", "current"]
+    assert acquire_mode.get("required") is not True
+    assert "default" not in acquire_mode
+    assert "required_if" not in acquire_mode
+    channels_mode = fields["channels_mode"]
+    assert channels_mode["type"] == "enum"
+    assert channels_mode["options"] == ["all", "displayed"]
+    assert channels_mode.get("required") is not True
+    assert "default" not in channels_mode
+    assert "required_if" not in channels_mode
+
+
+def test_autoscale_execution_forwards_none_for_unspecified_parameters(
+    tmp_path: Path,
+) -> None:
+    calls: list[dict] = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def autoscale(self, channels, *, acquire_mode=None, channels_mode=None) -> None:
+            calls.append({
+                "channels": channels,
+                "acquire_mode": acquire_mode,
+                "channels_mode": channels_mode,
+            })
+
+    normalized = validate_job_request({
+        "command": "autoscale",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {},
+    })["parameters"]
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        "autoscale",
+        "SIM::INSTR",
+        normalized,
+        tmp_path,
+    )
+
+    assert calls == [{"channels": None, "acquire_mode": None, "channels_mode": None}]
+    assert result == {
+        "exit_code": 0,
+        "result": {"action": "autoscale"},
+        "artifacts": [],
+    }
+
+
+def test_autoscale_validation_normalizes_and_execution_forwards_parameters(
+    tmp_path: Path,
+) -> None:
+    calls: list[dict] = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def autoscale(self, channels, *, acquire_mode=None, channels_mode=None) -> None:
+            calls.append({
+                "channels": channels,
+                "acquire_mode": acquire_mode,
+                "channels_mode": channels_mode,
+            })
+
+    normalized = validate_job_request({
+        "command": "autoscale",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {
+            "channels": "1,2",
+            "acquire_mode": "current",
+            "channels_mode": "displayed",
+        },
+    })["parameters"]
+    assert normalized["channels"] == [1, 2]
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        "autoscale",
+        "SIM::INSTR",
+        normalized,
+        tmp_path,
+    )
+
+    assert calls == [{
+        "channels": [1, 2],
+        "acquire_mode": "current",
+        "channels_mode": "displayed",
+    }]
+    assert result == {
+        "exit_code": 0,
+        "result": {"action": "autoscale"},
+        "artifacts": [],
+    }
+    with pytest.raises(WebUIRequestError):
+        validate_job_request({
+            "command": "autoscale",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"acquire_mode": "bogus"},
+        })
+    with pytest.raises(WebUIRequestError):
+        validate_job_request({
+            "command": "autoscale",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"channels_mode": "bogus"},
+        })
+
+
 def test_measure_menu_calls_core_action(tmp_path: Path) -> None:
     calls: list[str] = []
 

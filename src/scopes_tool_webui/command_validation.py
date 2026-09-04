@@ -1728,6 +1728,20 @@ def _validate_parameters(
         parameters["background"] = str(parameters.get("background", "black")).lower()
         if parameters["background"] not in {"black", "white"}:
             raise WebUIRequestError("background must be black or white")
+    elif command == "autoscale":
+        parameters["channels"] = _workflow_channels(
+            parameters.get("channels"), capabilities, required=False
+        )
+        if "acquire_mode" in parameters and parameters["acquire_mode"] not in {
+            "normal",
+            "current",
+        }:
+            raise WebUIRequestError("acquire_mode must be normal or current")
+        if "channels_mode" in parameters and parameters["channels_mode"] not in {
+            "all",
+            "displayed",
+        }:
+            raise WebUIRequestError("channels_mode must be all or displayed")
 
 
 def _normalize_acquisition_type(value: Any) -> str:

@@ -186,6 +186,38 @@ COMMANDS = (
         "fields": (),
     },
     {
+        "id": "autoscale",
+        "category": "Acquisition",
+        "label": "Autoscale",
+        "description": "Run oscilloscope autoscale; may adjust channel scaling, timebase, and trigger setup.",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {
+                "name": "channels",
+                "type": "multi-enum",
+                "options": (1, 2, 3, 4),
+                "serialize": "csv",
+                "option_label": "channel",
+                "label_key": "autoscale.channels",
+                "help_key": "autoscale.channels",
+            },
+            {
+                "name": "acquire_mode",
+                "type": "enum",
+                "options": ("normal", "current"),
+                "label_key": "autoscale.acquire_mode",
+                "help_key": "autoscale.acquire_mode",
+            },
+            {
+                "name": "channels_mode",
+                "type": "enum",
+                "options": ("all", "displayed"),
+                "label_key": "autoscale.channels_mode",
+                "help_key": "autoscale.channels_mode",
+            },
+        ),
+    },
+    {
         "id": "acquisition",
         "category": "Acquisition",
         "label": "Acquisition",
