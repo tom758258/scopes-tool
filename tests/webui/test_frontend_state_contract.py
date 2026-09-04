@@ -3961,3 +3961,56 @@ def test_advanced_math_form_and_result_localization() -> None:
     ):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> None:
+    app_source = read_static("app.js")
+    sync_header = extract_function_declaration(app_source, "function syncWorkspaceHeaderActions(editorKind)")
+    script = textwrap.dedent(
+        f'''
+        import assert from "node:assert/strict";
+        const catalog = {{
+          selected: () => ({{ id: "save-export" }}),
+        }};
+        const elements = {{
+          refresh: {{ hidden: false }},
+          execute: {{ hidden: false }},
+        }};
+        const commandForm = null;
+        const referenceEditor = {{}};
+        const saveExportEditor = {{
+          mode: "setup",
+          refreshButton: {{ hidden: false }},
+        }};
+        const serialEditor = {{}};
+        const triggerEditor = {{}};
+        const searchEditor = {{}};
+        const segmentedEditor = {{}};
+        const workflowEditor = {{}};
+        const sequenceEditor = {{}};
+        const cursorEditor = {{}};
+        const annotationEditor = {{}};
+        const wgenEditor = {{}};
+        const demoEditor = {{}};
+        {sync_header}
+
+        syncWorkspaceHeaderActions("save-export");
+        assert.equal(saveExportEditor.refreshButton.hidden, true);
+        saveExportEditor.mode = "image";
+        syncWorkspaceHeaderActions("save-export");
+        assert.equal(saveExportEditor.refreshButton.hidden, false);
+        saveExportEditor.mode = "setup";
+        syncWorkspaceHeaderActions("save-export");
+        syncWorkspaceHeaderActions("serial");
+        syncWorkspaceHeaderActions("save-export");
+        assert.equal(saveExportEditor.refreshButton.hidden, true);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

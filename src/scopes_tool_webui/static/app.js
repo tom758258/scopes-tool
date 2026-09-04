@@ -896,7 +896,8 @@ function syncWorkspaceHeaderActions(editorKind) {
     referenceEditor.refreshButton.hidden = editorKind !== "reference";
   }
   if (saveExportEditor?.refreshButton) {
-    saveExportEditor.refreshButton.hidden = editorKind !== "save-export";
+    saveExportEditor.refreshButton.hidden =
+      editorKind !== "save-export" || saveExportEditor.mode === "setup";
   }
   if (serialEditor?.refreshButton) serialEditor.refreshButton.hidden = editorKind !== "serial";
   if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
