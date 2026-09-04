@@ -537,6 +537,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .workspace-header-actions { justify-content: flex-start; }
   .command-description { overflow: visible; text-overflow: clip; white-space: normal; }
   .section-head { align-items: flex-start; }
+  .system-info-content { grid-template-columns: 1fr; }
   .live-summary-columns { grid-template-columns: 1fr; }
   .basic-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pc-output-row { grid-template-columns: 1fr; }

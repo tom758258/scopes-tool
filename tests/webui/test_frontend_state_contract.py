@@ -2799,6 +2799,10 @@ def test_command_panels_use_fixed_desktop_height_and_internal_overflow() -> None
     assert "min-height: 0;" in responsive_panels
     assert "overflow: visible;" in responsive_workspace_content
 
+    mobile_responsive = extract_function(styles, "@media (max-width: 700px)")
+    mobile_system_info = extract_css_rule(mobile_responsive, ".system-info-content {")
+    assert "grid-template-columns: 1fr;" in mobile_system_info
+
 
 def test_live_mode_badge_is_neutral_and_utility_glyphs_are_centered() -> None:
     styles = read_static("styles.css")
