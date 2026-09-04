@@ -106,7 +106,7 @@ readback, rollback, or browser-side SCPI behavior for this operation.
 
 The Command workbench exposes:
 
-- Identity information is read through the System Information section. `identify` has no standalone command card in the Command workbench, but its backend capability remains available for resource/model detection and capability gating.
+- System Information is available as a read-only presentation view under the System category in the Command workbench. Its Refresh action runs the hidden `system-information-snapshot` command; the `identify` backend remains responsible for live resource/model detection and capability gating.
 - Acquisition: `run`, `single`, `single-wait`, `stop-acquisition`,
   `force-trigger`, `autoscale`, `acquisition`
 - Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`
@@ -514,10 +514,11 @@ remain separate from the generic workflow progress shown in Result History.
 The Command workbench intentionally exposes operator-facing settings,
 captures, finite workflows, and structured information commands that have a
 clear browser interaction. Resource discovery uses the hidden
-`list-resources` helper. System identity (`identify`) is read through the
-System Information section (not through a standalone command card); the
-underlying identity backend remains available for resource/model detection
-and capability gating.
+`list-resources` helper. System Information is a read-only presentation view
+under the System category in the Command workbench. It has no standalone
+main-page section; its Refresh action runs the hidden
+`system-information-snapshot` command. The underlying `identify` backend
+remains responsible for resource/model detection and capability gating.
 
 Advanced or diagnostic CLI paths are not automatically browser commands.
 Current intentional omissions include direct SCPI sending, broad cleanup
@@ -526,8 +527,8 @@ tooling. Acquisition settings/controls (sample-rate setters, memory-depth
 setters, and similar low-level controls) remain CLI/Core paths and are not
 exposed in the WebUI. Read-only System Information (identity readback) and
 low-level Acquisition Information (current sample rate, acquisition points,
-record length) are now presented directly in the System Information section,
-but settings and control interfaces for these values remain unexposed. These
+record length) are presented in the System category workspace, but settings
+and control interfaces for these values remain unexposed. These
 omissions avoid exposing a Core operation without an appropriate interaction,
 capability, and result model.
 Basic FFT unit and window values remain Core-validated text until Core exposes

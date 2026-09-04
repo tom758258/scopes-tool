@@ -397,8 +397,8 @@ def test_serial_editor_replaces_generic_form_with_passive_selection() -> None:
     assert "function scheduleEditorRead()" not in app_source
     presentation = extract_function(app_source, "function syncEditorPresentation(editorKind)")
     assert "serialEditor?.schedulePresentation();" in presentation
-    assert "elements.formHeading.hidden = editorOwned;" in app_source
-    assert "elements.form.hidden = editorOwned;" in app_source
+    assert "elements.formHeading.hidden = editorOwned || systemInformationSelected;" in app_source
+    assert "elements.form.hidden = editorOwned || systemInformationSelected;" in app_source
     assert 'elements.serialEditor.hidden = editorKind !== "serial";' in app_source
     assert "syncWorkspaceHeaderActions(editorKind);" in app_source
     assert "elements.serialEditor.hidden = !editorOwned;" not in app_source
@@ -1842,6 +1842,7 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         const buildWorkspaceContext = () => ({});
         const renderLiveData = () => {};
         const updateAvailability = () => {};
+        const renderSystemInformation = () => {};
         const setCommandState = (state) => states.push({ resource: context.resource, ...state });
         const renderCurrentResult = () => {
           const job = resultPresentation.job;
@@ -1859,18 +1860,17 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
             identities.push({ resource: associatedContext.resource, model: idn.model });
           },
         };
+        let resolveSubmittedB;
+        const submittedB = new Promise((resolve) => { resolveSubmittedB = resolve; });
         const runJob = (command, parameters, commandContext, onUpdate) => {
           assert.equal(command, "identify");
           assert.deepEqual(parameters, {});
           submissions.push(commandContext.resource);
+          if (commandContext.resource === "RESOURCE-B") resolveSubmittedB();
           const jobId = `identify-${commandContext.resource}`;
           onUpdate({ job_id: jobId, command, status: "queued" });
           onUpdate({ job_id: jobId, command, status: "running" });
           return new Promise((resolve) => controllers.push({ jobId, onUpdate, resolve }));
-        };
-        const settle = async () => {
-          await Promise.resolve();
-          await Promise.resolve();
         };
         '''
     ) + declarations + textwrap.dedent(
@@ -1881,8 +1881,7 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         assert.deepEqual(submissions, []);
         executing = false;
 
-        const snapshotA = refreshSelectedResourceContext(contextFor("RESOURCE-A"));
-        await settle();
+        const identifyA = refreshSelectedResourceContext(contextFor("RESOURCE-A"));
         assert.deepEqual(submissions, ["RESOURCE-A"]);
 
         context = contextFor("RESOURCE-B");
@@ -1899,7 +1898,7 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         };
         controllers[0].onUpdate(failedA);
         controllers[0].resolve(failedA);
-        await settle();
+        await submittedB;
         assert.deepEqual(submissions, ["RESOURCE-A", "RESOURCE-B"]);
         assert.notEqual(states.at(-1).status, "failed");
         assert.equal(states.at(-1).resource, "RESOURCE-B");
@@ -1914,7 +1913,7 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         };
         controllers[1].onUpdate(completedB);
         controllers[1].resolve(completedB);
-        await snapshotA;
+        await identifyA;
 
         assert.deepEqual(submissions, ["RESOURCE-A", "RESOURCE-B"]);
         assert.equal(history.has("identify-RESOURCE-B"), true);
@@ -1990,6 +1989,7 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
         let rejectA;
         const renderLiveData = () => {};
         const updateAvailability = () => {};
+        const renderSystemInformation = () => {};
         const setCommandState = (state) => states.push({ resource: context.resource, ...state });
         const renderCurrentResult = () => {
           if (resultPresentation.kind === "error") {
@@ -2027,24 +2027,20 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
     ) + declarations + textwrap.dedent(
         r'''
 
-        const snapshotA = refreshSelectedResourceContext(contextFor("RESOURCE-A"));
-        await Promise.resolve();
-        // Note: in the simulated environment, the exact submission timing may differ
-        // from the live app; the key contract is that snapshot mechanism exists.
-        assert(submissions.length === 0 || submissions.includes("RESOURCE-A"));
+        const identifyA = refreshSelectedResourceContext(contextFor("RESOURCE-A"));
+        assert.deepEqual(submissions, ["RESOURCE-A"]);
+        assert.deepEqual(events, ["submit-RESOURCE-A"]);
 
         context = contextFor("RESOURCE-B");
         await refreshSelectedResourceContext(context);
-        // Note: submission sequence depends on simulated execution timing; verify basic contract.
         assert.equal(states.at(-1).resource, "RESOURCE-B");
-        // Status may vary in simulated environment depending on execution timing.
-        assert.equal(states.at(-1).status in {"queued", "failed"}, true);
+        assert.equal(states.at(-1).status, "queued");
 
         rejectA(new Error("HTTP 503: temporary failure"));
-        await snapshotA;
+        await identifyA;
 
         assert.deepEqual(events.slice(0, 3), ["submit-RESOURCE-A", "client-error-A", "submit-RESOURCE-B"]);
-        assert(submissions.includes("RESOURCE-A") || submissions.includes("RESOURCE-B"));
+        assert.deepEqual(submissions, ["RESOURCE-A", "RESOURCE-B"]);
         assert.equal(clientErrors.length, 1);
         assert.equal(clientErrors[0].kind, "error");
         assert.equal(clientErrors[0].command, "identify");
@@ -2061,11 +2057,7 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
           identities.every((item) => item.resource === "RESOURCE-B" && item.model === "DSO-X 4034A"),
           true,
         );
-        // Note: snapshot mechanism preserves backend identity execution contract; status depends on simulated timing.
-        assert.equal(
-            states.at(-1).status in {"completed", "failed", "queued"},
-            true,
-        );
+        assert.equal(states.at(-1).status, "completed");
         '''
     )
     completed = subprocess.run(
@@ -2438,6 +2430,126 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert "await requestCancel(currentJobId);" in cancel_handler
     assert 'elements.cancel.classList.remove("hidden");' in source
     assert 'elements.cancel.classList.add("hidden");' in source
+
+
+def test_system_information_is_a_read_only_workspace_view() -> None:
+    app_source = read_static("app.js")
+    html = read_static("index.html")
+
+    assert 'id="system-info-section"' not in html
+    assert 'id="system-refresh"' not in html
+    assert html.index('class="live-data-section"') < html.index('class="basic-command-section"')
+    assert html.count('id="system-information-workspace"') == 1
+    assert html.count('id="sys-manufacturer"') == 1
+    assert 'id="system-information-workspace"' in html.split('<div class="workspace-content">', 1)[1]
+    assert "scrollIntoView" not in app_source
+    assert "const systemInformationSelected = selected?.id === \"system-information\";" in app_source
+    assert "elements.execute.hidden = systemInformationSelected" in app_source
+    assert "elements.form.hidden = editorOwned || systemInformationSelected;" in app_source
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_system_information_refresh_runs_only_the_hidden_snapshot_command() -> None:
+    app_source = read_static("app.js")
+    declarations = "\n".join(
+        extract_function_declaration(app_source, signature)
+        for signature in (
+            "function systemInformationContextKey()",
+            "async function refreshSystemInformationSnapshot()",
+        )
+    )
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+
+        let context = { mode: "live", resource: "RESOURCE-A", model_id: "keysight-dsox4024a" };
+        let systemSnapshot = { contextKey: null, value: null, loading: false, error: null };
+        const calls = [];
+        let renders = 0;
+        let availabilityUpdates = 0;
+        const currentModelId = () => context.model_id;
+        const isExecutionBusy = () => false;
+        const commandAvailable = (command) => {
+          assert.equal(command, "system-information-snapshot");
+          return true;
+        };
+        const renderSystemInformation = () => { renders += 1; };
+        const updateAvailability = () => { availabilityUpdates += 1; };
+        const translate = (key) => key;
+        const executeCommand = async (command, parameters) => {
+          calls.push({ command, parameters });
+          return {
+            status: "completed",
+            result: {
+              result: {
+                idn: { vendor: "Keysight Technologies", model: "DSO-X 4034A" },
+                acquisition: { sample_rate: 5e9, acquisition_points: 1000000, record_length: 1000000 },
+              },
+            },
+          };
+        };
+        '''
+    ) + declarations + textwrap.dedent(
+        r'''
+
+        await refreshSystemInformationSnapshot();
+        assert.deepEqual(calls, [{ command: "system-information-snapshot", parameters: {} }]);
+        assert.equal(systemSnapshot.value.idn.model, "DSO-X 4034A");
+        assert.equal(systemSnapshot.loading, false);
+        assert.equal(systemSnapshot.error, null);
+        assert.equal(renders, 2);
+        assert.equal(availabilityUpdates, 2);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_system_result_summaries_localize_options_and_unknown_operation_bits() -> None:
+    results_path = STATIC_ROOT / "results.js"
+    chinese = read_static("locale_zh_tw.js")
+    assert '"system.option.MEMUP": "記憶體升級",' in chinese
+    assert '"system.option.WAVEGEN": "波形產生器",' in chinese
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const translations = {
+          "system.option.MEMUP": "記憶體升級",
+          "system.option.WAVEGEN": "波形產生器",
+        };
+        const source = [
+          `const translations = ${JSON.stringify(translations)};`,
+          "const hasTranslation = (key) => key in translations;",
+          "const translate = (key) => translations[key] ?? key;",
+          fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
+          "globalThis.resultsApi = { formatSystemOptionsSummary, formatSystemOperationStatusSummary };",
+        ].join("\n");
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { formatSystemOptionsSummary, formatSystemOperationStatusSummary } = globalThis.resultsApi;
+
+        assert.equal(
+          formatSystemOptionsSummary({ options: [0, "MEMUP", "WAVEGEN", "FPGAX"] }),
+          "記憶體升級 — MEMUP; 波形產生器 — WAVEGEN; FPGAX",
+        );
+        assert.equal(formatSystemOperationStatusSummary({ set_bits: [12] }), "Bit 12");
+        assert.equal(formatSystemOperationStatusSummary({ set_bits: [12] }).includes("system.operationStatus.bit.12"), false);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(results_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

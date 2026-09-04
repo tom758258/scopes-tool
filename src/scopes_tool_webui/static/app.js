@@ -108,7 +108,8 @@ const elements = {
   pcOutputOpen: document.querySelector("#pc-output-open"),
   pcOutputStatus: document.querySelector("#pc-output-status"),
   pcOutputCommandNote: document.querySelector("#pc-output-command-note"),
-  systemRefresh: document.querySelector("#system-refresh"),
+  systemInformationWorkspace: document.querySelector("#system-information-workspace"),
+  systemInformationStatus: document.querySelector("#system-information-status"),
   sysManufacturer: document.querySelector("#sys-manufacturer"),
   sysModel: document.querySelector("#sys-model"),
   sysSerial: document.querySelector("#sys-serial"),
@@ -393,9 +394,6 @@ async function initialize() {
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   bindPcOutputControls();
   elements.liveDataRefresh.addEventListener("click", refreshLiveDataSnapshot);
-  if (elements.systemRefresh) {
-    elements.systemRefresh.addEventListener("click", refreshSystemInformationSnapshot);
-  }
   updateAvailability();
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
@@ -414,6 +412,10 @@ async function initialize() {
   elements.refresh.addEventListener("click", async (event) => {
     event.preventDefault();
     const selected = catalog.selected();
+    if (selected?.id === "system-information") {
+      await refreshSystemInformationSnapshot();
+      return;
+    }
     if (!selected || !commandForm.isSettingEditor()) return;
     const parameters = commandForm.queryValues();
     if (parameters !== null) {
@@ -742,7 +744,15 @@ function sameExecutionContext(left, right) {
 
 function renderWorkspace() {
   const selected = catalog?.selected();
+  const systemInformationSelected = selected?.id === "system-information";
+  if (elements.systemInformationWorkspace) {
+    elements.systemInformationWorkspace.hidden = !systemInformationSelected;
+  }
   elements.identityWorkspace.hidden = !selected || selected.presentation_only === true;
+  if (systemInformationSelected) {
+    renderSystemInformation();
+    return;
+  }
   if (!selected || selected.presentation_only === true) return;
 
   elements.identityWorkspaceContent.replaceChildren();
@@ -811,13 +821,9 @@ document.addEventListener("localechange", () => {
 
 function syncCommandSelection(draft = null) {
   if (!catalog || !commandForm) return;
-  const previousSelected = state.selectedCommand;
   const selected = catalog.selected();
   state.selectedCommand = selected?.id || null;
-  if (selected?.id === "system-information" && previousSelected !== selected.id) {
-    const infoSection = document.getElementById("system-info-section");
-    if (infoSection) infoSection.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  const systemInformationSelected = selected?.id === "system-information";
   const editorKind = editorKindFor(selected);
   const editorOwned = editorKind !== null;
   invalidateGenericFormOwnership();
@@ -826,8 +832,8 @@ function syncCommandSelection(draft = null) {
     onDirty: () => updateAvailability(),
     onQueryFieldChange: invalidateGenericFormOwnership,
   });
-  elements.formHeading.hidden = editorOwned;
-  elements.form.hidden = editorOwned;
+  elements.formHeading.hidden = editorOwned || systemInformationSelected;
+  elements.form.hidden = editorOwned || systemInformationSelected;
   elements.referenceEditor.hidden = editorKind !== "reference";
   elements.saveExportEditor.hidden = editorKind !== "save-export";
   elements.serialEditor.hidden = editorKind !== "serial";
@@ -890,11 +896,11 @@ function updateAvailability() {
   const selected = catalog.selected();
   const busy = isExecutionBusy();
   elements.execute.disabled = busy || !selected || !commandAvailable(selected.id);
-  elements.refresh.disabled = busy || !selected || !commandAvailable(selected.id);
+  elements.refresh.disabled = busy || !selected
+    || (selected.id === "system-information"
+      ? systemSnapshot.loading || !commandAvailable("system-information-snapshot")
+      : !commandAvailable(selected.id));
   elements.liveDataRefresh.disabled = busy || liveDataSnapshot.loading || !commandAvailable("live-data-snapshot");
-  if (elements.systemRefresh) {
-    elements.systemRefresh.disabled = busy || systemSnapshot.loading || !commandAvailable("system-information-snapshot");
-  }
   triggerEditor?.applyBusyState();
   searchEditor?.applyBusyState();
   segmentedEditor?.applyBusyState();
@@ -916,10 +922,14 @@ function isExecutionBusy() {
 
 function syncWorkspaceHeaderActions(editorKind) {
   const selected = catalog?.selected();
+  const systemInformationSelected = selected?.id === "system-information";
   const measurementRun = ["measure", "measure-sweep"].includes(selected?.id)
     && editorKind === "measurement";
-  elements.refresh.hidden = !selected || editorKind !== null || !commandForm?.isSettingEditor();
-  elements.execute.hidden = !selected || (editorKind !== null && !measurementRun);
+  elements.refresh.hidden = systemInformationSelected
+    ? false
+    : !selected || editorKind !== null || !commandForm?.isSettingEditor();
+  elements.execute.hidden = systemInformationSelected
+    || !selected || (editorKind !== null && !measurementRun);
   if (referenceEditor?.refreshButton) {
     referenceEditor.refreshButton.hidden = editorKind !== "reference";
   }
@@ -1185,6 +1195,18 @@ function renderSystemInformation() {
   const result = systemSnapshot.value || {};
   const idn = result.idn || {};
   const acquisition = result.acquisition || {};
+  const hasLoaded = systemSnapshot.value !== null;
+  const emptyText = hasLoaded ? translate("system.unavailable") : "—";
+
+  if (elements.systemInformationStatus) {
+    elements.systemInformationStatus.classList.toggle("error-block", Boolean(systemSnapshot.error));
+    elements.systemInformationStatus.hidden = !systemSnapshot.loading && !systemSnapshot.error;
+    elements.systemInformationStatus.textContent = systemSnapshot.loading
+      ? translate("system.reading")
+      : systemSnapshot.error
+        ? `${translate("system.readFailed")}: ${systemSnapshot.error}`
+        : "";
+  }
 
   const setText = (element, value, unavailableText) => {
     if (!element) return;
@@ -1195,13 +1217,12 @@ function renderSystemInformation() {
     }
   };
 
-  setText(elements.sysManufacturer, idn.vendor, "—");
-  setText(elements.sysModel, idn.model, "—");
-  setText(elements.sysSerial, idn.serial, "—");
-  setText(elements.sysFirmware, idn.firmware, "—");
-  setText(elements.sysResource, context.resource || null, "—");
+  setText(elements.sysManufacturer, idn.vendor, emptyText);
+  setText(elements.sysModel, idn.model, emptyText);
+  setText(elements.sysSerial, idn.serial, emptyText);
+  setText(elements.sysFirmware, idn.firmware, emptyText);
+  setText(elements.sysResource, hasLoaded ? context.resource || null : null, emptyText);
 
-  const hasLoaded = systemSnapshot.value !== null;
   function formatSampleRate(hz) {
     if (hz === null || hz === undefined) return null;
     if (hz >= 1e9) return (hz / 1e9).toFixed(2) + " GSa/s";
@@ -1213,9 +1234,11 @@ function renderSystemInformation() {
     if (points === null || points === undefined) return null;
     return Number(points).toLocaleString();
   }
-  setText(elements.sysSampleRate, formatSampleRate(acquisition.sample_rate), hasLoaded ? translate("system.unavailable") : "—");
-  setText(elements.sysAcquisitionPoints, formatPoints(acquisition.acquisition_points) ? formatPoints(acquisition.acquisition_points) + " pts" : (hasLoaded ? translate("system.unavailable") : "—"), hasLoaded ? translate("system.unavailable") : "—");
-  setText(elements.sysRecordLength, formatPoints(acquisition.record_length) ? formatPoints(acquisition.record_length) + " pts" : (hasLoaded ? translate("system.unavailable") : "—"), hasLoaded ? translate("system.unavailable") : "—");
+  const acquisitionPoints = formatPoints(acquisition.acquisition_points);
+  const recordLength = formatPoints(acquisition.record_length);
+  setText(elements.sysSampleRate, formatSampleRate(acquisition.sample_rate), emptyText);
+  setText(elements.sysAcquisitionPoints, acquisitionPoints ? `${acquisitionPoints} pts` : null, emptyText);
+  setText(elements.sysRecordLength, recordLength ? `${recordLength} pts` : null, emptyText);
 }
 
 function setStateIndicator(indicator, text, stateClass, title = "") {

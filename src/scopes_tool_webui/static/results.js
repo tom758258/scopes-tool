@@ -3,29 +3,29 @@ import { hasTranslation, translate, translateJobStatus } from "/static/i18n.js";
 const RESULT_HISTORY_LIMIT = 20;
 
 const SYSTEM_OPTIONS_FRIENDLY_NAMES = {
-  MEMUP: "Memory Upgrade",
-  WAVEGEN: "Waveform Generator",
-  EMBD: "Low Speed Serial",
-  AUTO: "Automotive Serial",
-  FLEX: "FlexRay",
-  FRA: "Frequency Response Analysis",
-  PWR: "Power Measurements",
-  COMP: "RS-232 / UART Serial",
-  SGM: "Segmented Memory",
-  MASK: "Mask Test",
-  AUDIO: "I\u00B2S Serial",
-  EDK: "Educator's Kit",
-  AERO: "Aerospace Serial",
-  ADVMATH: "Advanced Math",
-  DVM: "Digital Voltmeter",
-  USBFL: "USB Low / Full Speed",
-  USBH: "USB High Speed",
-  USBSQ: "USB Signal Quality Analysis",
-  RML: "Remote Command Logging",
-  CANFD: "CAN FD",
-  CXPI: "CXPI",
-  SENSOR: "SENT",
-  USBPD: "USB PD",
+  MEMUP: "system.option.MEMUP",
+  WAVEGEN: "system.option.WAVEGEN",
+  EMBD: "system.option.EMBD",
+  AUTO: "system.option.AUTO",
+  FLEX: "system.option.FLEX",
+  FRA: "system.option.FRA",
+  PWR: "system.option.PWR",
+  COMP: "system.option.COMP",
+  SGM: "system.option.SGM",
+  MASK: "system.option.MASK",
+  AUDIO: "system.option.AUDIO",
+  EDK: "system.option.EDK",
+  AERO: "system.option.AERO",
+  ADVMATH: "system.option.ADVMATH",
+  DVM: "system.option.DVM",
+  USBFL: "system.option.USBFL",
+  USBH: "system.option.USBH",
+  USBSQ: "system.option.USBSQ",
+  RML: "system.option.RML",
+  CANFD: "system.option.CANFD",
+  CXPI: "system.option.CXPI",
+  SENSOR: "system.option.SENSOR",
+  USBPD: "system.option.USBPD",
 };
 
 function formatSystemOptionsSummary(result) {
@@ -35,7 +35,8 @@ function formatSystemOptionsSummary(result) {
   );
   if (!tokens.length) return "—";
   const formatted = tokens.map((token) => {
-    const name = SYSTEM_OPTIONS_FRIENDLY_NAMES[token];
+    const nameKey = SYSTEM_OPTIONS_FRIENDLY_NAMES[token];
+    const name = nameKey && hasTranslation(nameKey) ? translate(nameKey) : null;
     return name ? `${name} — ${token}` : String(token);
   });
   return formatted.join("; ");
@@ -69,7 +70,8 @@ function formatSystemOperationStatusSummary(result) {
   };
   const active = bits.map((bit) => {
     if (commonLabels[bit] !== undefined) return commonLabels[bit];
-    return translate(`system.operationStatus.bit.${bit}`) || `Bit ${bit}`;
+    const key = `system.operationStatus.bit.${bit}`;
+    return hasTranslation(key) ? translate(key) : `Bit ${bit}`;
   });
   return active.length ? active.join("; ") : translate("system.operationStatus.none") || "No active operation flags";
 }

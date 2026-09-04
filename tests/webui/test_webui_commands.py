@@ -3219,8 +3219,12 @@ def test_identify_hidden_from_catalog_but_backend_preserved() -> None:
     """Identify is hidden from browser presentation; backend execution remains."""
     client = TestClient(app)
     catalog_response = client.get("/api/commands")
-    command_ids = {entry["id"] for entry in catalog_response.json()}
+    catalog = {entry["id"]: entry for entry in catalog_response.json()}
+    command_ids = set(catalog)
     assert "identify" not in command_ids
+    assert catalog["system-information"]["category"] == "System"
+    assert catalog["system-information"]["presentation_only"] is True
+    assert "system-information-snapshot" not in command_ids
     # Backend execution of identify must still work through direct API call.
     completed = submit(client, "identify", "simulate", {})
     assert completed["status"] == "completed"
