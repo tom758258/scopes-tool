@@ -649,7 +649,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_scope_connection_args(measure_clear_parser)
 
     measure_menu_parser = subparsers.add_parser(
-        "measure-menu", help="open the instrument measurement menu"
+        "measure-menu", help="open the instrument Measurement interface"
     )
     _add_scope_connection_args(measure_menu_parser)
 

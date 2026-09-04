@@ -3984,7 +3984,7 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 Assert-ScpiSent -Payload $clear -Label "Measurement clear" -ExpectedCommands @(":MEASure:CLEar")
 
                 $measurementMenuCommand = if ($is4000XSeries) {
-                    ":DISPlay:MENU MEASure"
+                    ":DISPlay:SIDebar MEASurements"
                 } else {
                     ":SYSTem:MENU MEASure"
                 }

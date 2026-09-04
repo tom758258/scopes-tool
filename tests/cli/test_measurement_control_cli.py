@@ -9,7 +9,7 @@ from scopes_tool_cli import cli, runtime
     ("argv", "target"),
     [
         (["measure-clear"], ":MEASure:CLEar"),
-        (["measure-menu"], ":DISPlay:MENU MEASure"),
+        (["measure-menu"], ":DISPlay:SIDebar MEASurements"),
         (["measure-show", "--on"], ":MEASure:SHOW ON"),
         (["measure-show", "--query"], ":MEASure:SHOW?"),
         (["measure-source", "--source-channel", "1"], ":MEASure:SOURce CHANnel1"),

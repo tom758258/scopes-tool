@@ -476,7 +476,7 @@ def measurement_menu_command(capabilities: ScopeCapabilities) -> str:
     if capabilities.series in {"2000X", "3000X"}:
         return ":SYSTem:MENU MEASure"
     if capabilities.series == "4000X":
-        return ":DISPlay:MENU MEASure"
+        return ":DISPlay:SIDebar MEASurements"
     raise ParameterValidationError(
         f"Measurement menu is not supported by {capabilities.series} models."
     )

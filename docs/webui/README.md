@@ -123,7 +123,7 @@ The Command workbench exposes:
   `measure-install`, `measure-results`, `measure-show`, and `measure-clear` for
   installing one measurement at a time and managing the instrument's displayed
   measurements and measurement markers. The same workspace also offers an
-  explicit action that opens the instrument Measurement menu (`measure-menu`). A successful install refreshes the
+  explicit action that opens the instrument Measurement page (`measure-menu`). A successful install refreshes the
   displayed results when batch result queries are supported; installation
   remains available on models without that query capability.
   On capability-supported 3000X and 4000X models, the same workspace also

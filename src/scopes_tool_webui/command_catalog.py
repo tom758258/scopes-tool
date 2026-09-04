@@ -623,7 +623,7 @@ COMMANDS = (
     {
         "id": "measure-menu",
         "category": "Measurement",
-        "label": "Open Instrument Measurement Menu",
+        "label": "Open Instrument Measurement Page",
         "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),

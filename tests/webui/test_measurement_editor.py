@@ -54,11 +54,11 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert '"command.measure": "單項量測"' in chinese
     assert '"command.measure-sweep": "多項量測"' in chinese
     assert '"description.measure-sweep":' in chinese
-    assert '"command.measure-menu": "Open Instrument Measurement Menu"' in english
+    assert '"command.measure-menu": "Open Instrument Measurement Page"' in english
     assert '"command.measure-menu": "開啟儀器量測頁面"' in chinese
-    assert '"description.measure-menu": "Open the instrument Measurement menu."' in english
+    assert '"description.measure-menu": "Open the instrument Measurement page."' in english
     assert '"description.measure-menu": "開啟儀器量測頁面' in chinese
-    assert '"measurement.frontPanel.menu": "Open Instrument Measurement Menu"' in english
+    assert '"measurement.frontPanel.menu": "Open Instrument Measurement Page"' in english
     assert '"measurement.frontPanel.menu": "開啟儀器量測頁面"' in chinese
     for key in (
         "measurement.frontPanel.help.title",
@@ -74,12 +74,13 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert (
         '"measurement.frontPanel.help.clear": "Clear the current front-panel '
         'measurements and measurement markers. The oscilloscope may return to '
-        'the main waveform display; use Open Instrument Measurement Menu to '
-        'return to the Measurement page."' in english
+        'the main waveform display. Open Instrument Measurement Page only '
+        'reopens the page; it does not restore cleared measurements. Add a '
+        'measurement again if measurement data is needed."' in english
     )
     assert (
         '"measurement.frontPanel.help.clear": "清除目前前面板量測與量測標記。'
-        '執行後儀器可能返回主畫面；若要繼續查看或操作量測頁面，請按「開啟儀器量測頁面」。\"'
+        '儀器可能返回主畫面。「開啟儀器量測頁面」只會重新開啟頁面，不會恢復已清除的量測項目；若需要量測資料，請重新新增量測。\"'
         in chinese
     )
     assert '"workflow.editor.pairMeasurementsHelper"' in english

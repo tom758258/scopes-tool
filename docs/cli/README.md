@@ -149,7 +149,7 @@ Current implemented scope:
   `measure-stats` on 3000X and 4000X.
 - Control common measurement subsystem state with `measure-clear`,
   `measure-show`, `measure-source`, and `measure-window`. Open the
-  instrument Measurement menu with `measure-menu`.
+  instrument Measurement interface with `measure-menu`.
 - Save, display, label, clear, or query reference waveform slots 1 and 2 with
   `reference-save`, `reference-display`, `reference-label`,
   `reference-clear`, and `reference-query`.
@@ -1616,8 +1616,8 @@ supported simple measurement with a non-query `:MEASure` command. It neither
 clears the existing front-panel list nor queries the value. Pair,
 parameterized, and power measurements are not accepted by this command.
 `measure-clear` clears installed screen measurements. `measure-menu` opens the
-instrument Measurement menu (`:SYSTem:MENU MEASure` on 2000X/3000X,
-`:DISPlay:MENU MEASure` on 4000X). `measure-show` supports
+instrument Measurement interface (`:SYSTem:MENU MEASure` on 2000X/3000X,
+`:DISPlay:SIDebar MEASurements` on 4000X). `measure-show` supports
 ON and query only; OFF is intentionally not exposed because the common
 2000X/3000X behavior documents always-on measurement markers. `measure-source`
 accepts one or two analog channels validated against the selected model

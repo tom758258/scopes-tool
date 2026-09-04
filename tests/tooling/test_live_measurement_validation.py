@@ -97,7 +97,7 @@ def test_measure_controls_validates_public_install_without_auto_clear() -> None:
     )
     assert '-Command "measure-menu"' in controls
     assert '":SYSTem:MENU MEASure"' in controls
-    assert '":DISPlay:MENU MEASure"' in controls
+    assert '":DISPlay:SIDebar MEASurements"' in controls
     assert controls.index('-Command "measure-clear"') < controls.index(
         '-Command "measure-menu"'
     )

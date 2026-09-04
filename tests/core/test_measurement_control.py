@@ -57,7 +57,7 @@ def test_measurement_show_command_supports_on_and_off():
     [
         ("DSOX2004A", ":SYSTem:MENU MEASure"),
         ("DSOX3024A", ":SYSTem:MENU MEASure"),
-        ("DSOX4024A", ":DISPlay:MENU MEASure"),
+        ("DSOX4024A", ":DISPlay:SIDebar MEASurements"),
     ],
 )
 def test_measurement_menu_command_series(model_id, expected):
