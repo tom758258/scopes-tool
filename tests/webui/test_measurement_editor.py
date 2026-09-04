@@ -60,6 +60,28 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert '"description.measure-menu": "開啟儀器量測頁面' in chinese
     assert '"measurement.frontPanel.menu": "Open Instrument Measurement Menu"' in english
     assert '"measurement.frontPanel.menu": "開啟儀器量測頁面"' in chinese
+    for key in (
+        "measurement.frontPanel.help.title",
+        "measurement.frontPanel.help.refresh",
+        "measurement.frontPanel.help.show",
+        "measurement.frontPanel.help.hide",
+        "measurement.frontPanel.help.clear",
+        "measurement.frontPanel.help.menu",
+        "measurement.frontPanel.help.add",
+    ):
+        assert f'"{key}":' in english
+        assert f'"{key}":' in chinese
+    assert (
+        '"measurement.frontPanel.help.clear": "Clear the current front-panel '
+        'measurements and measurement markers. The oscilloscope may return to '
+        'the main waveform display; use Open Instrument Measurement Menu to '
+        'return to the Measurement page."' in english
+    )
+    assert (
+        '"measurement.frontPanel.help.clear": "清除目前前面板量測與量測標記。'
+        '執行後儀器可能返回主畫面；若要繼續查看或操作量測頁面，請按「開啟儀器量測頁面」。\"'
+        in chinese
+    )
     assert '"workflow.editor.pairMeasurementsHelper"' in english
     assert '"workflow.editor.channelPairRequired"' in english
     assert '"workflow.editor.pairMeasurementsHelper"' in chinese
@@ -559,13 +581,14 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(editor.frontPanelState.kind, "cleared");
         assert.equal(editor.frontPanelReadError, null);
 
-        const frontPanelEditor = (modelId) => {
+        const frontPanelEditor = (modelId, installSupported = true) => {
           const available = new Set(modelId === "keysight-dsox2004a"
             ? ["measure-install", "measure-clear", "measure-menu"]
             : ["measure-install", "measure-results", "measure-show", "measure-clear", "measurement-statistics", "measure-menu"]);
           const supported = new Set(modelId === "keysight-dsox2004a"
             ? ["measure-install"]
             : ["measure-install", "measure-results", "measurement-statistics"]);
+          if (!installSupported) supported.delete("measure-install");
           const installDefinition = {
             id: "measure-install",
             fields: [
@@ -828,6 +851,42 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         };
         const allTexts = collectText(unknownModel.container);
         assert.equal(allTexts.includes("measurement.frontPanel.markersAlwaysOn"), false);
+        const guideOf = (instance) => instance.container.children.find(
+          (node) => node.className.includes("measurement-front-panel-help"),
+        );
+        const guidePairs = (instance) => guideOf(instance).children[1].children.map(
+          (item) => [item.children[0].textContent, item.children[1].textContent],
+        );
+        const guideLabels = (instance) => guidePairs(instance).map(([label]) => label);
+        const expectedHelps = [
+          "measurement.frontPanel.help.refresh",
+          "measurement.frontPanel.help.show",
+          "measurement.frontPanel.help.hide",
+          "measurement.frontPanel.help.clear",
+          "measurement.frontPanel.help.menu",
+          "measurement.frontPanel.help.add",
+        ];
+        assert.equal(guideOf(toggleMarkers).children[0].textContent, "measurement.frontPanel.help.title");
+        assert.equal(toggleMarkers.container.children[1], guideOf(toggleMarkers));
+        assert.deepEqual(guideLabels(toggleMarkers), [
+          "measurement.frontPanel.refresh",
+          "measurement.frontPanel.show",
+          "measurement.frontPanel.hide",
+          "measurement.frontPanel.clear",
+          "measurement.frontPanel.menu",
+          "measurement.frontPanel.add",
+        ]);
+        assert(guidePairs(toggleMarkers).every(([, help], index) => help.includes(expectedHelps[index])));
+        assert.equal(model2000x.container.children[1], guideOf(model2000x));
+        assert.deepEqual(guideLabels(model2000x), [
+          "measurement.frontPanel.refresh",
+          "measurement.frontPanel.clear",
+          "measurement.frontPanel.menu",
+          "measurement.frontPanel.add",
+        ]);
+        const noInstall = frontPanelEditor("keysight-dsox4024a", false);
+        assert.equal(noInstall.controls.frontPanelInstall, undefined);
+        assert.equal(guideLabels(noInstall).includes("measurement.frontPanel.add"), false);
         '''
     ).replace("__CATALOG__", catalog_json)
     completed = subprocess.run(

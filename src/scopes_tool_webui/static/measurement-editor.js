@@ -519,7 +519,11 @@ export class MeasurementEditor {
     if (notes.children.length) actions.append(notes);
     this.container.append(actions);
     const installDefinition = this.definition("measure-install");
-    if (installDefinition && this.catalog.supported(installDefinition)) {
+    const installSupported = Boolean(
+      installDefinition && this.catalog.supported(installDefinition)
+    );
+    this.container.append(this.buildFrontPanelHelp(installSupported));
+    if (installSupported) {
       this.container.append(this.buildInstallSection(installDefinition));
     }
     this.frontPanelContent = null;
@@ -541,6 +545,39 @@ export class MeasurementEditor {
       this.container.append(this.buildStatisticsSection());
       this.renderStatisticsReadback();
     }
+  }
+
+  buildFrontPanelHelp(includeAdd) {
+    const section = document.createElement("section");
+    section.className = "measurement-editor-section measurement-front-panel-help";
+    const heading = document.createElement("strong");
+    heading.textContent = translate("measurement.frontPanel.help.title");
+    const list = document.createElement("ul");
+    const items = [
+      ["measurement.frontPanel.refresh", "measurement.frontPanel.help.refresh"],
+      ...(this.markerToggleSupported() !== false
+        ? [
+          ["measurement.frontPanel.show", "measurement.frontPanel.help.show"],
+          ["measurement.frontPanel.hide", "measurement.frontPanel.help.hide"],
+        ]
+        : []),
+      ["measurement.frontPanel.clear", "measurement.frontPanel.help.clear"],
+      ["measurement.frontPanel.menu", "measurement.frontPanel.help.menu"],
+      ...(includeAdd
+        ? [["measurement.frontPanel.add", "measurement.frontPanel.help.add"]]
+        : []),
+    ];
+    for (const [labelKey, helpKey] of items) {
+      const item = document.createElement("li");
+      const label = document.createElement("strong");
+      label.textContent = translate(labelKey);
+      const description = document.createElement("span");
+      description.textContent = ` — ${translate(helpKey)}`;
+      item.append(label, description);
+      list.append(item);
+    }
+    section.append(heading, list);
+    return section;
   }
 
   buildInstallSection(definition) {
