@@ -2880,6 +2880,26 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
               if (mode === "noresult") {
                 return { status: "failed", command, result: null, error: "boom-no-result", artifacts: [] };
               }
+              if (mode === "cancelled-partial") {
+                return {
+                  status: "cancelled",
+                  command,
+                  result: {
+                    exit_code: 1,
+                    result: {
+                      status: "error",
+                      error: "Smoke measurement query timed out",
+                      doctor: doctorSnapshot,
+                      measurements: [],
+                      capture: null,
+                      screenshot: null,
+                    },
+                    system_error: null,
+                  },
+                  error: null,
+                  artifacts: [],
+                };
+              }
               return {
                 status: "failed",
                 command,
@@ -2974,6 +2994,12 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
         failMode = "noresult";
         await editor.submit();
         assert.ok(panelText().includes("boom-no-result"));
+
+        failMode = "cancelled-partial";
+        await editor.submit();
+        const cancelledText = panelText();
+        assert.ok(cancelledText.includes("Smoke measurement query timed out"));
+        assert.equal(cancelledText.split("Smoke measurement query timed out").length - 1, 1);
 
         contextKey = "simulate|OTHER";
         editor.present();
@@ -4355,18 +4381,9 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(live_data_path)],
+        ["node", "--input-type=module", "--eval", script],
         capture_output=True,
         text=True,
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
-
-
-
-def test_cancelled_smoke_with_partial_error_shows_error_condition() -> None:
-    results_path = STATIC_ROOT / "results.js"
-    source = results_path.read_text(encoding="utf-8")
-    assert 'message && (job?.status === "failed" || result?.status === "error")' in source, "results.js must show error for failed or structured error status"
-    assert 'for (const name of ["measurements", "capture", "screenshot", "warnings"])' in source, "Smoke workspace loop must not include 'error' to avoid duplicate display"
