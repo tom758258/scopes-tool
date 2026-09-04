@@ -603,6 +603,7 @@ export const zhTW = {
   "command.measure-clear": "清除量測",
   "command.measure-menu": "開啟儀器量測頁面",
   "command.measure-show": "量測標記顯示",
+  "command.measurement-statistics": "進階量測統計",
   "command.measure-source": "量測來源",
   "command.measure-window": "量測視窗",
   "command.system-clear-status": "清除狀態",

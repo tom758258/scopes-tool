@@ -622,6 +622,7 @@ export const en = {
   "command.measure-clear": "Clear measurements",
   "command.measure-menu": "Open Instrument Measurement Page",
   "command.measure-show": "Measurement marker display",
+  "command.measurement-statistics": "Advanced Measurement Statistics",
   "command.measure-source": "Measurement source",
   "command.measure-window": "Measurement window",
   "command.system-clear-status": "Clear status",

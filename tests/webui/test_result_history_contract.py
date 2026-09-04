@@ -36,6 +36,18 @@ def test_result_panel_preserves_powers_style_bounded_job_history() -> None:
     assert "results.detailAvailable" not in source
 
 
+def test_measurement_statistics_result_command_label_is_localized() -> None:
+    english = LOCALE_EN_JS.read_text(encoding="utf-8")
+    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+
+    assert english.count(
+        '"command.measurement-statistics": "Advanced Measurement Statistics"'
+    ) == 1
+    assert chinese.count(
+        '"command.measurement-statistics": "進階量測統計"'
+    ) == 1
+
+
 def test_result_clear_resets_history_and_detail() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
     app_source = APP_JS.read_text(encoding="utf-8")
