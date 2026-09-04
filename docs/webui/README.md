@@ -94,11 +94,21 @@ to at least 1 ms and a positive poll interval no greater than the timeout. The
 result is command status using the existing trigger-wait fields and has no
 artifacts.
 
+Autoscale is an explicit Live/Simulate state-changing command. Source Channels,
+Acquire mode (`normal` or `current`), and Channels mode (`all` or `displayed`)
+are optional. Source Channels accepts only model-supported analog channel
+numbers; leaving it unset runs Autoscale without an explicit source list. When
+sources are selected, the instrument enables those sources, hides the others,
+and performs Autoscale using displayed channels. Autoscale can change channel
+display/scaling, timebase/delay, and trigger level, and may turn off cursors,
+measurements, Math waveforms, and reference waveforms. The WebUI adds no
+readback, rollback, or browser-side SCPI behavior for this operation.
+
 The Command workbench exposes:
 
 - Identity: `identify` (Read device information)
 - Acquisition: `run`, `single`, `single-wait`, `stop-acquisition`,
-  `force-trigger`, `acquisition`
+  `force-trigger`, `autoscale`, `acquisition`
 - Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`
 - Channel: `channel-display`, `channel-scale`, `channel-summary`,
   `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,
