@@ -1061,7 +1061,7 @@ export const en = {
   "help.measure.level": "Set the vertical level the waveform must cross. The instrument finds the Nth crossing in the selected rising or falling direction; enter a valid level that the current waveform can cross.",
   "help.measure.slope": "Select whether to find a rising or falling edge or crossing.",
   "help.measure.occurrence": "Starting at the left side of the waveform display, find the Nth edge or crossing in the selected rising or falling direction. 1 is the first, 2 is the second, and so on; enter an integer of 1 or greater.",
-  "help.measure-window.window": "In Measurement settings, this is optional. If left unchanged, the instrument's current measurement window is used. A selected value is applied before the measurement runs.",
+  "help.measure-window.window": "In Single Measurement, this is optional. If left unchanged, the instrument's current measurement window is used. A selected value is applied before the measurement runs.",
   "help.measure-window.window.main": "Measure within the main timebase display range.",
   "help.measure-window.window.zoom": "Measure using the waveform in the Zoom window; the Zoom timebase must be displayed.",
   "help.measure-window.window.auto": "Prefer the Zoom window when available; use Main when Zoom is unavailable or cannot be measured.",

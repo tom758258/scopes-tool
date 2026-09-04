@@ -953,7 +953,7 @@ def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
 
         const labels = {
-          "command.measure-sweep": "Measure Sweep",
+          "command.measure-sweep": "Multiple Measurements",
           "status.completed": "Completed",
           "results.status.planned": "Planned",
           "results.field.status": "Status",

@@ -1061,7 +1061,7 @@ export const zhTW = {
   "help.measure.level": "設定波形要穿越的垂直位準。儀器會依所選上升／下降方向，尋找第 N 次穿越此位準的位置；請輸入目前波形可能穿越的有效位準。",
   "help.measure.slope": "選擇要尋找上升或下降方向的邊緣／交越。",
   "help.measure.occurrence": "從波形畫面左側開始，依所選上升／下降方向尋找第 N 次邊緣或交越。1＝第一次、2＝第二次，以此類推；請輸入 1 以上的整數。",
-  "help.measure-window.window": "在量測設定中，此項為可選；若未變更，將沿用儀器目前的量測範圍。選擇新值後，會在執行量測前套用。",
+  "help.measure-window.window": "在「單項量測」中，此項為可選；若未變更，將沿用儀器目前的量測範圍。選擇新值後，會在執行量測前套用。",
   "help.measure-window.window.main": "在主時間軸顯示範圍內進行量測。",
   "help.measure-window.window.zoom": "使用 Zoom 視窗中的波形進行量測；需要已顯示 Zoom timebase。",
   "help.measure-window.window.auto": "有 Zoom 視窗時優先在 Zoom 中量測；無法量測或未顯示 Zoom 時使用 Main。",

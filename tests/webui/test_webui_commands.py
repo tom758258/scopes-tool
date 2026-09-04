@@ -161,6 +161,34 @@ def test_execute_force_trigger_calls_core_action(tmp_path: Path) -> None:
     }
 
 
+def test_measure_menu_calls_core_action(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def open_measurement_menu(self) -> None:
+            calls.append("open-menu")
+
+        def clear_measurements(self) -> None:
+            calls.append("clear")
+
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        "measure-menu",
+        "SIM::INSTR",
+        {},
+        tmp_path,
+    )
+
+    assert calls == ["open-menu"]
+    assert result == {
+        "exit_code": 0,
+        "result": {"action": "measure-menu"},
+        "artifacts": [],
+    }
+
+
 def test_single_wait_validation_and_execution_use_core_config(tmp_path: Path) -> None:
     request = validate_job_request({
         "command": "single-wait",
