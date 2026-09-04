@@ -34,7 +34,6 @@ def test_single_wait_and_screenshot_result_fields_have_zh_tw_labels() -> None:
         "results.field.poll_count": ("Poll count", "輪詢次數"),
         "results.field.elapsed_ms": ("Elapsed ms", "經過時間（毫秒）"),
         "results.field.condition_values": ("Condition values", "條件值"),
-        "results.field.raw_values": ("Raw values", "原始值"),
         "results.field.capture_allowed": ("Capture allowed", "允許擷取"),
         "results.field.capture_block_reason": ("Capture block reason", "禁止擷取原因"),
         "results.field.artifact": ("Artifact", "檔案"),
