@@ -106,13 +106,14 @@ The Command workbench exposes:
   `channel-range`, `channel-units`, `channel-vernier`, `channel-probe-skew`
 - Display: `display-label`, `display-clear`, `display-persistence`,
   `display-intensity`, `display-vectors`
-- Measurement: Measurement settings combines `measure` with the persistent
-  `measure-window` setting. Measure Sweep runs selected measurements across
+- Measurement: Single Measurement combines `measure` with the persistent
+  `measure-window` setting. Multiple Measurements runs selected measurements across
   model-projected analog channels and optional channel pairs, with Dry-run
-  using the existing Core planner. Front-panel measurements combines
+  using the existing Core planner. Front Panel Measurements combines
   `measure-install`, `measure-results`, `measure-show`, and `measure-clear` for
   installing one measurement at a time and managing the instrument's displayed
-  measurements and measurement markers. A successful install refreshes the
+  measurements and measurement markers. The same workspace also offers an
+  explicit action that opens the instrument Measurement menu (`measure-menu`). A successful install refreshes the
   displayed results when batch result queries are supported; installation
   remains available on models without that query capability.
   On capability-supported 3000X and 4000X models, the same workspace also
@@ -357,7 +358,7 @@ instrument-side `:SAVE:*` behavior.
 
 The command form uses simple metadata-driven controls for ordinary values,
 enums, numbers, booleans, multi-select lists, and small conditional field
-groups. Measure Sweep uses the Measurement editor for model-projected channel
+groups. Multiple Measurements uses the Measurement editor for model-projected channel
 and measurement choices, structured Source and Reference pair rows, and shared
 pair-measurement choices. For `measure-log` and `triggered-measure-loop`, the
 dedicated Workflow editor provides the corresponding workflow controls.

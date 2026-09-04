@@ -217,7 +217,7 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     )
     fields = {field["name"]: field for field in measure["fields"]}
 
-    assert measure["label"] == "Measurement settings"
+    assert measure["label"] == "Single Measurement"
     assert fields["item"]["label_key"] == "measure.item"
     assert fields["item"]["help_by_value"] == {
         item: f"measure.item.{item}" for item in SUPPORTED_MEASUREMENT_ITEMS
@@ -298,9 +298,9 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
 
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
-    assert '"command.measure": "Measurement settings"' in english
-    assert '"command.measure": "量測設定"' in chinese
-    assert '"command.front-panel-measurements": "Front-panel measurements"' in english
+    assert '"command.measure": "Single Measurement"' in english
+    assert '"command.measure": "單項量測"' in chinese
+    assert '"command.front-panel-measurements": "Front Panel Measurements"' in english
     assert '"command.front-panel-measurements": "前面板量測"' in chinese
     assert '"command.measure-results": "Front-panel measurement results"' in english
     assert '"command.measure-results": "前面板量測結果"' in chinese
@@ -982,7 +982,7 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
         entry["id"]: entry for entry in response.json()
         if entry["id"] in {
             "measure-install", "measure-results", "measure-clear", "measure-show",
-            "measure-window",
+            "measure-window", "measure-menu",
         }
     }
     assert all(entry["browser_hidden"] is True for entry in helpers.values())

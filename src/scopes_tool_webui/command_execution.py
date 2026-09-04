@@ -502,6 +502,9 @@ def _execute_scope_command(
     if command == "measure-clear":
         scope.clear_measurements()
         return _simple_scope_result("measure-clear")
+    if command == "measure-menu":
+        scope.open_measurement_menu()
+        return _simple_scope_result("measure-menu")
     if command == "measure-show":
         if parameters["action"] == "set":
             scope.configure_measurement_show(parameters.get("enabled", True))

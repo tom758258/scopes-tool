@@ -1200,6 +1200,8 @@ class SimulatorBackend:
             self.marker_y2 = value
         elif upper == ":MEASURE:CLEAR":
             self.measurement_statistics_items.clear()
+        elif upper in {":SYSTEM:MENU MEASURE", ":DISPLAY:MENU MEASURE"}:
+            pass
         elif upper in {":MEASURE:SHOW ON", ":MEASURE:SHOW OFF"}:
             self.measurement_show = upper.endswith(" ON")
         elif upper.startswith(":MEASURE:SOURCE CHANNEL"):

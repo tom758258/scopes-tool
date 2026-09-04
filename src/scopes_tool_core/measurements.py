@@ -273,6 +273,9 @@ class MeasurementController:
         validate_measurements_supported(self.capabilities)
         self.scpi.write(measurement_clear_command())
 
+    def open_menu(self) -> None:
+        self.scpi.write(measurement_menu_command(self.capabilities))
+
     def set_show(self, enabled: bool = True) -> None:
         validate_measurements_supported(self.capabilities)
         if not enabled and self.capabilities.series != "4000X":
@@ -466,6 +469,17 @@ class MeasurementController:
 
 def measurement_clear_command() -> str:
     return ":MEASure:CLEar"
+
+
+def measurement_menu_command(capabilities: ScopeCapabilities) -> str:
+    validate_measurements_supported(capabilities)
+    if capabilities.series in {"2000X", "3000X"}:
+        return ":SYSTem:MENU MEASure"
+    if capabilities.series == "4000X":
+        return ":DISPlay:MENU MEASure"
+    raise ParameterValidationError(
+        f"Measurement menu is not supported by {capabilities.series} models."
+    )
 
 
 def measurement_results_query() -> str:

@@ -3983,6 +3983,15 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 $clear = Invoke-LiveCli -Stage "measure-clear" -Command "measure-clear"
                 Assert-ScpiSent -Payload $clear -Label "Measurement clear" -ExpectedCommands @(":MEASure:CLEar")
 
+                $measurementMenuCommand = if ($is4000XSeries) {
+                    ":DISPlay:MENU MEASure"
+                } else {
+                    ":SYSTem:MENU MEASure"
+                }
+                $menu = Invoke-LiveCli -Stage "measure-menu" -Command "measure-menu"
+                Assert-ScpiSent -Payload $menu -Label "Measurement menu" `
+                    -ExpectedCommands @($measurementMenuCommand)
+
                 $show = Invoke-LiveCli -Stage "measure-show-on" -Command "measure-show" -Arguments @("--on")
                 Assert-ScpiSent -Payload $show -Label "Measurement show" -ExpectedCommands @(":MEASure:SHOW ON")
                 $showQuery = Invoke-LiveCli -Stage "measure-show-query" -Command "measure-show" -Arguments @("--query")

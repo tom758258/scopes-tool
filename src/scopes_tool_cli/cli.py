@@ -1051,6 +1051,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         return ["*IDN?", target, ":SYSTem:ERRor?"], [], result
     if command in {
         "measure-clear",
+        "measure-menu",
         "measure-install",
         "measure-show",
         "measure-source",

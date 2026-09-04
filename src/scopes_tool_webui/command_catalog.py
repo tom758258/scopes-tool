@@ -511,7 +511,7 @@ COMMANDS = (
     {
         "id": "measure",
         "category": "Measurement",
-        "label": "Measurement settings",
+        "label": "Single Measurement",
         "editor": "measurement",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
@@ -527,7 +527,7 @@ COMMANDS = (
     {
         "id": "measure-sweep",
         "category": "Measurement",
-        "label": "Measure Sweep",
+        "label": "Multiple Measurements",
         "editor": "measurement",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
@@ -574,6 +574,14 @@ COMMANDS = (
         "id": "measure-clear",
         "category": "Measurement",
         "label": "Clear measurements",
+        "browser_hidden": True,
+        "modes": ("live", "simulate"),
+        "fields": (),
+    },
+    {
+        "id": "measure-menu",
+        "category": "Measurement",
+        "label": "Open Instrument Measurement Menu",
         "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
@@ -1796,7 +1804,7 @@ def command_catalog() -> list[dict[str, Any]]:
             {
                 "id": "front-panel-measurements",
                 "category": "Measurement",
-                "label": "Front-panel measurements",
+                "label": "Front Panel Measurements",
                 "editor": "measurement",
                 "presentation_only": True,
                 "modes": ("live", "simulate"),

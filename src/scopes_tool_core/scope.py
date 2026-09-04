@@ -1457,6 +1457,9 @@ class Oscilloscope:
     def clear_measurements(self) -> None:
         self._measurement_controller().clear()
 
+    def open_measurement_menu(self) -> None:
+        self._measurement_controller().open_menu()
+
     def configure_measurement_show(self, enabled: bool = True) -> None:
         self._measurement_controller().set_show(enabled)
 

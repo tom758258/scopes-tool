@@ -148,7 +148,8 @@ Current implemented scope:
 - Rebuild front-panel quick measurements and query measurement statistics with
   `measure-stats` on 3000X and 4000X.
 - Control common measurement subsystem state with `measure-clear`,
-  `measure-show`, `measure-source`, and `measure-window`.
+  `measure-show`, `measure-source`, and `measure-window`. Open the
+  instrument Measurement menu with `measure-menu`.
 - Save, display, label, clear, or query reference waveform slots 1 and 2 with
   `reference-save`, `reference-display`, `reference-label`,
   `reference-clear`, and `reference-query`.
@@ -1607,13 +1608,16 @@ Control common measurement subsystem state:
 .\.venv\Scripts\scopes-tool.exe measure-source --query --simulate --json
 .\.venv\Scripts\scopes-tool.exe measure-window --window gate --simulate --json
 .\.venv\Scripts\scopes-tool.exe measure-window --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe measure-menu --simulate --json
 ```
 
 `measure-install` sets the selected analog source and installs exactly one
 supported simple measurement with a non-query `:MEASure` command. It neither
 clears the existing front-panel list nor queries the value. Pair,
 parameterized, and power measurements are not accepted by this command.
-`measure-clear` clears installed screen measurements. `measure-show` supports
+`measure-clear` clears installed screen measurements. `measure-menu` opens the
+instrument Measurement menu (`:SYSTem:MENU MEASure` on 2000X/3000X,
+`:DISPlay:MENU MEASure` on 4000X). `measure-show` supports
 ON and query only; OFF is intentionally not exposed because the common
 2000X/3000X behavior documents always-on measurement markers. `measure-source`
 accepts one or two analog channels validated against the selected model

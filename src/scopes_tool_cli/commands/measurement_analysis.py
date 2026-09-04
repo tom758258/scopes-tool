@@ -67,6 +67,7 @@ from scopes_tool_core.measurements import (
     MeasurementStatisticsResult,
     measurement_clear_command,
     measurement_install_command,
+    measurement_menu_command,
     measurement_results_query,
     measurement_show_command,
     measurement_show_query,
@@ -126,6 +127,9 @@ def _measurement_control_plan(
     if args.command == "measure-clear":
         command = measurement_clear_command()
         return [command], {"operation": "clear", "command": command}
+    if args.command == "measure-menu":
+        command = measurement_menu_command(capabilities)
+        return [command], {"operation": "open-menu", "command": command}
     if args.command == "measure-install":
         channel = validate_analog_channel(args.source_channel, capabilities)
         item = normalize_measurement_item(args.item)
@@ -291,6 +295,8 @@ def _cmd_measurement_control(args: argparse.Namespace) -> int:
         commands, result = _measurement_control_plan(args, scope.capabilities)
         if args.command == "measure-clear":
             scope.clear_measurements()
+        elif args.command == "measure-menu":
+            scope.open_measurement_menu()
         elif args.command == "measure-install":
             scope.install_measurement(args.source_channel, args.item)
         elif args.command == "measure-show":

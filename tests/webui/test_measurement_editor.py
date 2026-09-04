@@ -45,13 +45,21 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert '"measurement.frontPanel.resultsUnsupported"' in editor_source
     assert (
         '"measurement.frontPanel.resultsUnsupported": "This model cannot read the front-panel '
-        'measurement list as a batch. Use Measurement settings to obtain individual measurement '
+        'measurement list as a batch. Use Single Measurement to obtain individual measurement '
         'values."' in english
     )
-    assert '"command.measure-sweep": "Measure Sweep"' in english
+    assert '"command.measure": "Single Measurement"' in english
+    assert '"command.measure-sweep": "Multiple Measurements"' in english
     assert '"description.measure-sweep":' in english
-    assert '"command.measure-sweep": "量測掃描"' in chinese
+    assert '"command.measure": "單項量測"' in chinese
+    assert '"command.measure-sweep": "多項量測"' in chinese
     assert '"description.measure-sweep":' in chinese
+    assert '"command.measure-menu": "Open Instrument Measurement Menu"' in english
+    assert '"command.measure-menu": "開啟儀器量測頁面"' in chinese
+    assert '"description.measure-menu": "Open the instrument Measurement menu."' in english
+    assert '"description.measure-menu": "開啟儀器量測頁面' in chinese
+    assert '"measurement.frontPanel.menu": "Open Instrument Measurement Menu"' in english
+    assert '"measurement.frontPanel.menu": "開啟儀器量測頁面"' in chinese
     assert '"workflow.editor.pairMeasurementsHelper"' in english
     assert '"workflow.editor.channelPairRequired"' in english
     assert '"workflow.editor.pairMeasurementsHelper"' in chinese
@@ -68,7 +76,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert "延遲" not in chinese_helper
     assert (
         '"measurement.frontPanel.resultsUnsupported": "此型號無法一次讀取前面板量測清單；'
-        '若要取得量測值，請使用「量測設定」。"' in chinese
+        '若要取得量測值，請使用「單項量測」。"' in chinese
     )
     assert '"measurement.frontPanel.markersAlwaysOn"' in editor_source
     assert '"measurement.statistics.title"' in editor_source
@@ -553,8 +561,8 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
 
         const frontPanelEditor = (modelId) => {
           const available = new Set(modelId === "keysight-dsox2004a"
-            ? ["measure-install", "measure-clear"]
-            : ["measure-install", "measure-results", "measure-show", "measure-clear", "measurement-statistics"]);
+            ? ["measure-install", "measure-clear", "measure-menu"]
+            : ["measure-install", "measure-results", "measure-show", "measure-clear", "measurement-statistics", "measure-menu"]);
           const supported = new Set(modelId === "keysight-dsox2004a"
             ? ["measure-install"]
             : ["measure-install", "measure-results", "measurement-statistics"]);
@@ -565,11 +573,11 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
               { name: "item", options: ["vpp", "frequency"], default: "vpp" },
             ],
           };
-          const markerCatalog = {
+              const markerCatalog = {
             activeModelId: modelId,
             commands: [
               installDefinition,
-              ...["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
+              ...["measure-results", "measure-show", "measure-clear", "measure-menu", "measurement-statistics"].map((id) => ({ id })),
             ],
             fieldsFor: (definition) => definition.id === "measure-install"
               ? definition.fields
@@ -591,6 +599,9 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const model2000x = frontPanelEditor("keysight-dsox2004a");
         assert.equal(model2000x.controls.frontPanelRefresh.disabled, true);
         assert.equal(model2000x.controls.frontPanelClear.disabled, false);
+        assert.equal(model2000x.controls.frontPanelMenu.disabled, false);
+        assert.equal(model2000x.controls.frontPanelMenu.textContent, "measurement.frontPanel.menu");
+        assert.equal(model2000x.controls.frontPanelMenu.className, "secondary");
         assert.equal(model2000x.controls.frontPanelInstall.disabled, false);
         assert.deepEqual(model2000x.installForm.values(), {
           source_channel: 1, item: "vpp",
@@ -622,6 +633,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         const model3000x = frontPanelEditor("keysight-dsox3024a");
         assert.equal(model3000x.controls.frontPanelRefresh.disabled, false);
         assert.equal(model3000x.controls.frontPanelClear.disabled, false);
+        assert.equal(model3000x.controls.frontPanelMenu.disabled, false);
         assert.equal(model3000x.controls.frontPanelShow, undefined);
         assert.equal(model3000x.controls.frontPanelHide, undefined);
         const notes3000x = model3000x.container.children[0].children[1];
@@ -695,6 +707,9 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(toggleMarkers.controls.frontPanelHide.className, "secondary");
         assert.equal(toggleMarkers.controls.frontPanelClear.className, "danger");
         assert.equal(toggleMarkers.controls.frontPanelClear.disabled, false);
+        assert.equal(toggleMarkers.controls.frontPanelMenu.disabled, false);
+        assert.equal(toggleMarkers.controls.frontPanelMenu.className, "secondary");
+        assert.equal(toggleMarkers.controls.frontPanelMenu.textContent, "measurement.frontPanel.menu");
         assert(toggleMarkers.container.children.some(
           (node) => node.className === "measurement-front-panel-results",
         ));
@@ -704,6 +719,32 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(model2000x.container.children.some(
           (node) => node.className.includes("measurement-statistics-section"),
         ), false);
+
+        const menuCalls = [];
+        toggleMarkers.hooks.executeCommand = async (command, parameters) => {
+          menuCalls.push([command, parameters]);
+          return { status: "completed" };
+        };
+        await toggleMarkers.openMeasurementMenu();
+        assert.deepEqual(menuCalls, [["measure-menu", {}]]);
+        toggleMarkers.hooks.isCommandAvailable = () => false;
+        const menuBlockedCalls = [];
+        toggleMarkers.hooks.executeCommand = async (command, parameters) => {
+          menuBlockedCalls.push([command, parameters]);
+          return { status: "completed" };
+        };
+        await toggleMarkers.openMeasurementMenu();
+        assert.deepEqual(menuBlockedCalls, []);
+        toggleMarkers.hooks.isCommandAvailable = (command) => ["measure-clear", "measure-menu"].includes(command);
+        const clearCalls = [];
+        toggleMarkers.hooks.executeCommand = async (command, parameters) => {
+          clearCalls.push([command, parameters]);
+          return { status: "completed", result: { result: { measurements: { items: [] } } } };
+        };
+        await toggleMarkers.clearFrontPanel();
+        assert.deepEqual(clearCalls.at(-1), ["measure-clear", {}]);
+        assert.equal(clearCalls.some(([cmd]) => cmd === "measure-menu"), false);
+        assert.equal(toggleMarkers.frontPanelState.kind, "cleared");
 
         const unknownCalls = [];
         const frontPanelDefinition = catalog.commands.find(
@@ -719,7 +760,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
                 { name: "item", options: ["vpp"], default: "vpp" },
               ],
             },
-            ...["measure-results", "measure-show", "measure-clear", "measurement-statistics"].map((id) => ({ id })),
+            ...["measure-results", "measure-show", "measure-clear", "measure-menu", "measurement-statistics"].map((id) => ({ id })),
           ],
           fieldsFor: (definition) => definition.fields || [{ name: "action" }],
           supportReason: () => "",
@@ -748,12 +789,16 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert(unknownModel.controls.frontPanelShow);
         assert(unknownModel.controls.frontPanelHide);
         assert(unknownModel.controls.frontPanelClear);
+        assert(unknownModel.controls.frontPanelMenu);
         assert.equal(unknownModel.controls.frontPanelRefresh.disabled, true);
         assert.equal(unknownModel.controls.frontPanelInstall.disabled, true);
         assert.equal(unknownModel.installForm.disabled, true);
         assert.equal(unknownModel.controls.frontPanelShow.disabled, true);
         assert.equal(unknownModel.controls.frontPanelHide.disabled, true);
         assert.equal(unknownModel.controls.frontPanelClear.disabled, true);
+        assert.equal(unknownModel.controls.frontPanelMenu.disabled, true);
+        assert.equal(unknownModel.controls.frontPanelMenu.className, "secondary");
+        assert.equal(unknownModel.controls.frontPanelMenu.textContent, "measurement.frontPanel.menu");
         assert.equal(unknownModel.controls.frontPanelShow.className, "secondary");
         assert.equal(unknownModel.controls.frontPanelHide.className, "secondary");
         assert(unknownModel.controls.statisticsRefresh);
@@ -768,7 +813,13 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         await unknownModel.showFrontPanel(true);
         await unknownModel.showFrontPanel(false);
         await unknownModel.clearFrontPanel();
+        await unknownModel.openMeasurementMenu();
         assert.deepEqual(unknownCalls, []);
+        const busyEditor = frontPanelEditor("keysight-dsox4024a");
+        busyEditor.hooks.isExecutionBusy = () => true;
+        busyEditor.applyBusyState();
+        assert.equal(busyEditor.controls.frontPanelMenu.disabled, true);
+        assert.equal(busyEditor.controls.frontPanelClear.disabled, true);
         const collectText = (node) => {
           const texts = [];
           if (node.textContent) texts.push(node.textContent);

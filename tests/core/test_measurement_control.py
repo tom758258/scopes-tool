@@ -5,6 +5,7 @@ from scopes_tool_core.errors import ParameterValidationError
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.measurements import (
     MeasurementController,
+    measurement_menu_command,
     measurement_show_command,
     measurement_source_command,
     measurement_window_command,
@@ -49,6 +50,27 @@ def test_measurement_show_command_supports_on_and_off():
     assert measurement_show_command() == ":MEASure:SHOW ON"
     assert measurement_show_command(True) == ":MEASure:SHOW ON"
     assert measurement_show_command(False) == ":MEASure:SHOW OFF"
+
+
+@pytest.mark.parametrize(
+    ("model_id", "expected"),
+    [
+        ("DSOX2004A", ":SYSTem:MENU MEASure"),
+        ("DSOX3024A", ":SYSTem:MENU MEASure"),
+        ("DSOX4024A", ":DISPlay:MENU MEASure"),
+    ],
+)
+def test_measurement_menu_command_series(model_id, expected):
+    capabilities = capabilities_for_model(model_id)
+    assert measurement_menu_command(capabilities) == expected
+    backend = FakeBackend()
+    controller = MeasurementController(SCPIClient(backend), capabilities)
+    controller.open_menu()
+    assert backend.history == [expected]
+    scope = Oscilloscope(SimulatorBackend(physical_model_id=f"keysight-{model_id.lower()}"))
+    scope.query_idn()
+    scope.open_measurement_menu()
+    assert scope.backend.history[-1] == expected
 
 
 @pytest.mark.parametrize("model_id", ("DSOX2004A", "DSOX3024A"))

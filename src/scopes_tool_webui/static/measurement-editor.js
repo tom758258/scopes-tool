@@ -481,6 +481,7 @@ export class MeasurementEditor {
         ]
         : []),
       ["frontPanelClear", "measure-clear", "measurement.frontPanel.clear", "danger"],
+      ["frontPanelMenu", "measure-menu", "measurement.frontPanel.menu", "secondary"],
     ];
     for (const [name, command, key, className, enabled] of actionDefinitions) {
       const wrapper = document.createElement("div");
@@ -492,6 +493,7 @@ export class MeasurementEditor {
       button.addEventListener("click", () => {
         if (command === "measure-results") void this.refreshFrontPanel();
         else if (command === "measure-show") void this.showFrontPanel(enabled);
+        else if (command === "measure-menu") void this.openMeasurementMenu();
         else void this.clearFrontPanel();
       });
       this.controls[name] = button;
@@ -816,6 +818,11 @@ export class MeasurementEditor {
     this.renderFrontPanelReadback();
   }
 
+  async openMeasurementMenu() {
+    if (!this.hooks.isCommandAvailable("measure-menu")) return;
+    await this.hooks.executeCommand("measure-menu", {});
+  }
+
   renderFrontPanelReadback() {
     if (!this.frontPanelContent) return;
     this.frontPanelContent.replaceChildren();
@@ -915,6 +922,7 @@ export class MeasurementEditor {
       ["frontPanelShow", "measure-show"],
       ["frontPanelHide", "measure-show"],
       ["frontPanelClear", "measure-clear"],
+      ["frontPanelMenu", "measure-menu"],
       ["statisticsApply", "measurement-statistics"],
       ["statisticsRefresh", "measurement-statistics"],
       ["statisticsReset", "measurement-statistics"],

@@ -95,6 +95,20 @@ def test_measure_controls_validates_public_install_without_auto_clear() -> None:
     assert controls.index('-Command "measure-install"') < controls.index(
         '-Command "measure-clear"'
     )
+    assert '-Command "measure-menu"' in controls
+    assert '":SYSTem:MENU MEASure"' in controls
+    assert '":DISPlay:MENU MEASure"' in controls
+    assert controls.index('-Command "measure-clear"') < controls.index(
+        '-Command "measure-menu"'
+    )
+    assert controls.index('-Stage "measure-menu"') < controls.index(
+        '-Stage "measure-show-on"'
+    )
+    assert controls.count('-Command "measure-clear"') == 1
+    assert controls.count('-Command "measure-menu"') == 1
+    # Existing restoration logic must remain untangled.
+    assert 'measure-source-restore' in controls
+    assert 'measure-window-restore' in controls
 
 
 def test_pair_measurements_remain_strict() -> None:
