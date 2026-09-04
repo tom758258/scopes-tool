@@ -34,6 +34,7 @@ from scopes_tool_core.display import (
     validate_display_intensity,
     validate_display_persistence,
 )
+from scopes_tool_core.demo import validate_demo_function, validate_demo_phase
 from scopes_tool_core.dvm import normalize_dvm_mode
 from scopes_tool_core.fft import fft_configure_commands
 from scopes_tool_core.identity import physical_model_for_id
@@ -1373,6 +1374,34 @@ def _validate_parameters(
                     )
                 else:
                     parameters[value_name] = validate_wgen_load(parameters[value_name])
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
+        else:
+            _reject_query_parameters(parameters, (value_name,), command)
+    elif command in {
+        "demo-output",
+        "demo-function",
+        "demo-phase",
+    }:
+        action = _action(parameters, command)
+        value_name = {
+            "demo-output": "enabled",
+            "demo-function": "function",
+            "demo-phase": "degrees",
+        }[command]
+        if action == "set":
+            _require_parameter(parameters, value_name, command)
+            try:
+                if command == "demo-output":
+                    _require_boolean(parameters[value_name], value_name)
+                elif command == "demo-function":
+                    parameters[value_name] = validate_demo_function(
+                        parameters[value_name], capabilities
+                    )
+                else:
+                    parameters[value_name] = validate_demo_phase(
+                        _finite_number(parameters[value_name], value_name)
+                    )
             except Exception as exc:
                 raise WebUIRequestError(str(exc)) from exc
         else:

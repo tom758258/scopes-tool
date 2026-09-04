@@ -73,6 +73,7 @@ from scopes_tool_core.serial import (
     UART_TRIGGER_TYPES,
 )
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
+from scopes_tool_core.demo import DEMO_FUNCTIONS
 from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS
 
 
@@ -1284,6 +1285,51 @@ COMMANDS = (
         "group": "wgen",
         "editor": "wgen",
     },
+    {
+        "id": "demo-query",
+        "category": "DEMO",
+        "label": "Demo Signals state",
+        "modes": ("live", "simulate"),
+        "fields": (),
+        "group": "demo",
+        "editor": "demo",
+    },
+    {
+        "id": "demo-output",
+        "category": "DEMO",
+        "label": "Demo output",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "demo-output.enabled"},
+        ),
+        "group": "demo",
+        "editor": "demo",
+    },
+    {
+        "id": "demo-function",
+        "category": "DEMO",
+        "label": "Demo function",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "function", "type": "enum", "options": DEMO_FUNCTIONS, "option_label": "demo-function", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "demo-function.function"},
+        ),
+        "group": "demo",
+        "editor": "demo",
+    },
+    {
+        "id": "demo-phase",
+        "category": "DEMO",
+        "label": "Demo phase",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
+            {"name": "degrees", "type": "number", "minimum": 0, "maximum": 360, "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "demo-phase.degrees"},
+        ),
+        "group": "demo",
+        "editor": "demo",
+    },
 )
 
 
@@ -1770,6 +1816,7 @@ _READ_COMMANDS = frozenset(
         "dvm-current",
         "dvm-query",
         "wgen-query",
+        "demo-query",
         "external-trigger-settings",
         "search-count",
         "serial-query",
@@ -2030,6 +2077,10 @@ def _model_command_presentation(
                     override["required_if"] = conditions
             elif name == "measurement_slot":
                 override["hidden"] = True
+        if entry["id"] == "demo-function" and name == "function":
+            override["options"] = tuple(
+                value for value in DEMO_FUNCTIONS if value in capabilities.demo_functions
+            )
         if name == "pair_items" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"
@@ -2070,6 +2121,8 @@ def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: A
         return capabilities.supports_annotation
     if category == "WGEN":
         return capabilities.supports_wgen
+    if category == "DEMO":
+        return capabilities.supports_demo
     if category == "FFT / MATH":
         if command_id == "math-composite-source":
             return capabilities.supports_math_goft

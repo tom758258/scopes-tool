@@ -2401,7 +2401,7 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
 
     assert {entry["category"] for entry in grouped} <= {
         "Channel", "Trigger", "Search", "Serial", "Save / Export", "Workflow",
-        "Cursor", "Annotation", "WGEN",
+        "Cursor", "Annotation", "WGEN", "DEMO",
     }
     assert {entry["group"] for entry in grouped} == {
         "edge", "common", "external", "pulse-width", "runt", "transition",
@@ -2412,7 +2412,7 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
         "bus", "lister",
         "path-filename", "image", "waveform",
         "measurement", "capture", "triggered", "automation",
-        "cursor", "annotation", "wgen",
+        "cursor", "annotation", "wgen", "demo",
     }
 
     static_root = Path(__file__).resolve().parents[2] / "src" / "scopes_tool_webui" / "static"

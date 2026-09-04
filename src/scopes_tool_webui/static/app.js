@@ -15,6 +15,7 @@ import { requestCancel, runJob } from "/static/jobs.js";
 import { renderInstrumentSummary } from "/static/live-data.js";
 import { AnnotationEditor } from "/static/annotation-editor.js";
 import { CursorEditor } from "/static/cursor-editor.js";
+import { DemoEditor } from "/static/demo-editor.js";
 import { MeasurementEditor } from "/static/measurement-editor.js";
 import { WgenEditor } from "/static/wgen-editor.js";
 import {
@@ -87,6 +88,7 @@ const elements = {
   cursorEditor: document.querySelector("#cursor-editor"),
   annotationEditor: document.querySelector("#annotation-editor"),
   wgenEditor: document.querySelector("#wgen-editor"),
+  demoEditor: document.querySelector("#demo-editor"),
   workspaceHeaderActions: document.querySelector("#workspace-header-actions"),
   refresh: document.querySelector("#refresh-button"),
   execute: document.querySelector("#execute-button"),
@@ -128,6 +130,7 @@ let measurementEditor;
 let cursorEditor;
 let annotationEditor;
 let wgenEditor;
+let demoEditor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -156,6 +159,7 @@ const EDITOR_RENDERERS = {
   cursor: () => cursorEditor,
   annotation: () => annotationEditor,
   wgen: () => wgenEditor,
+  demo: () => demoEditor,
 };
 
 function editorKindFor(command) {
@@ -308,6 +312,18 @@ async function initialize() {
     selectedCommand: () => catalog.selected(),
   });
   wgenEditor = new WgenEditor(elements.wgenEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    mode: () => context.mode,
+    selectedCommand: () => catalog.selected(),
+  });
+  demoEditor = new DemoEditor(elements.demoEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
@@ -768,6 +784,7 @@ document.addEventListener("localechange", () => {
   cursorEditor?.rerender();
   annotationEditor?.rerender();
   wgenEditor?.rerender();
+  demoEditor?.rerender();
   syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
 });
@@ -798,6 +815,7 @@ function syncCommandSelection(draft = null) {
   elements.cursorEditor.hidden = editorKind !== "cursor";
   elements.annotationEditor.hidden = editorKind !== "annotation";
   elements.wgenEditor.hidden = editorKind !== "wgen";
+  elements.demoEditor.hidden = editorKind !== "demo";
   syncWorkspaceHeaderActions(editorKind);
   elements.selectedCommand.textContent = selected
     ? editorOwned
@@ -889,6 +907,7 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (cursorEditor?.refreshButton) cursorEditor.refreshButton.hidden = editorKind !== "cursor";
   if (annotationEditor?.refreshButton) annotationEditor.refreshButton.hidden = editorKind !== "annotation";
   if (wgenEditor?.refreshButton) wgenEditor.refreshButton.hidden = editorKind !== "wgen";
+  if (demoEditor?.refreshButton) demoEditor.refreshButton.hidden = editorKind !== "demo";
 }
 
 function syncEditorPresentation(editorKind) {
@@ -904,6 +923,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "cursor") cursorEditor?.schedulePresentation();
   if (editorKind === "annotation") annotationEditor?.schedulePresentation();
   if (editorKind === "wgen") wgenEditor?.schedulePresentation();
+  if (editorKind === "demo") demoEditor?.schedulePresentation();
 }
 
 function commandAction(command) {

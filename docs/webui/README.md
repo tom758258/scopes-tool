@@ -148,6 +148,9 @@ The Command workbench exposes:
   models and Advanced FFT controls on 4000X, plus `math-display`,
   `math-vertical`, `math-operator`, `math-transform`, `math-filter`,
   `math-visualization`, `math-composite-source`, and `math-clear`
+- DEMO: a dedicated Demo Signals editor over `demo-query`, `demo-output`,
+  `demo-function`, and `demo-phase`; function options are projected from
+  `demo_functions`
 - Trigger: a dedicated Trigger editor over the existing Edge, external,
   glitch/pulse-width, runt, transition, delay, setup/hold, edge-burst, TV,
   pattern/OR, sweep, reject, coupling, and holdoff commands
@@ -170,6 +173,10 @@ The Command workbench exposes:
 - WGEN: a dedicated Waveform Generator editor for explicit Refresh through the
   aggregate `wgen-query` and independent output, function, frequency,
   amplitude, offset, and load settings; settings never switch the output on
+- DEMO: a dedicated Demo Signals editor for explicit Refresh through the
+  aggregate `demo-query` and independent output, function, and phase settings;
+  function options are projected from the model's `demo_functions` capability
+  and settings never switch the output on
 - Workflow: `capture-batch`, `capture-until`, `capture-monitor`, `measure-log`,
   `measure-until`, `triggered-measure-loop`, and
   `triggered-capture-series`, plus Generic Sequence v1 under Automation
@@ -178,8 +185,8 @@ Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
 
 The Command Browser keeps Category as its first level. Categories with group
-metadata (Trigger, Search, Serial, Workflow, Cursor, Annotation, and WGEN)
-show
+metadata (Trigger, Search, Serial, Workflow, Cursor, Annotation, WGEN, and
+DEMO) show
 Category → Group → Commands sections, while categories without group metadata
 keep the plain Category → Commands list. Groups start expanded and can be
 collapsed and reopened; collapse state lives only in the current page session
@@ -318,7 +325,7 @@ the existing host-side raw CSV retrieval with its registered job artifact. Its
 filename-only field writes under the PC output folder selected in Basic
 Controls and fails rather than overwriting an existing file with that name.
 
-Selecting a Cursor, Annotation, or WGEN command opens the matching dedicated
+Selecting a Cursor, Annotation, WGEN, or DEMO command opens the matching dedicated
 editor instead of a plain command form. The Command Browser remains the only
 navigation; the editors add no second tab layer. Cursor offers explicit
 Refresh, manual cursor configuration (source channel, X1/X2, optional Y1/Y2),
@@ -329,6 +336,9 @@ selector is hidden on single-slot models and X/Y position controls appear only
 where Core capabilities report position support. WGEN Refresh reads the whole
 generator state through the single aggregate `wgen-query`; output, function,
 frequency, amplitude, offset, and load each keep an independent Apply over
+their existing command, and applying a setting never switches the output on.
+DEMO Refresh reads the whole DEMO state through the single aggregate
+`demo-query`; output, function, and phase each keep an independent Apply over
 their existing command, and applying a setting never switches the output on.
 Unsupported commands stay disabled in the Command Browser with the existing
 capability reason.
@@ -364,7 +374,7 @@ pair-measurement choices. For `measure-log` and `triggered-measure-loop`, the
 dedicated Workflow editor provides the corresponding workflow controls.
 Periodic Capture (`capture-batch`), Measure Until, and Triggered Capture Series
 use the dedicated Workflow editor. Trigger, Search, Serial, Segmented Memory,
-Workflow, Cursor, Annotation, and WGEN commands use only the conditional
+Workflow, Cursor, Annotation, WGEN, and DEMO commands use only the conditional
 visibility needed by their existing Core parameter semantics.
 
 Commands that expose the existing Core `query` / `set` contract as an

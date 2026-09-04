@@ -656,6 +656,20 @@ def _execute_scope_command(
         if parameters["action"] == "set":
             scope.configure_wgen_load(parameters["load"])
         return _state_scope_result("load", scope.query_wgen_load())
+    if command == "demo-query":
+        return _state_scope_result("demo", scope.query_demo())
+    if command == "demo-output":
+        if parameters["action"] == "set":
+            scope.configure_demo_output(parameters["enabled"])
+        return _state_scope_result("output", scope.query_demo_output())
+    if command == "demo-function":
+        if parameters["action"] == "set":
+            scope.configure_demo_function(parameters["function"])
+        return _state_scope_result("function", scope.query_demo_function())
+    if command == "demo-phase":
+        if parameters["action"] == "set":
+            scope.configure_demo_phase(parameters["degrees"])
+        return _state_scope_result("phase", scope.query_demo_phase())
     if command == "save-pwd":
         return _execute_state_setting(
             parameters, scope.configure_save_pwd, scope.query_save_pwd, "path"
