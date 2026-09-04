@@ -492,6 +492,66 @@ export function renderWorkspaceResult(container, job, context = {}) {
   ]);
 }
 
+export function renderDiagnosticsWorkspaceResult(container, job) {
+  container.replaceChildren();
+  const result = jobResultPayload(job);
+  const message = typeof result?.error === "string" && result.error
+    ? result.error
+    : job?.error;
+  if (job?.status === "failed" && message) {
+    appendError(container, message);
+  }
+  if (job?.command === "doctor") {
+    renderDoctorWorkspaceResult(container, result);
+    const payload = job?.result;
+    if (payload && typeof payload === "object" && payload.system_error) {
+      appendWorkspaceFields(container, [["system_error", payload.system_error]]);
+    }
+  } else if (job?.command === "smoke") {
+    renderSmokeWorkspaceResult(container, job, result);
+  } else if (result && typeof result === "object") {
+    renderWorkspaceResult(container, job);
+  }
+}
+
+function renderDoctorWorkspaceResult(container, result) {
+  if (!result || typeof result !== "object") return;
+  appendWorkspaceFields(container, [
+    ["backend", result.backend],
+    ["timeout_ms", result.timeout_ms],
+  ]);
+  if (result.acquisition && typeof result.acquisition === "object") {
+    appendWorkspaceFields(container, Object.entries(result.acquisition));
+  }
+  if (Array.isArray(result.channels)) {
+    renderChannelSummaryWorkspaceResult(container, result.channels);
+  }
+  for (const name of ["timebase", "edge_trigger"]) {
+    if (result[name] && typeof result[name] === "object") {
+      appendWorkspaceFields(container, Object.entries(result[name]));
+    }
+  }
+}
+
+function renderSmokeWorkspaceResult(container, job, result) {
+  if (!result || typeof result !== "object") return;
+  appendWorkspaceFields(container, [["status", result.status]]);
+  if (result.doctor && typeof result.doctor === "object") {
+    renderDoctorWorkspaceResult(container, result.doctor);
+  }
+  for (const name of ["measurements", "capture", "screenshot", "warnings", "error"]) {
+    const value = result[name];
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    appendWorkspaceFields(container, [[name, value]]);
+  }
+  if (Array.isArray(job?.artifacts) && job.artifacts.length) {
+    appendWorkspaceFields(container, [
+      ["artifacts", job.artifacts.map((item) => item?.name ?? String(item)).join(", ")],
+    ]);
+  }
+}
+
 function channelTitle(channel) {
   const key = `enum.channel${channel}`;
   if (hasTranslation(key)) return translate(key);

@@ -2817,10 +2817,45 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
           return { textContent: text, value: String(value) };
         };
         globalThis.translate = (key) => key;
+        globalThis.hasTranslation = () => false;
 
-        const source = fs.readFileSync(process.argv[1], "utf8")
+        const doctorSnapshot = {
+          backend: "system_visa",
+          timeout_ms: 2000,
+          acquisition: { type: "normal", count: 16 },
+          channels: [
+            { channel: 1, display: true, scale_volts_per_division: 2.0 },
+            { channel: 2, display: false, scale_volts_per_division: 1.0 },
+          ],
+          timebase: { scale_seconds_per_division: 0.001, position_seconds: 0.0 },
+          edge_trigger: { source_channel: 1, level_volts: 1.0, slope: "positive" },
+        };
+        const smokeSnapshot = {
+          status: "completed",
+          doctor: doctorSnapshot,
+          measurements: [
+            { command: ":MEASure:VPP? CHANnel1", item: "vpp", channel: 1, value: 2.0, unit: "V", valid: true },
+          ],
+          capture: { actual_points: 1000 },
+          screenshot: { byte_count: 1234 },
+          warnings: [],
+          error: null,
+        };
+        let failMode = null;
+        const doctorPayload = (extra = {}) => ({
+          exit_code: 0,
+          result: doctorSnapshot,
+          system_error: { code: 0, message: "No error", raw: "0", is_error: false },
+          ...extra,
+        });
+
+        const stripModule = (text) => text
           .replace(/^import[^\n]*\r?\n/gm, "")
-          .replace(/^export /gm, "")
+          .replace(/^export /gm, "");
+        const resultsSource = stripModule(fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static/results.js"), "utf8"));
+        const editorSource = stripModule(fs.readFileSync(process.argv[1], "utf8"));
+        const source = resultsSource + "\n" + editorSource
           + "\nglobalThis.diagnosticsApi = { DiagnosticsEditor };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
         const { DiagnosticsEditor } = globalThis.diagnosticsApi;
@@ -2837,9 +2872,48 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
           isAvailable: () => true,
           executeCommand: async (command, parameters) => {
             submitted.push({ command, parameters });
-            return { status: "completed" };
+            if (failMode) {
+              const mode = failMode;
+              failMode = null;
+              if (mode === "noresult") {
+                return { status: "failed", command, result: null, error: "boom-no-result", artifacts: [] };
+              }
+              return {
+                status: "failed",
+                command,
+                result: {
+                  exit_code: 1,
+                  result: {
+                    status: "error",
+                    error: "Smoke measurement query timed out",
+                    doctor: doctorSnapshot,
+                    measurements: [],
+                  },
+                  system_error: null,
+                },
+                error: "Core command returned a non-zero exit code.",
+                artifacts: [],
+              };
+            }
+            const payload = command === "smoke"
+              ? {
+                exit_code: 0,
+                result: smokeSnapshot,
+                system_error: { code: 0, message: "No error", raw: "0", is_error: false },
+              }
+              : doctorPayload();
+            return { status: "completed", command, result: payload, error: null, artifacts: [] };
           },
         });
+        const panelText = () => {
+          const texts = [];
+          const visit = (node) => {
+            if (typeof node.textContent === "string" && node.textContent) texts.push(node.textContent);
+            for (const child of node.children || []) visit(child);
+          };
+          visit(editor.resultPanel);
+          return texts.join(" ");
+        };
 
         editor.present();
         assert.equal(headerActions.children.length, 1);
@@ -2872,6 +2946,36 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
         assert.equal(editor.modeSelect.value, "doctor");
         assert.equal(editor.saveArtifactsInput.checked, false);
         assert.equal(editor.saveArtifactsField.hidden, true);
+
+        await editor.submit();
+        assert.ok(panelText().includes("normal"));
+        assert.ok(panelText().includes("Channel 1"));
+
+        editor.modeSelect.value = "smoke";
+        editor.modeSelect.dispatch("change");
+        assert.equal(panelText(), "");
+        await editor.submit();
+        assert.ok(panelText().includes("vpp"));
+        assert.ok(panelText().includes("Channel 1"));
+
+        editor.modeSelect.value = "doctor";
+        editor.modeSelect.dispatch("change");
+        assert.ok(panelText().includes("Channel 1"));
+
+        failMode = "partial";
+        editor.modeSelect.value = "smoke";
+        editor.modeSelect.dispatch("change");
+        await editor.submit();
+        assert.ok(panelText().includes("Smoke measurement query timed out"));
+        assert.ok(panelText().includes("Channel 1"));
+
+        failMode = "noresult";
+        await editor.submit();
+        assert.ok(panelText().includes("boom-no-result"));
+
+        contextKey = "simulate|OTHER";
+        editor.present();
+        assert.equal(panelText(), "");
         '''
     )
     completed = subprocess.run(

@@ -11,6 +11,7 @@ from scopes_tool_core.operations import (
     MeasureRequest,
     MeasureSweepRequest,
     SmokeRequest,
+    _OperationError,
     _prepare_output_dir,
     _trigger_wait_classifier_profile,
     run_acquisition_check,
@@ -524,6 +525,60 @@ def test_run_smoke_without_artifacts_keeps_capture_results_in_memory(tmp_path):
     for name in ("report.json", "scpi.log", "capture.csv", "capture_meta.json", "screen.png"):
         assert not (tmp_path / name).exists()
     assert ignored_output.read_text(encoding="utf-8") == "caller supplied path"
+
+
+def test_run_smoke_measurement_timeout_keeps_partial_and_stops():
+    sent: list[str] = []
+    late_calls: list[str] = []
+    with _scope() as scope:
+        real_query = scope.scpi.query
+
+        def failing_transport(command, **kwargs):
+            sent.append(command)
+            if ":MEASure:VPP?" in command:
+                raise VisaBackendError(
+                    "VISA query failed for ':MEASure:VPP? CHANnel1': "
+                    "VI_ERROR_TMO (-1073807339): Timeout expired before operation completed."
+                )
+            return real_query(command, **kwargs)
+
+        def unexpected_capture(*args, **kwargs):
+            late_calls.append("capture")
+            raise AssertionError("capture must not run after measurement timeout")
+
+        def unexpected_screenshot(*args, **kwargs):
+            late_calls.append("screenshot")
+            raise AssertionError("screenshot must not run after measurement timeout")
+
+        scope.scpi.query = failing_transport  # type: ignore[method-assign]
+        scope.capture_waveform_byte = unexpected_capture  # type: ignore[method-assign]
+        scope.capture_screenshot_png = unexpected_screenshot  # type: ignore[method-assign]
+        with pytest.raises(_OperationError) as excinfo:
+            run_smoke(
+                scope,
+                "SIM::keysight-dsox4024a::INSTR",
+                SmokeRequest(save_artifacts=False),
+            )
+
+        vpp_commands = [command for command in sent if ":MEASure:VPP?" in command]
+        assert len(vpp_commands) == 1
+        assert any(":SYSTem:ERRor?" in command for command in sent[: sent.index(vpp_commands[0])])
+        vpp_index = sent.index(vpp_commands[0])
+        assert sent[vpp_index + 1 :] == []
+        assert late_calls == []
+    partial = excinfo.value.result
+    assert partial.exit_code == 1
+    assert partial.files == []
+    assert partial.result["status"] == "error"
+    assert partial.result["doctor"] is not None
+    assert partial.result["doctor"]["acquisition"]["type"]
+    assert len(partial.result["doctor"]["channels"]) == 4
+    assert partial.result["measurements"] == []
+    assert partial.result["capture"] is None
+    assert partial.result["screenshot"] is None
+    assert "timed out" in partial.result["error"]
+    assert "may not be ready" in partial.result["error"]
+    assert any("timed out" in line for line in partial.human_lines)
 
 
 def test_run_acquisition_check_check_only_and_restore(tmp_path):

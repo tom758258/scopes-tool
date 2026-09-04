@@ -271,6 +271,8 @@ export const en = {
   "results.field.capture_block_reason": "Capture block reason",
   "results.field.artifact": "Artifact",
   "results.field.source_kind": "Source kind",
+  "results.field.system_error": "System error",
+  "results.field.artifacts": "Artifacts",
   "results.channelSummary.field.display": "Display",
   "results.channelSummary.field.label": "Channel label",
   "results.channelSummary.field.scale": "Vertical scale",

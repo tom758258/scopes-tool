@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from scopes_tool_core.dvm import DVM_MODES
+from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.fft import (
     FFT_DETECTION_TYPES,
     FFT_GATES,
@@ -30,6 +31,7 @@ from scopes_tool_core.measurements import (
     SUPPORTED_MEASUREMENT_ITEMS,
     validate_statistics_items,
 )
+from scopes_tool_core.operations import _OperationError
 from scopes_tool_core.trigger import TriggerWaitResult
 import scopes_tool_webui.app as app_module
 import scopes_tool_webui.command_execution as command_execution_module
@@ -235,6 +237,66 @@ def test_simulated_diagnostics_jobs_preserve_results_and_artifacts(tmp_path: Pat
         "screen.png",
     }
     assert artifact_job["result"]["result"]["save_artifacts"] is True
+
+
+def _smoke_timeout_partial() -> tuple[str, object]:
+    real_message = (
+        "VISA query failed for ':MEASure:VPP? CHANnel1': "
+        "VI_ERROR_TMO (-1073807339): Timeout expired before operation completed."
+    )
+    partial = command_execution_module.OperationResult(
+        exit_code=1,
+        result={
+            "status": "error",
+            "doctor": {"acquisition": {"type": "normal", "count": 16}},
+            "measurements": [],
+            "error": real_message,
+        },
+        files=[],
+        human_lines=["Smoke measurement query timed out"],
+    )
+    return real_message, _OperationError(OscilloscopeError(real_message), partial)
+
+
+def test_smoke_operation_error_keeps_partial_result_without_class_leak(
+    tmp_path: Path, monkeypatch
+) -> None:
+    real_message, operation_error = _smoke_timeout_partial()
+
+    def failing_smoke(scope, resource, request):  # type: ignore[no-untyped-def]
+        raise operation_error
+
+    monkeypatch.setattr(command_execution_module, "run_smoke", failing_smoke)
+    scope = type("FakeScope", (), {"capabilities": object()})()
+    payload = command_execution_module._execute_scope_command(
+        scope, "smoke", "SIM::INSTR", {"save_artifacts": False}, tmp_path
+    )
+
+    assert payload["exit_code"] == 1
+    assert payload["result"]["error"] == real_message
+    assert payload["result"]["doctor"]["acquisition"]["type"] == "normal"
+    assert "_OperationError" not in str(payload)
+
+
+def test_smoke_operation_error_job_fails_with_real_message(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = TestClient(app)
+    real_message, operation_error = _smoke_timeout_partial()
+
+    def failing_smoke(scope, resource, request):  # type: ignore[no-untyped-def]
+        raise operation_error
+
+    monkeypatch.setattr(command_execution_module, "run_smoke", failing_smoke)
+    job = submit(
+        client, "smoke", "simulate", {}, pc_output_dir=tmp_path / "smoke-failure"
+    )
+
+    assert job["status"] == "failed"
+    assert job["result"] is not None
+    assert job["result"]["exit_code"] == 1
+    assert job["result"]["result"]["error"] == real_message
+    assert "_OperationError" not in str(job)
 
 
 def test_execute_force_trigger_calls_core_action(tmp_path: Path) -> None:

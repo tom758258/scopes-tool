@@ -1,4 +1,5 @@
 import { translate } from "/static/i18n.js";
+import { renderDiagnosticsWorkspaceResult } from "/static/results.js";
 
 export class DiagnosticsEditor {
   constructor(container, catalog, hooks) {
@@ -10,6 +11,7 @@ export class DiagnosticsEditor {
     this.busy = false;
     this.renderedKey = null;
     this.renderedContextKey = null;
+    this.results = { doctor: null, smoke: null };
     this.buildHeaderAction();
   }
 
@@ -48,6 +50,7 @@ export class DiagnosticsEditor {
     if (this.renderedContextKey !== null && contextKey !== this.renderedContextKey) {
       this.mode = "doctor";
       this.saveArtifacts = false;
+      this.results = { doctor: null, smoke: null };
     }
     this.renderedContextKey = contextKey;
 
@@ -102,8 +105,21 @@ export class DiagnosticsEditor {
 
     this.help = document.createElement("p");
     this.help.className = "compact-note diagnostics-editor-help";
-    this.container.append(modeField, this.saveArtifactsField, this.help);
+    this.resultPanel = document.createElement("div");
+    this.resultPanel.className = "diagnostics-editor-result";
+    this.container.append(modeField, this.saveArtifactsField, this.help, this.resultPanel);
     this.renderMode();
+  }
+
+  renderStoredResult() {
+    if (!this.resultPanel) return;
+    const contextKey = this.hooks.contextKey?.() || "";
+    const entry = this.results[this.mode];
+    if (!entry || entry.contextKey !== contextKey) {
+      this.resultPanel.replaceChildren();
+      return;
+    }
+    renderDiagnosticsWorkspaceResult(this.resultPanel, entry.job);
   }
 
   renderMode() {
@@ -113,6 +129,7 @@ export class DiagnosticsEditor {
     this.help.textContent = translate(
       this.mode === "smoke" ? "diagnostics.smokeHelp" : "diagnostics.doctorHelp",
     );
+    this.renderStoredResult();
   }
 
   async submit() {
@@ -122,10 +139,16 @@ export class DiagnosticsEditor {
       ? { save_artifacts: this.saveArtifacts }
       : {};
     if (!this.hooks.isAvailable?.(command)) return null;
+    const submittedContextKey = this.hooks.contextKey?.() || "";
     this.busy = true;
     this.applyBusyState();
     try {
-      return await this.hooks.executeCommand(command, parameters);
+      const job = await this.hooks.executeCommand(command, parameters);
+      if (job && ["completed", "failed", "cancelled"].includes(job.status)) {
+        this.results[command] = { contextKey: submittedContextKey, job };
+        this.renderStoredResult();
+      }
+      return job;
     } finally {
       this.busy = false;
       this.applyBusyState();

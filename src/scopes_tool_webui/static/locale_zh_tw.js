@@ -272,6 +272,8 @@ export const zhTW = {
   "results.field.capture_block_reason": "禁止擷取原因",
   "results.field.artifact": "檔案",
   "results.field.source_kind": "來源種類",
+  "results.field.system_error": "系統錯誤",
+  "results.field.artifacts": "輸出檔案",
   "results.channelSummary.field.display": "顯示狀態",
   "results.channelSummary.field.label": "通道標籤",
   "results.channelSummary.field.scale": "垂直刻度",

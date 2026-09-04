@@ -36,7 +36,7 @@ from .batch import (
     system_error_manifest_dict,
     write_batch_manifest,
 )
-from .errors import OscilloscopeError
+from .errors import OscilloscopeError, VisaBackendError
 from .measurements import (
     is_pair_measurement_item,
     measurement_query,
@@ -1040,6 +1040,30 @@ def run_measure_log(
         ) from exc
 
 
+def _is_visa_timeout(exc: BaseException) -> bool:
+    """Return whether an exception chain contains a VISA read timeout."""
+
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if getattr(current, "error_code", None) in {
+            -1073807339,
+            "-1073807339",
+        }:
+            return True
+        if "VI_ERROR_TMO" in str(current):
+            return True
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        if current.__context__ is not None:
+            pending.append(current.__context__)
+    return False
+
+
 def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> OperationResult:
     """Run the capture-safe smoke workflow, optionally writing its report."""
 
@@ -1083,7 +1107,19 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
             for item in ("vpp", "vrms"):
                 command = measurement_query(item, 1, capabilities=scope.capabilities)
                 human.append(f"Command: {command}")
-                measurement = scope.query_measurement(1, item)
+                try:
+                    measurement = scope.query_measurement(1, item)
+                except VisaBackendError as exc:
+                    if not _is_visa_timeout(exc):
+                        raise
+                    timeout_message = (
+                        f"Smoke measurement query timed out for {command!r}. "
+                        "The acquisition may not be ready. Smoke stopped without "
+                        "further instrument queries because the VISA session may "
+                        "no longer be synchronized."
+                    )
+                    human.append(timeout_message)
+                    raise OscilloscopeError(timeout_message) from exc
                 record = {
                     "command": command,
                     **_measurement_result_json(measurement, parameters={}),
@@ -1184,6 +1220,10 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
             "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
             "files": files,
             "warnings": report["warnings"],
+            "doctor": report.get("doctor"),
+            "measurements": report.get("measurements"),
+            "capture": report.get("capture"),
+            "screenshot": report.get("screenshot"),
             "error": str(exc),
         }
         raise _OperationError(exc, OperationResult(1, result, files, human_lines=human, idn=idn, **_scope_backend_json(scope))) from exc

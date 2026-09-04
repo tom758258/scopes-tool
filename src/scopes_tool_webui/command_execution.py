@@ -59,6 +59,7 @@ from scopes_tool_core.measure_logger import (
     default_measure_log_output_dir,
 )
 from scopes_tool_core.measure_until import MEASURE_UNTIL_DEFAULT_BASE_DIR
+from scopes_tool_core.operations import _OperationError
 from scopes_tool_core.capture_until import CAPTURE_UNTIL_DEFAULT_BASE_DIR
 from scopes_tool_core.capture_monitor import CAPTURE_MONITOR_DEFAULT_BASE_DIR
 from scopes_tool_core.output_files import (
@@ -326,13 +327,16 @@ def _execute_scope_command(
     if command == "smoke":
         save_artifacts = parameters.get("save_artifacts", False)
         output_dir = _workflow_output_dir(command, artifact_dir) if save_artifacts else None
-        return _operation_payload(
-            run_smoke(
-                scope,
-                resource,
-                SmokeRequest(output_dir=output_dir, save_artifacts=save_artifacts),
+        try:
+            return _operation_payload(
+                run_smoke(
+                    scope,
+                    resource,
+                    SmokeRequest(output_dir=output_dir, save_artifacts=save_artifacts),
+                )
             )
-        )
+        except _OperationError as exc:
+            return _operation_payload(exc.result)
     if command == "run":
         scope.run()
         return _simple_scope_result("run")

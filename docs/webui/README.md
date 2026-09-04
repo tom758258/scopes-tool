@@ -473,6 +473,10 @@ structured result in Result History but creates no Smoke output directory or
 files. Enabling **Save diagnostic artifacts** writes the existing Smoke report,
 SCPI log, waveform CSV and metadata, and screenshot under the shared PC output
 root.
+The Diagnostics workspace shows the latest Doctor or Smoke result for the
+current execution context directly below the controls; Result History is kept
+unchanged. A failed Smoke run keeps its partial diagnostic result, including
+the measurement timeout reason when a measurement query times out.
 
 While `capture-monitor` runs, the existing job polling path requests only
 transient updates newer than the browser's last sequence. Each normal update
