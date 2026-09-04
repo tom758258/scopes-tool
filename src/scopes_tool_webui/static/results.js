@@ -498,7 +498,7 @@ export function renderDiagnosticsWorkspaceResult(container, job) {
   const message = typeof result?.error === "string" && result.error
     ? result.error
     : job?.error;
-  if (job?.status === "failed" && message) {
+  if (message && (job?.status === "failed" || result?.status === "error")) {
     appendError(container, message);
   }
   if (job?.command === "doctor") {

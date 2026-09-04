@@ -108,6 +108,8 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
+
+
 def run_generic_form_ownership_behavior(assertions: str) -> None:
     source = read_static("app.js").replace("options = {}", "options = null", 1)
     declarations = "\n".join(
@@ -4353,9 +4355,18 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         '''
     )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script],
+        ["node", "--input-type=module", "--eval", script, str(live_data_path)],
         capture_output=True,
         text=True,
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+
+
+def test_cancelled_smoke_with_partial_error_shows_error_condition() -> None:
+    results_path = STATIC_ROOT / "results.js"
+    source = results_path.read_text(encoding="utf-8")
+    assert 'message && (job?.status === "failed" || result?.status === "error")' in source, "results.js must show error for failed or structured error status"
+    assert 'for (const name of ["measurements", "capture", "screenshot", "warnings"])' in source, "Smoke workspace loop must not include 'error' to avoid duplicate display"
