@@ -106,7 +106,7 @@ readback, rollback, or browser-side SCPI behavior for this operation.
 
 The Command workbench exposes:
 
-- Identity: `identify` (Read device information)
+- Identity information is read through the System Information section. `identify` has no standalone command card in the Command workbench, but its backend capability remains available for resource/model detection and capability gating.
 - Acquisition: `run`, `single`, `single-wait`, `stop-acquisition`,
   `force-trigger`, `autoscale`, `acquisition`
 - Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`

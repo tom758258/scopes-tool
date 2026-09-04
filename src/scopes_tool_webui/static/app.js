@@ -806,12 +806,18 @@ document.addEventListener("localechange", () => {
   demoEditor?.rerender();
   syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
+  renderSystemInformation();
 });
 
 function syncCommandSelection(draft = null) {
   if (!catalog || !commandForm) return;
+  const previousSelected = state.selectedCommand;
   const selected = catalog.selected();
   state.selectedCommand = selected?.id || null;
+  if (selected?.id === "system-information" && previousSelected !== selected.id) {
+    const infoSection = document.getElementById("system-info-section");
+    if (infoSection) infoSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   const editorKind = editorKindFor(selected);
   const editorOwned = editorKind !== null;
   invalidateGenericFormOwnership();
@@ -1183,7 +1189,7 @@ function renderSystemInformation() {
   const setText = (element, value, unavailableText) => {
     if (!element) return;
     if (value === null || value === undefined) {
-      element.textContent = unavailableText || "Unavailable";
+      element.textContent = unavailableText || translate("system.unavailable");
     } else {
       element.textContent = typeof value === "number" ? String(value) : String(value);
     }
@@ -1207,9 +1213,9 @@ function renderSystemInformation() {
     if (points === null || points === undefined) return null;
     return Number(points).toLocaleString();
   }
-  setText(elements.sysSampleRate, formatSampleRate(acquisition.sample_rate), hasLoaded ? "Unavailable" : "—");
-  setText(elements.sysAcquisitionPoints, formatPoints(acquisition.acquisition_points) ? formatPoints(acquisition.acquisition_points) + " pts" : (hasLoaded ? "Unavailable" : "—"), hasLoaded ? "Unavailable" : "—");
-  setText(elements.sysRecordLength, formatPoints(acquisition.record_length) ? formatPoints(acquisition.record_length) + " pts" : (hasLoaded ? "Unavailable" : "—"), hasLoaded ? "Unavailable" : "—");
+  setText(elements.sysSampleRate, formatSampleRate(acquisition.sample_rate), hasLoaded ? translate("system.unavailable") : "—");
+  setText(elements.sysAcquisitionPoints, formatPoints(acquisition.acquisition_points) ? formatPoints(acquisition.acquisition_points) + " pts" : (hasLoaded ? translate("system.unavailable") : "—"), hasLoaded ? translate("system.unavailable") : "—");
+  setText(elements.sysRecordLength, formatPoints(acquisition.record_length) ? formatPoints(acquisition.record_length) + " pts" : (hasLoaded ? translate("system.unavailable") : "—"), hasLoaded ? translate("system.unavailable") : "—");
 }
 
 function setStateIndicator(indicator, text, stateClass, title = "") {

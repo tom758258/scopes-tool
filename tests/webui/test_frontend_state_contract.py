@@ -1800,9 +1800,6 @@ def test_selected_resource_refresh_uses_a_formal_identify_job_flow() -> None:
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
 )
-@pytest.mark.skip(
-    reason="Identity presentation moved to System Information snapshot; contract covered by Python-level tests (test_identify_hidden_from_catalog_but_backend_preserved).",
-)
 def test_selected_resource_snapshot_serializes_latest_requested_context() -> None:
     app_source = read_static("app.js")
     declarations = "\n".join(
@@ -1863,10 +1860,10 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
           },
         };
         const runJob = (command, parameters, commandContext, onUpdate) => {
-          assert.equal(command, "system-information-snapshot");
+          assert.equal(command, "identify");
           assert.deepEqual(parameters, {});
           submissions.push(commandContext.resource);
-          const jobId = `system-information-snapshot-${commandContext.resource}`;
+          const jobId = `identify-${commandContext.resource}`;
           onUpdate({ job_id: jobId, command, status: "queued" });
           onUpdate({ job_id: jobId, command, status: "running" });
           return new Promise((resolve) => controllers.push({ jobId, onUpdate, resolve }));
@@ -1895,8 +1892,8 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         assert.equal(states.at(-1).status, "queued");
 
         const failedA = {
-          job_id: "system-information-snapshot-RESOURCE-A",
-          command: "system-information-snapshot",
+          job_id: "identify-RESOURCE-A",
+          command: "identify",
           status: "failed",
           error: { type: "UnsupportedModelError", message: "Unsupported physical oscilloscope model: E3646A" },
         };
@@ -1906,12 +1903,12 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         assert.deepEqual(submissions, ["RESOURCE-A", "RESOURCE-B"]);
         assert.notEqual(states.at(-1).status, "failed");
         assert.equal(states.at(-1).resource, "RESOURCE-B");
-        assert.equal(history.has("system-information-snapshot-RESOURCE-A"), true);
+        assert.equal(history.has("identify-RESOURCE-A"), true);
         assert.deepEqual(identities, []);
 
         const completedB = {
-          job_id: "system-information-snapshot-RESOURCE-B",
-          command: "system-information-snapshot",
+          job_id: "identify-RESOURCE-B",
+          command: "identify",
           status: "completed",
           result: { result: { idn: { model: "DSO-X 4034A" } } },
         };
@@ -1920,7 +1917,7 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         await snapshotA;
 
         assert.deepEqual(submissions, ["RESOURCE-A", "RESOURCE-B"]);
-        assert.equal(history.has("system-information-snapshot-RESOURCE-B"), true);
+        assert.equal(history.has("identify-RESOURCE-B"), true);
         assert.equal(identities.length > 0, true);
         assert.equal(
           identities.every((item) => item.resource === "RESOURCE-B" && item.model === "DSO-X 4034A"),
@@ -1928,11 +1925,11 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         );
         assert.equal(
           currentResults.some((item) => item.resource === "RESOURCE-B"
-            && item.jobId === "system-information-snapshot-RESOURCE-A"
+            && item.jobId === "identify-RESOURCE-A"
             && item.status === "failed"),
           false,
         );
-        assert.equal(currentResults.at(-1).jobId, "system-information-snapshot-RESOURCE-B");
+        assert.equal(currentResults.at(-1).jobId, "identify-RESOURCE-B");
         assert.equal(states.at(-1).status, "completed");
         assert.equal(submissions.includes("RESOURCE-C"), false);
         assert.deepEqual(clientErrors, []);
@@ -1950,9 +1947,6 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
 @pytest.mark.skipif(
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
-)
-@pytest.mark.skip(
-    reason="Identity presentation moved to System Information snapshot; backend identity mechanism preserved and covered by Python-level contract tests (test_identify_hidden_from_catalog_but_backend_preserved, test_system_information_snapshot).",
 )
 def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_runs() -> None:
     app_source = read_static("app.js")
@@ -2012,7 +2006,7 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
           },
         };
         const runJob = (command, parameters, commandContext, onUpdate) => {
-          assert.equal(command, "system-information-snapshot");
+          assert.equal(command, "identify");
           assert.deepEqual(parameters, {});
           submissions.push(commandContext.resource);
           events.push(`submit-${commandContext.resource}`);
@@ -2020,7 +2014,7 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
             return new Promise((_resolve, reject) => { rejectA = reject; });
           }
           const completed = {
-            job_id: "system-information-snapshot-RESOURCE-B",
+            job_id: "identify-RESOURCE-B",
             command,
             status: "completed",
             result: { result: { idn: { model: "DSO-X 4034A" } } },
@@ -2053,7 +2047,7 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
         assert(submissions.includes("RESOURCE-A") || submissions.includes("RESOURCE-B"));
         assert.equal(clientErrors.length, 1);
         assert.equal(clientErrors[0].kind, "error");
-        assert.equal(clientErrors[0].command, "system-information-snapshot");
+        assert.equal(clientErrors[0].command, "identify");
         assert.equal(clientErrors[0].message, "HTTP 503: temporary failure");
         assert.equal(clientErrors[0].job, null);
         assert.equal("job_id" in clientErrors[0], false);
@@ -2061,7 +2055,7 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
           states.some((state) => state.resource === "RESOURCE-B" && state.status === "failed"),
           false,
         );
-        assert.deepEqual([...backendJobs], ["system-information-snapshot-RESOURCE-B"]);
+        assert.deepEqual([...backendJobs], ["identify-RESOURCE-B"]);
         assert.equal(identities.length > 0, true);
         assert.equal(
           identities.every((item) => item.resource === "RESOURCE-B" && item.model === "DSO-X 4034A"),

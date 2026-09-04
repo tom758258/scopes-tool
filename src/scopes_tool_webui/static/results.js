@@ -1,6 +1,79 @@
 import { hasTranslation, translate, translateJobStatus } from "/static/i18n.js";
 
 const RESULT_HISTORY_LIMIT = 20;
+
+const SYSTEM_OPTIONS_FRIENDLY_NAMES = {
+  MEMUP: "Memory Upgrade",
+  WAVEGEN: "Waveform Generator",
+  EMBD: "Low Speed Serial",
+  AUTO: "Automotive Serial",
+  FLEX: "FlexRay",
+  FRA: "Frequency Response Analysis",
+  PWR: "Power Measurements",
+  COMP: "RS-232 / UART Serial",
+  SGM: "Segmented Memory",
+  MASK: "Mask Test",
+  AUDIO: "I\u00B2S Serial",
+  EDK: "Educator's Kit",
+  AERO: "Aerospace Serial",
+  ADVMATH: "Advanced Math",
+  DVM: "Digital Voltmeter",
+  USBFL: "USB Low / Full Speed",
+  USBH: "USB High Speed",
+  USBSQ: "USB Signal Quality Analysis",
+  RML: "Remote Command Logging",
+  CANFD: "CAN FD",
+  CXPI: "CXPI",
+  SENSOR: "SENT",
+  USBPD: "USB PD",
+};
+
+function formatSystemOptionsSummary(result) {
+  if (!Array.isArray(result?.options)) return String(result);
+  const tokens = result.options.filter(
+    (token) => token !== 0 && token !== "0" && token !== null && token !== undefined && String(token).trim() !== "",
+  );
+  if (!tokens.length) return "—";
+  const formatted = tokens.map((token) => {
+    const name = SYSTEM_OPTIONS_FRIENDLY_NAMES[token];
+    return name ? `${name} — ${token}` : String(token);
+  });
+  return formatted.join("; ");
+}
+
+function formatSystemStatusByteSummary(result) {
+  if (result?.value === 0 || result?.set_bits?.length === 0) {
+    return translate("system.statusByte.none") || "Currently no status flags";
+  }
+  const bits = [
+    { bit: 7, label: translate("system.statusByte.operationSummary") || "Operation status summary" },
+    { bit: 6, label: translate("system.statusByte.serviceRequest") || "Service request / master status summary" },
+    { bit: 5, label: translate("system.statusByte.eventSummary") || "Event status summary" },
+    { bit: 4, label: translate("system.statusByte.messageAvailable") || "Message available" },
+    { bit: 2, label: translate("system.statusByte.instrumentMessage") || "Instrument message" },
+    { bit: 1, label: translate("system.statusByte.userEvent") || "User event" },
+    { bit: 0, label: translate("system.statusByte.triggerOccurred") || "Trigger occurred" },
+  ];
+  const setBits = Array.isArray(result?.set_bits) ? result.set_bits : [];
+  const active = bits.filter((b) => setBits.includes(b.bit)).map((b) => b.label);
+  return active.length ? active.join("; ") : translate("system.statusByte.unknown") || "Unknown status flags";
+}
+
+function formatSystemOperationStatusSummary(result) {
+  const bits = Array.isArray(result?.set_bits) ? result.set_bits : [];
+  const commonLabels = {
+    3: translate("system.operationStatus.running") || "Running / Scope executing",
+    5: translate("system.operationStatus.waitingTrigger") || "Waiting for Trigger",
+    9: translate("system.operationStatus.maskTestEvent") || "Mask Test Event",
+    11: translate("system.operationStatus.overload") || "Overload / Input overload",
+  };
+  const active = bits.map((bit) => {
+    if (commonLabels[bit] !== undefined) return commonLabels[bit];
+    return translate(`system.operationStatus.bit.${bit}`) || `Bit ${bit}`;
+  });
+  return active.length ? active.join("; ") : translate("system.operationStatus.none") || "No active operation flags";
+}
+
 let resultHistory = [];
 
 export function renderEmpty(summaryContainer, detailContainer) {
@@ -293,6 +366,9 @@ function successfulJobSummary(job) {
   if (job.command === "identify") return identifySummary(result);
   if (job.command === "list-resources") return resourceSummary(result);
   if (job.command === "screenshot") return translate("results.summary.screenshotCaptured");
+  if (job.command === "system-options") return formatSystemOptionsSummary(result);
+  if (job.command === "system-status-byte") return formatSystemStatusByteSummary(result);
+  if (job.command === "system-operation-status") return formatSystemOperationStatusSummary(result);
   if (job.command === "sequence") {
     return translate("results.summary.sequenceCompleted", {
       completed: result?.completed_step_executions ?? 0,
