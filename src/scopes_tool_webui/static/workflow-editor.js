@@ -94,7 +94,7 @@ export class WorkflowEditor {
   renderDefinition(definition, key) {
     const fields = this.catalog.fieldsFor(definition);
     const draft = this.sanitizeDraft(
-      this.drafts.get(key) || this.defaultDraft(fields),
+      this.drafts.get(key) || this.defaultDraft(fields, definition),
       fields,
     );
     this.drafts.set(key, draft);
@@ -132,19 +132,21 @@ export class WorkflowEditor {
         fieldByName(fields, "items").options || [],
         draft.items,
       ),
-      this.buildPairsSection(channels, draft.pairs),
-      this.pairItemsSection,
+      ...(definition.id === "measure-log"
+        ? [this.pairItemsSection, this.buildPairsSection(channels, draft.pairs)]
+        : [this.buildPairsSection(channels, draft.pairs), this.pairItemsSection]),
       this.buildLimitsSection(definition, fields, draft),
     );
     this.updatePairItemsVisibility();
   }
 
-  defaultDraft(fields) {
+  defaultDraft(fields, definition) {
     const values = {
       channels: defaultChoices(fieldByName(fields, "channels")),
       items: defaultChoices(fieldByName(fields, "items")),
       pairs: [],
-      pair_items: defaultChoices(fieldByName(fields, "pair_items")),
+      pair_items: definition?.id === "measure-log"
+        ? [] : defaultChoices(fieldByName(fields, "pair_items")),
     };
     for (const name of [
       "channel", "item", "count", "duration_seconds", "trigger_timeout_seconds", "interval_seconds",
@@ -245,7 +247,10 @@ export class WorkflowEditor {
       choice.append(input, text);
       choices.append(choice);
       this.controls[name].push(input);
-      input.addEventListener("change", () => this.captureDraft());
+      input.addEventListener("change", () => {
+        this.captureDraft();
+        if (name === "pair_items") this.applyBusyState();
+      });
     }
     section.append(choices);
     return section;
@@ -302,7 +307,8 @@ export class WorkflowEditor {
 
   updatePairItemsVisibility() {
     if (this.pairItemsSection) {
-      this.pairItemsSection.hidden = this.pairRows.length === 0;
+      this.pairItemsSection.hidden = this.selectedDefinition()?.id !== "measure-log"
+        && this.pairRows.length === 0;
     }
   }
 
@@ -873,5 +879,8 @@ export class WorkflowEditor {
     this.container.querySelectorAll("input, select, button").forEach((control) => {
       control.disabled = disabled;
     });
+    if (this.selectedDefinition()?.id === "measure-log" && this.addPairButton) {
+      this.addPairButton.disabled = disabled || !this.checkedValues("pair_items").length;
+    }
   }
 }

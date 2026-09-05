@@ -289,6 +289,10 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
 
         editor.controls.channels.find((input) => input.value === "1").checked = true;
         editor.controls.channels.find((input) => input.value === "3").checked = true;
+        for (const input of editor.controls.pair_items) {
+          input.checked = true;
+          input.dispatch("change");
+        }
         editor.addPairButton.dispatch("click");
         editor.addPairButton.dispatch("click");
         editor.pairRows[1].source.value = "3";
@@ -360,17 +364,35 @@ def test_workflow_pair_measurements_are_required_only_with_pair_rows() -> None:
         editor.schedulePresentation();
         await settle();
         editor.controls.count.value = "1";
-        for (const input of editor.controls.pair_items) input.checked = false;
         assert.equal(editor.pairRows.length, 0);
-        assert.equal(editor.pairItemsSection.hidden, true);
+        assert.deepEqual(editor.checkedValues("pair_items"), []);
+        assert.equal(editor.pairItemsSection.hidden, false);
+        assert.equal(editor.addPairButton.disabled, true);
+        assert.deepEqual(editor.container.children.map((section) => section.children[0].textContent), [
+          "workflow.editor.channels", "workflow.editor.measurements",
+          "workflow.editor.pairMeasurements", "workflow.editor.pairs", "workflow.editor.runLimits",
+        ]);
         assert.equal(editor.checkedValues("items").length > 0, true);
+        editor.controls.channels[0].checked = true;
 
         await editor.submit();
         assert.equal(submissions.length, 1);
         assert.equal(submissions[0].parameters.pair_items, "phase");
+        assert.equal(submissions[0].parameters.channels, "1");
+        assert.equal(submissions[0].parameters.items, "vpp,frequency");
+        assert.equal(editor.addPairButton.disabled, true);
 
+        editor.controls.pair_items[0].checked = true;
+        editor.controls.pair_items[0].dispatch("change");
+        assert.equal(editor.addPairButton.disabled, false);
+        assert.equal(editor.pairRows.length, 0);
         editor.addPairButton.dispatch("click");
+        assert.equal(editor.pairRows.length, 1);
         assert.equal(editor.pairItemsSection.hidden, false);
+        editor.controls.pair_items[0].checked = false;
+        editor.controls.pair_items[0].dispatch("change");
+        assert.equal(editor.addPairButton.disabled, true);
+        assert.equal(editor.pairRows.length, 1);
         await editor.submit();
         assert.equal(submissions.length, 1);
         assert.equal(
@@ -389,7 +411,7 @@ def test_workflow_pair_measurements_are_required_only_with_pair_rows() -> None:
 
         editor.pairRows[0].remove.dispatch("click");
         assert.equal(editor.pairRows.length, 0);
-        assert.equal(editor.pairItemsSection.hidden, true);
+        assert.equal(editor.pairItemsSection.hidden, false);
         await editor.submit();
         assert.equal(submissions.length, 2);
         assert.equal(submissions[1].parameters.pair_items, "phase");
