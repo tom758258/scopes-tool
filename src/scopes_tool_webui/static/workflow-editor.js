@@ -300,6 +300,9 @@ export class WorkflowEditor {
       row.remove();
       this.pairRows = this.pairRows.filter((item) => item !== entry);
       this.captureDraft();
+      if (this.pairRows.length === 0) {
+        this.controls.pair_items?.[0]?.setCustomValidity?.("");
+      }
       this.updatePairItemsVisibility();
     });
     source.input.addEventListener("change", () => this.captureDraft());

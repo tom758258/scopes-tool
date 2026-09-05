@@ -418,6 +418,7 @@ def test_workflow_pair_measurements_are_required_only_with_pair_rows() -> None:
 
         editor.pairRows[0].remove.dispatch("click");
         assert.equal(editor.pairRows.length, 0);
+        assert.equal(editor.controls.pair_items[0].customValidity, "");
         assert.equal(editor.pairItemsSection.hidden, false);
         editor.controls.pair_items[0].checked = false;
         editor.controls.pair_items[0].dispatch("change");
