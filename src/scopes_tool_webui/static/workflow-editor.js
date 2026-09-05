@@ -249,7 +249,10 @@ export class WorkflowEditor {
       this.controls[name].push(input);
       input.addEventListener("change", () => {
         this.captureDraft();
-        if (name === "pair_items") this.applyBusyState();
+        if (name === "pair_items") {
+          this.controls.pair_items?.[0]?.setCustomValidity?.("");
+          this.applyBusyState();
+        }
       });
     }
     section.append(choices);
@@ -272,6 +275,7 @@ export class WorkflowEditor {
       const reference = channels.find((channel) => channel !== source) || source;
       this.appendPairRow(channels, { source, reference });
       this.captureDraft();
+      this.controls.pair_items?.[0]?.setCustomValidity?.("");
       this.updatePairItemsVisibility();
       this.applyBusyState();
     });
@@ -614,6 +618,17 @@ export class WorkflowEditor {
     if (draft.pairs.length && !draft.pair_items.length) {
       pairItemControl?.setCustomValidity?.(
         translate("workflow.editor.pairMeasurementRequired"),
+      );
+      pairItemControl?.reportValidity?.();
+      return null;
+    }
+    if (
+      definition.id === "measure-log"
+      && !draft.pairs.length
+      && draft.pair_items.length
+    ) {
+      pairItemControl?.setCustomValidity?.(
+        translate("workflow.editor.channelPairRequired"),
       );
       pairItemControl?.reportValidity?.();
       return null;
