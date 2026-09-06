@@ -13,6 +13,7 @@ import {
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { renderInstrumentSummary } from "/static/live-data.js";
+import { AcquisitionEditor } from "/static/acquisition-editor.js";
 import { AnnotationEditor } from "/static/annotation-editor.js";
 import { CursorEditor } from "/static/cursor-editor.js";
 import { DemoEditor } from "/static/demo-editor.js";
@@ -77,6 +78,7 @@ const elements = {
   advancedToggle: document.querySelector("#advanced-command-toggle"),
   form: document.querySelector("#command-form"),
   formHeading: document.querySelector("#form-heading"),
+  acquisitionEditor: document.querySelector("#acquisition-editor"),
   referenceEditor: document.querySelector("#reference-editor"),
   saveExportEditor: document.querySelector("#save-export-editor"),
   serialEditor: document.querySelector("#serial-editor"),
@@ -129,6 +131,7 @@ const state = createInitialState();
 let context = state.executionContext;
 let catalog;
 let commandForm;
+let acquisitionEditor;
 let genericFormRevision = 0;
 let referenceEditor;
 let saveExportEditor;
@@ -163,6 +166,7 @@ const INTERNAL_COMMANDS = {
 };
 
 const EDITOR_RENDERERS = {
+  acquisition: () => acquisitionEditor,
   reference: () => referenceEditor,
   "save-export": () => saveExportEditor,
   serial: () => serialEditor,
@@ -208,6 +212,17 @@ async function initialize() {
     list: elements.commandList,
   }, () => syncCommandSelection());
   commandForm = new CommandForm(elements.form, catalog);
+  acquisitionEditor = new AcquisitionEditor(elements.acquisitionEditor, catalog, {
+    executeCommand,
+    isExecutionBusy,
+    isCommandAvailable: commandAvailable,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
   referenceEditor = new ReferenceEditor(elements.referenceEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
@@ -824,6 +839,7 @@ document.addEventListener("localechange", () => {
   workflowEditor?.rerender();
   sequenceEditor?.rerender();
   measurementEditor?.rerender();
+  acquisitionEditor?.rerender();
   cursorEditor?.rerender();
   annotationEditor?.rerender();
   wgenEditor?.rerender();
@@ -858,6 +874,7 @@ function syncCommandSelection(draft = null) {
   elements.workflowEditor.hidden = editorKind !== "workflow";
   if (elements.sequenceEditor) elements.sequenceEditor.hidden = editorKind !== "sequence";
   elements.measurementEditor.hidden = editorKind !== "measurement";
+  if (elements.acquisitionEditor) elements.acquisitionEditor.hidden = editorKind !== "acquisition";
   elements.cursorEditor.hidden = editorKind !== "cursor";
   elements.annotationEditor.hidden = editorKind !== "annotation";
   elements.wgenEditor.hidden = editorKind !== "wgen";
@@ -926,6 +943,7 @@ function updateAvailability() {
   workflowEditor?.applyBusyState();
   sequenceEditor?.applyBusyState();
   measurementEditor?.applyBusyState();
+  acquisitionEditor?.applyBusyState();
   if (typeof diagnosticsEditor !== "undefined") diagnosticsEditor?.applyBusyState();
   deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
   updateBasicAvailability();
@@ -979,6 +997,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "workflow") workflowEditor?.schedulePresentation();
   if (editorKind === "sequence") sequenceEditor?.schedulePresentation();
   if (editorKind === "measurement") measurementEditor?.schedulePresentation();
+  if (editorKind === "acquisition") acquisitionEditor?.schedulePresentation();
   if (editorKind === "cursor") cursorEditor?.schedulePresentation();
   if (editorKind === "annotation") annotationEditor?.schedulePresentation();
   if (editorKind === "wgen") wgenEditor?.schedulePresentation();

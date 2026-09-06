@@ -161,6 +161,7 @@ COMMANDS = (
         "id": "run",
         "category": "Acquisition",
         "label": "Run",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
     },
@@ -168,6 +169,7 @@ COMMANDS = (
         "id": "single",
         "category": "Acquisition",
         "label": "Single",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
     },
@@ -175,6 +177,7 @@ COMMANDS = (
         "id": "single-wait",
         "category": "Acquisition",
         "label": "Single + Wait",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (
             {
@@ -204,6 +207,7 @@ COMMANDS = (
         "id": "stop-acquisition",
         "category": "Acquisition",
         "label": "Stop",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
     },
@@ -211,45 +215,14 @@ COMMANDS = (
         "id": "force-trigger",
         "category": "Acquisition",
         "label": "Force Trigger",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
     },
     {
-        "id": "autoscale",
-        "category": "Acquisition",
-        "label": "Autoscale",
-        "description": "Run oscilloscope autoscale; may adjust channel scaling, timebase, and trigger setup.",
-        "modes": ("live", "simulate"),
-        "fields": (
-            {
-                "name": "channels",
-                "type": "multi-enum",
-                "options": (1, 2, 3, 4),
-                "serialize": "csv",
-                "option_label": "channel",
-                "label_key": "autoscale.channels",
-                "help_key": "autoscale.channels",
-            },
-            {
-                "name": "acquire_mode",
-                "type": "enum",
-                "options": ("normal", "current"),
-                "label_key": "autoscale.acquire_mode",
-                "help_key": "autoscale.acquire_mode",
-            },
-            {
-                "name": "channels_mode",
-                "type": "enum",
-                "options": ("all", "displayed"),
-                "label_key": "autoscale.channels_mode",
-                "help_key": "autoscale.channels_mode",
-            },
-        ),
-    },
-    {
         "id": "acquisition",
         "category": "Acquisition",
-        "label": "Acquisition",
+        "label": "Acquisition Settings",
         "modes": ("live", "simulate", "dry-run"),
         "fields": (
             {
@@ -284,6 +257,38 @@ COMMANDS = (
                 "maximum": 65536,
                 "visible_if": [{"field": "type", "equals": "average"}],
                 "help_key": "acquisition.average_count",
+            },
+        ),
+    },
+    {
+        "id": "autoscale",
+        "category": "Acquisition",
+        "label": "Autoscale",
+        "description": "Run oscilloscope autoscale; may adjust channel scaling, timebase, and trigger setup.",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {
+                "name": "channels",
+                "type": "multi-enum",
+                "options": (1, 2, 3, 4),
+                "serialize": "csv",
+                "option_label": "channel",
+                "label_key": "autoscale.channels",
+                "help_key": "autoscale.channels",
+            },
+            {
+                "name": "acquire_mode",
+                "type": "enum",
+                "options": ("normal", "current"),
+                "label_key": "autoscale.acquire_mode",
+                "help_key": "autoscale.acquire_mode",
+            },
+            {
+                "name": "channels_mode",
+                "type": "enum",
+                "options": ("all", "displayed"),
+                "label_key": "autoscale.channels_mode",
+                "help_key": "autoscale.channels_mode",
             },
         ),
     },
@@ -1948,6 +1953,15 @@ def command_catalog() -> list[dict[str, Any]]:
                 "fields": (),
             },
             {
+                "id": "acquisition-control",
+                "category": "Acquisition",
+                "label": "Acquisition Control",
+                "editor": "acquisition",
+                "presentation_only": True,
+                "modes": ("live", "simulate"),
+                "fields": (),
+            },
+            {
                 "id": "reference-waveform",
                 "category": "Reference",
                 "label": "Reference waveform",
@@ -1985,6 +1999,7 @@ def command_catalog() -> list[dict[str, Any]]:
         )
     )
     for presentation_id, first_underlying_id in (
+        ("acquisition-control", "run"),
         ("reference-waveform", "reference-save"),
         ("save-export", "save-pwd"),
     ):

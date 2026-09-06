@@ -109,8 +109,11 @@ readback, rollback, or browser-side SCPI behavior for this operation.
 The Command workbench exposes:
 
 - System Information is available as a read-only presentation view under the System category in the Command workbench. Its Refresh action runs the hidden `system-information-snapshot` command; the `identify` backend remains responsible for live resource/model detection and capability gating.
-- Acquisition: `run`, `single`, `single-wait`, `stop-acquisition`,
-  `force-trigger`, `autoscale`, `acquisition`
+- Acquisition: Acquisition Control combines `run`, `single`,
+  `single-wait`, `stop-acquisition`, and `force-trigger` in one workspace
+  using the existing commands and validation, Acquisition Settings is the
+  existing `acquisition` query/apply command, and `autoscale` remains
+  independent
 - Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`
 - Channel: `channel-display`, `channel-scale`, `channel-summary`,
   `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,

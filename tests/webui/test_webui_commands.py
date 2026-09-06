@@ -138,6 +138,40 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     assert item["options"] == list(SUPPORTED_MEASUREMENT_ITEMS)
 
 
+def test_acquisition_browser_shows_composite_control_settings_and_autoscale() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/commands")
+
+    assert response.status_code == 200
+    entries = response.json()
+    visible_acquisition = [
+        entry["id"]
+        for entry in entries
+        if entry["category"] == "Acquisition" and not entry.get("browser_hidden")
+    ]
+    assert visible_acquisition == ["acquisition-control", "acquisition", "autoscale"]
+    hidden_acquisition = {
+        entry["id"]
+        for entry in entries
+        if entry["category"] == "Acquisition" and entry.get("browser_hidden")
+    }
+    assert hidden_acquisition == {
+        "run",
+        "single",
+        "single-wait",
+        "stop-acquisition",
+        "force-trigger",
+    }
+    control = next(entry for entry in entries if entry["id"] == "acquisition-control")
+    assert control["editor"] == "acquisition"
+    assert control["presentation_only"] is True
+    assert control["modes"] == ["live", "simulate"]
+    assert control["fields"] == []
+    acquisition = next(entry for entry in entries if entry["id"] == "acquisition")
+    assert "editor" not in acquisition
+
+
 def test_diagnostics_catalog_and_validation_contract() -> None:
     client = TestClient(app)
     commands = {entry["id"]: entry for entry in client.get("/api/commands").json()}
