@@ -321,6 +321,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .trigger-editor-section { display: grid; gap: 8px; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--line); }
 .trigger-editor-section:first-child { margin-top: 0; }
 .trigger-editor-section .command-form { padding-top: 0; }
+.acquisition-editor .command-form .field-boolean { align-content: end; }
 .trigger-editor-action { justify-self: start; min-height: var(--control-h); }
 .reference-editor-control { display: grid; gap: 8px; }
 .reference-editor-control + .reference-editor-control { padding-top: 10px; margin-top: 4px; border-top: 1px dashed var(--line); }
