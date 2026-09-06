@@ -23,7 +23,7 @@ export class ReferenceEditor {
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
     this.refreshButton.className = "secondary reference-editor-refresh";
-    this.refreshButton.textContent = translate("actions.refresh");
+    this.refreshButton.textContent = translate("reference.editor.read");
     this.refreshButton.hidden = true;
     this.refreshButton.addEventListener("click", () => void this.refresh());
     this.hooks.headerActions?.append(this.refreshButton);

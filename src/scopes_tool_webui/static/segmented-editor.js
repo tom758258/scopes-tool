@@ -42,7 +42,7 @@ export class SegmentedEditor {
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
     this.refreshButton.className = "secondary";
-    this.refreshButton.textContent = translate("actions.refresh");
+    this.refreshButton.textContent = translate("segmented.editor.read");
     this.refreshButton.addEventListener("click", () => void this.refresh());
     if (this.hooks.headerActions) {
       this.refreshButton.hidden = true;

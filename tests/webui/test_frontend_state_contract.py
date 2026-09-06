@@ -2434,6 +2434,36 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert 'elements.cancel.classList.add("hidden");' in source
 
 
+def test_shared_header_read_labels_use_dedicated_keys() -> None:
+    app_source = read_static("app.js")
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+
+    header_actions = app_source.split("function syncWorkspaceHeaderActions(editorKind)", 1)[1].split(
+        "function syncEditorPresentation(editorKind)", 1,
+    )[0]
+    assert '"system.readInformation"' in header_actions
+    assert '"actions.readSettings"' in header_actions
+    assert "elements.refresh.textContent" in header_actions
+    for key in (
+        "actions.readSettings",
+        "system.readInformation",
+        "live_data.read",
+        "trigger.editor.read",
+        "search.editor.read",
+        "segmented.editor.read",
+        "cursor.editor.read",
+        "annotation.editor.read",
+        "wgen.editor.read",
+        "demo.editor.read",
+        "reference.editor.read",
+        "measurement.window.read",
+        "measurement.statistics.read",
+    ):
+        assert f'"{key}":' in english, key
+        assert f'"{key}":' in chinese, key
+
+
 def test_system_information_is_a_read_only_workspace_view() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
@@ -4366,6 +4396,7 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         const annotationEditor = {{}};
         const wgenEditor = {{}};
         const demoEditor = {{}};
+        const translate = (key) => key;
         {sync_header}
 
         syncWorkspaceHeaderActions("save-export");

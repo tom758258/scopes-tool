@@ -963,6 +963,9 @@ function syncWorkspaceHeaderActions(editorKind) {
   elements.refresh.hidden = systemInformationSelected
     ? false
     : !selected || editorKind !== null || !commandForm?.isSettingEditor();
+  elements.refresh.textContent = translate(
+    systemInformationSelected ? "system.readInformation" : "actions.readSettings",
+  );
   elements.execute.hidden = systemInformationSelected
     || !selected || (editorKind !== null && !measurementRun);
   if (referenceEditor?.refreshButton) {

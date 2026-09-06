@@ -156,7 +156,7 @@ export class MeasurementEditor {
     this.controls.windowRefresh = document.createElement("button");
     this.controls.windowRefresh.type = "button";
     this.controls.windowRefresh.className = "secondary";
-    this.controls.windowRefresh.textContent = translate("actions.refresh");
+    this.controls.windowRefresh.textContent = translate("measurement.window.read");
     this.controls.windowRefresh.addEventListener("click", () => void this.refreshWindow());
     head.append(heading, this.controls.windowRefresh);
 
@@ -648,7 +648,7 @@ export class MeasurementEditor {
     actions.className = "measurement-front-panel-buttons";
     for (const [name, key, className, handler] of [
       ["statisticsApply", "actions.apply", "primary", () => this.applyStatistics()],
-      ["statisticsRefresh", "actions.refresh", "secondary", () => this.refreshStatistics()],
+      ["statisticsRefresh", "measurement.statistics.read", "secondary", () => this.refreshStatistics()],
       ["statisticsReset", "measurement.statistics.reset", "secondary", () => this.runStatisticsAction("reset")],
     ]) {
       const button = document.createElement("button");

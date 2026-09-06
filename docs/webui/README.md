@@ -108,7 +108,7 @@ readback, rollback, or browser-side SCPI behavior for this operation.
 
 The Command workbench exposes:
 
-- System Information is available as a read-only presentation view under the System category in the Command workbench. Its Refresh action runs the hidden `system-information-snapshot` command; the `identify` backend remains responsible for live resource/model detection and capability gating.
+- System Information is available as a read-only presentation view under the System category in the Command workbench. Its Read system information action runs the hidden `system-information-snapshot` command; the `identify` backend remains responsible for live resource/model detection and capability gating.
 - Acquisition: Acquisition Control combines `run`, `single`,
   `single-wait`, `stop-acquisition`, and `force-trigger` in one workspace
   using the existing commands and validation, Acquisition Settings is the
@@ -134,8 +134,8 @@ The Command workbench exposes:
   On capability-supported 3000X and 4000X models, the same workspace also
   exposes Advanced Measurement Statistics with Results Mode fixed to All:
   independent instrument statistics display, Infinite or 2..2000 maximum
-  count, relative standard deviation, reset, explicit refresh, and the
-  instrument-accumulated statistics table. Refresh is read-only, and Apply is
+  count, relative standard deviation, reset, explicit Read statistics, and the
+  instrument-accumulated statistics table. Reading statistics is read-only, and Apply is
   available after a successful readback. It does not poll automatically or
   compute statistics in the browser. The 2000X profile does not expose this
   section.
@@ -178,19 +178,19 @@ The Command workbench exposes:
   Mode, Serial Display, UART/I2C/SPI/CAN configuration and triggers, and a
   protocol-independent Serial Lister section (display, reference, and
   host-side export), plus `serial-query`
-- Segmented Memory: a dedicated state view for explicit Refresh, Enter, Exit,
+- Segmented Memory: a dedicated state view for explicit Read current state, Enter, Exit,
   segment selection, and current Time Tag readback over `segmented-memory`,
   plus `segmented-capture`
-- Cursor: a dedicated Cursor editor for explicit Refresh, manual cursor
+- Cursor: a dedicated Cursor editor for explicit Read cursor state, manual cursor
   configuration over `cursor` (query, set, off), and current state readback
-- Annotation: a dedicated Annotation editor for explicit Refresh, annotation
+- Annotation: a dedicated Annotation editor for explicit Read annotation settings, annotation
   text/color/background editing, on/off/clear actions, and current state
   readback over `annotation`, with slot and position controls projected from
   Core capabilities
-- WGEN: a dedicated Waveform Generator editor for explicit Refresh through the
+- WGEN: a dedicated Waveform Generator editor for explicit Read generator settings through the
   aggregate `wgen-query` and independent output, function, frequency,
   amplitude, offset, and load settings; settings never switch the output on
-- DEMO: a dedicated Demo Signals editor for explicit Refresh through the
+- DEMO: a dedicated Demo Signals editor for explicit Read demo settings through the
   aggregate `demo-query` and independent output, function, and phase settings;
   function options are projected from the model's `demo_functions` capability
   and settings never switch the output on
@@ -223,7 +223,7 @@ existing `reference-save` command, then `reference-display` only after the save
 completes, and finally refreshes display and label state with `reference-query`.
 The shared reference waveform selector is visible before Live identity is
 available and is then limited by the detected model's projected capabilities.
-Selection is passive; explicit Refresh reads only display and label state for
+Selection is passive; the Read reference state action reads only display and label state for
 the selected waveform. Display, Label, and Clear remain independent actions
 through the normal foreground execution path.
 
@@ -278,16 +278,16 @@ coupling, and reject together; selecting Runt shows only Runt), and the group
 label above the sections names the group being edited. The editor presents the
 group's existing settings for editing; it does not report or change which
 trigger type the instrument currently uses. Selection and query-selector
-changes are presentation-only. Explicit Refresh reads only the active group's
+changes are presentation-only. The Read trigger settings action reads only the active group's
 setting commands, and a successful Apply is followed by an active-group
 readback so sibling forms do not go stale. Editor reads and applies are
-serialized; Apply and Refresh stay
+serialized; The Apply and Read trigger settings actions stay
 disabled until the current readback or write finishes. Each child command
 keeps its own metadata-driven form and its own independent Apply over the
 existing WebUI command; there is no Apply All, no transaction, and no merged
 payload. Informational commands such as `external-trigger-settings` keep their
 explicit Read action. Switching commands or groups discards unapplied edits
-without confirmation, and manual Refresh re-reads the active group while
+without confirmation, and Read trigger settings re-reads the active group while
 keeping unapplied edits. Model capability presentation continues to come from
 the shared Core capability projection; unsupported commands stay disabled in
 the Command Browser and are omitted from the group view.
@@ -296,7 +296,7 @@ Selecting a Search command opens the dedicated Search editor instead of a
 plain command form. The Command Browser groups remain Basic, Event, and
 Serial; the editor adds no second tab layer. Basic shows Search State and
 Search Mode as independent read-edit-Apply settings plus a read-only Search
-Count that is refreshed with the group. Explicit Refresh in Basic reads only
+Count that is refreshed with the group. The Read search settings action in Basic reads only
 these three commands. Event exposes capability-gated event navigation: models
 without Search event navigation show an unavailable note instead of controls,
 a reported current event of 0 displays verbatim as readback, and Apply keeps
@@ -306,7 +306,7 @@ a Bus selector projected from the model's serial bus count and a Protocol
 selector whose UART/I2C/SPI/CAN availability comes from the existing model
 projection; the clicked command chooses the initial protocol. Switching Bus or
 Protocol discards unapplied edits and changes presentation without querying;
-explicit Refresh reads only the active protocol. A Serial Search Apply submits
+explicit Read serial settings reads only the active protocol. A Serial Search Apply submits
 exactly one existing `serial-search-*`
 write with the selected bus and the metadata-driven criteria form — no separate
 `search-state`/`search-mode` writes and no Serial decode mode recheck — then
@@ -332,7 +332,7 @@ way as configuration applies. Switching Bus asks for confirmation before
 discarding any unapplied Display/Configuration/Trigger edits, and applying a
 different protocol asks before discarding old-protocol Configuration or
 Trigger edits. Bus and Protocol navigation does not query the instrument;
-explicit Refresh performs the existing mode, display, active-protocol, trigger,
+explicit Read serial settings performs the existing mode, display, active-protocol, trigger,
 and lister read sequence. A configuration Apply first re-checks `serial-mode` and skips
 the write when the instrument no longer reports the expected protocol. The
 Serial Lister section is independent of protocol and Bus: its state is
@@ -345,16 +345,16 @@ Controls and fails rather than overwriting an existing file with that name.
 Selecting a Cursor, Annotation, WGEN, or DEMO command opens the matching dedicated
 editor instead of a plain command form. The Command Browser remains the only
 navigation; the editors add no second tab layer. Cursor offers explicit
-Refresh, manual cursor configuration (source channel, X1/X2, optional Y1/Y2),
+Read cursor state, manual cursor configuration (source channel, X1/X2, optional Y1/Y2),
 Off, and current state readback (mode, positions, deltas, and DYDX where the
-instrument reports it). Annotation offers explicit Refresh, text/color/
+instrument reports it). Annotation offers explicit Read annotation settings, text/color/
 background editing, on/off/clear actions, and current state readback; the slot
 selector is hidden on single-slot models and X/Y position controls appear only
-where Core capabilities report position support. WGEN Refresh reads the whole
+where Core capabilities report position support. The Read generator settings action reads the whole
 generator state through the single aggregate `wgen-query`; output, function,
 frequency, amplitude, offset, and load each keep an independent Apply over
 their existing command, and applying a setting never switches the output on.
-DEMO Refresh reads the whole DEMO state through the single aggregate
+The Read demo settings action reads the whole DEMO state through the single aggregate
 `demo-query`; output, function, and phase each keep an independent Apply over
 their existing command, and applying a setting never switches the output on.
 Unsupported commands stay disabled in the Command Browser with the existing
@@ -405,8 +405,8 @@ visibility needed by their existing Core parameter semantics.
 
 Commands that expose the existing Core `query` / `set` contract as an
 instrument setting use a read-edit-Apply workflow in the browser. Command
-selection and presentation-only navigation are passive. Refresh explicitly
-reads current state, Apply submits the existing set action, and the set result's
+selection and presentation-only navigation are passive. The Read current settings action reads the current setting values; Apply submits
+the existing set action, and the set result's
 Core readback refreshes the editor. Unsaved field edits are not overwritten by
 later readback. Information and diagnostic commands
 remain explicit Read or Run actions.
@@ -446,13 +446,13 @@ deterministic simulator; Live opens the explicit resource through Core.
 
 Live Data keeps the existing WebUI, command, and Live status indicators and
 adds a small read-only summary of analog channels, horizontal settings, and
-the common trigger state. **Refresh** is an explicit foreground action that
+the common trigger state. **Read live data** is an explicit foreground action that
 uses the same Core-backed job admission as other commands. Live requires a
 selected resource with confirmed identity, Simulate uses the Core simulator,
 and Dry-run reports the summary as unavailable.
 
 The summary is cleared when its mode, resource, detected model, or planning
-model changes. A failed refresh leaves the previous successful summary visible
+model changes. A failed Read live data action leaves the previous successful summary visible
 for the same context. Live Data does not poll automatically or stream waveform
 data.
 
@@ -539,7 +539,7 @@ captures, finite workflows, and structured information commands that have a
 clear browser interaction. Resource discovery uses the hidden
 `list-resources` helper. System Information is a read-only presentation view
 under the System category in the Command workbench. It has no standalone
-main-page section; its Refresh action runs the hidden
+main-page section; its Read system information action runs the hidden
 `system-information-snapshot` command. The underlying `identify` backend
 remains responsible for resource/model detection and capability gating.
 

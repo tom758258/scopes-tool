@@ -46,7 +46,7 @@ export class WgenEditor {
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
     this.refreshButton.className = "secondary trigger-editor-refresh";
-    this.refreshButton.textContent = translate("actions.refresh");
+    this.refreshButton.textContent = translate("wgen.editor.read");
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
