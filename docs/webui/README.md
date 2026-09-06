@@ -117,7 +117,7 @@ The Command workbench exposes:
   `channel-bandwidth-limit`, `channel-impedance`, `channel-invert`,
   `channel-range`, `channel-units`, `channel-vernier`, `channel-probe-skew`
 - Display: `display-label`, `display-clear`, `display-persistence`,
-  `display-intensity`, `display-vectors`
+  `display-intensity`
 - Measurement: Single Measurement combines `measure` with the persistent
   `measure-window` setting. Multiple Measurements runs selected measurements across
   model-projected analog channels and optional channel pairs, with Dry-run

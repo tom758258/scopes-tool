@@ -1493,6 +1493,11 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
     } <= command_ids
     assert "measure-source" not in command_ids
     assert "front-panel-measurements" in command_ids
+    display_vectors = next(
+        entry for entry in response.json()
+        if entry["id"] == "display-vectors"
+    )
+    assert display_vectors["browser_hidden"] is True
     helpers = {
         entry["id"]: entry for entry in response.json()
         if entry["id"] in {

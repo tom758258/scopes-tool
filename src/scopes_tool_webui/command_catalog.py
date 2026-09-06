@@ -565,6 +565,7 @@ COMMANDS = (
         "id": "display-vectors",
         "category": "Display",
         "label": "Display vectors",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
