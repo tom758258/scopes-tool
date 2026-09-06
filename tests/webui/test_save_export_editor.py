@@ -1097,3 +1097,56 @@ def test_save_export_editor_setup_recall_confirms_before_executing() -> None:
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_save_export_status_locale_keys_are_unique() -> None:
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+
+    keys = (
+        "save-export.editor.readingCurrent",
+        "save-export.editor.currentLoaded",
+        "save-export.editor.currentReadFailed",
+        "save-export.editor.currentValueUnavailable",
+    )
+    for key in keys:
+        assert english.count(f'"{key}":') == 1, key
+        assert chinese.count(f'"{key}":') == 1, key
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_non_read_failure_does_not_present_read_failure_status() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const failingApply = buildEditor((command) => ({
+          status: command === "save-image-format" ? "failed" : "completed",
+          job_id: command,
+        }));
+        failingApply.editor.mode = "image";
+        failingApply.editor.rebuildSections("ctx|save-export:image");
+        failingApply.editor.pathEntry.form.valuesResult = { action: "set", path: "\\usb\\" };
+        failingApply.editor.pathEntry.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
+        const applyFormat = failingApply.editor.entries.find((entry) => entry.id === "save-image-format");
+        applyFormat.form.valuesResult = { action: "set", format: "PNG" };
+        applyFormat.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
+        failingApply.editor.filenameEntry.form.valuesResult = { filename: "screen" };
+        failingApply.editor.readStatus.textContent = "failed:stale-read";
+        await failingApply.editor.submitCurrentMode("save-image");
+        assert.deepEqual(failingApply.submitted.map((entry) => entry.command), ["save-pwd", "save-image-format"]);
+        assert.ok(!failingApply.editor.readStatus.textContent.startsWith("failed:"));
+
+        const failingSave = buildEditor((command) => ({
+          status: command === "save-image" ? "failed" : "completed",
+          job_id: command,
+        }));
+        failingSave.editor.mode = "image";
+        failingSave.editor.rebuildSections("ctx|save-export:image");
+        failingSave.editor.filenameEntry.form.valuesResult = { filename: "screen" };
+        failingSave.editor.readStatus.textContent = "failed:stale-read";
+        await failingSave.editor.submitCurrentMode("save-image");
+        assert.ok(failingSave.submitted.some((entry) => entry.command === "save-image"));
+        assert.ok(!failingSave.editor.readStatus.textContent.startsWith("failed:"));
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout

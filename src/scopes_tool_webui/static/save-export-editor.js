@@ -648,7 +648,8 @@ export class SaveExportEditor {
       for (const item of executionOrder) {
         const job = await this.hooks.executeCommand(item.id, item.values, { intent: item.intent });
         if (job?.status !== "completed") {
-          this.setReadStatus("failed", { group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"), failed: 1, total: 1 });
+          this.readStatus.className = "muted compact-note";
+          this.readStatus.textContent = "";
           return;
         }
         item.form.clearDirty();
@@ -656,7 +657,8 @@ export class SaveExportEditor {
       }
       const saveJob = await this.hooks.executeCommand(saveCommandId, saveValues, { intent: "command" });
       if (saveJob?.status !== "completed") {
-        this.setReadStatus("failed", { group: translate(this.mode === "image" ? "save-export.editor.mode.image" : "save-export.editor.mode.waveform"), failed: 1, total: 1 });
+        this.readStatus.className = "muted compact-note";
+        this.readStatus.textContent = "";
         return;
       }
       this.filenameEntry.form.clearDirty();
