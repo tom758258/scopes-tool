@@ -1,4 +1,3 @@
-import { translate } from "/static/i18n.js";
 import { CommandForm } from "/static/command-form.js";
 
 const INSTANT_CONTROL_COMMANDS = ["run", "single", "stop-acquisition", "force-trigger"];

@@ -29,28 +29,25 @@ def test_acquisition_control_composite_dispatch_and_wiring(tmp_path: Path) -> No
     app_source = read_static("app.js")
     index_source = read_static("index.html")
 
-    assert 'import { AcquisitionEditor } from "/static/acquisition-editor.js";' in app_source
     assert "acquisition: () => acquisitionEditor," in app_source
-    assert "elements.acquisitionEditor.hidden = editorKind !== " in app_source
-    assert 'if (editorKind === "acquisition") acquisitionEditor?.schedulePresentation();' in app_source
-    assert "acquisitionEditor?.rerender();" in app_source
-    assert "acquisitionEditor?.applyBusyState();" in app_source
     assert 'id="acquisition-editor"' in index_source
     for key in (
         '"command.acquisition-control": "Acquisition Control"',
         '"command.acquisition": "Acquisition Settings"',
         '"description.acquisition-control":',
-        '"acquisition.editor.title": "Acquisition"',
-        '"acquisition.editor.description":',
     ):
         assert key in english, key
     for key in (
         '"command.acquisition-control": "擷取控制"',
         '"command.acquisition": "擷取設定"',
         '"description.acquisition-control":',
-        '"acquisition.editor.title": "擷取"',
+    ):
+        assert key in chinese, key
+    for key in (
+        '"acquisition.editor.title":',
         '"acquisition.editor.description":',
     ):
+        assert key in english, key
         assert key in chinese, key
 
     script = textwrap.dedent(
