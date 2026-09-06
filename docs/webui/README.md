@@ -281,7 +281,7 @@ trigger type the instrument currently uses. Selection and query-selector
 changes are presentation-only. The Read trigger settings action reads only the active group's
 setting commands, and a successful Apply is followed by an active-group
 readback so sibling forms do not go stale. Editor reads and applies are
-serialized; The Apply and Read trigger settings actions stay
+serialized; the Apply and Read trigger settings actions stay
 disabled until the current readback or write finishes. Each child command
 keeps its own metadata-driven form and its own independent Apply over the
 existing WebUI command; there is no Apply All, no transaction, and no merged

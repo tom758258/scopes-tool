@@ -1365,7 +1365,7 @@ export const en = {
   "save-export.editor.storageNote": "Saves are written to instrument-side storage. They do not create WebUI download artifacts.",
   "save-export.editor.readingCurrent": "Reading current {{group}} settings... ({{current}} of {{total}})",
   "save-export.editor.currentLoaded": "Current {{group}} settings loaded.",
-  "save-export.editor.currentReadFailed": "Could not read {{failed}} of {{total}} {{group}} settings. You can refresh again or set new values manually.",
+  "save-export.editor.currentReadFailed": "Could not read {{failed}} of {{total}} {{group}} settings. You can reload the instrument settings or set new values manually.",
   "save-export.editor.currentValueUnavailable": "Current value could not be read.",
   "enum.reference-waveform": "Reference waveform {{value}}",
   "workflow.editor.title": "Workflow editor",
