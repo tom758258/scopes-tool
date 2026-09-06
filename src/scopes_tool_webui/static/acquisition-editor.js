@@ -103,6 +103,7 @@ export class AcquisitionEditor {
     const command = this.definition("single-wait");
     const section = this.buildSection(this.catalog.commandLabel(command));
     const formContainer = document.createElement("div");
+    formContainer.className = "command-form";
     const button = document.createElement("button");
     button.type = "button";
     button.className = "secondary trigger-editor-action";

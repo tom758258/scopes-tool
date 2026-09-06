@@ -120,6 +120,7 @@ def test_acquisition_control_composite_dispatch_and_wiring(tmp_path: Path) -> No
           ["run", "single", "stop-acquisition", "force-trigger"],
         );
         assert.equal(editor.singleWaitForm.command.id, "single-wait");
+        assert.equal(editor.singleWaitForm.container.className, "command-form");
 
         await editor.controlButtons[0].button.handler();
         assert.deepEqual(calls[0], ["run", {}, undefined]);
