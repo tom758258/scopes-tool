@@ -115,6 +115,7 @@ export class ReferenceEditor {
 
   buildActionSections() {
     this.entries = [];
+    this.labelVisibility = null;
     this.actionsHost.replaceChildren();
     const save = this.buildActionEntry("reference-save", true);
     if (save) {
@@ -140,6 +141,11 @@ export class ReferenceEditor {
       this.entries.push(action.entry);
     }
     if (management.children.length) this.actionsHost.append(management);
+    const visibility = this.buildLabelVisibilitySection();
+    if (visibility) {
+      this.actionsHost.append(visibility.section);
+      this.labelVisibility = visibility;
+    }
   }
 
   appendActionHeading(container, command) {
@@ -147,6 +153,36 @@ export class ReferenceEditor {
     heading.className = "trigger-editor-heading";
     heading.textContent = this.catalog.commandLabel(command);
     container.append(heading);
+  }
+
+  buildLabelVisibilitySection() {
+    const command = this.definition("display-label");
+    if (!command || !this.catalog.supported(command)) return null;
+    const section = document.createElement("section");
+    section.className = "trigger-editor-section";
+    const heading = document.createElement("strong");
+    heading.className = "trigger-editor-heading";
+    heading.textContent = translate("reference.editor.labelVisibility");
+    const formHost = document.createElement("div");
+    const form = new CommandForm(formHost, this.catalog);
+    form.render(command);
+    const note = document.createElement("p");
+    note.className = "muted compact-note";
+    note.textContent = translate("reference.editor.labelVisibilityShared");
+    const hint = document.createElement("p");
+    hint.className = "muted compact-note";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary trigger-editor-action";
+    button.textContent = translate(
+      command.presentation.kind === "setting"
+        ? "actions.apply"
+        : `actions.${command.presentation.action}`,
+    );
+    const entry = { id: "display-label", form, button, kind: command.presentation.kind };
+    button.addEventListener("click", () => void this.applyLabelVisibility(entry));
+    section.append(heading, formHost, note, hint, button);
+    return { section, entry, hint };
   }
 
   buildActionEntry(id, isSaveWorkflow) {
@@ -206,7 +242,54 @@ export class ReferenceEditor {
       }
     }
     this.readStatus.textContent = translate("reference.editor.currentLoaded");
+    await this.readLabelVisibility(requestedKey, referenceLabelOf(job));
     return job;
+  }
+
+  async readLabelVisibility(requestedKey, referenceLabel) {
+    if (!this.labelVisibility) return null;
+    const visibilityJob = await this.hooks.executeCommand(
+      "display-label",
+      { action: "query" },
+      { intent: "readback" },
+    );
+    if (`${this.currentKey()}|${this.selectedSlot()}` !== requestedKey) return visibilityJob;
+    if (visibilityJob?.status !== "completed") {
+      this.labelVisibility.hint.textContent = translate("reference.editor.labelVisibilityReadFailed");
+      return visibilityJob;
+    }
+    this.labelVisibility.entry.form?.syncResult(visibilityJob, true);
+    this.updateLabelVisibilityHint(referenceLabel, visibilityJob?.result?.result?.state);
+    return visibilityJob;
+  }
+
+  updateLabelVisibilityHint(referenceLabel, enabled) {
+    if (!this.labelVisibility) return;
+    this.labelVisibility.hint.textContent =
+      enabled === false && typeof referenceLabel === "string" && referenceLabel !== ""
+        ? translate("reference.editor.labelConfiguredDisplayOff")
+        : "";
+  }
+
+  async applyLabelVisibility(entry) {
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
+    const values = entry.form ? entry.form.values() : {};
+    if (values === null) return null;
+    this.setBusy(true);
+    try {
+      const job = await this.hooks.executeCommand(
+        "display-label",
+        { ...values, action: "set" },
+        { intent: "apply" },
+      );
+      if (job?.status === "completed") {
+        entry.form?.clearDirty();
+        await this.readCurrentState();
+      }
+      return job;
+    } finally {
+      this.setBusy(false);
+    }
   }
 
   async refresh() {
@@ -282,5 +365,14 @@ export class ReferenceEditor {
       entry.button.disabled = disabled;
       entry.form?.setDisabled(disabled);
     }
+    if (this.labelVisibility) {
+      this.labelVisibility.entry.button.disabled = disabled;
+      this.labelVisibility.entry.form?.setDisabled(disabled);
+    }
   }
+}
+
+function referenceLabelOf(job) {
+  const reference = job?.result?.result?.reference;
+  return reference && typeof reference === "object" ? reference.label : undefined;
 }

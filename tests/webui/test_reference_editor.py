@@ -35,6 +35,10 @@ def test_reference_editor_wiring_and_localization() -> None:
         "reference.editor.saveAndDisplay",
         "reference.editor.currentLoaded",
         "reference.editor.readFailed",
+        "reference.editor.labelVisibility",
+        "reference.editor.labelVisibilityShared",
+        "reference.editor.labelConfiguredDisplayOff",
+        "reference.editor.labelVisibilityReadFailed",
         "command.save-export",
         "description.save-export",
     ):
@@ -59,6 +63,18 @@ def test_reference_editor_wiring_and_localization() -> None:
     )
     assert "設定參考波形的標籤名稱" in chinese_reference_help
     assert "不控制標籤文字是否顯示在儀器畫面上" in chinese_reference_help
+    assert '"reference.editor.labelVisibility": "Label visibility"' in english
+    assert '"reference.editor.labelVisibility": "標籤顯示"' in chinese
+    display_label_description = next(
+        line for line in english.splitlines()
+        if '"description.display-label":' in line
+    )
+    assert "single shared display setting" in display_label_description
+    channel_label_description = next(
+        line for line in english.splitlines()
+        if '"description.channel-label":' in line
+    )
+    assert "Display → Label (display-label)" in channel_label_description
 
 
 REFERENCE_EDITOR_HARNESS = r'''
@@ -119,6 +135,8 @@ REFERENCE_EDITOR_HARNESS = r'''
           this.valuesResult = { action: "set", enabled: true };
         } else if (command.id === "reference-label") {
           this.valuesResult = { action: "set", label: "BASE" };
+        } else if (command.id === "display-label") {
+          this.valuesResult = { action: "query", enabled: false };
         }
       }
       values() { return this.valuesResult; }
@@ -163,6 +181,11 @@ REFERENCE_EDITOR_HARNESS = r'''
       def("reference-waveform", { kind: "command", action: "run" }, []),
     ];
     commands.at(-1).presentation_only = true;
+    commands.push({
+      id: "display-label", category: "Display", label: "Display label",
+      modes: ["live", "simulate"], presentation: setting,
+      fields: [{ name: "action", type: "enum" }, { name: "enabled", type: "boolean" }],
+    });
     const catalog = {
       commands,
       fieldsFor: (command) => command.fields,
@@ -173,14 +196,15 @@ REFERENCE_EDITOR_HARNESS = r'''
     const env = { available: false, executionBusy: false, contextKey: "live||" };
     const submitted = [];
     const commandStatuses = [];
+    let displayLabelState = false;
     const hooks = {
       executeCommand: async (command, parameters, options) => {
         submitted.push({ command, parameters, intent: options?.intent });
-        return {
-          job_id: `job-${submitted.length}`,
-          status: commandStatuses.shift() || "completed",
-          result: { result: { reference: { displayed: true, label: "BASE" } } },
-        };
+        const status = commandStatuses.shift() || "completed";
+        const result = command === "display-label"
+          ? { result: { state: displayLabelState } }
+          : { result: { reference: { displayed: true, label: "BASE" } } };
+        return { job_id: `job-${submitted.length}`, status, result };
       },
       headerActions: new FakeNode(),
       isAvailable: () => env.available,
@@ -219,9 +243,18 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
         assert.equal(editor.refreshButton.disabled, false);
         assert.equal(editor.slotForm.disabled, false);
         await editor.refresh();
-        assert.deepEqual(submitted, [{
-          command: "reference-query", parameters: { slot: 1 }, intent: "readback",
-        }]);
+        assert.deepEqual(submitted, [
+          {
+            command: "reference-query",
+            parameters: { slot: 1 },
+            intent: "readback",
+          },
+          {
+            command: "display-label",
+            parameters: { action: "query" },
+            intent: "readback",
+          },
+        ]);
         assert.equal(editor.readStatus.textContent, "reference.editor.currentLoaded");
         assert.equal(
           editor.entries.find((entry) => entry.id === "reference-save").form.syncCalls.length,
@@ -253,6 +286,11 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
           {
             command: "reference-query",
             parameters: { slot: 1 },
+            intent: "readback",
+          },
+          {
+            command: "display-label",
+            parameters: { action: "query" },
             intent: "readback",
           },
         ]);
@@ -366,6 +404,47 @@ def test_reference_display_failure_stops_before_readback() -> None:
             intent: "apply",
           },
         ]);
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_reference_label_visibility_reads_and_applies_shared_setting() -> None:
+    script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.available = true;
+        editor.schedulePresentation();
+        await settle();
+
+        assert.ok(editor.labelVisibility);
+        assert.equal(editor.labelVisibility.entry.id, "display-label");
+
+        await editor.refresh();
+        assert.deepEqual(submitted, [
+          { command: "reference-query", parameters: { slot: 1 }, intent: "readback" },
+          { command: "display-label", parameters: { action: "query" }, intent: "readback" },
+        ]);
+        assert.equal(
+          editor.labelVisibility.hint.textContent,
+          "reference.editor.labelConfiguredDisplayOff",
+        );
+
+        submitted.length = 0;
+        editor.labelVisibility.entry.form.valuesResult = { action: "query", enabled: true };
+        const job = await editor.applyLabelVisibility(editor.labelVisibility.entry);
+        assert.equal(job.status, "completed");
+        assert.equal(submitted[0].command, "display-label");
+        assert.deepEqual(submitted[0].parameters, { action: "set", enabled: true });
+        assert.equal("slot" in submitted[0].parameters, false);
+        assert.equal(submitted[0].intent, "apply");
+        assert.equal(submitted[1].command, "reference-query");
+        assert.equal(submitted[2].command, "display-label");
         ''')
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
