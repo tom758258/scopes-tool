@@ -126,6 +126,7 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
         import assert from "node:assert/strict";
 
         let genericFormRevision = 0;
+        let channelLabelVisibility = null;
         let executing = false;
         let currentJobId = null;
         let pendingResourceLiveSupport = null;

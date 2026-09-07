@@ -223,9 +223,12 @@ existing `reference-save` command, then `reference-display` only after the save
 completes, and finally refreshes display and label state with `reference-query`.
 The shared reference waveform selector is visible before Live identity is
 available and is then limited by the detected model's projected capabilities.
-Selection is passive; the Read reference state action reads only display and label state for
-the selected waveform. Display, Label, and Clear remain independent actions
-through the normal foreground execution path.
+Selection is passive; Read reference state reads display and label state for
+the selected waveform and the shared label visibility through `display-label`.
+Reference waveform display, label text, and Clear remain independent actions.
+Channel label and Reference also offer a shared Label visibility control with
+explicit Read and Apply using the existing `display-label` query/set readback.
+This instrument-wide setting remains available under Display.
 
 Selecting `measure-log`, `triggered-measure-loop`, `capture-batch`,
 `measure-until`, `capture-until`, `capture-monitor`, or

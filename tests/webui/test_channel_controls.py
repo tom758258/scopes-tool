@@ -184,6 +184,17 @@ def test_channel_summary_result_locale_keys_exist() -> None:
     assert '"results.field.coupling": "耦合"' in zh
 
 
+def test_channel_label_composes_shared_visibility_without_replacing_display_command() -> None:
+    app = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+    html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+    assert 'id="channel-label-visibility"' in html
+    assert 'new LabelVisibility(elements.channelLabelVisibility, catalog,' in app
+    assert 'channelLabelVisibility?.render(selected?.id === "channel-label")' in app
+    commands = {entry["id"]: entry for entry in command_catalog()}
+    assert commands["display-label"]["category"] == "Display"
+    assert "channel-label-display" not in commands
+
+
 @pytest.mark.skipif(
     subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
     reason="Node.js is required for frontend behavior checks",
@@ -367,6 +378,70 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         source += "\nglobalThis.CommandForm=CommandForm;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
         const CommandForm = globalThis.CommandForm;
+
+        // Shared visibility uses the existing form and actual readback, including set results.
+        {
+          const visibilitySource = fs.readFileSync(
+            path.join(process.cwd(), "src/scopes_tool_webui/static/label-visibility.js"), "utf8",
+          ).replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "")
+            + "\nglobalThis.LabelVisibility = LabelVisibility;";
+          await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(visibilitySource)}`);
+          const command = __DISPLAY_LABEL__;
+          const calls = [];
+          let contextKey = "simulate|model";
+          let returnedState = false;
+          let status = "completed";
+          let finish;
+          const hooks = {
+            contextKey: () => contextKey,
+            isAvailable: () => true,
+            isExecutionBusy: () => false,
+            executeCommand: async (id, parameters, options) => {
+              calls.push({ id, parameters, intent: options.intent });
+              if (finish === null) await new Promise((resolve) => { finish = resolve; });
+              return { status, result: { result: { state: returnedState } } };
+            },
+          };
+          const control = new globalThis.LabelVisibility(makeContainer(), {
+            ...catalog, commands: [command], supported: () => true,
+          }, hooks);
+          control.render(true);
+          assert.equal(calls.length, 0);
+          assert.equal(control.container.children[1].textContent, "labels.shared");
+          const input = control.container.querySelector('[data-field="enabled"]');
+          assert.equal(input.value, "");
+          await control.run(false);
+          assert.equal(input.value, "false");
+          input.value = "true";
+          input.dataset.dirty = "true";
+          await control.run(false);
+          assert.equal(input.value, "true");
+          await control.run(true);
+          assert.deepEqual(calls.at(-1), {
+            id: "display-label", parameters: { action: "set", enabled: true }, intent: "apply",
+          });
+          assert.equal(input.value, "false", "set readback wins over requested value");
+          assert.equal(input.dataset.dirty, undefined);
+          returnedState = true;
+          await control.run(false);
+          assert.equal(input.value, "true");
+          status = "failed";
+          await control.run(false);
+          assert.equal(input.value, "true");
+          assert.equal(control.status.textContent, "labels.readFailed");
+          status = "completed";
+          finish = null;
+          const pending = control.run(false);
+          assert.equal(control.applyButton.disabled, true);
+          control.render(true);
+          contextKey = "simulate|other-model";
+          finish();
+          await pending;
+          assert.equal(control.container.querySelector('[data-field="enabled"]').value, "");
+          control.render(false);
+          assert.equal(control.container.hidden, true);
+          assert.equal(await control.run(false), null);
+        }
 
         // A. channel integer+options with channel label -> SELECT and values() integer
         {
@@ -562,6 +637,10 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         "__MEASURE_WINDOW_FIELDS__", json.dumps(measure_window_fields)
     ).replace(
         "__REFERENCE_SLOT__", json.dumps(reference_slot)
+    ).replace(
+        "__DISPLAY_LABEL__", json.dumps(next(
+            entry for entry in command_catalog() if entry["id"] == "display-label"
+        ))
     )
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script],

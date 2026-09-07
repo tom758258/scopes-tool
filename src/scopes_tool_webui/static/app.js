@@ -2,6 +2,7 @@ import { getCommands, getHealth, openPcOutputFolder, selectPcOutputFolder, valid
 import { bindBasicControls } from "/static/basic-controls.js";
 import { CommandCatalog } from "/static/command-catalog.js";
 import { CommandForm } from "/static/command-form.js";
+import { LabelVisibility } from "/static/label-visibility.js";
 import { DeviceResource } from "/static/device-resource.js";
 import {
   buildWorkspaceContext,
@@ -77,6 +78,7 @@ const elements = {
   advanced: document.querySelector("#advanced-commands"),
   advancedToggle: document.querySelector("#advanced-command-toggle"),
   form: document.querySelector("#command-form"),
+  channelLabelVisibility: document.querySelector("#channel-label-visibility"),
   formHeading: document.querySelector("#form-heading"),
   acquisitionEditor: document.querySelector("#acquisition-editor"),
   referenceEditor: document.querySelector("#reference-editor"),
@@ -131,6 +133,7 @@ const state = createInitialState();
 let context = state.executionContext;
 let catalog;
 let commandForm;
+let channelLabelVisibility;
 let acquisitionEditor;
 let genericFormRevision = 0;
 let referenceEditor;
@@ -212,6 +215,12 @@ async function initialize() {
     list: elements.commandList,
   }, () => syncCommandSelection());
   commandForm = new CommandForm(elements.form, catalog);
+  channelLabelVisibility = new LabelVisibility(elements.channelLabelVisibility, catalog, {
+    executeCommand,
+    isExecutionBusy,
+    isAvailable: () => commandAvailable("display-label"),
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}|${genericFormRevision}`,
+  });
   acquisitionEditor = new AcquisitionEditor(elements.acquisitionEditor, catalog, {
     executeCommand,
     isExecutionBusy,
@@ -865,6 +874,7 @@ function syncCommandSelection(draft = null) {
   });
   elements.formHeading.hidden = editorOwned || systemInformationSelected;
   elements.form.hidden = editorOwned || systemInformationSelected;
+  channelLabelVisibility?.render(selected?.id === "channel-label");
   elements.referenceEditor.hidden = editorKind !== "reference";
   elements.saveExportEditor.hidden = editorKind !== "save-export";
   elements.serialEditor.hidden = editorKind !== "serial";
@@ -938,6 +948,7 @@ function updateAvailability() {
   searchEditor?.applyBusyState();
   segmentedEditor?.applyBusyState();
   referenceEditor?.applyBusyState();
+  channelLabelVisibility?.applyBusyState();
   saveExportEditor?.applyBusyState();
   serialEditor?.render(serialEditor.controller.state);
   workflowEditor?.applyBusyState();

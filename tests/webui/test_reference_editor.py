@@ -35,10 +35,9 @@ def test_reference_editor_wiring_and_localization() -> None:
         "reference.editor.saveAndDisplay",
         "reference.editor.currentLoaded",
         "reference.editor.readFailed",
-        "reference.editor.labelVisibility",
-        "reference.editor.labelVisibilityShared",
-        "reference.editor.labelConfiguredDisplayOff",
-        "reference.editor.labelVisibilityReadFailed",
+        "labels.visibility",
+        "labels.shared",
+        "labels.readFailed",
         "command.save-export",
         "description.save-export",
     ):
@@ -63,8 +62,8 @@ def test_reference_editor_wiring_and_localization() -> None:
     )
     assert "設定參考波形的標籤名稱" in chinese_reference_help
     assert "不控制標籤文字是否顯示在儀器畫面上" in chinese_reference_help
-    assert '"reference.editor.labelVisibility": "Label visibility"' in english
-    assert '"reference.editor.labelVisibility": "標籤顯示"' in chinese
+    assert '"labels.visibility": "Label visibility"' in english
+    assert '"labels.visibility": "標籤顯示"' in chinese
     display_label_description = next(
         line for line in english.splitlines()
         if '"description.display-label":' in line
@@ -74,7 +73,7 @@ def test_reference_editor_wiring_and_localization() -> None:
         line for line in english.splitlines()
         if '"description.channel-label":' in line
     )
-    assert "Display → Label (display-label)" in channel_label_description
+    assert "Label visibility" in channel_label_description
 
 
 REFERENCE_EDITOR_HARNESS = r'''
@@ -136,14 +135,21 @@ REFERENCE_EDITOR_HARNESS = r'''
         } else if (command.id === "reference-label") {
           this.valuesResult = { action: "set", label: "BASE" };
         } else if (command.id === "display-label") {
-          this.valuesResult = { action: "query", enabled: false };
+          this.valuesResult = { action: "set", enabled: false };
         }
       }
       values() { return this.valuesResult; }
+      queryValues() { return { action: "query" }; }
       setDisabled(value) { this.disabled = value; }
       syncResult(job, preserveDirty) { this.syncCalls.push([job.job_id, preserveDirty]); }
       clearDirty() { this.clearCalls += 1; }
     };
+
+    const visibilitySource = fs.readFileSync(
+      new URL("label-visibility.js", `file:///${process.argv[1].replaceAll("\\", "/")}`), "utf8",
+    ).replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "")
+      + "\nglobalThis.LabelVisibility = LabelVisibility;";
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(visibilitySource)}`);
 
     const source = fs.readFileSync(process.argv[1], "utf8")
       .replace(/^import[^\n]*\r?\n/gm, "")
@@ -423,28 +429,33 @@ def test_reference_label_visibility_reads_and_applies_shared_setting() -> None:
         await settle();
 
         assert.ok(editor.labelVisibility);
-        assert.equal(editor.labelVisibility.entry.id, "display-label");
+        assert.equal(editor.labelVisibility.form.command.id, "display-label");
+        assert.equal(editor.labelVisibility.container.children[1].textContent, "labels.shared");
 
         await editor.refresh();
         assert.deepEqual(submitted, [
           { command: "reference-query", parameters: { slot: 1 }, intent: "readback" },
           { command: "display-label", parameters: { action: "query" }, intent: "readback" },
         ]);
-        assert.equal(
-          editor.labelVisibility.hint.textContent,
-          "reference.editor.labelConfiguredDisplayOff",
-        );
+        assert.deepEqual(editor.labelVisibility.form.syncCalls, [["job-2", true]]);
+        assert.equal(editor.labelVisibility.status.textContent, "");
 
         submitted.length = 0;
-        editor.labelVisibility.entry.form.valuesResult = { action: "query", enabled: true };
-        const job = await editor.applyLabelVisibility(editor.labelVisibility.entry);
+        editor.labelVisibility.form.valuesResult = { action: "set", enabled: true };
+        const job = await editor.labelVisibility.run(true);
         assert.equal(job.status, "completed");
         assert.equal(submitted[0].command, "display-label");
         assert.deepEqual(submitted[0].parameters, { action: "set", enabled: true });
         assert.equal("slot" in submitted[0].parameters, false);
         assert.equal(submitted[0].intent, "apply");
-        assert.equal(submitted[1].command, "reference-query");
-        assert.equal(submitted[2].command, "display-label");
+        assert.equal(submitted.length, 1);
+        assert.equal(editor.labelVisibility.form.clearCalls, 1);
+        assert.deepEqual(editor.labelVisibility.form.syncCalls.at(-1), ["job-1", true]);
+        submitted.length = 0;
+        await editor.labelVisibility.run(false);
+        assert.deepEqual(submitted, [
+          { command: "display-label", parameters: { action: "query" }, intent: "readback" },
+        ]);
         ''')
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
