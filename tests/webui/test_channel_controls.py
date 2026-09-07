@@ -1177,15 +1177,15 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
 
         // 9. Scale presets use text inputs and fill only the scale field without dispatch.
         const expectedScalePresets = [
-          ["0.001", "0.001"],
-          ["0.002", "0.002"],
-          ["0.005", "0.005"],
-          ["0.01", "0.01"],
-          ["0.02", "0.02"],
-          ["0.05", "0.05"],
-          ["0.1", "0.1"],
-          ["0.2", "0.2"],
-          ["0.5", "0.5"],
+          ["1m", "0.001"],
+          ["2m", "0.002"],
+          ["5m", "0.005"],
+          ["10m", "0.01"],
+          ["20m", "0.02"],
+          ["50m", "0.05"],
+          ["100m", "0.1"],
+          ["200m", "0.2"],
+          ["500m", "0.5"],
           ["1", "1"],
         ];
         assert.equal(editor.scaleInput.type, "text");
@@ -1209,13 +1209,13 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
 
         // 10. Range presets fill only the range field without dispatch.
         const expectedRangePresets = [
-          ["0.008", "0.008"],
-          ["0.016", "0.016"],
-          ["0.04", "0.04"],
-          ["0.08", "0.08"],
-          ["0.16", "0.16"],
-          ["0.4", "0.4"],
-          ["0.8", "0.8"],
+          ["8m", "0.008"],
+          ["16m", "0.016"],
+          ["40m", "0.04"],
+          ["80m", "0.08"],
+          ["160m", "0.16"],
+          ["400m", "0.4"],
+          ["800m", "0.8"],
           ["1.6", "1.6"],
           ["4", "4"],
           ["8", "8"],
@@ -1238,6 +1238,12 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         }
         assert.equal(calls.length, callsBeforeRangePresets);
         assert.equal(editor.scaleInput.value, "sentinel");
+
+        // Preset labels stay unit-neutral: no V or A unit suffix.
+        for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
+          assert.equal(button.textContent.includes("V"), false);
+          assert.equal(button.textContent.includes("A"), false);
+        }
 
         // 11. Busy state disables presets alongside the existing controls.
         editor.busy = true;

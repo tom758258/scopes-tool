@@ -38,6 +38,7 @@ export class ChannelOffsetEditor {
     this.divRange = null;
     this.lastOffset = null;
     this.selectedDiv = null;
+    this.divIncomplete = false;
     this.buildDom();
   }
 
@@ -87,6 +88,7 @@ export class ChannelOffsetEditor {
     this.channelSelect.dataset.field = "channel";
     this.channelSelect.addEventListener("change", () => {
       this.offsetInput.value = "";
+      this.divIncomplete = false;
       this.clearDivState();
       this.applyBusyState();
     });
@@ -118,30 +120,42 @@ export class ChannelOffsetEditor {
     this.divHint.textContent = translate("channel-offset.editor.divHint");
 
     this.divButtonsHost = document.createElement("div");
-    this.divButtonsHost.className = "div-quick-fill";
-    this.divButtons = [];
+    this.divButtonsHost.className = "div-slider-block";
+    this.divSlider = document.createElement("input");
+    this.divSlider.type = "range";
+    this.divSlider.min = String(DIV_STEPS[0]);
+    this.divSlider.max = String(DIV_STEPS[DIV_STEPS.length - 1]);
+    this.divSlider.step = "1";
+    this.divSlider.value = "0";
+    this.divSlider.setAttribute("aria-label", translate("channel-offset.editor.divHeading"));
+    this.divSlider.addEventListener("input", () => {
+      this.selectDiv(Number(this.divSlider.value));
+    });
+    this.divTicksHost = document.createElement("div");
+    this.divTicksHost.className = "div-slider-ticks";
+    this.divTicksHost.style.gridTemplateColumns = `repeat(${DIV_STEPS.length}, minmax(0, 1fr))`;
+    this.divTicks = [];
     for (const div of DIV_STEPS) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "secondary";
-      button.textContent = divLabel(div);
-      button.addEventListener("click", () => {
-        this.selectDiv(div);
-      });
-      this.divButtonsHost.append(button);
-      this.divButtons.push(button);
+      const tick = document.createElement("span");
+      tick.textContent = divLabel(div);
+      this.divTicksHost.append(tick);
+      this.divTicks.push(tick);
     }
 
     this.info = document.createElement("output");
     this.info.className = "muted compact-note";
     this.selection = document.createElement("output");
     this.selection.className = "muted compact-note";
+    this.divStatus = document.createElement("output");
+    this.divStatus.className = "muted compact-note";
     this.divSection.append(
       this.divHeading,
       this.divHint,
       this.divButtonsHost,
+      this.divTicksHost,
       this.info,
       this.selection,
+      this.divStatus,
     );
 
     this.actions = document.createElement("div");
@@ -182,6 +196,7 @@ export class ChannelOffsetEditor {
     this.offsetFieldLabel.textContent = translate("field.channel-offset.value");
     this.divHeading.textContent = translate("channel-offset.editor.divHeading");
     this.divHint.textContent = translate("channel-offset.editor.divHint");
+    this.divSlider.setAttribute("aria-label", translate("channel-offset.editor.divHeading"));
     this.readButton.textContent = translate("actions.readSettings");
     this.applyButton.textContent = translate("actions.apply");
     this.syncInfo();
@@ -203,6 +218,7 @@ export class ChannelOffsetEditor {
     }
     this.stateKey = key;
     this.offsetInput.value = "";
+    this.divIncomplete = false;
     this.clearDivState();
     this.rebuild();
     this.applyBusyState();
@@ -238,6 +254,7 @@ export class ChannelOffsetEditor {
   }
 
   syncInfo() {
+    this.divSlider.value = this.selectedDiv === null ? "0" : String(this.selectedDiv);
     if (this.divScale === null || this.divChannel === null) {
       this.info.textContent = "";
     } else {
@@ -258,6 +275,9 @@ export class ChannelOffsetEditor {
         value: formatEngineering(Number(cleanFloatText(this.selectedDiv * this.divScale)), unit, { signed: true }),
       });
     }
+    this.divStatus.textContent = this.divIncomplete
+      ? translate("channel-offset.editor.divReadIncomplete")
+      : "";
   }
 
   selectDiv(div) {
@@ -285,11 +305,14 @@ export class ChannelOffsetEditor {
         { intent: "readback" },
       );
       if (
-        job?.status !== "completed" ||
         this.hooks.contextKey() !== contextKey ||
         this.selectedChannel() !== channel ||
         !this.selectedDefinition()
       ) {
+        return job;
+      }
+      if (job?.status !== "completed") {
+        this.divIncomplete = true;
         this.clearDivState();
         return job;
       }
@@ -298,23 +321,26 @@ export class ChannelOffsetEditor {
         ? channels.find((item) => Number(item?.channel) === channel)
         : undefined;
       const scale = entry?.scale;
-      if (typeof scale !== "number" || !Number.isFinite(scale) || scale <= 0) {
+      const range = entry?.range;
+      const offset = entry?.offset;
+      const units = entry?.units;
+      const complete = typeof scale === "number" && Number.isFinite(scale) && scale > 0
+        && typeof range === "number" && Number.isFinite(range) && range > 0
+        && typeof offset === "number" && Number.isFinite(offset)
+        && (units === "volt" || units === "amp");
+      if (!complete) {
+        this.divIncomplete = true;
         this.clearDivState();
         return job;
       }
-      const offset = entry?.offset;
-      if (typeof offset === "number" && Number.isFinite(offset)) {
-        this.offsetInput.value = String(offset);
-        this.lastOffset = offset;
-      } else {
-        this.lastOffset = null;
-      }
+      this.offsetInput.value = String(offset);
+      this.lastOffset = offset;
       this.divScale = scale;
       this.divChannel = channel;
-      this.divUnits = entry?.units === "amp" ? "amp" : "volt";
-      const range = entry?.range;
-      this.divRange = typeof range === "number" && Number.isFinite(range) ? range : null;
+      this.divUnits = units;
+      this.divRange = range;
       this.selectedDiv = null;
+      this.divIncomplete = false;
       this.syncInfo();
       return job;
     } finally {
@@ -378,6 +404,6 @@ export class ChannelOffsetEditor {
     const divDisabled = unavailable
       || this.divScale === null
       || this.divChannel !== this.selectedChannel();
-    for (const button of this.divButtons) button.disabled = divDisabled;
+    this.divSlider.disabled = divDisabled;
   }
 }

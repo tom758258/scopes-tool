@@ -38,6 +38,7 @@ def test_channel_offset_editor_locale_keys_exist() -> None:
         "channel-offset.editor.divHint",
         "channel-offset.editor.currentSettings",
         "channel-offset.editor.divSelection",
+        "channel-offset.editor.divReadIncomplete",
     ):
         assert f'"{key}":' in zh, key
         assert f'"{key}":' in en, key
@@ -72,6 +73,7 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
           append(...nodes) { this.children.push(...nodes); }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           addEventListener(event, handler) { this[`on_${event}`] = handler; }
+          setAttribute(k, v) { (this.attributes = this.attributes || {})[k] = String(v); }
           remove() {}
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
@@ -110,6 +112,7 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
         const calls = [];
         let currentContext = "simulate||keysight-dsox4024a";
         let deferredResolve = null;
+        let partialField = null;
         const hooks = {
           contextKey: () => currentContext,
           selectedCommand: () => ({ id: "channel-offset", editor: "channel-offset" }),
@@ -120,6 +123,12 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
             if (id === "channel-summary") {
               if (deferredResolve !== null) {
                 return new Promise((resolve) => { deferredResolve = resolve; });
+              }
+              if (partialField !== null) {
+                const patched = SUMMARY.map((entry) => entry.channel === 1
+                  ? { ...entry, [partialField]: null }
+                  : entry);
+                return { status: "completed", result: { result: { channels: patched } } };
               }
               return { status: "completed", result: { result: { channels: SUMMARY } } };
             }
@@ -143,16 +152,23 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
         const editor = new globalThis.ChannelOffsetEditor(new FakeNode("div"), catalog, hooks);
         editor.present();
 
-        // 1. Div control is disabled before a successful read.
+        // 1. Slider is disabled before a successful read.
         assert.deepEqual(editor.channels, [1, 2, 3, 4]);
-        assert.equal(editor.divButtons.length, 9);
+        assert.equal(editor.divSlider.tagName, "INPUT");
+        assert.equal(editor.divSlider.type, "range");
+        assert.equal(editor.divSlider.min, "-4");
+        assert.equal(editor.divSlider.max, "4");
+        assert.equal(editor.divSlider.step, "1");
+        assert.equal(editor.divSlider.value, "0");
+        assert.equal(editor.divSlider.disabled, true);
+        assert.equal(editor.divSlider.attributes["aria-label"], "channel-offset.editor.divHeading");
+        assert.equal(editor.divTicks.length, 9);
         assert.deepEqual(
-          editor.divButtons.map((button) => button.textContent),
+          editor.divTicks.map((tick) => tick.textContent),
           ["-4", "-3", "-2", "-1", "0", "+1", "+2", "+3", "+4"],
         );
-        editor.divButtons.forEach((button) => assert.equal(button.type, "button"));
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, true));
         assert.equal(editor.selection.textContent, "");
+        assert.equal(editor.divStatus.textContent, "");
 
         // 2. Reading the selected channel enables Div control and fills the draft.
         editor.channelSelect.value = "1";
@@ -161,44 +177,48 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
         assert.equal(calls.length, 1);
         assert.deepEqual(calls[0], ["channel-summary", {}, { intent: "readback" }]);
         assert.equal(editor.offsetInput.value, "0.1");
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
+        assert.equal(editor.divSlider.disabled, false);
         assert.equal(
           editor.info.textContent,
           "S=F:0.5:V|R=F:4:V|U=enum.volt|O=F:0.1:V",
         );
+        assert.equal(editor.divStatus.textContent, "");
 
-        // 3. +2 div on a 0.5 V/div scale fills 1.0 V without executing.
-        const plusTwo = editor.divButtons.find((button) => button.textContent === "+2");
-        plusTwo.on_click();
+        // 3. Slider +2 on a 0.5 V/div scale fills 1.0 V without executing.
+        editor.divSlider.value = "2";
+        editor.divSlider.on_input();
         assert.equal(editor.offsetInput.value, "1");
+        assert.equal(editor.divSlider.value, "2");
         assert.equal(editor.selection.textContent, "D=+2|V=F:1:V");
         assert.equal(calls.length, 1);
 
-        // 4. Manual numeric edits clear the quick-fill selection.
+        // 4. Manual numeric edits clear the quick-fill selection and reset the slider.
         editor.offsetInput.value = "0.75";
         editor.offsetInput.on_input();
         assert.equal(editor.selection.textContent, "");
+        assert.equal(editor.divSlider.value, "0");
         assert.equal(editor.offsetInput.value, "0.75");
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
+        assert.equal(editor.divSlider.disabled, false);
 
         // 5. Switching channels invalidates the previous channel scale.
         editor.channelSelect.value = "2";
         editor.channelSelect.on_change();
         assert.equal(editor.offsetInput.value, "");
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, true));
+        assert.equal(editor.divSlider.disabled, true);
         assert.equal(editor.selection.textContent, "");
+        assert.equal(editor.divStatus.textContent, "");
 
-        // 6. Reading the new channel enables Div control with its own units.
+        // 6. Reading the new channel enables the slider with its own units.
         editor.readButton.on_click();
         await drain();
         assert.equal(editor.offsetInput.value, "-0.5");
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
+        assert.equal(editor.divSlider.disabled, false);
         assert.equal(
           editor.info.textContent,
           "S=F:1:A|R=F:8:A|U=enum.amp|O=F:-0.5:A",
         );
 
-        // 7. A stale CH1 response must not enable Div control for CH2.
+        // 7. A stale CH1 response must not enable the slider for CH2, nor show feedback.
         editor.channelSelect.value = "1";
         editor.channelSelect.on_change();
         deferredResolve = "armed";
@@ -209,16 +229,17 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
         deferredResolve = null;
         pendingResolve({ status: "completed", result: { result: { channels: SUMMARY } } });
         await drain();
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, true));
+        assert.equal(editor.divSlider.disabled, true);
         assert.equal(editor.divChannel, null);
+        assert.equal(editor.divStatus.textContent, "");
 
         // 8. Apply writes the draft and clears the selection but keeps Div state.
         editor.channelSelect.value = "1";
         editor.readButton.on_click();
         await drain();
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
-        const plusOne = editor.divButtons.find((button) => button.textContent === "+1");
-        plusOne.on_click();
+        assert.equal(editor.divSlider.disabled, false);
+        editor.divSlider.value = "1";
+        editor.divSlider.on_input();
         assert.equal(editor.offsetInput.value, "0.5");
         const callsBeforeApply = calls.length;
         editor.applyButton.on_click();
@@ -231,7 +252,23 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
         ]);
         assert.equal(editor.offsetInput.value, "0.5");
         assert.equal(editor.selection.textContent, "");
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
+        assert.equal(editor.divSlider.value, "0");
+        assert.equal(editor.divSlider.disabled, false);
+
+        // 9. A partial summary never enables the slider and never falls back to volt.
+        editor.channelSelect.value = "1";
+        editor.channelSelect.on_change();
+        editor.offsetInput.value = "0.75";
+        partialField = "units";
+        editor.readButton.on_click();
+        await drain();
+        partialField = null;
+        assert.equal(editor.divSlider.disabled, true);
+        assert.equal(editor.divChannel, null);
+        assert.equal(editor.divUnits, null);
+        assert.equal(editor.offsetInput.value, "0.75");
+        assert.equal(editor.selection.textContent, "");
+        assert.equal(editor.divStatus.textContent, "channel-offset.editor.divReadIncomplete");
 
         console.log(JSON.stringify({ ok: true }));
         '''

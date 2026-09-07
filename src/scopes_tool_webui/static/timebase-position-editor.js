@@ -27,6 +27,7 @@ export class TimebasePositionEditor {
     this.divReference = null;
     this.lastPosition = null;
     this.selectedDiv = null;
+    this.divIncomplete = false;
     this.buildDom();
   }
 
@@ -76,31 +77,43 @@ export class TimebasePositionEditor {
     this.referenceNote.textContent = translate("timebase-position.editor.referenceNote");
 
     this.divButtonsHost = document.createElement("div");
-    this.divButtonsHost.className = "div-quick-fill";
-    this.divButtons = [];
+    this.divButtonsHost.className = "div-slider-block";
+    this.divSlider = document.createElement("input");
+    this.divSlider.type = "range";
+    this.divSlider.min = String(DIV_STEPS[0]);
+    this.divSlider.max = String(DIV_STEPS[DIV_STEPS.length - 1]);
+    this.divSlider.step = "1";
+    this.divSlider.value = "0";
+    this.divSlider.setAttribute("aria-label", translate("timebase-position.editor.divHeading"));
+    this.divSlider.addEventListener("input", () => {
+      this.selectDiv(Number(this.divSlider.value));
+    });
+    this.divTicksHost = document.createElement("div");
+    this.divTicksHost.className = "div-slider-ticks";
+    this.divTicksHost.style.gridTemplateColumns = `repeat(${DIV_STEPS.length}, minmax(0, 1fr))`;
+    this.divTicks = [];
     for (const div of DIV_STEPS) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "secondary";
-      button.textContent = divLabel(div);
-      button.addEventListener("click", () => {
-        this.selectDiv(div);
-      });
-      this.divButtonsHost.append(button);
-      this.divButtons.push(button);
+      const tick = document.createElement("span");
+      tick.textContent = divLabel(div);
+      this.divTicksHost.append(tick);
+      this.divTicks.push(tick);
     }
 
     this.info = document.createElement("output");
     this.info.className = "muted compact-note";
     this.selection = document.createElement("output");
     this.selection.className = "muted compact-note";
+    this.divStatus = document.createElement("output");
+    this.divStatus.className = "muted compact-note";
     this.divSection.append(
       this.divHeading,
       this.divHint,
       this.referenceNote,
       this.divButtonsHost,
+      this.divTicksHost,
       this.info,
       this.selection,
+      this.divStatus,
     );
 
     this.actions = document.createElement("div");
@@ -141,6 +154,7 @@ export class TimebasePositionEditor {
     this.divHeading.textContent = translate("timebase-position.editor.divHeading");
     this.divHint.textContent = translate("timebase-position.editor.divHint");
     this.referenceNote.textContent = translate("timebase-position.editor.referenceNote");
+    this.divSlider.setAttribute("aria-label", translate("timebase-position.editor.divHeading"));
     this.readButton.textContent = translate("actions.readSettings");
     this.applyButton.textContent = translate("actions.apply");
     this.syncInfo();
@@ -158,6 +172,7 @@ export class TimebasePositionEditor {
     }
     this.stateKey = key;
     this.positionInput.value = "";
+    this.divIncomplete = false;
     this.clearDivState();
     this.rebuild();
     this.applyBusyState();
@@ -176,6 +191,7 @@ export class TimebasePositionEditor {
   }
 
   syncInfo() {
+    this.divSlider.value = this.selectedDiv === null ? "0" : String(this.selectedDiv);
     if (this.divScale === null || this.divReference === null) {
       this.info.textContent = "";
     } else {
@@ -195,6 +211,9 @@ export class TimebasePositionEditor {
         value: formatEngineering(Number(cleanFloatText(this.selectedDiv * this.divScale)), "s", { signed: true }),
       });
     }
+    this.divStatus.textContent = this.divIncomplete
+      ? translate("timebase-position.editor.divReadIncomplete")
+      : "";
   }
 
   selectDiv(div) {
@@ -219,17 +238,18 @@ export class TimebasePositionEditor {
         { action: "query" },
         { intent: "readback" },
       );
-      if (
-        scaleJob?.status !== "completed" ||
-        this.hooks.contextKey() !== contextKey ||
-        !this.selectedDefinition()
-      ) {
+      if (this.hooks.contextKey() !== contextKey || !this.selectedDefinition()) {
+        return scaleJob;
+      }
+      if (scaleJob?.status !== "completed") {
+        this.divIncomplete = true;
         this.clearDivState();
         return scaleJob;
       }
       const scale = scaleJob?.result?.result?.timebase?.seconds_per_division
         ?? scaleJob?.result?.timebase?.seconds_per_division;
       if (typeof scale !== "number" || !Number.isFinite(scale) || scale <= 0) {
+        this.divIncomplete = true;
         this.clearDivState();
         return scaleJob;
       }
@@ -239,17 +259,18 @@ export class TimebasePositionEditor {
         { action: "query" },
         { intent: "readback" },
       );
-      if (
-        positionJob?.status !== "completed" ||
-        this.hooks.contextKey() !== contextKey ||
-        !this.selectedDefinition()
-      ) {
+      if (this.hooks.contextKey() !== contextKey || !this.selectedDefinition()) {
+        return positionJob;
+      }
+      if (positionJob?.status !== "completed") {
+        this.divIncomplete = true;
         this.clearDivState();
         return positionJob;
       }
       const position = positionJob?.result?.result?.timebase?.position_seconds
         ?? positionJob?.result?.timebase?.position_seconds;
       if (typeof position !== "number" || !Number.isFinite(position)) {
+        this.divIncomplete = true;
         this.clearDivState();
         return positionJob;
       }
@@ -259,17 +280,18 @@ export class TimebasePositionEditor {
         { action: "query" },
         { intent: "readback" },
       );
-      if (
-        referenceJob?.status !== "completed" ||
-        this.hooks.contextKey() !== contextKey ||
-        !this.selectedDefinition()
-      ) {
+      if (this.hooks.contextKey() !== contextKey || !this.selectedDefinition()) {
+        return referenceJob;
+      }
+      if (referenceJob?.status !== "completed") {
+        this.divIncomplete = true;
         this.clearDivState();
         return referenceJob;
       }
       const reference = referenceJob?.result?.result?.timebase?.reference
         ?? referenceJob?.result?.timebase?.reference;
       if (reference !== "left" && reference !== "center" && reference !== "right") {
+        this.divIncomplete = true;
         this.clearDivState();
         return referenceJob;
       }
@@ -279,6 +301,7 @@ export class TimebasePositionEditor {
       this.divReference = reference;
       this.lastPosition = position;
       this.selectedDiv = null;
+      this.divIncomplete = false;
       this.syncInfo();
       return referenceJob;
     } finally {
@@ -337,6 +360,6 @@ export class TimebasePositionEditor {
     this.readButton.disabled = unavailable;
     this.applyButton.disabled = unavailable;
     const divDisabled = unavailable || this.divScale === null;
-    for (const button of this.divButtons) button.disabled = divDisabled;
+    this.divSlider.disabled = divDisabled;
   }
 }

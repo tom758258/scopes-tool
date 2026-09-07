@@ -39,6 +39,7 @@ def test_timebase_position_editor_locale_keys_exist() -> None:
         "timebase-position.editor.referenceNote",
         "timebase-position.editor.currentSettings",
         "timebase-position.editor.divSelection",
+        "timebase-position.editor.divReadIncomplete",
     ):
         assert f'"{key}":' in zh, key
         assert f'"{key}":' in en, key
@@ -73,6 +74,7 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
           append(...nodes) { this.children.push(...nodes); }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           addEventListener(event, handler) { this[`on_${event}`] = handler; }
+          setAttribute(k, v) { (this.attributes = this.attributes || {})[k] = String(v); }
           remove() {}
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
@@ -106,6 +108,7 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         const calls = [];
         let currentContext = "simulate||keysight-dsox4024a";
         let failId = null;
+        let deferredResolve = null;
         const hooks = {
           contextKey: () => currentContext,
           selectedCommand: () => ({ id: "timebase-position", editor: "timebase-position" }),
@@ -114,6 +117,9 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
           async executeCommand(id, parameters, options) {
             calls.push([id, parameters, options]);
             if (id === failId) return { status: "failed" };
+            if (id === "timebase-scale" && deferredResolve !== null) {
+              return new Promise((resolve) => { deferredResolve = resolve; });
+            }
             if (id === "timebase-scale") {
               return { status: "completed", result: { result: { timebase: { seconds_per_division: 0.0002 } } } };
             }
@@ -143,15 +149,22 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         const editor = new globalThis.TimebasePositionEditor(new FakeNode("div"), catalog, hooks);
         editor.present();
 
-        // 1. Div control is disabled before a successful read.
-        assert.equal(editor.divButtons.length, 11);
+        // 1. Slider is disabled before a successful read.
+        assert.equal(editor.divSlider.tagName, "INPUT");
+        assert.equal(editor.divSlider.type, "range");
+        assert.equal(editor.divSlider.min, "-5");
+        assert.equal(editor.divSlider.max, "5");
+        assert.equal(editor.divSlider.step, "1");
+        assert.equal(editor.divSlider.value, "0");
+        assert.equal(editor.divSlider.disabled, true);
+        assert.equal(editor.divSlider.attributes["aria-label"], "timebase-position.editor.divHeading");
+        assert.equal(editor.divTicks.length, 11);
         assert.deepEqual(
-          editor.divButtons.map((button) => button.textContent),
+          editor.divTicks.map((tick) => tick.textContent),
           ["-5", "-4", "-3", "-2", "-1", "0", "+1", "+2", "+3", "+4", "+5"],
         );
-        editor.divButtons.forEach((button) => assert.equal(button.type, "button"));
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, true));
         assert.equal(editor.selection.textContent, "");
+        assert.equal(editor.divStatus.textContent, "");
 
         // 2. A successful read enables Div control and fills the draft.
         currentContext = "simulate||keysight-dsox4024a";
@@ -162,51 +175,57 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         assert.deepEqual(calls[1][0], "timebase-position");
         assert.deepEqual(calls[2][0], "timebase-reference");
         assert.equal(editor.positionInput.value, "0.0001");
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
+        assert.equal(editor.divSlider.disabled, false);
         assert.equal(
           editor.info.textContent,
           "S=F:0.0002:s|R=enum.center|P=F:0.0001:s|SPAN=F:0.002:s",
         );
+        assert.equal(editor.divStatus.textContent, "");
 
-        // 3. +3 div fills the numeric draft without executing a new command.
-        const plusThree = editor.divButtons.find((button) => button.textContent === "+3");
-        plusThree.on_click();
+        // 3. Slider +3 fills the numeric draft without executing a new command.
+        editor.divSlider.value = "3";
+        editor.divSlider.on_input();
         assert.equal(editor.positionInput.value, "0.0006");
+        assert.equal(editor.divSlider.value, "3");
         assert.equal(editor.selection.textContent, "D=+3|V=F:0.0006:s");
         assert.equal(calls.length, 3);
 
-        // 4. Manual numeric edits clear the quick-fill selection.
+        // 4. Manual numeric edits clear the quick-fill selection and reset the slider.
         editor.positionInput.value = "0.00045";
         editor.positionInput.on_input();
         assert.equal(editor.selection.textContent, "");
+        assert.equal(editor.divSlider.value, "0");
         assert.equal(editor.positionInput.value, "0.00045");
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
+        assert.equal(editor.divSlider.disabled, false);
 
-        // 5. A failed read keeps Div control disabled without touching the draft.
+        // 5. A failed read keeps the slider disabled, keeps the draft, shows feedback.
         failId = "timebase-scale";
         editor.readButton.on_click();
         await drain();
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, true));
+        assert.equal(editor.divSlider.disabled, true);
         assert.equal(editor.positionInput.value, "0.00045");
         assert.equal(editor.selection.textContent, "");
+        assert.equal(editor.divStatus.textContent, "timebase-position.editor.divReadIncomplete");
         failId = null;
 
         // 6. A context change invalidates the read-derived Div state.
         editor.readButton.on_click();
         await drain();
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
+        assert.equal(editor.divSlider.disabled, false);
+        assert.equal(editor.divStatus.textContent, "");
         currentContext = "simulate|RESOURCE-B|keysight-dsox4024a";
         editor.present();
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, true));
+        assert.equal(editor.divSlider.disabled, true);
         assert.equal(editor.positionInput.value, "");
         assert.equal(editor.selection.textContent, "");
+        assert.equal(editor.divStatus.textContent, "");
 
         // 7. Apply writes the draft and clears the selection but keeps Div state.
         currentContext = "simulate||keysight-dsox4024a";
         editor.readButton.on_click();
         await drain();
-        const plusTwo = editor.divButtons.find((button) => button.textContent === "+2");
-        plusTwo.on_click();
+        editor.divSlider.value = "2";
+        editor.divSlider.on_input();
         assert.equal(editor.positionInput.value, "0.0004");
         const callsBeforeApply = calls.length;
         editor.applyButton.on_click();
@@ -219,7 +238,37 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         ]);
         assert.equal(editor.positionInput.value, "0.0004");
         assert.equal(editor.selection.textContent, "");
-        editor.divButtons.forEach((button) => assert.equal(button.disabled, false));
+        assert.equal(editor.divSlider.value, "0");
+        assert.equal(editor.divSlider.disabled, false);
+        assert.equal(editor.divStatus.textContent, "");
+
+        // 8. A successful Apply does not clear a read-incomplete state.
+        failId = "timebase-scale";
+        editor.readButton.on_click();
+        await drain();
+        failId = null;
+        assert.equal(editor.divSlider.disabled, true);
+        assert.equal(editor.divStatus.textContent, "timebase-position.editor.divReadIncomplete");
+        editor.positionInput.value = "0.0006";
+        editor.applyButton.on_click();
+        await drain();
+        assert.deepEqual(calls[calls.length - 1][0], "timebase-position");
+        assert.equal(editor.divSlider.disabled, true);
+        assert.equal(editor.divStatus.textContent, "timebase-position.editor.divReadIncomplete");
+
+        // 9. A stale response after a context change touches nothing.
+        editor.positionInput.value = "0.0009";
+        deferredResolve = "armed";
+        editor.readButton.on_click();
+        currentContext = "simulate|RESOURCE-C|keysight-dsox4024a";
+        const pendingResolve = deferredResolve;
+        assert.equal(typeof pendingResolve, "function");
+        deferredResolve = null;
+        pendingResolve({ status: "completed", result: { result: { timebase: { seconds_per_division: 0.001 } } } });
+        await drain();
+        assert.equal(editor.positionInput.value, "0.0009");
+        assert.equal(editor.divSlider.disabled, true);
+        assert.equal(editor.divStatus.textContent, "timebase-position.editor.divReadIncomplete");
 
         console.log(JSON.stringify({ ok: true }));
         '''
