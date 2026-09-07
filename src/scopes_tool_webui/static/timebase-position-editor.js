@@ -88,6 +88,7 @@ export class TimebasePositionEditor {
     this.divSlider.addEventListener("input", () => {
       this.selectDiv(Number(this.divSlider.value));
     });
+    this.divButtonsHost.append(this.divSlider);
     this.divTicksHost = document.createElement("div");
     this.divTicksHost.className = "div-slider-ticks";
     this.divTicksHost.style.gridTemplateColumns = `repeat(${DIV_STEPS.length}, minmax(0, 1fr))`;

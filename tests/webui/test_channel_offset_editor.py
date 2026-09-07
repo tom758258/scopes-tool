@@ -161,6 +161,10 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
         assert.equal(editor.divSlider.step, "1");
         assert.equal(editor.divSlider.value, "0");
         assert.equal(editor.divSlider.disabled, true);
+        assert.equal(
+          editor.divButtonsHost.children.includes(editor.divSlider),
+          true,
+        );
         assert.equal(editor.divSlider.attributes["aria-label"], "channel-offset.editor.divHeading");
         assert.equal(editor.divTicks.length, 9);
         assert.deepEqual(
