@@ -1055,3 +1055,258 @@ def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+SYSTEM_SEMANTIC_WORKSPACE_HARNESS = r"""
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
+          }
+          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
+          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.testLocale = "zh-TW";
+        const labels = {
+          "zh-TW": {
+            noErrors: "未偵測到儀器錯誤。",
+            queueClear: "儀器錯誤佇列目前為空。",
+            detected: "偵測到 {{count}} 筆儀器錯誤：",
+            readFailed: "無法讀取儀器錯誤佇列；未取得儀器錯誤碼。",
+            maxReads: "已達最大讀取數；錯誤佇列中可能仍有未讀取項目。",
+            statusNone: "目前沒有狀態旗標",
+            messageAvailable: "訊息可用",
+            running: "執行中",
+            standardNone: "目前沒有標準事件旗標。",
+            clearedNote: "本次讀取已清除標準事件狀態暫存器。",
+            commandError: "命令錯誤",
+            queryError: "查詢錯誤",
+            opcComplete: "所有待處理的儀器操作皆已完成。",
+            clearDone: "儀器狀態已清除。",
+            optionsEmpty: "儀器未回報已安裝的選配功能。",
+            memup: "記憶體升級",
+            failed: "失敗",
+            instrumentError: "儀器錯誤",
+          },
+          en: {
+            noErrors: "No instrument errors detected.",
+            queueClear: "The instrument error queue is clear.",
+            detected: "Detected {{count}} instrument errors:",
+            readFailed: "Could not read the instrument error queue. No instrument error code was obtained.",
+            maxReads: "The maximum read count was reached; additional errors may remain.",
+            statusNone: "Currently no status flags",
+            messageAvailable: "Message available",
+            running: "Running / Scope executing",
+            standardNone: "No standard event flags are set.",
+            clearedNote: "This read cleared the Standard Event Status Register.",
+            commandError: "Command Error",
+            queryError: "Query Error",
+            opcComplete: "All pending instrument operations are complete.",
+            clearDone: "Instrument status was cleared.",
+            optionsEmpty: "No installed instrument options were reported.",
+            memup: "Memory Upgrade",
+            failed: "Failed",
+            instrumentError: "Instrument error",
+          },
+        };
+        const keyFor = (key) => ({
+          "results.system.checkError.noErrors": "noErrors",
+          "results.system.checkError.queueClear": "queueClear",
+          "results.system.checkError.detected": "detected",
+          "results.system.checkError.readFailed": "readFailed",
+          "results.system.checkError.maxReadsReached": "maxReads",
+          "system.statusByte.none": "statusNone",
+          "system.statusByte.messageAvailable": "messageAvailable",
+          "system.operationStatus.running": "running",
+          "system.standardEvent.none": "standardNone",
+          "system.standardEvent.clearedNote": "clearedNote",
+          "system.standardEvent.commandError": "commandError",
+          "system.standardEvent.queryError": "queryError",
+          "system.opc.complete": "opcComplete",
+          "system.clearStatus.done": "clearDone",
+          "system.options.empty": "optionsEmpty",
+          "system.option.MEMUP": "memup",
+          "status.failedJob": "failed",
+          "results.status.instrument_error": "instrumentError",
+        })[key];
+        const translate = (key, values = {}) => {
+          const name = keyFor(key);
+          const text = name ? labels[globalThis.testLocale][name] : key;
+          return Object.entries(values).reduce(
+            (value, [field, replacement]) => value.replaceAll(`{{${field}}}`, String(replacement)),
+            text,
+          );
+        };
+        const hasTranslation = (key) => keyFor(key) !== undefined;
+        const translateJobStatus = (status) => translate(
+          { failed: "status.failedJob" }[status] || `status.${status}`,
+        );
+        globalThis.testTranslate = translate;
+        globalThis.testHasTranslation = hasTranslation;
+        globalThis.testTranslateJobStatus = translateJobStatus;
+
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          "const translateJobStatus = globalThis.testTranslateJobStatus;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
+          + "\nglobalThis.resultApi = { renderJob, renderWorkspaceResult };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const api = globalThis.resultApi;
+        const workspaceLines = (job) => {
+          const workspace = new FakeNode("div");
+          api.renderWorkspaceResult(workspace, job, { mode: "simulate" });
+          return workspace.children.map((line) => line.children.map((node) => node.textContent).join(""));
+        };
+        const historyLine = (job) => {
+          const summary = new FakeNode("div");
+          api.renderJob(summary, job, new FakeNode("div"));
+          const line = summary.children[0].children;
+          return { badge: line[1].textContent, badgeClass: line[1].className, summary: line[2].textContent };
+        };
+        const completed = (command, result) => ({
+          job_id: `job-${command}`, command, status: "completed",
+          result: { exit_code: 0, result, artifacts: [] },
+        });
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_system_semantic_workspace_results() -> None:
+    english = LOCALE_EN_JS.read_text(encoding="utf-8")
+    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+    for key, en_value, zh_value in (
+        ("system.standardEvent.none", "No standard event flags are set.", "目前沒有標準事件旗標。"),
+        ("system.standardEvent.commandError", "Command Error", "命令錯誤"),
+        ("system.standardEvent.queryError", "Query Error", "查詢錯誤"),
+        ("system.opc.complete", "All pending instrument operations are complete.", "所有待處理的儀器操作皆已完成。"),
+        ("system.clearStatus.done", "Instrument status was cleared.", "儀器狀態已清除。"),
+        ("system.options.empty", "No installed instrument options were reported.", "儀器未回報已安裝的選配功能。"),
+        ("results.system.checkError.noErrors", "No instrument errors detected.", "未偵測到儀器錯誤。"),
+        ("results.system.checkError.readFailed", "Could not read the instrument error queue. No instrument error code was obtained.", "無法讀取儀器錯誤佇列；未取得儀器錯誤碼。"),
+    ):
+        assert f'"{key}": "{en_value}"' in english, key
+        assert f'"{key}": "{zh_value}"' in chinese, key
+    script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
+        r'''
+        assert.deepEqual(
+          workspaceLines(completed("check-error", {
+            drain: true, max_reads: 20,
+            entries: [{ code: 0, message: "No error", raw: '0,"No error"' }],
+            system_error: { code: 0, message: "No error", raw: '0,"No error"' },
+          })),
+          ["未偵測到儀器錯誤。", "儀器錯誤佇列目前為空。"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-status-byte", { value: 0, raw: "0", set_bits: [] })),
+          ["目前沒有狀態旗標"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-status-byte", { value: 24, raw: "24", set_bits: [4, 3] })),
+          ["訊息可用; Bit 3"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-operation-status", { value: 8, raw: "8", set_bits: [3, 99] })),
+          ["執行中; Bit 99"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-standard-event", { value: 0, raw: "0", set_bits: [] })),
+          ["目前沒有標準事件旗標。", "本次讀取已清除標準事件狀態暫存器。"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-standard-event", { value: 36, raw: "36", set_bits: [5, 2] })),
+          ["命令錯誤; 查詢錯誤", "本次讀取已清除標準事件狀態暫存器。"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-opc", { operation_complete: { complete: true, raw: "1" } })),
+          ["所有待處理的儀器操作皆已完成。"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-clear-status", { action: "system-clear-status" })),
+          ["儀器狀態已清除。"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-options", { raw: "0,0", options: ["0", "0"] })),
+          ["儀器未回報已安裝的選配功能。"],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-options", { raw: "0,MEMUP,FPGAX", options: ["0", "MEMUP", "FPGAX"] })),
+          ["記憶體升級 — MEMUP; FPGAX"],
+        );
+
+        globalThis.testLocale = "en";
+        assert.deepEqual(
+          workspaceLines(completed("check-error", {
+            drain: true, max_reads: 20,
+            entries: [{ code: 0, message: "No error", raw: '0,"No error"' }],
+            system_error: { code: 0, message: "No error", raw: '0,"No error"' },
+          })),
+          ["No instrument errors detected.", "The instrument error queue is clear."],
+        );
+        assert.deepEqual(
+          workspaceLines(completed("system-standard-event", { value: 0, raw: "0", set_bits: [] })),
+          ["No standard event flags are set.", "This read cleared the Standard Event Status Register."],
+        );
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_check_error_failure_distinction() -> None:
+    script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
+        r'''
+        const failedWithErrors = {
+          job_id: "job-check-error-errors", command: "check-error", status: "failed",
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: {
+            drain: true, max_reads: 20,
+            entries: [
+              { code: -113, message: "Undefined header", raw: '-113,"Undefined header"' },
+              { code: -222, message: "Data out of range", raw: '-222,"Data out of range"' },
+              { code: 0, message: "No error", raw: '0,"No error"' },
+            ],
+            system_error: { code: 0, message: "No error", raw: '0,"No error"' },
+          }, artifacts: [] },
+        };
+        const found = historyLine(failedWithErrors);
+        assert.equal(found.badge, "儀器錯誤");
+        assert.ok(found.badgeClass.includes("badge-failed"));
+        assert.ok(found.summary.includes("偵測到 2 筆儀器錯誤"));
+        assert.ok(found.summary.includes("-113 — Undefined header"));
+        assert.equal(found.summary.includes("non-zero exit code"), false);
+
+        const unreadable = {
+          job_id: "job-check-error-unreadable", command: "check-error", status: "failed",
+          error: "VI_ERROR_TMO: timeout",
+          result: null, artifacts: [],
+        };
+        const missing = historyLine(unreadable);
+        assert.equal(missing.badge, "失敗");
+        assert.equal(missing.summary, "無法讀取儀器錯誤佇列；未取得儀器錯誤碼。");
+
+        globalThis.testLocale = "en";
+        const foundEn = historyLine({ ...failedWithErrors, job_id: "job-check-error-errors-en" });
+        assert.equal(foundEn.badge, "Instrument error");
+        assert.ok(foundEn.summary.includes("Detected 2 instrument errors:"));
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

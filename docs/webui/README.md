@@ -418,7 +418,9 @@ Model-aware command availability and field limits are projected from Core
 capabilities. Live uses the detected physical model; Simulate and Dry-run use
 the selected planning model. The command workspace shows the latest successful
 result for that exact command and execution context, while Result History and
-raw Result Detail retain the full job and diagnostic views.
+raw Result Detail retain the full job and diagnostic views. Successful System
+command results use operator-readable semantic summaries in the Workspace;
+full structured and raw payloads remain available in Result Detail.
 
 Timebase scale, position, and reference use the same
 read-edit-Apply-verification pattern. Reference accepts Left, Center, or Right.

@@ -60,7 +60,7 @@ function formatSystemOptionsSummary(result) {
   const tokens = result.options.filter(
     (token) => token !== 0 && token !== "0" && token !== null && token !== undefined && String(token).trim() !== "",
   );
-  if (!tokens.length) return "—";
+  if (!tokens.length) return translate("system.options.empty");
   const formatted = tokens.map((token) => {
     const nameKey = SYSTEM_OPTIONS_FRIENDLY_NAMES[token];
     const name = nameKey && hasTranslation(nameKey) ? translate(nameKey) : null;
@@ -73,17 +73,19 @@ function formatSystemStatusByteSummary(result) {
   if (result?.value === 0 || result?.set_bits?.length === 0) {
     return translate("system.statusByte.none") || "Currently no status flags";
   }
-  const bits = [
-    { bit: 7, label: translate("system.statusByte.operationSummary") || "Operation status summary" },
-    { bit: 6, label: translate("system.statusByte.serviceRequest") || "Service request / master status summary" },
-    { bit: 5, label: translate("system.statusByte.eventSummary") || "Event status summary" },
-    { bit: 4, label: translate("system.statusByte.messageAvailable") || "Message available" },
-    { bit: 2, label: translate("system.statusByte.instrumentMessage") || "Instrument message" },
-    { bit: 1, label: translate("system.statusByte.userEvent") || "User event" },
-    { bit: 0, label: translate("system.statusByte.triggerOccurred") || "Trigger occurred" },
-  ];
+  const labels = {
+    7: translate("system.statusByte.operationSummary") || "Operation status summary",
+    6: translate("system.statusByte.serviceRequest") || "Service request / master status summary",
+    5: translate("system.statusByte.eventSummary") || "Event status summary",
+    4: translate("system.statusByte.messageAvailable") || "Message available",
+    2: translate("system.statusByte.instrumentMessage") || "Instrument message",
+    1: translate("system.statusByte.userEvent") || "User event",
+    0: translate("system.statusByte.triggerOccurred") || "Trigger occurred",
+  };
   const setBits = Array.isArray(result?.set_bits) ? result.set_bits : [];
-  const active = bits.filter((b) => setBits.includes(b.bit)).map((b) => b.label);
+  const active = setBits.map((bit) => (
+    labels[bit] !== undefined ? labels[bit] : `Bit ${bit}`
+  ));
   return active.length ? active.join("; ") : translate("system.statusByte.unknown") || "Unknown status flags";
 }
 
@@ -101,6 +103,86 @@ function formatSystemOperationStatusSummary(result) {
     return hasTranslation(key) ? translate(key) : `Bit ${bit}`;
   });
   return active.length ? active.join("; ") : translate("system.operationStatus.none") || "No active operation flags";
+}
+
+function formatStandardEventSummary(result) {
+  const setBits = Array.isArray(result?.set_bits) ? result.set_bits : [];
+  if (result?.value === 0 || setBits.length === 0) {
+    return translate("system.standardEvent.none");
+  }
+  const labels = {
+    7: translate("system.standardEvent.powerOn"),
+    6: translate("system.standardEvent.userRequest"),
+    5: translate("system.standardEvent.commandError"),
+    4: translate("system.standardEvent.executionError"),
+    3: translate("system.standardEvent.deviceDependentError"),
+    2: translate("system.standardEvent.queryError"),
+    1: translate("system.standardEvent.requestControl"),
+    0: translate("system.standardEvent.operationComplete"),
+  };
+  return setBits
+    .map((bit) => (labels[bit] !== undefined ? labels[bit] : `Bit ${bit}`))
+    .join("; ");
+}
+
+function checkErrorEntries(result) {
+  return Array.isArray(result?.entries) ? result.entries : [];
+}
+
+function isInstrumentErrorEntry(entry) {
+  const code = Number(entry?.code);
+  return Number.isFinite(code) && code !== 0;
+}
+
+function checkErrorInstrumentErrors(result) {
+  return checkErrorEntries(result).filter(isInstrumentErrorEntry);
+}
+
+function hasCheckErrorInstrumentErrors(job) {
+  return job?.command === "check-error"
+    && checkErrorInstrumentErrors(jobResultPayload(job)).length > 0;
+}
+
+function checkErrorQueueClear(result) {
+  const entries = checkErrorEntries(result);
+  return entries.length > 0 && !isInstrumentErrorEntry(entries[entries.length - 1]);
+}
+
+function checkErrorReadsExhausted(result) {
+  const maxReads = Number(result?.max_reads);
+  const entries = checkErrorEntries(result);
+  return Number.isFinite(maxReads) && entries.length >= maxReads && !checkErrorQueueClear(result);
+}
+
+function checkErrorEntryLine(entry) {
+  const message = typeof entry?.message === "string" ? entry.message : "";
+  return message ? `${entry.code} — ${message}` : String(entry?.code ?? "");
+}
+
+function checkErrorMaxReadsLine(result) {
+  return checkErrorReadsExhausted(result)
+    ? translate("results.system.checkError.maxReadsReached")
+    : "";
+}
+
+function checkErrorDetectedSummary(result) {
+  const errors = checkErrorInstrumentErrors(result);
+  const summary = translate("results.system.checkError.detected", { count: errors.length });
+  const parts = errors.length ? [`${summary} ${checkErrorEntryLine(errors[0])}`] : [summary];
+  const maxReads = checkErrorMaxReadsLine(result);
+  if (maxReads) parts.push(maxReads);
+  return parts.join(" ");
+}
+
+function checkErrorNoErrorSummary() {
+  return `${translate("results.system.checkError.noErrors")} ${translate("results.system.checkError.queueClear")}`;
+}
+
+function checkErrorFailureSummary(result) {
+  if (!checkErrorInstrumentErrors(result).length) {
+    return translate("results.system.checkError.readFailed");
+  }
+  return checkErrorDetectedSummary(result);
 }
 
 let resultHistory = [];
@@ -197,6 +279,8 @@ function renderHistory(summaryContainer) {
 
     const invalidMeasurement =
       entry.kind === "job" && isInvalidMeasurementSentinel(entry.job);
+    const checkErrorInstrumentError =
+      entry.kind === "job" && hasCheckErrorInstrumentErrors(entry.job);
     const statusValue = entry.kind === "job" ? entry.job.status : "failed";
     const status = document.createElement("span");
     status.className = invalidMeasurement
@@ -204,7 +288,9 @@ function renderHistory(summaryContainer) {
       : `badge badge-${statusValue}`;
     status.textContent = invalidMeasurement
       ? translate("results.status.noValidMeasurement")
-      : translateJobStatus(statusValue);
+      : checkErrorInstrumentError
+        ? translate("results.status.instrument_error")
+        : translateJobStatus(statusValue);
     statusLine.append(status);
 
     const summary = document.createElement("span");
@@ -312,6 +398,7 @@ function jobErrorSummary(job) {
 }
 
 function commandErrorSummary(command, result) {
+  if (command === "check-error") return checkErrorFailureSummary(result);
   if (command === "measure-sweep") return measureSweepErrorSummary(result);
   if (command === "single-wait") return triggerWaitErrorSummary(result, false);
   if (command === "capture") return triggerWaitErrorSummary(result?.trigger, true);
@@ -398,6 +485,10 @@ function successfulJobSummary(job) {
   if (job.command === "system-options") return formatSystemOptionsSummary(result);
   if (job.command === "system-status-byte") return formatSystemStatusByteSummary(result);
   if (job.command === "system-operation-status") return formatSystemOperationStatusSummary(result);
+  if (job.command === "system-standard-event") return formatStandardEventSummary(result);
+  if (job.command === "system-opc") return operationCompleteSummary(result);
+  if (job.command === "system-clear-status") return translate("system.clearStatus.done");
+  if (job.command === "check-error") return checkErrorNoErrorSummary();
   if (job.command === "sequence") {
     return translate("results.summary.sequenceCompleted", {
       completed: result?.completed_step_executions ?? 0,
@@ -414,6 +505,14 @@ function jobResultPayload(job) {
   const result = job?.result;
   if (!result || typeof result !== "object") return result;
   return result.result !== undefined ? result.result : result;
+}
+
+function operationCompleteSummary(result) {
+  const state = result?.operation_complete;
+  const complete = state && typeof state === "object" ? state.complete : result?.complete;
+  return complete === true
+    ? translate("system.opc.complete")
+    : translate("results.summary.completed");
 }
 
 function identifySummary(result) {
@@ -476,6 +575,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
     renderIdentityWorkspaceResult(container, job);
     return;
   }
+  if (renderSystemWorkspaceResult(container, job)) return;
   const result = jobResultPayload(job);
   if (job.command === "channel-summary" && Array.isArray(result?.channels)) {
     renderChannelSummaryWorkspaceResult(container, result.channels);
@@ -517,6 +617,61 @@ export function renderWorkspaceResult(container, job, context = {}) {
     ["execution_mode", context.mode || ""],
     ["summary", successfulJobSummary(job)],
   ]);
+}
+
+function appendSystemWorkspaceLines(container, lines) {
+  lines.filter((text) => text !== null && text !== undefined && text !== "").forEach((text) => {
+    const line = document.createElement("div");
+    line.className = "workspace-result-field";
+    const content = document.createElement("span");
+    content.textContent = text;
+    line.append(content);
+    container.append(line);
+  });
+}
+
+function renderSystemWorkspaceResult(container, job) {
+  const result = jobResultPayload(job);
+  switch (job?.command) {
+    case "check-error": {
+      const errors = checkErrorInstrumentErrors(result);
+      if (errors.length) {
+        appendSystemWorkspaceLines(container, [
+          checkErrorDetectedSummary(result),
+          ...errors.map(checkErrorEntryLine),
+        ]);
+      } else {
+        appendSystemWorkspaceLines(container, [
+          translate("results.system.checkError.noErrors"),
+          translate("results.system.checkError.queueClear"),
+        ]);
+      }
+      return true;
+    }
+    case "system-status-byte":
+      appendSystemWorkspaceLines(container, [formatSystemStatusByteSummary(result)]);
+      return true;
+    case "system-operation-status":
+      appendSystemWorkspaceLines(container, [formatSystemOperationStatusSummary(result)]);
+      return true;
+    case "system-standard-event":
+      appendSystemWorkspaceLines(container, [
+        formatStandardEventSummary(result),
+        translate("system.standardEvent.clearedNote"),
+      ]);
+      return true;
+    case "system-opc":
+      appendSystemWorkspaceLines(container, [operationCompleteSummary(result)]);
+      return true;
+    case "system-clear-status":
+      appendSystemWorkspaceLines(container, [translate("system.clearStatus.done")]);
+      return true;
+    case "system-options":
+      appendSystemWorkspaceLines(container, [formatSystemOptionsSummary(result)]);
+      return true;
+    default:
+      return false;
+  }
 }
 
 export function renderDiagnosticsWorkspaceResult(container, job) {
