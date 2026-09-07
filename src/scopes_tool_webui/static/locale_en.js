@@ -1317,6 +1317,7 @@ export const en = {
   "channel-scale-range.editor.applyScale": "Apply Scale",
   "channel-scale-range.editor.readRange": "Read Range",
   "channel-scale-range.editor.applyRange": "Apply Range",
+  "channel-scale-range.editor.quickFillHelp": "Quick fill (optional): Select a common value below to fill this field automatically, or enter a value directly.",
   "acquisition.editor.title": "Acquisition",
   "acquisition.editor.description": "Run, stop, or single-trigger acquisition and wait finitely for trigger completion.",
   "cursor.state.mode": "Mode",

@@ -1,29 +1,29 @@
 import { hasTranslation, translate } from "/static/i18n.js";
 
 const SCALE_PRESETS = [
-  { label: "1 mV/div", value: "0.001" },
-  { label: "2 mV/div", value: "0.002" },
-  { label: "5 mV/div", value: "0.005" },
-  { label: "10 mV/div", value: "0.01" },
-  { label: "20 mV/div", value: "0.02" },
-  { label: "50 mV/div", value: "0.05" },
-  { label: "100 mV/div", value: "0.1" },
-  { label: "200 mV/div", value: "0.2" },
-  { label: "500 mV/div", value: "0.5" },
-  { label: "1 V/div", value: "1" },
+  { label: "0.001", value: "0.001" },
+  { label: "0.002", value: "0.002" },
+  { label: "0.005", value: "0.005" },
+  { label: "0.01", value: "0.01" },
+  { label: "0.02", value: "0.02" },
+  { label: "0.05", value: "0.05" },
+  { label: "0.1", value: "0.1" },
+  { label: "0.2", value: "0.2" },
+  { label: "0.5", value: "0.5" },
+  { label: "1", value: "1" },
 ];
 
 const RANGE_PRESETS = [
-  { label: "8 mV", value: "0.008" },
-  { label: "16 mV", value: "0.016" },
-  { label: "40 mV", value: "0.04" },
-  { label: "80 mV", value: "0.08" },
-  { label: "160 mV", value: "0.16" },
-  { label: "400 mV", value: "0.4" },
-  { label: "800 mV", value: "0.8" },
-  { label: "1.6 V", value: "1.6" },
-  { label: "4 V", value: "4" },
-  { label: "8 V", value: "8" },
+  { label: "0.008", value: "0.008" },
+  { label: "0.016", value: "0.016" },
+  { label: "0.04", value: "0.04" },
+  { label: "0.08", value: "0.08" },
+  { label: "0.16", value: "0.16" },
+  { label: "0.4", value: "0.4" },
+  { label: "0.8", value: "0.8" },
+  { label: "1.6", value: "1.6" },
+  { label: "4", value: "4" },
+  { label: "8", value: "8" },
 ];
 
 function channelLabel(channel) {
@@ -111,6 +111,9 @@ export class ChannelScaleRangeEditor {
     this.scaleInput.dataset.field = "volts_per_division";
     this.scaleField.append(this.scaleFieldLabel, this.scaleInput);
 
+    this.scaleHelp = document.createElement("small");
+    this.scaleHelp.className = "field-help";
+
     this.scalePresets = document.createElement("div");
     this.scalePresets.className = "channel-scale-range-presets";
     this.scalePresetButtons = [];
@@ -149,7 +152,7 @@ export class ChannelScaleRangeEditor {
     });
 
     this.scaleActions.append(this.readScaleButton, this.applyScaleButton);
-    this.scaleSection.append(this.scaleHeading, this.scaleField, this.scalePresets, this.scaleActions);
+    this.scaleSection.append(this.scaleHeading, this.scaleField, this.scaleHelp, this.scalePresets, this.scaleActions);
 
     // 3. Range section
     this.rangeSection = document.createElement("div");
@@ -168,6 +171,9 @@ export class ChannelScaleRangeEditor {
     this.rangeInput.inputMode = "decimal";
     this.rangeInput.dataset.field = "volts";
     this.rangeField.append(this.rangeFieldLabel, this.rangeInput);
+
+    this.rangeHelp = document.createElement("small");
+    this.rangeHelp.className = "field-help";
 
     this.rangePresets = document.createElement("div");
     this.rangePresets.className = "channel-scale-range-presets";
@@ -207,7 +213,7 @@ export class ChannelScaleRangeEditor {
     });
 
     this.rangeActions.append(this.readRangeButton, this.applyRangeButton);
-    this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangePresets, this.rangeActions);
+    this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangeHelp, this.rangePresets, this.rangeActions);
 
     this.container.append(
       this.channelField,
@@ -216,7 +222,13 @@ export class ChannelScaleRangeEditor {
     );
 
     this.stateKey = null;
+    this.syncHelpText();
     this.schedulePresentation();
+  }
+
+  syncHelpText() {
+    this.scaleHelp.textContent = `${translate("help.channel-scale.volts_per_division")}\n${translate("channel-scale-range.editor.quickFillHelp")}`;
+    this.rangeHelp.textContent = `${translate("help.channel-range.volts")}\n${translate("channel-scale-range.editor.quickFillHelp")}`;
   }
 
   schedulePresentation() {
@@ -233,6 +245,7 @@ export class ChannelScaleRangeEditor {
     this.rangeFieldLabel.textContent = translate("field.channel-range.value");
     this.readRangeButton.textContent = translate("channel-scale-range.editor.readRange");
     this.applyRangeButton.textContent = translate("channel-scale-range.editor.applyRange");
+    this.syncHelpText();
 
     const currentVal = this.channelSelect.value;
     this.populateChannels();

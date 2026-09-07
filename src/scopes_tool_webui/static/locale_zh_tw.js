@@ -1317,6 +1317,7 @@ export const zhTW = {
   "channel-scale-range.editor.applyScale": "套用刻度",
   "channel-scale-range.editor.readRange": "讀取範圍",
   "channel-scale-range.editor.applyRange": "套用範圍",
+  "channel-scale-range.editor.quickFillHelp": "快速填入（選用）：點選下方常用值會自動填入此欄位；也可不使用快捷按鈕，直接自行輸入。",
   "acquisition.editor.title": "擷取",
   "acquisition.editor.description": "執行連續擷取、停止或單次觸發擷取，並在有限時間內等待觸發完成。",
   "cursor.state.mode": "模式",

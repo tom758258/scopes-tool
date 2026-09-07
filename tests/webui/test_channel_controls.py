@@ -961,6 +961,15 @@ def test_channel_scale_range_composite_workspace() -> None:
     assert ".channel-scale-range-presets" in css
     assert ".channel-scale-range-value" in css
     assert "max-width: 50%" in css
+    desktop_presets = css.split(".channel-scale-range-presets {", 1)[1].split("}", 1)[0]
+    assert "repeat(5, minmax(0, 1fr))" in desktop_presets
+    narrow = css.split("@media (max-width: 700px)", 1)[1]
+    narrow_presets = narrow.split(".channel-scale-range-presets {", 1)[1].split("}", 1)[0]
+    assert "repeat(2, minmax(0, 1fr))" in narrow_presets
+
+    # Shared quick-fill help key exists in both locales
+    assert '"channel-scale-range.editor.quickFillHelp":' in zh
+    assert '"channel-scale-range.editor.quickFillHelp":' in en
 
 
 @pytest.mark.skipif(
@@ -1138,16 +1147,16 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
 
         // 9. Scale presets use text inputs and fill only the scale field without dispatch.
         const expectedScalePresets = [
-          ["1 mV/div", "0.001"],
-          ["2 mV/div", "0.002"],
-          ["5 mV/div", "0.005"],
-          ["10 mV/div", "0.01"],
-          ["20 mV/div", "0.02"],
-          ["50 mV/div", "0.05"],
-          ["100 mV/div", "0.1"],
-          ["200 mV/div", "0.2"],
-          ["500 mV/div", "0.5"],
-          ["1 V/div", "1"],
+          ["0.001", "0.001"],
+          ["0.002", "0.002"],
+          ["0.005", "0.005"],
+          ["0.01", "0.01"],
+          ["0.02", "0.02"],
+          ["0.05", "0.05"],
+          ["0.1", "0.1"],
+          ["0.2", "0.2"],
+          ["0.5", "0.5"],
+          ["1", "1"],
         ];
         assert.equal(editor.scaleInput.type, "text");
         assert.equal(editor.scaleInput.inputMode, "decimal");
@@ -1170,16 +1179,16 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
 
         // 10. Range presets fill only the range field without dispatch.
         const expectedRangePresets = [
-          ["8 mV", "0.008"],
-          ["16 mV", "0.016"],
-          ["40 mV", "0.04"],
-          ["80 mV", "0.08"],
-          ["160 mV", "0.16"],
-          ["400 mV", "0.4"],
-          ["800 mV", "0.8"],
-          ["1.6 V", "1.6"],
-          ["4 V", "4"],
-          ["8 V", "8"],
+          ["0.008", "0.008"],
+          ["0.016", "0.016"],
+          ["0.04", "0.04"],
+          ["0.08", "0.08"],
+          ["0.16", "0.16"],
+          ["0.4", "0.4"],
+          ["0.8", "0.8"],
+          ["1.6", "1.6"],
+          ["4", "4"],
+          ["8", "8"],
         ];
         assert.equal(editor.rangeInput.type, "text");
         assert.equal(editor.rangeInput.inputMode, "decimal");
@@ -1211,6 +1220,42 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
           assert.equal(button.disabled, false);
         }
+
+        // 12. Scale/range help combines existing field help with the shared quick-fill note.
+        assert.equal(editor.scaleHelp.tagName, "SMALL");
+        assert.equal(editor.scaleHelp.className, "field-help");
+        assert.equal(
+          editor.scaleHelp.textContent,
+          "help.channel-scale.volts_per_division\nchannel-scale-range.editor.quickFillHelp",
+        );
+        assert.equal(editor.rangeHelp.tagName, "SMALL");
+        assert.equal(editor.rangeHelp.className, "field-help");
+        assert.equal(
+          editor.rangeHelp.textContent,
+          "help.channel-range.volts\nchannel-scale-range.editor.quickFillHelp",
+        );
+        assert.deepEqual(
+          editor.scaleSection.children.map((node) => node.tagName),
+          ["STRONG", "LABEL", "SMALL", "DIV", "DIV"],
+        );
+        assert.equal(editor.scaleSection.children[2], editor.scaleHelp);
+        assert.equal(editor.scaleSection.children[3], editor.scalePresets);
+        assert.deepEqual(
+          editor.rangeSection.children.map((node) => node.tagName),
+          ["STRONG", "LABEL", "SMALL", "DIV", "DIV"],
+        );
+        assert.equal(editor.rangeSection.children[2], editor.rangeHelp);
+        assert.equal(editor.rangeSection.children[3], editor.rangePresets);
+        globalThis.translate = (key) => `T:${key}`;
+        editor.rerender();
+        assert.equal(
+          editor.scaleHelp.textContent,
+          "T:help.channel-scale.volts_per_division\nT:channel-scale-range.editor.quickFillHelp",
+        );
+        assert.equal(
+          editor.rangeHelp.textContent,
+          "T:help.channel-range.volts\nT:channel-scale-range.editor.quickFillHelp",
+        );
 
         console.log(JSON.stringify({ ok: true }));
         '''
