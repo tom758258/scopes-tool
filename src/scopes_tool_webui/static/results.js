@@ -638,7 +638,7 @@ function renderSystemWorkspaceResult(container, job) {
       if (errors.length) {
         appendSystemWorkspaceLines(container, [
           checkErrorDetectedSummary(result),
-          ...errors.map(checkErrorEntryLine),
+          ...errors.slice(1).map(checkErrorEntryLine),
         ]);
       } else {
         appendSystemWorkspaceLines(container, [

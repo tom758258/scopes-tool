@@ -408,6 +408,10 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           control.render(true);
           assert.equal(calls.length, 0);
           assert.equal(control.container.children[1].textContent, "labels.shared");
+          const buttons = control.container.children.filter((node) => node.tagName === "BUTTON");
+          assert.equal(buttons.length, 1);
+          assert.equal(buttons[0].textContent, "actions.apply");
+          assert.equal(control.applyButton, buttons[0]);
           const input = control.container.querySelector('[data-field="enabled"]');
           assert.equal(input.value, "");
           await control.run(false);

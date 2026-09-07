@@ -2424,7 +2424,15 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert "commandForm.isSettingEditor()" in refresh_handler
     assert "const parameters = commandForm.queryValues();" in refresh_handler
     assert 'intent: "readback"' in refresh_handler
-    assert "formRevision: genericFormRevision" in refresh_handler
+    assert "formRevision," in refresh_handler
+    assert "const formRevision = genericFormRevision;" in refresh_handler
+    assert "const submittedWorkspaceContext = currentWorkspaceContext(selected.id);" in refresh_handler
+    assert "const job = await executeCommand(selected.id, parameters," in refresh_handler
+    assert 'selected.id === "channel-label"' in refresh_handler
+    assert "job?.status === \"completed\"" in refresh_handler
+    assert "formRevision === genericFormRevision" in refresh_handler
+    assert "isCurrentEditorJob(selected.id, submittedWorkspaceContext)" in refresh_handler
+    assert "await channelLabelVisibility?.run(false);" in refresh_handler
     assert "function scheduleEditorRead()" not in source
 
     cancel_handler = source.split('elements.cancel.addEventListener("click"', 1)[1].split(

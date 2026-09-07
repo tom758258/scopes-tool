@@ -457,10 +457,20 @@ async function initialize() {
     if (!selected || !commandForm.isSettingEditor()) return;
     const parameters = commandForm.queryValues();
     if (parameters !== null) {
-      await executeCommand(selected.id, parameters, {
+      const formRevision = genericFormRevision;
+      const submittedWorkspaceContext = currentWorkspaceContext(selected.id);
+      const job = await executeCommand(selected.id, parameters, {
         intent: "readback",
-        formRevision: genericFormRevision,
+        formRevision,
       });
+      if (
+        selected.id === "channel-label"
+        && job?.status === "completed"
+        && formRevision === genericFormRevision
+        && isCurrentEditorJob(selected.id, submittedWorkspaceContext)
+      ) {
+        await channelLabelVisibility?.run(false);
+      }
     }
   });
   elements.cancel.addEventListener("click", async () => {

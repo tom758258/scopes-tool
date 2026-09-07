@@ -1095,7 +1095,7 @@ SYSTEM_SEMANTIC_WORKSPACE_HARNESS = r"""
           en: {
             noErrors: "No instrument errors detected.",
             queueClear: "The instrument error queue is clear.",
-            detected: "Detected {{count}} instrument errors:",
+            detected: "Instrument errors detected ({{count}}):",
             readFailed: "Could not read the instrument error queue. No instrument error code was obtained.",
             maxReads: "The maximum read count was reached; additional errors may remain.",
             statusNone: "Currently no status flags",
@@ -1239,6 +1239,21 @@ def test_system_semantic_workspace_results() -> None:
           workspaceLines(completed("system-options", { raw: "0,MEMUP,FPGAX", options: ["0", "MEMUP", "FPGAX"] })),
           ["記憶體升級 — MEMUP; FPGAX"],
         );
+        const failedLines = workspaceLines({
+          job_id: "job-check-error-direct", command: "check-error", status: "failed",
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: {
+            drain: true, max_reads: 20,
+            entries: [
+              { code: -113, message: "Undefined header", raw: '-113,"Undefined header"' },
+              { code: -222, message: "Data out of range", raw: '-222,"Data out of range"' },
+              { code: 0, message: "No error", raw: '0,"No error"' },
+            ],
+            system_error: { code: 0, message: "No error", raw: '0,"No error"' },
+          }, artifacts: [] },
+        }).join("\n");
+        assert.equal(failedLines.split("-113").length - 1, 1);
+        assert.equal(failedLines.split("-222").length - 1, 1);
 
         globalThis.testLocale = "en";
         assert.deepEqual(
@@ -1300,7 +1315,21 @@ def test_check_error_failure_distinction() -> None:
         globalThis.testLocale = "en";
         const foundEn = historyLine({ ...failedWithErrors, job_id: "job-check-error-errors-en" });
         assert.equal(foundEn.badge, "Instrument error");
-        assert.ok(foundEn.summary.includes("Detected 2 instrument errors:"));
+        assert.ok(foundEn.summary.includes("Instrument errors detected (2):"));
+        const singleEn = historyLine({
+          job_id: "job-check-error-single-en", command: "check-error", status: "failed",
+          error: "Core command returned a non-zero exit code.",
+          result: { exit_code: 1, result: {
+            drain: true, max_reads: 20,
+            entries: [
+              { code: -113, message: "Undefined header", raw: '-113,"Undefined header"' },
+              { code: 0, message: "No error", raw: '0,"No error"' },
+            ],
+            system_error: { code: 0, message: "No error", raw: '0,"No error"' },
+          }, artifacts: [] },
+        });
+        assert.ok(singleEn.summary.includes("Instrument errors detected (1):"));
+        assert.equal(singleEn.summary.includes("1 instrument errors"), false);
         '''
     )
     completed = subprocess.run(

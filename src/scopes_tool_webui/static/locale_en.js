@@ -1558,7 +1558,7 @@ export const en = {
   "system.options.empty": "No installed instrument options were reported.",
   "results.system.checkError.noErrors": "No instrument errors detected.",
   "results.system.checkError.queueClear": "The instrument error queue is clear.",
-  "results.system.checkError.detected": "Detected {{count}} instrument errors:",
+  "results.system.checkError.detected": "Instrument errors detected ({{count}}):",
   "results.system.checkError.readFailed": "Could not read the instrument error queue. No instrument error code was obtained.",
   "results.system.checkError.maxReadsReached": "The maximum read count was reached; additional errors may remain.",
 };

@@ -27,17 +27,12 @@ export class LabelVisibility {
     this.form.render(command);
     this.status = document.createElement("output");
     this.status.className = "muted compact-note";
-    this.readButton = document.createElement("button");
     this.applyButton = document.createElement("button");
-    for (const button of [this.readButton, this.applyButton]) {
-      button.type = "button";
-      button.className = "secondary trigger-editor-action";
-    }
-    this.readButton.textContent = translate("actions.readSettings");
+    this.applyButton.type = "button";
+    this.applyButton.className = "secondary trigger-editor-action";
     this.applyButton.textContent = translate("actions.apply");
-    this.readButton.addEventListener("click", () => void this.run(false));
     this.applyButton.addEventListener("click", () => void this.run(true));
-    this.container.append(heading, note, host, this.status, this.readButton, this.applyButton);
+    this.container.append(heading, note, host, this.status, this.applyButton);
     this.applyBusyState();
   }
 
@@ -73,7 +68,6 @@ export class LabelVisibility {
     if (!this.form) return;
     disabled ||= this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable();
     this.form.setDisabled(disabled);
-    this.readButton.disabled = disabled;
     this.applyButton.disabled = disabled;
   }
 }

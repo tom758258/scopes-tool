@@ -227,8 +227,9 @@ Selection is passive; Read reference state reads display and label state for
 the selected waveform and the shared label visibility through `display-label`.
 Reference waveform display, label text, and Clear remain independent actions.
 Channel label and Reference also offer a shared Label visibility control with
-explicit Read and Apply using the existing `display-label` query/set readback.
-This instrument-wide setting remains available under Display.
+explicit Apply using the existing `display-label` query/set readback; reading
+follows the workspace top Read action. This instrument-wide setting remains
+available under Display.
 
 Selecting `measure-log`, `triggered-measure-loop`, `capture-batch`,
 `measure-until`, `capture-until`, `capture-monitor`, or
