@@ -114,11 +114,13 @@ The Command workbench exposes:
   using the existing commands and validation, Acquisition Settings is the
   existing `acquisition` query/apply command, and `autoscale` remains
   independent
-- Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`
+- Timebase: `timebase-scale`, Time Offset (`timebase-position`) with Div quick-fill based on the current time/div after a successful read, `timebase-reference`
 - Channel: Vertical Scale / Range (`channel-scale-range`) combines
   `channel-scale` and `channel-range` in one presentation workspace, while the
   underlying commands remain available to CLI and Worker execution;
-  `channel-display`, `channel-summary`, `channel-label`, `channel-offset`,
+  Vertical Offset (`channel-offset`) offers Div quick-fill based on the
+  selected channel's current scale after a successful read;
+  `channel-display`, `channel-summary`, `channel-label`,
   `channel-coupling`, `channel-probe`, `channel-bandwidth-limit`,
   `channel-impedance`, `channel-invert`, `channel-units`, `channel-vernier`,
   `channel-probe-skew`

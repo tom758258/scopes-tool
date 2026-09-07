@@ -312,6 +312,7 @@ COMMANDS = (
         "id": "timebase-position",
         "category": "Timebase",
         "label": "Timebase position",
+        "editor": "timebase-position",
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
@@ -395,6 +396,7 @@ COMMANDS = (
         "id": "channel-offset",
         "category": "Channel",
         "label": "Channel offset",
+        "editor": "channel-offset",
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},

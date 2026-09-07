@@ -37,6 +37,8 @@ import { TriggerEditor } from "/static/trigger-editor.js";
 import { WorkflowEditor } from "/static/workflow-editor.js";
 import { ChannelDisplayEditor } from "/static/channel-display-editor.js";
 import { ChannelScaleRangeEditor } from "/static/channel-scale-range-editor.js";
+import { TimebasePositionEditor } from "/static/timebase-position-editor.js";
+import { ChannelOffsetEditor } from "/static/channel-offset-editor.js";
 import { SequenceEditor } from "/static/sequence-editor.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
@@ -94,6 +96,8 @@ const elements = {
   measurementEditor: document.querySelector("#measurement-editor"),
   channelDisplayEditor: document.querySelector("#channel-display-editor"),
   channelScaleRangeEditor: document.querySelector("#channel-scale-range-editor"),
+  timebasePositionEditor: document.querySelector("#timebase-position-editor"),
+  channelOffsetEditor: document.querySelector("#channel-offset-editor"),
   cursorEditor: document.querySelector("#cursor-editor"),
   annotationEditor: document.querySelector("#annotation-editor"),
   wgenEditor: document.querySelector("#wgen-editor"),
@@ -151,6 +155,8 @@ let sequenceEditor;
 let measurementEditor;
 let channelDisplayEditor;
 let channelScaleRangeEditor;
+let timebasePositionEditor;
+let channelOffsetEditor;
 let cursorEditor;
 let annotationEditor;
 let wgenEditor;
@@ -192,6 +198,8 @@ const EDITOR_RENDERERS = {
   diagnostics: () => diagnosticsEditor,
   "channel-display": () => channelDisplayEditor,
   "channel-scale-range": () => channelScaleRangeEditor,
+  "timebase-position": () => timebasePositionEditor,
+  "channel-offset": () => channelOffsetEditor,
 };
 
 function editorKindFor(command) {
@@ -350,6 +358,26 @@ async function initialize() {
     selectedCommand: () => catalog.selected(),
   });
   channelScaleRangeEditor = new ChannelScaleRangeEditor(elements.channelScaleRangeEditor, catalog, {
+    executeCommand,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  timebasePositionEditor = new TimebasePositionEditor(elements.timebasePositionEditor, catalog, {
+    executeCommand,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  channelOffsetEditor = new ChannelOffsetEditor(elements.channelOffsetEditor, catalog, {
     executeCommand,
     isExecutionBusy,
     isAvailable: () => {
@@ -889,6 +917,8 @@ document.addEventListener("localechange", () => {
   measurementEditor?.rerender();
   channelDisplayEditor?.rerender();
   channelScaleRangeEditor?.rerender();
+  timebasePositionEditor?.rerender();
+  channelOffsetEditor?.rerender();
   acquisitionEditor?.rerender();
   cursorEditor?.rerender();
   annotationEditor?.rerender();
@@ -927,6 +957,8 @@ function syncCommandSelection(draft = null) {
   elements.measurementEditor.hidden = editorKind !== "measurement";
   if (elements.channelDisplayEditor) elements.channelDisplayEditor.hidden = editorKind !== "channel-display";
   if (elements.channelScaleRangeEditor) elements.channelScaleRangeEditor.hidden = editorKind !== "channel-scale-range";
+  if (elements.timebasePositionEditor) elements.timebasePositionEditor.hidden = editorKind !== "timebase-position";
+  if (elements.channelOffsetEditor) elements.channelOffsetEditor.hidden = editorKind !== "channel-offset";
   if (elements.acquisitionEditor) elements.acquisitionEditor.hidden = editorKind !== "acquisition";
   elements.cursorEditor.hidden = editorKind !== "cursor";
   elements.annotationEditor.hidden = editorKind !== "annotation";
@@ -999,6 +1031,8 @@ function updateAvailability() {
   measurementEditor?.applyBusyState();
   channelDisplayEditor?.applyBusyState();
   channelScaleRangeEditor?.applyBusyState();
+  timebasePositionEditor?.applyBusyState();
+  channelOffsetEditor?.applyBusyState();
   acquisitionEditor?.applyBusyState();
   if (typeof diagnosticsEditor !== "undefined") diagnosticsEditor?.applyBusyState();
   deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
@@ -1060,6 +1094,8 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "measurement") measurementEditor?.schedulePresentation();
   if (editorKind === "channel-display") channelDisplayEditor?.schedulePresentation();
   if (editorKind === "channel-scale-range") channelScaleRangeEditor?.schedulePresentation();
+  if (editorKind === "timebase-position") timebasePositionEditor?.schedulePresentation();
+  if (editorKind === "channel-offset") channelOffsetEditor?.schedulePresentation();
   if (editorKind === "acquisition") acquisitionEditor?.schedulePresentation();
   if (editorKind === "cursor") cursorEditor?.schedulePresentation();
   if (editorKind === "annotation") annotationEditor?.schedulePresentation();
