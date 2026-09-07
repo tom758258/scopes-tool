@@ -832,6 +832,18 @@ def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
         assert.equal(failedRun.calls.length, 1);
         assert.equal(failedRun.editor.status.textContent, "channel-display.editor.runIncomplete");
 
+        // 1. Same context present() should preserve existing status.
+        failedRun.editor.present();
+        assert.equal(
+          failedRun.editor.status.textContent,
+          "channel-display.editor.runIncomplete",
+        );
+
+        // 2. Presentation context change should clear previous status.
+        currentContext = "simulate|other-model";
+        failedRun.editor.present();
+        assert.equal(failedRun.editor.status.textContent, "");
+
         // C. A context change after the first command prevents the second dispatch or stale status.
         currentContext = "simulate|model";
         const staleStatus = "current-context-status";

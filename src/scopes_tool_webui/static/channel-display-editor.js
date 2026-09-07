@@ -103,6 +103,7 @@ export class ChannelDisplayEditor {
       return;
     }
     this.stateKey = key;
+    this.status.textContent = "";
     this.rebuild();
     this.applyBusyState();
   }
