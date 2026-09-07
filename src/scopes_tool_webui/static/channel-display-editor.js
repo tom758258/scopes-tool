@@ -151,6 +151,7 @@ export class ChannelDisplayEditor {
           { action: "set", channel: item.channel, enabled: item.enabled },
           { intent: "apply" },
         );
+        if (this.hooks.contextKey() !== key) return null;
         const enabled = job?.result?.result?.enabled
           ?? job?.result?.enabled;
         if (

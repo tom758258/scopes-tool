@@ -832,15 +832,18 @@ def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
         assert.equal(failedRun.calls.length, 1);
         assert.equal(failedRun.editor.status.textContent, "channel-display.editor.runIncomplete");
 
-        // C. A context change after the first completed command prevents the second dispatch.
+        // C. A context change after the first command prevents the second dispatch or stale status.
         currentContext = "simulate|model";
-        const staleRun = makeEditor([1, 2, 3, 4], ({ parameters, setContext }) => {
+        const staleStatus = "current-context-status";
+        const staleRun = makeEditor([1, 2, 3, 4], ({ setContext }) => {
           setContext("simulate|other-model");
-          return { status: "completed", result: { result: { enabled: parameters.enabled } } };
+          return { status: "failed" };
         });
+        staleRun.editor.status.textContent = staleStatus;
         await staleRun.editor.run();
         assert.equal(staleRun.calls.length, 1);
         assert.equal(staleRun.calls[0].parameters.channel, 1);
+        assert.equal(staleRun.editor.status.textContent, staleStatus);
 
         // D. A complete aggregate readback updates all checkboxes atomically.
         currentContext = "simulate|model";
