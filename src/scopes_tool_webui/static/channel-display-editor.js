@@ -151,7 +151,13 @@ export class ChannelDisplayEditor {
           { action: "set", channel: item.channel, enabled: item.enabled },
           { intent: "apply" },
         );
-        if (job?.status !== "completed") {
+        const enabled = job?.result?.result?.enabled
+          ?? job?.result?.enabled;
+        if (
+          job?.status !== "completed"
+          || typeof enabled !== "boolean"
+          || enabled !== item.enabled
+        ) {
           this.status.textContent = translate("channel-display.editor.runIncomplete");
           return job;
         }

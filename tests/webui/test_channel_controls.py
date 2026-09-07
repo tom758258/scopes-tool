@@ -717,13 +717,190 @@ def test_channel_commands_keep_groups_order_and_presentation_labels() -> None:
     assert '"group.basic": "Basic"' in en
 
 
+@pytest.mark.skipif(
+    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+    reason="Node.js is required for frontend behavior checks",
+)
 def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
-    assert "channel-display.editor" in (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
-    assert "channel-display.editor" in (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
-    catalog = command_catalog()
-    entry = next(item for item in catalog if item["id"] == "channel-display")
-    assert entry.get("editor") == "channel-display"
-    assert entry.get("group") == "channel-basic"
+    catalog_json = json.dumps(command_catalog())
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeEl {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.className = "";
+            this.textContent = "";
+            this.hidden = false;
+            this.disabled = false;
+            this.checked = false;
+            this.type = "";
+            this.value = "";
+          }
+          append(...nodes) { this.children.push(...nodes); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          addEventListener(event, handler) { this[`on_${event}`] = handler; }
+          remove() {}
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeEl(tag) };
+        globalThis.queueMicrotask = (fn) => fn();
+        globalThis.hasTranslation = () => false;
+        globalThis.translate = (key) => key;
+
+        let editorSource = fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static/channel-display-editor.js"),
+          "utf8",
+        );
+        editorSource = editorSource
+          .replace(/^import[^\n]*\r?\n/gm, "")
+          .replace("export class ChannelDisplayEditor", "class ChannelDisplayEditor")
+          + "\nglobalThis.ChannelDisplayEditor = ChannelDisplayEditor;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(editorSource)}`);
+
+        const command = __CATALOG__.find((entry) => entry.id === "channel-display");
+        let currentContext = "simulate|model";
+
+        function makeEditor(options, handler) {
+          const calls = [];
+          const catalog = {
+            commands: [{
+              ...command,
+              fields: command.fields.map((field) =>
+                field.name === "channel" ? { ...field, options } : field
+              ),
+            }],
+            fieldsFor: (definition) => definition.fields || [],
+            optionsFor: (field) => field.options || [],
+          };
+          const hooks = {
+            contextKey: () => currentContext,
+            selectedCommand: () => ({ id: "channel-display", editor: "channel-display" }),
+            isAvailable: () => true,
+            isExecutionBusy: () => false,
+            isCommandAvailable: () => true,
+            async executeCommand(id, parameters, requestOptions) {
+              calls.push({ id, parameters, options: requestOptions });
+              return handler({ id, parameters, setContext: (value) => { currentContext = value; } });
+            },
+          };
+          return {
+            editor: new globalThis.ChannelDisplayEditor(new FakeEl("div"), catalog, hooks),
+            calls,
+          };
+        }
+
+        // A. Run snapshots the checkbox state and dispatches all projected channels in order.
+        currentContext = "simulate|model";
+        const completeRun = makeEditor([1, 2, 3, 4], ({ parameters }) => ({
+          status: "completed",
+          result: { result: { enabled: parameters.enabled } },
+        }));
+        const completeBoxes = completeRun.editor.entries.map((entry) => entry.box);
+        completeBoxes[0].checked = true;
+        completeBoxes[1].checked = false;
+        completeBoxes[2].checked = true;
+        completeBoxes[3].checked = false;
+        await completeRun.editor.run();
+        assert.deepEqual(completeRun.calls, [
+          { id: "channel-display", parameters: { action: "set", channel: 1, enabled: true }, options: { intent: "apply" } },
+          { id: "channel-display", parameters: { action: "set", channel: 2, enabled: false }, options: { intent: "apply" } },
+          { id: "channel-display", parameters: { action: "set", channel: 3, enabled: true }, options: { intent: "apply" } },
+          { id: "channel-display", parameters: { action: "set", channel: 4, enabled: false }, options: { intent: "apply" } },
+        ]);
+        assert.equal(completeRun.editor.status.textContent, "");
+
+        // B. A completed set with a mismatching readback stops immediately.
+        currentContext = "simulate|model";
+        const mismatchRun = makeEditor([1, 2, 3, 4], ({ parameters }) => ({
+          status: "completed",
+          result: { enabled: parameters.channel === 1 ? false : parameters.enabled },
+        }));
+        await mismatchRun.editor.run();
+        assert.equal(mismatchRun.calls.length, 1);
+        assert.equal(mismatchRun.calls[0].parameters.channel, 1);
+        assert.equal(mismatchRun.editor.status.textContent, "channel-display.editor.runIncomplete");
+
+        // A lifecycle failure also stops before the next channel.
+        currentContext = "simulate|model";
+        const failedRun = makeEditor([1, 2, 3, 4], () => ({ status: "failed" }));
+        await failedRun.editor.run();
+        assert.equal(failedRun.calls.length, 1);
+        assert.equal(failedRun.editor.status.textContent, "channel-display.editor.runIncomplete");
+
+        // C. A context change after the first completed command prevents the second dispatch.
+        currentContext = "simulate|model";
+        const staleRun = makeEditor([1, 2, 3, 4], ({ parameters, setContext }) => {
+          setContext("simulate|other-model");
+          return { status: "completed", result: { result: { enabled: parameters.enabled } } };
+        });
+        await staleRun.editor.run();
+        assert.equal(staleRun.calls.length, 1);
+        assert.equal(staleRun.calls[0].parameters.channel, 1);
+
+        // D. A complete aggregate readback updates all checkboxes atomically.
+        currentContext = "simulate|model";
+        const completeRead = makeEditor([1, 2, 3, 4], ({ id }) => id === "channel-summary"
+          ? {
+              status: "completed",
+              result: { result: { channels: [
+                { channel: 1, display: true },
+                { channel: 2, display: false },
+                { channel: 3, display: true },
+                { channel: 4, display: false },
+              ] } },
+            }
+          : { status: "completed" });
+        for (const [index, entry] of completeRead.editor.entries.entries()) {
+          entry.box.checked = index % 2 === 1;
+        }
+        await completeRead.editor.read();
+        assert.deepEqual(completeRead.editor.entries.map((entry) => entry.box.checked), [true, false, true, false]);
+        assert.equal(completeRead.editor.status.textContent, "");
+
+        // Invalid aggregate readback leaves every checkbox unchanged.
+        currentContext = "simulate|model";
+        const invalidRead = makeEditor([1, 2, 3, 4], ({ id }) => id === "channel-summary"
+          ? {
+              status: "completed",
+              result: { channels: [
+                { channel: 1, display: true },
+                { channel: 2, display: null },
+                { channel: 3, display: false },
+                { channel: 4, display: true },
+              ] },
+            }
+          : { status: "completed" });
+        const invalidBefore = [false, true, false, true];
+        invalidRead.editor.entries.forEach((entry, index) => { entry.box.checked = invalidBefore[index]; });
+        await invalidRead.editor.read();
+        assert.deepEqual(invalidRead.editor.entries.map((entry) => entry.box.checked), invalidBefore);
+        assert.equal(invalidRead.editor.status.textContent, "channel-display.editor.readFailed");
+
+        // E. Channel options are projected from the catalog.
+        currentContext = "simulate|model";
+        const projected = makeEditor([1, 2], () => ({ status: "completed" }));
+        assert.deepEqual(projected.editor.channels, [1, 2]);
+        assert.equal(projected.editor.entries.length, 2);
+
+        console.log(JSON.stringify({ ok: true }));
+        '''
+    ).replace("__CATALOG__", catalog_json)
+    completed = subprocess.run(
+        ["node", "--input-type=module"],
+        cwd=REPO_ROOT,
+        input=script,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
+    assert json.loads(completed.stdout) == {"ok": True}
 
 
 def test_channel_scale_range_composite_workspace() -> None:

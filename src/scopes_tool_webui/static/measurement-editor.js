@@ -18,6 +18,11 @@ function choiceLabel(value) {
   return hasTranslation(key) ? translate(key) : String(value);
 }
 
+function channelLabel(value) {
+  const key = `enum.channel${String(value)}`;
+  return hasTranslation(key) ? translate(key) : `CH${String(value)}`;
+}
+
 function measurementPayload(job) {
   return job?.result?.result?.measurements || job?.result?.measurements || null;
 }
