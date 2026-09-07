@@ -3102,7 +3102,7 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 13
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 14
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
 
@@ -4692,6 +4692,7 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         const annotationEditor = {{}};
         const wgenEditor = {{}};
         const demoEditor = {{}};
+        const channelDisplayEditor = {{}};
         const translate = (key) => key;
         {sync_header}
 
