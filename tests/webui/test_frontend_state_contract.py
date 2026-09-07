@@ -712,6 +712,14 @@ def test_serial_editor_replaces_generic_form_with_passive_selection() -> None:
         assert f'"{key}":' in chinese, key
 
 
+def test_channel_display_editor_uses_workflow_editor_layout() -> None:
+    html = read_static("index.html")
+    assert (
+        'id="channel-display-editor" '
+        'class="channel-display-editor workflow-editor" hidden'
+    ) in html
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
     serial_editor_path = STATIC_ROOT / "serial-editor.js"
