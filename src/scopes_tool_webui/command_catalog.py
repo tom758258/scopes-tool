@@ -356,6 +356,7 @@ COMMANDS = (
         "id": "channel-scale",
         "category": "Channel",
         "label": "Channel scale",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
@@ -412,6 +413,7 @@ COMMANDS = (
         "id": "channel-range",
         "category": "Channel",
         "label": "Channel range",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
@@ -1997,12 +1999,23 @@ def command_catalog() -> list[dict[str, Any]]:
                 "modes": ("live", "simulate"),
                 "fields": (),
             },
+            {
+                "id": "channel-scale-range",
+                "category": "Channel",
+                "label": "Vertical Scale / Range",
+                "editor": "channel-scale-range",
+                "presentation_only": True,
+                "modes": ("live", "simulate"),
+                "fields": (),
+                "group": "channel-basic",
+            },
         )
     )
     for presentation_id, first_underlying_id in (
         ("acquisition-control", "run"),
         ("reference-waveform", "reference-save"),
         ("save-export", "save-pwd"),
+        ("channel-scale-range", "channel-scale"),
     ):
         presentation = next(entry for entry in catalog if entry["id"] == presentation_id)
         catalog.remove(presentation)

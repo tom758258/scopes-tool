@@ -36,6 +36,7 @@ import { createInitialState } from "/static/state.js";
 import { TriggerEditor } from "/static/trigger-editor.js";
 import { WorkflowEditor } from "/static/workflow-editor.js";
 import { ChannelDisplayEditor } from "/static/channel-display-editor.js";
+import { ChannelScaleRangeEditor } from "/static/channel-scale-range-editor.js";
 import { SequenceEditor } from "/static/sequence-editor.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
@@ -92,6 +93,7 @@ const elements = {
   sequenceEditor: document.querySelector("#sequence-editor"),
   measurementEditor: document.querySelector("#measurement-editor"),
   channelDisplayEditor: document.querySelector("#channel-display-editor"),
+  channelScaleRangeEditor: document.querySelector("#channel-scale-range-editor"),
   cursorEditor: document.querySelector("#cursor-editor"),
   annotationEditor: document.querySelector("#annotation-editor"),
   wgenEditor: document.querySelector("#wgen-editor"),
@@ -148,6 +150,7 @@ let workflowEditor;
 let sequenceEditor;
 let measurementEditor;
 let channelDisplayEditor;
+let channelScaleRangeEditor;
 let cursorEditor;
 let annotationEditor;
 let wgenEditor;
@@ -188,6 +191,7 @@ const EDITOR_RENDERERS = {
   demo: () => demoEditor,
   diagnostics: () => diagnosticsEditor,
   "channel-display": () => channelDisplayEditor,
+  "channel-scale-range": () => channelScaleRangeEditor,
 };
 
 function editorKindFor(command) {
@@ -337,6 +341,16 @@ async function initialize() {
   channelDisplayEditor = new ChannelDisplayEditor(elements.channelDisplayEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  channelScaleRangeEditor = new ChannelScaleRangeEditor(elements.channelScaleRangeEditor, catalog, {
+    executeCommand,
     isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
@@ -874,6 +888,7 @@ document.addEventListener("localechange", () => {
   sequenceEditor?.rerender();
   measurementEditor?.rerender();
   channelDisplayEditor?.rerender();
+  channelScaleRangeEditor?.rerender();
   acquisitionEditor?.rerender();
   cursorEditor?.rerender();
   annotationEditor?.rerender();
@@ -910,7 +925,8 @@ function syncCommandSelection(draft = null) {
   elements.workflowEditor.hidden = editorKind !== "workflow";
   if (elements.sequenceEditor) elements.sequenceEditor.hidden = editorKind !== "sequence";
   elements.measurementEditor.hidden = editorKind !== "measurement";
-  elements.channelDisplayEditor.hidden = editorKind !== "channel-display";
+  if (elements.channelDisplayEditor) elements.channelDisplayEditor.hidden = editorKind !== "channel-display";
+  if (elements.channelScaleRangeEditor) elements.channelScaleRangeEditor.hidden = editorKind !== "channel-scale-range";
   if (elements.acquisitionEditor) elements.acquisitionEditor.hidden = editorKind !== "acquisition";
   elements.cursorEditor.hidden = editorKind !== "cursor";
   elements.annotationEditor.hidden = editorKind !== "annotation";
@@ -1042,6 +1058,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "sequence") sequenceEditor?.schedulePresentation();
   if (editorKind === "measurement") measurementEditor?.schedulePresentation();
   if (editorKind === "channel-display") channelDisplayEditor?.schedulePresentation();
+  if (editorKind === "channel-scale-range") channelScaleRangeEditor?.schedulePresentation();
   if (editorKind === "acquisition") acquisitionEditor?.schedulePresentation();
   if (editorKind === "cursor") cursorEditor?.schedulePresentation();
   if (editorKind === "annotation") annotationEditor?.schedulePresentation();

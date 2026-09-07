@@ -115,10 +115,13 @@ The Command workbench exposes:
   existing `acquisition` query/apply command, and `autoscale` remains
   independent
 - Timebase: `timebase-scale`, `timebase-position`, `timebase-reference`
-- Channel: `channel-display`, `channel-scale`, `channel-summary`,
-  `channel-label`, `channel-offset`, `channel-coupling`, `channel-probe`,
-  `channel-bandwidth-limit`, `channel-impedance`, `channel-invert`,
-  `channel-range`, `channel-units`, `channel-vernier`, `channel-probe-skew`
+- Channel: Vertical Scale / Range (`channel-scale-range`) combines
+  `channel-scale` and `channel-range` in one presentation workspace, while the
+  underlying commands remain available to CLI and Worker execution;
+  `channel-display`, `channel-summary`, `channel-label`, `channel-offset`,
+  `channel-coupling`, `channel-probe`, `channel-bandwidth-limit`,
+  `channel-impedance`, `channel-invert`, `channel-units`, `channel-vernier`,
+  `channel-probe-skew`
 - Display: `display-label`, `display-clear`, `display-persistence`,
   `display-intensity`
 - Measurement: Single Measurement combines `measure` with the persistent

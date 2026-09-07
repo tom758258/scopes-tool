@@ -724,3 +724,207 @@ def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
     entry = next(item for item in catalog if item["id"] == "channel-display")
     assert entry.get("editor") == "channel-display"
     assert entry.get("group") == "channel-basic"
+
+
+def test_channel_scale_range_composite_workspace() -> None:
+    catalog = {entry["id"]: entry for entry in command_catalog()}
+    assert "channel-scale-range" in catalog
+    composite = catalog["channel-scale-range"]
+    assert composite["category"] == "Channel"
+    assert composite["group"] == "channel-basic"
+    assert composite["editor"] == "channel-scale-range"
+    assert composite["presentation_only"] is True
+    assert composite["modes"] == ["live", "simulate"]
+    assert composite["fields"] == []
+
+    # Underlying commands are hidden in command browser
+    assert catalog["channel-scale"]["browser_hidden"] is True
+    assert catalog["channel-range"]["browser_hidden"] is True
+
+    # Underlying commands still retain their proper fields and requirements
+    scale_fields = {field["name"]: field for field in catalog["channel-scale"]["fields"]}
+    assert "volts_per_division" in scale_fields
+    assert scale_fields["volts_per_division"]["exclusive_minimum"] == 0
+
+    range_fields = {field["name"]: field for field in catalog["channel-range"]["fields"]}
+    assert "volts" in range_fields
+    assert range_fields["volts"]["exclusive_minimum"] == 0
+
+    zh = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    en = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    assert '"command.channel-scale-range": "垂直刻度 / 範圍"' in zh
+    assert '"command.channel-scale-range": "Vertical Scale / Range"' in en
+    assert '"channel-scale-range.editor.title": "垂直刻度 / 範圍"' in zh
+    assert '"channel-scale-range.editor.title": "Vertical Scale / Range"' in en
+    assert "Range = Scale × 8" in zh
+    assert "Range = Scale × 8" in en
+
+
+@pytest.mark.skipif(
+    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path) -> None:
+    catalog_json = json.dumps(command_catalog())
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeNode {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.className = "";
+            this.textContent = "";
+            this.disabled = false;
+            this.style = {};
+            this.value = "";
+            this.type = "";
+            this.min = "";
+            this.step = "";
+          }
+          append(...nodes) { this.children.push(...nodes); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          addEventListener(event, handler) { this[`on_${event}`] = handler; }
+          remove() {}
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.queueMicrotask = (fn) => { fn(); };
+        globalThis.translate = (key) => key;
+        globalThis.hasTranslation = (_key) => false;
+
+        const calls = [];
+        let executionBusy = false;
+        let currentContext = "simulate||keysight-dsox4024a";
+        const hooks = {
+          contextKey: () => currentContext,
+          selectedCommand: () => ({ id: "channel-scale-range", editor: "channel-scale-range" }),
+          isAvailable: () => true,
+          isExecutionBusy: () => executionBusy,
+          async executeCommand(id, parameters, options) {
+            calls.push([id, parameters, options]);
+            if (id === "channel-scale") {
+              if (parameters.action === "query") {
+                return { status: "completed", result: { volts_per_division: 0.2 } };
+              }
+              if (parameters.action === "set") {
+                return { status: "completed", result: { volts_per_division: parameters.volts_per_division } };
+              }
+            }
+            if (id === "channel-range") {
+              if (parameters.action === "query") {
+                return { status: "completed", result: { volts: 1.6 } };
+              }
+              if (parameters.action === "set") {
+                return { status: "completed", result: { volts: parameters.volts } };
+              }
+            }
+            return { status: "completed" };
+          },
+        };
+
+        const catalog = {
+          commands: __CATALOG__,
+          fieldsFor: (command) => command.fields || [],
+          optionsFor: (field) => field.options || [],
+        };
+
+        let editorSource = fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static/channel-scale-range-editor.js"),
+          "utf8",
+        );
+        editorSource = editorSource
+          .replace(/^import[^\n]*\r?\n/gm, "")
+          .replace("export class ChannelScaleRangeEditor", "class ChannelScaleRangeEditor")
+          + "\nglobalThis.ChannelScaleRangeEditor = ChannelScaleRangeEditor;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(editorSource)}`);
+
+        const editor = new globalThis.ChannelScaleRangeEditor(new FakeNode("div"), catalog, hooks);
+        editor.present();
+
+        // Verify channel dropdown was populated from catalog
+        assert.equal(editor.channels.length, 4);
+        assert.deepEqual(editor.channels, [1, 2, 3, 4]);
+
+        // Select shared channel 3
+        editor.channelSelect.value = "3";
+
+        // 1. Read Scale dispatch
+        await editor.readScaleButton.on_click();
+        assert.deepEqual(calls[0], [
+          "channel-scale",
+          { action: "query", channel: 3 },
+          { intent: "readback" },
+        ]);
+        assert.equal(editor.scaleInput.value, "0.2");
+
+        // 2. Apply Scale dispatch with positive finite value
+        editor.scaleInput.value = "0.5";
+        await editor.applyScaleButton.on_click();
+        assert.deepEqual(calls[1], [
+          "channel-scale",
+          { action: "set", channel: 3, volts_per_division: 0.5 },
+          { intent: "apply" },
+        ]);
+        assert.equal(editor.scaleInput.value, "0.5");
+
+        // 3. Read Range dispatch
+        await editor.readRangeButton.on_click();
+        assert.deepEqual(calls[2], [
+          "channel-range",
+          { action: "query", channel: 3 },
+          { intent: "readback" },
+        ]);
+        assert.equal(editor.rangeInput.value, "1.6");
+
+        // 4. Apply Range dispatch with positive finite value
+        editor.rangeInput.value = "4";
+        await editor.applyRangeButton.on_click();
+        assert.deepEqual(calls[3], [
+          "channel-range",
+          { action: "set", channel: 3, volts: 4 },
+          { intent: "apply" },
+        ]);
+        assert.equal(editor.rangeInput.value, "4");
+
+        // 5. Invalid numeric values are rejected without dispatch
+        editor.scaleInput.value = "-1";
+        await editor.applyScaleButton.on_click();
+        assert.equal(calls.length, 4);
+
+        editor.scaleInput.value = "abc";
+        await editor.applyScaleButton.on_click();
+        assert.equal(calls.length, 4);
+
+        // 6. Stale result protection: if contextKey changes before read completes, do not update input
+        let slowReadResolve;
+        hooks.executeCommand = async (id, parameters, options) => {
+          calls.push([id, parameters, options]);
+          return new Promise((resolve) => { slowReadResolve = resolve; });
+        };
+        const readPromise = editor.readScaleButton.on_click();
+        // Context changed while read was pending
+        currentContext = "live|USB0::0x0957::0x17A6::MY50000001::INSTR|keysight-dsox4024a";
+        slowReadResolve({ status: "completed", result: { volts_per_division: 99 } });
+        await readPromise;
+        // scaleInput should NOT be overwritten with 99
+        assert.notEqual(editor.scaleInput.value, "99");
+
+        console.log(JSON.stringify({ ok: true }));
+        '''
+    ).replace("__CATALOG__", catalog_json)
+
+    harness_path = tmp_path / "scale-range-editor-harness.mjs"
+    harness_path.write_text(script, encoding="utf-8")
+    completed = subprocess.run(
+        ["node", str(harness_path)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
+    assert json.loads(completed.stdout) == {"ok": True}
