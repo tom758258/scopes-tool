@@ -1230,7 +1230,7 @@ export const zhTW = {
   "help.measure-show.enabled": "設定示波器是否顯示量測標記。",
   "help.measurement-statistics.display-enabled": "設定是否在儀器螢幕顯示進階統計；此設定不控制 WebUI 結果表格。",
   "help.measurement-statistics.relative-stddev-enabled": "啟用或停用儀器的相對標準差設定。",
-  "help.timebase.seconds_per_division": "單位：秒/格，例如 0.001 = 1 ms/div。",
+  "help.timebase.seconds_per_division": "單位：秒/格，例如 0.001 = 1 ms/div。\n快速填入（選用）：點選下方時間會自動填入此欄位；也可不使用快捷按鈕，直接自行輸入。",
   "help.timebase.position_seconds": "單位：秒；可正可負，可用範圍依目前每格時間而定。",
   "help.timebase.reference": "選擇水平時間軸參考位置位於畫面左側、中央或右側。",
   "description.channel-summary": "一次讀取所有類比通道的顯示、刻度、偏移、耦合、阻抗與探棒等設定。",

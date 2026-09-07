@@ -1230,7 +1230,7 @@ export const en = {
   "help.measure-show.enabled": "Set whether measurement markers are displayed on the instrument.",
   "help.measurement-statistics.display-enabled": "Set whether advanced statistics are shown on the instrument display; this does not control the WebUI results table.",
   "help.measurement-statistics.relative-stddev-enabled": "Enable or disable the instrument's relative standard deviation setting.",
-  "help.timebase.seconds_per_division": "Seconds per division; for example, 0.001 = 1 ms/div.",
+  "help.timebase.seconds_per_division": "Seconds per division; for example, 0.001 = 1 ms/div.\nQuick-fill presets are optional: select a time below to fill this field automatically, or enter a value manually.",
   "help.timebase.position_seconds": "Seconds; may be positive or negative. The valid range depends on the current time/div setting.",
   "help.timebase.reference": "Choose whether the horizontal reference is at the left, center, or right of the display.",
   "description.channel-summary": "Read common setup values for all analog channels at once.",
