@@ -956,6 +956,12 @@ def test_channel_scale_range_composite_workspace() -> None:
     )[0]
     assert "channelScaleRangeEditor?.applyBusyState();" in availability
 
+    # Preset layout and value-field width contracts live in styles.css
+    css = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
+    assert ".channel-scale-range-presets" in css
+    assert ".channel-scale-range-value" in css
+    assert "max-width: 50%" in css
+
 
 @pytest.mark.skipif(
     subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
@@ -1126,6 +1132,85 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         await readPromise;
         // scaleInput should NOT be overwritten with 99
         assert.notEqual(editor.scaleInput.value, "99");
+
+        // Drain the step-8 read continuation so busy clears before preset checks.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // 9. Scale presets use text inputs and fill only the scale field without dispatch.
+        const expectedScalePresets = [
+          ["1 mV/div", "0.001"],
+          ["2 mV/div", "0.002"],
+          ["5 mV/div", "0.005"],
+          ["10 mV/div", "0.01"],
+          ["20 mV/div", "0.02"],
+          ["50 mV/div", "0.05"],
+          ["100 mV/div", "0.1"],
+          ["200 mV/div", "0.2"],
+          ["500 mV/div", "0.5"],
+          ["1 V/div", "1"],
+        ];
+        assert.equal(editor.scaleInput.type, "text");
+        assert.equal(editor.scaleInput.inputMode, "decimal");
+        assert.equal(editor.scalePresetButtons.length, 10);
+        assert.deepEqual(
+          editor.scalePresetButtons.map((button) => button.textContent),
+          expectedScalePresets.map(([label]) => label),
+        );
+        editor.scalePresetButtons.forEach((button) => assert.equal(button.type, "button"));
+        editor.rangeInput.value = "sentinel";
+        const callsBeforeScalePresets = calls.length;
+        for (const [label, value] of expectedScalePresets) {
+          const button = editor.scalePresetButtons.find((candidate) => candidate.textContent === label);
+          assert.ok(button, label);
+          button.on_click();
+          assert.equal(editor.scaleInput.value, value);
+        }
+        assert.equal(calls.length, callsBeforeScalePresets);
+        assert.equal(editor.rangeInput.value, "sentinel");
+
+        // 10. Range presets fill only the range field without dispatch.
+        const expectedRangePresets = [
+          ["8 mV", "0.008"],
+          ["16 mV", "0.016"],
+          ["40 mV", "0.04"],
+          ["80 mV", "0.08"],
+          ["160 mV", "0.16"],
+          ["400 mV", "0.4"],
+          ["800 mV", "0.8"],
+          ["1.6 V", "1.6"],
+          ["4 V", "4"],
+          ["8 V", "8"],
+        ];
+        assert.equal(editor.rangeInput.type, "text");
+        assert.equal(editor.rangeInput.inputMode, "decimal");
+        assert.equal(editor.rangePresetButtons.length, 10);
+        assert.deepEqual(
+          editor.rangePresetButtons.map((button) => button.textContent),
+          expectedRangePresets.map(([label]) => label),
+        );
+        editor.rangePresetButtons.forEach((button) => assert.equal(button.type, "button"));
+        editor.scaleInput.value = "sentinel";
+        const callsBeforeRangePresets = calls.length;
+        for (const [label, value] of expectedRangePresets) {
+          const button = editor.rangePresetButtons.find((candidate) => candidate.textContent === label);
+          assert.ok(button, label);
+          button.on_click();
+          assert.equal(editor.rangeInput.value, value);
+        }
+        assert.equal(calls.length, callsBeforeRangePresets);
+        assert.equal(editor.scaleInput.value, "sentinel");
+
+        // 11. Busy state disables presets alongside the existing controls.
+        editor.busy = true;
+        editor.applyBusyState();
+        for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
+          assert.equal(button.disabled, true);
+        }
+        editor.busy = false;
+        editor.applyBusyState();
+        for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
+          assert.equal(button.disabled, false);
+        }
 
         console.log(JSON.stringify({ ok: true }));
         '''

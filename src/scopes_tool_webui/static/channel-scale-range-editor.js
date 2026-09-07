@@ -1,5 +1,31 @@
 import { hasTranslation, translate } from "/static/i18n.js";
 
+const SCALE_PRESETS = [
+  { label: "1 mV/div", value: "0.001" },
+  { label: "2 mV/div", value: "0.002" },
+  { label: "5 mV/div", value: "0.005" },
+  { label: "10 mV/div", value: "0.01" },
+  { label: "20 mV/div", value: "0.02" },
+  { label: "50 mV/div", value: "0.05" },
+  { label: "100 mV/div", value: "0.1" },
+  { label: "200 mV/div", value: "0.2" },
+  { label: "500 mV/div", value: "0.5" },
+  { label: "1 V/div", value: "1" },
+];
+
+const RANGE_PRESETS = [
+  { label: "8 mV", value: "0.008" },
+  { label: "16 mV", value: "0.016" },
+  { label: "40 mV", value: "0.04" },
+  { label: "80 mV", value: "0.08" },
+  { label: "160 mV", value: "0.16" },
+  { label: "400 mV", value: "0.4" },
+  { label: "800 mV", value: "0.8" },
+  { label: "1.6 V", value: "1.6" },
+  { label: "4 V", value: "4" },
+  { label: "8 V", value: "8" },
+];
+
 function channelLabel(channel) {
   const key = `enum.channel${channel}`;
   return hasTranslation(key) ? translate(key) : `CH${channel}`;
@@ -76,15 +102,30 @@ export class ChannelScaleRangeEditor {
     this.scaleHeading.textContent = translate("channel-scale-range.editor.scale");
 
     this.scaleField = document.createElement("label");
-    this.scaleField.className = "field";
+    this.scaleField.className = "field channel-scale-range-value";
     this.scaleFieldLabel = document.createElement("span");
     this.scaleFieldLabel.textContent = translate("field.volts_per_division");
     this.scaleInput = document.createElement("input");
-    this.scaleInput.type = "number";
-    this.scaleInput.step = "any";
-    this.scaleInput.min = "0";
+    this.scaleInput.type = "text";
+    this.scaleInput.inputMode = "decimal";
     this.scaleInput.dataset.field = "volts_per_division";
     this.scaleField.append(this.scaleFieldLabel, this.scaleInput);
+
+    this.scalePresets = document.createElement("div");
+    this.scalePresets.className = "channel-scale-range-presets";
+    this.scalePresetButtons = [];
+    for (const preset of SCALE_PRESETS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = preset.label;
+      button.addEventListener("click", () => {
+        if (this.scaleInput.disabled) return;
+        this.scaleInput.value = preset.value;
+      });
+      this.scalePresets.append(button);
+      this.scalePresetButtons.push(button);
+    }
 
     this.scaleActions = document.createElement("div");
     this.scaleActions.style.display = "flex";
@@ -108,7 +149,7 @@ export class ChannelScaleRangeEditor {
     });
 
     this.scaleActions.append(this.readScaleButton, this.applyScaleButton);
-    this.scaleSection.append(this.scaleHeading, this.scaleField, this.scaleActions);
+    this.scaleSection.append(this.scaleHeading, this.scaleField, this.scalePresets, this.scaleActions);
 
     // 3. Range section
     this.rangeSection = document.createElement("div");
@@ -119,15 +160,30 @@ export class ChannelScaleRangeEditor {
     this.rangeHeading.textContent = translate("channel-scale-range.editor.range");
 
     this.rangeField = document.createElement("label");
-    this.rangeField.className = "field";
+    this.rangeField.className = "field channel-scale-range-value";
     this.rangeFieldLabel = document.createElement("span");
     this.rangeFieldLabel.textContent = translate("field.channel-range.value");
     this.rangeInput = document.createElement("input");
-    this.rangeInput.type = "number";
-    this.rangeInput.step = "any";
-    this.rangeInput.min = "0";
+    this.rangeInput.type = "text";
+    this.rangeInput.inputMode = "decimal";
     this.rangeInput.dataset.field = "volts";
     this.rangeField.append(this.rangeFieldLabel, this.rangeInput);
+
+    this.rangePresets = document.createElement("div");
+    this.rangePresets.className = "channel-scale-range-presets";
+    this.rangePresetButtons = [];
+    for (const preset of RANGE_PRESETS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = preset.label;
+      button.addEventListener("click", () => {
+        if (this.rangeInput.disabled) return;
+        this.rangeInput.value = preset.value;
+      });
+      this.rangePresets.append(button);
+      this.rangePresetButtons.push(button);
+    }
 
     this.rangeActions = document.createElement("div");
     this.rangeActions.style.display = "flex";
@@ -151,7 +207,7 @@ export class ChannelScaleRangeEditor {
     });
 
     this.rangeActions.append(this.readRangeButton, this.applyRangeButton);
-    this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangeActions);
+    this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangePresets, this.rangeActions);
 
     this.container.append(
       this.channelField,
@@ -384,5 +440,7 @@ export class ChannelScaleRangeEditor {
     this.applyScaleButton.disabled = disabled;
     this.readRangeButton.disabled = disabled;
     this.applyRangeButton.disabled = disabled;
+    for (const button of this.scalePresetButtons) button.disabled = disabled;
+    for (const button of this.rangePresetButtons) button.disabled = disabled;
   }
 }
