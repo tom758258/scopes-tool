@@ -463,6 +463,8 @@ export const en = {
   "enum.ascii-xy": "ASCII-XY",
   "enum.csv": "CSV",
   "enum.binary": "Binary",
+  "enum.invalid DVM sentinel": "invalid DVM sentinel",
+  "enum.non-finite DVM value": "non-finite DVM value",
   "enum.wgen-function.sine": "Sine",
   "enum.wgen-function.square": "Square",
   "enum.wgen-function.ramp": "Ramp",

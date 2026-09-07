@@ -2547,10 +2547,12 @@ def test_system_information_refresh_runs_only_the_hidden_snapshot_command() -> N
 def test_system_result_summaries_localize_options_and_unknown_operation_bits() -> None:
     results_path = STATIC_ROOT / "results.js"
     chinese = read_static("locale_zh_tw.js")
+    english = read_static("locale_en.js")
     assert '"system.option.MEMUP": "記憶體升級",' in chinese
     assert '"system.option.WAVEGEN": "波形產生器",' in chinese
     assert '"system.option.AERO": "MIL-1553/ARINC 429 串列",' in chinese
     assert '"system.option.USF": "USB 2.0 低速／全速",' in chinese
+    assert '"system.option.AERO": "MIL-1553/ARINC 429 Serial",' in english
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -2565,16 +2567,17 @@ def test_system_result_summaries_localize_options_and_unknown_operation_bits() -
           "system.option.AERO": "MIL-1553/ARINC 429 串列",
           "system.option.USF": "USB 2.0 低速／全速",
           "system.option.D3000PWRA": "電源供應器測試軟體",
+          "enum.invalid DVM sentinel": "DVM 讀值無效",
         };
         const source = [
           `const translations = ${JSON.stringify(translations)};`,
           "const hasTranslation = (key) => key in translations;",
           "const translate = (key) => translations[key] ?? key;",
           fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
-          "globalThis.resultsApi = { formatSystemOptionsSummary, formatSystemOperationStatusSummary };",
+          "globalThis.resultsApi = { formatSystemOptionsSummary, formatSystemOperationStatusSummary, formatWorkspaceValue };",
         ].join("\n");
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
-        const { formatSystemOptionsSummary, formatSystemOperationStatusSummary } = globalThis.resultsApi;
+        const { formatSystemOptionsSummary, formatSystemOperationStatusSummary, formatWorkspaceValue } = globalThis.resultsApi;
 
         assert.equal(
           formatSystemOptionsSummary({ options: [0, "MEMUP", "WAVEGEN", "FPGAX"] }),
@@ -2590,6 +2593,10 @@ def test_system_result_summaries_localize_options_and_unknown_operation_bits() -
         );
         assert.equal(formatSystemOperationStatusSummary({ set_bits: [12] }), "Bit 12");
         assert.equal(formatSystemOperationStatusSummary({ set_bits: [12] }).includes("system.operationStatus.bit.12"), false);
+        assert.equal(
+          formatWorkspaceValue("reason", "invalid DVM sentinel"),
+          "DVM 讀值無效",
+        );
         '''
     )
     completed = subprocess.run(
