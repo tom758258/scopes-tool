@@ -54,23 +54,20 @@ export class ChannelScaleRangeEditor {
   buildDom() {
     this.container.replaceChildren();
 
-    // 1. Linked settings explanation note
-    this.explanation = document.createElement("p");
-    this.explanation.className = "compact-note muted";
-    this.explanation.style.whiteSpace = "pre-line";
-    this.explanation.style.marginBottom = "10px";
-    this.explanation.textContent = translate("channel-scale-range.editor.description");
-
-    // 2. Shared channel selector
+    // 1. Shared channel selector
     this.channelField = document.createElement("label");
     this.channelField.className = "field";
     this.channelFieldLabel = document.createElement("span");
     this.channelFieldLabel.textContent = translate("field.channel");
     this.channelSelect = document.createElement("select");
     this.channelSelect.dataset.field = "channel";
+    this.channelSelect.addEventListener("change", () => {
+      this.scaleInput.value = "";
+      this.rangeInput.value = "";
+    });
     this.channelField.append(this.channelFieldLabel, this.channelSelect);
 
-    // 3. Scale section
+    // 2. Scale section
     this.scaleSection = document.createElement("div");
     this.scaleSection.className = "trigger-editor-section";
 
@@ -113,7 +110,7 @@ export class ChannelScaleRangeEditor {
     this.scaleActions.append(this.readScaleButton, this.applyScaleButton);
     this.scaleSection.append(this.scaleHeading, this.scaleField, this.scaleActions);
 
-    // 4. Range section
+    // 3. Range section
     this.rangeSection = document.createElement("div");
     this.rangeSection.className = "trigger-editor-section";
 
@@ -157,7 +154,6 @@ export class ChannelScaleRangeEditor {
     this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangeActions);
 
     this.container.append(
-      this.explanation,
       this.channelField,
       this.scaleSection,
       this.rangeSection,
@@ -172,7 +168,6 @@ export class ChannelScaleRangeEditor {
   }
 
   rerender() {
-    this.explanation.textContent = translate("channel-scale-range.editor.description");
     this.channelFieldLabel.textContent = translate("field.channel");
     this.scaleHeading.textContent = translate("channel-scale-range.editor.scale");
     this.scaleFieldLabel.textContent = translate("field.volts_per_division");
@@ -199,6 +194,8 @@ export class ChannelScaleRangeEditor {
       return;
     }
     this.stateKey = key;
+    this.scaleInput.value = "";
+    this.rangeInput.value = "";
     this.rebuild();
     this.applyBusyState();
   }

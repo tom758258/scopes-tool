@@ -935,6 +935,11 @@ def test_channel_scale_range_composite_workspace() -> None:
     assert '"channel-scale-range.editor.title": "Vertical Scale / Range"' in en
     assert "Range = Scale × 8" in zh
     assert "Range = Scale × 8" in en
+    app = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+    availability = app.split("function updateAvailability()", 1)[1].split(
+        "function isExecutionBusy()", 1
+    )[0]
+    assert "channelScaleRangeEditor?.applyBusyState();" in availability
 
 
 @pytest.mark.skipif(
@@ -1076,7 +1081,24 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         await editor.applyScaleButton.on_click();
         assert.equal(calls.length, 4);
 
-        // 6. Stale result protection: if contextKey changes before read completes, do not update input
+        // 6. Channel changes clear both linked values.
+        editor.scaleInput.value = "0.5";
+        editor.rangeInput.value = "4";
+        editor.channelSelect.value = "2";
+        editor.channelSelect.on_change();
+        assert.equal(editor.scaleInput.value, "");
+        assert.equal(editor.rangeInput.value, "");
+
+        // 7. A new context clears both linked values and keeps the editor structure compact.
+        editor.scaleInput.value = "0.5";
+        editor.rangeInput.value = "4";
+        currentContext = "simulate|RESOURCE-B|keysight-dsox4024a";
+        editor.present();
+        assert.equal(editor.scaleInput.value, "");
+        assert.equal(editor.rangeInput.value, "");
+        assert.equal(editor.container.children.length, 3);
+
+        // 8. Stale result protection: if contextKey changes before read completes, do not update input
         let slowReadResolve;
         hooks.executeCommand = async (id, parameters, options) => {
           calls.push([id, parameters, options]);

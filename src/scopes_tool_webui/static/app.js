@@ -998,6 +998,7 @@ function updateAvailability() {
   sequenceEditor?.applyBusyState();
   measurementEditor?.applyBusyState();
   channelDisplayEditor?.applyBusyState();
+  channelScaleRangeEditor?.applyBusyState();
   acquisitionEditor?.applyBusyState();
   if (typeof diagnosticsEditor !== "undefined") diagnosticsEditor?.applyBusyState();
   deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
