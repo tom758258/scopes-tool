@@ -1309,6 +1309,8 @@ export const zhTW = {
   "channel-display.editor.description": "在同一個工作區控制每個類比通道是否顯示，並從通道狀態讀取目前設定。",
   "channel-display.editor.readFailed": "無法讀取目前通道顯示設定。",
   "channel-display.editor.runIncomplete": "執行未完成；部分通道可能已更新，請讀取目前設定。",
+  "channel-display.editor.displayedChannels": "顯示通道",
+  "channel-display.editor.displayHelper": "勾選表示顯示該通道，取消勾選表示隱藏。執行後會套用目前選擇；讀取目前設定會重新同步目前通道顯示狀態。",
   "channel-scale-range.editor.title": "垂直刻度 / 範圍",
   "channel-scale-range.editor.description": "垂直刻度與垂直範圍為連動設定。垂直刻度表示每格的數值，垂直範圍表示完整 8 格的總範圍，因此 Range = Scale × 8。修改其中一項會影響另一項。",
   "channel-scale-range.editor.scale": "垂直刻度",

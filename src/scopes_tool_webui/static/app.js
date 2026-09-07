@@ -943,7 +943,7 @@ function syncCommandSelection(draft = null) {
     onDirty: () => updateAvailability(),
     onQueryFieldChange: invalidateGenericFormOwnership,
   });
-  elements.formHeading.hidden = editorOwned || systemInformationSelected;
+  elements.formHeading.hidden = (editorOwned && editorKind !== "channel-display") || systemInformationSelected;
   elements.form.hidden = editorOwned || systemInformationSelected;
   channelLabelVisibility?.render(selected?.id === "channel-label");
   elements.referenceEditor.hidden = editorKind !== "reference";

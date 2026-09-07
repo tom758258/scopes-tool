@@ -765,7 +765,7 @@ def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
         const command = __CATALOG__.find((entry) => entry.id === "channel-display");
         let currentContext = "simulate|model";
 
-        function makeEditor(options, handler) {
+        function makeEditor(options, handler, headerActions = null) {
           const calls = [];
           const catalog = {
             commands: [{
@@ -783,6 +783,7 @@ def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
             isAvailable: () => true,
             isExecutionBusy: () => false,
             isCommandAvailable: () => true,
+            ...(headerActions ? { headerActions } : {}),
             async executeCommand(id, parameters, requestOptions) {
               calls.push({ id, parameters, options: requestOptions });
               return handler({ id, parameters, setContext: (value) => { currentContext = value; } });
@@ -901,6 +902,35 @@ def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
         const projected = makeEditor([1, 2], () => ({ status: "completed" }));
         assert.deepEqual(projected.editor.channels, [1, 2]);
         assert.equal(projected.editor.entries.length, 2);
+
+        // F. With headerActions, refresh/run move to the header and the body uses a section.
+        currentContext = "simulate|model";
+        const headerActions = new FakeEl("div");
+        const headedRun = makeEditor([1, 2, 3, 4], ({ parameters }) => ({
+          status: "completed",
+          result: { result: { enabled: parameters.enabled } },
+        }), headerActions);
+        assert.ok(headerActions.children.includes(headedRun.editor.refreshButton));
+        assert.ok(headerActions.children.includes(headedRun.editor.runButton));
+        assert.equal(headedRun.editor.container.children.includes(headedRun.editor.refreshButton), false);
+        assert.equal(headedRun.editor.container.children.includes(headedRun.editor.runButton), false);
+        assert.ok(headedRun.editor.runButton.className.split(" ").includes("primary"));
+        assert.equal(headedRun.editor.section.tagName, "DIV");
+        assert.equal(headedRun.editor.section.className, "workflow-editor-section");
+        assert.equal(headedRun.editor.heading.textContent, "channel-display.editor.displayedChannels");
+        assert.equal(headedRun.editor.helper.textContent, "channel-display.editor.displayHelper");
+        assert.deepEqual(
+          headedRun.editor.section.children.map((node) => node.tagName),
+          ["STRONG", "DIV", "SMALL"],
+        );
+        assert.equal(headedRun.editor.section.children[1], headedRun.editor.choicesHost);
+        await headedRun.editor.run();
+        assert.equal(headedRun.calls.length, 4);
+
+        // Fallback without headerActions keeps both buttons in the body.
+        assert.ok(completeRun.editor.container.children.includes(completeRun.editor.refreshButton));
+        assert.ok(completeRun.editor.container.children.includes(completeRun.editor.runButton));
+        assert.ok(completeRun.editor.runButton.className.split(" ").includes("primary"));
 
         console.log(JSON.stringify({ ok: true }));
         '''

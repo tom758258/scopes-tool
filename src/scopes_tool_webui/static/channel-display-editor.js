@@ -52,6 +52,7 @@ export class ChannelDisplayEditor {
 
   buildDom() {
     this.refreshButton?.remove?.();
+    this.runButton?.remove?.();
     this.container.replaceChildren();
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
@@ -66,18 +67,33 @@ export class ChannelDisplayEditor {
     } else {
       this.container.append(this.refreshButton);
     }
+    this.section = document.createElement("div");
+    this.section.className = "workflow-editor-section";
+    this.heading = document.createElement("strong");
+    this.heading.className = "workflow-editor-heading";
+    this.heading.textContent = translate("channel-display.editor.displayedChannels");
     this.choicesHost = document.createElement("div");
     this.choicesHost.className = "workflow-editor-choices";
+    this.helper = document.createElement("small");
+    this.helper.className = "muted compact-note";
+    this.helper.textContent = translate("channel-display.editor.displayHelper");
+    this.section.append(this.heading, this.choicesHost, this.helper);
     this.runButton = document.createElement("button");
     this.runButton.type = "button";
-    this.runButton.className = "secondary trigger-editor-action";
+    this.runButton.className = "primary trigger-editor-action";
     this.runButton.textContent = translate("actions.run");
     this.runButton.addEventListener("click", () => {
       void this.run();
     });
     this.status = document.createElement("output");
     this.status.className = "muted compact-note";
-    this.container.append(this.choicesHost, this.runButton, this.status);
+    if (this.hooks.headerActions) {
+      this.runButton.hidden = true;
+      this.hooks.headerActions.append(this.runButton);
+      this.container.append(this.section, this.status);
+    } else {
+      this.container.append(this.section, this.runButton, this.status);
+    }
     this.stateKey = null;
     this.schedulePresentation();
   }
@@ -89,6 +105,8 @@ export class ChannelDisplayEditor {
   rerender() {
     this.refreshButton.textContent = translate("actions.readSettings");
     this.runButton.textContent = translate("actions.run");
+    this.heading.textContent = translate("channel-display.editor.displayedChannels");
+    this.helper.textContent = translate("channel-display.editor.displayHelper");
     for (const entry of this.entries) entry.text.textContent = channelLabel(entry.channel);
   }
 

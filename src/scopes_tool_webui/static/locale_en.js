@@ -1309,6 +1309,8 @@ export const en = {
   "channel-display.editor.description": "Control which analog channels are displayed in one workspace and read their display state.",
   "channel-display.editor.readFailed": "Could not read current channel display settings.",
   "channel-display.editor.runIncomplete": "Execution incomplete; some channels may have been updated. Read current settings to align.",
+  "channel-display.editor.displayedChannels": "Displayed channels",
+  "channel-display.editor.displayHelper": "Checked channels are displayed; unchecked channels are hidden. Run applies the current selection. Read current settings synchronizes the current channel display state.",
   "channel-scale-range.editor.title": "Vertical Scale / Range",
   "channel-scale-range.editor.description": "Vertical scale and vertical range are linked settings. Scale is the value per division, while Range is the full 8-division vertical span, so Range = Scale × 8. Changing either setting affects the other.",
   "channel-scale-range.editor.scale": "Vertical Scale",
