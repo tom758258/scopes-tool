@@ -715,3 +715,12 @@ def test_channel_commands_keep_groups_order_and_presentation_labels() -> None:
     # Search and shared basic group remains intact
     assert '"group.basic": "基本"' in zh
     assert '"group.basic": "Basic"' in en
+
+
+def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
+    assert "channel-display.editor" in (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    assert "channel-display.editor" in (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    catalog = command_catalog()
+    entry = next(item for item in catalog if item["id"] == "channel-display")
+    assert entry.get("editor") == "channel-display"
+    assert entry.get("group") == "channel-basic"

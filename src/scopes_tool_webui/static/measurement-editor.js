@@ -232,7 +232,7 @@ export class MeasurementEditor {
     );
     this.container.replaceChildren(
       this.buildSweepChoiceSection(
-        "workflow.editor.channels",
+        "field.autoscale.channels",
         "channels",
         fieldByName(fields, "channels").options || [],
         draft.channels,
@@ -313,7 +313,8 @@ export class MeasurementEditor {
       input.value = String(option);
       input.checked = selectedValues.has(input.value);
       const text = document.createElement("span");
-      text.textContent = name === "channels" ? `CH${option}` : choiceLabel(option);
+      if (name === "channels") text.textContent = channelLabel(option);
+      else text.textContent = choiceLabel(option);
       choice.append(input, text);
       choices.append(choice);
       this.sweepControls[name].push(input);

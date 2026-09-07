@@ -17,6 +17,12 @@ def _locale_help_keys(text: str) -> set[str]:
     return set(re.findall(r'"help\.([^"]+)":', text))
 
 
+def test_channel_display_has_editor_not_treated_as_generic_command() -> None:
+    commands = command_catalog()
+    display = next(entry for entry in commands if entry["id"] == "channel-display")
+    assert display.get("editor") == "channel-display"
+
+
 def test_generic_commands_have_dedicated_descriptions() -> None:
     catalog = command_catalog()
     generic_ids = {entry["id"] for entry in catalog if not entry.get("editor")}

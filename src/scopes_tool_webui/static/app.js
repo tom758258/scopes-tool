@@ -35,6 +35,7 @@ import { SerialEditor } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
 import { TriggerEditor } from "/static/trigger-editor.js";
 import { WorkflowEditor } from "/static/workflow-editor.js";
+import { ChannelDisplayEditor } from "/static/channel-display-editor.js";
 import { SequenceEditor } from "/static/sequence-editor.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
@@ -90,6 +91,7 @@ const elements = {
   workflowEditor: document.querySelector("#workflow-editor"),
   sequenceEditor: document.querySelector("#sequence-editor"),
   measurementEditor: document.querySelector("#measurement-editor"),
+  channelDisplayEditor: document.querySelector("#channel-display-editor"),
   cursorEditor: document.querySelector("#cursor-editor"),
   annotationEditor: document.querySelector("#annotation-editor"),
   wgenEditor: document.querySelector("#wgen-editor"),
@@ -145,6 +147,7 @@ let segmentedEditor;
 let workflowEditor;
 let sequenceEditor;
 let measurementEditor;
+let channelDisplayEditor;
 let cursorEditor;
 let annotationEditor;
 let wgenEditor;
@@ -184,6 +187,7 @@ const EDITOR_RENDERERS = {
   wgen: () => wgenEditor,
   demo: () => demoEditor,
   diagnostics: () => diagnosticsEditor,
+  "channel-display": () => channelDisplayEditor,
 };
 
 function editorKindFor(command) {
@@ -328,6 +332,17 @@ async function initialize() {
     isCommandAvailable: commandAvailable,
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     mode: () => context.mode,
+    selectedCommand: () => catalog.selected(),
+  });
+  channelDisplayEditor = new ChannelDisplayEditor(elements.channelDisplayEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     selectedCommand: () => catalog.selected(),
   });
   cursorEditor = new CursorEditor(elements.cursorEditor, catalog, {
@@ -858,6 +873,7 @@ document.addEventListener("localechange", () => {
   workflowEditor?.rerender();
   sequenceEditor?.rerender();
   measurementEditor?.rerender();
+  channelDisplayEditor?.rerender();
   acquisitionEditor?.rerender();
   cursorEditor?.rerender();
   annotationEditor?.rerender();
@@ -894,6 +910,7 @@ function syncCommandSelection(draft = null) {
   elements.workflowEditor.hidden = editorKind !== "workflow";
   if (elements.sequenceEditor) elements.sequenceEditor.hidden = editorKind !== "sequence";
   elements.measurementEditor.hidden = editorKind !== "measurement";
+  elements.channelDisplayEditor.hidden = editorKind !== "channel-display";
   if (elements.acquisitionEditor) elements.acquisitionEditor.hidden = editorKind !== "acquisition";
   elements.cursorEditor.hidden = editorKind !== "cursor";
   elements.annotationEditor.hidden = editorKind !== "annotation";
@@ -964,6 +981,7 @@ function updateAvailability() {
   workflowEditor?.applyBusyState();
   sequenceEditor?.applyBusyState();
   measurementEditor?.applyBusyState();
+  channelDisplayEditor?.applyBusyState();
   acquisitionEditor?.applyBusyState();
   if (typeof diagnosticsEditor !== "undefined") diagnosticsEditor?.applyBusyState();
   deviceResource?.setExternalBusy(executing || Boolean(pendingResourceLiveSupport));
@@ -1006,6 +1024,8 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (annotationEditor?.refreshButton) annotationEditor.refreshButton.hidden = editorKind !== "annotation";
   if (wgenEditor?.refreshButton) wgenEditor.refreshButton.hidden = editorKind !== "wgen";
   if (demoEditor?.refreshButton) demoEditor.refreshButton.hidden = editorKind !== "demo";
+  if (channelDisplayEditor?.refreshButton) channelDisplayEditor.refreshButton.hidden = editorKind !== "channel-display";
+  if (channelDisplayEditor?.runButton) channelDisplayEditor.runButton.hidden = editorKind !== "channel-display";
   if (typeof diagnosticsEditor !== "undefined" && diagnosticsEditor?.runButton) {
     diagnosticsEditor.runButton.hidden = editorKind !== "diagnostics";
   }
@@ -1021,6 +1041,7 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "workflow") workflowEditor?.schedulePresentation();
   if (editorKind === "sequence") sequenceEditor?.schedulePresentation();
   if (editorKind === "measurement") measurementEditor?.schedulePresentation();
+  if (editorKind === "channel-display") channelDisplayEditor?.schedulePresentation();
   if (editorKind === "acquisition") acquisitionEditor?.schedulePresentation();
   if (editorKind === "cursor") cursorEditor?.schedulePresentation();
   if (editorKind === "annotation") annotationEditor?.schedulePresentation();

@@ -343,6 +343,7 @@ COMMANDS = (
         "id": "channel-display",
         "category": "Channel",
         "label": "Channel display",
+        "editor": "channel-display",
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},

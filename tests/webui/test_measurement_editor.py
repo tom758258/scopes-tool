@@ -239,8 +239,13 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(sweepUi.sweepPairItemsSection.hidden, false);
         assert.deepEqual(
           sweepUi.container.children.map((section) => section.children[0].textContent),
-          ["workflow.editor.channels", "workflow.editor.measurements", "workflow.editor.pairMeasurements", "workflow.editor.pairs"],
+          ["field.autoscale.channels", "workflow.editor.measurements", "workflow.editor.pairMeasurements", "workflow.editor.pairs"],
         );
+        // Channel options use localized enum labels, not raw CH prefixes
+        zh_text = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+        en_text = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+        assert '"enum.channel1": "通道 1"' in zh_text
+        assert '"enum.channel1": "Channel 1"' in en_text
         assert.equal(
           sweepUi.sweepPairItemsSection.children[1].textContent,
           "workflow.editor.pairMeasurementsHelper",
