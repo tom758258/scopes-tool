@@ -996,10 +996,25 @@ def test_channel_scale_range_composite_workspace() -> None:
     narrow = css.split("@media (max-width: 700px)", 1)[1]
     narrow_presets = narrow.split(".channel-scale-range-presets {", 1)[1].split("}", 1)[0]
     assert "repeat(2, minmax(0, 1fr))" in narrow_presets
+    assert ".channel-scale-range-mode button.selected" in css
+    header_actions = app.split("function syncWorkspaceHeaderActions(editorKind)", 1)[1].split(
+        "function syncEditorPresentation(editorKind)", 1
+    )[0]
+    assert 'channelScaleRangeEditor.readButton.hidden = editorKind !== "channel-scale-range";' in header_actions
+    assert 'channelScaleRangeEditor.applyButton.hidden = editorKind !== "channel-scale-range";' in header_actions
 
     # Shared quick-fill help key exists in both locales
-    assert '"channel-scale-range.editor.quickFillHelp":' in zh
-    assert '"channel-scale-range.editor.quickFillHelp":' in en
+    assert '"channel-scale-range.editor.quickFillHelp":' not in zh
+    assert '"channel-scale-range.editor.quickFillHelp":' not in en
+    for key in (
+        "channel-scale-range.editor.modeScale",
+        "channel-scale-range.editor.modeRange",
+        "channel-scale-range.editor.scaleDescription",
+        "channel-scale-range.editor.rangeDescription",
+        "channel-scale-range.editor.readFirstHelp",
+    ):
+        assert f'"{key}":' in zh, key
+        assert f'"{key}":' in en, key
 
 
 @pytest.mark.skipif(
@@ -1019,18 +1034,36 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
             this.tagName = tag.toUpperCase();
             this.children = [];
             this.dataset = {};
+            this.attributes = {};
             this.className = "";
             this.textContent = "";
             this.disabled = false;
+            this.hidden = false;
             this.style = {};
             this.value = "";
             this.type = "";
             this.min = "";
             this.step = "";
+            const classSet = () => new Set(this.className.split(" ").filter(Boolean));
+            const writeBack = (set) => { this.className = [...set].join(" "); };
+            this.classList = {
+              add: (...names) => { const s = classSet(); names.forEach((n) => s.add(n)); writeBack(s); },
+              remove: (...names) => { const s = classSet(); names.forEach((n) => s.delete(n)); writeBack(s); },
+              toggle: (name, force) => {
+                const s = classSet();
+                const want = force === undefined ? !s.has(name) : Boolean(force);
+                if (want) s.add(name); else s.delete(name);
+                writeBack(s);
+                return want;
+              },
+              contains: (name) => classSet().has(name),
+            };
           }
           append(...nodes) { this.children.push(...nodes); }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           addEventListener(event, handler) { this[`on_${event}`] = handler; }
+          setAttribute(k, v) { this.attributes[k] = String(v); }
+          getAttribute(k) { return this.attributes[k]; }
           remove() {}
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
@@ -1038,14 +1071,26 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         globalThis.translate = (key) => key;
         globalThis.hasTranslation = (_key) => false;
 
+        let liveDataSource = fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static/live-data.js"),
+          "utf8",
+        );
+        liveDataSource = liveDataSource.replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "")
+          + "\nglobalThis.formatEngineering = formatEngineering;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(liveDataSource)}`);
+
         const calls = [];
         let executionBusy = false;
         let currentContext = "simulate||keysight-dsox4024a";
+        let mockUnits = "volt";
+        let failUnits = false;
+        const headerActions = new FakeNode("div");
         const hooks = {
           contextKey: () => currentContext,
           selectedCommand: () => ({ id: "channel-scale-range", editor: "channel-scale-range" }),
           isAvailable: () => true,
-          isExecutionBusy: () => executionBusy,
+          isExecutionBusy: () => false,
+          headerActions,
           async executeCommand(id, parameters, options) {
             calls.push([id, parameters, options]);
             if (id === "channel-scale") {
@@ -1063,6 +1108,10 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
               if (parameters.action === "set") {
                 return { status: "completed", result: { volts: parameters.volts } };
               }
+            }
+            if (id === "channel-units") {
+              if (failUnits) return { status: "failed" };
+              return { status: "completed", result: { units: mockUnits } };
             }
             return { status: "completed" };
           },
@@ -1087,6 +1136,10 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         const editor = new globalThis.ChannelScaleRangeEditor(new FakeNode("div"), catalog, hooks);
         editor.present();
 
+        const drain = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+
         // Verify channel dropdown was populated from catalog
         assert.equal(editor.channels.length, 4);
         assert.deepEqual(editor.channels, [1, 2, 3, 4]);
@@ -1094,77 +1147,207 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         // Select shared channel 3
         editor.channelSelect.value = "3";
 
-        // 1. Read Scale dispatch
-        await editor.readScaleButton.on_click();
+        // 0. Default mode is Scale; only the Scale section is visible.
+        assert.equal(editor.mode, "scale");
+        assert.equal(editor.scaleSection.hidden, false);
+        assert.equal(editor.rangeSection.hidden, true);
+        assert.equal(editor.modeButtons.scale.classList.contains("selected"), true);
+        assert.equal(editor.modeButtons.range.classList.contains("selected"), false);
+        assert.ok(headerActions.children.includes(editor.readButton));
+        assert.ok(headerActions.children.includes(editor.applyButton));
+        assert.deepEqual(
+          editor.scalePresetButtons.map((button) => button.textContent),
+          ["0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1", "0.2", "0.5", "1"],
+        );
+        for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
+          assert.equal(button.disabled, true);
+        }
+
+        // 1. Header Read in Scale mode queries scale then units and enables Scale presets.
+        editor.readButton.on_click();
+        await drain();
         assert.deepEqual(calls[0], [
           "channel-scale",
           { action: "query", channel: 3 },
           { intent: "readback" },
         ]);
+        assert.deepEqual(calls[1], [
+          "channel-units",
+          { action: "query", channel: 3 },
+          { intent: "readback" },
+        ]);
+        assert.equal(editor.scaleInput.value, "0.2");
+        assert.deepEqual(
+          editor.scalePresetButtons.map((button) => button.textContent),
+          [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1].map(
+            (value) => globalThis.formatEngineering(value, "V"),
+          ),
+        );
+        assert.equal(editor.scalePresetButtons[0].textContent, globalThis.formatEngineering(0.001, "V"));
+        for (const button of editor.scalePresetButtons) assert.equal(button.disabled, false);
+        // Range was not read: its presets stay disabled even though units are known.
+        for (const button of editor.rangePresetButtons) assert.equal(button.disabled, true);
+
+        // 2. Switching modes needs no dispatch and keeps per-mode read state.
+        const callsBeforeSwitch = calls.length;
+        editor.modeButtons.range.on_click();
+        assert.equal(editor.mode, "range");
+        assert.equal(editor.scaleSection.hidden, true);
+        assert.equal(editor.rangeSection.hidden, false);
+        assert.equal(editor.modeButtons.scale.classList.contains("selected"), false);
+        assert.equal(editor.modeButtons.range.classList.contains("selected"), true);
+        assert.equal(calls.length, callsBeforeSwitch);
+        for (const button of editor.rangePresetButtons) assert.equal(button.disabled, true);
+
+        // 3. Header Read in Range mode enables Range presets; Scale stays enabled.
+        editor.readButton.on_click();
+        await drain();
+        assert.deepEqual(calls[calls.length - 2], [
+          "channel-range",
+          { action: "query", channel: 3 },
+          { intent: "readback" },
+        ]);
+        assert.deepEqual(calls[calls.length - 1][0], "channel-units");
+        assert.equal(editor.rangeInput.value, "1.6");
+        for (const button of editor.rangePresetButtons) assert.equal(button.disabled, false);
+        for (const button of editor.scalePresetButtons) assert.equal(button.disabled, false);
+        // Preset click fills without dispatch and leaves the other field alone.
+        editor.rangeInput.value = "sentinel";
+        const rangeButton = editor.rangePresetButtons.find(
+          (candidate) => candidate.textContent === globalThis.formatEngineering(4, "V"),
+        );
+        assert.ok(rangeButton);
+        rangeButton.on_click();
+        assert.equal(editor.rangeInput.value, "4");
         assert.equal(editor.scaleInput.value, "0.2");
 
-        // 2. Apply Scale dispatch with positive finite value
+        // 4. Header Apply dispatches set for the current mode with readback fill.
+        editor.modeButtons.scale.on_click();
         editor.scaleInput.value = "0.5";
-        await editor.applyScaleButton.on_click();
-        assert.deepEqual(calls[1], [
+        const callsBeforeApply = calls.length;
+        editor.applyButton.on_click();
+        await drain();
+        assert.equal(calls.length, callsBeforeApply + 1);
+        assert.deepEqual(calls[calls.length - 1], [
           "channel-scale",
           { action: "set", channel: 3, volts_per_division: 0.5 },
           { intent: "apply" },
         ]);
         assert.equal(editor.scaleInput.value, "0.5");
+        // Apply does not unlock anything new and keeps presets enabled.
+        for (const button of editor.scalePresetButtons) assert.equal(button.disabled, false);
 
-        // 3. Read Range dispatch
-        await editor.readRangeButton.on_click();
-        assert.deepEqual(calls[2], [
-          "channel-range",
-          { action: "query", channel: 3 },
-          { intent: "readback" },
-        ]);
-        assert.equal(editor.rangeInput.value, "1.6");
-
-        // 4. Apply Range dispatch with positive finite value
-        editor.rangeInput.value = "4";
-        await editor.applyRangeButton.on_click();
-        assert.deepEqual(calls[3], [
-          "channel-range",
-          { action: "set", channel: 3, volts: 4 },
-          { intent: "apply" },
-        ]);
-        assert.equal(editor.rangeInput.value, "4");
-
-        // 5. Invalid numeric values are rejected without dispatch
+        // 5. Invalid numeric values are rejected without dispatch.
         editor.scaleInput.value = "-1";
-        await editor.applyScaleButton.on_click();
-        assert.equal(calls.length, 4);
-
+        editor.applyButton.on_click();
+        await drain();
+        assert.equal(calls.length, callsBeforeApply + 1);
         editor.scaleInput.value = "abc";
-        await editor.applyScaleButton.on_click();
-        assert.equal(calls.length, 4);
+        editor.applyButton.on_click();
+        await drain();
+        assert.equal(calls.length, callsBeforeApply + 1);
 
-        // 6. Channel changes clear both linked values.
+        // 6. AMP units render mA / A labels after a fresh read.
+        mockUnits = "amp";
+        currentContext = "simulate|RESOURCE-B|keysight-dsox4024a";
+        editor.present();
+        editor.channelSelect.value = "3";
+        editor.readButton.on_click();
+        await drain();
+        assert.equal(editor.scalePresetButtons[0].textContent, globalThis.formatEngineering(0.001, "A"));
+        assert.equal(editor.scalePresetButtons[9].textContent, globalThis.formatEngineering(1, "A"));
+        mockUnits = "volt";
+
+        // 7. A failed value read keeps presets disabled and leaves inputs alone.
+        hooks.executeCommand = async (id, parameters, options) => {
+          calls.push([id, parameters, options]);
+          if (id === "channel-scale") return { status: "failed" };
+          if (id === "channel-units") return { status: "completed", result: { units: "volt" } };
+          return { status: "completed" };
+        };
+        editor.scaleInput.value = "sentinel";
+        editor.readButton.on_click();
+        await drain();
+        for (const button of editor.scalePresetButtons) assert.equal(button.disabled, true);
+        assert.equal(editor.scaleInput.value, "sentinel");
+
+        // 8. A failed units query fills the value but never unlocks quick-fill.
+        hooks.executeCommand = async (id, parameters, options) => {
+          calls.push([id, parameters, options]);
+          if (id === "channel-scale") return { status: "completed", result: { volts_per_division: 0.2 } };
+          if (id === "channel-units") return { status: "failed" };
+          return { status: "completed" };
+        };
+        editor.readButton.on_click();
+        await drain();
+        assert.equal(editor.scaleInput.value, "0.2");
+        for (const button of editor.scalePresetButtons) assert.equal(button.disabled, true);
+        editor.modeButtons.range.on_click();
+        for (const button of editor.rangePresetButtons) assert.equal(button.disabled, true);
+
+        // Restore the default mock for the remaining steps.
+        hooks.executeCommand = async (id, parameters, options) => {
+          calls.push([id, parameters, options]);
+          if (id === "channel-scale") {
+            if (parameters.action === "query") {
+              return { status: "completed", result: { volts_per_division: 0.2 } };
+            }
+            if (parameters.action === "set") {
+              return { status: "completed", result: { volts_per_division: parameters.volts_per_division } };
+            }
+          }
+          if (id === "channel-range") {
+            if (parameters.action === "query") {
+              return { status: "completed", result: { volts: 1.6 } };
+            }
+            if (parameters.action === "set") {
+              return { status: "completed", result: { volts: parameters.volts } };
+            }
+          }
+          if (id === "channel-units") {
+            return { status: "completed", result: { units: mockUnits } };
+          }
+          return { status: "completed" };
+        };
+
+        // 9. Channel changes clear values, units, and per-mode read state.
+        editor.modeButtons.scale.on_click();
+        editor.readButton.on_click();
+        await drain();
+        for (const button of editor.scalePresetButtons) assert.equal(button.disabled, false);
         editor.scaleInput.value = "0.5";
         editor.rangeInput.value = "4";
         editor.channelSelect.value = "2";
         editor.channelSelect.on_change();
         assert.equal(editor.scaleInput.value, "");
         assert.equal(editor.rangeInput.value, "");
+        for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
+          assert.equal(button.disabled, true);
+        }
 
-        // 7. A new context clears both linked values and keeps the editor structure compact.
+        // 10. A new context clears values and keeps the editor structure compact.
+        editor.channelSelect.value = "3";
+        editor.readButton.on_click();
+        await drain();
+        for (const button of editor.scalePresetButtons) assert.equal(button.disabled, false);
         editor.scaleInput.value = "0.5";
         editor.rangeInput.value = "4";
-        currentContext = "simulate|RESOURCE-B|keysight-dsox4024a";
+        currentContext = "simulate|RESOURCE-C|keysight-dsox4024a";
         editor.present();
         assert.equal(editor.scaleInput.value, "");
         assert.equal(editor.rangeInput.value, "");
-        assert.equal(editor.container.children.length, 3);
+        assert.equal(editor.container.children.length, 4);
+        for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
+          assert.equal(button.disabled, true);
+        }
 
-        // 8. Stale result protection: if contextKey changes before read completes, do not update input
+        // 11. Stale result protection: if contextKey changes before read completes, do not update input.
         let slowReadResolve;
         hooks.executeCommand = async (id, parameters, options) => {
           calls.push([id, parameters, options]);
           return new Promise((resolve) => { slowReadResolve = resolve; });
         };
-        const readPromise = editor.readScaleButton.on_click();
+        const readPromise = editor.readButton.on_click();
         // Context changed while read was pending
         currentContext = "live|USB0::0x0957::0x17A6::MY50000001::INSTR|keysight-dsox4024a";
         slowReadResolve({ status: "completed", result: { volts_per_division: 99 } });
@@ -1172,80 +1355,10 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         // scaleInput should NOT be overwritten with 99
         assert.notEqual(editor.scaleInput.value, "99");
 
-        // Drain the step-8 read continuation so busy clears before preset checks.
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        // Drain the step-11 read continuation so busy clears before the remaining checks.
+        await drain();
 
-        // 9. Scale presets use text inputs and fill only the scale field without dispatch.
-        const expectedScalePresets = [
-          ["1m", "0.001"],
-          ["2m", "0.002"],
-          ["5m", "0.005"],
-          ["10m", "0.01"],
-          ["20m", "0.02"],
-          ["50m", "0.05"],
-          ["100m", "0.1"],
-          ["200m", "0.2"],
-          ["500m", "0.5"],
-          ["1", "1"],
-        ];
-        assert.equal(editor.scaleInput.type, "text");
-        assert.equal(editor.scaleInput.inputMode, "decimal");
-        assert.equal(editor.scalePresetButtons.length, 10);
-        assert.deepEqual(
-          editor.scalePresetButtons.map((button) => button.textContent),
-          expectedScalePresets.map(([label]) => label),
-        );
-        editor.scalePresetButtons.forEach((button) => assert.equal(button.type, "button"));
-        editor.rangeInput.value = "sentinel";
-        const callsBeforeScalePresets = calls.length;
-        for (const [label, value] of expectedScalePresets) {
-          const button = editor.scalePresetButtons.find((candidate) => candidate.textContent === label);
-          assert.ok(button, label);
-          button.on_click();
-          assert.equal(editor.scaleInput.value, value);
-        }
-        assert.equal(calls.length, callsBeforeScalePresets);
-        assert.equal(editor.rangeInput.value, "sentinel");
-
-        // 10. Range presets fill only the range field without dispatch.
-        const expectedRangePresets = [
-          ["8m", "0.008"],
-          ["16m", "0.016"],
-          ["40m", "0.04"],
-          ["80m", "0.08"],
-          ["160m", "0.16"],
-          ["400m", "0.4"],
-          ["800m", "0.8"],
-          ["1.6", "1.6"],
-          ["4", "4"],
-          ["8", "8"],
-        ];
-        assert.equal(editor.rangeInput.type, "text");
-        assert.equal(editor.rangeInput.inputMode, "decimal");
-        assert.equal(editor.rangePresetButtons.length, 10);
-        assert.deepEqual(
-          editor.rangePresetButtons.map((button) => button.textContent),
-          expectedRangePresets.map(([label]) => label),
-        );
-        editor.rangePresetButtons.forEach((button) => assert.equal(button.type, "button"));
-        editor.scaleInput.value = "sentinel";
-        const callsBeforeRangePresets = calls.length;
-        for (const [label, value] of expectedRangePresets) {
-          const button = editor.rangePresetButtons.find((candidate) => candidate.textContent === label);
-          assert.ok(button, label);
-          button.on_click();
-          assert.equal(editor.rangeInput.value, value);
-        }
-        assert.equal(calls.length, callsBeforeRangePresets);
-        assert.equal(editor.scaleInput.value, "sentinel");
-
-        // Preset labels stay unit-neutral: no V or A unit suffix.
-        for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
-          assert.equal(button.textContent.includes("V"), false);
-          assert.equal(button.textContent.includes("A"), false);
-        }
-
-        // 11. Busy state disables presets alongside the existing controls.
+        // 12. Busy state disables presets alongside the existing controls.
         editor.busy = true;
         editor.applyBusyState();
         for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
@@ -1253,45 +1366,41 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         }
         editor.busy = false;
         editor.applyBusyState();
-        for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
-          assert.equal(button.disabled, false);
-        }
 
-        // 12. Scale/range help combines existing field help with the shared quick-fill note.
+        // 13. Help combines the mode description with the read-first note.
         assert.equal(editor.scaleHelp.tagName, "SMALL");
         assert.equal(editor.scaleHelp.className, "field-help");
         assert.equal(
           editor.scaleHelp.textContent,
-          "help.channel-scale.volts_per_division\nchannel-scale-range.editor.quickFillHelp",
+          "channel-scale-range.editor.scaleDescription\nchannel-scale-range.editor.readFirstHelp",
         );
         assert.equal(editor.rangeHelp.tagName, "SMALL");
         assert.equal(editor.rangeHelp.className, "field-help");
         assert.equal(
           editor.rangeHelp.textContent,
-          "help.channel-range.volts\nchannel-scale-range.editor.quickFillHelp",
+          "channel-scale-range.editor.rangeDescription\nchannel-scale-range.editor.readFirstHelp",
         );
-        assert.deepEqual(
-          editor.scaleSection.children.map((node) => node.tagName),
-          ["STRONG", "LABEL", "SMALL", "DIV", "DIV"],
-        );
-        assert.equal(editor.scaleSection.children[2], editor.scaleHelp);
-        assert.equal(editor.scaleSection.children[3], editor.scalePresets);
-        assert.deepEqual(
-          editor.rangeSection.children.map((node) => node.tagName),
-          ["STRONG", "LABEL", "SMALL", "DIV", "DIV"],
-        );
-        assert.equal(editor.rangeSection.children[2], editor.rangeHelp);
-        assert.equal(editor.rangeSection.children[3], editor.rangePresets);
         globalThis.translate = (key) => `T:${key}`;
         editor.rerender();
         assert.equal(
           editor.scaleHelp.textContent,
-          "T:help.channel-scale.volts_per_division\nT:channel-scale-range.editor.quickFillHelp",
+          "T:channel-scale-range.editor.scaleDescription\nT:channel-scale-range.editor.readFirstHelp",
         );
         assert.equal(
           editor.rangeHelp.textContent,
-          "T:help.channel-range.volts\nT:channel-scale-range.editor.quickFillHelp",
+          "T:channel-scale-range.editor.rangeDescription\nT:channel-scale-range.editor.readFirstHelp",
         );
+
+        // 14. Without headerActions the Read / Apply pair falls back to the body.
+        const fallbackEditor = new globalThis.ChannelScaleRangeEditor(new FakeNode("div"), catalog, {
+          contextKey: () => currentContext,
+          selectedCommand: () => ({ id: "channel-scale-range", editor: "channel-scale-range" }),
+          isAvailable: () => true,
+          isExecutionBusy: () => false,
+          executeCommand: async () => ({ status: "completed" }),
+        });
+        assert.ok(fallbackEditor.container.children.includes(fallbackEditor.readButton));
+        assert.ok(fallbackEditor.container.children.includes(fallbackEditor.applyButton));
 
         console.log(JSON.stringify({ ok: true }));
         '''
