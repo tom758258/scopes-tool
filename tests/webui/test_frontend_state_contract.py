@@ -108,7 +108,271 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_timebase_scale_presets_fill_value_without_execute() -> None:
+    styles = read_static("styles.css")
+    assert ".timebase-scale-presets" in styles
+    assert "grid-column: 1 / -1;" in styles
+    assert "repeat(5, minmax(0, 1fr))" in styles
+    assert "repeat(2, minmax(0, 1fr))" in styles
 
+    command_form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeEl {
+          constructor(tag) {
+            this.tagName = String(tag).toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.attributes = {};
+            this.style = {};
+            this.className = "";
+            this.textContent = "";
+            this.hidden = false;
+            this.disabled = false;
+            this.checked = false;
+            this.type = "";
+            this.multiple = false;
+            this.required = false;
+            this.validity = {};
+            this._value = "";
+            this.options = [];
+            this.selectedOptions = [];
+            this.parentElement = null;
+            this.listeners = {};
+            const classes = new Set();
+            this.classList = {
+              add: (...names) => names.forEach((name) => classes.add(name)),
+              contains: (name) => classes.has(name),
+            };
+          }
+          get value() { return this._value; }
+          set value(v) { this._value = String(v); }
+          append(...nodes) {
+            for (const n of nodes) {
+              this.children.push(n);
+              n.parentElement = this;
+              if (n.tagName === "OPTION") {
+                this.options.push(n);
+                if (n.selected) this.selectedOptions.push(n);
+              }
+            }
+          }
+          replaceChildren(...nodes) {
+            this.children = [];
+            this.options = [];
+            this.selectedOptions = [];
+            if (nodes.length) this.append(...nodes);
+          }
+          setAttribute(k, v) { this.attributes[k] = String(v); }
+          getAttribute(k) { return this.attributes[k]; }
+          addEventListener(type, fn) {
+            (this.listeners[type] = this.listeners[type] || []).push(fn);
+          }
+          dispatchEvent(event) {
+            for (const fn of this.listeners[event.type] || []) fn(event);
+            return true;
+          }
+          closest(sel) {
+            if (sel === '[data-visible-if-hidden="true"]') {
+              let node = this;
+              while (node) {
+                if (node.dataset?.visibleIfHidden === "true") return node;
+                node = node.parentElement;
+              }
+            }
+            return null;
+          }
+          setCustomValidity() {}
+          checkValidity() { return true; }
+          reportValidity() {}
+          querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+          querySelectorAll(sel) {
+            const out = [];
+            const mField = sel.match(/^\[data-field="([^"]+)"\]$/);
+            const walk = (node) => {
+              for (const c of node.children || []) {
+                if (sel === "[data-field]" && c.dataset && "field" in c.dataset) out.push(c);
+                else if (mField && c.dataset && c.dataset.field === mField[1]) out.push(c);
+                else if (sel === "button" && c.tagName === "BUTTON") out.push(c);
+                else if (sel === ".timebase-scale-presets"
+                  && c.className.split(" ").includes("timebase-scale-presets")) out.push(c);
+                else if (sel === ".timebase-scale-presets button" && c.tagName === "BUTTON") {
+                  let p = c.parentElement;
+                  let inside = false;
+                  while (p) {
+                    if (p.className && p.className.split(" ").includes("timebase-scale-presets")) {
+                      inside = true;
+                      break;
+                    }
+                    p = p.parentElement;
+                  }
+                  if (inside) out.push(c);
+                }
+                else if (sel === "[data-multi-for]" && c.dataset && "multiFor" in c.dataset) out.push(c);
+                else if (sel === "[data-visible-if]" && c.dataset && "visibleIf" in c.dataset) out.push(c);
+                else if (sel === "[data-help-by-value]" && c.dataset && "helpByValue" in c.dataset) out.push(c);
+                else if (sel === "span" && c.tagName === "SPAN") out.push(c);
+                walk(c);
+              }
+            };
+            walk(this);
+            return out;
+          }
+        }
+        globalThis.document = { createElement: (tag) => new FakeEl(tag) };
+        globalThis.Option = function (text, value) {
+          const o = new FakeEl("option");
+          o.textContent = text;
+          o.value = String(value);
+          return o;
+        };
+        globalThis.Event = class Event {
+          constructor(type, init) {
+            this.type = type;
+            this.bubbles = init?.bubbles;
+          }
+        };
+        globalThis.HTMLElement = FakeEl;
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.CommandForm = CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const expected = [
+          ["100 ns/div", "0.0000001"],
+          ["1 µs/div", "0.000001"],
+          ["10 µs/div", "0.00001"],
+          ["100 µs/div", "0.0001"],
+          ["1 ms/div", "0.001"],
+          ["10 ms/div", "0.01"],
+          ["20 ms/div", "0.02"],
+          ["100 ms/div", "0.1"],
+          ["200 ms/div", "0.2"],
+          ["1 s/div", "1"],
+        ];
+        const catalog = {
+          fieldsFor: (cmd) => cmd.fields,
+          optionsFor: (field) => field?.options || [],
+        };
+        const timebaseScale = {
+          id: "timebase-scale",
+          fields: [
+            { name: "action", type: "enum", options: ["query", "set"] },
+            {
+              name: "seconds_per_division",
+              type: "number",
+              exclusive_minimum: 0,
+              help_key: "timebase.seconds_per_division",
+            },
+          ],
+          presentation: {
+            kind: "setting",
+            action_field: "action",
+            query_value: "query",
+            apply_value: "set",
+            query_fields: [],
+          },
+        };
+
+        const dirtyCalls = [];
+        const queryCalls = [];
+        const container = new FakeEl("form");
+        const form = new globalThis.CommandForm(container, catalog);
+        form.render(timebaseScale, {
+          onDirty: (field) => dirtyCalls.push(field),
+          onQueryFieldChange: (field) => queryCalls.push(field),
+        });
+
+        const presetHost = container.children.find((child) => child.className
+          .split(" ")
+          .includes("timebase-scale-presets"));
+        assert.ok(presetHost, "presets render for timebase-scale");
+        const fieldWrapper = container.children.find((child) => child.tagName === "LABEL");
+        assert.ok(fieldWrapper, "seconds field wrapper renders");
+        assert.ok(
+          container.children.indexOf(presetHost) > container.children.indexOf(fieldWrapper),
+          "presets sit after the field as a form sibling",
+        );
+        const labelButtons = [];
+        {
+          const walk = (node) => {
+            for (const child of node.children || []) {
+              if (child.tagName === "BUTTON") labelButtons.push(child);
+              walk(child);
+            }
+          };
+          walk(fieldWrapper);
+        }
+        assert.equal(labelButtons.length, 0);
+
+        const buttons = presetHost.children.filter((child) => child.tagName === "BUTTON");
+        assert.equal(buttons.length, 10);
+        assert.deepEqual(buttons.map((button) => button.textContent), expected.map(([label]) => label));
+        buttons.forEach((button) => assert.equal(button.type, "button"));
+
+        const input = container.querySelector('[data-field="seconds_per_division"]');
+        assert.ok(input);
+        for (const [label, value] of expected) {
+          const button = buttons.find((candidate) => candidate.textContent === label);
+          assert.ok(button, label);
+          const before = dirtyCalls.length;
+          button.dispatchEvent(new globalThis.Event("click", { bubbles: true }));
+          assert.equal(input.value, value);
+          assert.equal(input.dataset.dirty, "true");
+          assert.equal(dirtyCalls.length, before + 1);
+          assert.equal(dirtyCalls[dirtyCalls.length - 1], "seconds_per_division");
+          assert.equal(form.values().seconds_per_division, Number(value));
+        }
+        assert.equal(queryCalls.length, 0);
+        assert.deepEqual(form.queryValues(), { action: "query" });
+
+        form.setDisabled(true);
+        assert.equal(input.disabled, true);
+        buttons.forEach((button) => assert.equal(button.disabled, true));
+        buttons[0].dispatchEvent(new globalThis.Event("click", { bubbles: true }));
+        assert.equal(input.value, expected[expected.length - 1][1]);
+        form.setDisabled(false);
+        assert.equal(input.disabled, false);
+        buttons.forEach((button) => assert.equal(button.disabled, false));
+
+        form.render({
+          id: "timebase-position",
+          fields: [
+            { name: "action", type: "enum", options: ["query", "set"] },
+            { name: "position_seconds", type: "number" },
+          ],
+          presentation: {
+            kind: "setting",
+            action_field: "action",
+            query_value: "query",
+            apply_value: "set",
+            query_fields: [],
+          },
+        }, {});
+        assert.equal(container.querySelectorAll("button").length, 0);
+        assert.equal(container.querySelector(".timebase-scale-presets"), null);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 def run_generic_form_ownership_behavior(assertions: str) -> None:
     source = read_static("app.js").replace("options = {}", "options = null", 1)

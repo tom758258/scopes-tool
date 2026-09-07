@@ -3,6 +3,18 @@ import { applyNumericFieldConstraints } from "/static/numeric-input.js";
 
 const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 const FFT_FREQUENCY_FIELDS = new Set(["center_hz", "span_hz", "start_hz", "stop_hz"]);
+const TIMEBASE_SCALE_PRESETS = [
+  { label: "100 ns/div", value: "0.0000001" },
+  { label: "1 µs/div", value: "0.000001" },
+  { label: "10 µs/div", value: "0.00001" },
+  { label: "100 µs/div", value: "0.0001" },
+  { label: "1 ms/div", value: "0.001" },
+  { label: "10 ms/div", value: "0.01" },
+  { label: "20 ms/div", value: "0.02" },
+  { label: "100 ms/div", value: "0.1" },
+  { label: "200 ms/div", value: "0.2" },
+  { label: "1 s/div", value: "1" },
+];
 
 function translateEnum(value, optionLabel = null) {
   const scopedKey = optionLabel ? `enum.${optionLabel}.${String(value)}` : null;
@@ -55,6 +67,7 @@ export class CommandForm {
       this.container.append(disclosure);
     }
     if (options.draft) this.restoreDraft(options.draft);
+    this.appendTimebaseScalePresets();
     this.container.querySelectorAll("[data-field]").forEach((input) => {
       if (input.type === "hidden") return;
       const changed = () => {
@@ -80,6 +93,28 @@ export class CommandForm {
     this.container.append(empty);
   }
 
+  appendTimebaseScalePresets() {
+    if (this.command?.id !== "timebase-scale") return;
+    const input = this.container.querySelector('[data-field="seconds_per_division"]');
+    if (!input) return;
+    const presets = document.createElement("div");
+    presets.className = "timebase-scale-presets";
+    TIMEBASE_SCALE_PRESETS.forEach((preset) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = preset.label;
+      button.addEventListener("click", () => {
+        const target = this.container.querySelector('[data-field="seconds_per_division"]');
+        if (!target || target.disabled) return;
+        target.value = preset.value;
+        target.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      presets.append(button);
+    });
+    this.container.append(presets);
+  }
+
   isSettingEditor() {
     if (this.presentation?.kind !== "setting") return false;
     if (this.presentation.action_choices?.length) return true;
@@ -98,6 +133,9 @@ export class CommandForm {
   setDisabled(disabled) {
     this.container.querySelectorAll("[data-field]").forEach((input) => {
       if (input.type !== "hidden") input.disabled = disabled;
+    });
+    this.container.querySelectorAll(".timebase-scale-presets button").forEach((button) => {
+      button.disabled = disabled;
     });
     this.container.querySelectorAll("[data-multi-for]").forEach((box) => {
       box.disabled = disabled;
