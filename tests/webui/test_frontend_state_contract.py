@@ -2549,6 +2549,8 @@ def test_system_result_summaries_localize_options_and_unknown_operation_bits() -
     chinese = read_static("locale_zh_tw.js")
     assert '"system.option.MEMUP": "記憶體升級",' in chinese
     assert '"system.option.WAVEGEN": "波形產生器",' in chinese
+    assert '"system.option.AERO": "MIL-1553/ARINC 429 串列",' in chinese
+    assert '"system.option.USF": "USB 2.0 低速／全速",' in chinese
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -2557,6 +2559,12 @@ def test_system_result_summaries_localize_options_and_unknown_operation_bits() -
         const translations = {
           "system.option.MEMUP": "記憶體升級",
           "system.option.WAVEGEN": "波形產生器",
+          "system.option.MSO": "混合訊號示波器",
+          "system.option.BW20": "頻寬",
+          "system.option.PLUS": "增強功能",
+          "system.option.AERO": "MIL-1553/ARINC 429 串列",
+          "system.option.USF": "USB 2.0 低速／全速",
+          "system.option.D3000PWRA": "電源供應器測試軟體",
         };
         const source = [
           `const translations = ${JSON.stringify(translations)};`,
@@ -2571,6 +2579,14 @@ def test_system_result_summaries_localize_options_and_unknown_operation_bits() -
         assert.equal(
           formatSystemOptionsSummary({ options: [0, "MEMUP", "WAVEGEN", "FPGAX"] }),
           "記憶體升級 — MEMUP; 波形產生器 — WAVEGEN; FPGAX",
+        );
+        assert.equal(
+          formatSystemOptionsSummary({
+            options: ["MSO", "BW20", "PLUS", "AERO", "USF", "D3000PWRA", "FPGAX"],
+          }),
+          "混合訊號示波器 — MSO; 頻寬 — BW20; 增強功能 — PLUS; "
+          + "MIL-1553/ARINC 429 串列 — AERO; USB 2.0 低速／全速 — USF; "
+          + "電源供應器測試軟體 — D3000PWRA; FPGAX",
         );
         assert.equal(formatSystemOperationStatusSummary({ set_bits: [12] }), "Bit 12");
         assert.equal(formatSystemOperationStatusSummary({ set_bits: [12] }).includes("system.operationStatus.bit.12"), false);
