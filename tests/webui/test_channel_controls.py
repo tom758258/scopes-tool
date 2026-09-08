@@ -1518,7 +1518,10 @@ def test_channel_scale_range_workspace_latest_result() -> None:
         assert.ok(displayed().includes("workspace.resultEmpty"));
         selected = { id: "save-export", presentation_only: true };
         sandbox.renderWorkspace();
-        assert.equal(elements.identityWorkspace.hidden, true);
+        assert.equal(elements.identityWorkspace.hidden, false);
+        const saved = capture("save-pwd", "query", { path: "data" });
+        assert.equal(saved.command, "save-pwd");
+        assert.ok(!displayed().includes("workspace.resultEmpty"));
         '''
     )
     completed = subprocess.run(

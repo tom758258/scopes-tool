@@ -177,7 +177,7 @@ def test_diagnostics_catalog_and_validation_contract() -> None:
     commands = {entry["id"]: entry for entry in client.get("/api/commands").json()}
 
     diagnostics = commands["diagnostics"]
-    assert diagnostics["category"] == "Diagnostics"
+    assert diagnostics["category"] == "System"
     assert diagnostics["editor"] == "diagnostics"
     assert diagnostics["presentation_only"] is True
     assert diagnostics["modes"] == ["live", "simulate"]
@@ -1923,6 +1923,10 @@ def test_commands_expose_reference_and_save_subset() -> None:
         assert commands[command]["browser_hidden"] is True
     assert commands["reference-waveform"]["presentation_only"] is True
     assert commands["reference-waveform"]["editor"] == "reference"
+    assert commands["reference-labels"]["presentation_only"] is True
+    assert commands["reference-labels"]["editor"] == "reference-labels"
+    assert commands["reference-labels"]["category"] == "Reference"
+    assert commands["reference-labels"]["modes"] == ["live", "simulate"]
     assert commands["save-export"]["presentation_only"] is True
     assert commands["save-export"]["editor"] == "save-export"
     assert expected <= {entry["id"] for entry in commands_module.COMMANDS}
@@ -1937,7 +1941,7 @@ def test_commands_expose_reference_and_save_subset() -> None:
         entry["id"]
         for entry in browser_commands
         if entry["category"] == "Reference"
-    ] == ["reference-waveform"]
+    ] == ["reference-waveform", "reference-labels"]
     assert [
         entry["id"]
         for entry in browser_commands

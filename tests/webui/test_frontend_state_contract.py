@@ -3165,7 +3165,7 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 17
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 18
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
     styles = read_static("styles.css")
@@ -4763,6 +4763,7 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         }};
         const commandForm = null;
         const referenceEditor = {{}};
+        const referenceLabelsEditor = {{}};
         const saveExportEditor = {{
           mode: "setup",
           refreshButton: {{ hidden: false }},
@@ -4878,7 +4879,12 @@ def test_acquisition_control_workspace_latest_result() -> None:
         assert.equal(content.children[0].textContent, "workspace.resultEmpty");
         selected = { id: "save-export", presentation_only: true };
         sandbox.renderWorkspace();
-        assert.equal(sandbox.elements.identityWorkspace.hidden, true);
+        assert.equal(sandbox.elements.identityWorkspace.hidden, false);
+        {
+          const job = { command: "save-pwd", status: "completed", result: { path: "data" } };
+          sandbox.captureWorkspaceResult(job, sandbox.currentWorkspaceContext("save-pwd"));
+          assert.deepEqual(content.children, [job]);
+        }
         '''
     )
     completed = subprocess.run(

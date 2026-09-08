@@ -1978,6 +1978,15 @@ def command_catalog() -> list[dict[str, Any]]:
                 "fields": (),
             },
             {
+                "id": "reference-labels",
+                "category": "Reference",
+                "label": "Reference labels",
+                "editor": "reference-labels",
+                "presentation_only": True,
+                "modes": ("live", "simulate"),
+                "fields": (),
+            },
+            {
                 "id": "system-information",
                 "category": "System",
                 "label": "System Information",
@@ -1996,7 +2005,7 @@ def command_catalog() -> list[dict[str, Any]]:
             },
             {
                 "id": "diagnostics",
-                "category": "Diagnostics",
+                "category": "System",
                 "label": "Diagnostics",
                 "editor": "diagnostics",
                 "presentation_only": True,

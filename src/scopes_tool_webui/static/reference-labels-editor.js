@@ -1,19 +1,15 @@
 import { CommandForm } from "/static/command-form.js";
+import { LabelVisibility } from "/static/label-visibility.js";
 import { translate } from "/static/i18n.js";
 
-const REFERENCE_MANAGEMENT_ACTIONS = [
-  "reference-display",
-  "reference-clear",
-];
-
-export class ReferenceEditor {
+export class ReferenceLabelsEditor {
   constructor(container, catalog, hooks) {
     this.container = container;
     this.catalog = catalog;
     this.hooks = hooks;
     this.busy = false;
     this.renderedKey = null;
-    this.entries = [];
+    this.entry = null;
     this.buildHeaderAction();
   }
 
@@ -21,8 +17,8 @@ export class ReferenceEditor {
     this.refreshButton?.remove?.();
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
-    this.refreshButton.className = "secondary reference-editor-refresh";
-    this.refreshButton.textContent = translate("reference.editor.read");
+    this.refreshButton.className = "secondary reference-labels-editor-refresh";
+    this.refreshButton.textContent = translate("reference-labels.editor.read");
     this.refreshButton.hidden = true;
     this.refreshButton.addEventListener("click", () => void this.refresh());
     this.hooks.headerActions?.append(this.refreshButton);
@@ -34,7 +30,7 @@ export class ReferenceEditor {
 
   selectedDefinition() {
     const selected = this.hooks.selectedCommand?.();
-    return selected?.editor === "reference" ? selected : null;
+    return selected?.editor === "reference-labels" ? selected : null;
   }
 
   currentKey() {
@@ -55,7 +51,7 @@ export class ReferenceEditor {
     const definition = this.selectedDefinition();
     if (!definition) {
       this.renderedKey = null;
-      this.entries = [];
+      this.entry = null;
       this.container.replaceChildren();
       this.applyBusyState();
       return;
@@ -70,10 +66,10 @@ export class ReferenceEditor {
 
   buildWorkspace() {
     this.container.replaceChildren();
-    this.entries = [];
+    this.entry = null;
 
     const selectorSection = document.createElement("section");
-    selectorSection.className = "trigger-editor-section reference-editor-selector";
+    selectorSection.className = "trigger-editor-section reference-labels-editor-selector";
     const selectorHost = document.createElement("div");
     selectorHost.className = "command-form";
     selectorSection.append(selectorHost);
@@ -81,31 +77,25 @@ export class ReferenceEditor {
     this.slotForm.render(this.definition("reference-query"));
     selectorHost.querySelector?.('[data-field="slot"]')?.addEventListener("change", () => {
       this.readStatus.textContent = "";
-      this.buildActionSections();
+      this.buildLabelSection();
       this.applyBusyState();
     });
 
     this.readStatus = document.createElement("output");
     this.readStatus.className = "muted compact-note";
-    this.actionsHost = document.createElement("div");
-    this.actionsHost.className = "trigger-editor-sections";
-    this.container.append(selectorSection, this.readStatus, this.actionsHost);
-    this.buildActionSections();
+    this.labelHost = document.createElement("div");
+    this.labelHost.className = "trigger-editor-sections";
+    this.container.append(selectorSection, this.readStatus, this.labelHost);
+    this.buildLabelSection();
   }
 
-  actionDefinition(id) {
-    const command = this.definition(id);
+  labelDefinition() {
+    const command = this.definition("reference-label");
     if (!command) return null;
     const presentation = { ...command.presentation };
     presentation.query_fields = (presentation.query_fields || []).filter(
       (name) => name !== "slot",
     );
-    if (id === "reference-display") {
-      presentation.readback_fields = {
-        ...(presentation.readback_fields || {}),
-        enabled: "displayed",
-      };
-    }
     return {
       ...command,
       fields: this.catalog.fieldsFor(command).filter((field) => field.name !== "slot"),
@@ -113,33 +103,38 @@ export class ReferenceEditor {
     };
   }
 
-  buildActionSections() {
-    this.entries = [];
-    this.actionsHost.replaceChildren();
-    const save = this.buildActionEntry("reference-save", true);
-    if (save) {
+  buildLabelSection() {
+    this.entry = null;
+    this.labelVisibility = null;
+    this.labelHost.replaceChildren();
+    const command = this.labelDefinition();
+    if (command && this.catalog.supported(command)) {
       const section = document.createElement("section");
       section.className = "trigger-editor-section";
-      this.appendActionHeading(section, save.command);
-      section.append(save.formHost, save.button);
-      this.actionsHost.append(section);
-      this.entries.push(save.entry);
+      this.appendActionHeading(section, command);
+      const formHost = document.createElement("div");
+      formHost.className = "command-form";
+      const form = new CommandForm(formHost, this.catalog);
+      form.render(command);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary trigger-editor-action";
+      button.textContent = translate("actions.apply");
+      const entry = { id: command.id, form, button, kind: command.presentation.kind };
+      button.addEventListener("click", () => void this.submit(entry));
+      section.append(formHost, button);
+      this.labelHost.append(section);
+      this.entry = entry;
     }
 
-    const management = document.createElement("section");
-    management.className = "trigger-editor-section";
-    for (const id of REFERENCE_MANAGEMENT_ACTIONS) {
-      const action = this.buildActionEntry(id, false);
-      if (!action) continue;
-      const control = document.createElement("div");
-      control.className = "reference-editor-control";
-      this.appendActionHeading(control, action.command);
-      if (action.formHost) control.append(action.formHost);
-      control.append(action.button);
-      management.append(control);
-      this.entries.push(action.entry);
-    }
-    if (management.children.length) this.actionsHost.append(management);
+    const section = document.createElement("section");
+    section.className = "trigger-editor-section";
+    this.labelHost.append(section);
+    this.labelVisibility = new LabelVisibility(section, this.catalog, {
+      ...this.hooks,
+      contextKey: () => `${this.currentKey()}|${this.selectedSlot()}`,
+    });
+    this.labelVisibility.render(true);
   }
 
   appendActionHeading(container, command) {
@@ -154,36 +149,6 @@ export class ReferenceEditor {
       note.textContent = description;
       container.append(note);
     }
-  }
-
-  buildActionEntry(id, isSaveWorkflow) {
-    const command = this.actionDefinition(id);
-    if (!command || !this.catalog.supported(command)) return null;
-
-    let form = null;
-    let formHost = null;
-    if (command.fields.length) {
-      formHost = document.createElement("div");
-      formHost.className = "command-form";
-      form = new CommandForm(formHost, this.catalog);
-      form.render(command);
-    }
-    const button = document.createElement("button");
-    button.type = "button";
-    const style = isSaveWorkflow ? "primary" : id === "reference-clear" ? "danger" : "secondary";
-    button.className = `${style} trigger-editor-action`;
-    button.textContent = isSaveWorkflow
-      ? translate("reference.editor.saveAndDisplay")
-      : translate(
-          command.presentation.kind === "setting"
-            ? "actions.apply"
-            : `actions.${command.presentation.action}`,
-        );
-    const entry = { id, form, button, kind: command.presentation.kind };
-    button.addEventListener("click", () => void (
-      isSaveWorkflow ? this.saveAndDisplay(entry) : this.submit(entry)
-    ));
-    return { command, entry, formHost, button };
   }
 
   selectedSlot() {
@@ -202,15 +167,12 @@ export class ReferenceEditor {
     );
     if (`${this.currentKey()}|${this.selectedSlot()}` !== requestedKey) return job;
     if (job?.status !== "completed") {
-      this.readStatus.textContent = translate("reference.editor.readFailed");
+      this.readStatus.textContent = translate("reference-labels.editor.readFailed");
       return job;
     }
-    for (const entry of this.entries) {
-      if (entry.id === "reference-display") {
-        entry.form?.syncResult(job, true);
-      }
-    }
-    this.readStatus.textContent = translate("reference.editor.currentLoaded");
+    this.entry?.form?.syncResult(job, true);
+    this.readStatus.textContent = translate("reference-labels.editor.currentLoaded");
+    await this.labelVisibility?.run(false);
     return job;
   }
 
@@ -246,34 +208,6 @@ export class ReferenceEditor {
     }
   }
 
-  async saveAndDisplay(entry) {
-    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
-    const slot = this.selectedSlot();
-    const values = entry.form?.values();
-    if (slot === null || slot === undefined || values === null) return null;
-    this.setBusy(true);
-    try {
-      const saveJob = await this.hooks.executeCommand(
-        "reference-save",
-        { ...values, slot },
-        { intent: "command" },
-      );
-      if (saveJob?.status !== "completed") return saveJob;
-      entry.form.clearDirty();
-
-      const displayJob = await this.hooks.executeCommand(
-        "reference-display",
-        { action: "set", slot, enabled: true },
-        { intent: "apply" },
-      );
-      if (displayJob?.status !== "completed") return displayJob;
-      await this.readCurrentState();
-      return displayJob;
-    } finally {
-      this.setBusy(false);
-    }
-  }
-
   setBusy(value) {
     this.busy = value;
     this.applyBusyState();
@@ -283,9 +217,10 @@ export class ReferenceEditor {
     const disabled = this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable();
     this.refreshButton.disabled = disabled;
     this.slotForm?.setDisabled(disabled);
-    for (const entry of this.entries) {
-      entry.button.disabled = disabled;
-      entry.form?.setDisabled(disabled);
+    if (this.entry) {
+      this.entry.button.disabled = disabled;
+      this.entry.form?.setDisabled(disabled);
     }
+    this.labelVisibility?.applyBusyState(disabled);
   }
 }

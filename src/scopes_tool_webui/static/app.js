@@ -28,6 +28,7 @@ import {
 } from "/static/pc-output.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
 import { ReferenceEditor } from "/static/reference-editor.js";
+import { ReferenceLabelsEditor } from "/static/reference-labels-editor.js";
 import { SaveExportEditor } from "/static/save-export-editor.js";
 import { SearchEditor } from "/static/search-editor.js";
 import { SegmentedEditor } from "/static/segmented-editor.js";
@@ -87,6 +88,7 @@ const elements = {
   formHeading: document.querySelector("#form-heading"),
   acquisitionEditor: document.querySelector("#acquisition-editor"),
   referenceEditor: document.querySelector("#reference-editor"),
+  referenceLabelsEditor: document.querySelector("#reference-labels-editor"),
   saveExportEditor: document.querySelector("#save-export-editor"),
   serialEditor: document.querySelector("#serial-editor"),
   triggerEditor: document.querySelector("#trigger-editor"),
@@ -148,6 +150,7 @@ let channelLabelApplyButton = null;
 let acquisitionEditor;
 let genericFormRevision = 0;
 let referenceEditor;
+let referenceLabelsEditor;
 let saveExportEditor;
 let serialEditor;
 let triggerEditor;
@@ -186,6 +189,7 @@ const INTERNAL_COMMANDS = {
 const EDITOR_RENDERERS = {
   acquisition: () => acquisitionEditor,
   reference: () => referenceEditor,
+  "reference-labels": () => referenceLabelsEditor,
   "save-export": () => saveExportEditor,
   serial: () => serialEditor,
   trigger: () => triggerEditor,
@@ -253,6 +257,17 @@ async function initialize() {
     selectedCommand: () => catalog.selected(),
   });
   referenceEditor = new ReferenceEditor(elements.referenceEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  referenceLabelsEditor = new ReferenceLabelsEditor(elements.referenceLabelsEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
@@ -863,6 +878,22 @@ function renderWorkspace() {
   const compositeCommands = {
     "channel-scale-range": ["channel-scale", "channel-range"],
     "acquisition-control": ["run", "single", "single-wait", "stop-acquisition", "force-trigger"],
+    "reference-waveform": ["reference-query", "reference-save", "reference-display", "reference-clear"],
+    "reference-labels": ["reference-query", "reference-label", "display-label"],
+    "save-export": [
+      "save-pwd",
+      "save-filename",
+      "save-image-format",
+      "save-image-palette",
+      "save-image-ink-saver",
+      "save-image-factors",
+      "save-image",
+      "save-waveform-format",
+      "save-waveform-length",
+      "save-waveform",
+      "setup-save",
+      "setup-recall",
+    ],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
@@ -920,6 +951,7 @@ document.addEventListener("localechange", () => {
     syncCommandSelection(commandDraft);
   }
   referenceEditor?.rerender();
+  referenceLabelsEditor?.rerender();
   saveExportEditor?.rerender();
   serialEditor?.rerender();
   triggerEditor?.rerender();
@@ -961,6 +993,7 @@ function syncCommandSelection(draft = null) {
   elements.form.hidden = editorOwned || systemInformationSelected;
   channelLabelVisibility?.render(selected?.id === "channel-label");
   elements.referenceEditor.hidden = editorKind !== "reference";
+  if (elements.referenceLabelsEditor) elements.referenceLabelsEditor.hidden = editorKind !== "reference-labels";
   elements.saveExportEditor.hidden = editorKind !== "save-export";
   elements.serialEditor.hidden = editorKind !== "serial";
   elements.triggerEditor.hidden = editorKind !== "trigger";
@@ -1044,6 +1077,7 @@ function updateAvailability() {
   searchEditor?.applyBusyState();
   segmentedEditor?.applyBusyState();
   referenceEditor?.applyBusyState();
+  referenceLabelsEditor?.applyBusyState();
   channelLabelVisibility?.applyBusyState();
   saveExportEditor?.applyBusyState();
   serialEditor?.render(serialEditor.controller.state);
@@ -1115,6 +1149,9 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (referenceEditor?.refreshButton) {
     referenceEditor.refreshButton.hidden = editorKind !== "reference";
   }
+  if (referenceLabelsEditor?.refreshButton) {
+    referenceLabelsEditor.refreshButton.hidden = editorKind !== "reference-labels";
+  }
   if (saveExportEditor?.refreshButton) {
     saveExportEditor.refreshButton.hidden =
       editorKind !== "save-export" || saveExportEditor.mode === "setup";
@@ -1146,6 +1183,7 @@ function syncWorkspaceHeaderActions(editorKind) {
 
 function syncEditorPresentation(editorKind) {
   if (editorKind === "reference") referenceEditor?.schedulePresentation();
+  if (editorKind === "reference-labels") referenceLabelsEditor?.schedulePresentation();
   if (editorKind === "save-export") saveExportEditor?.schedulePresentation();
   if (editorKind === "serial") serialEditor?.schedulePresentation();
   if (editorKind === "trigger") triggerEditor?.schedulePresentation();
