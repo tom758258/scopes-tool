@@ -414,10 +414,13 @@ def test_timebase_scale_presets_fill_value_without_execute() -> None:
 
 def test_slider_selection_has_reserved_height_and_scrollbar_gutter() -> None:
     styles = read_static("styles.css")
-    assert "scrollbar-gutter: stable;" in styles
-    assert ".div-slider-selection {" in styles
-    assert "display: block;" in styles
-    assert "min-height: 1.45em;" in styles
+
+    workspace_rule = extract_css_rule(styles, ".workspace-content")
+    assert "scrollbar-gutter: stable;" in workspace_rule
+
+    selection_rule = extract_css_rule(styles, ".div-slider-selection")
+    assert "display: block;" in selection_rule
+    assert "min-height: 1.45em;" in selection_rule
 
 
 def test_scale_range_mode_has_spacing_from_channel_selector() -> None:
