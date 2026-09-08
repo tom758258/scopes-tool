@@ -95,18 +95,13 @@ export class ChannelScaleRangeEditor {
   buildDom() {
     this.container.replaceChildren();
 
-    // 0. Section heading with shared read-first help. The workspace header
-    // already shows the Scale/Range relationship, so this only explains how
-    // to operate this section.
+    // 0. Section intro with shared read-first help (no extra heading to avoid duplicate Parameters).
     this.introSection = document.createElement("div");
     this.introSection.className = "workflow-editor-section";
-    this.introHeading = document.createElement("strong");
-    this.introHeading.className = "workflow-editor-heading";
-    this.introHeading.textContent = translate("commands.parameters");
     this.introHelp = document.createElement("small");
     this.introHelp.className = "muted compact-note";
     this.introHelp.textContent = translate("channel-scale-range.editor.readFirstHelp");
-    this.introSection.append(this.introHeading, this.introHelp);
+    this.introSection.append(this.introHelp);
 
     // 1. Shared channel selector
     this.channelField = document.createElement("label");
@@ -340,7 +335,6 @@ export class ChannelScaleRangeEditor {
     this.scaleFieldLabel.textContent = translate("field.volts_per_division");
     this.rangeHeading.textContent = translate("channel-scale-range.editor.range");
     this.rangeFieldLabel.textContent = translate("field.channel-range.value");
-    this.introHeading.textContent = translate("commands.parameters");
     this.introHelp.textContent = translate("channel-scale-range.editor.readFirstHelp");
     this.readButton.textContent = translate("actions.readSettings");
     this.applyButton.textContent = translate("actions.apply");

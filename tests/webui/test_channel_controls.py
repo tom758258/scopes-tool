@@ -1155,6 +1155,8 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         assert.ok(editor.container.children.includes(editor.actions));
         assert.ok(editor.actions.children.includes(editor.readButton));
         assert.ok(editor.actions.children.includes(editor.applyButton));
+        // Regression: intro section must not contain a duplicate heading.
+        assert.deepEqual(editor.introSection.children, [editor.introHelp]);
         assert.deepEqual(
           editor.scalePresetButtons.map((button) => button.textContent),
           ["0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1", "0.2", "0.5", "1"],

@@ -420,6 +420,12 @@ def test_slider_selection_has_reserved_height_and_scrollbar_gutter() -> None:
     assert "min-height: 1.45em;" in styles
 
 
+def test_scale_range_mode_has_spacing_from_channel_selector() -> None:
+    styles = read_static("styles.css")
+    mode_rule = extract_css_rule(styles, ".channel-scale-range-mode")
+    assert "margin-top: 8px;" in mode_rule
+
+
 def run_generic_form_ownership_behavior(assertions: str) -> None:
     source = read_static("app.js").replace("options = {}", "options = null", 1)
     declarations = "\n".join(
