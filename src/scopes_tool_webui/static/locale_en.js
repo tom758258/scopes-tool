@@ -1405,7 +1405,7 @@ export const en = {
   "diagnostics.smoke": "Smoke",
   "diagnostics.saveArtifacts": "Save diagnostic artifacts",
   "diagnostics.doctorHelp": "Doctor does not change scope configuration and performs one final system-error check.",
-  "diagnostics.smokeHelp": "Smoke runs CH1 VPP/VRMS measurement, waveform transfer, and screenshot transfer. Before running, confirm CH1 has a visible and measurable waveform, and the oscilloscope has acquired enough data for measurement. Smoke does not automatically run Autoscale, Single, or Force Trigger, and does not change instrument settings. Smoke drains stale system errors before validation; enabling Save diagnostic artifacts writes files to the PC output folder.",
+  "diagnostics.smokeHelp": "Smoke runs CH1 VPP/VRMS measurement, waveform transfer, and screenshot transfer. Before running, confirm CH1 has a visible and measurable waveform, and the oscilloscope has acquired enough data for measurement. Smoke does not automatically run Autoscale, Single, or Force Trigger, and does not prepare or adjust acquisition or trigger conditions for measurement. Smoke drains stale system errors before validation; enabling Save diagnostic artifacts writes files to the PC output folder.",
   "save-export.editor.workspaceLabel": "All Save / Export settings",
   "save-export.editor.workspaceName": "Save / Export",
   "save-export.editor.storageNote": "Saves are written to instrument-side storage. They do not create WebUI download artifacts.",

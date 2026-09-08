@@ -1405,7 +1405,7 @@ export const zhTW = {
   "diagnostics.smoke": "Smoke",
   "diagnostics.saveArtifacts": "儲存診斷檔案",
   "diagnostics.doctorHelp": "Doctor 不會修改示波器設定，並會執行一次最終系統錯誤檢查。",
-  "diagnostics.smokeHelp": "Smoke 會執行 CH1 VPP/VRMS 量測、波形傳輸與畫面傳輸。執行前請確認 CH1 已有可見且可量測的波形，且示波器已完成足以供量測的擷取。Smoke 不會自動執行 Autoscale、Single 或 Force Trigger，也不會修改示波器設定。Smoke 會在驗證前清除既有的舊系統錯誤；啟用「儲存診斷檔案」時，才會將診斷檔案寫入 PC 輸出資料夾。",
+  "diagnostics.smokeHelp": "Smoke 會執行 CH1 VPP/VRMS 量測、波形傳輸與畫面傳輸。執行前請確認 CH1 已有可見且可量測的波形，且示波器已完成足以供量測的擷取。Smoke 不會自動執行 Autoscale、Single 或 Force Trigger，也不會替使用者準備或調整量測所需的擷取或觸發條件。Smoke 會在驗證前清除既有的舊系統錯誤；啟用「儲存診斷檔案」時，才會將診斷檔案寫入 PC 輸出資料夾。",
   "save-export.editor.workspaceLabel": "所有儲存 / 匯出設定",
   "save-export.editor.workspaceName": "儲存 / 匯出",
   "save-export.editor.storageNote": "儲存至儀器端儲存裝置，不會建立 WebUI 下載檔案。",
