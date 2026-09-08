@@ -980,23 +980,28 @@ function syncCommandSelection(draft = null) {
   elements.demoEditor.hidden = editorKind !== "demo";
   if (elements.diagnosticsEditor) elements.diagnosticsEditor.hidden = editorKind !== "diagnostics";
   syncWorkspaceHeaderActions(editorKind);
-  elements.selectedCommand.textContent = selected
+  const selectedTitle = selected
     ? editorOwned
       ? editorKind === "measurement"
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
     : translate("commands.selectCommand");
-  elements.commandDescription.textContent = selected
+  elements.selectedCommand.textContent = selectedTitle;
+  elements.selectedCommand.title = selectedTitle;
+  const selectedDescription = selected
     ? editorOwned
       ? ["measurement", "reference", "save-export"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
     : translate("commands.noDescription");
+  elements.commandDescription.textContent = selectedDescription;
+  elements.commandDescription.title = selectedDescription;
   const supportReason = selected ? catalog.supportReason(selected) : "";
   elements.commandSupportReason.hidden = !supportReason;
   elements.commandSupportReason.textContent = supportReason;
+  elements.commandSupportReason.title = supportReason;
   renderPcOutputNote();
   elements.execute.textContent = translate(`actions.${commandAction(selected)}`);
   renderWorkspace();
