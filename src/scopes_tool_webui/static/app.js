@@ -82,6 +82,7 @@ const elements = {
   advanced: document.querySelector("#advanced-commands"),
   advancedToggle: document.querySelector("#advanced-command-toggle"),
   form: document.querySelector("#command-form"),
+  channelLabelActions: document.querySelector("#channel-label-actions"),
   channelLabelVisibility: document.querySelector("#channel-label-visibility"),
   formHeading: document.querySelector("#form-heading"),
   acquisitionEditor: document.querySelector("#acquisition-editor"),
@@ -142,6 +143,8 @@ let context = state.executionContext;
 let catalog;
 let commandForm;
 let channelLabelVisibility;
+let channelLabelReadButton = null;
+let channelLabelApplyButton = null;
 let acquisitionEditor;
 let genericFormRevision = 0;
 let referenceEditor;
@@ -237,6 +240,7 @@ async function initialize() {
     isAvailable: () => commandAvailable("display-label"),
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}|${genericFormRevision}`,
   });
+  buildChannelLabelActions();
   acquisitionEditor = new AcquisitionEditor(elements.acquisitionEditor, catalog, {
     executeCommand,
     isExecutionBusy,
@@ -359,6 +363,7 @@ async function initialize() {
   });
   channelScaleRangeEditor = new ChannelScaleRangeEditor(elements.channelScaleRangeEditor, catalog, {
     executeCommand,
+    headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
@@ -933,6 +938,7 @@ document.addEventListener("localechange", () => {
   wgenEditor?.rerender();
   demoEditor?.rerender();
   diagnosticsEditor?.rerender();
+  renderChannelLabelActions();
   syncWorkspaceHeaderActions(editorKindFor(catalog?.selected()));
   renderCurrentResult();
   renderSystemInformation();
@@ -1027,6 +1033,8 @@ function updateAvailability() {
       ? systemSnapshot.loading || !commandAvailable("system-information-snapshot")
       : !commandAvailable(selected.id));
   elements.liveDataRefresh.disabled = busy || liveDataSnapshot.loading || !commandAvailable("live-data-snapshot");
+  if (channelLabelReadButton) channelLabelReadButton.disabled = elements.refresh.disabled;
+  if (channelLabelApplyButton) channelLabelApplyButton.disabled = elements.execute.disabled;
   triggerEditor?.applyBusyState();
   searchEditor?.applyBusyState();
   segmentedEditor?.applyBusyState();
@@ -1053,19 +1061,52 @@ function isExecutionBusy() {
     || Boolean(deviceResource?.scanInProgress);
 }
 
+function buildChannelLabelActions() {
+  if (!elements.channelLabelActions) return;
+  elements.channelLabelActions.replaceChildren();
+  channelLabelReadButton = document.createElement("button");
+  channelLabelReadButton.type = "button";
+  channelLabelReadButton.className = "secondary";
+  channelLabelReadButton.textContent = translate("actions.readSettings");
+  channelLabelReadButton.addEventListener("click", () => {
+    elements.refresh.click();
+  });
+  channelLabelApplyButton = document.createElement("button");
+  channelLabelApplyButton.type = "button";
+  channelLabelApplyButton.className = "primary";
+  channelLabelApplyButton.textContent = translate("actions.apply");
+  channelLabelApplyButton.addEventListener("click", () => {
+    elements.execute.click();
+  });
+  elements.channelLabelActions.append(channelLabelReadButton, channelLabelApplyButton);
+}
+
+function renderChannelLabelActions() {
+  if (channelLabelReadButton) {
+    channelLabelReadButton.textContent = translate("actions.readSettings");
+  }
+  if (channelLabelApplyButton) {
+    channelLabelApplyButton.textContent = translate("actions.apply");
+  }
+}
+
 function syncWorkspaceHeaderActions(editorKind) {
   const selected = catalog?.selected();
   const systemInformationSelected = selected?.id === "system-information";
   const measurementRun = ["measure", "measure-sweep"].includes(selected?.id)
     && editorKind === "measurement";
+  const channelLabelSelected = selected?.id === "channel-label";
   elements.refresh.hidden = systemInformationSelected
     ? false
-    : !selected || editorKind !== null || !commandForm?.isSettingEditor();
+    : !selected || editorKind !== null || !commandForm?.isSettingEditor() || channelLabelSelected;
   elements.refresh.textContent = translate(
     systemInformationSelected ? "system.readInformation" : "actions.readSettings",
   );
   elements.execute.hidden = systemInformationSelected
-    || !selected || (editorKind !== null && !measurementRun);
+    || !selected || (editorKind !== null && !measurementRun) || channelLabelSelected;
+  if (elements.channelLabelActions) {
+    elements.channelLabelActions.hidden = !channelLabelSelected;
+  }
   if (referenceEditor?.refreshButton) {
     referenceEditor.refreshButton.hidden = editorKind !== "reference";
   }
@@ -1089,6 +1130,8 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (channelDisplayEditor?.runButton) channelDisplayEditor.runButton.hidden = editorKind !== "channel-display";
   if (timebasePositionEditor?.readButton) timebasePositionEditor.readButton.hidden = editorKind !== "timebase-position";
   if (timebasePositionEditor?.applyButton) timebasePositionEditor.applyButton.hidden = editorKind !== "timebase-position";
+  if (channelScaleRangeEditor?.readButton) channelScaleRangeEditor.readButton.hidden = editorKind !== "channel-scale-range";
+  if (channelScaleRangeEditor?.applyButton) channelScaleRangeEditor.applyButton.hidden = editorKind !== "channel-scale-range";
   if (channelOffsetEditor?.readButton) channelOffsetEditor.readButton.hidden = editorKind !== "channel-offset";
   if (channelOffsetEditor?.applyButton) channelOffsetEditor.applyButton.hidden = editorKind !== "channel-offset";
   if (typeof diagnosticsEditor !== "undefined" && diagnosticsEditor?.runButton) {

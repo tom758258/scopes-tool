@@ -92,7 +92,10 @@ export class ChannelOffsetEditor {
       this.clearDivState();
       this.applyBusyState();
     });
-    this.channelField.append(this.channelFieldLabel, this.channelSelect);
+    this.channelHelp = document.createElement("small");
+    this.channelHelp.className = "field-help";
+    this.channelHelp.textContent = translate("channel-offset.editor.channelHelp");
+    this.channelField.append(this.channelFieldLabel, this.channelSelect, this.channelHelp);
 
     this.offsetField = document.createElement("label");
     this.offsetField.className = "field";
@@ -106,7 +109,10 @@ export class ChannelOffsetEditor {
       this.selectedDiv = null;
       this.syncInfo();
     });
-    this.offsetField.append(this.offsetFieldLabel, this.offsetInput);
+    this.offsetHelp = document.createElement("small");
+    this.offsetHelp.className = "field-help";
+    this.offsetHelp.textContent = translate("channel-offset.editor.valueHelp");
+    this.offsetField.append(this.offsetFieldLabel, this.offsetInput, this.offsetHelp);
 
     this.divSection = document.createElement("div");
     this.divSection.className = "trigger-editor-section";
@@ -204,7 +210,9 @@ export class ChannelOffsetEditor {
 
   rerender() {
     this.channelFieldLabel.textContent = translate("field.channel");
+    this.channelHelp.textContent = translate("channel-offset.editor.channelHelp");
     this.offsetFieldLabel.textContent = translate("field.channel-offset.value");
+    this.offsetHelp.textContent = translate("channel-offset.editor.valueHelp");
     this.divHeading.textContent = translate("channel-offset.editor.divHeading");
     this.divHint.textContent = translate("channel-offset.editor.divHint");
     this.divSlider.setAttribute("aria-label", translate("channel-offset.editor.divHeading"));

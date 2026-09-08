@@ -30,7 +30,7 @@ export class LabelVisibility {
     this.status.className = "muted compact-note";
     this.applyButton = document.createElement("button");
     this.applyButton.type = "button";
-    this.applyButton.className = "secondary trigger-editor-action";
+    this.applyButton.className = "primary trigger-editor-action";
     this.applyButton.textContent = translate("actions.apply");
     this.applyButton.addEventListener("click", () => void this.run(true));
     this.container.append(heading, note, host, this.status, this.applyButton);

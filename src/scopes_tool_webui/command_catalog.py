@@ -624,6 +624,7 @@ COMMANDS = (
                 "maximum": 4,
                 "default": 1,
                 "required": True,
+                "help_key": "measure-install.source_channel",
             },
             {
                 "name": "item",
@@ -632,6 +633,7 @@ COMMANDS = (
                 "default": "vpp",
                 "required": True,
                 "label_key": "measure.item",
+                "help_key": "measure-install.item",
             },
         ),
     },

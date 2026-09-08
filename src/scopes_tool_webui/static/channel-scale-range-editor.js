@@ -116,7 +116,10 @@ export class ChannelScaleRangeEditor {
       this.clearReadState();
       this.applyBusyState();
     });
-    this.channelField.append(this.channelFieldLabel, this.channelSelect);
+    this.channelHelp = document.createElement("small");
+    this.channelHelp.className = "field-help";
+    this.channelHelp.textContent = translate("channel-scale-range.editor.channelHelp");
+    this.channelField.append(this.channelFieldLabel, this.channelSelect, this.channelHelp);
 
     // 2. Scale / Range mode selector (mutually exclusive, Scale by default)
     this.modeSelector = document.createElement("div");
@@ -238,15 +241,21 @@ export class ChannelScaleRangeEditor {
     const channelForm = document.createElement("div");
     channelForm.className = "command-form";
     channelForm.append(this.channelField);
-    this.actions.append(this.readButton, this.applyButton);
     this.container.append(
       this.introSection,
       channelForm,
       this.modeSelector,
       this.scaleSection,
       this.rangeSection,
-      this.actions,
     );
+    if (this.hooks.headerActions) {
+      this.readButton.hidden = true;
+      this.applyButton.hidden = true;
+      this.hooks.headerActions.append(this.readButton, this.applyButton);
+    } else {
+      this.actions.append(this.readButton, this.applyButton);
+      this.container.append(this.actions);
+    }
 
     this.stateKey = null;
     this.syncHelpText();
@@ -321,6 +330,7 @@ export class ChannelScaleRangeEditor {
   }
 
   syncHelpText() {
+    this.channelHelp.textContent = translate("channel-scale-range.editor.channelHelp");
     this.scaleHelp.textContent = translate("channel-scale-range.editor.scaleDescription");
     this.rangeHelp.textContent = translate("channel-scale-range.editor.rangeDescription");
   }

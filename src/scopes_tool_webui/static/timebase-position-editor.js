@@ -59,7 +59,10 @@ export class TimebasePositionEditor {
       this.selectedDiv = null;
       this.syncInfo();
     });
-    this.positionField.append(this.positionFieldLabel, this.positionInput);
+    this.positionHelp = document.createElement("small");
+    this.positionHelp.className = "field-help";
+    this.positionHelp.textContent = translate("timebase-position.editor.positionHelp");
+    this.positionField.append(this.positionFieldLabel, this.positionInput, this.positionHelp);
 
     this.divSection = document.createElement("div");
     this.divSection.className = "trigger-editor-section";
@@ -162,6 +165,7 @@ export class TimebasePositionEditor {
 
   rerender() {
     this.positionFieldLabel.textContent = translate("field.position_seconds");
+    this.positionHelp.textContent = translate("timebase-position.editor.positionHelp");
     this.divHeading.textContent = translate("timebase-position.editor.divHeading");
     this.divHint.textContent = translate("timebase-position.editor.divHint");
     this.referenceNote.textContent = translate("timebase-position.editor.referenceNote");

@@ -249,6 +249,15 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .pc-output-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px; }
 #pc-output-status.error-summary { margin: 0; }
 .pc-output-command-note { margin-bottom: 10px; }
+.pc-output-note-box {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border: 1px solid #b9d4ee;
+  border-radius: var(--radius-sm);
+  background: #edf5fd;
+  color: var(--ink);
+}
+.channel-label-actions { display: flex; gap: 8px; margin-top: 12px; }
 .advanced-command-button { font-size: 12px; }
 
 .command-workbench { display: grid; grid-template-columns: minmax(380px, 42%) minmax(0, 1fr); align-items: start; gap: 14px; min-width: 0; }
