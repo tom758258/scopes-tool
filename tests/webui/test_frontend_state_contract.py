@@ -3147,8 +3147,14 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 15
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 17
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
+
+    styles = read_static("styles.css")
+    desktop_form = extract_css_rule(styles, ".command-form {")
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in desktop_form
+    mobile = extract_function(styles, "@media (max-width: 700px)")
+    assert "grid-template-columns: 1fr;" in extract_css_rule(mobile, ".command-form {")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
@@ -4733,14 +4739,30 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         const segmentedEditor = {{}};
         const workflowEditor = {{}};
         const sequenceEditor = {{}};
-        const cursorEditor = {{}};
-        const annotationEditor = {{}};
+        const cursorEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
+        const annotationEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const wgenEditor = {{}};
         const demoEditor = {{}};
         const channelDisplayEditor = {{}};
         const channelScaleRangeEditor = {{}};
+        const timebasePositionEditor = {{ readButton: {{}}, applyButton: {{}} }};
+        const channelOffsetEditor = {{ readButton: {{}}, applyButton: {{}} }};
         const translate = (key) => key;
         {sync_header}
+
+        const actionPairs = [
+          ["timebase-position", timebasePositionEditor.readButton, timebasePositionEditor.applyButton],
+          ["channel-offset", channelOffsetEditor.readButton, channelOffsetEditor.applyButton],
+          ["cursor", cursorEditor.refreshButton, cursorEditor.entry.button],
+          ["annotation", annotationEditor.refreshButton, annotationEditor.entry.button],
+        ];
+        for (const kind of [...actionPairs.map(([kind]) => kind), "save-export"]) {{
+          syncWorkspaceHeaderActions(kind);
+          for (const [owner, read, apply] of actionPairs) {{
+            assert.equal(read.hidden, owner !== kind);
+            assert.equal(apply.hidden, owner !== kind);
+          }}
+        }}
 
         syncWorkspaceHeaderActions("save-export");
         assert.equal(saveExportEditor.refreshButton.hidden, true);

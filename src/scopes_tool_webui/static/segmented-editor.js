@@ -169,8 +169,15 @@ export class SegmentedEditor {
     this.captureButton.className = "primary";
     this.captureButton.textContent = translate("actions.capture");
     this.captureButton.addEventListener("click", () => void this.capture());
+    this.captureSection.append(captureHeading);
+    const captureDescription = this.catalog.description?.(this.captureDefinition());
+    if (captureDescription) {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = captureDescription;
+      this.captureSection.append(note);
+    }
     this.captureSection.append(
-      captureHeading,
       captureChannelField,
       captureSegmentsField,
       capturePointsField,

@@ -29,6 +29,7 @@ export class CursorEditor {
 
   buildDom() {
     this.refreshButton?.remove?.();
+    this.entry?.button.remove?.();
     this.container.replaceChildren();
     this.headRow = document.createElement("div");
     this.headRow.className = "trigger-editor-head";
@@ -126,6 +127,7 @@ export class CursorEditor {
 
   clearSections() {
     this.renderedKey = null;
+    this.entry?.button.remove?.();
     this.entry = null;
     this.sectionsHost.replaceChildren();
     this.groupHeading.textContent = "";
@@ -136,6 +138,7 @@ export class CursorEditor {
     this.epoch += 1;
     const epoch = this.epoch;
     this.renderedKey = key;
+    this.entry?.button.remove?.();
     this.entry = null;
     this.sectionsHost.replaceChildren();
     const command = this.definition();
@@ -146,13 +149,21 @@ export class CursorEditor {
     heading.className = "trigger-editor-heading";
     heading.textContent = this.catalog.commandLabel(command);
     const formContainer = document.createElement("div");
+    formContainer.className = "command-form";
     const actionButton = document.createElement("button");
     actionButton.type = "button";
     actionButton.className = "secondary trigger-editor-action";
     actionButton.textContent = translate("actions.apply");
     const statePanel = document.createElement("div");
     statePanel.className = "cursor-editor-state";
-    section.append(heading, formContainer, actionButton, statePanel);
+    section.append(heading, formContainer);
+    if (this.hooks.headerActions) {
+      actionButton.hidden = !this.selectedDefinition();
+      this.hooks.headerActions.append(actionButton);
+    } else {
+      section.append(actionButton);
+    }
+    section.append(statePanel);
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
     this.entry = { form, button: actionButton, panel: statePanel, epoch };

@@ -316,11 +316,20 @@ export class SearchEditor {
     heading.className = "search-editor-heading";
     heading.textContent = this.catalog.commandLabel(command);
     const formContainer = document.createElement("div");
+    formContainer.className = "command-form";
     const applyButton = document.createElement("button");
     applyButton.type = "button";
     applyButton.className = "secondary search-editor-action";
     applyButton.textContent = translate("actions.apply");
-    section.append(heading, formContainer, applyButton);
+    section.append(heading);
+    const description = this.catalog.description?.(command);
+    if (description) {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = description;
+      section.append(note);
+    }
+    section.append(formContainer, applyButton);
     this.bodyHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
     form.render(command, {});

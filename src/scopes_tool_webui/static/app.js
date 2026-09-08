@@ -370,6 +370,7 @@ async function initialize() {
   });
   timebasePositionEditor = new TimebasePositionEditor(elements.timebasePositionEditor, catalog, {
     executeCommand,
+    headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
@@ -380,6 +381,7 @@ async function initialize() {
   });
   channelOffsetEditor = new ChannelOffsetEditor(elements.channelOffsetEditor, catalog, {
     executeCommand,
+    headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
@@ -1078,12 +1080,18 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = editorKind !== "segmented";
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
   if (sequenceEditor?.executeButton) sequenceEditor.executeButton.hidden = editorKind !== "sequence";
+  if (cursorEditor?.entry?.button) cursorEditor.entry.button.hidden = editorKind !== "cursor";
   if (cursorEditor?.refreshButton) cursorEditor.refreshButton.hidden = editorKind !== "cursor";
+  if (annotationEditor?.entry?.button) annotationEditor.entry.button.hidden = editorKind !== "annotation";
   if (annotationEditor?.refreshButton) annotationEditor.refreshButton.hidden = editorKind !== "annotation";
   if (wgenEditor?.refreshButton) wgenEditor.refreshButton.hidden = editorKind !== "wgen";
   if (demoEditor?.refreshButton) demoEditor.refreshButton.hidden = editorKind !== "demo";
   if (channelDisplayEditor?.refreshButton) channelDisplayEditor.refreshButton.hidden = editorKind !== "channel-display";
   if (channelDisplayEditor?.runButton) channelDisplayEditor.runButton.hidden = editorKind !== "channel-display";
+  if (timebasePositionEditor?.readButton) timebasePositionEditor.readButton.hidden = editorKind !== "timebase-position";
+  if (timebasePositionEditor?.applyButton) timebasePositionEditor.applyButton.hidden = editorKind !== "timebase-position";
+  if (channelOffsetEditor?.readButton) channelOffsetEditor.readButton.hidden = editorKind !== "channel-offset";
+  if (channelOffsetEditor?.applyButton) channelOffsetEditor.applyButton.hidden = editorKind !== "channel-offset";
   if (channelScaleRangeEditor?.readButton) channelScaleRangeEditor.readButton.hidden = editorKind !== "channel-scale-range";
   if (channelScaleRangeEditor?.applyButton) channelScaleRangeEditor.applyButton.hidden = editorKind !== "channel-scale-range";
   if (typeof diagnosticsEditor !== "undefined" && diagnosticsEditor?.runButton) {

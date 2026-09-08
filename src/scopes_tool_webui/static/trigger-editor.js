@@ -139,6 +139,7 @@ export class TriggerEditor {
     heading.className = "trigger-editor-heading";
     heading.textContent = this.catalog.commandLabel(command);
     const formContainer = document.createElement("div");
+    formContainer.className = "command-form";
     const actionButton = document.createElement("button");
     actionButton.type = "button";
     actionButton.className = "secondary trigger-editor-action";
@@ -147,7 +148,15 @@ export class TriggerEditor {
     actionButton.textContent = translate(
       kind === "setting" ? "actions.apply" : `actions.${action}`,
     );
-    section.append(heading, formContainer, actionButton);
+    section.append(heading);
+    const description = this.catalog.description?.(command);
+    if (description) {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = description;
+      section.append(note);
+    }
+    section.append(formContainer, actionButton);
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
     const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch };

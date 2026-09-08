@@ -479,13 +479,13 @@ def test_reference_action_forms_use_command_form_layout() -> None:
         assert.equal(selectorHost.className.includes("command-form"), false);
 
         const saveSection = editor.actionsHost.children[0];
-        const saveFormHost = saveSection.children[1];
+        const saveFormHost = saveSection.children.find((node) => node.className === "command-form");
         assert.ok(saveFormHost);
         assert.equal(saveFormHost.className, "command-form");
 
         const management = editor.actionsHost.children[1];
         const displayControl = management.children[0];
-        const displayFormHost = displayControl.children[1];
+        const displayFormHost = displayControl.children.find((node) => node.className === "command-form");
         assert.ok(displayFormHost);
         assert.equal(displayFormHost.className, "command-form");
         ''')

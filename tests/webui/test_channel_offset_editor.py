@@ -114,6 +114,7 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
         let deferredResolve = null;
         let partialField = null;
         const hooks = {
+          headerActions: new FakeNode("div"),
           contextKey: () => currentContext,
           selectedCommand: () => ({ id: "channel-offset", editor: "channel-offset" }),
           isAvailable: () => true,
@@ -151,6 +152,17 @@ def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
 
         const editor = new globalThis.ChannelOffsetEditor(new FakeNode("div"), catalog, hooks);
         editor.present();
+        assert.deepEqual(hooks.headerActions.children, [editor.readButton, editor.applyButton]);
+        assert.equal(editor.container.children.includes(editor.actions), false);
+        assert.equal(editor.actions.children.length, 0);
+        const parameterForm = editor.container.children.find((node) => node.className === "command-form");
+        assert.deepEqual(parameterForm.children, [editor.channelField, editor.offsetField]);
+        assert.ok(editor.container.children.includes(editor.divSection));
+        const local = new globalThis.ChannelOffsetEditor(new FakeNode("div"), catalog, {
+          ...hooks, headerActions: null,
+        });
+        assert.deepEqual(local.actions.children, [local.readButton, local.applyButton]);
+        assert.ok(local.container.children.includes(local.actions));
 
         // 1. Slider is disabled before a successful read.
         assert.deepEqual(editor.channels, [1, 2, 3, 4]);

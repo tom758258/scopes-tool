@@ -1155,6 +1155,8 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         assert.equal(editor.rangeSection.hidden, true);
         assert.equal(editor.modeButtons.scale.classList.contains("selected"), true);
         assert.equal(editor.modeButtons.range.classList.contains("selected"), false);
+        const channelForm = editor.container.children.find((node) => node.className === "command-form");
+        assert.deepEqual(channelForm.children, [editor.channelField]);
         assert.ok(headerActions.children.includes(editor.readButton));
         assert.ok(headerActions.children.includes(editor.applyButton));
         assert.deepEqual(

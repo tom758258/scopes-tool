@@ -222,8 +222,11 @@ export class ChannelScaleRangeEditor {
       void this.applyCurrent();
     });
 
+    const channelForm = document.createElement("div");
+    channelForm.className = "command-form";
+    channelForm.append(this.channelField);
     this.container.append(
-      this.channelField,
+      channelForm,
       this.modeSelector,
       this.scaleSection,
       this.rangeSection,

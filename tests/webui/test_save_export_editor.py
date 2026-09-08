@@ -229,6 +229,7 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
           "save-image-factors",
         ]);
         assert.ok(!editor.entries.some((entry) => entry.id.startsWith("save-waveform")));
+        assert.ok(editor.entries.every((entry) => entry.form.container.className === "command-form"));
 
         editor.mode = "waveform";
         editor.rebuildSections("ctx|save-export:waveform");

@@ -316,6 +316,7 @@ export class SaveExportEditor {
     heading.className = "trigger-editor-heading";
     heading.textContent = translate("field.save-pwd.path");
     const formHost = document.createElement("div");
+    formHost.className = "command-form";
     const command = this.commandForId("save-pwd");
     const form = new CommandForm(formHost, this.catalog);
     form.render(command, { onDirty: () => this.updateDestinationPreview() });
@@ -338,6 +339,7 @@ export class SaveExportEditor {
       saveCommandId === "save-image" ? "field.save-image.filename" : "field.save-waveform.filename",
     );
     const formHost = document.createElement("div");
+    formHost.className = "command-form";
     const command = this.commandForId(saveCommandId);
     const form = new CommandForm(formHost, this.catalog);
     form.render(command, { onDirty: () => this.updateDestinationPreview() });
@@ -361,6 +363,7 @@ export class SaveExportEditor {
     note.className = "muted compact-note";
     note.textContent = translate("save-export.editor.setupNote");
     const formHost = document.createElement("div");
+    formHost.className = "command-form";
     const command = this.commandForId(modeConfig.setupSaveCommandId);
     const form = new CommandForm(formHost, this.catalog);
     form.render(command);
@@ -410,6 +413,7 @@ export class SaveExportEditor {
     const heading = document.createElement("strong");
     heading.className = "trigger-editor-heading";
     heading.textContent = this.catalog.commandLabel(command);
+    section.append(heading);
     const description = this.catalog.description?.(command);
     if (description) {
       const note = document.createElement("p");
@@ -418,9 +422,10 @@ export class SaveExportEditor {
       section.append(note);
     }
     const formHost = document.createElement("div");
+    formHost.className = "command-form";
     const form = new CommandForm(formHost, this.catalog);
     form.render(command, { onDirty: () => this.updateDestinationPreview() });
-    section.append(heading, formHost);
+    section.append(formHost);
     container.append(section);
     return { id: command.id, form, kind: "setting", section };
   }
@@ -433,6 +438,7 @@ export class SaveExportEditor {
     note.className = "muted compact-note";
     note.textContent = translate("save-export.editor.baseFilenameHelp");
     const formHost = document.createElement("div");
+    formHost.className = "command-form";
     const form = new CommandForm(formHost, this.catalog);
     const button = document.createElement("button");
     button.type = "button";

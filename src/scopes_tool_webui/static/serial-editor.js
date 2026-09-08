@@ -532,7 +532,10 @@ export class SerialEditor {
       this.hooks.headerActions.append(this.refreshButton);
     }
 
+    this.displayDescription = document.createElement("p");
+    this.displayDescription.className = "muted compact-note";
     this.displayFormContainer = document.createElement("div");
+    this.displayFormContainer.className = "command-form";
     this.applyDisplayButton = document.createElement("button");
     this.applyDisplayButton.type = "button";
     this.applyDisplayButton.className = "secondary serial-editor-action";
@@ -542,13 +545,16 @@ export class SerialEditor {
     });
     const displaySection = this.section(
       "serial.editor.displaySection",
-      this.displayFormContainer,
+      [this.displayDescription, this.displayFormContainer],
       this.applyDisplayButton,
     );
 
     this.configNote = document.createElement("p");
     this.configNote.className = "muted compact-note";
+    this.configDescription = document.createElement("p");
+    this.configDescription.className = "muted compact-note";
     this.configFormContainer = document.createElement("div");
+    this.configFormContainer.className = "command-form";
     this.applyConfigButton = document.createElement("button");
     this.applyConfigButton.type = "button";
     this.applyConfigButton.className = "secondary serial-editor-action";
@@ -558,18 +564,21 @@ export class SerialEditor {
     });
     const configSection = this.section(
       "serial.editor.configuration",
-      [this.configNote, this.configFormContainer],
+      [this.configNote, this.configDescription, this.configFormContainer],
       this.applyConfigButton,
     );
 
+    this.triggerDescription = document.createElement("p");
+    this.triggerDescription.className = "muted compact-note";
     this.triggerFormContainer = document.createElement("div");
+    this.triggerFormContainer.className = "command-form";
     this.applyTriggerButton = this.actionButton(
       translate("serial.editor.applyTrigger"),
       () => void this.submitTrigger(),
     );
     this.triggerSection = this.section(
       "serial.editor.triggerSection",
-      this.triggerFormContainer,
+      [this.triggerDescription, this.triggerFormContainer],
       this.applyTriggerButton,
     );
 
@@ -669,6 +678,8 @@ export class SerialEditor {
     if (this.displayFormReady) return;
     const definition = this.editorDefinition("serial-display");
     if (!definition) return;
+    this.displayDescription.textContent = this.catalog.description?.(definition) || "";
+    this.displayDescription.hidden = !this.displayDescription.textContent;
     this.displayForm.render(definition, {
       onDirty: () => this.controller.setDirty("display", this.displayForm.isDirty()),
     });
@@ -682,12 +693,15 @@ export class SerialEditor {
     this.configForm = new CommandForm(this.configFormContainer, this.catalog);
     const definition = this.editorDefinition(commandId);
     if (!definition) return;
+    this.configDescription.textContent = this.catalog.description?.(definition) || "";
+    this.configDescription.hidden = !this.configDescription.textContent;
     this.configForm.render(definition, {
       onDirty: () => this.controller.setDirty("config", this.configForm.isDirty()),
     });
   }
 
   clearConfigForm() {
+    this.configDescription.textContent = "";
     this.renderedConfigCommand = null;
     this.configFormContainer.replaceChildren();
     this.configForm = null;
@@ -701,12 +715,15 @@ export class SerialEditor {
     this.triggerForm = new CommandForm(this.triggerFormContainer, this.catalog);
     const definition = this.editorDefinition(commandId);
     if (!definition) return;
+    this.triggerDescription.textContent = this.catalog.description?.(definition) || "";
+    this.triggerDescription.hidden = !this.triggerDescription.textContent;
     this.triggerForm.render(definition, {
       onDirty: () => this.controller.setDirty("trigger", this.triggerForm.isDirty()),
     });
   }
 
   clearTriggerForm() {
+    this.triggerDescription.textContent = "";
     this.renderedTriggerCommand = null;
     this.triggerFormContainer?.replaceChildren();
     this.triggerForm = null;

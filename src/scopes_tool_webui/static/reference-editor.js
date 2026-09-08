@@ -157,6 +157,13 @@ export class ReferenceEditor {
     heading.className = "trigger-editor-heading";
     heading.textContent = this.catalog.commandLabel(command);
     container.append(heading);
+    const description = this.catalog.description?.(command);
+    if (description) {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = description;
+      container.append(note);
+    }
   }
 
   buildActionEntry(id, isSaveWorkflow) {
@@ -167,9 +174,7 @@ export class ReferenceEditor {
     let formHost = null;
     if (command.fields.length) {
       formHost = document.createElement("div");
-      if (id === "reference-save" || id === "reference-display") {
-        formHost.className = "command-form";
-      }
+      formHost.className = "command-form";
       form = new CommandForm(formHost, this.catalog);
       form.render(command);
     }

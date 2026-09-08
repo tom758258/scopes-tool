@@ -238,6 +238,7 @@ TRIGGER_EDITOR_HARNESS = r'''
           supported: () => true,
           groupLabel: (group) => group,
           commandLabel: (command) => command.label,
+          description: (command) => `catalog-description:${command.id}`,
           fieldsFor: (command) => command.fields,
         };
         const env = {
@@ -275,6 +276,13 @@ def test_trigger_actions_follow_global_execution_admission_and_recover() -> None
         editor.schedulePresentation();
         await settle();
         const entry = editor.entries[0];
+        assert.equal(entry.form.container.className, "command-form");
+        assert.ok(editor.sectionsHost.children[0].children.includes(entry.button));
+        const section = editor.sectionsHost.children[0];
+        const note = section.children.find((node) => node.className === "muted compact-note");
+        assert.equal(note.textContent, catalog.description(entry.form.renderedCommand));
+        assert.ok(section.children.indexOf(note) > 0);
+        assert.ok(section.children.indexOf(note) < section.children.indexOf(entry.form.container));
 
         env.executionBusy = true;
         editor.applyBusyState();

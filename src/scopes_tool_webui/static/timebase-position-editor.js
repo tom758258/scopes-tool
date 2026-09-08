@@ -138,8 +138,18 @@ export class TimebasePositionEditor {
       void this.apply();
     });
 
-    this.actions.append(this.readButton, this.applyButton);
-    this.container.append(this.positionField, this.divSection, this.actions);
+    const formContainer = document.createElement("div");
+    formContainer.className = "command-form";
+    formContainer.append(this.positionField);
+    this.container.append(formContainer, this.divSection);
+    if (this.hooks.headerActions) {
+      this.readButton.hidden = true;
+      this.applyButton.hidden = true;
+      this.hooks.headerActions.append(this.readButton, this.applyButton);
+    } else {
+      this.actions.append(this.readButton, this.applyButton);
+      this.container.append(this.actions);
+    }
 
     this.stateKey = null;
     this.syncInfo();

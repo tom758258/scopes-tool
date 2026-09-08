@@ -206,11 +206,11 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
 
         class FakeNode {
           constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; this.disabled = false; }
-          append(...nodes) { this.children.push(...nodes); }
+          append(...nodes) { for (const node of nodes) { node.remove(); node.parent = this; this.children.push(node); } }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           addEventListener(_name, handler) { this.handler = handler; }
           setAttribute() {}
-          remove() {}
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((node) => node !== this); this.parent = null; }
           querySelector() { return null; }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
@@ -271,6 +271,11 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
 
         const editor = new globalThis.AnnotationEditor(new FakeNode("div"), catalog, hooks);
         await editor.refresh(true, true);
+        assert.ok(hooks.headerActions.children.includes(editor.refreshButton));
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
+        assert.equal(editor.entry.form.container.className, "command-form");
+        assert.ok(!editor.sectionsHost.children[0].children.includes(editor.entry.button));
+
         assert.deepEqual(calls[0], ["annotation", { action: "query", slot: 1 }]);
         const panel = editor.entry.panel;
         const rows = Object.fromEntries(
@@ -294,6 +299,22 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
           assert.equal(actionCalls.length, 1);
           assert.deepEqual(actionCalls[0], ["annotation", { action, slot: 3 }]);
         }
+
+        const headerCount = hooks.headerActions.children.length;
+        const oldApply = editor.entry.button;
+        const callsBeforeLayout = calls.length;
+        editor.rerender();
+        assert.equal(hooks.headerActions.children.length, headerCount);
+        assert.ok(!hooks.headerActions.children.includes(oldApply));
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
+        const local = new globalThis.AnnotationEditor(new FakeNode("div"), catalog, {
+          ...hooks, headerActions: null,
+        });
+        await local.refresh(false, false);
+        assert.ok(local.sectionsHost.children[0].children.includes(local.entry.button));
+        assert.equal(calls.length, callsBeforeLayout);
+        editor.clearSections();
+        assert.equal(hooks.headerActions.children.length, headerCount - 1);
 
         console.log(JSON.stringify({ ok: true }));
         '''
