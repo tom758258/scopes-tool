@@ -45,6 +45,22 @@ RESULT_FIELDS = (
 )
 
 
+def test_smoke_help_documents_measurement_prerequisites() -> None:
+    en = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    zh = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    # Extract the exact value for diagnostics.smokeHelp from each locale.
+    en_match = re.search(r'"diagnostics\.smokeHelp"\s*:\s*"(.*?)(?<!\\)"', en)
+    zh_match = re.search(r'"diagnostics\.smokeHelp"\s*:\s*"(.*?)(?<!\\)"', zh)
+    assert en_match is not None, "missing diagnostics.smokeHelp in locale_en.js"
+    assert zh_match is not None, "missing diagnostics.smokeHelp in locale_zh_tw.js"
+    en_text = en_match.group(1)
+    zh_text = zh_match.group(1)
+    # Core prerequisites that must appear in the Smoke help value in both locales.
+    for keyword in ("CH1", "VPP/VRMS", "Autoscale", "Single", "Force Trigger"):
+        assert keyword in en_text, f"missing '{keyword}' in en smokeHelp"
+        assert keyword in zh_text, f"missing '{keyword}' in zh smokeHelp"
+
+
 def test_result_field_labels_localized() -> None:
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
