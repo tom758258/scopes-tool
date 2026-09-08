@@ -701,7 +701,7 @@ def test_serial_editor_replaces_generic_form_with_passive_selection() -> None:
     assert "function scheduleEditorRead()" not in app_source
     presentation = extract_function(app_source, "function syncEditorPresentation(editorKind)")
     assert "serialEditor?.schedulePresentation();" in presentation
-    assert "elements.formHeading.hidden = (editorOwned && editorKind !== \"channel-display\") || systemInformationSelected;" in app_source
+    assert "elements.formHeading.hidden = (editorOwned && ![\"channel-display\", \"timebase-position\", \"channel-scale-range\"].includes(editorKind)) || systemInformationSelected;" in app_source
     assert "elements.form.hidden = editorOwned || systemInformationSelected;" in app_source
     assert 'elements.serialEditor.hidden = editorKind !== "serial";' in app_source
     assert "syncWorkspaceHeaderActions(editorKind);" in app_source

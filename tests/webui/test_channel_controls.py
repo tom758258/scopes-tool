@@ -406,6 +406,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
             ...catalog, commands: [command], supported: () => true,
           }, hooks);
           control.render(true);
+          assert.equal(control.form.container.className, "command-form");
           assert.equal(calls.length, 0);
           assert.equal(control.container.children[1].textContent, "labels.shared");
           const buttons = control.container.children.filter((node) => node.tagName === "BUTTON");

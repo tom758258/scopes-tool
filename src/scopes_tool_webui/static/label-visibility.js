@@ -23,6 +23,7 @@ export class LabelVisibility {
     note.className = "muted compact-note";
     note.textContent = translate("labels.shared");
     const host = document.createElement("div");
+    host.className = "command-form";
     this.form = new CommandForm(host, this.catalog);
     this.form.render(command);
     this.status = document.createElement("output");
