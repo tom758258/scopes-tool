@@ -68,6 +68,7 @@ export class CommandForm {
     }
     if (options.draft) this.restoreDraft(options.draft);
     this.appendTimebaseScalePresets();
+    this.appendChannelProbePresets();
     this.container.querySelectorAll("[data-field]").forEach((input) => {
       if (input.type === "hidden") return;
       const changed = () => {
@@ -115,6 +116,28 @@ export class CommandForm {
     this.container.append(presets);
   }
 
+  appendChannelProbePresets() {
+    if (this.command?.id !== "channel-probe") return;
+    const input = this.container.querySelector('[data-field="ratio"]');
+    if (!input) return;
+    const presets = document.createElement("div");
+    presets.className = "channel-probe-presets";
+    [1, 10, 20, 100, 1000].forEach((ratio) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = `${ratio}:1`;
+      button.addEventListener("click", () => {
+        const target = this.container.querySelector('[data-field="ratio"]');
+        if (!target || target.disabled) return;
+        target.value = String(ratio);
+        target.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      presets.append(button);
+    });
+    this.container.append(presets);
+  }
+
   isSettingEditor() {
     if (this.presentation?.kind !== "setting") return false;
     if (this.presentation.action_choices?.length) return true;
@@ -135,6 +158,9 @@ export class CommandForm {
       if (input.type !== "hidden") input.disabled = disabled;
     });
     this.container.querySelectorAll(".timebase-scale-presets button").forEach((button) => {
+      button.disabled = disabled;
+    });
+    this.container.querySelectorAll(".channel-probe-presets button").forEach((button) => {
       button.disabled = disabled;
     });
     this.container.querySelectorAll("[data-multi-for]").forEach((box) => {

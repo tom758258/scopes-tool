@@ -299,7 +299,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .command-form-advanced { grid-column: 1 / -1; }
 .command-form-advanced > summary { color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; }
 .command-form-advanced-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-top: 10px; }
-.timebase-scale-presets { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.timebase-scale-presets, .channel-probe-presets { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .div-slider-ticks { display: grid; gap: 6px; font-size: 11px; color: var(--muted); text-align: center; }
 .channel-scale-range-value { max-width: 50%; }
 .channel-scale-range-mode { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -543,7 +543,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .live-resource-field { grid-template-columns: 1fr; }
   .command-form { grid-template-columns: 1fr; }
   .command-form-advanced-fields { grid-template-columns: 1fr; }
-  .timebase-scale-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .timebase-scale-presets, .channel-probe-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .channel-scale-range-value { max-width: none; }
   .channel-scale-range-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-editor-limits { grid-template-columns: 1fr; }

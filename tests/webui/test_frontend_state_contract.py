@@ -111,7 +111,7 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_timebase_scale_presets_fill_value_without_execute() -> None:
     styles = read_static("styles.css")
-    assert ".timebase-scale-presets" in styles
+    assert ".timebase-scale-presets, .channel-probe-presets {" in styles
     assert "grid-column: 1 / -1;" in styles
     assert "repeat(5, minmax(0, 1fr))" in styles
     assert "repeat(2, minmax(0, 1fr))" in styles
@@ -200,11 +200,11 @@ def test_timebase_scale_presets_fill_value_without_execute() -> None:
                 else if (sel === "button" && c.tagName === "BUTTON") out.push(c);
                 else if (sel === ".timebase-scale-presets"
                   && c.className.split(" ").includes("timebase-scale-presets")) out.push(c);
-                else if (sel === ".timebase-scale-presets button" && c.tagName === "BUTTON") {
+                else if ([".timebase-scale-presets button", ".channel-probe-presets button"].includes(sel) && c.tagName === "BUTTON") {
                   let p = c.parentElement;
                   let inside = false;
                   while (p) {
-                    if (p.className && p.className.split(" ").includes("timebase-scale-presets")) {
+                    if (p.className && p.className.split(" ").includes(sel.split(" ")[0].slice(1))) {
                       inside = true;
                       break;
                     }
@@ -347,6 +347,43 @@ def test_timebase_scale_presets_fill_value_without_execute() -> None:
         form.setDisabled(false);
         assert.equal(input.disabled, false);
         buttons.forEach((button) => assert.equal(button.disabled, false));
+
+        form.render({
+          id: "channel-probe",
+          fields: [
+            { name: "action", type: "enum", options: ["query", "set"] },
+            { name: "channel", type: "integer", default: 1 },
+            { name: "ratio", type: "number", exclusive_minimum: 0 },
+          ],
+          presentation: { ...timebaseScale.presentation, query_fields: ["channel"] },
+        }, {
+          onDirty: (field) => dirtyCalls.push(field),
+          onQueryFieldChange: (field) => queryCalls.push(field),
+        });
+        const ratioInput = container.querySelector('[data-field="ratio"]');
+        const probeButtons = container.querySelectorAll("button");
+        const ratios = [1, 10, 20, 100, 1000];
+        assert.equal(probeButtons.length, 5);
+        assert.deepEqual(probeButtons.map((button) => button.textContent), ratios.map((ratio) => `${ratio}:1`));
+        assert.ok(container.children.indexOf(probeButtons[0].parentElement) > container.children.indexOf(ratioInput.parentElement));
+        probeButtons.forEach((button, index) => {
+          assert.equal(button.type, "button");
+          form.clearDirty();
+          const before = dirtyCalls.length;
+          button.dispatchEvent(new globalThis.Event("click", { bubbles: true }));
+          assert.equal(ratioInput.value, String(ratios[index]));
+          assert.equal(ratioInput.dataset.dirty, "true");
+          assert.equal(dirtyCalls.length, before + 1);
+          assert.equal(dirtyCalls.at(-1), "ratio");
+        });
+        assert.equal(queryCalls.length, 0);
+        form.setDisabled(true);
+        assert.equal(ratioInput.disabled, true);
+        probeButtons.forEach((button) => assert.equal(button.disabled, true));
+        probeButtons[0].dispatchEvent(new globalThis.Event("click"));
+        assert.equal(ratioInput.value, "1000");
+        form.setDisabled(false);
+        probeButtons.forEach((button) => assert.equal(button.disabled, false));
 
         form.render({
           id: "timebase-position",
