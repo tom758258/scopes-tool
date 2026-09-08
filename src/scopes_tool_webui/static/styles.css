@@ -286,7 +286,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .command-description,
 .command-support-reason { margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .command-support-reason { color: var(--warning); }
-.workspace-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 0 16px 14px; }
+.workspace-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 0 16px 14px; scrollbar-gutter: stable; }
 .form-heading { padding: 12px 0 8px; border-bottom: 1px solid var(--line); }
 .form-heading h3 { margin: 0; font-size: 12px; font-weight: 700; }
 .command-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 0 0; }
@@ -301,6 +301,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .command-form-advanced-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-top: 10px; }
 .timebase-scale-presets, .channel-probe-presets { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .div-slider-ticks { display: grid; gap: 6px; font-size: 11px; color: var(--muted); text-align: center; }
+.div-slider-selection { display: block; min-height: 1.45em; }
 .channel-scale-range-value { max-width: 50%; }
 .channel-scale-range-mode { display: flex; flex-wrap: wrap; gap: 6px; }
 .channel-scale-range-mode button:not(.selected) { border-color: var(--line); background: var(--bg); color: var(--muted); }

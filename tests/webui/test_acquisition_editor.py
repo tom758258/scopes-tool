@@ -142,6 +142,14 @@ def test_acquisition_control_composite_dispatch_and_wiring(tmp_path: Path) -> No
         assert.equal(editor.singleWaitButton.disabled, true);
         assert.equal(editor.singleWaitForm.formDisabled, true);
 
+        // Single-wait button should be primary; control buttons stay secondary.
+        assert.ok(editor.singleWaitButton.className.includes("primary"));
+        assert.ok(!editor.singleWaitButton.className.includes("secondary"));
+        for (const entry of editor.controlButtons) {
+          assert.ok(entry.button.className.includes("secondary"));
+          assert.ok(!entry.button.className.includes("primary"));
+        }
+
         console.log(JSON.stringify({ ok: true }));
         '''
     ).replace("__CATALOG__", catalog_json)

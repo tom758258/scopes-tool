@@ -95,6 +95,19 @@ export class ChannelScaleRangeEditor {
   buildDom() {
     this.container.replaceChildren();
 
+    // 0. Section heading with shared read-first help. The workspace header
+    // already shows the Scale/Range relationship, so this only explains how
+    // to operate this section.
+    this.introSection = document.createElement("div");
+    this.introSection.className = "workflow-editor-section";
+    this.introHeading = document.createElement("strong");
+    this.introHeading.className = "workflow-editor-heading";
+    this.introHeading.textContent = translate("commands.parameters");
+    this.introHelp = document.createElement("small");
+    this.introHelp.className = "muted compact-note";
+    this.introHelp.textContent = translate("channel-scale-range.editor.readFirstHelp");
+    this.introSection.append(this.introHeading, this.introHelp);
+
     // 1. Shared channel selector
     this.channelField = document.createElement("label");
     this.channelField.className = "field";
@@ -205,7 +218,12 @@ export class ChannelScaleRangeEditor {
 
     this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangeHelp, this.rangePresets);
 
-    // 4. Single Read / Apply pair, routed by the current mode
+    // 4. Single Read / Apply pair in the content area, routed by the current mode
+    this.actions = document.createElement("div");
+    this.actions.style.display = "flex";
+    this.actions.style.gap = "8px";
+    this.actions.style.marginTop = "6px";
+
     this.readButton = document.createElement("button");
     this.readButton.type = "button";
     this.readButton.className = "secondary";
@@ -225,19 +243,15 @@ export class ChannelScaleRangeEditor {
     const channelForm = document.createElement("div");
     channelForm.className = "command-form";
     channelForm.append(this.channelField);
+    this.actions.append(this.readButton, this.applyButton);
     this.container.append(
+      this.introSection,
       channelForm,
       this.modeSelector,
       this.scaleSection,
       this.rangeSection,
+      this.actions,
     );
-    if (this.hooks.headerActions) {
-      this.readButton.hidden = true;
-      this.applyButton.hidden = true;
-      this.hooks.headerActions.append(this.readButton, this.applyButton);
-    } else {
-      this.container.append(this.readButton, this.applyButton);
-    }
 
     this.stateKey = null;
     this.syncHelpText();
@@ -312,8 +326,8 @@ export class ChannelScaleRangeEditor {
   }
 
   syncHelpText() {
-    this.scaleHelp.textContent = `${translate("channel-scale-range.editor.scaleDescription")}\n${translate("channel-scale-range.editor.readFirstHelp")}`;
-    this.rangeHelp.textContent = `${translate("channel-scale-range.editor.rangeDescription")}\n${translate("channel-scale-range.editor.readFirstHelp")}`;
+    this.scaleHelp.textContent = translate("channel-scale-range.editor.scaleDescription");
+    this.rangeHelp.textContent = translate("channel-scale-range.editor.rangeDescription");
   }
 
   schedulePresentation() {
@@ -326,6 +340,8 @@ export class ChannelScaleRangeEditor {
     this.scaleFieldLabel.textContent = translate("field.volts_per_division");
     this.rangeHeading.textContent = translate("channel-scale-range.editor.range");
     this.rangeFieldLabel.textContent = translate("field.channel-range.value");
+    this.introHeading.textContent = translate("commands.parameters");
+    this.introHelp.textContent = translate("channel-scale-range.editor.readFirstHelp");
     this.readButton.textContent = translate("actions.readSettings");
     this.applyButton.textContent = translate("actions.apply");
     this.modeButtons.scale.textContent = translate("channel-scale-range.editor.modeScale");

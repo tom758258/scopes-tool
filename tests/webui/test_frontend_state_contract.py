@@ -411,6 +411,15 @@ def test_timebase_scale_presets_fill_value_without_execute() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
+
+def test_slider_selection_has_reserved_height_and_scrollbar_gutter() -> None:
+    styles = read_static("styles.css")
+    assert "scrollbar-gutter: stable;" in styles
+    assert ".div-slider-selection {" in styles
+    assert "display: block;" in styles
+    assert "min-height: 1.45em;" in styles
+
+
 def run_generic_form_ownership_behavior(assertions: str) -> None:
     source = read_static("app.js").replace("options = {}", "options = null", 1)
     declarations = "\n".join(
@@ -3147,7 +3156,7 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 17
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 16
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
     styles = read_static("styles.css")

@@ -999,11 +999,7 @@ def test_channel_scale_range_composite_workspace() -> None:
     assert "repeat(2, minmax(0, 1fr))" in narrow_presets
     assert ".channel-scale-range-mode button.selected" in css
     assert ".channel-scale-range-mode button:not(.selected) {" in css
-    header_actions = app.split("function syncWorkspaceHeaderActions(editorKind)", 1)[1].split(
-        "function syncEditorPresentation(editorKind)", 1
-    )[0]
-    assert 'channelScaleRangeEditor.readButton.hidden = editorKind !== "channel-scale-range";' in header_actions
-    assert 'channelScaleRangeEditor.applyButton.hidden = editorKind !== "channel-scale-range";' in header_actions
+    # Scale/Range uses content-area actions (no header wiring).
 
     # Shared quick-fill help key exists in both locales
     assert '"channel-scale-range.editor.quickFillHelp":' not in zh
@@ -1086,13 +1082,11 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         let currentContext = "simulate||keysight-dsox4024a";
         let mockUnits = "volt";
         let failUnits = false;
-        const headerActions = new FakeNode("div");
         const hooks = {
           contextKey: () => currentContext,
           selectedCommand: () => ({ id: "channel-scale-range", editor: "channel-scale-range" }),
           isAvailable: () => true,
           isExecutionBusy: () => false,
-          headerActions,
           async executeCommand(id, parameters, options) {
             calls.push([id, parameters, options]);
             if (id === "channel-scale") {
@@ -1157,8 +1151,10 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         assert.equal(editor.modeButtons.range.classList.contains("selected"), false);
         const channelForm = editor.container.children.find((node) => node.className === "command-form");
         assert.deepEqual(channelForm.children, [editor.channelField]);
-        assert.ok(headerActions.children.includes(editor.readButton));
-        assert.ok(headerActions.children.includes(editor.applyButton));
+        // Read / Apply live in the content area inside a shared actions row.
+        assert.ok(editor.container.children.includes(editor.actions));
+        assert.ok(editor.actions.children.includes(editor.readButton));
+        assert.ok(editor.actions.children.includes(editor.applyButton));
         assert.deepEqual(
           editor.scalePresetButtons.map((button) => button.textContent),
           ["0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1", "0.2", "0.5", "1"],
@@ -1167,7 +1163,7 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
           assert.equal(button.disabled, true);
         }
 
-        // 1. Header Read in Scale mode queries scale then units and enables Scale presets.
+        // 1. Content Read in Scale mode queries scale then units and enables Scale presets.
         editor.readButton.on_click();
         await drain();
         assert.deepEqual(calls[0], [
@@ -1203,7 +1199,7 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         assert.equal(calls.length, callsBeforeSwitch);
         for (const button of editor.rangePresetButtons) assert.equal(button.disabled, true);
 
-        // 3. Header Read in Range mode enables Range presets; Scale stays enabled.
+        // 3. Content Read in Range mode enables Range presets; Scale stays enabled.
         editor.readButton.on_click();
         await drain();
         assert.deepEqual(calls[calls.length - 2], [
@@ -1225,7 +1221,7 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         assert.equal(editor.rangeInput.value, "4");
         assert.equal(editor.scaleInput.value, "0.2");
 
-        // 4. Header Apply dispatches set for the current mode with readback fill.
+        // 4. Content Apply dispatches set for the current mode with readback fill.
         editor.modeButtons.scale.on_click();
         editor.scaleInput.value = "0.5";
         const callsBeforeApply = calls.length;
@@ -1354,7 +1350,7 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         editor.present();
         assert.equal(editor.scaleInput.value, "");
         assert.equal(editor.rangeInput.value, "");
-        assert.equal(editor.container.children.length, 4);
+        assert.equal(editor.container.children.length, 6);
         for (const button of [...editor.scalePresetButtons, ...editor.rangePresetButtons]) {
           assert.equal(button.disabled, true);
         }
@@ -1385,31 +1381,31 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         editor.busy = false;
         editor.applyBusyState();
 
-        // 13. Help combines the mode description with the read-first note.
+        // 13. Mode help shows only its own description (read-first moved to intro).
         assert.equal(editor.scaleHelp.tagName, "SMALL");
         assert.equal(editor.scaleHelp.className, "field-help");
         assert.equal(
           editor.scaleHelp.textContent,
-          "channel-scale-range.editor.scaleDescription\nchannel-scale-range.editor.readFirstHelp",
+          "channel-scale-range.editor.scaleDescription",
         );
         assert.equal(editor.rangeHelp.tagName, "SMALL");
         assert.equal(editor.rangeHelp.className, "field-help");
         assert.equal(
           editor.rangeHelp.textContent,
-          "channel-scale-range.editor.rangeDescription\nchannel-scale-range.editor.readFirstHelp",
+          "channel-scale-range.editor.rangeDescription",
         );
         globalThis.translate = (key) => `T:${key}`;
         editor.rerender();
         assert.equal(
           editor.scaleHelp.textContent,
-          "T:channel-scale-range.editor.scaleDescription\nT:channel-scale-range.editor.readFirstHelp",
+          "T:channel-scale-range.editor.scaleDescription",
         );
         assert.equal(
           editor.rangeHelp.textContent,
-          "T:channel-scale-range.editor.rangeDescription\nT:channel-scale-range.editor.readFirstHelp",
+          "T:channel-scale-range.editor.rangeDescription",
         );
 
-        // 14. Without headerActions the Read / Apply pair falls back to the body.
+        // 14. Read / Apply pair lives in the content actions row.
         const fallbackEditor = new globalThis.ChannelScaleRangeEditor(new FakeNode("div"), catalog, {
           contextKey: () => currentContext,
           selectedCommand: () => ({ id: "channel-scale-range", editor: "channel-scale-range" }),
@@ -1417,8 +1413,9 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
           isExecutionBusy: () => false,
           executeCommand: async () => ({ status: "completed" }),
         });
-        assert.ok(fallbackEditor.container.children.includes(fallbackEditor.readButton));
-        assert.ok(fallbackEditor.container.children.includes(fallbackEditor.applyButton));
+        assert.ok(fallbackEditor.container.children.includes(fallbackEditor.actions));
+        assert.ok(fallbackEditor.actions.children.includes(fallbackEditor.readButton));
+        assert.ok(fallbackEditor.actions.children.includes(fallbackEditor.applyButton));
 
         console.log(JSON.stringify({ ok: true }));
         '''

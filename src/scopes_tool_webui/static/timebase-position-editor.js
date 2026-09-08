@@ -103,7 +103,7 @@ export class TimebasePositionEditor {
     this.info = document.createElement("output");
     this.info.className = "muted compact-note";
     this.selection = document.createElement("output");
-    this.selection.className = "muted compact-note";
+    this.selection.className = "muted compact-note div-slider-selection";
     this.divStatus = document.createElement("output");
     this.divStatus.className = "muted compact-note";
     this.divSection.append(

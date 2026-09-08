@@ -106,7 +106,7 @@ export class AcquisitionEditor {
     formContainer.className = "command-form";
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "secondary trigger-editor-action";
+    button.className = "primary trigger-editor-action";
     button.textContent = this.catalog.commandLabel(command);
     button.addEventListener("click", () => {
       void this.submitSingleWait();

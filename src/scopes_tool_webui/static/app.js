@@ -359,7 +359,6 @@ async function initialize() {
   });
   channelScaleRangeEditor = new ChannelScaleRangeEditor(elements.channelScaleRangeEditor, catalog, {
     executeCommand,
-    headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
     isAvailable: () => {
       const selected = catalog.selected();
@@ -1092,8 +1091,6 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (timebasePositionEditor?.applyButton) timebasePositionEditor.applyButton.hidden = editorKind !== "timebase-position";
   if (channelOffsetEditor?.readButton) channelOffsetEditor.readButton.hidden = editorKind !== "channel-offset";
   if (channelOffsetEditor?.applyButton) channelOffsetEditor.applyButton.hidden = editorKind !== "channel-offset";
-  if (channelScaleRangeEditor?.readButton) channelScaleRangeEditor.readButton.hidden = editorKind !== "channel-scale-range";
-  if (channelScaleRangeEditor?.applyButton) channelScaleRangeEditor.applyButton.hidden = editorKind !== "channel-scale-range";
   if (typeof diagnosticsEditor !== "undefined" && diagnosticsEditor?.runButton) {
     diagnosticsEditor.runButton.hidden = editorKind !== "diagnostics";
   }
