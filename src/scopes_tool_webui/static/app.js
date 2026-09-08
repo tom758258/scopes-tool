@@ -854,20 +854,23 @@ function renderWorkspace() {
   if (elements.systemInformationWorkspace) {
     elements.systemInformationWorkspace.hidden = !systemInformationSelected;
   }
-  elements.identityWorkspace.hidden = !selected || selected.presentation_only === true;
+  const scaleRangeSelected = selected?.id === "channel-scale-range";
+  elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !scaleRangeSelected);
   if (systemInformationSelected) {
     renderSystemInformation();
     return;
   }
-  if (!selected || selected.presentation_only === true) return;
+  if (elements.identityWorkspace.hidden) return;
 
   elements.identityWorkspaceContent.replaceChildren();
   const workspaceContext = currentWorkspaceContext(selected.id);
-  const job = findWorkspaceResult(
-    state.workspaceResults,
-    workspaceContext,
-    selected.id === "identify",
-  );
+  // Capture order tracks the latest success across the two underlying commands.
+  const job = scaleRangeSelected
+    ? [...state.workspaceResults.values()].reverse().find((entry) => (
+      ["channel-scale", "channel-range"].includes(entry.context.command)
+        && sameWorkspaceContext(entry.context, { ...workspaceContext, command: entry.context.command })
+    ))?.job
+    : findWorkspaceResult(state.workspaceResults, workspaceContext, selected.id === "identify");
   if (job) {
     renderWorkspaceResult(elements.identityWorkspaceContent, job, workspaceContext);
     return;

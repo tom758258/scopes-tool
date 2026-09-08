@@ -1432,3 +1432,98 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
     )
     assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
     assert json.loads(completed.stdout) == {"ok": True}
+
+
+def test_channel_scale_range_workspace_latest_result() -> None:
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import vm from "node:vm";
+        const read = (name) => fs.readFileSync(`src/scopes_tool_webui/static/${name}`, "utf8");
+        const app = read("app.js");
+        const functions = [
+          app.slice(app.indexOf("function renderWorkspace()"), app.indexOf("async function updateHealth()")),
+          app.slice(app.indexOf("function currentWorkspaceContext("), app.indexOf("function isCurrentEditorJob(")),
+        ].join("\n");
+        const node = () => ({
+          children: [], hidden: false,
+          replaceChildren() { this.children = []; },
+          append(...children) { this.children.push(...children); },
+        });
+        const elements = { identityWorkspace: node(), identityWorkspaceContent: node() };
+        let selected = { id: "channel-scale-range", presentation_only: true };
+        let context = { mode: "live", resource: "scope-a", model_id: null };
+        let model = "model-a";
+        const sandbox = {
+          elements, document: { createElement: node },
+          catalog: { selected: () => selected },
+          state: { workspaceResults: new Map() },
+          currentModelId: () => model,
+          translate: (key) => key,
+          get context() { return context; },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(
+          read("execution-context.js").replace(/^import[^\n]*\r?\n/gm, "").replaceAll("export function ", "function ")
+          + read("results.js").replace(/^import[^\n]*\r?\n/gm, "").replaceAll("export function ", "function ")
+          + functions,
+          Object.assign(sandbox, { hasTranslation: () => false }),
+        );
+        const displayed = () => JSON.stringify(elements.identityWorkspaceContent.children);
+        const capture = (command, action, result) => {
+          const job = { command, status: "completed", result: { result: { action, ...result } } };
+          sandbox.captureWorkspaceResult(job, sandbox.currentWorkspaceContext(command));
+          return job;
+        };
+        sandbox.renderWorkspace();
+        assert.equal(elements.identityWorkspace.hidden, false);
+        assert.ok(displayed().includes("workspace.resultEmpty"));
+        for (const action of ["query", "set"]) {
+          const scale = capture("channel-scale", action, { volts_per_division: 0.2 });
+          assert.ok(displayed().includes("Volts per division"));
+          assert.ok(displayed().includes("0.2"));
+          capture("channel-units", "query", { units: "volt" });
+          assert.ok(displayed().includes("Volts per division"));
+          const range = capture("channel-range", action, { volts: 1.6 });
+          assert.ok(displayed().includes("1.6"));
+          assert.ok(!displayed().includes("Volts per division"));
+          assert.equal(scale.command, "channel-scale");
+          assert.equal(range.command, "channel-range");
+          sandbox.captureWorkspaceResult({ command: "channel-scale", status: "failed" }, sandbox.currentWorkspaceContext("channel-scale"));
+          assert.ok(displayed().includes("1.6"));
+        }
+        const submitted = sandbox.currentWorkspaceContext("channel-scale");
+        for (const changed of [
+          { mode: "simulate", resource: null, model_id: "model-a" },
+          { mode: "live", resource: "scope-b", model_id: null },
+        ]) {
+          context = changed;
+          sandbox.captureWorkspaceResult({ command: "channel-scale", status: "completed", result: { volts_per_division: 0.5 } }, submitted);
+          assert.ok(displayed().includes("workspace.resultEmpty"));
+        }
+        context = { mode: "live", resource: "scope-a", model_id: null };
+        model = "model-b";
+        sandbox.renderWorkspace();
+        assert.ok(displayed().includes("workspace.resultEmpty"));
+        context = { mode: "simulate", model_id: "model-a" };
+        capture("channel-scale", "query", { volts_per_division: 0.2 });
+        context = { mode: "simulate", model_id: "model-b" };
+        sandbox.renderWorkspace();
+        assert.ok(displayed().includes("workspace.resultEmpty"));
+        selected = { id: "channel-offset" };
+        sandbox.captureWorkspaceResult({ command: "channel-range", status: "completed", result: { volts: 4 } }, submitted);
+        assert.ok(displayed().includes("workspace.resultEmpty"));
+        selected = { id: "save-export", presentation_only: true };
+        sandbox.renderWorkspace();
+        assert.equal(elements.identityWorkspace.hidden, true);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
