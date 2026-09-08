@@ -12,6 +12,8 @@
   --muted: #637083;
   --accent: #0b66c3;
   --accent-strong: #084f98;
+  --primary: #4f6f8f;
+  --primary-strong: #3f5d78;
   --ok: #16794c;
   --danger: #b42318;
   --warning: #946200;
@@ -94,8 +96,8 @@ button:disabled { cursor: default; opacity: .55; }
 
 .secondary:hover,
 .command-pill-button:hover { border-color: var(--accent); color: var(--accent); }
-.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
-.primary:hover { border-color: var(--accent-strong); background: var(--accent-strong); }
+.primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+.primary:hover { border-color: var(--primary-strong); background: var(--primary-strong); }
 .danger { border-color: var(--danger); background: var(--panel); color: var(--danger); }
 .danger:not(:disabled):hover { background: var(--danger); color: #fff; }
 .locale-toggle { white-space: nowrap; }

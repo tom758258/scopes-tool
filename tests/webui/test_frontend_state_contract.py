@@ -3175,6 +3175,22 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     assert "grid-template-columns: 1fr;" in extract_css_rule(mobile, ".command-form {")
 
 
+def test_primary_action_uses_dedicated_semantic_color() -> None:
+    styles = read_static("styles.css")
+    root = extract_css_rule(styles, ":root {")
+    primary = extract_css_rule(styles, ".primary {")
+    primary_hover = extract_css_rule(styles, ".primary:hover {")
+
+    assert "--primary: #4f6f8f;" in root
+    assert "--primary-strong: #3f5d78;" in root
+
+    assert "var(--primary)" in primary
+    assert "var(--accent)" not in primary
+
+    assert "var(--primary-strong)" in primary_hover
+    assert "var(--accent-strong)" not in primary_hover
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
     editor_path = STATIC_ROOT / "diagnostics-editor.js"
