@@ -303,6 +303,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .div-slider-ticks { display: grid; gap: 6px; font-size: 11px; color: var(--muted); text-align: center; }
 .channel-scale-range-value { max-width: 50%; }
 .channel-scale-range-mode { display: flex; flex-wrap: wrap; gap: 6px; }
+.channel-scale-range-mode button:not(.selected) { border-color: var(--line); background: var(--bg); color: var(--muted); }
 .channel-scale-range-mode button.selected { border-color: #b9d4ee; background: #f2f7fd; color: var(--accent-strong); font-weight: 700; }
 .channel-scale-range-presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .multi-choice { display: flex; flex-wrap: wrap; gap: 6px; max-height: 148px; overflow: auto; padding: 2px; margin: -2px; }

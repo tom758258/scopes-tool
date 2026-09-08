@@ -405,7 +405,6 @@ export class ChannelScaleRangeEditor {
         this.clearModeRead("scale");
         return job;
       }
-      this.scaleInput.value = String(val);
 
       const unitsJob = await this.hooks.executeCommand(
         "channel-units",
@@ -424,6 +423,7 @@ export class ChannelScaleRangeEditor {
         this.clearModeRead("scale");
         return unitsJob;
       }
+      this.scaleInput.value = String(val);
       this.scaleRead = { channel, value: val };
       this.divUnits = units;
       this.unitsChannel = channel;
@@ -508,7 +508,6 @@ export class ChannelScaleRangeEditor {
         this.clearModeRead("range");
         return job;
       }
-      this.rangeInput.value = String(val);
 
       const unitsJob = await this.hooks.executeCommand(
         "channel-units",
@@ -527,6 +526,7 @@ export class ChannelScaleRangeEditor {
         this.clearModeRead("range");
         return unitsJob;
       }
+      this.rangeInput.value = String(val);
       this.rangeRead = { channel, value: val };
       this.divUnits = units;
       this.unitsChannel = channel;

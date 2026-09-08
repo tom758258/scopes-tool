@@ -997,6 +997,7 @@ def test_channel_scale_range_composite_workspace() -> None:
     narrow_presets = narrow.split(".channel-scale-range-presets {", 1)[1].split("}", 1)[0]
     assert "repeat(2, minmax(0, 1fr))" in narrow_presets
     assert ".channel-scale-range-mode button.selected" in css
+    assert ".channel-scale-range-mode button:not(.selected) {" in css
     header_actions = app.split("function syncWorkspaceHeaderActions(editorKind)", 1)[1].split(
         "function syncEditorPresentation(editorKind)", 1
     )[0]
@@ -1258,6 +1259,8 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         assert.equal(editor.scalePresetButtons[9].textContent, globalThis.formatEngineering(1, "A"));
         mockUnits = "volt";
 
+        const successfulExecuteCommand = hooks.executeCommand;
+
         // 7. A failed value read keeps presets disabled and leaves inputs alone.
         hooks.executeCommand = async (id, parameters, options) => {
           calls.push([id, parameters, options]);
@@ -1271,7 +1274,15 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         for (const button of editor.scalePresetButtons) assert.equal(button.disabled, true);
         assert.equal(editor.scaleInput.value, "sentinel");
 
-        // 8. A failed units query fills the value but never unlocks quick-fill.
+        // 8. A failed units query preserves input, confirmed units, and the other mode.
+        hooks.executeCommand = successfulExecuteCommand;
+        mockUnits = "amp";
+        await editor.readScale();
+        await editor.readRange();
+        const previousRangeRead = editor.rangeRead;
+        assert.ok(editor.scaleRead);
+        assert.ok(previousRangeRead);
+        editor.scaleInput.value = "sentinel";
         hooks.executeCommand = async (id, parameters, options) => {
           calls.push([id, parameters, options]);
           if (id === "channel-scale") return { status: "completed", result: { volts_per_division: 0.2 } };
@@ -1280,10 +1291,14 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         };
         editor.readButton.on_click();
         await drain();
-        assert.equal(editor.scaleInput.value, "0.2");
+        assert.equal(editor.scaleInput.value, "sentinel");
+        assert.equal(editor.scaleRead, null);
+        assert.equal(editor.divUnits, "amp");
+        assert.equal(editor.unitsChannel, 3);
+        assert.equal(editor.rangeRead, previousRangeRead);
         for (const button of editor.scalePresetButtons) assert.equal(button.disabled, true);
         editor.modeButtons.range.on_click();
-        for (const button of editor.rangePresetButtons) assert.equal(button.disabled, true);
+        for (const button of editor.rangePresetButtons) assert.equal(button.disabled, false);
 
         // Restore the default mock for the remaining steps.
         hooks.executeCommand = async (id, parameters, options) => {
