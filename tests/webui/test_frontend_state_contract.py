@@ -4761,3 +4761,74 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_acquisition_control_workspace_latest_result() -> None:
+    app = read_static("app.js")
+    functions = "\n".join(extract_function_declaration(app, signature) for signature in (
+        "function renderWorkspace()",
+        "function currentWorkspaceContext(",
+        "function captureWorkspaceResult(",
+    ))
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import vm from "node:vm";
+        const content = {
+          children: [],
+          replaceChildren() { this.children = []; },
+          append(child) { this.children.push(child); },
+        };
+        let selected = { id: "acquisition-control", presentation_only: true };
+        const context = { mode: "live", resource: "scope-a", model_id: null };
+        let model = "model-a";
+        const sandbox = {
+          context,
+          catalog: { selected: () => selected },
+          currentModelId: () => model,
+          state: { workspaceResults: new Map() },
+          elements: { identityWorkspace: {}, identityWorkspaceContent: content },
+          document: { createElement: () => ({}) },
+          translate: (key) => key,
+          renderWorkspaceResult: (container, job) => container.append(job),
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(
+          fs.readFileSync(process.argv[1], "utf8")
+            .replace(/^import[^\n]*\r?\n/gm, "")
+            .replaceAll("export function ", "function ") + process.argv[2],
+          sandbox,
+        );
+        sandbox.renderWorkspace();
+        assert.equal(sandbox.elements.identityWorkspace.hidden, false);
+        for (const command of ["run", "stop-acquisition"]) {
+          const job = { command, status: "completed", result: { action: command } };
+          sandbox.captureWorkspaceResult(job, sandbox.currentWorkspaceContext(command));
+          assert.deepEqual(content.children, [job]);
+        }
+        const original = { ...context };
+        for (const changed of [
+          { ...original, mode: "simulate", model_id: "model-a" },
+          { ...original, resource: "scope-b" },
+        ]) {
+          Object.assign(context, changed);
+          sandbox.renderWorkspace();
+          assert.equal(content.children[0].textContent, "workspace.resultEmpty");
+        }
+        Object.assign(context, original);
+        model = "model-b";
+        sandbox.renderWorkspace();
+        assert.equal(content.children[0].textContent, "workspace.resultEmpty");
+        selected = { id: "save-export", presentation_only: true };
+        sandbox.renderWorkspace();
+        assert.equal(sandbox.elements.identityWorkspace.hidden, true);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(STATIC_ROOT / "execution-context.js"), functions],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

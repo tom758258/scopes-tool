@@ -854,8 +854,11 @@ function renderWorkspace() {
   if (elements.systemInformationWorkspace) {
     elements.systemInformationWorkspace.hidden = !systemInformationSelected;
   }
-  const scaleRangeSelected = selected?.id === "channel-scale-range";
-  elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !scaleRangeSelected);
+  const compositeCommands = {
+    "channel-scale-range": ["channel-scale", "channel-range"],
+    "acquisition-control": ["run", "single", "single-wait", "stop-acquisition", "force-trigger"],
+  }[selected?.id];
+  elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
     renderSystemInformation();
     return;
@@ -864,10 +867,10 @@ function renderWorkspace() {
 
   elements.identityWorkspaceContent.replaceChildren();
   const workspaceContext = currentWorkspaceContext(selected.id);
-  // Capture order tracks the latest success across the two underlying commands.
-  const job = scaleRangeSelected
+  // Capture order tracks the latest success across the underlying commands.
+  const job = compositeCommands
     ? [...state.workspaceResults.values()].reverse().find((entry) => (
-      ["channel-scale", "channel-range"].includes(entry.context.command)
+      compositeCommands.includes(entry.context.command)
         && sameWorkspaceContext(entry.context, { ...workspaceContext, command: entry.context.command })
     ))?.job
     : findWorkspaceResult(state.workspaceResults, workspaceContext, selected.id === "identify");
