@@ -82,7 +82,7 @@ export class SaveExportEditor {
     this.container.replaceChildren();
     this.readSettingsPrompt = null;
     this.storageNote = document.createElement("p");
-    this.storageNote.className = "muted compact-note";
+    this.storageNote.className = "muted compact-note pc-output-note-box";
     this.storageNote.textContent = translate("save-export.editor.storageNote");
     this.headRow = document.createElement("div");
     this.headRow.className = "trigger-editor-head";
@@ -104,6 +104,7 @@ export class SaveExportEditor {
     }
     this.modeSelector = document.createElement("div");
     this.modeSelector.className = "trigger-editor-segmented";
+    this.modeSelector.hidden = true;
     this.readStatus = document.createElement("output");
     this.readStatus.className = "muted compact-note";
     this.sectionsHost = document.createElement("div");
@@ -142,6 +143,13 @@ export class SaveExportEditor {
   selectedDefinition() {
     const selected = this.hooks.selectedCommand?.();
     return selected?.editor === "save-export" ? selected : null;
+  }
+
+  updateModeFromSelection() {
+    const selected = this.selectedDefinition();
+    if (selected?.id === "save-waveform") this.mode = "waveform";
+    else if (selected?.id === "setup-save") this.mode = "setup";
+    else this.mode = "image";
   }
 
   hasCurrentSettings() {
@@ -199,6 +207,7 @@ export class SaveExportEditor {
       return;
     }
     const definition = this.selectedDefinition();
+    this.updateModeFromSelection();
     if (!definition) {
       this.stateKey = null;
       this.clearSections();
@@ -252,6 +261,7 @@ export class SaveExportEditor {
     this.readSettingsPrompt = null;
     this.readStatus.textContent = "";
     this.sectionsHost.replaceChildren();
+    this.updateModeFromSelection();
     if (!this.selectedDefinition()) return;
 
     const modeConfig = SAVE_EXPORT_MODES[this.mode] || SAVE_EXPORT_MODES.image;
@@ -268,7 +278,10 @@ export class SaveExportEditor {
     }
     this.pathEntry = this.buildSharedPathForm();
     this.filenameEntry = this.buildModeFilenameForm(modeConfig.saveCommandId);
-    this.sectionsHost.append(this.pathEntry.section, this.filenameEntry.section);
+    const pairHost = document.createElement("div");
+    pairHost.className = "save-export-pair";
+    pairHost.append(this.pathEntry.section, this.filenameEntry.section);
+    this.sectionsHost.append(pairHost);
 
     const modeSection = document.createElement("section");
     modeSection.className = "trigger-editor-section";
@@ -390,14 +403,20 @@ export class SaveExportEditor {
     this.setupSaveButton.addEventListener("click", () => {
       void this.submitSetup(modeConfig.setupSaveCommandId, false);
     });
-    this.setupRecallButton = document.createElement("button");
-    this.setupRecallButton.type = "button";
-    this.setupRecallButton.className = "secondary trigger-editor-action";
-    this.setupRecallButton.textContent = translate("save-export.editor.recallSetup");
-    this.setupRecallButton.addEventListener("click", () => {
-      void this.submitSetup(modeConfig.setupRecallCommandId, true);
-    });
-    section.append(heading, note, formHost, this.setupSaveButton, this.setupRecallButton);
+    const showRecall = this.selectedDefinition()?.id !== "setup-save";
+    if (showRecall) {
+      this.setupRecallButton = document.createElement("button");
+      this.setupRecallButton.type = "button";
+      this.setupRecallButton.className = "secondary trigger-editor-action";
+      this.setupRecallButton.textContent = translate("save-export.editor.recallSetup");
+      this.setupRecallButton.addEventListener("click", () => {
+        void this.submitSetup(modeConfig.setupRecallCommandId, true);
+      });
+    }
+    section.append(heading, note, formHost, this.setupSaveButton);
+    if (showRecall && this.setupRecallButton) {
+      section.append(this.setupRecallButton);
+    }
     this.sectionsHost.append(section);
     this.applyBusyState();
   }
@@ -457,7 +476,7 @@ export class SaveExportEditor {
     const form = new CommandForm(formHost, this.catalog);
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "secondary trigger-editor-action";
+    button.className = "primary trigger-editor-action";
     button.textContent = translate("actions.apply");
     form.render(command, { onDirty: () => this.applyBusyState() });
     const entry = { id: command.id, container, form, button, kind: "setting" };

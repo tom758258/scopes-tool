@@ -891,7 +891,6 @@ COMMANDS = (
         "id": "save-image",
         "category": "Save / Export",
         "label": "Save image",
-        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "group": "image",
         "editor": "save-export",
@@ -939,7 +938,6 @@ COMMANDS = (
         "id": "save-waveform",
         "category": "Save / Export",
         "label": "Save waveform",
-        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "group": "waveform",
         "editor": "save-export",
@@ -951,7 +949,6 @@ COMMANDS = (
         "id": "setup-save",
         "category": "Save / Export",
         "label": "Save setup",
-        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "editor": "save-export",
         "fields": (
@@ -1994,15 +1991,6 @@ def command_catalog() -> list[dict[str, Any]]:
                 "fields": (),
             },
             {
-                "id": "save-export",
-                "category": "Save / Export",
-                "label": "Save / Export",
-                "editor": "save-export",
-                "presentation_only": True,
-                "modes": ("live", "simulate"),
-                "fields": (),
-            },
-            {
                 "id": "diagnostics",
                 "category": "System",
                 "label": "Diagnostics",
@@ -2026,7 +2014,6 @@ def command_catalog() -> list[dict[str, Any]]:
     for presentation_id, first_underlying_id in (
         ("acquisition-control", "run"),
         ("reference-waveform", "reference-save"),
-        ("save-export", "save-pwd"),
         ("channel-scale-range", "channel-scale"),
     ):
         presentation = next(entry for entry in catalog if entry["id"] == presentation_id)

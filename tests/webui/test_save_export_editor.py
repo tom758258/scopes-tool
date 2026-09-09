@@ -1236,3 +1236,40 @@ def test_save_export_non_read_failure_does_not_present_read_failure_status() -> 
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_three_independent_commands_contract() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const { editor, submitted, hooks, catalog, context, executionState } = buildEditor();
+        const commands = catalog.commands;
+        const selectedImage = commands.find((c) => c.id === "save-image");
+        const selectedWaveform = commands.find((c) => c.id === "save-waveform");
+        const selectedSetup = commands.find((c) => c.id === "setup-save");
+        assert.ok(selectedImage, "save-image must be visible in catalog");
+        assert.ok(selectedWaveform, "save-waveform must be visible in catalog");
+        assert.ok(selectedSetup, "setup-save must be visible in catalog");
+
+        hooks.selectedCommand = () => selectedImage;
+        editor.rebuildSections("ctx|save-export:image");
+        assert.equal(editor.mode, "image");
+        assert.ok(editor.modeSelector.hidden || !editor.modeSelector.textContent, "mode selector must be hidden");
+        assert.ok(editor.storageNote.className.includes("pc-output-note-box"), "banner must use pc-output-note-box");
+        assert.equal(editor.sectionsHost.children.length, 3, "sectionsHost should have pair + mode + advanced");
+
+        hooks.selectedCommand = () => selectedWaveform;
+        editor.rebuildSections("ctx|save-export:waveform");
+        assert.equal(editor.mode, "waveform");
+
+        hooks.selectedCommand = () => selectedSetup;
+        editor.rebuildSections("ctx|save-export:setup");
+        assert.equal(editor.mode, "setup");
+        assert.ok(!editor.setupRecallButton, "setup-save must not expose recall button");
+
+        const advanced = editor.advancedEntry;
+        if (advanced) assert.ok(advanced.button.className.includes("primary"), "advanced apply must be primary button");
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
