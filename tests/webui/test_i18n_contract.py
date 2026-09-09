@@ -32,6 +32,7 @@ RESULT_FIELDS = (
     "state",
     "set_bits",
     "complete",
+    "displayed",
     "options",
     "drain",
     "max_reads",

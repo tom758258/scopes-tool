@@ -444,6 +444,8 @@ def test_reference_labels_editor_reads_and_applies_label_state() -> None:
         await settle();
 
             assert.equal(labelsEditor.entry.id, "reference-label");
+            assert.ok(labelsEditor.entry.button.className.includes("primary"));
+            assert.equal(labelsEditor.entry.button.className.includes("secondary"), false);
             // Slot selector (left) and label text (right) share one two-column row.
             const topRow = labelsEditor.container.children[0];
             assert.equal(topRow.className, "command-form");

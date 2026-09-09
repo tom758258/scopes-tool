@@ -119,7 +119,7 @@ export class ReferenceLabelsEditor {
       form.render(command);
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "secondary trigger-editor-action";
+      button.className = "primary trigger-editor-action";
       button.textContent = translate("actions.apply");
       const entry = { id: command.id, form, button, kind: command.presentation.kind };
       button.addEventListener("click", () => void this.submit(entry));

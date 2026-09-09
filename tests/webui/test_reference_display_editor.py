@@ -78,7 +78,11 @@ DISPLAY_EDITOR_HARNESS = r'''
         return handler(id, parameters, options);
       },
     };
-    const catalog = { commands: [], fieldsFor: () => [], optionsFor: () => [] };
+    const catalog = {
+      commands: [{ id: "reference-display", fields: [{ name: "slot", options: [1, 2] }] }],
+      fieldsFor: (command) => command.fields || [],
+      optionsFor: (field) => field.options || [],
+    };
     const editor = new ReferenceDisplayEditor(new FakeNode(), catalog, hooks);
     const settle = async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -123,6 +127,24 @@ def test_reference_display_editor_shows_two_slots_with_shared_actions() -> None:
         assert.ok(editor.container.children.includes(editor.section));
         assert.equal(editor.container.children.includes(editor.refreshButton), false);
         assert.equal(editor.container.children.includes(editor.runButton), false);
+        ''',
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_reference_display_editor_follows_projected_slots() -> None:
+    run_harness(
+        r'''
+        const singleCatalog = {
+          commands: [{ id: "reference-display", fields: [{ name: "slot", options: [1] }] }],
+          fieldsFor: (command) => command.fields || [],
+          optionsFor: (field) => field.options || [],
+        };
+        const singleEditor = new ReferenceDisplayEditor(new FakeNode(), singleCatalog, hooks);
+        singleEditor.schedulePresentation();
+        await settle();
+        assert.deepEqual(singleEditor.entries.map((entry) => entry.slot), [1]);
+        assert.equal(singleEditor.entries[0].text.textContent, "Reference waveform 1");
         ''',
     )
 

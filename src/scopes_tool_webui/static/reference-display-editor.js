@@ -1,7 +1,5 @@
 import { hasTranslation, translate } from "/static/i18n.js";
 
-const REFERENCE_SLOTS = [1, 2];
-
 function slotLabel(slot) {
   const key = "enum.reference-waveform";
   return hasTranslation(key) ? translate(key, { value: slot }) : `Reference ${slot}`;
@@ -18,8 +16,29 @@ export class ReferenceDisplayEditor {
     this.hooks = hooks;
     this.busy = false;
     this.stateKey = null;
+    this.slots = [];
     this.entries = [];
     this.buildDom();
+  }
+
+  definition() {
+    return this.catalog.commands.find((command) => command.id === "reference-display") || null;
+  }
+
+  displaySlots() {
+    const definition = this.definition();
+    if (!definition) return [];
+    const fields = this.catalog.fieldsFor
+      ? this.catalog.fieldsFor(definition)
+      : definition.fields || [];
+    const slotField = fields.find((field) => field.name === "slot") || {};
+    const options = this.catalog.optionsFor
+      ? this.catalog.optionsFor(slotField)
+      : slotField.options || [];
+    return [...options]
+      .map(Number)
+      .filter((slot) => Number.isInteger(slot) && slot > 0)
+      .sort((left, right) => left - right);
   }
 
   selectedDefinition() {
@@ -108,9 +127,10 @@ export class ReferenceDisplayEditor {
   }
 
   rebuild() {
+    this.slots = this.displaySlots();
     this.entries = [];
     this.choicesHost.replaceChildren();
-    for (const slot of REFERENCE_SLOTS) {
+    for (const slot of this.slots) {
       const choice = document.createElement("label");
       choice.className = "multi-choice-option";
       const box = document.createElement("input");
@@ -131,9 +151,11 @@ export class ReferenceDisplayEditor {
 
   async readStates() {
     const key = this.hooks.contextKey();
+    const slots = this.displaySlots();
+    if (!slots.length) return null;
     const states = new Map();
     let job = null;
-    for (const slot of REFERENCE_SLOTS) {
+    for (const slot of slots) {
       if (this.hooks.contextKey() !== key || !this.selectedDefinition()) return null;
       job = await this.hooks.executeCommand(
         "reference-display",
@@ -158,7 +180,9 @@ export class ReferenceDisplayEditor {
   async run() {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
     if (!this.selectedDefinition()) return null;
-    const desired = REFERENCE_SLOTS.map((slot) => ({
+    const slots = this.displaySlots();
+    if (!slots.length) return null;
+    const desired = slots.map((slot) => ({
       slot,
       enabled: this.boxFor(slot)?.checked === true,
     }));
@@ -225,7 +249,8 @@ export class ReferenceDisplayEditor {
   applyBusyState() {
     const disabled = this.busy
       || this.hooks.isExecutionBusy?.()
-      || !this.hooks.isAvailable();
+      || !this.hooks.isAvailable()
+      || !this.slots.length;
     this.refreshButton.disabled = disabled;
     this.runButton.disabled = disabled;
     for (const entry of this.entries) entry.box.disabled = disabled;

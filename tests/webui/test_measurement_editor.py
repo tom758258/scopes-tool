@@ -176,7 +176,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           catalog.availableCommands()
             .filter((command) => command.category === "Reference")
             .map((command) => command.id),
-          ["reference-waveform", "reference-labels"],
+              ["reference-waveform", "reference-display", "reference-labels"],
         );
         assert.deepEqual(
           catalog.availableCommands()
