@@ -304,7 +304,9 @@ export class SaveExportEditor {
       for (const commandId of pair) {
         const command = this.commandForId(commandId);
         if (!command || !this.catalog.supported(command)) continue;
-        this.entries.push(this.buildSettingEntry(command, settingsPair));
+        const entry = this.buildSettingEntry(command, settingsPair);
+        entry.section.classList.add("save-export-paired-setting");
+        this.entries.push(entry);
         rendered += 1;
       }
       if (rendered === 1) settingsPair.classList.add("save-export-pair-single");

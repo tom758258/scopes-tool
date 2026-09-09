@@ -1354,6 +1354,7 @@ def test_command_catalog_projects_fixed_numeric_constraints() -> None:
         ("serial-search-uart", "data", {"minimum": 0, "maximum": 255}),
         ("serial-search-spi", "width", {"minimum": 1, "maximum": 10}),
         ("serial-search-can", "data_length", {"minimum": 1, "maximum": 8}),
+        ("save-waveform-length", "points", {"minimum": 100, "spinner": False}),
         ("segmented-memory", "segments", {"minimum": 2}),
         ("segmented-capture", "segments", {"minimum": 2}),
     )

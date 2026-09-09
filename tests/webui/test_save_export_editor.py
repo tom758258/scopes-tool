@@ -1276,6 +1276,9 @@ def test_save_export_editor_pairs_settings_before_destination() -> None:
           "save-waveform-format",
           "save-waveform-length",
         ]);
+        for (const entry of waveformEditor.entries) {
+          assert.ok(entry.section.className.split(/\s+/).includes("save-export-paired-setting"));
+        }
         assert.ok(waveformPairs[1].children.includes(waveformEditor.pathEntry.section));
         assert.ok(waveformPairs[1].children.includes(waveformEditor.filenameEntry.section));
         const waveformPreview = waveformKids.find(
@@ -1321,6 +1324,9 @@ def test_save_export_pair_layout_contract() -> None:
     assert ".save-export-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));" in css
     assert ".save-export-pair > .trigger-editor-section .command-form { grid-template-columns: 1fr; }" in css
     assert ".save-export-pair-single > .trigger-editor-section { grid-column: 1 / -1; }" in css
+    desktop = css.split("@media (min-width: 701px)", 1)[1].split("@media", 1)[0]
+    assert ".save-export-paired-setting > .compact-note" in desktop
+    assert "min-height" in desktop
     mobile = css.split("@media (max-width: 700px)", 1)[1]
     assert ".save-export-pair { grid-template-columns: 1fr; }" in mobile
 
@@ -1328,8 +1334,22 @@ def test_save_export_pair_layout_contract() -> None:
 def test_save_setup_file_and_waveform_length_locale_contract() -> None:
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
-    assert '"field.setup.file": "Instrument file path"' in english
-    assert '"field.setup.file": "儀器端檔案路徑"' in chinese
+    assert '"field.setup.file": "Full instrument-side file path"' in english
+    assert '"field.setup.file": "儀器端完整檔案路徑"' in chinese
+    english_setup_help = next(
+        line for line in english.splitlines() if '"help.setup.file":' in line
+    )
+    chinese_setup_help = next(
+        line for line in chinese.splitlines() if '"help.setup.file":' in line
+    )
+    assert "including the filename" in english_setup_help
+    assert "not generated automatically" in english_setup_help
+    assert "not a pc file upload" in english_setup_help.lower()
+    assert "baseline.scp" in english_setup_help
+    assert "包含檔名" in chinese_setup_help
+    assert "不會自動產生" in chinese_setup_help
+    assert "不是 PC 檔案上傳" in chinese_setup_help
+    assert "baseline.scp" in chinese_setup_help
     english_length_help = next(
         line for line in english.splitlines() if '"help.save-waveform-length.points":' in line
     )
@@ -1337,4 +1357,6 @@ def test_save_setup_file_and_waveform_length_locale_contract() -> None:
         line for line in chinese.splitlines() if '"help.save-waveform-length.points":' in line
     )
     assert "100" in english_length_help and "maximum" in english_length_help
+    assert "instrument" in english_length_help
     assert "100" in chinese_length_help and "最大" in chinese_length_help
+    assert "儀器" in chinese_length_help

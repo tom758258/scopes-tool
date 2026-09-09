@@ -921,7 +921,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "points", "type": "integer", "minimum": 100, "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-waveform-length.points"},
+            {"name": "points", "type": "integer", "minimum": 100, "spinner": False, "required_if": [{"field": "action", "equals": "set"}], "help_key": "save-waveform-length.points"},
         ),
     },
     {
