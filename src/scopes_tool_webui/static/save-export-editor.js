@@ -72,6 +72,7 @@ export class SaveExportEditor {
     this.setupRecallButton = null;
     this.saveButton = null;
     this.destinationPreview = null;
+    this.readSettingsPrompt = null;
     this.modeButtons = [];
     this.buildDom();
   }
@@ -79,6 +80,7 @@ export class SaveExportEditor {
   buildDom() {
     this.refreshButton?.remove?.();
     this.container.replaceChildren();
+    this.readSettingsPrompt = null;
     this.storageNote = document.createElement("p");
     this.storageNote.className = "muted compact-note";
     this.storageNote.textContent = translate("save-export.editor.storageNote");
@@ -233,6 +235,7 @@ export class SaveExportEditor {
     this.setupSaveButton = null;
     this.setupRecallButton = null;
     this.saveButton = null;
+    this.readSettingsPrompt = null;
     this.sectionsHost.replaceChildren();
     this.groupHeading.textContent = "";
     this.readStatus.textContent = "";
@@ -246,6 +249,7 @@ export class SaveExportEditor {
     this.renderedKey = key;
     this.entries = [];
     this.saveButton = null;
+    this.readSettingsPrompt = null;
     this.readStatus.textContent = "";
     this.sectionsHost.replaceChildren();
     if (!this.selectedDefinition()) return;
@@ -272,12 +276,11 @@ export class SaveExportEditor {
     modeHeading.className = "trigger-editor-heading";
     modeHeading.textContent = translate(modeConfig.labelKey);
     modeSection.append(modeHeading);
-    if (modeConfig.id !== "setup" && !this.hasCurrentSettings()) {
-      const promptNote = document.createElement("p");
-      promptNote.className = "muted compact-note";
-      promptNote.textContent = translate("save-export.editor.readSettingsPrompt");
-      modeSection.append(promptNote);
-    }
+    this.readSettingsPrompt = document.createElement("p");
+    this.readSettingsPrompt.className = "muted compact-note";
+    this.readSettingsPrompt.textContent = translate("save-export.editor.readSettingsPrompt");
+    this.readSettingsPrompt.hidden = this.hasCurrentSettings();
+    modeSection.append(this.readSettingsPrompt);
     this.sectionsHost.append(modeSection);
 
     for (const commandId of modeConfig.settingIds) {
@@ -556,7 +559,7 @@ export class SaveExportEditor {
       total,
     });
     this.updateDestinationPreview();
-    return true;
+    return failed === 0;
   }
 
   entryForId(id) {
@@ -709,24 +712,27 @@ export class SaveExportEditor {
   applyBusyState() {
     const executionBusy = this.hooks.isExecutionBusy?.() || false;
     const available = this.hooks.isAvailable();
-    const disabled = this.busy || executionBusy || !available || (this.mode !== "setup" && !this.hasCurrentSettings());
-    this.refreshButton.disabled = disabled;
+    const executionDisabled = this.busy || executionBusy || !available;
+    const settingsRequired = this.mode !== "setup" && !this.hasCurrentSettings();
+    const editingDisabled = executionDisabled || settingsRequired;
+    this.refreshButton.disabled = executionDisabled;
     this.modeButtons.forEach((button) => {
-      button.disabled = disabled;
+      button.disabled = executionDisabled;
     });
-    if (this.pathEntry?.form) this.pathEntry.form.setDisabled(disabled);
-    if (this.filenameEntry?.form) this.filenameEntry.form.setDisabled(disabled);
-    if (this.setupEntry?.form) this.setupEntry.form.setDisabled(disabled);
-    if (this.setupSaveButton) this.setupSaveButton.disabled = disabled;
-    if (this.setupRecallButton) this.setupRecallButton.disabled = disabled;
-    if (this.advancedEntry?.form) this.advancedEntry.form.setDisabled(disabled);
+    if (this.pathEntry?.form) this.pathEntry.form.setDisabled(editingDisabled);
+    if (this.filenameEntry?.form) this.filenameEntry.form.setDisabled(editingDisabled);
+    if (this.setupEntry?.form) this.setupEntry.form.setDisabled(executionDisabled);
+    if (this.setupSaveButton) this.setupSaveButton.disabled = executionDisabled;
+    if (this.setupRecallButton) this.setupRecallButton.disabled = executionDisabled;
+    if (this.advancedEntry?.form) this.advancedEntry.form.setDisabled(editingDisabled);
     if (this.advancedEntry?.button) {
-      this.advancedEntry.button.disabled = disabled || !this.isDirty(this.advancedEntry.form);
+      this.advancedEntry.button.disabled = editingDisabled || !this.isDirty(this.advancedEntry.form);
     }
-    if (this.saveButton) this.saveButton.disabled = disabled;
+    if (this.saveButton) this.saveButton.disabled = editingDisabled;
     for (const entry of this.entries) {
-      entry.form?.setDisabled(disabled);
+      entry.form?.setDisabled(editingDisabled);
     }
+    if (this.readSettingsPrompt) this.readSettingsPrompt.hidden = !settingsRequired;
     if (!this.busy && !executionBusy && available && this.pendingRefresh) {
       const force = this.pendingRefreshForce;
       this.pendingRefresh = false;

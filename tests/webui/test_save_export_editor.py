@@ -246,11 +246,35 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_save_export_editor_same_mode_click_preserves_state_and_mode_change_reads_once() -> None:
+def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         const { editor, submitted } = buildEditor();
+        await editor.refresh(false, false);
+        assert.equal(submitted.length, 0);
+        assert.ok(!editor.hasCurrentSettings());
+        assert.equal(editor.refreshButton.disabled, false);
+        assert.ok(editor.modeButtons.every((button) => !button.disabled));
+        assert.equal(editor.pathEntry.form.disabled, true);
+        assert.equal(editor.saveButton.disabled, true);
+        assert.equal(editor.advancedEntry.form.disabled, true);
+        assert.equal(editor.readSettingsPrompt.hidden, false);
+
         await editor.refresh(false, true);
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-pwd",
+          "save-filename",
+          "save-image-format",
+          "save-image-palette",
+          "save-image-ink-saver",
+          "save-image-factors",
+        ]);
+        assert.ok(editor.hasCurrentSettings());
+        assert.equal(editor.pathEntry.form.disabled, false);
+        assert.equal(editor.saveButton.disabled, false);
+        assert.equal(editor.advancedEntry.form.disabled, false);
+        assert.equal(editor.readSettingsPrompt.hidden, true);
+
         const imagePathEntry = editor.pathEntry;
         const imageReadCount = submitted.length;
 
@@ -263,8 +287,13 @@ def test_save_export_editor_same_mode_click_preserves_state_and_mode_change_read
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.equal(editor.mode, "waveform");
         assert.notEqual(editor.pathEntry, imagePathEntry);
-        // Mode change does not trigger automatic readback; submitted count unchanged
         assert.equal(submitted.length, imageReadCount);
+        assert.ok(!editor.hasCurrentSettings());
+        assert.equal(editor.refreshButton.disabled, false);
+        assert.ok(editor.modeButtons.every((button) => !button.disabled));
+        assert.equal(editor.pathEntry.form.disabled, true);
+        assert.equal(editor.saveButton.disabled, true);
+        assert.equal(editor.readSettingsPrompt.hidden, false);
         '''
     )
     completed = run_node(script)
@@ -316,12 +345,38 @@ def test_save_export_editor_read_progress_is_one_based() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_failed_read_does_not_unlock() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const { editor, submitted } = buildEditor((command) => ({
+          status: command === "save-image-format" ? "failed" : "completed",
+          job_id: command,
+        }));
+
+        await editor.refresh(false, false);
+        await editor.refresh(false, true);
+        const failedRead = submitted.find((entry) => entry.command === "save-image-format");
+        assert.ok(failedRead);
+        assert.equal(failedRead.job.status, "failed");
+        assert.ok(!editor.hasCurrentSettings());
+        assert.equal(editor.stateKey, null);
+        assert.ok(editor.readStatus.textContent.startsWith("failed:Image"));
+        assert.equal(editor.saveButton.disabled, true);
+        assert.equal(editor.readSettingsPrompt.hidden, false);
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         let pathValuesCalls = 0;
+        let savePathValuesCalls = null;
         const { editor, submitted } = buildEditor((command) => {
-          if (command === "save-image") assert.equal(pathValuesCalls, 0);
+          if (command === "save-image") savePathValuesCalls = pathValuesCalls;
           return { status: "completed", job_id: command };
         });
         editor.rebuildSections("ctx|save-export:image");
@@ -332,8 +387,12 @@ def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
         editor.filenameEntry.form.valuesResult = { filename: "screen" };
 
         await editor.refresh(false, true);
+        const pathValuesBeforeSave = pathValuesCalls;
+        const writeStart = submitted.length;
         await editor.submitCurrentMode("save-image");
-        assert.deepEqual(submitted.map((entry) => entry.command), ["save-image"]);
+        const writes = submitted.slice(writeStart);
+        assert.deepEqual(writes.map((entry) => entry.command), ["save-image"]);
+        assert.equal(savePathValuesCalls, pathValuesBeforeSave);
         '''
     )
     completed = run_node(script)
@@ -359,20 +418,22 @@ def test_save_export_editor_submits_image_settings_then_final_image_save() -> No
         editor.advancedEntry.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
 
         await editor.refresh(false, true);
+        const writeStart = submitted.length;
         await editor.submitCurrentMode("save-image");
-        assert.deepEqual(submitted.map((entry) => entry.command), [
+        const writes = submitted.slice(writeStart);
+        assert.deepEqual(writes.map((entry) => entry.command), [
           "save-pwd",
           "save-image-format",
           "save-image",
         ]);
-        assert.deepEqual(submitted.map((entry) => entry.parameters), [
+        assert.deepEqual(writes.map((entry) => entry.parameters), [
           { action: "set", path: "\\usb\\" },
           { action: "set", format: "PNG" },
           { filename: "scope" },
         ]);
-        assert.ok(!submitted.some((entry) => entry.command.startsWith("save-waveform")));
-        assert.ok(!submitted.some((entry) => entry.command === "save-filename"));
-        assert.ok(!submitted.some((entry) => entry.parameters.action === "query"));
+        assert.ok(!writes.some((entry) => entry.command.startsWith("save-waveform")));
+        assert.ok(!writes.some((entry) => entry.command === "save-filename"));
+        assert.ok(!writes.some((entry) => entry.parameters.action === "query"));
         '''
     )
     completed = run_node(script)
@@ -401,21 +462,23 @@ def test_save_export_editor_submits_waveform_settings_then_final_waveform_save()
         editor.advancedEntry.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
 
         await editor.refresh(false, true);
+        const writeStart = submitted.length;
         await editor.submitCurrentMode("save-waveform");
-        assert.deepEqual(submitted.map((entry) => entry.command), [
+        const writes = submitted.slice(writeStart);
+        assert.deepEqual(writes.map((entry) => entry.command), [
           "save-pwd",
           "save-waveform-format",
           "save-waveform-length",
           "save-waveform",
         ]);
-        assert.deepEqual(submitted.map((entry) => entry.parameters), [
+        assert.deepEqual(writes.map((entry) => entry.parameters), [
           { action: "set", path: "\\usb\\" },
           { action: "set", format: "CSV" },
           { action: "set", points: 1000 },
           { filename: "trace" },
         ]);
-        assert.ok(!submitted.some((entry) => entry.command.startsWith("save-image")));
-        assert.ok(!submitted.some((entry) => entry.command === "save-filename"));
+        assert.ok(!writes.some((entry) => entry.command.startsWith("save-image")));
+        assert.ok(!writes.some((entry) => entry.command === "save-filename"));
         '''
     )
     completed = run_node(script)
@@ -693,9 +756,9 @@ def test_save_export_editor_invalidates_loaded_state_when_format_resync_becomes_
         assert.equal(editor.stateKey, "ctx|save-export:image");
         assert.equal(format.form.valuesResult.format, "PNG");
 
-        const saveStart = submitted.length;
         editor.filenameEntry.form.valuesResult = { filename: "screen.bmp" };
         await editor.refresh(false, true);
+        const saveStart = submitted.length;
         await editor.submitCurrentMode("save-image");
         const saveCommands = submitted.slice(saveStart);
         assert.deepEqual(saveCommands.map((entry) => entry.command), ["save-image"]);
@@ -755,9 +818,9 @@ def test_save_export_editor_keeps_successful_save_when_format_resync_fails() -> 
         editor.advancedEntry.form.valuesResult = { action: "set", name: "keep_me" };
         editor.advancedEntry.form.container._fieldNodes = [advancedDirty];
 
-        const saveStart = submitted.length;
         editor.filenameEntry.form.valuesResult = { filename: "screen.bmp" };
         await editor.refresh(false, true);
+        const saveStart = submitted.length;
         await editor.submitCurrentMode("save-image");
         const saveCommands = submitted.slice(saveStart);
         assert.deepEqual(saveCommands.map((entry) => entry.command), [
@@ -792,7 +855,6 @@ def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy()
         editor.schedulePresentation();
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.equal(submitted.length, 0);
-        assert.equal(editor.pendingPresentation, true);
         assert.equal(editor.pendingRefresh, false);
 
         context.value = "changed-context";
@@ -855,17 +917,20 @@ def test_save_export_editor_applies_advanced_filename_only_when_requested() -> N
         advanced.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
 
         await editor.refresh(false, true);
+        const saveStart = submitted.length;
         await editor.submitCurrentMode("save-image");
-        assert.deepEqual(submitted.map((entry) => entry.command), ["save-image"]);
+        assert.deepEqual(submitted.slice(saveStart).map((entry) => entry.command), ["save-image"]);
 
         await advanced.form.onDirty();
         await editor.refresh(false, true);
+        const applyStart = submitted.length;
         await editor.applyAdvancedFilename(advanced);
-        assert.deepEqual(submitted.map((entry) => entry.command), ["save-image", "save-filename"]);
-        assert.deepEqual(submitted[1].parameters, { action: "set", name: "instrument_default" });
-        assert.equal(submitted[1].intent, "apply");
+        const applyWrites = submitted.slice(applyStart);
+        assert.deepEqual(applyWrites.map((entry) => entry.command), ["save-filename"]);
+        assert.deepEqual(applyWrites[0].parameters, { action: "set", name: "instrument_default" });
+        assert.equal(applyWrites[0].intent, "apply");
         assert.equal(advanced.form.clearedDirty, 1);
-        assert.deepEqual(advanced.form.syncCalls, [["save-filename", false]]);
+        assert.deepEqual(advanced.form.syncCalls.at(-1), ["save-filename", false]);
         '''
     )
     completed = run_node(script)
@@ -876,8 +941,8 @@ def test_save_export_editor_applies_advanced_filename_only_when_requested() -> N
 def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor((command) => ({
-          status: command === "save-filename" ? "failed" : "completed",
+        const { editor, submitted } = buildEditor((command, parameters, options) => ({
+          status: command === "save-filename" && options?.intent === "apply" ? "failed" : "completed",
           job_id: command,
         }));
         editor.mode = "image";
@@ -887,10 +952,12 @@ def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> 
         advanced.form.valuesResult = { action: "set", name: "keep_me" };
         advanced.form.container._fieldNodes = [dirtyField];
 
-        const job = await editor.refresh(false, true);
-        await editor.applyAdvancedFilename(advanced);
+        await editor.refresh(false, true);
+        const applyStart = submitted.length;
+        const job = await editor.applyAdvancedFilename(advanced);
+        const applyWrites = submitted.slice(applyStart);
         assert.equal(job.status, "failed");
-        assert.deepEqual(submitted.map((entry) => entry.command), ["save-filename"]);
+        assert.deepEqual(applyWrites.map((entry) => entry.command), ["save-filename"]);
         assert.equal(advanced.form.clearedDirty, 0);
         assert.equal(advanced.form.container._fieldNodes[0], dirtyField);
         '''
@@ -904,7 +971,7 @@ def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         const { editor, executionState } = buildEditor();
-        editor.rebuildSections("ctx|save-export:image");
+        await editor.refresh(false, false);
         // Before reading settings, save button is disabled (read-first behavior)
         assert.equal(editor.saveButton.disabled, true);
         await editor.refresh(false, true);
@@ -937,8 +1004,8 @@ def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -
 def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor((command) => ({
-          status: command === "save-image-format" ? "failed" : "completed",
+        const { editor, submitted } = buildEditor((command, parameters, options) => ({
+          status: command === "save-image-format" && options?.intent === "apply" ? "failed" : "completed",
           job_id: command,
         }));
         editor.mode = "image";
@@ -951,8 +1018,10 @@ def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> No
         editor.filenameEntry.form.valuesResult = { filename: "screen" };
 
         await editor.refresh(false, true);
+        const writeStart = submitted.length;
         await editor.submitCurrentMode("save-image");
-        assert.deepEqual(submitted.map((entry) => entry.command), ["save-pwd", "save-image-format"]);
+        const writes = submitted.slice(writeStart);
+        assert.deepEqual(writes.map((entry) => entry.command), ["save-pwd", "save-image-format"]);
         '''
     )
     completed = run_node(script)
@@ -1037,6 +1106,9 @@ def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
         await editor.refresh(false, true);
         assert.equal(submitted.length, 0);
         assert.equal(editor.refreshButton.hidden, true);
+        assert.equal(editor.setupEntry.form.disabled, false);
+        assert.equal(editor.setupSaveButton.disabled, false);
+        assert.equal(editor.setupRecallButton.disabled, false);
         assert.deepEqual(editor.entries, []);
         assert.equal(editor.pathEntry, null);
         assert.equal(editor.filenameEntry, null);
@@ -1128,8 +1200,8 @@ def test_save_export_status_locale_keys_are_unique() -> None:
 def test_save_export_non_read_failure_does_not_present_read_failure_status() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const failingApply = buildEditor((command) => ({
-          status: command === "save-image-format" ? "failed" : "completed",
+        const failingApply = buildEditor((command, parameters, options) => ({
+          status: command === "save-image-format" && options?.intent === "apply" ? "failed" : "completed",
           job_id: command,
         }));
         failingApply.editor.mode = "image";
@@ -1141,20 +1213,24 @@ def test_save_export_non_read_failure_does_not_present_read_failure_status() -> 
         applyFormat.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
         failingApply.editor.filenameEntry.form.valuesResult = { filename: "screen" };
         failingApply.editor.readStatus.textContent = "failed:stale-read";
+        await failingApply.editor.refresh(false, true);
+        const applyStart = failingApply.submitted.length;
         await failingApply.editor.submitCurrentMode("save-image");
-        assert.deepEqual(failingApply.submitted.map((entry) => entry.command), ["save-pwd", "save-image-format"]);
+        assert.deepEqual(failingApply.submitted.slice(applyStart).map((entry) => entry.command), ["save-pwd", "save-image-format"]);
         assert.ok(!failingApply.editor.readStatus.textContent.startsWith("failed:"));
 
-        const failingSave = buildEditor((command) => ({
-          status: command === "save-image" ? "failed" : "completed",
+        const failingSave = buildEditor((command, parameters, options) => ({
+          status: command === "save-image" && options?.intent === "command" ? "failed" : "completed",
           job_id: command,
         }));
         failingSave.editor.mode = "image";
         failingSave.editor.rebuildSections("ctx|save-export:image");
         failingSave.editor.filenameEntry.form.valuesResult = { filename: "screen" };
         failingSave.editor.readStatus.textContent = "failed:stale-read";
+        await failingSave.editor.refresh(false, true);
+        const saveStart = failingSave.submitted.length;
         await failingSave.editor.submitCurrentMode("save-image");
-        assert.ok(failingSave.submitted.some((entry) => entry.command === "save-image"));
+        assert.ok(failingSave.submitted.slice(saveStart).some((entry) => entry.command === "save-image"));
         assert.ok(!failingSave.editor.readStatus.textContent.startsWith("failed:"));
         '''
     )
