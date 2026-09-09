@@ -581,7 +581,7 @@ export const en = {
   "save-export.editor.saveImage": "Save image",
   "save-export.editor.saveWaveform": "Save waveform",
   "save-export.editor.mode.setup": "Setup",
-  "save-export.editor.setupNote": "Save or recall the instrument setup. File targets are instrument-side paths, not PC file uploads.",
+  "save-export.editor.setupNote": "Save the instrument setup to an instrument slot or instrument-side file.",
   "save-export.editor.saveSetup": "Save Setup",
   "save-export.editor.recallSetup": "Recall Setup",
   "save-export.editor.setupSlotTarget": "slot {{slot}}",

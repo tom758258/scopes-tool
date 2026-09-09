@@ -554,7 +554,7 @@ export const zhTW = {
   "save-export.editor.saveImage": "儲存影像",
   "save-export.editor.saveWaveform": "儲存波形",
   "save-export.editor.mode.setup": "設定",
-  "save-export.editor.setupNote": "儲存或還原儀器設定。檔案目標為儀器端路徑，不是 PC 檔案上傳。",
+  "save-export.editor.setupNote": "將儀器設定儲存至儀器插槽或儀器端檔案。",
   "save-export.editor.saveSetup": "儲存設定",
   "save-export.editor.recallSetup": "還原設定",
   "save-export.editor.setupSlotTarget": "插槽 {{slot}}",

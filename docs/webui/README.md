@@ -154,15 +154,12 @@ The Command workbench exposes:
   display workspace over `reference-display` for slots 1 and 2, plus a
   separate Reference labels workspace over `reference-label` and the shared
   `display-label` visibility
-- Save / Export: a single workspace with Path / Filename, Image, Waveform,
-  and Setup sections over `save-pwd`, `save-filename`, `save-image-format`,
-  `save-image-palette`, `save-image-ink-saver`, `save-image-factors`,
-  `save-image`, `save-waveform-format`, `save-waveform-length`,
-  `save-waveform`, `setup-save`, and `setup-recall`
-  (`save-waveform-length-max` remains an underlying
-  query-only operation; the WebUI does not query or configure it and only
-  displays the maximum-length-mode limitation; `setup-save` and `setup-recall`
-  remain hidden from the Command Browser and are owned by the workspace)
+- Save / Export: three independent visible commands, Save Image
+  (`save-image`), Save Waveform (`save-waveform`), and Save Setup
+  (`setup-save`), sharing the dedicated Save / Export editor
+  (`editor: save-export`). Low-level save settings stay hidden and are read
+  or applied through the editor; `setup-recall` stays hidden from the Command
+  Browser and is not exposed through the Save Setup UI
 - System: a Diagnostics workspace combining the `doctor` operation, which does
   not change scope configuration but performs one final system-error check,
   and the full `smoke` workflow, plus `check-error`, `system-status-byte`,
