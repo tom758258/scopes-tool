@@ -891,6 +891,7 @@ COMMANDS = (
         "id": "save-image",
         "category": "Save / Export",
         "label": "Save image",
+        "browser_hidden": False,
         "modes": ("live", "simulate"),
         "group": "image",
         "editor": "save-export",
@@ -938,6 +939,7 @@ COMMANDS = (
         "id": "save-waveform",
         "category": "Save / Export",
         "label": "Save waveform",
+        "browser_hidden": False,
         "modes": ("live", "simulate"),
         "group": "waveform",
         "editor": "save-export",
@@ -949,6 +951,7 @@ COMMANDS = (
         "id": "setup-save",
         "category": "Save / Export",
         "label": "Save setup",
+        "browser_hidden": False,
         "modes": ("live", "simulate"),
         "editor": "save-export",
         "fields": (

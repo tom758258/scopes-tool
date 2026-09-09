@@ -180,7 +180,6 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
             { id: "save-waveform", editor: "save-export", category: "Save / Export", label: "Save waveform", group: "waveform", presentation: { kind: "command", action: "save" }, fields: [{ name: "filename", type: "string" }] },
             { id: "setup-save", editor: "save-export", category: "Save / Export", label: "Save setup", presentation: { kind: "command", action: "run" }, fields: [{ name: "target", type: "enum" }, { name: "slot", type: "integer" }, { name: "file", type: "string" }] },
             { id: "setup-recall", editor: "save-export", category: "Save / Export", label: "Recall setup", presentation: { kind: "command", action: "run" }, fields: [{ name: "target", type: "enum" }, { name: "slot", type: "integer" }, { name: "file", type: "string" }] },
-            { id: "save-export", editor: "save-export", category: "Save / Export", label: "Save / Export", presentation_only: true, presentation: { kind: "command", action: "run" }, fields: [] },
           ];
           return {
             commands,
@@ -208,7 +207,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
             isAvailable: () => executionState.available,
             isExecutionBusy: () => executionState.busy,
             contextKey: () => context.value,
-            selectedCommand: () => catalog.commands.find((command) => command.id === "save-export"),
+            selectedCommand: () => catalog.commands.find((command) => command.id === "save-image"),
           };
           return { editor: new globalThis.saveExportApi.SaveExportEditor(new FakeNode("div"), catalog, hooks), submitted, hooks, catalog, context, executionState };
         };
@@ -1256,7 +1255,11 @@ def test_save_export_three_independent_commands_contract() -> None:
         assert.equal(editor.mode, "image");
         assert.ok(editor.modeSelector.hidden || !editor.modeSelector.textContent, "mode selector must be hidden");
         assert.ok(editor.storageNote.className.includes("pc-output-note-box"), "banner must use pc-output-note-box");
-        assert.equal(editor.sectionsHost.children.length, 3, "sectionsHost should have pair + mode + advanced");
+        assert.ok(editor.sectionsHost.children.length >= 3, "sectionsHost must contain pair, preview, mode, and optionally advanced");
+        const previewSection = [...editor.sectionsHost.children].find(
+          (node) => node.tagName === "SECTION" && node.textContent && node.textContent.includes("Destination preview")
+        );
+        assert.ok(previewSection, "destination preview must exist as independent full-width section");
 
         hooks.selectedCommand = () => selectedWaveform;
         editor.rebuildSections("ctx|save-export:waveform");

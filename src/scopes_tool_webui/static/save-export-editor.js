@@ -149,7 +149,9 @@ export class SaveExportEditor {
     const selected = this.selectedDefinition();
     if (selected?.id === "save-waveform") this.mode = "waveform";
     else if (selected?.id === "setup-save") this.mode = "setup";
-    else this.mode = "image";
+    else if (selected?.id === "save-image") this.mode = "image";
+    // For backward compatibility with tests that set mode manually without changing selectedCommand,
+    // do not override when selected command is missing or unrecognized.
   }
 
   hasCurrentSettings() {
@@ -283,6 +285,22 @@ export class SaveExportEditor {
     pairHost.append(this.pathEntry.section, this.filenameEntry.section);
     this.sectionsHost.append(pairHost);
 
+    // Full-width destination preview (independent of filename half-column)
+    if (this.filenameEntry && (this.filenameEntry.preview || this.filenameEntry.form)) {
+      const previewNote = document.createElement("p");
+      previewNote.className = "muted compact-note";
+      previewNote.textContent = translate("save-export.editor.destinationPreviewLabel");
+      const previewSection = document.createElement("section");
+      previewSection.className = "trigger-editor-section";
+      if (!this.destinationPreview) {
+        this.destinationPreview = document.createElement("output");
+        this.destinationPreview.className = "readonly-value";
+        this.destinationPreview.textContent = "";
+      }
+      previewSection.append(previewNote, this.destinationPreview);
+      this.sectionsHost.append(previewSection);
+    }
+
     const modeSection = document.createElement("section");
     modeSection.className = "trigger-editor-section";
     const modeHeading = document.createElement("strong");
@@ -377,8 +395,9 @@ export class SaveExportEditor {
     this.destinationPreview = document.createElement("output");
     this.destinationPreview.className = "readonly-value";
     this.destinationPreview.textContent = "";
-    section.append(heading, formHost, preview, this.destinationPreview);
-    return { section, form };
+    // Preview will be appended separately as full-width section, not inside filename section
+    section.append(heading, formHost);
+    return { section, form, preview, destinationPreview: this.destinationPreview };
   }
 
   buildSetupSection(modeConfig) {

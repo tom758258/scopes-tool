@@ -385,22 +385,17 @@ their existing command, and applying a setting never switches the output on.
 Unsupported commands stay disabled in the Command Browser with the existing
 capability reason.
 
-Selecting Save / Export opens one workspace with Default save location, Image,
-Waveform, and Setup sections. The underlying commands remain available to the
-workspace but are hidden from the Command Browser. Selection is
-presentation-only. Explicit Refresh serially reads every readable setting
-in the Default save location, Image, and Waveform sections without running
-Save Image or Save Waveform
-(`save-waveform-length-max` is not queried; the WebUI only displays the
-maximum-length-mode limitation). Setup has no readback. Entering Setup
-performs no instrument I/O, and Reload instrument settings is unavailable
-in Setup mode. Each setting
-keeps an independent Apply over its existing command, and a successful Apply
-is followed by its existing group readback that preserves unapplied sibling
-edits. The editor shows readback progress and identifies settings whose current
-value could not be read; after a failed read, an operator can retry the
-workspace or enter and apply a new value manually. There is no Apply All,
-merged payload, transaction, or rollback.
+Selecting Save / Export exposes three independent workspace commands:
+Save Image (`save-image`), Save Waveform (`save-waveform`), and Save Setup
+(`setup-save`). Each uses the dedicated Save / Export editor (`editor: save-export`)
+with a fixed mode (image, waveform, or setup), shared instrument-side path,
+per-save filename, independent Apply, full-width destination preview, and
+advanced base filename settings. `setup-recall` remains hidden from the Command
+Browser and is not exposed through this interface. Bottom-level save settings
+(`save-pwd`, `save-image-format`, `save-image-palette`, `save-image-ink-saver`,
+`save-image-factors`, `save-waveform-format`, `save-waveform-length`,
+`save-waveform-length-max`, `save-filename`) stay hidden and are read or applied
+through the editor.
 
 Save Image and Save Waveform each require their own explicit filename and
 submit only their existing instrument-side Save command. They do not inherit

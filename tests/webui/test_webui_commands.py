@@ -522,13 +522,12 @@ def test_setup_save_recall_catalog_and_slot_presentation() -> None:
 
     for command_id, label in (
         ("setup-save", "Save setup"),
-        ("setup-recall", "Recall setup"),
     ):
         entry = commands[command_id]
         assert entry["category"] == "Save / Export"
         assert entry["label"] == label
         assert entry["modes"] == ["live", "simulate"]
-        assert entry["browser_hidden"] is True
+        assert entry["browser_hidden"] is False
         assert entry["editor"] == "save-export"
         assert "group" not in entry
         fields = {field["name"]: field for field in entry["fields"]}
@@ -545,6 +544,13 @@ def test_setup_save_recall_catalog_and_slot_presentation() -> None:
         assert fields["file"]["required_if"] == [{"field": "target", "equals": "file"}]
         for model in entry["presentation"]["models"].values():
             assert "slot" not in model["fields"]
+
+    setup_recall = commands["setup-recall"]
+    assert setup_recall["category"] == "Save / Export"
+    assert setup_recall["label"] == "Recall setup"
+    assert setup_recall["modes"] == ["live", "simulate"]
+    assert setup_recall["browser_hidden"] is True
+    assert setup_recall["editor"] == "save-export"
 
     reference_slot = commands["reference-save"]["presentation"]["models"][MODEL_ID][
         "fields"
@@ -1909,11 +1915,9 @@ def test_commands_expose_reference_and_save_subset() -> None:
         "save-image-palette",
         "save-image-ink-saver",
         "save-image-factors",
-        "save-image",
         "save-waveform-format",
         "save-waveform-length",
         "save-waveform-length-max",
-        "save-waveform",
     }
 
     assert expected <= commands.keys()
@@ -1929,13 +1933,11 @@ def test_commands_expose_reference_and_save_subset() -> None:
     assert commands["reference-labels"]["editor"] == "reference-labels"
     assert commands["reference-labels"]["category"] == "Reference"
     assert commands["reference-labels"]["modes"] == ["live", "simulate"]
-    assert commands["save-export"]["presentation_only"] is True
-    assert commands["save-export"]["editor"] == "save-export"
+    assert commands.get("save-export") is None
     assert expected <= {entry["id"] for entry in commands_module.COMMANDS}
     assert {
         "reference-waveform",
         "reference-labels",
-        "save-export",
     }.isdisjoint(commands_module._COMMAND_BY_ID)
 
     browser_commands = [
@@ -1946,11 +1948,12 @@ def test_commands_expose_reference_and_save_subset() -> None:
         for entry in browser_commands
         if entry["category"] == "Reference"
     ] == ["reference-waveform", "reference-display", "reference-labels"]
-    assert [
+    save_export_visible = [
         entry["id"]
         for entry in browser_commands
         if entry["category"] == "Save / Export"
-    ] == ["save-export"]
+    ]
+    assert save_export_visible == ["save-image", "save-waveform", "setup-save"]
     categories = list(dict.fromkeys(entry["category"] for entry in browser_commands))
     assert categories.index("Capture") < categories.index("Reference")
     assert categories.index("Reference") < categories.index("Save / Export")

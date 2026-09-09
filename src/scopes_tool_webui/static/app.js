@@ -899,20 +899,6 @@ function renderWorkspace() {
       "reference-clear",
     ],
     "reference-labels": ["reference-query", "reference-label", "display-label"],
-    "save-export": [
-      "save-pwd",
-      "save-filename",
-      "save-image-format",
-      "save-image-palette",
-      "save-image-ink-saver",
-      "save-image-factors",
-      "save-image",
-      "save-waveform-format",
-      "save-waveform-length",
-      "save-waveform",
-      "setup-save",
-      "setup-recall",
-    ],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
@@ -1036,7 +1022,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? ["measurement", "reference-display"].includes(editorKind)
+      ? ["measurement", "reference-display", "save-export"].includes(editorKind)
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)

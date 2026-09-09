@@ -530,7 +530,7 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
             "\nfunction captureWorkspaceResult(", 1
         )[0]
     )
-    for selected_id in ("reference-waveform", "reference-labels", "save-export"):
+    for selected_id in ("reference-waveform", "reference-labels", "setup-save"):
         assert f'"{selected_id}"' in render_source
     script = textwrap.dedent(
         r'''
@@ -597,8 +597,8 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
           ]);
           return job;
         };
-        const show = (id, command) => {
-          selected = { id, presentation_only: true };
+        const show = (id, command, presentationOnly = true) => {
+          selected = { id, presentation_only: presentationOnly };
           const job = seed(command);
           rendered.length = 0;
           globalThis.elements.identityWorkspaceContent.replaceChildren();
@@ -610,7 +610,7 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
 
         show("reference-waveform", "reference-query");
         show("reference-labels", "display-label");
-        show("save-export", "save-pwd");
+        show("setup-save", "setup-save", false);
 
         selected = { id: "reference-waveform", presentation_only: true };
         globalThis.state.workspaceResults = new Map();

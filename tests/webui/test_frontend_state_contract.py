@@ -4755,7 +4755,7 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         f'''
         import assert from "node:assert/strict";
         const catalog = {{
-          selected: () => ({{ id: "save-export" }}),
+          selected: () => ({{ id: "setup-save" }}),
         }};
         const elements = {{
           refresh: {{ hidden: false }},
@@ -4878,14 +4878,6 @@ def test_acquisition_control_workspace_latest_result() -> None:
         model = "model-b";
         sandbox.renderWorkspace();
         assert.equal(content.children[0].textContent, "workspace.resultEmpty");
-        selected = { id: "save-export", presentation_only: true };
-        sandbox.renderWorkspace();
-        assert.equal(sandbox.elements.identityWorkspace.hidden, false);
-        {
-          const job = { command: "save-pwd", status: "completed", result: { path: "data" } };
-          sandbox.captureWorkspaceResult(job, sandbox.currentWorkspaceContext("save-pwd"));
-          assert.deepEqual(content.children, [job]);
-        }
         '''
     )
     completed = subprocess.run(
