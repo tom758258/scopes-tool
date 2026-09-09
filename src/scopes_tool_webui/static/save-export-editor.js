@@ -90,7 +90,7 @@ export class SaveExportEditor {
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
     this.refreshButton.className = "secondary trigger-editor-refresh";
-    this.refreshButton.textContent = translate("save-export.editor.reloadSettings");
+    this.refreshButton.textContent = translate("actions.readSettings");
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
@@ -129,7 +129,7 @@ export class SaveExportEditor {
         if (modeKey === this.mode) return;
         this.mode = modeKey;
         this.renderModeButtons();
-        this.scheduleRefresh(false);
+        this.schedulePresentation();
       });
       this.modeSelector.append(button);
       this.modeButtons.push(button);
@@ -140,6 +140,10 @@ export class SaveExportEditor {
   selectedDefinition() {
     const selected = this.hooks.selectedCommand?.();
     return selected?.editor === "save-export" ? selected : null;
+  }
+
+  hasCurrentSettings() {
+    return this.mode === "setup" || this.stateKey === this.currentStateKey();
   }
 
   currentStateKey() {
@@ -158,7 +162,7 @@ export class SaveExportEditor {
 
   schedulePresentation() {
     queueMicrotask(() => {
-      void this.refresh(false, true);
+      void this.refresh(false, false);
     });
   }
 
@@ -236,7 +240,9 @@ export class SaveExportEditor {
   }
 
   rebuildSections(key) {
+    const needsRebuildStateReset = this.renderedKey !== key;
     this.epoch += 1;
+    if (needsRebuildStateReset) this.stateKey = null;
     this.renderedKey = key;
     this.entries = [];
     this.saveButton = null;
@@ -266,6 +272,12 @@ export class SaveExportEditor {
     modeHeading.className = "trigger-editor-heading";
     modeHeading.textContent = translate(modeConfig.labelKey);
     modeSection.append(modeHeading);
+    if (modeConfig.id !== "setup" && !this.hasCurrentSettings()) {
+      const promptNote = document.createElement("p");
+      promptNote.className = "muted compact-note";
+      promptNote.textContent = translate("save-export.editor.readSettingsPrompt");
+      modeSection.append(promptNote);
+    }
     this.sectionsHost.append(modeSection);
 
     for (const commandId of modeConfig.settingIds) {
@@ -554,6 +566,7 @@ export class SaveExportEditor {
   }
 
   async applyAdvancedFilename(entry) {
+    if (this.mode !== "setup" && !this.hasCurrentSettings()) return null;
     if (
       this.busy
       || this.hooks.isExecutionBusy?.()
@@ -630,6 +643,7 @@ export class SaveExportEditor {
 
   async submitCurrentMode(saveCommandId) {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
+    if (this.mode !== "setup" && !this.hasCurrentSettings()) return;
     const executionOrder = [];
     if (this.pathEntry && this.isDirty(this.pathEntry.form)) {
       const pathValues = this.pathEntry.form.values();
@@ -695,7 +709,7 @@ export class SaveExportEditor {
   applyBusyState() {
     const executionBusy = this.hooks.isExecutionBusy?.() || false;
     const available = this.hooks.isAvailable();
-    const disabled = this.busy || executionBusy || !available;
+    const disabled = this.busy || executionBusy || !available || (this.mode !== "setup" && !this.hasCurrentSettings());
     this.refreshButton.disabled = disabled;
     this.modeButtons.forEach((button) => {
       button.disabled = disabled;

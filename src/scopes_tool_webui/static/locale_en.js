@@ -571,7 +571,7 @@ export const en = {
   "save-export.editor.title": "Save / Export",
   "save-export.editor.mode.image": "Image",
   "save-export.editor.mode.waveform": "Waveform data",
-  "save-export.editor.reloadSettings": "Reload instrument settings",
+  "save-export.editor.readSettingsPrompt": "Read the instrument settings before using this function.",
   "save-export.editor.pathHelper": "This is the current instrument-side save location. Example: \\usb\\.",
   "save-export.editor.pathUnavailable": "Could not read the current save location.",
   "save-export.editor.destinationPreviewLabel": "Destination preview",

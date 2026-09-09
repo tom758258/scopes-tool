@@ -544,7 +544,7 @@ export const zhTW = {
   "save-export.editor.title": "儲存 / 匯出",
   "save-export.editor.mode.image": "影像",
   "save-export.editor.mode.waveform": "波形資料",
-  "save-export.editor.reloadSettings": "重新讀取儀器設定",
+  "save-export.editor.readSettingsPrompt": "請先讀取儀器設定後再使用此功能。",
   "save-export.editor.pathHelper": "這是目前儀器端儲存位置範例：\\usb\\。",
   "save-export.editor.pathUnavailable": "無法讀取目前儲存位置。",
   "save-export.editor.destinationPreviewLabel": "儲存目的地預覽",

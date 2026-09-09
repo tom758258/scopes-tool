@@ -86,7 +86,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           "save-export.editor.title": "Save / Export",
           "save-export.editor.mode.image": "Image",
           "save-export.editor.mode.waveform": "Waveform data",
-          "save-export.editor.reloadSettings": "Reload instrument settings",
+          "save-export.editor.readSettingsPrompt": "Read the instrument settings before using this function.",
           "save-export.editor.storageNote": "Instrument-side storage",
           "save-export.editor.pathHelper": "Example: \\usb\\",
           "save-export.editor.pathUnavailable": "Could not read the current save location.",
@@ -263,14 +263,8 @@ def test_save_export_editor_same_mode_click_preserves_state_and_mode_change_read
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.equal(editor.mode, "waveform");
         assert.notEqual(editor.pathEntry, imagePathEntry);
-        assert.deepEqual(submitted.slice(-4).map((entry) => entry.command), [
-          "save-pwd",
-          "save-filename",
-          "save-waveform-format",
-          "save-waveform-length",
-        ]);
-        assert.equal(submitted.length, imageReadCount + 4);
-        assert.ok(!submitted.some((entry) => entry.command === "save-waveform-length-max"));
+        // Mode change does not trigger automatic readback; submitted count unchanged
+        assert.equal(submitted.length, imageReadCount);
         '''
     )
     completed = run_node(script)
@@ -337,6 +331,7 @@ def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
         };
         editor.filenameEntry.form.valuesResult = { filename: "screen" };
 
+        await editor.refresh(false, true);
         await editor.submitCurrentMode("save-image");
         assert.deepEqual(submitted.map((entry) => entry.command), ["save-image"]);
         '''
@@ -363,6 +358,7 @@ def test_save_export_editor_submits_image_settings_then_final_image_save() -> No
         editor.advancedEntry.form.valuesResult = { action: "set", name: "instrument_default" };
         editor.advancedEntry.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
 
+        await editor.refresh(false, true);
         await editor.submitCurrentMode("save-image");
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-pwd",
@@ -404,6 +400,7 @@ def test_save_export_editor_submits_waveform_settings_then_final_waveform_save()
         editor.advancedEntry.form.valuesResult = { action: "set", name: "instrument_default" };
         editor.advancedEntry.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
 
+        await editor.refresh(false, true);
         await editor.submitCurrentMode("save-waveform");
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "save-pwd",
@@ -698,6 +695,7 @@ def test_save_export_editor_invalidates_loaded_state_when_format_resync_becomes_
 
         const saveStart = submitted.length;
         editor.filenameEntry.form.valuesResult = { filename: "screen.bmp" };
+        await editor.refresh(false, true);
         await editor.submitCurrentMode("save-image");
         const saveCommands = submitted.slice(saveStart);
         assert.deepEqual(saveCommands.map((entry) => entry.command), ["save-image"]);
@@ -759,6 +757,7 @@ def test_save_export_editor_keeps_successful_save_when_format_resync_fails() -> 
 
         const saveStart = submitted.length;
         editor.filenameEntry.form.valuesResult = { filename: "screen.bmp" };
+        await editor.refresh(false, true);
         await editor.submitCurrentMode("save-image");
         const saveCommands = submitted.slice(saveStart);
         assert.deepEqual(saveCommands.map((entry) => entry.command), [
@@ -793,23 +792,18 @@ def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy()
         editor.schedulePresentation();
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.equal(submitted.length, 0);
-        assert.equal(editor.pendingRefresh, true);
-        assert.equal(editor.pendingRefreshForce, false);
+        assert.equal(editor.pendingPresentation, true);
+        assert.equal(editor.pendingRefresh, false);
 
         context.value = "changed-context";
         executionState.busy = false;
         editor.applyBusyState();
         await new Promise((resolve) => setTimeout(resolve, 0));
-        assert.deepEqual(submitted.map((entry) => entry.command), [
-          "save-pwd",
-          "save-filename",
-          "save-image-format",
-          "save-image-palette",
-          "save-image-ink-saver",
-          "save-image-factors",
-        ]);
-        assert.equal(editor.stateKey, "changed-context|save-export:image");
-        const firstReadCount = submitted.length;
+        // schedulePresentation() is presentation-only; does not trigger readback
+        assert.equal(submitted.length, 0);
+        assert.equal(editor.pendingPresentation, false);
+        assert.equal(editor.stateKey, null);
+        const firstReadCount = 0;
 
         editor.applyBusyState();
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -833,7 +827,15 @@ def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy()
         executionState.available = true;
         editor.applyBusyState();
         await new Promise((resolve) => setTimeout(resolve, 0));
-        assert.equal(submitted.length, firstReadCount * 2);
+        // After forced refresh completes, read commands should be submitted once
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-pwd",
+          "save-filename",
+          "save-image-format",
+          "save-image-palette",
+          "save-image-ink-saver",
+          "save-image-factors",
+        ]);
         '''
     )
     completed = run_node(script)
@@ -852,10 +854,12 @@ def test_save_export_editor_applies_advanced_filename_only_when_requested() -> N
         advanced.form.valuesResult = { action: "set", name: "instrument_default" };
         advanced.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
 
+        await editor.refresh(false, true);
         await editor.submitCurrentMode("save-image");
         assert.deepEqual(submitted.map((entry) => entry.command), ["save-image"]);
 
         await advanced.form.onDirty();
+        await editor.refresh(false, true);
         await editor.applyAdvancedFilename(advanced);
         assert.deepEqual(submitted.map((entry) => entry.command), ["save-image", "save-filename"]);
         assert.deepEqual(submitted[1].parameters, { action: "set", name: "instrument_default" });
@@ -883,7 +887,8 @@ def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> 
         advanced.form.valuesResult = { action: "set", name: "keep_me" };
         advanced.form.container._fieldNodes = [dirtyField];
 
-        const job = await editor.applyAdvancedFilename(advanced);
+        const job = await editor.refresh(false, true);
+        await editor.applyAdvancedFilename(advanced);
         assert.equal(job.status, "failed");
         assert.deepEqual(submitted.map((entry) => entry.command), ["save-filename"]);
         assert.equal(advanced.form.clearedDirty, 0);
@@ -900,6 +905,9 @@ def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -
         r'''
         const { editor, executionState } = buildEditor();
         editor.rebuildSections("ctx|save-export:image");
+        // Before reading settings, save button is disabled (read-first behavior)
+        assert.equal(editor.saveButton.disabled, true);
+        await editor.refresh(false, true);
         assert.equal(editor.saveButton.disabled, false);
 
         editor.busy = true;
@@ -942,6 +950,7 @@ def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> No
         format.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
         editor.filenameEntry.form.valuesResult = { filename: "screen" };
 
+        await editor.refresh(false, true);
         await editor.submitCurrentMode("save-image");
         assert.deepEqual(submitted.map((entry) => entry.command), ["save-pwd", "save-image-format"]);
         '''
