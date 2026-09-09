@@ -191,8 +191,9 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           };
         };
 
-        const buildEditor = (execute = null) => {
+        const buildEditor = (execute = null, supported = null) => {
           const catalog = makeCatalog();
+          if (supported) catalog.supported = supported;
           const submitted = [];
           const context = { value: "ctx" };
           const executionState = { busy: false, available: true };
@@ -1249,3 +1250,91 @@ def test_save_export_three_independent_commands_contract() -> None:
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_pairs_settings_before_destination() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const isPair = (node) => (node.className || "").split(/\s+/).includes("save-export-pair");
+        const entryIdsOf = (editor, pair) => pair.children.map(
+          (child) => editor.entries.find((entry) => entry.section === child)?.id,
+        );
+
+        const waveformBuilt = buildEditor();
+        waveformBuilt.selectCommand("save-waveform");
+        const waveformEditor = waveformBuilt.editor;
+        waveformEditor.rebuildSections("ctx|save-export:waveform");
+        assert.deepEqual(waveformEditor.entries.map((entry) => entry.id), [
+          "save-waveform-format",
+          "save-waveform-length",
+        ]);
+        const waveformKids = [...waveformEditor.sectionsHost.children];
+        const waveformPairs = waveformKids.filter(isPair);
+        assert.equal(waveformPairs.length, 2);
+        assert.deepEqual(entryIdsOf(waveformEditor, waveformPairs[0]), [
+          "save-waveform-format",
+          "save-waveform-length",
+        ]);
+        assert.ok(waveformPairs[1].children.includes(waveformEditor.pathEntry.section));
+        assert.ok(waveformPairs[1].children.includes(waveformEditor.filenameEntry.section));
+        const waveformPreview = waveformKids.find(
+          (node) => node.tagName === "SECTION" && node.textContent && node.textContent.includes("Destination preview")
+        );
+        const waveformSaveHost = waveformKids.find((node) => (node.children || []).includes(waveformEditor.saveButton));
+        assert.ok(waveformKids.indexOf(waveformPairs[0]) < waveformKids.indexOf(waveformPairs[1]));
+        assert.ok(waveformKids.indexOf(waveformPairs[1]) < waveformKids.indexOf(waveformPreview));
+        assert.ok(waveformKids.indexOf(waveformPreview) < waveformKids.indexOf(waveformSaveHost));
+
+        const imageBuilt = buildEditor();
+        imageBuilt.selectCommand("save-image");
+        const imageEditor = imageBuilt.editor;
+        imageEditor.rebuildSections("ctx|save-export:image");
+        const imagePairs = [...imageEditor.sectionsHost.children].filter(isPair);
+        assert.equal(imagePairs.length, 3);
+        assert.deepEqual(entryIdsOf(imageEditor, imagePairs[0]), ["save-image-format", "save-image-palette"]);
+        assert.deepEqual(entryIdsOf(imageEditor, imagePairs[1]), ["save-image-ink-saver", "save-image-factors"]);
+
+        const gatedBuilt = buildEditor(null, (command) => command.id !== "save-image-palette");
+        gatedBuilt.selectCommand("save-image");
+        const gatedEditor = gatedBuilt.editor;
+        gatedEditor.rebuildSections("ctx|save-export:image");
+        assert.deepEqual(gatedEditor.entries.map((entry) => entry.id), [
+          "save-image-format",
+          "save-image-ink-saver",
+          "save-image-factors",
+        ]);
+        const gatedPairs = [...gatedEditor.sectionsHost.children].filter(isPair);
+        assert.equal(gatedPairs.length, 3);
+        assert.deepEqual(entryIdsOf(gatedEditor, gatedPairs[0]), ["save-image-format"]);
+        assert.ok(gatedPairs[0].className.split(/\s+/).includes("save-export-pair-single"));
+        assert.deepEqual(entryIdsOf(gatedEditor, gatedPairs[1]), ["save-image-ink-saver", "save-image-factors"]);
+        assert.ok(!gatedPairs[1].className.split(/\s+/).includes("save-export-pair-single"));
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_save_export_pair_layout_contract() -> None:
+    css = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
+    assert ".save-export-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));" in css
+    assert ".save-export-pair > .trigger-editor-section .command-form { grid-template-columns: 1fr; }" in css
+    assert ".save-export-pair-single > .trigger-editor-section { grid-column: 1 / -1; }" in css
+    mobile = css.split("@media (max-width: 700px)", 1)[1]
+    assert ".save-export-pair { grid-template-columns: 1fr; }" in mobile
+
+
+def test_save_setup_file_and_waveform_length_locale_contract() -> None:
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    assert '"field.setup.file": "Instrument file path"' in english
+    assert '"field.setup.file": "儀器端檔案路徑"' in chinese
+    english_length_help = next(
+        line for line in english.splitlines() if '"help.save-waveform-length.points":' in line
+    )
+    chinese_length_help = next(
+        line for line in chinese.splitlines() if '"help.save-waveform-length.points":' in line
+    )
+    assert "100" in english_length_help and "maximum" in english_length_help
+    assert "100" in chinese_length_help and "最大" in chinese_length_help

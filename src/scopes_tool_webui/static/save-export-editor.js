@@ -278,6 +278,47 @@ export class SaveExportEditor {
     }
     this.pathEntry = this.buildSharedPathForm();
     this.filenameEntry = this.buildModeFilenameForm(modeConfig.saveCommandId);
+
+    // Settings first: fixed semantic pairs. Each pair keeps its own
+    // supported() gating; a lone supported setting spans the full row.
+    const settingsSection = document.createElement("section");
+    settingsSection.className = "trigger-editor-section";
+    const settingsHeading = document.createElement("strong");
+    settingsHeading.className = "trigger-editor-heading";
+    settingsHeading.textContent = translate(modeConfig.labelKey);
+    settingsSection.append(settingsHeading);
+    this.readSettingsPrompt = document.createElement("p");
+    this.readSettingsPrompt.className = "muted compact-note";
+    this.readSettingsPrompt.textContent = translate("save-export.editor.readSettingsPrompt");
+    this.readSettingsPrompt.hidden = this.hasCurrentSettings();
+    settingsSection.append(this.readSettingsPrompt);
+    this.sectionsHost.append(settingsSection);
+
+    const settingPairs = modeConfig.id === "image"
+      ? [["save-image-format", "save-image-palette"], ["save-image-ink-saver", "save-image-factors"]]
+      : [["save-waveform-format", "save-waveform-length"]];
+    for (const pair of settingPairs) {
+      const settingsPair = document.createElement("div");
+      settingsPair.className = "save-export-pair";
+      let rendered = 0;
+      for (const commandId of pair) {
+        const command = this.commandForId(commandId);
+        if (!command || !this.catalog.supported(command)) continue;
+        this.entries.push(this.buildSettingEntry(command, settingsPair));
+        rendered += 1;
+      }
+      if (rendered === 1) settingsPair.classList.add("save-export-pair-single");
+      if (rendered > 0) this.sectionsHost.append(settingsPair);
+    }
+
+    if (modeConfig.id === "waveform") {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = translate("save-export.editor.waveformLengthMaxNote");
+      this.sectionsHost.append(note);
+    }
+
+    // Destination second.
     const pairHost = document.createElement("div");
     pairHost.className = "save-export-pair";
     pairHost.append(this.pathEntry.section, this.filenameEntry.section);
@@ -299,33 +340,9 @@ export class SaveExportEditor {
       this.sectionsHost.append(previewSection);
     }
 
-    const modeSection = document.createElement("section");
-    modeSection.className = "trigger-editor-section";
-    const modeHeading = document.createElement("strong");
-    modeHeading.className = "trigger-editor-heading";
-    modeHeading.textContent = translate(modeConfig.labelKey);
-    modeSection.append(modeHeading);
-    this.readSettingsPrompt = document.createElement("p");
-    this.readSettingsPrompt.className = "muted compact-note";
-    this.readSettingsPrompt.textContent = translate("save-export.editor.readSettingsPrompt");
-    this.readSettingsPrompt.hidden = this.hasCurrentSettings();
-    modeSection.append(this.readSettingsPrompt);
-    this.sectionsHost.append(modeSection);
-
-    for (const commandId of modeConfig.settingIds) {
-      const command = this.commandForId(commandId);
-      if (!command || !this.catalog.supported(command)) continue;
-      const entry = this.buildSettingEntry(command, modeSection);
-      this.entries.push(entry);
-    }
-
-    if (modeConfig.id === "waveform") {
-      const note = document.createElement("p");
-      note.className = "muted compact-note";
-      note.textContent = translate("save-export.editor.waveformLengthMaxNote");
-      modeSection.append(note);
-    }
-
+    // Save action last (before advanced settings).
+    const actionSection = document.createElement("section");
+    actionSection.className = "trigger-editor-section";
     this.saveButton = document.createElement("button");
     this.saveButton.type = "button";
     this.saveButton.className = "primary trigger-editor-action";
@@ -335,7 +352,8 @@ export class SaveExportEditor {
     this.saveButton.addEventListener("click", () => {
       void this.submitCurrentMode(modeConfig.saveCommandId);
     });
-    modeSection.append(this.saveButton);
+    actionSection.append(this.saveButton);
+    this.sectionsHost.append(actionSection);
 
     const advanced = document.createElement("details");
     advanced.className = "trigger-editor-details";
