@@ -400,7 +400,7 @@ requires its own explicit filename and submits only its existing
 instrument-side Save command. They do not inherit
 or update `save-filename`; the editor makes this filename separation explicit.
 They do not add filename extensions, refresh unrelated settings, or create
-WebUI download artifacts. Screenshot and Capture remain separate host-side
+local output files on the host computer. Screenshot and Capture remain separate host-side
 retrieval paths that register downloadable artifacts. The Basic Controls PC
 output folder does not change `save-pwd`, `save-filename`, or any other
 instrument-side `:SAVE:*` behavior.

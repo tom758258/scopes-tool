@@ -20,7 +20,7 @@ def test_health_identity_and_root_static_serving() -> None:
 
     root = client.get("/")
     assert root.status_code == 200
-    assert "Scopes Tool WebUI" in root.text
+    assert '<title data-i18n="page.title">' in root.text
     assert "text/html" in root.headers["content-type"]
 
     stylesheet = client.get("/static/styles.css")

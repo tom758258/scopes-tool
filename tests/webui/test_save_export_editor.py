@@ -1317,7 +1317,7 @@ def test_save_export_editor_pairs_settings_before_destination() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_save_export_editor_renders_description_after_form() -> None:
+def test_save_export_editor_setting_sections_have_no_duplicate_description() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         const built = buildEditor();
@@ -1328,19 +1328,17 @@ def test_save_export_editor_renders_description_after_form() -> None:
         for (const entry of editor.entries) {
           const kids = [...entry.section.children];
           assert.equal(kids[0].tagName, "STRONG");
-          const formIdx = kids.findIndex((node) => node.className === "command-form");
-          const noteIdx = kids.findIndex((node) => node.tagName === "P");
-          assert.ok(formIdx >= 0 && noteIdx >= 0 && formIdx < noteIdx, entry.id);
+          assert.ok(kids.some((node) => node.className === "command-form"), entry.id);
+          assert.ok(!kids.some((node) => node.tagName === "P"), entry.id);
         }
 
         built.selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
         const formatEntry = editor.entries.find((entry) => entry.id === "save-image-format");
         const formatKids = [...formatEntry.section.children];
-        assert.ok(
-          formatKids.findIndex((node) => node.className === "command-form")
-          < formatKids.findIndex((node) => node.tagName === "P")
-        );
+        assert.equal(formatKids[0].tagName, "STRONG");
+        assert.ok(formatKids.some((node) => node.className === "command-form"));
+        assert.ok(!formatKids.some((node) => node.tagName === "P"));
         '''
     )
     completed = run_node(script)

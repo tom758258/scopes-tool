@@ -68,3 +68,43 @@ def test_result_field_labels_localized() -> None:
     for field in RESULT_FIELDS:
         assert f'"results.field.{field}":' in english or f'"field.{field}":' in english, field
         assert f'"results.field.{field}":' in chinese or f'"field.{field}":' in chinese, field
+
+
+def _locale_value(source: str, key: str) -> str:
+    match = re.search(rf'"{re.escape(key)}"\s*:\s*"(.*?)(?<!\\)"', source)
+    assert match is not None, f"missing {key}"
+    return match.group(1)
+
+
+def test_tool_neutral_user_facing_copy() -> None:
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "WebUI" not in _locale_value(english, "page.title")
+    assert "WebUI" not in _locale_value(chinese, "page.title")
+    assert _locale_value(english, "live_data.webui_state") == "Tool State"
+    assert _locale_value(chinese, "live_data.webui_state") == "工具狀態"
+
+    english_pc_help = _locale_value(english, "pcOutput.helper")
+    chinese_pc_help = _locale_value(chinese, "pcOutput.helper")
+    assert "WebUI" not in english_pc_help
+    assert "WebUI" not in chinese_pc_help
+    assert "this tool" in english_pc_help
+    assert "本工具" in chinese_pc_help
+
+    assert "WebUI" not in _locale_value(english, "save-export.editor.baseFilenameHelp")
+    assert "WebUI" not in _locale_value(chinese, "save-export.editor.baseFilenameHelp")
+    assert "WebUI" not in _locale_value(english, "help.measurement-statistics.display-enabled")
+    assert "WebUI" not in _locale_value(chinese, "help.measurement-statistics.display-enabled")
+
+    english_storage = _locale_value(english, "save-export.editor.storageNote")
+    chinese_storage = _locale_value(chinese, "save-export.editor.storageNote")
+    assert "WebUI" not in english_storage
+    assert "WebUI" not in chinese_storage
+    assert "local" in english_storage
+    assert "本機" in chinese_storage
+
+    assert '<title data-i18n="page.title">Scopes Tool</title>' in html
+    assert '<span data-i18n="live_data.webui_state">Tool State</span>' in html
+    assert '<p class="compact-note" data-i18n="pcOutput.helper">This is the only PC-side output location setting in this tool.' in html

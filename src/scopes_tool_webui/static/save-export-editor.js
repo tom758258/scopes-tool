@@ -485,15 +485,6 @@ export class SaveExportEditor {
     const form = new CommandForm(formHost, this.catalog);
     form.render(command, { onDirty: () => this.updateDestinationPreview() });
     section.append(formHost);
-    // Description after the form: its line count must never push the
-    // label/control of this or the paired column down.
-    const description = this.catalog.description?.(command);
-    if (description) {
-      const note = document.createElement("p");
-      note.className = "muted compact-note";
-      note.textContent = description;
-      section.append(note);
-    }
     container.append(section);
     return { id: command.id, form, kind: "setting", section };
   }
