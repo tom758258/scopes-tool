@@ -1930,9 +1930,11 @@ def test_commands_expose_reference_and_save_subset() -> None:
     assert commands["save-export"]["presentation_only"] is True
     assert commands["save-export"]["editor"] == "save-export"
     assert expected <= {entry["id"] for entry in commands_module.COMMANDS}
-    assert {"reference-waveform", "save-export"}.isdisjoint(
-        commands_module._COMMAND_BY_ID
-    )
+    assert {
+        "reference-waveform",
+        "reference-labels",
+        "save-export",
+    }.isdisjoint(commands_module._COMMAND_BY_ID)
 
     browser_commands = [
         entry for entry in response.json() if not entry.get("browser_hidden")

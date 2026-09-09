@@ -149,12 +149,10 @@ The Command workbench exposes:
   backend helper remains available to existing API clients but is not shown in
   the normal workbench.
 - Capture: `screenshot`, `capture`
-- Diagnostics: one Diagnostics editor for the `doctor` operation, which does
-  not change scope configuration but performs one final system-error check,
-  and the full `smoke` workflow
-- Reference: a single Reference waveform workspace over `reference-save`,
-  `reference-display`, `reference-label`, `reference-clear`, and
-  `reference-query`
+- Reference: a Reference waveform workspace over `reference-save`,
+  `reference-display`, `reference-clear`, and `reference-query`, plus a
+  separate Reference labels workspace over `reference-label` and the shared
+  `display-label` visibility
 - Save / Export: a single workspace with Path / Filename, Image, Waveform,
   and Setup sections over `save-pwd`, `save-filename`, `save-image-format`,
   `save-image-palette`, `save-image-ink-saver`, `save-image-factors`,
@@ -164,7 +162,10 @@ The Command workbench exposes:
   query-only operation; the WebUI does not query or configure it and only
   displays the maximum-length-mode limitation; `setup-save` and `setup-recall`
   remain hidden from the Command Browser and are owned by the workspace)
-- System: `check-error`, `system-status-byte`, `system-operation-status`,
+- System: a Diagnostics workspace combining the `doctor` operation, which does
+  not change scope configuration but performs one final system-error check,
+  and the full `smoke` workflow, plus `check-error`, `system-status-byte`,
+  `system-operation-status`,
   `system-clear-status`, `system-opc`, `system-standard-event`,
   `system-options`
 - DVM: `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`,
@@ -222,16 +223,24 @@ Grouping is presentation only: it does not change Core command semantics,
 model or capability gating, or the metadata-driven forms. Dedicated editors
 use the existing groups where described below.
 
-Selecting Reference waveform opens one workspace for saving and comparing a
-source channel with a selected reference waveform. Save and display runs the
+Selecting Reference waveform opens one workspace for saving and controlling
+the selected reference waveform. Save and display runs the
 existing `reference-save` command, then `reference-display` only after the save
-completes, and finally refreshes display and label state with `reference-query`.
+completes, and finally refreshes the selected reference waveform state with
+`reference-query`. `reference-query` continues to return the selected
+waveform's display and label state; the Reference waveform workspace uses
+that readback for its waveform controls.
 The shared reference waveform selector is visible before Live identity is
 available and is then limited by the detected model's projected capabilities.
-Selection is passive; Read reference state reads display and label state for
-the selected waveform and the shared label visibility through `display-label`.
-Reference waveform display, label text, and Clear remain independent actions.
-Channel label and Reference also offer a shared Label visibility control with
+Selection is passive; Read reference state reads the selected waveform state.
+Reference waveform display and Clear remain independent actions.
+
+Selecting Reference labels opens the separate label workspace. It uses the
+selected reference slot for `reference-label` and reads the current reference
+state through `reference-query`. Shared instrument label visibility is read
+and applied through `display-label`. That visibility setting is
+instrument-wide and is not specific to Reference 1 or Reference 2.
+Channel label also offers the shared Label visibility control with
 explicit Apply using the existing `display-label` query/set readback; reading
 follows the workspace top Read action. This instrument-wide setting remains
 available under Display.
