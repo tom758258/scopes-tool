@@ -135,9 +135,11 @@ def test_reference_display_editor_shows_two_slots_with_shared_actions() -> None:
 def test_reference_display_editor_follows_projected_slots() -> None:
     run_harness(
         r'''
+        const baseCommand = { id: "reference-display", fields: [{ name: "slot", options: [1, 2] }] };
         const singleCatalog = {
-          commands: [{ id: "reference-display", fields: [{ name: "slot", options: [1] }] }],
-          fieldsFor: (command) => command.fields || [],
+          commands: [baseCommand],
+          fieldsFor: (command) => (command.fields || []).map((field) =>
+            field.name === "slot" ? { ...field, options: [1] } : field),
           optionsFor: (field) => field.options || [],
         };
         const singleEditor = new ReferenceDisplayEditor(new FakeNode(), singleCatalog, hooks);
