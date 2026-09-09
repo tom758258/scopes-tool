@@ -150,8 +150,6 @@ export class SaveExportEditor {
     if (selected?.id === "save-waveform") this.mode = "waveform";
     else if (selected?.id === "setup-save") this.mode = "setup";
     else if (selected?.id === "save-image") this.mode = "image";
-    // For backward compatibility with tests that set mode manually without changing selectedCommand,
-    // do not override when selected command is missing or unrecognized.
   }
 
   hasCurrentSettings() {
@@ -286,7 +284,7 @@ export class SaveExportEditor {
     this.sectionsHost.append(pairHost);
 
     // Full-width destination preview (independent of filename half-column)
-    if (this.filenameEntry && (this.filenameEntry.preview || this.filenameEntry.form)) {
+    if (this.filenameEntry?.form) {
       const previewNote = document.createElement("p");
       previewNote.className = "muted compact-note";
       previewNote.textContent = translate("save-export.editor.destinationPreviewLabel");
@@ -389,15 +387,12 @@ export class SaveExportEditor {
     const command = this.commandForId(saveCommandId);
     const form = new CommandForm(formHost, this.catalog);
     form.render(command, { onDirty: () => this.updateDestinationPreview() });
-    const preview = document.createElement("p");
-    preview.className = "muted compact-note";
-    preview.textContent = translate("save-export.editor.destinationPreviewLabel");
     this.destinationPreview = document.createElement("output");
     this.destinationPreview.className = "readonly-value";
     this.destinationPreview.textContent = "";
     // Preview will be appended separately as full-width section, not inside filename section
     section.append(heading, formHost);
-    return { section, form, preview, destinationPreview: this.destinationPreview };
+    return { section, form, destinationPreview: this.destinationPreview };
   }
 
   buildSetupSection(modeConfig) {

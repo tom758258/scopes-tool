@@ -2907,8 +2907,6 @@ def test_command_catalog_group_metadata_contract() -> None:
         "serial-lister-display": "lister",
         "serial-lister-export": "lister",
         "save-pwd": "path-filename",
-        "save-image": "image",
-        "save-waveform": "waveform",
         "capture-batch": "capture",
         "measure-log": "measurement",
         "measure-until": "measurement",
@@ -2919,7 +2917,7 @@ def test_command_catalog_group_metadata_contract() -> None:
     for command_id, group in expected_groups.items():
         assert commands[command_id]["group"] == group, command_id
 
-    for command_id in ("acquisition", "screenshot"):
+    for command_id in ("acquisition", "screenshot", "save-image", "save-waveform", "setup-save"):
         assert "group" not in commands[command_id], command_id
 
 

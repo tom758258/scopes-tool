@@ -893,7 +893,6 @@ COMMANDS = (
         "label": "Save image",
         "browser_hidden": False,
         "modes": ("live", "simulate"),
-        "group": "image",
         "editor": "save-export",
         "fields": (
             {"name": "filename", "type": "string", "required": True, "label_key": "save-image.filename", "help_key": "save-image.filename"},
@@ -941,7 +940,6 @@ COMMANDS = (
         "label": "Save waveform",
         "browser_hidden": False,
         "modes": ("live", "simulate"),
-        "group": "waveform",
         "editor": "save-export",
         "fields": (
             {"name": "filename", "type": "string", "required": True, "label_key": "save-waveform.filename", "help_key": "save-waveform.filename"},

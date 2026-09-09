@@ -196,6 +196,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
           const submitted = [];
           const context = { value: "ctx" };
           const executionState = { busy: false, available: true };
+          let selectedId = "save-image";
           const hooks = {
               executeCommand: async (command, parameters, options) => {
               const job = execute
@@ -207,9 +208,14 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
             isAvailable: () => executionState.available,
             isExecutionBusy: () => executionState.busy,
             contextKey: () => context.value,
-            selectedCommand: () => catalog.commands.find((command) => command.id === "save-image"),
+            selectedCommand: () => catalog.commands.find((command) => command.id === selectedId) || null,
           };
-          return { editor: new globalThis.saveExportApi.SaveExportEditor(new FakeNode("div"), catalog, hooks), submitted, hooks, catalog, context, executionState };
+          const editor = new globalThis.saveExportApi.SaveExportEditor(new FakeNode("div"), catalog, hooks);
+          const selectCommand = (id) => {
+            selectedId = id;
+            editor.updateModeFromSelection();
+          };
+          return { editor, submitted, hooks, catalog, context, executionState, selectCommand };
         };
 '''
 
@@ -218,8 +224,8 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
 def test_save_export_editor_shows_only_the_selected_mode() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor } = buildEditor();
-        editor.mode = "image";
+        const { editor, selectCommand } = buildEditor();
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
           "save-image-format",
@@ -230,7 +236,7 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
         assert.ok(!editor.entries.some((entry) => entry.id.startsWith("save-waveform")));
         assert.ok(editor.entries.every((entry) => entry.form.container.className === "command-form"));
 
-        editor.mode = "waveform";
+        selectCommand("save-waveform");
         editor.rebuildSections("ctx|save-export:waveform");
         assert.deepEqual(editor.entries.map((entry) => entry.id), [
           "save-waveform-format",
@@ -248,7 +254,7 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
 def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor();
+        const { editor, submitted, selectCommand } = buildEditor();
         await editor.refresh(false, false);
         assert.equal(submitted.length, 0);
         assert.ok(!editor.hasCurrentSettings());
@@ -277,13 +283,13 @@ def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
         const imagePathEntry = editor.pathEntry;
         const imageReadCount = submitted.length;
 
-        editor.modeButtons[0].dispatch("click");
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        selectCommand("save-image");
+        await editor.refresh(false, false);
         assert.equal(editor.pathEntry, imagePathEntry);
         assert.equal(submitted.length, imageReadCount);
 
-        editor.modeButtons[1].dispatch("click");
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        selectCommand("save-waveform");
+        await editor.refresh(false, false);
         assert.equal(editor.mode, "waveform");
         assert.notEqual(editor.pathEntry, imagePathEntry);
         assert.equal(submitted.length, imageReadCount);
@@ -303,8 +309,8 @@ def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
 def test_save_export_editor_reads_and_displays_the_current_save_path() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor } = buildEditor();
-        editor.mode = "image";
+        const { editor, selectCommand } = buildEditor();
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
 
         editor.pathEntry.form.queryValuesResult = { path: "\\usb\\" };
@@ -402,8 +408,8 @@ def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
 def test_save_export_editor_submits_image_settings_then_final_image_save() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor();
-        editor.mode = "image";
+        const { editor, submitted, selectCommand } = buildEditor();
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
 
         editor.pathEntry.form.valuesResult = { action: "set", path: "\\usb\\" };
@@ -443,8 +449,8 @@ def test_save_export_editor_submits_image_settings_then_final_image_save() -> No
 def test_save_export_editor_submits_waveform_settings_then_final_waveform_save() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor();
-        editor.mode = "waveform";
+        const { editor, submitted, selectCommand } = buildEditor();
+        selectCommand("save-waveform");
         editor.rebuildSections("ctx|save-export:waveform");
 
         editor.pathEntry.form.valuesResult = { action: "set", path: "\\usb\\" };
@@ -488,8 +494,8 @@ def test_save_export_editor_submits_waveform_settings_then_final_waveform_save()
 def test_save_export_editor_keeps_default_base_filename_in_advanced_settings() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor } = buildEditor();
-        editor.mode = "image";
+        const { editor, selectCommand } = buildEditor();
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
         const mainText = editor.sectionsHost.textContent || "";
         assert.ok(!mainText.includes("Default base filename"));
@@ -507,7 +513,7 @@ def test_save_export_editor_keeps_default_base_filename_in_advanced_settings() -
 def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context_change() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted, context } = buildEditor((command) => ({
+        const { editor, submitted, context, selectCommand } = buildEditor((command) => ({
           status: "completed",
           job_id: command,
           result: { result: {} },
@@ -533,7 +539,7 @@ def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context
         await editor.refresh(false, true);
         assert.equal(submitted.length, firstReadCount * 2);
 
-        editor.mode = "waveform";
+        selectCommand("save-waveform");
         await editor.refresh(false, true);
         assert.deepEqual(submitted.slice(-4).map((entry) => entry.command), [
           "save-pwd",
@@ -578,7 +584,7 @@ def test_save_export_editor_retries_an_interrupted_read_without_premarking_loade
         ]);
         assert.equal(editor.stateKey, null);
 
-        hooks.selectedCommand = () => catalog.commands.find((command) => command.id === "save-export");
+        hooks.selectedCommand = () => catalog.commands.find((command) => command.id === "save-image");
         const interruptedCount = submitted.length;
         await editor.refresh(false, true);
         assert.equal(submitted.length, interruptedCount + 6);
@@ -626,7 +632,7 @@ def test_save_export_editor_invalidates_loaded_state_before_interrupted_forced_r
         ]);
         assert.equal(editor.stateKey, null);
 
-        hooks.selectedCommand = () => catalog.commands.find((command) => command.id === "save-export");
+        hooks.selectedCommand = () => catalog.commands.find((command) => command.id === "save-image");
         const retryStart = submitted.length;
         await editor.refresh(false, true);
         assert.deepEqual(submitted.slice(retryStart).map((entry) => entry.command), [
@@ -695,7 +701,7 @@ def test_save_export_editor_resyncs_format_after_explicit_image_and_waveform_ext
           return { status: "completed", job_id: command, result: { result: {} } };
         });
         const waveformEditor = waveformBuilt.editor;
-        waveformEditor.mode = "waveform";
+        waveformBuilt.selectCommand("save-waveform");
         waveformEditor.rebuildSections("ctx|save-export:waveform");
         const waveformFormat = waveformEditor.entries.find((entry) => entry.id === "save-waveform-format");
         waveformFormat.form.syncResult = function (job, preserveDirty) {
@@ -766,7 +772,7 @@ def test_save_export_editor_invalidates_loaded_state_when_format_resync_becomes_
         assert.equal(editor.stateKey, null);
         assert.ok(!editor.readStatus.textContent.startsWith("failed:"));
 
-        hooks.selectedCommand = () => catalog.commands.find((command) => command.id === "save-export");
+        hooks.selectedCommand = () => catalog.commands.find((command) => command.id === "save-image");
         const retryStart = submitted.length;
         await editor.refresh(false, true);
         assert.deepEqual(submitted.slice(retryStart).map((entry) => entry.command), [
@@ -907,8 +913,8 @@ def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy()
 def test_save_export_editor_applies_advanced_filename_only_when_requested() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor();
-        editor.mode = "image";
+        const { editor, submitted, selectCommand } = buildEditor();
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
         const advanced = editor.advancedEntry;
         assert.ok(advanced.form.command.fields.some((field) => field.name === "action"));
@@ -940,11 +946,11 @@ def test_save_export_editor_applies_advanced_filename_only_when_requested() -> N
 def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor((command, parameters, options) => ({
+        const { editor, submitted, selectCommand } = buildEditor((command, parameters, options) => ({
           status: command === "save-filename" && options?.intent === "apply" ? "failed" : "completed",
           job_id: command,
         }));
-        editor.mode = "image";
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
         const advanced = editor.advancedEntry;
         const dirtyField = { dataset: { dirty: "true" } };
@@ -1003,11 +1009,11 @@ def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -
 def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor((command, parameters, options) => ({
+        const { editor, submitted, selectCommand } = buildEditor((command, parameters, options) => ({
           status: command === "save-image-format" && options?.intent === "apply" ? "failed" : "completed",
           job_id: command,
         }));
-        editor.mode = "image";
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
         editor.pathEntry.form.valuesResult = { action: "set", path: "\\usb\\" };
         editor.pathEntry.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
@@ -1031,8 +1037,8 @@ def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> No
 def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor } = buildEditor();
-        editor.mode = "image";
+        const { editor, selectCommand } = buildEditor();
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
         editor.pathEntry.form.valuesResult = { path: "\\usb\\" };
         editor.filenameEntry.form.valuesResult = { filename: "screen" };
@@ -1066,7 +1072,7 @@ def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> 
         assert.equal(editor.destinationPreview.textContent, "\\usb\\");
         assert.ok(!editor.destinationPreview.textContent.includes("scope"));
 
-        editor.mode = "waveform";
+        selectCommand("save-waveform");
         editor.rebuildSections("ctx|save-export:waveform");
         editor.pathEntry.form.valuesResult = { path: "\\usb\\" };
         editor.filenameEntry.form.valuesResult = { filename: "trace" };
@@ -1098,26 +1104,25 @@ def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> 
 def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor();
-        editor.modeButtons[2].dispatch("click");
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        const { editor, submitted, selectCommand } = buildEditor();
+        selectCommand("setup-save");
+        await editor.refresh(false, false);
         assert.equal(editor.mode, "setup");
         await editor.refresh(false, true);
         assert.equal(submitted.length, 0);
         assert.equal(editor.refreshButton.hidden, true);
         assert.equal(editor.setupEntry.form.disabled, false);
         assert.equal(editor.setupSaveButton.disabled, false);
-        assert.equal(editor.setupRecallButton.disabled, false);
+        assert.ok(!editor.setupRecallButton, "setup-save must not expose a recall button");
         assert.deepEqual(editor.entries, []);
         assert.equal(editor.pathEntry, null);
         assert.equal(editor.filenameEntry, null);
         assert.ok(editor.setupEntry);
         assert.ok(editor.setupSaveButton);
-        assert.ok(editor.setupRecallButton);
         assert.ok(editor.sectionsHost.textContent.includes("Setup storage note"));
         assert.ok(!editor.sectionsHost.textContent.includes("Maximum waveform length mode"));
-        editor.modeButtons[0].dispatch("click");
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        selectCommand("save-image");
+        await editor.refresh(false, false);
         assert.equal(editor.mode, "image");
         assert.equal(editor.refreshButton.hidden, false);
         '''
@@ -1130,9 +1135,10 @@ def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
 def test_save_export_editor_setup_save_submits_target_parameters() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted } = buildEditor();
-        editor.mode = "setup";
+        const { editor, submitted, selectCommand } = buildEditor();
+        selectCommand("setup-save");
         editor.rebuildSections("ctx|save-export:setup");
+        assert.ok(!editor.setupRecallButton, "setup-save must not expose a recall button");
         editor.setupEntry.form.valuesResult = { target: "slot", slot: 1 };
         editor.setupSaveButton.dispatch("click");
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1142,38 +1148,6 @@ def test_save_export_editor_setup_save_submits_target_parameters() -> None:
         assert.deepEqual(submitted.map((entry) => entry.command), ["setup-save", "setup-save"]);
         assert.deepEqual(submitted[0].parameters, { target: "slot", slot: 1 });
         assert.deepEqual(submitted[1].parameters, { target: "file", file: "\\usb\\baseline.scp" });
-        '''
-    )
-    completed = run_node(script)
-    assert completed.returncode == 0, completed.stderr or completed.stdout
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_save_export_editor_setup_recall_confirms_before_executing() -> None:
-    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
-        r'''
-        const confirmMessages = [];
-        globalThis.window = { confirm: (message) => { confirmMessages.push(message); return true; } };
-        const { editor, submitted } = buildEditor();
-        editor.mode = "setup";
-        editor.rebuildSections("ctx|save-export:setup");
-        editor.setupEntry.form.valuesResult = { target: "slot", slot: 1 };
-        editor.setupRecallButton.dispatch("click");
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        assert.equal(submitted.length, 1);
-        assert.equal(submitted[0].command, "setup-recall");
-        assert.deepEqual(submitted[0].parameters, { target: "slot", slot: 1 });
-        assert.ok(confirmMessages[0].includes("slot 1"));
-        editor.setupEntry.form.valuesResult = { target: "file", file: "\\usb\\baseline.scp" };
-        editor.setupRecallButton.dispatch("click");
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        assert.equal(submitted.length, 2);
-        assert.ok(confirmMessages[1].includes("\\usb\\baseline.scp"));
-        globalThis.window = { confirm: (message) => { confirmMessages.push(message); return false; } };
-        editor.setupRecallButton.dispatch("click");
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        assert.equal(submitted.length, 2);
-        assert.equal(confirmMessages.length, 3);
         '''
     )
     completed = run_node(script)
@@ -1203,7 +1177,7 @@ def test_save_export_non_read_failure_does_not_present_read_failure_status() -> 
           status: command === "save-image-format" && options?.intent === "apply" ? "failed" : "completed",
           job_id: command,
         }));
-        failingApply.editor.mode = "image";
+        failingApply.selectCommand("save-image");
         failingApply.editor.rebuildSections("ctx|save-export:image");
         failingApply.editor.pathEntry.form.valuesResult = { action: "set", path: "\\usb\\" };
         failingApply.editor.pathEntry.form.container._fieldNodes = [{ dataset: { dirty: "true" } }];
@@ -1222,7 +1196,7 @@ def test_save_export_non_read_failure_does_not_present_read_failure_status() -> 
           status: command === "save-image" && options?.intent === "command" ? "failed" : "completed",
           job_id: command,
         }));
-        failingSave.editor.mode = "image";
+        failingSave.selectCommand("save-image");
         failingSave.editor.rebuildSections("ctx|save-export:image");
         failingSave.editor.filenameEntry.form.valuesResult = { filename: "screen" };
         failingSave.editor.readStatus.textContent = "failed:stale-read";
@@ -1241,7 +1215,7 @@ def test_save_export_non_read_failure_does_not_present_read_failure_status() -> 
 def test_save_export_three_independent_commands_contract() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        const { editor, submitted, hooks, catalog, context, executionState } = buildEditor();
+        const { editor, submitted, hooks, catalog, context, executionState, selectCommand } = buildEditor();
         const commands = catalog.commands;
         const selectedImage = commands.find((c) => c.id === "save-image");
         const selectedWaveform = commands.find((c) => c.id === "save-waveform");
@@ -1250,7 +1224,7 @@ def test_save_export_three_independent_commands_contract() -> None:
         assert.ok(selectedWaveform, "save-waveform must be visible in catalog");
         assert.ok(selectedSetup, "setup-save must be visible in catalog");
 
-        hooks.selectedCommand = () => selectedImage;
+        selectCommand("save-image");
         editor.rebuildSections("ctx|save-export:image");
         assert.equal(editor.mode, "image");
         assert.ok(editor.modeSelector.hidden || !editor.modeSelector.textContent, "mode selector must be hidden");
@@ -1260,18 +1234,17 @@ def test_save_export_three_independent_commands_contract() -> None:
           (node) => node.tagName === "SECTION" && node.textContent && node.textContent.includes("Destination preview")
         );
         assert.ok(previewSection, "destination preview must exist as independent full-width section");
+        assert.ok(editor.advancedEntry, "save-image must expose the advanced base filename entry");
+        assert.ok(editor.advancedEntry.button.className.includes("primary"), "advanced apply must be primary button");
 
-        hooks.selectedCommand = () => selectedWaveform;
+        selectCommand("save-waveform");
         editor.rebuildSections("ctx|save-export:waveform");
         assert.equal(editor.mode, "waveform");
 
-        hooks.selectedCommand = () => selectedSetup;
+        selectCommand("setup-save");
         editor.rebuildSections("ctx|save-export:setup");
         assert.equal(editor.mode, "setup");
         assert.ok(!editor.setupRecallButton, "setup-save must not expose recall button");
-
-        const advanced = editor.advancedEntry;
-        if (advanced) assert.ok(advanced.button.className.includes("primary"), "advanced apply must be primary button");
         '''
     )
     completed = run_node(script)

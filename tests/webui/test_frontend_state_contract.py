@@ -4754,8 +4754,9 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
     script = textwrap.dedent(
         f'''
         import assert from "node:assert/strict";
+        let selectedId = "setup-save";
         const catalog = {{
-          selected: () => ({{ id: "setup-save" }}),
+          selected: () => ({{ id: selectedId }}),
         }};
         const elements = {{
           refresh: {{ hidden: false }},
@@ -4768,6 +4769,12 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         const saveExportEditor = {{
           mode: "setup",
           refreshButton: {{ hidden: false }},
+        }};
+        const selectSaveCommand = (id) => {{
+          selectedId = id;
+          if (id === "save-waveform") saveExportEditor.mode = "waveform";
+          else if (id === "setup-save") saveExportEditor.mode = "setup";
+          else if (id === "save-image") saveExportEditor.mode = "image";
         }};
         const serialEditor = {{}};
         const triggerEditor = {{}};
@@ -4802,10 +4809,10 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
 
         syncWorkspaceHeaderActions("save-export");
         assert.equal(saveExportEditor.refreshButton.hidden, true);
-        saveExportEditor.mode = "image";
+        selectSaveCommand("save-image");
         syncWorkspaceHeaderActions("save-export");
         assert.equal(saveExportEditor.refreshButton.hidden, false);
-        saveExportEditor.mode = "setup";
+        selectSaveCommand("setup-save");
         syncWorkspaceHeaderActions("save-export");
         syncWorkspaceHeaderActions("serial");
         syncWorkspaceHeaderActions("save-export");

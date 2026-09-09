@@ -385,20 +385,22 @@ their existing command, and applying a setting never switches the output on.
 Unsupported commands stay disabled in the Command Browser with the existing
 capability reason.
 
-Selecting Save / Export exposes three independent workspace commands:
+Selecting Save / Export exposes three independent commands:
 Save Image (`save-image`), Save Waveform (`save-waveform`), and Save Setup
 (`setup-save`). Each uses the dedicated Save / Export editor (`editor: save-export`)
-with a fixed mode (image, waveform, or setup), shared instrument-side path,
-per-save filename, independent Apply, full-width destination preview, and
-advanced base filename settings. `setup-recall` remains hidden from the Command
-Browser and is not exposed through this interface. Bottom-level save settings
+with a mode fixed by the selected command (image, waveform, or setup).
+`setup-recall` remains hidden from the Command Browser and is not exposed
+through this interface. Bottom-level save settings
 (`save-pwd`, `save-image-format`, `save-image-palette`, `save-image-ink-saver`,
 `save-image-factors`, `save-waveform-format`, `save-waveform-length`,
 `save-waveform-length-max`, `save-filename`) stay hidden and are read or applied
 through the editor.
 
-Save Image and Save Waveform each require their own explicit filename and
-submit only their existing instrument-side Save command. They do not inherit
+Save Image and Save Waveform each use the instrument-side Save / Export editor
+with a shared instrument-side path, a per-save filename, an independent Apply,
+a full-width destination preview, and advanced base filename settings. Each
+requires its own explicit filename and submits only its existing
+instrument-side Save command. They do not inherit
 or update `save-filename`; the editor makes this filename separation explicit.
 They do not add filename extensions, refresh unrelated settings, or create
 WebUI download artifacts. Screenshot and Capture remain separate host-side
@@ -406,10 +408,11 @@ retrieval paths that register downloadable artifacts. The Basic Controls PC
 output folder does not change `save-pwd`, `save-filename`, or any other
 instrument-side `:SAVE:*` behavior.
 
-Setup targets an instrument slot (0 through 9) or an instrument-side file
-such as `\usb\baseline.scp`. Setup files do not use the shared Save PWD or
-Filename. Save Setup is an explicit action. Recall Setup asks for
-confirmation first because it replaces the oscilloscope's current setup.
+Save Setup is an independent command targeting an instrument slot (0 through 9)
+or an instrument-side file such as `\usb\baseline.scp`. Setup files do not use
+the shared Save PWD or Filename workflow. The Save Setup UI only provides Save;
+the `setup-recall` backend command still exists but stays hidden from the Command
+Browser and is not exposed through this interface.
 Like other saves, setup targets are instrument-side storage, not PC downloads.
 
 The command form uses simple metadata-driven controls for ordinary values,

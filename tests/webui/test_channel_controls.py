@@ -1516,12 +1516,6 @@ def test_channel_scale_range_workspace_latest_result() -> None:
         selected = { id: "channel-offset" };
         sandbox.captureWorkspaceResult({ command: "channel-range", status: "completed", result: { volts: 4 } }, submitted);
         assert.ok(displayed().includes("workspace.resultEmpty"));
-        selected = { id: "save-export", presentation_only: true };
-        sandbox.renderWorkspace();
-        assert.equal(elements.identityWorkspace.hidden, false);
-        const saved = capture("save-pwd", "query", { path: "data" });
-        assert.equal(saved.command, "save-pwd");
-        assert.ok(!displayed().includes("workspace.resultEmpty"));
         '''
     )
     completed = subprocess.run(
