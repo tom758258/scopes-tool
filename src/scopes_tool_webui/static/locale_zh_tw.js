@@ -793,7 +793,7 @@ export const zhTW = {
   "field.save-waveform.filename": "本次波形檔名",
   "field.setup.target": "目標",
   "field.setup.slot": "設定插槽",
-  "field.setup.file": "儀器端完整檔案路徑",
+  "field.setup.file": "儀器端檔案路徑",
   "field.check-error.max_reads": "最大讀取數",
   "category.Trigger": "觸發",
   "category.Search": "搜尋",

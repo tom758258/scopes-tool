@@ -793,7 +793,7 @@ export const en = {
   "field.save-waveform.filename": "Waveform filename for this save",
   "field.setup.target": "Target",
   "field.setup.slot": "Setup slot",
-  "field.setup.file": "Full instrument-side file path",
+  "field.setup.file": "Instrument file path",
   "field.check-error.max_reads": "Max reads",
   "category.Trigger": "Trigger",
   "category.Search": "Search",

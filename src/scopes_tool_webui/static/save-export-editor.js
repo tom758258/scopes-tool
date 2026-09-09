@@ -304,9 +304,7 @@ export class SaveExportEditor {
       for (const commandId of pair) {
         const command = this.commandForId(commandId);
         if (!command || !this.catalog.supported(command)) continue;
-        const entry = this.buildSettingEntry(command, settingsPair);
-        entry.section.classList.add("save-export-paired-setting");
-        this.entries.push(entry);
+        this.entries.push(this.buildSettingEntry(command, settingsPair));
         rendered += 1;
       }
       if (rendered === 1) settingsPair.classList.add("save-export-pair-single");
@@ -482,6 +480,13 @@ export class SaveExportEditor {
     heading.className = "trigger-editor-heading";
     heading.textContent = this.catalog.commandLabel(command);
     section.append(heading);
+    const formHost = document.createElement("div");
+    formHost.className = "command-form";
+    const form = new CommandForm(formHost, this.catalog);
+    form.render(command, { onDirty: () => this.updateDestinationPreview() });
+    section.append(formHost);
+    // Description after the form: its line count must never push the
+    // label/control of this or the paired column down.
     const description = this.catalog.description?.(command);
     if (description) {
       const note = document.createElement("p");
@@ -489,11 +494,6 @@ export class SaveExportEditor {
       note.textContent = description;
       section.append(note);
     }
-    const formHost = document.createElement("div");
-    formHost.className = "command-form";
-    const form = new CommandForm(formHost, this.catalog);
-    form.render(command, { onDirty: () => this.updateDestinationPreview() });
-    section.append(formHost);
     container.append(section);
     return { id: command.id, form, kind: "setting", section };
   }

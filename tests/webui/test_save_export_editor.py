@@ -1276,10 +1276,7 @@ def test_save_export_editor_pairs_settings_before_destination() -> None:
           "save-waveform-format",
           "save-waveform-length",
         ]);
-        for (const entry of waveformEditor.entries) {
-          assert.ok(entry.section.className.split(/\s+/).includes("save-export-paired-setting"));
-        }
-        assert.ok(waveformPairs[1].children.includes(waveformEditor.pathEntry.section));
+            assert.ok(waveformPairs[1].children.includes(waveformEditor.pathEntry.section));
         assert.ok(waveformPairs[1].children.includes(waveformEditor.filenameEntry.section));
         const waveformPreview = waveformKids.find(
           (node) => node.tagName === "SECTION" && node.textContent && node.textContent.includes("Destination preview")
@@ -1319,14 +1316,46 @@ def test_save_export_editor_pairs_settings_before_destination() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_renders_description_after_form() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const built = buildEditor();
+        built.catalog.description = (command) => `description.${command.id}`;
+        built.selectCommand("save-waveform");
+        const editor = built.editor;
+        editor.rebuildSections("ctx|save-export:waveform");
+        for (const entry of editor.entries) {
+          const kids = [...entry.section.children];
+          assert.equal(kids[0].tagName, "STRONG");
+          const formIdx = kids.findIndex((node) => node.className === "command-form");
+          const noteIdx = kids.findIndex((node) => node.tagName === "P");
+          assert.ok(formIdx >= 0 && noteIdx >= 0 && formIdx < noteIdx, entry.id);
+        }
+
+        built.selectCommand("save-image");
+        editor.rebuildSections("ctx|save-export:image");
+        const formatEntry = editor.entries.find((entry) => entry.id === "save-image-format");
+        const formatKids = [...formatEntry.section.children];
+        assert.ok(
+          formatKids.findIndex((node) => node.className === "command-form")
+          < formatKids.findIndex((node) => node.tagName === "P")
+        );
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def test_save_export_pair_layout_contract() -> None:
     css = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
-    assert ".save-export-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));" in css
+    assert ".save-export-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }" in css
     assert ".save-export-pair > .trigger-editor-section .command-form { grid-template-columns: 1fr; }" in css
     assert ".save-export-pair-single > .trigger-editor-section { grid-column: 1 / -1; }" in css
     desktop = css.split("@media (min-width: 701px)", 1)[1].split("@media", 1)[0]
-    assert ".save-export-paired-setting > .compact-note" in desktop
-    assert "min-height" in desktop
+    assert ".save-export-pair > .trigger-editor-section" in desktop
+    assert "align-content: start;" in desktop
+    assert "save-export-paired-setting" not in css
     mobile = css.split("@media (max-width: 700px)", 1)[1]
     assert ".save-export-pair { grid-template-columns: 1fr; }" in mobile
 
@@ -1334,8 +1363,8 @@ def test_save_export_pair_layout_contract() -> None:
 def test_save_setup_file_and_waveform_length_locale_contract() -> None:
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
-    assert '"field.setup.file": "Full instrument-side file path"' in english
-    assert '"field.setup.file": "儀器端完整檔案路徑"' in chinese
+    assert '"field.setup.file": "Instrument file path"' in english
+    assert '"field.setup.file": "儀器端檔案路徑"' in chinese
     english_setup_help = next(
         line for line in english.splitlines() if '"help.setup.file":' in line
     )
