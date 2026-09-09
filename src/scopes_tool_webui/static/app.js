@@ -28,6 +28,7 @@ import {
 } from "/static/pc-output.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
 import { ReferenceEditor } from "/static/reference-editor.js";
+import { ReferenceDisplayEditor } from "/static/reference-display-editor.js";
 import { ReferenceLabelsEditor } from "/static/reference-labels-editor.js";
 import { SaveExportEditor } from "/static/save-export-editor.js";
 import { SearchEditor } from "/static/search-editor.js";
@@ -88,6 +89,7 @@ const elements = {
   formHeading: document.querySelector("#form-heading"),
   acquisitionEditor: document.querySelector("#acquisition-editor"),
   referenceEditor: document.querySelector("#reference-editor"),
+  referenceDisplayEditor: document.querySelector("#reference-display-editor"),
   referenceLabelsEditor: document.querySelector("#reference-labels-editor"),
   saveExportEditor: document.querySelector("#save-export-editor"),
   serialEditor: document.querySelector("#serial-editor"),
@@ -150,6 +152,7 @@ let channelLabelApplyButton = null;
 let acquisitionEditor;
 let genericFormRevision = 0;
 let referenceEditor;
+let referenceDisplayEditor;
 let referenceLabelsEditor;
 let saveExportEditor;
 let serialEditor;
@@ -189,6 +192,7 @@ const INTERNAL_COMMANDS = {
 const EDITOR_RENDERERS = {
   acquisition: () => acquisitionEditor,
   reference: () => referenceEditor,
+  "reference-display": () => referenceDisplayEditor,
   "reference-labels": () => referenceLabelsEditor,
   "save-export": () => saveExportEditor,
   serial: () => serialEditor,
@@ -268,6 +272,17 @@ async function initialize() {
     selectedCommand: () => catalog.selected(),
   });
   referenceLabelsEditor = new ReferenceLabelsEditor(elements.referenceLabelsEditor, catalog, {
+    executeCommand,
+    headerActions: elements.workspaceHeaderActions,
+    isExecutionBusy,
+    isAvailable: () => {
+      const selected = catalog.selected();
+      return Boolean(selected && commandAvailable(selected.id));
+    },
+    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    selectedCommand: () => catalog.selected(),
+  });
+  referenceDisplayEditor = new ReferenceDisplayEditor(elements.referenceDisplayEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
@@ -878,7 +893,11 @@ function renderWorkspace() {
   const compositeCommands = {
     "channel-scale-range": ["channel-scale", "channel-range"],
     "acquisition-control": ["run", "single", "single-wait", "stop-acquisition", "force-trigger"],
-    "reference-waveform": ["reference-query", "reference-save", "reference-display", "reference-clear"],
+    "reference-waveform": [
+      "reference-query",
+      "reference-save",
+      "reference-clear",
+    ],
     "reference-labels": ["reference-query", "reference-label", "display-label"],
     "save-export": [
       "save-pwd",
@@ -951,6 +970,7 @@ document.addEventListener("localechange", () => {
     syncCommandSelection(commandDraft);
   }
   referenceEditor?.rerender();
+  referenceDisplayEditor?.rerender();
   referenceLabelsEditor?.rerender();
   saveExportEditor?.rerender();
   serialEditor?.rerender();
@@ -993,6 +1013,7 @@ function syncCommandSelection(draft = null) {
   elements.form.hidden = editorOwned || systemInformationSelected;
   channelLabelVisibility?.render(selected?.id === "channel-label");
   elements.referenceEditor.hidden = editorKind !== "reference";
+  if (elements.referenceDisplayEditor) elements.referenceDisplayEditor.hidden = editorKind !== "reference-display";
   if (elements.referenceLabelsEditor) elements.referenceLabelsEditor.hidden = editorKind !== "reference-labels";
   elements.saveExportEditor.hidden = editorKind !== "save-export";
   elements.serialEditor.hidden = editorKind !== "serial";
@@ -1015,7 +1036,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? editorKind === "measurement"
+      ? ["measurement", "reference-display"].includes(editorKind)
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
@@ -1024,7 +1045,7 @@ function syncCommandSelection(draft = null) {
   elements.selectedCommand.title = selectedTitle;
   const selectedDescription = selected
     ? editorOwned
-      ? ["measurement", "reference", "save-export"].includes(editorKind)
+      ? ["measurement", "reference", "reference-display", "save-export"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
@@ -1077,6 +1098,7 @@ function updateAvailability() {
   searchEditor?.applyBusyState();
   segmentedEditor?.applyBusyState();
   referenceEditor?.applyBusyState();
+  referenceDisplayEditor?.applyBusyState();
   referenceLabelsEditor?.applyBusyState();
   channelLabelVisibility?.applyBusyState();
   saveExportEditor?.applyBusyState();
@@ -1152,6 +1174,8 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (referenceLabelsEditor?.refreshButton) {
     referenceLabelsEditor.refreshButton.hidden = editorKind !== "reference-labels";
   }
+  if (referenceDisplayEditor?.refreshButton) referenceDisplayEditor.refreshButton.hidden = editorKind !== "reference-display";
+  if (referenceDisplayEditor?.runButton) referenceDisplayEditor.runButton.hidden = editorKind !== "reference-display";
   if (saveExportEditor?.refreshButton) {
     saveExportEditor.refreshButton.hidden =
       editorKind !== "save-export" || saveExportEditor.mode === "setup";
@@ -1183,6 +1207,7 @@ function syncWorkspaceHeaderActions(editorKind) {
 
 function syncEditorPresentation(editorKind) {
   if (editorKind === "reference") referenceEditor?.schedulePresentation();
+  if (editorKind === "reference-display") referenceDisplayEditor?.schedulePresentation();
   if (editorKind === "reference-labels") referenceLabelsEditor?.schedulePresentation();
   if (editorKind === "save-export") saveExportEditor?.schedulePresentation();
   if (editorKind === "serial") serialEditor?.schedulePresentation();

@@ -2,7 +2,6 @@ import { CommandForm } from "/static/command-form.js";
 import { translate } from "/static/i18n.js";
 
 const REFERENCE_MANAGEMENT_ACTIONS = [
-  "reference-display",
   "reference-clear",
 ];
 
@@ -100,12 +99,6 @@ export class ReferenceEditor {
     presentation.query_fields = (presentation.query_fields || []).filter(
       (name) => name !== "slot",
     );
-    if (id === "reference-display") {
-      presentation.readback_fields = {
-        ...(presentation.readback_fields || {}),
-        enabled: "displayed",
-      };
-    }
     return {
       ...command,
       fields: this.catalog.fieldsFor(command).filter((field) => field.name !== "slot"),
@@ -204,11 +197,6 @@ export class ReferenceEditor {
     if (job?.status !== "completed") {
       this.readStatus.textContent = translate("reference.editor.readFailed");
       return job;
-    }
-    for (const entry of this.entries) {
-      if (entry.id === "reference-display") {
-        entry.form?.syncResult(job, true);
-      }
     }
     this.readStatus.textContent = translate("reference.editor.currentLoaded");
     return job;

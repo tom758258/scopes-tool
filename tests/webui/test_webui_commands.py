@@ -1900,7 +1900,6 @@ def test_commands_expose_reference_and_save_subset() -> None:
     commands = {entry["id"]: entry for entry in response.json()}
     expected = {
         "reference-save",
-        "reference-display",
         "reference-label",
         "reference-clear",
         "reference-query",
@@ -1921,6 +1920,9 @@ def test_commands_expose_reference_and_save_subset() -> None:
     for command in expected:
         assert commands[command]["modes"] == ["live", "simulate"]
         assert commands[command]["browser_hidden"] is True
+    assert commands["reference-display"]["modes"] == ["live", "simulate"]
+    assert commands["reference-display"].get("browser_hidden") is not True
+    assert commands["reference-display"]["editor"] == "reference-display"
     assert commands["reference-waveform"]["presentation_only"] is True
     assert commands["reference-waveform"]["editor"] == "reference"
     assert commands["reference-labels"]["presentation_only"] is True
@@ -1943,7 +1945,7 @@ def test_commands_expose_reference_and_save_subset() -> None:
         entry["id"]
         for entry in browser_commands
         if entry["category"] == "Reference"
-    ] == ["reference-waveform", "reference-labels"]
+    ] == ["reference-waveform", "reference-display", "reference-labels"]
     assert [
         entry["id"]
         for entry in browser_commands

@@ -68,11 +68,11 @@ export class ReferenceLabelsEditor {
     this.container.replaceChildren();
     this.entry = null;
 
-    const selectorSection = document.createElement("section");
-    selectorSection.className = "trigger-editor-section reference-labels-editor-selector";
+    // Shared two-column row: slot selector (left) + label text (right).
+    // Both hosts are plain grid items; the forms keep their own containers.
+    this.topRow = document.createElement("div");
+    this.topRow.className = "command-form";
     const selectorHost = document.createElement("div");
-    selectorHost.className = "command-form";
-    selectorSection.append(selectorHost);
     this.slotForm = new CommandForm(selectorHost, this.catalog);
     this.slotForm.render(this.definition("reference-query"));
     selectorHost.querySelector?.('[data-field="slot"]')?.addEventListener("change", () => {
@@ -80,12 +80,14 @@ export class ReferenceLabelsEditor {
       this.buildLabelSection();
       this.applyBusyState();
     });
+    this.labelFieldHost = document.createElement("div");
+    this.topRow.append(selectorHost, this.labelFieldHost);
 
     this.readStatus = document.createElement("output");
     this.readStatus.className = "muted compact-note";
     this.labelHost = document.createElement("div");
     this.labelHost.className = "trigger-editor-sections";
-    this.container.append(selectorSection, this.readStatus, this.labelHost);
+    this.container.append(this.topRow, this.readStatus, this.labelHost);
     this.buildLabelSection();
   }
 
@@ -107,14 +109,13 @@ export class ReferenceLabelsEditor {
     this.entry = null;
     this.labelVisibility = null;
     this.labelHost.replaceChildren();
+    this.labelFieldHost.replaceChildren();
     const command = this.labelDefinition();
     if (command && this.catalog.supported(command)) {
       const section = document.createElement("section");
       section.className = "trigger-editor-section";
       this.appendActionHeading(section, command);
-      const formHost = document.createElement("div");
-      formHost.className = "command-form";
-      const form = new CommandForm(formHost, this.catalog);
+      const form = new CommandForm(this.labelFieldHost, this.catalog);
       form.render(command);
       const button = document.createElement("button");
       button.type = "button";
@@ -122,7 +123,7 @@ export class ReferenceLabelsEditor {
       button.textContent = translate("actions.apply");
       const entry = { id: command.id, form, button, kind: command.presentation.kind };
       button.addEventListener("click", () => void this.submit(entry));
-      section.append(formHost, button);
+      section.append(button);
       this.labelHost.append(section);
       this.entry = entry;
     }

@@ -3165,7 +3165,7 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 18
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 19
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
     styles = read_static("styles.css")
@@ -4762,8 +4762,9 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
           execute: {{ hidden: false }},
         }};
         const commandForm = null;
-        const referenceEditor = {{}};
-        const referenceLabelsEditor = {{}};
+            const referenceEditor = {{}};
+            const referenceDisplayEditor = {{ refreshButton: {{}}, runButton: {{}} }};
+            const referenceLabelsEditor = {{}};
         const saveExportEditor = {{
           mode: "setup",
           refreshButton: {{ hidden: false }},

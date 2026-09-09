@@ -150,7 +150,8 @@ The Command workbench exposes:
   the normal workbench.
 - Capture: `screenshot`, `capture`
 - Reference: a Reference waveform workspace over `reference-save`,
-  `reference-display`, `reference-clear`, and `reference-query`, plus a
+  `reference-clear`, and `reference-query`, a separate Reference waveform
+  display workspace over `reference-display` for slots 1 and 2, plus a
   separate Reference labels workspace over `reference-label` and the shared
   `display-label` visibility
 - Save / Export: a single workspace with Path / Filename, Image, Waveform,
@@ -233,7 +234,13 @@ that readback for its waveform controls.
 The shared reference waveform selector is visible before Live identity is
 available and is then limited by the detected model's projected capabilities.
 Selection is passive; Read reference state reads the selected waveform state.
-Reference waveform display and Clear remain independent actions.
+Reference waveform Clear remains an independent action.
+
+Selecting Reference waveform display opens a separate workspace with one
+checkbox per reference slot (1 and 2). Read current settings queries each
+slot through `reference-display`; Run applies the checkbox state through
+`reference-display` and then re-reads both slots, since enabling one
+reference may change the other on the instrument.
 
 Selecting Reference labels opens the separate label workspace. It uses the
 selected reference slot for `reference-label` and reads the current reference

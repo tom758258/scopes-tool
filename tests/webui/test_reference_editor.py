@@ -24,14 +24,19 @@ def test_reference_editor_wiring_and_localization() -> None:
     chinese = read_static("locale_zh_tw.js")
 
     assert 'import { ReferenceEditor } from "/static/reference-editor.js";' in app
+    assert 'import { ReferenceDisplayEditor } from "/static/reference-display-editor.js";' in app
     assert 'import { ReferenceLabelsEditor } from "/static/reference-labels-editor.js";' in app
     assert 'id="reference-editor" class="reference-editor trigger-editor" hidden' in html
+    assert 'id="reference-display-editor" class="reference-display-editor workflow-editor" hidden' in html
     assert 'id="reference-labels-editor" class="reference-editor trigger-editor" hidden' in html
     assert 'reference: () => referenceEditor,' in app
+    assert '"reference-display": () => referenceDisplayEditor,' in app
     assert '"reference-labels": () => referenceLabelsEditor,' in app
     assert 'elements.referenceEditor.hidden = editorKind !== "reference";' in app
+    assert 'elements.referenceDisplayEditor.hidden = editorKind !== "reference-display";' in app
     assert 'elements.referenceLabelsEditor.hidden = editorKind !== "reference-labels";' in app
     assert 'referenceEditor?.schedulePresentation();' in app
+    assert 'referenceDisplayEditor?.schedulePresentation();' in app
     assert 'referenceLabelsEditor?.schedulePresentation();' in app
     for key in (
         "command.reference-waveform",
@@ -42,6 +47,10 @@ def test_reference_editor_wiring_and_localization() -> None:
         "reference.editor.saveAndDisplay",
         "reference.editor.currentLoaded",
         "reference.editor.readFailed",
+        "reference-display.editor.displayedReferences",
+        "reference-display.editor.displayHelper",
+        "reference-display.editor.runIncomplete",
+        "reference-display.editor.readFailed",
         "reference-labels.editor.title",
         "reference-labels.editor.description",
         "reference-labels.editor.read",
@@ -248,9 +257,9 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
         r'''
         editor.schedulePresentation();
         await settle();
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "reference-save", "reference-display", "reference-clear",
-        ]);
+            assert.deepEqual(editor.entries.map((entry) => entry.id), [
+              "reference-save", "reference-clear",
+            ]);
         assert.equal(editor.refreshButton.disabled, true);
         assert.equal(editor.slotForm.disabled, true);
         assert.ok(editor.entries.every((entry) => entry.button.disabled));
@@ -271,14 +280,10 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
           },
         ]);
         assert.equal(editor.readStatus.textContent, "reference.editor.currentLoaded");
-        assert.equal(
-          editor.entries.find((entry) => entry.id === "reference-save").form.syncCalls.length,
-          0,
-        );
-        assert.equal(
-          editor.entries.find((entry) => entry.id === "reference-display").form.syncCalls.length,
-          1,
-        );
+            assert.equal(
+              editor.entries.find((entry) => entry.id === "reference-save").form.syncCalls.length,
+              0,
+            );
 
         submitted.length = 0;
         const save = editor.entries.find((entry) => entry.id === "reference-save");
@@ -301,24 +306,19 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
           },
         ]);
 
-        for (const id of ["reference-display", "reference-clear"]) {
-          submitted.length = 0;
-          const entry = editor.entries.find((item) => item.id === id);
-          await editor.submit(entry);
-          assert.equal(submitted[0].command, id);
-          assert.equal(submitted[0].parameters.slot, 1);
-          assert.equal(submitted[1].command, "reference-query");
-          assert.equal(submitted[1].intent, "readback");
-        }
-        assert.deepEqual(
-          editor.entries.find((entry) => entry.id === "reference-save").form.valuesResult,
-          { source_channel: 1 },
-        );
-        assert.equal(
-          editor.entries.find((entry) => entry.id === "reference-display").form
-            .command.presentation.readback_fields.enabled,
-          "displayed",
-        );
+            for (const id of ["reference-clear"]) {
+              submitted.length = 0;
+              const entry = editor.entries.find((item) => item.id === id);
+              await editor.submit(entry);
+              assert.equal(submitted[0].command, id);
+              assert.equal(submitted[0].parameters.slot, 1);
+              assert.equal(submitted[1].command, "reference-query");
+              assert.equal(submitted[1].intent, "readback");
+            }
+            assert.deepEqual(
+              editor.entries.find((entry) => entry.id === "reference-save").form.valuesResult,
+              { source_channel: 1 },
+            );
         ''')
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
@@ -443,9 +443,15 @@ def test_reference_labels_editor_reads_and_applies_label_state() -> None:
         labelsEditor.schedulePresentation();
         await settle();
 
-        assert.equal(labelsEditor.entry.id, "reference-label");
-        const selectorHost = labelsEditor.container.children[0].children[0];
-        assert.equal(selectorHost.className.includes("command-form"), true);
+            assert.equal(labelsEditor.entry.id, "reference-label");
+            // Slot selector (left) and label text (right) share one two-column row.
+            const topRow = labelsEditor.container.children[0];
+            assert.equal(topRow.className, "command-form");
+            assert.deepEqual(topRow.children, [
+              labelsEditor.slotForm.container,
+              labelsEditor.labelFieldHost,
+            ]);
+            assert.equal(labelsEditor.entry.form.container, labelsEditor.labelFieldHost);
         assert.ok(labelsEditor.labelVisibility);
         assert.equal(labelsEditor.labelVisibility.form.command.id, "display-label");
 
@@ -492,11 +498,13 @@ def test_reference_action_forms_use_command_form_layout() -> None:
         assert.ok(saveFormHost);
         assert.equal(saveFormHost.className, "command-form");
 
-        const management = editor.actionsHost.children[1];
-        const displayControl = management.children[0];
-        const displayFormHost = displayControl.children.find((node) => node.className === "command-form");
-        assert.ok(displayFormHost);
-        assert.equal(displayFormHost.className, "command-form");
+            const management = editor.actionsHost.children[1];
+            assert.equal(management.children.length, 1);
+            const clearControl = management.children[0];
+            assert.equal(
+              clearControl.children.find((node) => node.className === "command-form"),
+              undefined,
+            );
         ''')
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],

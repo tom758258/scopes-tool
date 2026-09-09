@@ -766,8 +766,7 @@ COMMANDS = (
         "id": "reference-display",
         "category": "Reference",
         "label": "Reference waveform display",
-        "browser_hidden": True,
-        "editor": "reference",
+        "editor": "reference-display",
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
