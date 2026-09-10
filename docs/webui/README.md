@@ -186,8 +186,9 @@ The Command workbench exposes:
 - Segmented Memory: a dedicated state view for explicit Read current state, Enter, Exit,
   segment selection, and current Time Tag readback over `segmented-memory`,
   plus `segmented-capture`
-- Cursor: a dedicated Cursor editor for explicit Read cursor state, manual cursor
-  configuration over `cursor` (query, set, off), and current state readback
+- Cursor: a dedicated Cursor editor for explicit Read cursor state
+  (`cursor-query`), manual cursor configuration (`cursor-set`), turning
+  cursors off (`cursor-off`), and current state readback
 - Annotation: a dedicated Annotation editor for explicit Read annotation settings, annotation
   text/color/background editing, on/off/clear actions, and current state
   readback over `annotation`, with slot and position controls projected from
@@ -368,9 +369,11 @@ Controls and fails rather than overwriting an existing file with that name.
 Selecting a Cursor, Annotation, WGEN, or DEMO command opens the matching dedicated
 editor instead of a plain command form. The Command Browser remains the only
 navigation; the editors add no second tab layer. Cursor offers explicit
-Read cursor state, manual cursor configuration (source channel, X1/X2, optional Y1/Y2),
-Off, and current state readback (mode, positions, deltas, and DYDX where the
-instrument reports it). Annotation offers explicit Read annotation settings, text/color/
+Read cursor state (`cursor-query`), manual cursor configuration (`cursor-set`:
+source channel, X1/X2, optional Y1/Y2), and Turn off cursors (`cursor-off`),
+plus current state readback (mode, positions, deltas, and DYDX where the
+instrument reports it). Applying cursor settings switches the cursors to
+Manual mode and enables them. Annotation offers explicit Read annotation settings, text/color/
 background editing, on/off/clear actions, and current state readback; the slot
 selector is hidden on single-slot models and X/Y position controls appear only
 where Core capabilities report position support. The Read generator settings action reads the whole

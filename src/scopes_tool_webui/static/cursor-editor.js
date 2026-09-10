@@ -55,7 +55,7 @@ export class CursorEditor {
   }
 
   definition() {
-    return this.catalog.commands.find((command) => command.id === "cursor") || null;
+    return this.selectedDefinition();
   }
 
   selectedDefinition() {
@@ -153,12 +153,25 @@ export class CursorEditor {
     const actionButton = document.createElement("button");
     actionButton.type = "button";
     actionButton.className = "secondary trigger-editor-action";
-    actionButton.textContent = translate("actions.apply");
+    actionButton.textContent = translate(
+      command.id === "cursor-set" ? "actions.apply" : `actions.${command.presentation?.action || "run"}`,
+    );
+    // cursor-query reuses the header Read action; a second query button would
+    // duplicate it, so only set/off keep a section button. The button is
+    // recreated on every rebuild, so hidden state always follows the selection.
+    actionButton.hidden = command.id === "cursor-query";
     const statePanel = document.createElement("div");
     statePanel.className = "cursor-editor-state";
-    section.append(heading, formContainer);
+    section.append(heading);
+    const description = this.catalog.description?.(command);
+    if (description) {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = description;
+      section.append(note);
+    }
+    section.append(formContainer);
     if (this.hooks.headerActions) {
-      actionButton.hidden = !this.selectedDefinition();
       this.hooks.headerActions.append(actionButton);
     } else {
       section.append(actionButton);
@@ -181,8 +194,8 @@ export class CursorEditor {
   async readState() {
     if (!this.entry || this.entry.epoch !== this.epoch) return;
     const job = await this.hooks.executeCommand(
-      "cursor",
-      { action: "query" },
+      "cursor-query",
+      {},
       { intent: "readback" },
     );
     if (job?.status === "completed" && this.entry.epoch === this.epoch) {
@@ -211,13 +224,19 @@ export class CursorEditor {
   async submit() {
     const entry = this.entry;
     if (!entry || this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
+    const command = this.definition();
+    if (!command) return;
     const submissionKey = this.currentStateKey();
-    const parameters = entry.form.values();
-    if (parameters === null) return;
+    let parameters = {};
+    if (command.id === "cursor-set") {
+      const values = entry.form.values();
+      if (values === null) return;
+      parameters = values;
+    }
     this.setBusy(true);
     try {
       const job = await this.hooks.executeCommand(
-        "cursor",
+        command.id,
         parameters,
         { intent: "apply" },
       );

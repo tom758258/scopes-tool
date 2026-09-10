@@ -647,6 +647,20 @@ def _execute_scope_command(
         elif action == "off":
             scope.cursor_off()
         return _state_scope_result("cursor", scope.query_cursor())
+    if command == "cursor-query":
+        return _state_scope_result("cursor", scope.query_cursor())
+    if command == "cursor-set":
+        scope.configure_cursor(
+            parameters["source_channel"],
+            parameters["x1"],
+            parameters["x2"],
+            y1_volts=parameters.get("y1"),
+            y2_volts=parameters.get("y2"),
+        )
+        return _state_scope_result("cursor", scope.query_cursor())
+    if command == "cursor-off":
+        scope.cursor_off()
+        return _state_scope_result("cursor", scope.query_cursor())
     if command == "annotation":
         action = parameters["action"]
         slot = parameters["slot"]

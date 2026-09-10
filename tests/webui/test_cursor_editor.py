@@ -22,24 +22,45 @@ def read_static(name: str) -> str:
 
 
 def test_cursor_command_carries_cursor_editor_metadata() -> None:
-    entry = next(
+    legacy = next(
         entry for entry in commands_module.COMMANDS if entry["id"] == "cursor"
     )
+    assert legacy.get("hidden") is True
 
-    assert entry["category"] == "Cursor"
-    assert entry["group"] == "cursor"
-    assert entry["editor"] == "cursor"
-    assert entry.get("browser_hidden") is not True
-    assert entry.get("hidden") is not True
-    action = next(field for field in entry["fields"] if field["name"] == "action")
-    assert tuple(action["options"]) == ("query", "set", "off")
-    assert {field["name"] for field in entry["fields"]} == {
-        "action",
+    public = {
+        entry["id"]: entry for entry in commands_module.command_catalog()
+    }
+    assert {"cursor-query", "cursor-set", "cursor-off"} <= set(public)
+    assert "cursor" not in public
+
+    for command_id in ("cursor-query", "cursor-set", "cursor-off"):
+        entry = public[command_id]
+        assert entry["category"] == "Cursor"
+        assert entry["group"] == "cursor"
+        assert entry["editor"] == "cursor"
+        assert entry.get("browser_hidden") is not True
+        assert entry.get("hidden") is not True
+
+    assert public["cursor-query"]["fields"] == []
+    assert public["cursor-off"]["fields"] == []
+    assert public["cursor-query"]["presentation"]["action"] == "read"
+    setters = public["cursor-set"]["fields"]
+    assert [field["name"] for field in setters] == [
         "source_channel",
         "x1",
         "x2",
         "y1",
         "y2",
+    ]
+    assert {
+        field["name"] for field in setters if field.get("required") is True
+    } == {"source_channel", "x1", "x2"}
+    assert {field["help_key"] for field in setters} == {
+        "cursor.source_channel",
+        "cursor.x1",
+        "cursor.x2",
+        "cursor.y1",
+        "cursor.y2",
     }
 
 
@@ -82,6 +103,37 @@ def test_cursor_set_validation_requires_source_and_x_positions() -> None:
         })
 
 
+def test_cursor_set_command_validation_requires_source_and_x_positions() -> None:
+    request = validate_job_request({
+        "command": "cursor-set",
+        "mode": "simulate",
+        "model_id": MODEL_ID,
+        "parameters": {
+            "source_channel": 1,
+            "x1": 0.0,
+            "x2": 0.001,
+            "y1": 0.0,
+            "y2": 0.5,
+        },
+    })
+
+    assert request["parameters"]["source_channel"] == 1
+    with pytest.raises(WebUIRequestError, match="source_channel"):
+        validate_job_request({
+            "command": "cursor-set",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"x1": 0.0, "x2": 0.001},
+        })
+    with pytest.raises(WebUIRequestError, match="unknown parameter"):
+        validate_job_request({
+            "command": "cursor-query",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"x1": 0.0},
+        })
+
+
 def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> None:
     calls: list[tuple] = []
 
@@ -110,10 +162,9 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
     scope = FakeScope()
     result = command_execution_module._execute_scope_command(
         scope,
-        "cursor",
+        "cursor-set",
         "SIM::INSTR",
         {
-            "action": "set",
             "source_channel": 1,
             "x1": 0.0,
             "x2": 0.001,
@@ -131,6 +182,20 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
     assert "auto_timebase" not in calls[0][2]
     assert "auto_vertical" not in calls[0][2]
     assert result["result"]["cursor"]["x_delta_seconds"] == 0.001
+
+    calls.clear()
+    command_execution_module._execute_scope_command(
+        scope, "cursor-query", "SIM::INSTR", {}, tmp_path
+    )
+
+    assert calls == [("query", (), {})]
+
+    calls.clear()
+    command_execution_module._execute_scope_command(
+        scope, "cursor-off", "SIM::INSTR", {}, tmp_path
+    )
+
+    assert calls == [("off", (), {}), ("query", (), {})]
 
     calls.clear()
     command_execution_module._execute_scope_command(
@@ -158,8 +223,12 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     assert "cursorEditor?.rerender();" in app_source
     assert 'id="cursor-editor"' in index_source
     for key in (
-        '"command.cursor": "Cursor"',
-        '"description.cursor":',
+        '"command.cursor-query": "Cursor state"',
+        '"description.cursor-query":',
+        '"command.cursor-set": "Set cursors"',
+        '"description.cursor-set":',
+        '"command.cursor-off": "Turn off cursors"',
+        '"description.cursor-off":',
         '"cursor.editor.title": "Cursor editor"',
         '"cursor.editor.description":',
         '"cursor.state.xDelta":',
@@ -167,8 +236,12 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     ):
         assert key in english, key
     for key in (
-        '"command.cursor": "游標"',
-        '"description.cursor":',
+        '"command.cursor-query": "游標狀態"',
+        '"description.cursor-query":',
+        '"command.cursor-set": "設定游標"',
+        '"description.cursor-set":',
+        '"command.cursor-off": "關閉游標"',
+        '"description.cursor-off":',
         '"cursor.editor.title": "游標編輯器"',
         '"cursor.editor.description":',
         '"cursor.state.xDelta":',
@@ -195,14 +268,13 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         globalThis.queueMicrotask = (fn) => { fn(); };
 
         globalThis.translate = (key) => key;
-        let submittedAction = "query";
+        let selectedId = "cursor-query";
         globalThis.CommandForm = class CommandForm {
           constructor(container, _catalog) { this.container = container; this.command = null; this.disabled = false; }
           render(command) { this.command = command; }
           values() {
-            if (submittedAction === "query") return { action: "query" };
-            if (submittedAction === "off") return { action: "off" };
-            return { action: submittedAction, source_channel: 1, x1: 0, x2: 0.001 };
+            if (selectedId === "cursor-set") return { source_channel: 1, x1: 0, x2: 0.001 };
+            return {};
           }
           setDisabled(disabled) { this.disabled = disabled; }
           clearDirty() {}
@@ -212,7 +284,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         const hooks = {
           calls,
           contextKey: () => "simulate||keysight-dsox4024a",
-          selectedCommand: () => ({ id: "cursor", editor: "cursor", group: "cursor" }),
+          selectedCommand: () => ({ id: selectedId, editor: "cursor", group: "cursor" }),
           isAvailable: () => true,
           isExecutionBusy: () => false,
           headerActions: new FakeNode("div"),
@@ -236,6 +308,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
           commands: __CATALOG__,
           groupLabel: (group) => group,
           commandLabel: (command) => command.id,
+          description: (command) => `description.${command.id}`,
           supported: () => true,
         };
 
@@ -263,7 +336,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.equal(editor.entry.form.container.className, "command-form");
         assert.ok(!editor.sectionsHost.children[0].children.includes(editor.entry.button));
 
-        assert.deepEqual(calls[0], ["cursor", { action: "query" }]);
+        assert.deepEqual(calls[0], ["cursor-query", {}]);
         const panel = editor.entry.panel;
         const rows = Object.fromEntries(
           panel.children.map((row) => [row.children[0].textContent, row.children[1].textContent]),
@@ -272,20 +345,43 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.equal(rows["cursor.state.xDelta"], "0.001");
         assert.equal(rows["cursor.state.dydx"], "500");
         assert.ok(!("cursor.state.y1" in rows));
+        // cursor-query reuses the header Read action; no second query button.
+        assert.equal(editor.entry.button.hidden, true);
 
-        submittedAction = "off";
-        const beforeSubmit = calls.length;
-        await editor.submit();
-        const submittedCalls = calls.slice(beforeSubmit);
-        assert.equal(submittedCalls.length, 1);
-        assert.deepEqual(submittedCalls[0], ["cursor", { action: "off" }]);
+        selectedId = "cursor-set";
+        const beforeSetRead = calls.length;
+        await editor.refresh(true, true);
+        assert.deepEqual(calls.slice(beforeSetRead), [["cursor-query", {}]]);
+        assert.equal(editor.entry.button.hidden, false);
+        assert.equal(editor.entry.button.textContent, "actions.apply");
+        const setSection = editor.sectionsHost.children[0];
+        assert.ok(setSection.children.some((node) => node.className === "muted compact-note"));
+        assert.ok(setSection.children.some((node) => node.textContent === "description.cursor-set"));
 
-        submittedAction = "set";
         const beforeSet = calls.length;
         await editor.submit();
         const setCalls = calls.slice(beforeSet);
         assert.equal(setCalls.length, 1);
-        assert.deepEqual(setCalls[0], ["cursor", { action: "set", source_channel: 1, x1: 0, x2: 0.001 }]);
+        assert.deepEqual(setCalls[0], ["cursor-set", { source_channel: 1, x1: 0, x2: 0.001 }]);
+
+        selectedId = "cursor-off";
+        const beforeOffRead = calls.length;
+        await editor.refresh(true, true);
+        assert.deepEqual(calls.slice(beforeOffRead), [["cursor-query", {}]]);
+        assert.equal(editor.entry.button.hidden, false);
+        assert.equal(editor.entry.button.textContent, "actions.run");
+        const beforeSubmit = calls.length;
+        await editor.submit();
+        const submittedCalls = calls.slice(beforeSubmit);
+        assert.equal(submittedCalls.length, 1);
+        assert.deepEqual(submittedCalls[0], ["cursor-off", {}]);
+
+        // Switching back to cursor-query hides the section button again.
+        selectedId = "cursor-query";
+        const callsBeforeBack = calls.length;
+        await editor.refresh(true, false);
+        assert.equal(calls.length, callsBeforeBack);
+        assert.equal(editor.entry.button.hidden, true);
 
         const headerCount = hooks.headerActions.children.length;
         const oldApply = editor.entry.button;
