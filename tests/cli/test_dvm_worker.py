@@ -95,11 +95,13 @@ def test_worker_dvm_query_simulator_execution(tmp_path):
     assert exit_code == 0
     assert payload["result"]["mode"] == "dc"
     assert payload["result"]["source_channel"] == 1
+    assert payload["result"]["unit"] == "volt"
     assert payload["files"] == []
     assert payload["scpi"]["sent"] == [
         "*IDN?",
         ":DVM:ENABle?",
         ":DVM:SOURce?",
+        ":CHANnel1:UNITs?",
         ":DVM:MODE?",
         ":DVM:ARANge?",
         ":DVM:CURRent?",

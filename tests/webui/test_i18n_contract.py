@@ -43,6 +43,7 @@ RESULT_FIELDS = (
     "reason",
     "auto_range_enabled",
     "is_error",
+    "unit",
 )
 
 

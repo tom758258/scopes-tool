@@ -58,6 +58,7 @@ def test_dvm_query_simulator_json_normalizes_all_fields(capsys):
     assert result["mode"] == "dc"
     assert result["auto_range_enabled"] is True
     assert result["value"] == 0.0
+    assert result["unit"] == "volt"
     assert result["raw"] == {
         "enabled": "0",
         "source": "CHAN1",

@@ -906,6 +906,117 @@ if (-not $stateGateOpen) {
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
+    ("result_fields", "expected_passed", "expected_unit"),
+    [
+        ({"unit": "volt"}, True, "volt"),
+        ({"unit": "amp"}, True, "amp"),
+        ({}, False, None),
+        ({"unit": "volts"}, False, None),
+    ],
+)
+def test_dvm_snapshot_unit_contract(
+    tmp_path: Path, result_fields: dict, expected_passed: bool, expected_unit
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "live-dvm-check.ps1"
+    harness_path = tmp_path / "dvm-snapshot-unit.ps1"
+    harness_path.write_text(
+        """\
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [string] $ResultJson
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath,
+    [ref] $tokens,
+    [ref] $parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw "Failed to parse DVM live script: $($parseErrors[0].Message)"
+}
+
+foreach ($functionName in @(
+    "Get-RequiredResultValue",
+    "Get-DvmSnapshot"
+)) {
+    $functionAst = $ast.Find({
+        param($node)
+        return (
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $functionName
+        )
+    }, $true)
+    if ($null -eq $functionAst) {
+        throw "${functionName} was not found in ${ScriptPath}."
+    }
+    Invoke-Expression $functionAst.Extent.Text
+}
+
+$payload = [pscustomobject]@{
+    result = ($ResultJson | ConvertFrom-Json)
+}
+
+$outcome = [ordered]@{
+    passed = $false
+    unit = $null
+    error = ""
+}
+try {
+    $snapshot = Get-DvmSnapshot -Payload $payload -Stage "unit contract"
+    $outcome.passed = $true
+    $outcome.unit = $snapshot.DvmUnit
+} catch {
+    $outcome.error = [string]$_.Exception.Message
+}
+$outcome | ConvertTo-Json -Compress
+""",
+        encoding="utf-8",
+    )
+    result = {
+        "enabled": True,
+        "source_channel": 1,
+        "mode": "dc",
+        "auto_range_enabled": False,
+        **result_fields,
+    }
+
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness_path),
+            "-ScriptPath",
+            str(script_path),
+            "-ResultJson",
+            json.dumps(result),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    outcome = json.loads(completed.stdout.splitlines()[-1])
+    assert outcome["passed"] is expected_passed
+    assert outcome["unit"] == expected_unit
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
+@pytest.mark.parametrize(
     (
         "scenario",
         "expected_status",

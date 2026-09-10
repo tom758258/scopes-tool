@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import math
 
 from .capabilities import ScopeCapabilities
-from .channel import validate_analog_channel
+from .channel import ChannelController, ChannelUnits, validate_analog_channel
 from .errors import DvmResponseError, ParameterValidationError
 from .scpi import SCPIClient
 
@@ -96,6 +96,7 @@ class DvmState:
     mode: str
     auto_range_enabled: bool
     value: float | None
+    unit: ChannelUnits
     valid: bool
     reason: str | None
     raw: dict[str, str]
@@ -107,6 +108,7 @@ class DvmState:
             "mode": self.mode,
             "auto_range_enabled": self.auto_range_enabled,
             "value": self.value,
+            "unit": self.unit,
             "valid": self.valid,
             "reason": self.reason,
             "raw": dict(self.raw),
@@ -156,6 +158,9 @@ class DvmController:
     def query(self) -> DvmState:
         enabled = self.query_enable()
         source = self.query_source()
+        units = ChannelController(self.scpi, self.capabilities).query_units(
+            source.source_channel
+        )
         mode = self.query_mode()
         auto_range = self.query_auto_range()
         current = self.query_current()
@@ -165,6 +170,7 @@ class DvmController:
             mode=mode.mode,
             auto_range_enabled=auto_range.auto_range_enabled,
             value=current.value,
+            unit=units,
             valid=current.valid,
             reason=current.reason,
             raw={

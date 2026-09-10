@@ -108,13 +108,18 @@ def test_dvm_current_preserves_invalid_sentinel():
     ("raw_mode", "expected_mode"),
     [("DCRMs", "dc-rms"), ("DCRM", "dc-rms"), ("ACRM", "ac-rms")],
 )
+@pytest.mark.parametrize(
+    ("units_raw", "expected_unit"),
+    [("VOLT", "volt"), ("AMP", "amp")],
+)
 def test_dvm_controller_aggregate_query_preserves_normalized_and_raw_fields(
-    raw_mode, expected_mode
+    raw_mode, expected_mode, units_raw, expected_unit
 ):
     backend = FakeBackend(
         responses={
             ":DVM:ENABle?": "1",
             ":DVM:SOURce?": "CHANnel2",
+            ":CHANnel2:UNITs?": units_raw,
             ":DVM:MODE?": raw_mode,
             ":DVM:ARANge?": "0",
             ":DVM:CURRent?": "+1.23400000E+000",
@@ -130,6 +135,7 @@ def test_dvm_controller_aggregate_query_preserves_normalized_and_raw_fields(
         "mode": expected_mode,
         "auto_range_enabled": False,
         "value": 1.234,
+        "unit": expected_unit,
         "valid": True,
         "reason": None,
         "raw": {
@@ -140,4 +146,8 @@ def test_dvm_controller_aggregate_query_preserves_normalized_and_raw_fields(
             "current": "+1.23400000E+000",
         },
     }
-    assert backend.history == dvm_query_commands()
+    assert backend.history == [
+        *dvm_query_commands()[:2],
+        ":CHANnel2:UNITs?",
+        *dvm_query_commands()[2:],
+    ]

@@ -484,6 +484,7 @@ function Get-DvmSnapshot {
     $mode = [string](Get-RequiredResultValue -Payload $Payload -Name "mode" -Stage $Stage)
     $autoRange = Get-RequiredResultValue `
         -Payload $Payload -Name "auto_range_enabled" -Stage $Stage
+    $unit = [string](Get-RequiredResultValue -Payload $Payload -Name "unit" -Stage $Stage)
 
     if ($enabled -isnot [bool]) {
         throw "${Stage}: enabled is not a boolean."
@@ -498,12 +499,16 @@ function Get-DvmSnapshot {
     if ($mode -notin @("dc", "dc-rms", "ac-rms")) {
         throw "${Stage}: mode is not canonical: ${mode}"
     }
+    if ($unit -notin @("volt", "amp")) {
+        throw "${Stage}: unit is not canonical: ${unit}"
+    }
 
     return [pscustomobject]@{
         DvmEnabled = [bool]$enabled
         DvmSourceChannel = $sourceChannel
         DvmMode = $mode
         DvmAutoRange = [bool]$autoRange
+        DvmUnit = $unit
     }
 }
 

@@ -1655,7 +1655,9 @@ uppercase values are accepted. Boolean configuration uses only
 `--enabled true|false`. DVM source is an analog channel validated against the
 selected model profile. Current and aggregate results preserve raw readbacks;
 sentinel or non-finite readings return `value: null`, `valid: false`, and a
-reason instead of crashing. DVM availability may depend on an instrument
+reason instead of crashing. The aggregate `dvm-query` result also reports the
+source channel's canonical unit (`volt` or `amp`). The standalone
+`dvm-current` result does not include unit metadata. DVM availability may depend on an instrument
 option or license, and live rejection flows through the normal instrument
 error handling path.
 

@@ -480,6 +480,7 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
             print(f"DVM mode: {state.mode}")
             print(f"DVM auto range enabled: {state.auto_range_enabled}")
             print(f"DVM current value: {state.value}")
+            print(f"DVM unit: {state.unit}")
 
         entry = scope.query_system_error()
         runtime._json_record_system_error(entry)
