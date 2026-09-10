@@ -206,7 +206,7 @@ class FFTController:
             source_channel=int(source_canonical.removeprefix("channel")),
             units=units,
             window=window,
-            units_canonical=parse_fft_units(units),
+            units_canonical=parse_fft_units(units) if operation_canonical == "fft" else None,
             window_canonical=parse_fft_window(window),
             center_hz=_query_fft_finite_number(
                 self.scpi, center_command, "center frequency"
@@ -293,6 +293,15 @@ def fft_configure_commands(
     if fft_operation == "fft-phase" and units is not None:
         raise ParameterValidationError(
             "--units is not supported with --fft-operation fft-phase; omit --units."
+        )
+    if (
+        isinstance(window, str)
+        and window.strip().lower() == "bartlett"
+        and capabilities is not None
+        and capabilities.series != "4000X"
+    ):
+        raise ParameterValidationError(
+            "--window bartlett requires a 4000X capability profile."
         )
     advanced_values = (
         start_hz,

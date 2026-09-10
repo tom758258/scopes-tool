@@ -1651,6 +1651,9 @@ def test_fft_math_slot_scoped_presentation_and_canonical_readback() -> None:
     advanced = fft["presentation"]["models"][MODEL_ID]["fields"]
     assert basic["function"]["options"] == [1]
     assert advanced["function"]["options"] == [1, 2, 3, 4]
+    assert "bartlett" not in basic["window"]["options"]
+    assert "bartlett" not in fft["presentation"]["models"]["keysight-dsox3024a"]["fields"]["window"]["options"]
+    assert "bartlett" in advanced["window"]["options"]
     for command_id in (
         "math-display",
         "math-vertical",
@@ -1679,6 +1682,8 @@ def test_fft_math_slot_scoped_presentation_and_canonical_readback() -> None:
     assert '"field.fft.display": "顯示 MATH 波形"' in chinese
     assert '"description.fft": "Configure FFT on the selected Math slot.' in english
     assert '"description.fft": "設定所選 MATH 槽位的 FFT。' in chinese
+    assert "depend on the selected oscilloscope model" in english
+    assert "依所選示波器機型而定" in chinese
     assert '"field.function": "Function"' in english
     assert '"field.function": "功能"' in chinese
     for key in (

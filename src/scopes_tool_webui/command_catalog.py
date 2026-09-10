@@ -2174,6 +2174,11 @@ def _model_command_presentation(
                 option for option in field.get("options", ())
                 if option != "gate" or capabilities.series == "4000X"
             )
+        if entry["id"] == "fft" and name == "window":
+            override["options"] = tuple(
+                option for option in FFT_WINDOWS
+                if option != "bartlett" or capabilities.series == "4000X"
+            )
         if entry["id"] == "measure-show" and name == "enabled" and capabilities.series != "4000X":
             override["hidden"] = True
         if entry["id"] == "fft" and name in _ADVANCED_FFT_FIELDS and not capabilities.supports_advanced_fft:

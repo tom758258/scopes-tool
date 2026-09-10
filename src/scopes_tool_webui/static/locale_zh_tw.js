@@ -1100,7 +1100,7 @@ export const zhTW = {
   "help.dvm-source.channel": "選擇要進行 DVM 測量的類比通道。即使該通道目前未顯示波形，仍可用於 DVM 測量。",
   "help.dvm-mode.mode": "選擇 DVM 的量測模式：直流、直流 RMS 或交流 RMS。",
   "help.fft.units": "此項為可選；留空時不修改目前設定。選擇 FFT 垂直單位：decibel 或 vrms，分別對應 dB 與 Vrms。",
-  "help.fft.window": "此項為可選；留空時不修改目前設定。選擇 FFT 視窗函數：rectangular、hanning、flattop、bharris 或 bartlett；不同視窗會影響頻譜洩漏與解析度。",
+  "help.fft.window": "選擇 FFT 視窗函數；可用選項依所選示波器機型而定。不同視窗會影響頻譜洩漏與解析度。",
   "help.fft.center_hz": "此項為可選；留空時不修改目前設定。設定 FFT 頻譜的中心頻率，單位 Hz，必須大於或等於 0。",
   "help.fft.span_hz": "此項為可選；留空時不修改目前設定。設定 FFT 頻譜的頻寬範圍，單位 Hz，必須大於 0。",
   "help.fft.operation": "選擇 FFT 幅值或 FFT 相位運算。",

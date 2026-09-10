@@ -551,6 +551,26 @@ def test_result_history_runtime_behaviour() -> None:
         }));
         assert.deepEqual(fieldTexts(fft).map((field) => field[0]), ["FFTPhase", "FFT \u76f8\u4f4d", "\u7e2e\u653e\u8996\u7a97"]);
 
+        const fftMagnitude = new FakeNode("div");
+        api.renderWorkspaceResult(fftMagnitude, makeJob("fft", "fft", "completed", {
+          result: { result: { fft: {
+            operation: "FFT",
+            operation_canonical: "fft",
+            units: "DEC",
+            units_canonical: "decibel",
+            window: "HANN",
+            window_canonical: "hanning",
+          } } },
+        }));
+        const magnitudeValues = fieldTexts(fftMagnitude).map((field) => field[0]);
+        assert.equal(magnitudeValues.length, 4);
+        assert.ok(magnitudeValues.includes("FFT"));
+        assert.ok(magnitudeValues.includes("DEC"));
+        assert.ok(magnitudeValues.includes("HANN"));
+            assert.ok(!magnitudeValues.includes("decibel"));
+            assert.ok(!magnitudeValues.includes("hanning"));
+            assert.ok(!magnitudeValues.some((value) => value.includes("canonical")));
+
         globalThis.testLocale = "en";
         const singleMeasurement = new FakeNode("div");
         api.renderWorkspaceResult(singleMeasurement, measurementJob({

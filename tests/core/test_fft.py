@@ -250,3 +250,37 @@ def test_fft_query_exposes_raw_and_canonical_units_and_window():
     assert state.window == "HANN"
     assert state.units_canonical == "decibel"
     assert state.window_canonical == "hanning"
+
+
+@pytest.mark.parametrize("units", ["DEGR", "RAD"])
+def test_fft_phase_query_keeps_phase_units_raw_without_canonical(units):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    scope.configure_fft(2, 1, fft_operation="fft-phase")
+    backend.fft_functions[2]["units"] = units
+
+    state = scope.query_fft(2)
+
+    assert state.operation_canonical == "fft-phase"
+    assert state.units == units
+    assert state.units_canonical is None
+    assert state.window_canonical == "hanning"
+
+
+@pytest.mark.parametrize(
+    ("model", "accepted"),
+    [("DSOX2004A", False), ("DSOX3024A", False), ("DSOX4024A", True)],
+)
+def test_fft_bartlett_window_requires_4000x_profile(model, accepted):
+    capabilities = capabilities_for_model(model)
+    if accepted:
+        commands = fft_configure_commands(
+            1, 1, window="bartlett", capabilities=capabilities
+        )
+        assert "BARTlett" in commands[-1]
+    else:
+        with pytest.raises(ParameterValidationError, match="bartlett"):
+            fft_configure_commands(
+                1, 1, window="bartlett", capabilities=capabilities
+            )

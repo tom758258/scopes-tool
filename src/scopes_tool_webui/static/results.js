@@ -598,6 +598,12 @@ export function renderWorkspaceResult(container, job, context = {}) {
     const fields = Object.entries(display).filter(([name, value]) => {
       if (isRawDiagnosticField(name)) return false;
       if (
+        job.command === "fft"
+        && (name === "units_canonical" || name === "window_canonical")
+      ) {
+        return false;
+      }
+      if (
         job.command === "sequence"
         && name === "files"
         && Array.isArray(value)

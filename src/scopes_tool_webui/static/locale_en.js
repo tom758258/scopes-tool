@@ -1100,7 +1100,7 @@ export const en = {
   "help.dvm-source.channel": "Select the analog channel for DVM measurement. The channel can still be used even when its waveform is not displayed.",
   "help.dvm-mode.mode": "Select the DVM measurement mode: DC, DC RMS, or AC RMS.",
   "help.fft.units": "Optional; leave blank to keep the current setting. Select the FFT vertical units: decibel or vrms, corresponding to dB and Vrms.",
-  "help.fft.window": "Optional; leave blank to keep the current setting. Select the FFT window function: rectangular, hanning, flattop, bharris, or bartlett; different windows affect spectral leakage and resolution.",
+  "help.fft.window": "Select the FFT window function. Available choices depend on the selected oscilloscope model; different windows affect spectral leakage and resolution.",
   "help.fft.center_hz": "Optional; leave blank to keep the current setting. Set the center frequency of the FFT spectrum in Hz; must be greater than or equal to 0.",
   "help.fft.span_hz": "Optional; leave blank to keep the current setting. Set the frequency span of the FFT spectrum in Hz; must be greater than 0.",
   "help.fft.operation": "Select FFT magnitude or FFT phase operation.",
