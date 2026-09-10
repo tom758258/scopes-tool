@@ -5,6 +5,8 @@ import pytest
 from scopes_tool_core.fft import (
     fft_configure_commands,
     fft_query_commands,
+    parse_fft_units,
+    parse_fft_window,
 )
 
 from scopes_tool_core.capabilities import capabilities_for_model
@@ -193,3 +195,58 @@ def test_fft_fractional_detection_points_readback_is_rejected():
 
     with pytest.raises(ChannelResponseError, match="detection points"):
         scope.query_fft(1)
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("DEC", "decibel"),
+        ("DECIBEL", "decibel"),
+        ("dEcIbEl", "decibel"),
+        ("VRMS", "vrms"),
+        ("vrms", "vrms"),
+    ],
+)
+def test_parse_fft_units_accepts_abbreviated_and_full_tokens(raw, expected):
+    assert parse_fft_units(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("RECT", "rectangular"),
+        ("RECTANGULAR", "rectangular"),
+        ("HANN", "hanning"),
+        ("HANNING", "hanning"),
+        ("FLAT", "flattop"),
+        ("FLATTOP", "flattop"),
+        ("BHAR", "bharris"),
+        ("BHARRIS", "bharris"),
+        ("BART", "bartlett"),
+        ("BARTLETT", "bartlett"),
+        ("hAnN", "hanning"),
+    ],
+)
+def test_parse_fft_window_accepts_abbreviated_and_full_tokens(raw, expected):
+    assert parse_fft_window(raw) == expected
+
+
+@pytest.mark.parametrize("parse", [parse_fft_units, parse_fft_window])
+def test_parse_fft_units_and_window_reject_unknown_tokens(parse):
+    with pytest.raises(ChannelResponseError, match="Could not parse FFT"):
+        parse("UNKNOWN")
+
+
+def test_fft_query_exposes_raw_and_canonical_units_and_window():
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    scope.query_fft(1)
+    backend.fft_functions[1]["units"] = "DEC"
+    backend.fft_functions[1]["window"] = "HANN"
+
+    state = scope.query_fft(1)
+
+    assert state.units == "DEC"
+    assert state.window == "HANN"
+    assert state.units_canonical == "decibel"
+    assert state.window_canonical == "hanning"

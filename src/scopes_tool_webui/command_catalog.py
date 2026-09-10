@@ -22,6 +22,8 @@ from scopes_tool_core.fft import (
     FFT_GATES,
     FFT_OPERATIONS,
     FFT_PHASE_REFERENCES,
+    FFT_UNITS,
+    FFT_WINDOWS,
 )
 from scopes_tool_core.math import (
     MATH_COMPOSITE_OPERATIONS,
@@ -1112,10 +1114,10 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "label_key": "math-function.slot", "option_label": "math-function", "help_key": "math-function.slot"},
             {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}], "help_key": "fft.source_channel"},
-            {"name": "units", "type": "string", "help_key": "fft.units"},
-            {"name": "window", "type": "string", "help_key": "fft.window"},
+            {"name": "units", "type": "enum", "options": FFT_UNITS, "help_key": "fft.units"},
+            {"name": "window", "type": "enum", "options": FFT_WINDOWS, "help_key": "fft.window"},
             {"name": "center_hz", "type": "number", "minimum": 0, "help_key": "fft.center_hz"},
             {"name": "span_hz", "type": "number", "exclusive_minimum": 0, "help_key": "fft.span_hz"},
             {
@@ -1163,7 +1165,7 @@ COMMANDS = (
                 "label_key": "fft.detection_points",
                 "help_key": "fft.detection_points",
             },
-            {"name": "display", "type": "boolean", "help_key": "fft.display"},
+            {"name": "display", "type": "boolean", "label_key": "fft.display", "help_key": "fft.display"},
         ),
     },
     {
@@ -1173,7 +1175,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "label_key": "math-function.slot", "option_label": "math-function", "help_key": "math-function.slot"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-display.enabled"},
         ),
     },
@@ -1184,7 +1186,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "label_key": "math-function.slot", "option_label": "math-function", "help_key": "math-function.slot"},
             {"name": "scale", "type": "number", "exclusive_minimum": 0, "help_key": "math-vertical.scale"},
             {"name": "range_value", "type": "number", "exclusive_minimum": 0, "help_key": "math-vertical.range_value"},
             {"name": "offset", "type": "number", "help_key": "math-vertical.offset"},
@@ -1197,10 +1199,10 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "operation", "type": "enum", "options": MATH_OPERATIONS, "required_if": [{"field": "action", "equals": "set"}]},
-            {"name": "source1", "type": "enum", "options": MATH_SOURCES, "required_if": [{"field": "action", "equals": "set"}]},
-            {"name": "source2", "type": "enum", "options": MATH_SOURCES, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "label_key": "math-function.slot", "option_label": "math-function", "help_key": "math-function.slot"},
+            {"name": "operation", "type": "enum", "options": MATH_OPERATIONS, "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-operator.operation"},
+            {"name": "source1", "type": "enum", "options": MATH_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-operator.source1"},
+            {"name": "source2", "type": "enum", "options": MATH_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-operator.source2"},
         ),
     },
     {
@@ -1210,8 +1212,8 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "operation", "type": "enum", "options": MATH_TRANSFORMS, "option_label": "math-transform", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "label_key": "math-function.slot", "option_label": "math-function", "help_key": "math-function.slot"},
+            {"name": "operation", "type": "enum", "options": MATH_TRANSFORMS, "option_label": "math-transform", "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-transform.operation"},
             {"name": "source", "type": "enum", "options": MATH_TRANSFORM_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "advanced-math.source"},
             {"name": "input_offset", "type": "number", "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "integrate"}], "help_key": "math-transform.input_offset"},
             {"name": "gain", "type": "number", "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "linear"}], "help_key": "math-transform.gain"},
@@ -1225,8 +1227,8 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "operation", "type": "enum", "options": MATH_FILTER_OPERATIONS, "option_label": "math-filter", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "label_key": "math-function.slot", "option_label": "math-function", "help_key": "math-function.slot"},
+            {"name": "operation", "type": "enum", "options": MATH_FILTER_OPERATIONS, "option_label": "math-filter", "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-filter.operation"},
             {"name": "source", "type": "enum", "options": MATH_TRANSFORM_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "advanced-math.source"},
             {"name": "cutoff_hz", "type": "number", "exclusive_minimum": 0, "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "in": ["low-pass", "high-pass"]}], "help_key": "math-filter.cutoff_hz"},
             {"name": "average_count", "type": "integer", "minimum": 2, "maximum": 65536, "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "average"}], "help_key": "math-filter.average_count"},
@@ -1240,8 +1242,8 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
-            {"name": "operation", "type": "enum", "options": MATH_VISUALIZATION_OPERATIONS, "option_label": "math-visualization", "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "label_key": "math-function.slot", "option_label": "math-function", "help_key": "math-function.slot"},
+            {"name": "operation", "type": "enum", "options": MATH_VISUALIZATION_OPERATIONS, "option_label": "math-visualization", "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-visualization.operation"},
             {"name": "source", "type": "enum", "options": MATH_TRANSFORM_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "advanced-math.source"},
             {"name": "source2", "type": "enum", "options": MATH_SOURCES, "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "trend"}, {"field": "measurement", "equals": "vratio"}], "required_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "trend"}, {"field": "measurement", "equals": "vratio"}], "help_key": "math-visualization.source2"},
             {"name": "measurement", "type": "enum", "options": MATH_TREND_MEASUREMENTS, "option_label": "math-trend-measurement", "visible_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "trend"}], "required_if": [{"field": "action", "equals": "set"}, {"field": "operation", "equals": "trend"}], "help_key": "math-visualization.measurement"},
@@ -1255,9 +1257,9 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "operation", "type": "enum", "options": MATH_COMPOSITE_OPERATIONS, "required_if": [{"field": "action", "equals": "set"}]},
-            {"name": "source1", "type": "enum", "options": MATH_SOURCES, "required_if": [{"field": "action", "equals": "set"}]},
-            {"name": "source2", "type": "enum", "options": MATH_SOURCES, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "operation", "type": "enum", "options": MATH_COMPOSITE_OPERATIONS, "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-composite-source.operation"},
+            {"name": "source1", "type": "enum", "options": MATH_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-composite-source.source1"},
+            {"name": "source2", "type": "enum", "options": MATH_SOURCES, "required_if": [{"field": "action", "equals": "set"}], "help_key": "math-composite-source.source2"},
         ),
     },
     {
@@ -1266,7 +1268,7 @@ COMMANDS = (
         "label": "Clear math",
         "modes": ("live", "simulate"),
         "fields": (
-            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            {"name": "function", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "label_key": "math-function.slot", "option_label": "math-function", "help_key": "math-function.slot"},
         ),
     },
     {
@@ -1864,7 +1866,11 @@ _SETTING_QUERY_FIELDS = {
 }
 
 _SETTING_READBACK_FIELDS = {
-    "fft": {"fft_operation": "operation_canonical"},
+    "fft": {
+        "fft_operation": "operation_canonical",
+        "units": "units_canonical",
+        "window": "window_canonical",
+    },
     "measure-source": {"source_channel": "source1_channel"},
     "math-vertical": {"range_value": "range"},
     "dvm-auto-range": {"enabled": "auto_range_enabled"},
@@ -2127,6 +2133,8 @@ def _model_command_presentation(
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
         if field.get("type") == "integer" and name == "function":
             override["maximum"] = capabilities.math_function_count
+            if entry["category"] == "FFT / MATH":
+                override["options"] = tuple(range(1, capabilities.math_function_count + 1))
         if field.get("type") == "integer" and name == "bus":
             override["maximum"] = capabilities.serial_bus_count
         if entry["category"] == "Reference" and name == "slot" and capabilities.reference_waveforms:

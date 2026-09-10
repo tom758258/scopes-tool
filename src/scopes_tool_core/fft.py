@@ -22,12 +22,35 @@ from .scpi import SCPIClient
 
 _FFT_UNITS = {"decibel": "DECibel", "vrms": "VRMS"}
 
+FFT_UNITS = tuple(_FFT_UNITS)
+
 _FFT_WINDOWS = {
     "rectangular": "RECTangular",
     "hanning": "HANNing",
     "flattop": "FLATtop",
     "bharris": "BHARris",
     "bartlett": "BARTlett",
+}
+
+FFT_WINDOWS = tuple(_FFT_WINDOWS)
+
+_FFT_UNITS_READBACKS = {
+    "DEC": "decibel",
+    "DECIBEL": "decibel",
+    "VRMS": "vrms",
+}
+
+_FFT_WINDOW_READBACKS = {
+    "RECT": "rectangular",
+    "RECTANGULAR": "rectangular",
+    "HANN": "hanning",
+    "HANNING": "hanning",
+    "FLAT": "flattop",
+    "FLATTOP": "flattop",
+    "BHAR": "bharris",
+    "BHARRIS": "bharris",
+    "BART": "bartlett",
+    "BARTLETT": "bartlett",
 }
 
 FFT_OPERATIONS = ("fft", "fft-phase")
@@ -103,6 +126,8 @@ class FFTState:
     span_hz: float
     display: bool
     operation_canonical: str | None = None
+    units_canonical: str | None = None
+    window_canonical: str | None = None
     start_hz: float | None = None
     stop_hz: float | None = None
     gate: str | None = None
@@ -172,13 +197,17 @@ class FFTController:
         source_canonical = parse_math_source(
             source, capabilities=self.capabilities
         )
+        units = self.scpi.query(units_command)
+        window = self.scpi.query(window_command)
         state = FFTState(
             function=function,
             operation=operation,
             operation_canonical=operation_canonical,
             source_channel=int(source_canonical.removeprefix("channel")),
-            units=self.scpi.query(units_command),
-            window=self.scpi.query(window_command),
+            units=units,
+            window=window,
+            units_canonical=parse_fft_units(units),
+            window_canonical=parse_fft_window(window),
             center_hz=_query_fft_finite_number(
                 self.scpi, center_command, "center frequency"
             ),
@@ -389,12 +418,28 @@ def normalize_fft_units(value: str) -> str:
     except KeyError as exc:
         raise ParameterValidationError("--units must be decibel or vrms.") from exc
 
+def parse_fft_units(raw: str) -> str:
+    try:
+        return _FFT_UNITS_READBACKS[raw.strip().upper()]
+    except (KeyError, AttributeError) as exc:
+        raise ChannelResponseError(
+            f"Could not parse FFT units response: {raw!r}"
+        ) from exc
+
 def normalize_fft_window(value: str) -> str:
     try:
         return _FFT_WINDOWS[value.strip().lower()]
     except KeyError as exc:
         raise ParameterValidationError(
             "--window must be rectangular, hanning, flattop, bharris, or bartlett."
+        ) from exc
+
+def parse_fft_window(raw: str) -> str:
+    try:
+        return _FFT_WINDOW_READBACKS[raw.strip().upper()]
+    except (KeyError, AttributeError) as exc:
+        raise ChannelResponseError(
+            f"Could not parse FFT window response: {raw!r}"
         ) from exc
 
 def normalize_fft_operation(value: str) -> str:

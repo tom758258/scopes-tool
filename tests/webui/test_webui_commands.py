@@ -1626,6 +1626,77 @@ def test_fft_catalog_projects_advanced_fields_by_model_capability() -> None:
     ]
 
 
+def test_fft_math_slot_scoped_presentation_and_canonical_readback() -> None:
+    commands = {
+        entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()
+    }
+    fft = commands["fft"]
+    fields = {field["name"]: field for field in fft["fields"]}
+    assert fields["function"]["label_key"] == "math-function.slot"
+    assert fields["function"]["option_label"] == "math-function"
+    assert fields["function"]["help_key"] == "math-function.slot"
+    assert fields["units"]["type"] == "enum"
+    assert fields["units"]["options"] == ["decibel", "vrms"]
+    assert fields["window"]["type"] == "enum"
+    assert fields["window"]["options"] == [
+        "rectangular", "hanning", "flattop", "bharris", "bartlett",
+    ]
+    assert fields["display"]["label_key"] == "fft.display"
+    assert fft["presentation"]["readback_fields"] == {
+        "fft_operation": "operation_canonical",
+        "units": "units_canonical",
+        "window": "window_canonical",
+    }
+    basic = fft["presentation"]["models"]["keysight-dsox2004a"]["fields"]
+    advanced = fft["presentation"]["models"][MODEL_ID]["fields"]
+    assert basic["function"]["options"] == [1]
+    assert advanced["function"]["options"] == [1, 2, 3, 4]
+    for command_id in (
+        "math-display",
+        "math-vertical",
+        "math-operator",
+        "math-transform",
+        "math-filter",
+        "math-visualization",
+        "math-clear",
+    ):
+        function = next(
+            field for field in commands[command_id]["fields"] if field["name"] == "function"
+        )
+        assert function["label_key"] == "math-function.slot", command_id
+        assert function["option_label"] == "math-function", command_id
+        assert function["help_key"] == "math-function.slot", command_id
+
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    assert '"command.fft": "MATH - FFT"' in english
+    assert '"command.fft": "MATH - FFT"' in chinese
+    assert '"field.math-function.slot": "Math slot"' in english
+    assert '"field.math-function.slot": "MATH 槽位"' in chinese
+    assert '"enum.math-function": "Math {{value}}"' in english
+    assert '"enum.math-function": "Math {{value}}"' in chinese
+    assert '"field.fft.display": "Show MATH waveform"' in english
+    assert '"field.fft.display": "顯示 MATH 波形"' in chinese
+    assert '"description.fft": "Configure FFT on the selected Math slot.' in english
+    assert '"description.fft": "設定所選 MATH 槽位的 FFT。' in chinese
+    assert '"field.function": "Function"' in english
+    assert '"field.function": "功能"' in chinese
+    for key in (
+        "help.math-function.slot",
+        "help.math-operator.operation",
+        "help.math-operator.source1",
+        "help.math-operator.source2",
+        "help.math-transform.operation",
+        "help.math-filter.operation",
+        "help.math-visualization.operation",
+        "help.math-composite-source.operation",
+        "help.math-composite-source.source1",
+        "help.math-composite-source.source2",
+    ):
+        assert f'"{key}":' in english, key
+        assert f'"{key}":' in chinese, key
+
+
 def test_advanced_math_catalog_exposes_operation_specific_fields() -> None:
     commands = {
         entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()

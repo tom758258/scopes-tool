@@ -4684,6 +4684,87 @@ def test_fft_phase_units_visibility_and_submission() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_fft_abbreviated_readback_syncs_canonical_values_for_apply() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.formApi = { CommandForm };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const makeField = (name, type, value) => ({
+          value: value ?? "",
+          type: type === "boolean" ? "checkbox" : "text",
+          checked: false,
+          dataset: { field: name, type },
+          validity: { badInput: false },
+          closest: () => null,
+          setCustomValidity() {},
+          checkValidity() { return true; },
+          reportValidity() {},
+        });
+
+        const units = makeField("units", "string", "");
+        const window = makeField("window", "string", "");
+        const fields = [units, window];
+        const container = {
+          querySelectorAll(selector) {
+            if (selector === "[data-field]") return fields;
+            if (selector === "[data-visible-if]") return [];
+            if (selector === "[data-help-by-value]") return [];
+            return [];
+          },
+          querySelector(selector) {
+            const match = selector.match(/^\[data-field="(.+)"\]$/);
+            return fields.find((f) => f.dataset.field === match?.[1]) ?? null;
+          },
+          replaceChildren() {},
+        };
+
+        const form = new globalThis.formApi.CommandForm(container, { optionsFor: () => [] });
+        form.command = { id: "fft" };
+        form.presentation = {
+          kind: "setting",
+          action_field: "action",
+          apply_value: "set",
+          query_value: "query",
+          readback_fields: { units: "units_canonical", window: "window_canonical" },
+        };
+
+        // Core already canonicalized the SCPI tokens; the form only follows the alias.
+        form.syncResult({ result: { result: {
+          units: "DEC",
+          units_canonical: "decibel",
+          window: "HANN",
+          window_canonical: "hanning",
+        } } }, true);
+        assert.equal(units.value, "decibel");
+        assert.equal(window.value, "hanning");
+        assert.deepEqual(form.values(), { units: "decibel", window: "hanning" });
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def test_fft_result_field_localization() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
