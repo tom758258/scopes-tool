@@ -1089,7 +1089,7 @@ export const zhTW = {
   "help.save-image-factors.enabled": "啟用後在儲存影像中包含量測因子與註記。",
   "help.save-image.filename": "僅供本次儲存影像使用，不會使用或修改預設基本檔名。",
   "help.save-waveform-format.format": "選擇輸出的波形檔案格式；不同格式適合儀器回讀或後續分析。",
-  "help.save-waveform-length.points": "設定未使用最大長度時要儲存的波形資料點數。最小值為 100 點；可用上限會依儀器型號與目前設定狀態而變化，本工具目前不會顯示該上限。因此 10000、20000 點在某些設定下可能可用，在其他設定下則未必。",
+  "help.save-waveform-length.points": "設定未使用最大長度時要儲存的波形資料點數。最小值為 100 點；可用上限會依儀器型號與目前設定狀態而變化，本工具目前不會顯示該上限。",
   "help.check-error.max_reads": "最大讀取數；達到此數或回報無錯誤時即停止。",
   "help.save-waveform.filename": "僅供本次儲存波形使用，不會使用或修改預設基本檔名。",
   "help.setup.target": "選擇設定目標為儀器插槽或儀器端檔案。",

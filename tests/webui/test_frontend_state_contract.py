@@ -3499,6 +3499,29 @@ def test_boolean_field_help_spans_full_row() -> None:
     assert "grid-column: 1 / -1;" in boolean_help
 
 
+def test_field_help_and_readonly_value_wrap_long_text() -> None:
+    styles = read_static("styles.css")
+    field_help = extract_css_rule(styles, ".field-help {")
+
+    assert "overflow-wrap: anywhere;" in field_help
+
+    readonly_value = extract_css_rule(styles, ".readonly-value {")
+
+    assert "min-width: 0;" in readonly_value
+    assert "overflow-wrap: anywhere;" in readonly_value
+
+
+def test_shared_editor_sections_constrain_intrinsic_minimum_width() -> None:
+    styles = read_static("styles.css")
+    for selector in (
+        ".trigger-editor-section {",
+        ".serial-editor-section {",
+        ".search-editor-section {",
+        ".workflow-editor-section {",
+    ):
+        assert "min-width: 0;" in extract_css_rule(styles, selector), selector
+
+
 def test_summary_uses_only_scopes_supported_states() -> None:
     english = read_static("locale_en.js")
 

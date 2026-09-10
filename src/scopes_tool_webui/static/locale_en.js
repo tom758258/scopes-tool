@@ -1089,7 +1089,7 @@ export const en = {
   "help.save-image-factors.enabled": "Enable to include measurement factors and annotations in the saved image.",
   "help.save-image.filename": "Filename used only for this Save Image operation; it does not use or change the default base filename.",
   "help.save-waveform-format.format": "Select the output waveform file format; different formats suit instrument recall or further analysis.",
-  "help.save-waveform-length.points": "Set how many waveform data points to save when maximum length is not in use. Minimum: 100 points. The usable maximum depends on the instrument and its current configuration, and this tool does not currently display that limit. Values such as 10000 or 20000 may therefore be valid in some configurations and not in others.",
+  "help.save-waveform-length.points": "Set how many waveform data points to save when maximum length is not in use. Minimum: 100 points. The usable maximum depends on the instrument and its current configuration, and this tool does not currently display that limit.",
   "help.check-error.max_reads": "Maximum number of error queue reads; stops early when no error is reported.",
   "help.save-waveform.filename": "Filename used only for this Save Waveform operation; it does not use or change the default base filename.",
   "help.setup.target": "Choose whether the setup target is an instrument slot or an instrument-side file.",

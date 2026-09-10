@@ -313,7 +313,7 @@ export class SaveExportEditor {
 
     if (modeConfig.id === "waveform") {
       const note = document.createElement("p");
-      note.className = "muted compact-note";
+      note.className = "muted compact-note save-export-waveform-max-note";
       note.textContent = translate("save-export.editor.waveformLengthMaxNote");
       this.sectionsHost.append(note);
     }

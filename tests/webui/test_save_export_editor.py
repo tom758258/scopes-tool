@@ -13,6 +13,13 @@ STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
 SAVE_EXPORT_EDITOR_SOURCE = STATIC_ROOT / "save-export-editor.js"
 
 
+def _css_rule(source: str, selector: str) -> str:
+    start = source.index(selector)
+    body_start = source.index("{", start)
+    end = source.index("}", body_start)
+    return source[body_start:end + 1]
+
+
 def run_node(script: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(SAVE_EXPORT_EDITOR_SOURCE)],
@@ -1285,6 +1292,10 @@ def test_save_export_editor_pairs_settings_before_destination() -> None:
         assert.ok(waveformKids.indexOf(waveformPairs[0]) < waveformKids.indexOf(waveformPairs[1]));
         assert.ok(waveformKids.indexOf(waveformPairs[1]) < waveformKids.indexOf(waveformPreview));
         assert.ok(waveformKids.indexOf(waveformPreview) < waveformKids.indexOf(waveformSaveHost));
+        const maxNote = [...waveformEditor.sectionsHost.children].find(
+          (node) => node.classList?.contains("save-export-waveform-max-note")
+        );
+        assert.ok(maxNote);
 
         const imageBuilt = buildEditor();
         imageBuilt.selectCommand("save-image");
@@ -1347,15 +1358,28 @@ def test_save_export_editor_setting_sections_have_no_duplicate_description() -> 
 
 def test_save_export_pair_layout_contract() -> None:
     css = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
-    assert ".save-export-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }" in css
-    assert ".save-export-pair > .trigger-editor-section .command-form { grid-template-columns: 1fr; }" in css
-    assert ".save-export-pair-single > .trigger-editor-section { grid-column: 1 / -1; }" in css
+    pair = _css_rule(css, ".save-export-pair {")
+    assert "display: grid;" in pair
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in pair
+    assert "align-items: start;" in pair
+    assert "margin-bottom: 8px;" in pair
+    child = _css_rule(css, ".save-export-pair > .trigger-editor-section .command-form {")
+    assert "grid-template-columns: 1fr;" in child
+    single = _css_rule(css, ".save-export-pair-single > .trigger-editor-section {")
+    assert "grid-column: 1 / -1;" in single
     desktop = css.split("@media (min-width: 701px)", 1)[1].split("@media", 1)[0]
-    assert ".save-export-pair > .trigger-editor-section" in desktop
-    assert "align-content: start;" in desktop
+    desktop_child = _css_rule(desktop, ".save-export-pair > .trigger-editor-section")
+    assert "margin-top: 0;" in desktop_child
+    assert "align-content: start;" in desktop_child
     assert "save-export-paired-setting" not in css
     mobile = css.split("@media (max-width: 700px)", 1)[1]
-    assert ".save-export-pair { grid-template-columns: 1fr; }" in mobile
+    assert "grid-template-columns: 1fr;" in _css_rule(mobile, ".save-export-pair {")
+
+
+def test_save_export_waveform_max_note_has_spacing_contract() -> None:
+    css = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
+    max_note = _css_rule(css, ".save-export-waveform-max-note {")
+    assert "margin-bottom: 8px;" in max_note
 
 
 def test_save_setup_file_and_waveform_length_locale_contract() -> None:
@@ -1387,3 +1411,6 @@ def test_save_setup_file_and_waveform_length_locale_contract() -> None:
     assert "instrument" in english_length_help
     assert "100" in chinese_length_help and "最大" in chinese_length_help
     assert "儀器" in chinese_length_help
+    for example in ("10000", "20000"):
+        assert example not in english_length_help
+        assert example not in chinese_length_help
