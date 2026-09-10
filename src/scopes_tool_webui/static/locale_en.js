@@ -1095,6 +1095,7 @@ export const en = {
   "help.setup.target": "Choose whether the setup target is an instrument slot or an instrument-side file.",
   "help.setup.slot": "Select the instrument setup slot, 0 through 9.",
   "help.setup.file": "Enter the full instrument-side file path including the filename, for example \\usb\\baseline.scp. The filename is not generated automatically. This is not a PC file upload.",
+  "help.dvm-source.channel": "Select the analog channel for DVM measurement. The channel can still be used even when its waveform is not displayed.",
   "help.dvm-mode.mode": "Select the DVM measurement mode: DC, DC RMS, or AC RMS.",
   "help.fft.units": "Optional; leave blank to keep the current setting. Enter the FFT vertical units: decibel or vrms, corresponding to dB and Vrms.",
   "help.fft.window": "Optional; leave blank to keep the current setting. Enter the FFT window function: rectangular, hanning, flattop, bharris, or bartlett; different windows affect spectral leakage and resolution.",

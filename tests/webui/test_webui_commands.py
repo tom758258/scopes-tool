@@ -1557,6 +1557,23 @@ def test_commands_expose_channel_display_measurement_dvm_and_math_subset() -> No
 
     dvm_mode = next(entry for entry in response.json() if entry["id"] == "dvm-mode")
     assert next(field for field in dvm_mode["fields"] if field["name"] == "mode")["options"] == list(DVM_MODES)
+    dvm_current = next(entry for entry in response.json() if entry["id"] == "dvm-current")
+    assert dvm_current["browser_hidden"] is True
+    dvm_source = next(entry for entry in response.json() if entry["id"] == "dvm-source")
+    channel_field = next(field for field in dvm_source["fields"] if field["name"] == "channel")
+    assert channel_field["help_key"] == "dvm-source.channel"
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    assert (
+        '"help.dvm-source.channel": "Select the analog channel for DVM measurement. '
+        'The channel can still be used even when its waveform is not displayed."'
+        in english
+    )
+    assert (
+        '"help.dvm-source.channel": "選擇要進行 DVM 測量的類比通道。'
+        '即使該通道目前未顯示波形，仍可用於 DVM 測量。"'
+        in chinese
+    )
     measure_window = next(entry for entry in response.json() if entry["id"] == "measure-window")
     assert next(field for field in measure_window["fields"] if field["name"] == "window")["options"] == list(
         MEASUREMENT_WINDOW_CHOICES

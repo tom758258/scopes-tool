@@ -1095,6 +1095,7 @@ export const zhTW = {
   "help.setup.target": "選擇設定目標為儀器插槽或儀器端檔案。",
   "help.setup.slot": "選擇儀器設定插槽（0–9）。",
   "help.setup.file": "請填寫包含檔名的儀器端完整檔案路徑，例如 \\usb\\baseline.scp。檔名不會自動產生。這不是 PC 檔案上傳。",
+  "help.dvm-source.channel": "選擇要進行 DVM 測量的類比通道。即使該通道目前未顯示波形，仍可用於 DVM 測量。",
   "help.dvm-mode.mode": "選擇 DVM 的量測模式：直流、直流 RMS 或交流 RMS。",
   "help.fft.units": "此項為可選；留空時不修改目前設定。輸入 FFT 垂直單位：decibel 或 vrms，分別對應 dB 與 Vrms。",
   "help.fft.window": "此項為可選；留空時不修改目前設定。輸入 FFT 視窗函數：rectangular、hanning、flattop、bharris 或 bartlett；不同視窗會影響頻譜洩漏與解析度。",

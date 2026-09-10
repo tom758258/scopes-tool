@@ -1067,7 +1067,7 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
-            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}]},
+            {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}], "help_key": "dvm-source.channel"},
         ),
     },
     {
@@ -1094,6 +1094,7 @@ COMMANDS = (
         "id": "dvm-current",
         "category": "DVM",
         "label": "DVM current reading",
+        "browser_hidden": True,
         "modes": ("live", "simulate"),
         "fields": (),
     },
