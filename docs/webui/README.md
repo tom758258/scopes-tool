@@ -167,7 +167,8 @@ The Command workbench exposes:
   `system-clear-status`, `system-opc`, `system-standard-event`,
   `system-options`
 - DVM: `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`,
-  `dvm-current`, `dvm-query`
+  `dvm-query`. The underlying `dvm-current` command remains available to
+  backend callers but is hidden from the Command Browser.
 - FFT / MATH: capability-driven `fft` with basic controls on all supported
   models and Advanced FFT controls on 4000X, plus `math-display`,
   `math-vertical`, `math-operator`, `math-transform`, `math-filter`,
