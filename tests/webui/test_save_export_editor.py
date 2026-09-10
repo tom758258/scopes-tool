@@ -682,14 +682,14 @@ def test_save_export_editor_resyncs_format_after_explicit_image_and_waveform_ext
         await imageEditor.refresh(false, true);
         assert.equal(imageFormat.form.valuesResult.format, "PNG");
         const imageStart = imageBuilt.submitted.length;
-        imageEditor.filenameEntry.form.valuesResult = { filename: "screen.bmp" };
+        imageEditor.filenameEntry.form.valuesResult = { filename: "screen.BmP" };
         await imageEditor.submitCurrentMode("save-image");
         const imageCommands = imageBuilt.submitted.slice(imageStart);
         assert.deepEqual(imageCommands.map((entry) => entry.command), [
           "save-image",
           "save-image-format",
         ]);
-        assert.deepEqual(imageCommands[0].parameters, { filename: "screen.bmp" });
+        assert.deepEqual(imageCommands[0].parameters, { filename: "screen.BmP" });
         assert.deepEqual(imageCommands[1].parameters, { action: "query" });
         assert.equal(imageCommands[1].intent, "readback");
         assert.ok(!imageCommands.some((entry) => entry.parameters.action === "set"));
@@ -1129,6 +1129,9 @@ def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
         assert.ok(editor.setupSaveButton);
         assert.ok(editor.sectionsHost.textContent.includes("Setup storage note"));
         assert.ok(!editor.sectionsHost.textContent.includes("Maximum waveform length mode"));
+        selectCommand("setup-recall");
+        await editor.refresh(false, false);
+        assert.equal(editor.mode, "setup");
         selectCommand("save-image");
         await editor.refresh(false, false);
         assert.equal(editor.mode, "image");

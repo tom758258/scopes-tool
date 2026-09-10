@@ -5,49 +5,51 @@ const SAVE_EXPORT_MODES = {
   image: {
     id: "image",
     labelKey: "save-export.editor.mode.image",
-    settingIds: [
-      "save-image-format",
-      "save-image-palette",
-      "save-image-ink-saver",
-      "save-image-factors",
+    commandId: "save-image",
+    settingPairs: [
+      ["save-image-format", "save-image-palette"],
+      ["save-image-ink-saver", "save-image-factors"],
     ],
-    saveCommandId: "save-image",
+    formatSettingId: "save-image-format",
+    formatExtensions: {
+      png: ".png",
+      bmp: ".bmp",
+      bmp8: ".bmp",
+      bmp24: ".bmp",
+    },
   },
   waveform: {
     id: "waveform",
     labelKey: "save-export.editor.mode.waveform",
-    settingIds: [
-      "save-waveform-format",
-      "save-waveform-length",
+    commandId: "save-waveform",
+    settingPairs: [
+      ["save-waveform-format", "save-waveform-length"],
     ],
-    saveCommandId: "save-waveform",
+    formatSettingId: "save-waveform-format",
+    formatExtensions: {
+      csv: ".csv",
+      "ascii-xy": ".csv",
+      binary: ".bin",
+    },
   },
   setup: {
     id: "setup",
     labelKey: "save-export.editor.mode.setup",
-    settingIds: [],
-    setupSaveCommandId: "setup-save",
+    commandId: "setup-save",
+    settingPairs: [],
     setupRecallCommandId: "setup-recall",
   },
 };
 
-function determineFileExtension(mode, formatValue) {
+function determineFileExtension(modeConfig, formatValue) {
   const value = String(formatValue || "").trim().toLowerCase();
-  if (mode === "image") {
-    if (value === "png") return ".png";
-    if (["bmp", "bmp8", "bmp24"].includes(value)) return ".bmp";
-    return "";
-  }
-  if (value === "csv" || value === "ascii-xy") return ".csv";
-  if (value === "binary") return ".bin";
-  return "";
+  return (modeConfig?.formatExtensions || {})[value] || "";
 }
 
-function hasExplicitSaveExtension(mode, filename) {
-  const value = String(filename || "");
-  return mode === "image"
-    ? /\.(?:png|bmp)$/i.test(value)
-    : /\.(?:csv|bin)$/i.test(value);
+function hasExplicitSaveExtension(modeConfig, filename) {
+  const value = String(filename || "").toLowerCase();
+  return Object.values(modeConfig?.formatExtensions || {})
+    .some((extension) => value.endsWith(extension));
 }
 
 export class SaveExportEditor {
@@ -146,10 +148,13 @@ export class SaveExportEditor {
   }
 
   updateModeFromSelection() {
-    const selected = this.selectedDefinition();
-    if (selected?.id === "save-waveform") this.mode = "waveform";
-    else if (selected?.id === "setup-save") this.mode = "setup";
-    else if (selected?.id === "save-image") this.mode = "image";
+    const selectedId = this.selectedDefinition()?.id;
+    for (const [modeKey, config] of Object.entries(SAVE_EXPORT_MODES)) {
+      if (config.commandId === selectedId) {
+        this.mode = modeKey;
+        return;
+      }
+    }
   }
 
   hasCurrentSettings() {
@@ -277,7 +282,7 @@ export class SaveExportEditor {
       return;
     }
     this.pathEntry = this.buildSharedPathForm();
-    this.filenameEntry = this.buildModeFilenameForm(modeConfig.saveCommandId);
+    this.filenameEntry = this.buildModeFilenameForm(modeConfig);
 
     // Settings first: fixed semantic pairs. Each pair keeps its own
     // supported() gating; a lone supported setting spans the full row.
@@ -294,9 +299,7 @@ export class SaveExportEditor {
     settingsSection.append(this.readSettingsPrompt);
     this.sectionsHost.append(settingsSection);
 
-    const settingPairs = modeConfig.id === "image"
-      ? [["save-image-format", "save-image-palette"], ["save-image-ink-saver", "save-image-factors"]]
-      : [["save-waveform-format", "save-waveform-length"]];
+    const settingPairs = modeConfig.settingPairs;
     for (const pair of settingPairs) {
       const settingsPair = document.createElement("div");
       settingsPair.className = "save-export-pair";
@@ -350,7 +353,7 @@ export class SaveExportEditor {
       modeConfig.id === "image" ? "save-export.editor.saveImage" : "save-export.editor.saveWaveform",
     );
     this.saveButton.addEventListener("click", () => {
-      void this.submitCurrentMode(modeConfig.saveCommandId);
+      void this.submitCurrentMode(modeConfig.commandId);
     });
     actionSection.append(this.saveButton);
     this.sectionsHost.append(actionSection);
@@ -392,17 +395,18 @@ export class SaveExportEditor {
     return { section, form };
   }
 
-  buildModeFilenameForm(saveCommandId) {
+  buildModeFilenameForm(modeConfig) {
+    const commandId = modeConfig.commandId;
     const section = document.createElement("section");
     section.className = "trigger-editor-section";
     const heading = document.createElement("strong");
     heading.className = "trigger-editor-heading";
     heading.textContent = translate(
-      saveCommandId === "save-image" ? "field.save-image.filename" : "field.save-waveform.filename",
+      modeConfig.id === "image" ? "field.save-image.filename" : "field.save-waveform.filename",
     );
     const formHost = document.createElement("div");
     formHost.className = "command-form";
-    const command = this.commandForId(saveCommandId);
+    const command = this.commandForId(commandId);
     const form = new CommandForm(formHost, this.catalog);
     form.render(command, { onDirty: () => this.updateDestinationPreview() });
     this.destinationPreview = document.createElement("output");
@@ -424,7 +428,7 @@ export class SaveExportEditor {
     note.textContent = translate("save-export.editor.setupNote");
     const formHost = document.createElement("div");
     formHost.className = "command-form";
-    const command = this.commandForId(modeConfig.setupSaveCommandId);
+    const command = this.commandForId(modeConfig.commandId);
     const form = new CommandForm(formHost, this.catalog);
     form.render(command);
     this.setupEntry = { form };
@@ -433,9 +437,9 @@ export class SaveExportEditor {
     this.setupSaveButton.className = "primary trigger-editor-action";
     this.setupSaveButton.textContent = translate("save-export.editor.saveSetup");
     this.setupSaveButton.addEventListener("click", () => {
-      void this.submitSetup(modeConfig.setupSaveCommandId, false);
+      void this.submitSetup(modeConfig.commandId, false);
     });
-    const showRecall = this.selectedDefinition()?.id !== "setup-save";
+    const showRecall = this.selectedDefinition()?.id !== modeConfig.commandId;
     if (showRecall) {
       this.setupRecallButton = document.createElement("button");
       this.setupRecallButton.type = "button";
@@ -535,12 +539,10 @@ export class SaveExportEditor {
     const filenameValues = currentValues(this.filenameEntry?.form);
     const path = String(pathValues.path || "");
     const filename = String(filenameValues.filename || "");
-    const mode = this.mode;
-    const formatEntry = mode === "image"
-      ? this.entries.find((entry) => entry.id === "save-image-format")
-      : this.entries.find((entry) => entry.id === "save-waveform-format");
+    const modeConfig = this.modeConfig();
+    const formatEntry = this.entries.find((entry) => entry.id === modeConfig?.formatSettingId);
     const formatValue = currentValues(formatEntry?.form).format;
-    const suffix = determineFileExtension(mode, formatValue);
+    const suffix = determineFileExtension(modeConfig, formatValue);
     const normalizedPath = path ? (path.endsWith("\\") ? path : `${path}\\`) : "";
     if (!filename) {
       this.destinationPreview.textContent = normalizedPath;
@@ -555,7 +557,7 @@ export class SaveExportEditor {
 
   async readWorkspace() {
     if (this.mode === "setup") return true;
-    const ids = ["save-pwd", "save-filename", ...this.modeConfig().settingIds];
+    const ids = ["save-pwd", "save-filename", ...this.modeConfig().settingPairs.flat()];
     const entries = ids
       .map((id) => ({ id, entry: this.entryForId(id) }))
       .filter(({ entry }) => entry);
@@ -660,7 +662,9 @@ export class SaveExportEditor {
       this.stateKey = null;
       return;
     }
-    const formatId = mode === "image" ? "save-image-format" : "save-waveform-format";
+    const modeConfig = SAVE_EXPORT_MODES[mode];
+    const formatId = modeConfig?.formatSettingId;
+    if (!formatId) return;
     const entry = this.entryForId(formatId);
     if (!entry?.form) return;
     const values = entry.form.queryValues();
@@ -706,10 +710,11 @@ export class SaveExportEditor {
     }
     const saveValues = this.filenameEntry?.form?.values?.();
     if (saveValues === null) return;
-    const mode = this.mode;
+    const modeConfig = this.modeConfig();
+    const mode = modeConfig.id;
     const epoch = this.epoch;
     const stateKey = this.currentStateKey();
-    const resyncFormat = hasExplicitSaveExtension(mode, saveValues?.filename);
+    const resyncFormat = hasExplicitSaveExtension(modeConfig, saveValues?.filename);
     this.setBusy(true);
     try {
       for (const item of executionOrder) {
