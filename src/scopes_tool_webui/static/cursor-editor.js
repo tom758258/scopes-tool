@@ -1,17 +1,6 @@
 import { translate } from "/static/i18n.js";
 import { CommandForm } from "/static/command-form.js";
 
-const STATE_ROWS = [
-  ["mode", "mode"],
-  ["x1_seconds", "x1"],
-  ["x2_seconds", "x2"],
-  ["y1_volts", "y1"],
-  ["y2_volts", "y2"],
-  ["x_delta_seconds", "xDelta"],
-  ["y_delta_volts", "yDelta"],
-  ["dydx", "dydx"],
-];
-
 export class CursorEditor {
   constructor(container, catalog, hooks) {
     this.container = container;
@@ -31,10 +20,6 @@ export class CursorEditor {
     this.refreshButton?.remove?.();
     this.entry?.button.remove?.();
     this.container.replaceChildren();
-    this.headRow = document.createElement("div");
-    this.headRow.className = "trigger-editor-head";
-    this.groupHeading = document.createElement("strong");
-    this.groupHeading.className = "trigger-editor-heading";
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
     this.refreshButton.className = "secondary trigger-editor-refresh";
@@ -42,16 +27,15 @@ export class CursorEditor {
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
-    this.headRow.append(this.groupHeading);
     if (this.hooks.headerActions) {
       this.refreshButton.hidden = true;
       this.hooks.headerActions.append(this.refreshButton);
     } else {
-      this.headRow.append(this.refreshButton);
+      this.container.append(this.refreshButton);
     }
     this.sectionsHost = document.createElement("div");
     this.sectionsHost.className = "trigger-editor-sections";
-    this.container.append(this.headRow, this.sectionsHost);
+    this.container.append(this.sectionsHost);
   }
 
   definition() {
@@ -113,7 +97,6 @@ export class CursorEditor {
       return;
     }
     this.stateKey = key;
-    this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
     if (this.renderedKey !== key) this.rebuildSections(key);
     this.applyBusyState();
     if (!read || !this.hooks.isAvailable()) return;
@@ -130,7 +113,6 @@ export class CursorEditor {
     this.entry?.button.remove?.();
     this.entry = null;
     this.sectionsHost.replaceChildren();
-    this.groupHeading.textContent = "";
     this.refreshButton.disabled = true;
   }
 
@@ -160,8 +142,6 @@ export class CursorEditor {
     // duplicate it, so only set/off keep a section button. The button is
     // recreated on every rebuild, so hidden state always follows the selection.
     actionButton.hidden = command.id === "cursor-query";
-    const statePanel = document.createElement("div");
-    statePanel.className = "cursor-editor-state";
     section.append(heading);
     const description = this.catalog.description?.(command);
     if (description) {
@@ -176,49 +156,24 @@ export class CursorEditor {
     } else {
       section.append(actionButton);
     }
-    section.append(statePanel);
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
-    this.entry = { form, button: actionButton, panel: statePanel, epoch };
+    this.entry = { form, button: actionButton, epoch };
     form.render(command, {});
+    const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    formContainer.hidden = fields.length === 0;
     actionButton.addEventListener("click", () => {
       void this.submit();
     });
   }
 
-  statePayload(job) {
-    const payload = job?.result?.result !== undefined ? job.result.result : job?.result;
-    return payload?.cursor || null;
-  }
-
   async readState() {
     if (!this.entry || this.entry.epoch !== this.epoch) return;
-    const job = await this.hooks.executeCommand(
+    await this.hooks.executeCommand(
       "cursor-query",
       {},
       { intent: "readback" },
     );
-    if (job?.status === "completed" && this.entry.epoch === this.epoch) {
-      this.renderState(this.statePayload(job));
-    }
-  }
-
-  renderState(state) {
-    const { panel } = this.entry;
-    panel.replaceChildren();
-    if (!state) return;
-    for (const [resultKey, labelSuffix] of STATE_ROWS) {
-      const value = state[resultKey];
-      if (value === undefined || value === null) continue;
-      const row = document.createElement("div");
-      row.className = "cursor-editor-state-row";
-      const label = document.createElement("span");
-      label.textContent = translate(`cursor.state.${labelSuffix}`);
-      const shown = document.createElement("span");
-      shown.textContent = String(value);
-      row.append(label, shown);
-      panel.append(row);
-    }
   }
 
   async submit() {
@@ -246,7 +201,6 @@ export class CursorEditor {
         && submissionKey === this.currentStateKey()
       ) {
         entry.form.clearDirty();
-        this.renderState(this.statePayload(job));
       }
     } finally {
       this.setBusy(false);

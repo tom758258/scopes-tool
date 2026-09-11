@@ -965,6 +965,9 @@ function isEnabledWorkspaceField(name) {
 }
 
 const RESULT_ENUM_CONTEXTS = {
+  cursor: {
+    mode: "cursor-mode",
+  },
   fft: {
     operation_canonical: "fft-operation",
     gate: "fft-gate",

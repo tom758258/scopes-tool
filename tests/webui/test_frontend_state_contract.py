@@ -2944,6 +2944,45 @@ def test_system_result_summaries_localize_options_and_unknown_operation_bits() -
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
+    results_path = STATIC_ROOT / "results.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const translations = {
+          "enum.cursor-mode.MAN": "Manual",
+          "enum.cursor-mode.MANual": "Manual",
+          "enum.cursor-mode.OFF": "Off",
+        };
+        const source = [
+          `const translations = ${JSON.stringify(translations)};`,
+          "const hasTranslation = (key) => key in translations;",
+          "const translate = (key) => translations[key] ?? key;",
+          fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
+          "globalThis.resultsApi = { formatWorkspaceValue };",
+        ].join("\n");
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { formatWorkspaceValue } = globalThis.resultsApi;
+
+        assert.equal(formatWorkspaceValue("mode", "MAN", "cursor"), "Manual");
+        assert.equal(formatWorkspaceValue("mode", "MANual", "cursor"), "Manual");
+        assert.equal(formatWorkspaceValue("mode", "OFF", "cursor"), "Off");
+        assert.equal(formatWorkspaceValue("mode", "TRACK", "cursor"), "TRACK");
+        assert.equal(formatWorkspaceValue("mode", "MAN", null), "MAN");
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(results_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
     run_generic_form_ownership_behavior(
         r'''

@@ -36,7 +36,7 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
     for command_id in ("cursor-query", "cursor-set", "cursor-off"):
         entry = public[command_id]
         assert entry["category"] == "Cursor"
-        assert entry["group"] == "cursor"
+        assert "group" not in entry
         assert entry["editor"] == "cursor"
         assert entry.get("browser_hidden") is not True
         assert entry.get("hidden") is not True
@@ -233,6 +233,9 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         '"cursor.editor.description":',
         '"cursor.state.xDelta":',
         '"cursor.state.dydx":',
+        '"enum.cursor-mode.MAN": "Manual"',
+        '"enum.cursor-mode.MANual": "Manual"',
+        '"enum.cursor-mode.OFF": "Off"',
     ):
         assert key in english, key
     for key in (
@@ -246,6 +249,9 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         '"cursor.editor.description":',
         '"cursor.state.xDelta":',
         '"cursor.state.dydx":',
+        '"enum.cursor-mode.MAN": "手動"',
+        '"enum.cursor-mode.MANual": "手動"',
+        '"enum.cursor-mode.OFF": "關閉"',
     ):
         assert key in chinese, key
 
@@ -284,7 +290,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         const hooks = {
           calls,
           contextKey: () => "simulate||keysight-dsox4024a",
-          selectedCommand: () => ({ id: selectedId, editor: "cursor", group: "cursor" }),
+          selectedCommand: () => catalog.commands.find((command) => command.id === selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,
           headerActions: new FakeNode("div"),
@@ -337,14 +343,23 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.ok(!editor.sectionsHost.children[0].children.includes(editor.entry.button));
 
         assert.deepEqual(calls[0], ["cursor-query", {}]);
-        const panel = editor.entry.panel;
-        const rows = Object.fromEntries(
-          panel.children.map((row) => [row.children[0].textContent, row.children[1].textContent]),
-        );
-        assert.equal(rows["cursor.state.mode"], "MANual");
-        assert.equal(rows["cursor.state.xDelta"], "0.001");
-        assert.equal(rows["cursor.state.dydx"], "500");
-        assert.ok(!("cursor.state.y1" in rows));
+        // No inline cursor-state panel; state surfaces through Workspace Result.
+        // No inner heading row; the page header already shows the editor title.
+        assert.equal(editor.entry.panel, undefined);
+        const classNames = [];
+        {
+          const walk = (node) => {
+            for (const child of node.children || []) {
+              if (child.className) classNames.push(child.className);
+              walk(child);
+            }
+          };
+          walk(editor.container);
+        }
+        assert.ok(!classNames.includes("cursor-editor-state"));
+        assert.ok(!classNames.includes("trigger-editor-head"));
+        // cursor-query has no fields; its empty form stays hidden.
+        assert.equal(editor.entry.form.container.hidden, true);
         // cursor-query reuses the header Read action; no second query button.
         assert.equal(editor.entry.button.hidden, true);
 
@@ -354,6 +369,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.deepEqual(calls.slice(beforeSetRead), [["cursor-query", {}]]);
         assert.equal(editor.entry.button.hidden, false);
         assert.equal(editor.entry.button.textContent, "actions.apply");
+        assert.equal(editor.entry.form.container.hidden, false);
         const setSection = editor.sectionsHost.children[0];
         assert.ok(setSection.children.some((node) => node.className === "muted compact-note"));
         assert.ok(setSection.children.some((node) => node.textContent === "description.cursor-set"));
@@ -370,6 +386,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.deepEqual(calls.slice(beforeOffRead), [["cursor-query", {}]]);
         assert.equal(editor.entry.button.hidden, false);
         assert.equal(editor.entry.button.textContent, "actions.run");
+        assert.equal(editor.entry.form.container.hidden, true);
         const beforeSubmit = calls.length;
         await editor.submit();
         const submittedCalls = calls.slice(beforeSubmit);

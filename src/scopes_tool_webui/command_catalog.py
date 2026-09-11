@@ -1294,7 +1294,6 @@ COMMANDS = (
         "label": "Cursor state",
         "modes": ("live", "simulate"),
         "fields": (),
-        "group": "cursor",
         "editor": "cursor",
     },
     {
@@ -1309,7 +1308,6 @@ COMMANDS = (
             {"name": "y1", "type": "number", "help_key": "cursor.y1"},
             {"name": "y2", "type": "number", "help_key": "cursor.y2"},
         ),
-        "group": "cursor",
         "editor": "cursor",
     },
     {
@@ -1318,7 +1316,6 @@ COMMANDS = (
         "label": "Turn off cursors",
         "modes": ("live", "simulate"),
         "fields": (),
-        "group": "cursor",
         "editor": "cursor",
     },
     {

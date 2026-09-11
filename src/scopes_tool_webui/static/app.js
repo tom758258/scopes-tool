@@ -899,6 +899,8 @@ function renderWorkspace() {
       "reference-clear",
     ],
     "reference-labels": ["reference-query", "reference-label", "display-label"],
+    "cursor-set": ["cursor-query", "cursor-set"],
+    "cursor-off": ["cursor-query", "cursor-off"],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {

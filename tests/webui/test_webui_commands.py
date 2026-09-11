@@ -3011,7 +3011,7 @@ def test_command_catalog_group_metadata_contract() -> None:
     for command_id, group in expected_groups.items():
         assert commands[command_id]["group"] == group, command_id
 
-    for command_id in ("acquisition", "screenshot", "save-image", "save-waveform", "setup-save"):
+    for command_id in ("acquisition", "screenshot", "save-image", "save-waveform", "setup-save", "cursor-query", "cursor-set", "cursor-off"):
         assert "group" not in commands[command_id], command_id
 
 
@@ -3058,7 +3058,7 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
 
     assert {entry["category"] for entry in grouped} <= {
         "Channel", "Trigger", "Search", "Serial", "Save / Export", "Workflow",
-        "Cursor", "Annotation", "WGEN", "DEMO",
+        "Annotation", "WGEN", "DEMO",
     }
     assert {entry["group"] for entry in grouped} == {
         "edge", "common", "external", "pulse-width", "runt", "transition",
@@ -3069,7 +3069,7 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
         "bus", "lister",
         "path-filename", "image", "waveform",
         "measurement", "capture", "triggered", "automation",
-        "cursor", "annotation", "wgen", "demo",
+        "annotation", "wgen", "demo",
     }
 
     static_root = Path(__file__).resolve().parents[2] / "src" / "scopes_tool_webui" / "static"
