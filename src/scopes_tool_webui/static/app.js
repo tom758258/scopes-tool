@@ -1024,7 +1024,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? ["measurement", "reference-display", "save-export"].includes(editorKind)
+      ? ["cursor", "measurement", "reference-display", "save-export"].includes(editorKind)
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
@@ -1033,7 +1033,7 @@ function syncCommandSelection(draft = null) {
   elements.selectedCommand.title = selectedTitle;
   const selectedDescription = selected
     ? editorOwned
-      ? ["measurement", "reference", "reference-display", "save-export"].includes(editorKind)
+      ? ["cursor", "measurement", "reference", "reference-display", "save-export"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)

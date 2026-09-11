@@ -64,6 +64,14 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
     }
 
 
+def test_cursor_set_form_layout_is_scoped() -> None:
+    css = read_static("styles.css")
+    assert ".cursor-set-form" in css
+    for field in ("source_channel", "x1", "x2", "y1", "y2"):
+        assert f'[data-field="{field}"]' in css, field
+    assert "grid-template-areas: none" in css
+
+
 def test_cursor_set_validation_requires_source_and_x_positions() -> None:
     request = validate_job_request({
         "command": "cursor",
@@ -221,6 +229,10 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     assert 'if (editorKind === "cursor") cursorEditor?.schedulePresentation();' in app_source
     assert 'cursorEditor.refreshButton.hidden = editorKind !== "cursor";' in app_source
     assert "cursorEditor?.rerender();" in app_source
+    # Cursor uses the existing command-specific header path, so each of
+    # cursor-query/cursor-set/cursor-off shows its own label/description.
+    assert '["cursor", "measurement", "reference-display", "save-export"].includes(editorKind)' in app_source
+    assert '["cursor", "measurement", "reference", "reference-display", "save-export"].includes(editorKind)' in app_source
     assert 'id="cursor-editor"' in index_source
     for key in (
         '"command.cursor-query": "Cursor state"',
@@ -271,6 +283,17 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
           setAttribute() {}
           remove() { if (this.parent) this.parent.children = this.parent.children.filter((node) => node !== this); this.parent = null; }
           querySelector() { return null; }
+          get classList() {
+            const node = this;
+            return {
+              add(...tokens) {
+                const current = new Set(node.className.split(" ").filter(Boolean));
+                for (const token of tokens) current.add(token);
+                node.className = [...current].join(" ");
+              },
+              contains(token) { return node.className.split(" ").includes(token); },
+            };
+          }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.queueMicrotask = (fn) => { fn(); };
@@ -341,12 +364,13 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         await editor.refresh(true, true);
         assert.ok(hooks.headerActions.children.includes(editor.refreshButton));
         assert.ok(hooks.headerActions.children.includes(editor.entry.button));
-        assert.equal(editor.entry.form.container.className, "command-form");
+        assert.equal(editor.entry.form.container.classList.contains("command-form"), true);
+        assert.equal(editor.entry.form.container.classList.contains("cursor-set-form"), false);
         assert.ok(!editor.sectionsHost.children[0].children.includes(editor.entry.button));
 
         assert.deepEqual(calls[0], ["cursor-query", {}]);
         // No inline cursor-state panel; state surfaces through Workspace Result.
-        // No inner heading row; the page header already shows the editor title.
+        // No inner heading row; the page header already shows the command label.
         assert.equal(editor.entry.panel, undefined);
         const classNames = [];
         {
@@ -360,7 +384,10 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         }
         assert.ok(!classNames.includes("cursor-editor-state"));
         assert.ok(!classNames.includes("trigger-editor-head"));
-        // cursor-query has no fields; its empty form stays hidden.
+        assert.ok(!classNames.includes("trigger-editor-heading"));
+        assert.ok(!classNames.includes("muted compact-note"));
+        // cursor-query has no fields; its empty section stays hidden.
+        assert.equal(editor.sectionsHost.children[0].hidden, true);
         assert.equal(editor.entry.form.container.hidden, true);
         // cursor-query reuses the header Read action; no second query button.
         assert.equal(editor.entry.button.hidden, true);
@@ -373,8 +400,13 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.equal(editor.entry.button.textContent, "actions.apply");
         assert.equal(editor.entry.form.container.hidden, false);
         const setSection = editor.sectionsHost.children[0];
-        assert.ok(setSection.children.some((node) => node.className === "muted compact-note"));
-        assert.ok(setSection.children.some((node) => node.textContent === "description.cursor-set"));
+        assert.equal(setSection.hidden, false);
+        // The page header shows the command label/description; the section
+        // must not repeat them.
+        assert.ok(setSection.children.every((node) => node.className !== "trigger-editor-heading"));
+        assert.ok(setSection.children.every((node) => node.className !== "muted compact-note"));
+        assert.equal(editor.entry.form.container.classList.contains("command-form"), true);
+        assert.equal(editor.entry.form.container.classList.contains("cursor-set-form"), true);
 
         const beforeSet = calls.length;
         await editor.submit();
@@ -388,7 +420,9 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.deepEqual(calls.slice(beforeOffRead), [["cursor-query", {}]]);
         assert.equal(editor.entry.button.hidden, false);
         assert.equal(editor.entry.button.textContent, "actions.run");
+        assert.equal(editor.sectionsHost.children[0].hidden, true);
         assert.equal(editor.entry.form.container.hidden, true);
+        assert.equal(editor.entry.form.container.classList.contains("cursor-set-form"), false);
         const beforeSubmit = calls.length;
         await editor.submit();
         const submittedCalls = calls.slice(beforeSubmit);
@@ -401,6 +435,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         await editor.refresh(true, false);
         assert.equal(calls.length, callsBeforeBack);
         assert.equal(editor.entry.button.hidden, true);
+        assert.equal(editor.sectionsHost.children[0].hidden, true);
 
         const headerCount = hooks.headerActions.children.length;
         const oldApply = editor.entry.button;

@@ -127,11 +127,11 @@ export class CursorEditor {
     if (!command || !this.catalog.supported(command)) return;
     const section = document.createElement("section");
     section.className = "trigger-editor-section";
-    const heading = document.createElement("strong");
-    heading.className = "trigger-editor-heading";
-    heading.textContent = this.catalog.commandLabel(command);
     const formContainer = document.createElement("div");
     formContainer.className = "command-form";
+    if (command.id === "cursor-set") {
+      formContainer.classList.add("cursor-set-form");
+    }
     const actionButton = document.createElement("button");
     actionButton.type = "button";
     actionButton.className = "secondary trigger-editor-action";
@@ -142,14 +142,6 @@ export class CursorEditor {
     // duplicate it, so only set/off keep a section button. The button is
     // recreated on every rebuild, so hidden state always follows the selection.
     actionButton.hidden = command.id === "cursor-query";
-    section.append(heading);
-    const description = this.catalog.description?.(command);
-    if (description) {
-      const note = document.createElement("p");
-      note.className = "muted compact-note";
-      note.textContent = description;
-      section.append(note);
-    }
     section.append(formContainer);
     if (this.hooks.headerActions) {
       this.hooks.headerActions.append(actionButton);
@@ -161,6 +153,7 @@ export class CursorEditor {
     this.entry = { form, button: actionButton, epoch };
     form.render(command, {});
     const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    section.hidden = fields.length === 0;
     formContainer.hidden = fields.length === 0;
     actionButton.addEventListener("click", () => {
       void this.submit();
