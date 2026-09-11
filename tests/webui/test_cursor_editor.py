@@ -235,6 +235,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         '"cursor.state.dydx":',
         '"enum.cursor-mode.MAN": "Manual"',
         '"enum.cursor-mode.MANual": "Manual"',
+        '"enum.cursor-mode.MANUAL": "Manual"',
         '"enum.cursor-mode.OFF": "Off"',
     ):
         assert key in english, key
@@ -251,6 +252,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         '"cursor.state.dydx":',
         '"enum.cursor-mode.MAN": "手動"',
         '"enum.cursor-mode.MANual": "手動"',
+        '"enum.cursor-mode.MANUAL": "手動"',
         '"enum.cursor-mode.OFF": "關閉"',
     ):
         assert key in chinese, key

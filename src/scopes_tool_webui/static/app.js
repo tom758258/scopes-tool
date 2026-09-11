@@ -1174,7 +1174,10 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = editorKind !== "segmented";
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
   if (sequenceEditor?.executeButton) sequenceEditor.executeButton.hidden = editorKind !== "sequence";
-  if (cursorEditor?.entry?.button) cursorEditor.entry.button.hidden = editorKind !== "cursor";
+  if (cursorEditor?.entry?.button) {
+    cursorEditor.entry.button.hidden =
+      editorKind !== "cursor" || selected?.id === "cursor-query";
+  }
   if (cursorEditor?.refreshButton) cursorEditor.refreshButton.hidden = editorKind !== "cursor";
   if (annotationEditor?.entry?.button) annotationEditor.entry.button.hidden = editorKind !== "annotation";
   if (annotationEditor?.refreshButton) annotationEditor.refreshButton.hidden = editorKind !== "annotation";

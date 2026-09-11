@@ -401,6 +401,7 @@ export const en = {
   "enum.ac-rms": "AC RMS",
   "enum.cursor-mode.MAN": "Manual",
   "enum.cursor-mode.MANual": "Manual",
+  "enum.cursor-mode.MANUAL": "Manual",
   "enum.cursor-mode.OFF": "Off",
   "enum.main": "Main",
   "enum.zoom": "Zoom",

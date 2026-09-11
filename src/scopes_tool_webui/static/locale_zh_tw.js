@@ -402,6 +402,7 @@ export const zhTW = {
   "enum.ac-rms": "AC RMS",
   "enum.cursor-mode.MAN": "手動",
   "enum.cursor-mode.MANual": "手動",
+  "enum.cursor-mode.MANUAL": "手動",
   "enum.cursor-mode.OFF": "關閉",
   "enum.main": "主畫面",
   "enum.zoom": "縮放",

@@ -2954,6 +2954,7 @@ def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
         const translations = {
           "enum.cursor-mode.MAN": "Manual",
           "enum.cursor-mode.MANual": "Manual",
+          "enum.cursor-mode.MANUAL": "Manual",
           "enum.cursor-mode.OFF": "Off",
         };
         const source = [
@@ -2968,6 +2969,7 @@ def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
 
         assert.equal(formatWorkspaceValue("mode", "MAN", "cursor"), "Manual");
         assert.equal(formatWorkspaceValue("mode", "MANual", "cursor"), "Manual");
+        assert.equal(formatWorkspaceValue("mode", "MANUAL", "cursor"), "Manual");
         assert.equal(formatWorkspaceValue("mode", "OFF", "cursor"), "Off");
         assert.equal(formatWorkspaceValue("mode", "TRACK", "cursor"), "TRACK");
         assert.equal(formatWorkspaceValue("mode", "MAN", null), "MAN");
@@ -4960,6 +4962,27 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         syncWorkspaceHeaderActions("serial");
         syncWorkspaceHeaderActions("save-export");
         assert.equal(saveExportEditor.refreshButton.hidden, true);
+
+        selectedId = "cursor-query";
+        syncWorkspaceHeaderActions("cursor");
+        assert.equal(cursorEditor.refreshButton.hidden, false);
+        assert.equal(cursorEditor.entry.button.hidden, true);
+        syncWorkspaceHeaderActions("cursor");
+        assert.equal(cursorEditor.entry.button.hidden, true);
+
+        selectedId = "cursor-set";
+        syncWorkspaceHeaderActions("cursor");
+        assert.equal(cursorEditor.refreshButton.hidden, false);
+        assert.equal(cursorEditor.entry.button.hidden, false);
+
+        selectedId = "cursor-off";
+        syncWorkspaceHeaderActions("cursor");
+        assert.equal(cursorEditor.refreshButton.hidden, false);
+        assert.equal(cursorEditor.entry.button.hidden, false);
+
+        syncWorkspaceHeaderActions("serial");
+        assert.equal(cursorEditor.refreshButton.hidden, true);
+        assert.equal(cursorEditor.entry.button.hidden, true);
         '''
     )
     completed = subprocess.run(
