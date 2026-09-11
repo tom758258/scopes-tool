@@ -1504,9 +1504,9 @@ class Oscilloscope:
     def configure_cursor(
         self,
         source_channel: int,
-        x1_seconds: float,
-        x2_seconds: float,
         *,
+        x1_seconds: float | None = None,
+        x2_seconds: float | None = None,
         y1_volts: float | None = None,
         y2_volts: float | None = None,
         auto_timebase: bool = False,
@@ -1514,8 +1514,8 @@ class Oscilloscope:
     ) -> None:
         self._cursor_controller().set_manual(
             source_channel,
-            x1_seconds,
-            x2_seconds,
+            x1_seconds=x1_seconds,
+            x2_seconds=x2_seconds,
             y1_volts=y1_volts,
             y2_volts=y2_volts,
             auto_timebase=auto_timebase,

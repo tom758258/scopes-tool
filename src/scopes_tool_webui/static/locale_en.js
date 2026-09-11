@@ -919,7 +919,7 @@ export const en = {
   "command.cursor-query": "Cursor state",
   "description.cursor-query": "Read the current cursor mode and available cursor positions.",
   "command.cursor-set": "Set cursors",
-  "description.cursor-set": "Applying these settings switches the cursors to Manual mode and enables them. X1 and X2 are required; Y1 and Y2 are optional.",
+  "description.cursor-set": "Set one or more X/Y cursor positions. Unspecified positions remain unchanged. Applying switches cursors to Manual mode.",
   "command.cursor-off": "Turn off cursors",
   "description.cursor-off": "Turn off and hide the cursor display.",
   "command.annotation": "Annotation",

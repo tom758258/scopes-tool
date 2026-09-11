@@ -3,6 +3,7 @@ import pytest
 from scopes_tool_core.cursor import (
     cursor_auto_vertical_plan,
     cursor_auto_timebase_plan,
+    cursor_configure_commands,
 )
 
 from scopes_tool_core.errors import ParameterValidationError
@@ -12,14 +13,14 @@ from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
 def test_cursor_auto_timebase_plan_keeps_visible_positions():
-    result = cursor_auto_timebase_plan(1e-3, 0.0, 0.0, 1e-3)
+    result = cursor_auto_timebase_plan(1e-3, 0.0, x1_seconds=0.0, x2_seconds=1e-3)
 
     assert result.changed is False
     assert result.target_scale_seconds_per_division == pytest.approx(1e-3)
     assert result.commands == (":TIMebase:SCALe?", ":TIMebase:POSition?")
 
 def test_cursor_auto_timebase_plan_widens_for_out_of_range_x2():
-    result = cursor_auto_timebase_plan(1e-3, 0.0, 0.0, 0.01)
+    result = cursor_auto_timebase_plan(1e-3, 0.0, x1_seconds=0.0, x2_seconds=0.01)
 
     assert result.changed is True
     assert result.target_scale_seconds_per_division == pytest.approx(0.0025)
@@ -30,7 +31,7 @@ def test_cursor_auto_timebase_plan_widens_for_out_of_range_x2():
     )
 
 def test_cursor_auto_timebase_plan_uses_current_position():
-    result = cursor_auto_timebase_plan(1e-3, 0.01, 0.009, 0.011)
+    result = cursor_auto_timebase_plan(1e-3, 0.01, x1_seconds=0.009, x2_seconds=0.011)
 
     assert result.changed is False
     assert result.target_scale_seconds_per_division == pytest.approx(1e-3)
@@ -110,7 +111,7 @@ def test_configure_cursor_auto_timebase_sends_scale_before_cursor_commands():
     scope = Oscilloscope(backend)
     scope.query_idn()
 
-    scope.configure_cursor(1, 0.0, 0.01, auto_timebase=True)
+    scope.configure_cursor(1, x1_seconds=0.0, x2_seconds=0.01, auto_timebase=True)
 
     assert backend.history[1:4] == [
         ":TIMebase:SCALe?",
@@ -130,7 +131,7 @@ def test_configure_cursor_auto_vertical_sends_scale_offset_before_cursor_command
     scope = Oscilloscope(backend)
     scope.query_idn()
 
-    scope.configure_cursor(1, 0.0, 1e-3, y1_volts=20.0, y2_volts=21.0, auto_vertical=True)
+    scope.configure_cursor(1, x1_seconds=0.0, x2_seconds=1e-3, y1_volts=20.0, y2_volts=21.0, auto_vertical=True)
 
     assert backend.history[1:5] == [
         ":CHANnel1:SCALe?",
@@ -152,7 +153,67 @@ def test_configure_cursor_invalid_x_fails_before_auto_timebase_or_vertical_write
     scope.query_idn()
 
     with pytest.raises(ParameterValidationError, match="--x1 must be a finite number"):
-        scope.configure_cursor(1, float("nan"), 0.01, auto_timebase=True, auto_vertical=True, y1_volts=1.0)
+        scope.configure_cursor(1, x1_seconds=float("nan"), x2_seconds=0.01, auto_timebase=True, auto_vertical=True, y1_volts=1.0)
+
+    assert backend.history == ["*IDN?"]
+
+
+@pytest.mark.parametrize(
+    "kwargs, expected",
+    [
+        (
+            {"x1_seconds": 0.001},
+            [":MARKer:MODE MANual", ":MARKer:X1Y1source CHANnel1", ":MARKer:X2Y2source CHANnel1", ":MARKer:X1Position 0.001"],
+        ),
+        (
+            {"x2_seconds": 0.002},
+            [":MARKer:MODE MANual", ":MARKer:X1Y1source CHANnel1", ":MARKer:X2Y2source CHANnel1", ":MARKer:X2Position 0.002"],
+        ),
+        (
+            {"y1_volts": 0.5},
+            [":MARKer:MODE MANual", ":MARKer:X1Y1source CHANnel1", ":MARKer:X2Y2source CHANnel1", ":MARKer:Y1Position 0.5"],
+        ),
+        (
+            {"y2_volts": 1.0},
+            [":MARKer:MODE MANual", ":MARKer:X1Y1source CHANnel1", ":MARKer:X2Y2source CHANnel1", ":MARKer:Y2Position 1"],
+        ),
+        (
+            {"x1_seconds": 0.0, "y2_volts": 1.0},
+            [":MARKer:MODE MANual", ":MARKer:X1Y1source CHANnel1", ":MARKer:X2Y2source CHANnel1", ":MARKer:X1Position 0", ":MARKer:Y2Position 1"],
+        ),
+    ],
+)
+def test_cursor_configure_commands_emit_only_provided_positions(kwargs, expected):
+    assert cursor_configure_commands(1, **kwargs) == expected
+
+
+def test_cursor_configure_commands_reject_missing_positions():
+    with pytest.raises(ParameterValidationError, match="at least one of"):
+        cursor_configure_commands(1)
+
+
+def test_cursor_auto_timebase_plan_supports_single_x():
+    result = cursor_auto_timebase_plan(1e-3, 0.0, x1_seconds=0.01)
+
+    assert result.changed is True
+    assert result.target_scale_seconds_per_division == pytest.approx(0.0025)
+
+
+def test_cursor_auto_timebase_plan_rejects_missing_x():
+    with pytest.raises(ParameterValidationError, match="--auto-timebase requires --x1 or --x2"):
+        cursor_auto_timebase_plan(1e-3, 0.0)
+
+
+def test_configure_cursor_invalid_auto_targets_fail_with_zero_scope_io():
+    backend = SimulatorBackend(timebase_scale=1e-3, channel_scale={1: 1.0})
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    with pytest.raises(ParameterValidationError, match="--auto-timebase requires --x1 or --x2"):
+        scope.configure_cursor(1, y1_volts=0.5, auto_timebase=True)
+
+    with pytest.raises(ParameterValidationError, match="--auto-vertical requires --y1 or --y2"):
+        scope.configure_cursor(1, x1_seconds=0.0, auto_vertical=True)
 
     assert backend.history == ["*IDN?"]
 

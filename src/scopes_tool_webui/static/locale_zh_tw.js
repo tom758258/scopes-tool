@@ -918,7 +918,7 @@ export const zhTW = {
   "command.cursor-query": "游標狀態",
   "description.cursor-query": "讀取目前游標模式與可用的游標位置。",
   "command.cursor-set": "設定游標",
-  "description.cursor-set": "套用設定時會將游標切換為手動模式並啟用游標。X1、X2 為必要設定；Y1、Y2 可選。",
+  "description.cursor-set": "設定一個或多個 X/Y 游標位置；未提供的位置保持不變。套用時會將游標切換為手動模式。",
   "command.cursor-off": "關閉游標",
   "description.cursor-off": "關閉並隱藏游標顯示。",
   "command.annotation": "註解",

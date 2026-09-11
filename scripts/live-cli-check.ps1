@@ -4075,22 +4075,61 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
             $primaryException = $null
             $firstCleanupException = $null
             try {
-                $configured = Invoke-LiveCli -Stage "cursor-set" -Command "cursor" -Arguments @(
+                $baseline = Invoke-LiveCli -Stage "cursor-set-baseline" -Command "cursor" -Arguments @(
                     "--source-channel", "1", "--x1", "0", "--x2", "0.001",
                     "--y1", "0", "--y2", "0.5"
                 )
                 $cursorConfigured = $true
-                Assert-ScpiSent -Payload $configured -Label "Cursor configure" -ExpectedCommands @(
+                Assert-ScpiSent -Payload $baseline -Label "Cursor baseline configure" -ExpectedCommands @(
                     ":MARKer:MODE MANual", ":MARKer:X1Position 0", ":MARKer:X2Position 0.001",
                     ":MARKer:Y1Position 0", ":MARKer:Y2Position 0.5"
                 )
-                $readback = Invoke-LiveCli -Stage "cursor-query" -Command "cursor" -Arguments @("--query")
-                Assert-ScpiSent -Payload $readback -Label "Cursor query" -ExpectedCommands @(
+                $baselineRead = Invoke-LiveCli -Stage "cursor-query-baseline" -Command "cursor" -Arguments @("--query")
+                Assert-ScpiSent -Payload $baselineRead -Label "Cursor baseline query" -ExpectedCommands @(
                     ":MARKer:MODE?", ":MARKer:XDELta?", ":MARKer:YDELta?"
                 )
-                if ([string]$readback.result.mode -eq "off") {
-                    throw "Cursor query reported OFF after configure."
+                $baselineMode = ([string]$baselineRead.result.mode).Trim().ToLowerInvariant()
+                if ($baselineMode -notin @("man", "manual")) {
+                    throw "Cursor baseline query reported unexpected mode '$($baselineRead.result.mode)'."
                 }
+                $partialX = Invoke-LiveCli -Stage "cursor-set-x1-partial" -Command "cursor" -Arguments @(
+                    "--source-channel", "1", "--x1", "0.0005"
+                )
+                Assert-ScpiSent -Payload $partialX -Label "Cursor X1-only configure" -ExpectedCommands @(
+                    ":MARKer:MODE MANual", ":MARKer:X1Position 0.0005"
+                )
+                $rewrittenByX = @($partialX.scpi.sent | Where-Object { $_ -match ":MARKer:(X2|Y1|Y2)Position " })
+                if ($rewrittenByX.Count -gt 0) {
+                    throw "Cursor X1-only configure rewrote other positions: $($rewrittenByX -join ', ')."
+                }
+                $readX = Invoke-LiveCli -Stage "cursor-query-x1-partial" -Command "cursor" -Arguments @("--query")
+                $modeX = ([string]$readX.result.mode).Trim().ToLowerInvariant()
+                if ($modeX -notin @("man", "manual")) {
+                    throw "Cursor X1-only query reported unexpected mode '$($readX.result.mode)'."
+                }
+                Assert-NearlyEqual -Actual ([double]$readX.result.x1_seconds) -Expected 0.0005 -Label "Cursor X1-only X1"
+                Assert-NearlyEqual -Actual ([double]$readX.result.x2_seconds) -Expected 0.001 -Label "Cursor X1-only X2 unchanged"
+                Assert-NearlyEqual -Actual ([double]$readX.result.y1_volts) -Expected 0 -Label "Cursor X1-only Y1 unchanged"
+                Assert-NearlyEqual -Actual ([double]$readX.result.y2_volts) -Expected 0.5 -Label "Cursor X1-only Y2 unchanged"
+                $partialY = Invoke-LiveCli -Stage "cursor-set-y2-partial" -Command "cursor" -Arguments @(
+                    "--source-channel", "1", "--y2", "0.25"
+                )
+                Assert-ScpiSent -Payload $partialY -Label "Cursor Y2-only configure" -ExpectedCommands @(
+                    ":MARKer:MODE MANual", ":MARKer:Y2Position 0.25"
+                )
+                $rewrittenByY = @($partialY.scpi.sent | Where-Object { $_ -match ":MARKer:(X1|X2|Y1)Position " })
+                if ($rewrittenByY.Count -gt 0) {
+                    throw "Cursor Y2-only configure rewrote other positions: $($rewrittenByY -join ', ')."
+                }
+                $readY = Invoke-LiveCli -Stage "cursor-query-y2-partial" -Command "cursor" -Arguments @("--query")
+                $modeY = ([string]$readY.result.mode).Trim().ToLowerInvariant()
+                if ($modeY -notin @("man", "manual")) {
+                    throw "Cursor Y2-only query reported unexpected mode '$($readY.result.mode)'."
+                }
+                Assert-NearlyEqual -Actual ([double]$readY.result.y2_volts) -Expected 0.25 -Label "Cursor Y2-only Y2"
+                Assert-NearlyEqual -Actual ([double]$readY.result.x1_seconds) -Expected 0.0005 -Label "Cursor Y2-only X1 unchanged"
+                Assert-NearlyEqual -Actual ([double]$readY.result.x2_seconds) -Expected 0.001 -Label "Cursor Y2-only X2 unchanged"
+                Assert-NearlyEqual -Actual ([double]$readY.result.y1_volts) -Expected 0 -Label "Cursor Y2-only Y1 unchanged"
             } catch {
                 $primaryException = $_.Exception
             } finally {

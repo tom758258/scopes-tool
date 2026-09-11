@@ -92,8 +92,8 @@ def test_advanced_command_formatting():
     ]
     assert cursor_configure_commands(
         1,
-        0.0,
-        1e-3,
+        x1_seconds=0.0,
+        x2_seconds=1e-3,
         y1_volts=0.0,
         y2_volts=0.5,
         capabilities=capabilities,
@@ -167,7 +167,7 @@ def test_simulator_advanced_state_round_trip():
     assert scope.query_trigger_holdoff() == pytest.approx(2e-6)
     assert ":TRIGger:HOLDoff:RANDom OFF" in backend.history
 
-    scope.configure_cursor(1, 0.0, 1e-3, y1_volts=0.1, y2_volts=0.6)
+    scope.configure_cursor(1, x1_seconds=0.0, x2_seconds=1e-3, y1_volts=0.1, y2_volts=0.6)
     cursor = scope.query_cursor()
     assert cursor.mode == "MANUAL"
     assert cursor.x_delta_seconds == pytest.approx(1e-3)

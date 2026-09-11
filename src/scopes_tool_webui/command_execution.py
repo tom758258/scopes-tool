@@ -639,8 +639,8 @@ def _execute_scope_command(
         if action == "set":
             scope.configure_cursor(
                 parameters["source_channel"],
-                parameters["x1"],
-                parameters["x2"],
+                x1_seconds=parameters.get("x1"),
+                x2_seconds=parameters.get("x2"),
                 y1_volts=parameters.get("y1"),
                 y2_volts=parameters.get("y2"),
             )
@@ -652,8 +652,8 @@ def _execute_scope_command(
     if command == "cursor-set":
         scope.configure_cursor(
             parameters["source_channel"],
-            parameters["x1"],
-            parameters["x2"],
+            x1_seconds=parameters.get("x1"),
+            x2_seconds=parameters.get("x2"),
             y1_volts=parameters.get("y1"),
             y2_volts=parameters.get("y2"),
         )

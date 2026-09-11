@@ -457,8 +457,10 @@ Control and setup:
   by `:TRIGger:HOLDoff <seconds>`. On 2000X/3000X profiles `commands` contain
   only `:TRIGger:HOLDoff <seconds>`.
 - `cursor`: `operation`, `commands`, `source_channel`, `x1_seconds`,
-  `x2_seconds`, optional `y1_volts`, `y2_volts`, `auto_timebase`,
-  `auto_vertical`, and `diagnostic`.
+  `x2_seconds`, `y1_volts`, `y2_volts`, `auto_timebase`,
+  `auto_vertical`, and `diagnostic`. `x1_seconds`, `x2_seconds`, `y1_volts`,
+  and `y2_volts` are nullable; positions not supplied for a configure
+  operation are reported as `null`.
 - `acquisition`: `operation`, `commands`, `type`, `scpi_type`, `count`.
 - `sample-rate`: `operation`, `sample_rate_hz` for current-rate queries,
   `query_kind` and `maximum_sample_rate_hz` for maximum-rate queries,

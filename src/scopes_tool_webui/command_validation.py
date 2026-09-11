@@ -1292,15 +1292,22 @@ def _validate_parameters(
         if action not in {"query", "set", "off"}:
             raise WebUIRequestError("cursor action must be query, set, or off")
         if action == "set":
-            for name in ("source_channel", "x1", "x2"):
-                _require_parameter(parameters, name, command)
+            _require_parameter(parameters, "source_channel", command)
+            if all(
+                parameters.get(name) is None for name in ("x1", "x2", "y1", "y2")
+            ):
+                raise WebUIRequestError(
+                    "cursor set requires at least one of x1, x2, y1, or y2"
+                )
             try:
                 parameters["source_channel"] = validate_analog_channel(
                     _integer(parameters["source_channel"], "source_channel"),
                     capabilities,
                 )
-                parameters["x1"] = _finite_number(parameters["x1"], "x1")
-                parameters["x2"] = _finite_number(parameters["x2"], "x2")
+                if parameters.get("x1") is not None:
+                    parameters["x1"] = _finite_number(parameters["x1"], "x1")
+                if parameters.get("x2") is not None:
+                    parameters["x2"] = _finite_number(parameters["x2"], "x2")
                 if parameters.get("y1") is not None:
                     parameters["y1"] = _finite_number(parameters["y1"], "y1")
                 if parameters.get("y2") is not None:
@@ -1319,15 +1326,22 @@ def _validate_parameters(
             if unexpected is not None:
                 raise WebUIRequestError(f"cursor {action} cannot include {unexpected}")
     elif command == "cursor-set":
-        for name in ("source_channel", "x1", "x2"):
-            _require_parameter(parameters, name, command)
+        _require_parameter(parameters, "source_channel", command)
+        if all(
+            parameters.get(name) is None for name in ("x1", "x2", "y1", "y2")
+        ):
+            raise WebUIRequestError(
+                "cursor set requires at least one of x1, x2, y1, or y2"
+            )
         try:
             parameters["source_channel"] = validate_analog_channel(
                 _integer(parameters["source_channel"], "source_channel"),
                 capabilities,
             )
-            parameters["x1"] = _finite_number(parameters["x1"], "x1")
-            parameters["x2"] = _finite_number(parameters["x2"], "x2")
+            if parameters.get("x1") is not None:
+                parameters["x1"] = _finite_number(parameters["x1"], "x1")
+            if parameters.get("x2") is not None:
+                parameters["x2"] = _finite_number(parameters["x2"], "x2")
             if parameters.get("y1") is not None:
                 parameters["y1"] = _finite_number(parameters["y1"], "y1")
             if parameters.get("y2") is not None:

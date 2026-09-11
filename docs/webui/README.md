@@ -371,7 +371,8 @@ Selecting a Cursor, Annotation, WGEN, or DEMO command opens the matching dedicat
 editor instead of a plain command form. The Command Browser remains the only
 navigation; the editors add no second tab layer. Cursor offers explicit
 Read cursor state (`cursor-query`), manual cursor configuration (`cursor-set`:
-source channel, X1/X2, optional Y1/Y2), and Turn off cursors (`cursor-off`),
+source channel plus any of X1/X2/Y1/Y2; unspecified positions stay unchanged),
+and Turn off cursors (`cursor-off`),
 plus current state readback (mode, positions, deltas, and DYDX where the
 instrument reports it). Applying cursor settings switches the cursors to
 Manual mode and enables them. Annotation offers explicit Read annotation settings

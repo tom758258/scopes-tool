@@ -1414,21 +1414,21 @@ def test_cursor_auto_timebase_and_auto_vertical_can_combine(capsys):
 def test_cursor_auto_timebase_rejects_query_and_off(capsys):
     assert cli.main(["cursor", "--dry-run", "--json", "--query", "--auto-timebase"]) == 1
     payload = _json_stdout(capsys)
-    assert "--auto-timebase is only valid" in payload["error"]["message"]
+    assert payload["error"]["message"] == "--query cannot be combined with --auto-timebase"
 
     assert cli.main(["cursor", "--dry-run", "--json", "--off", "--auto-timebase"]) == 1
     payload = _json_stdout(capsys)
-    assert "--auto-timebase is only valid" in payload["error"]["message"]
+    assert payload["error"]["message"] == "--off cannot be combined with --auto-timebase"
 
 
 def test_cursor_auto_vertical_rejects_query_off_and_missing_y(capsys):
     assert cli.main(["cursor", "--dry-run", "--json", "--query", "--auto-vertical"]) == 1
     payload = _json_stdout(capsys)
-    assert "--auto-vertical is only valid" in payload["error"]["message"]
+    assert payload["error"]["message"] == "--query cannot be combined with --auto-vertical"
 
     assert cli.main(["cursor", "--dry-run", "--json", "--off", "--auto-vertical"]) == 1
     payload = _json_stdout(capsys)
-    assert "--auto-vertical is only valid" in payload["error"]["message"]
+    assert payload["error"]["message"] == "--off cannot be combined with --auto-vertical"
 
     assert (
         cli.main(

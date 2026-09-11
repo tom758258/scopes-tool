@@ -3327,6 +3327,18 @@ def test_baseline_live_script_contains_acquisition_measurement_and_status_wiring
     assert 'Arguments @("--off")' in cursor_case
     assert ':MARKer:MODE MANual' in cursor_case
     assert ':MARKer:MODE TIME' not in cursor_case
+    for stage in (
+        'Stage "cursor-set-baseline"',
+        'Stage "cursor-query-baseline"',
+        'Stage "cursor-set-x1-partial"',
+        'Stage "cursor-query-x1-partial"',
+        'Stage "cursor-set-y2-partial"',
+        'Stage "cursor-query-y2-partial"',
+    ):
+        assert stage in cursor_case
+    assert '"--x1", "0.0005"' in cursor_case
+    assert '"--y2", "0.25"' in cursor_case
+    assert "Assert-NearlyEqual" in cursor_case
 
     lifecycle_markers = [
         script.index('Invoke-BaselineCase -Name "fixture-baseline"'),
@@ -5319,19 +5331,27 @@ function Drain-AfterFailure {
 function Assert-ScpiSent {
     param([object] $Payload, [string[]] $ExpectedCommands, [string] $Label)
     if ($script:Scenario -eq "configure-assert-and-cleanup-fail" -and
-        $Label -eq "Cursor configure") {
+        $Label -eq "Cursor baseline configure") {
         throw "cursor configure assertion failure"
+    }
+}
+
+function Assert-NearlyEqual {
+    param([double] $Actual, [double] $Expected, [string] $Label)
+    $tolerance = [Math]::Max(1e-12, [Math]::Abs($Expected) * 1e-3)
+    if ([Math]::Abs($Actual - $Expected) -gt $tolerance) {
+        throw "${Label} readback ${Actual} does not match ${Expected}."
     }
 }
 
 function Invoke-LiveCli {
     param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
     $script:Events.Add($Stage)
-    if ($script:Scenario -eq "configure-fail" -and $Stage -eq "cursor-set") {
+    if ($script:Scenario -eq "configure-fail" -and $Stage -eq "cursor-set-baseline") {
         throw "cursor configure primary failure"
     }
     if ($script:Scenario -eq "query-and-cleanup-fail" -and
-        $Stage -eq "cursor-query") {
+        $Stage -eq "cursor-query-baseline") {
         throw "cursor query primary failure"
     }
     if ($script:Scenario -in @(
@@ -5343,8 +5363,16 @@ function Invoke-LiveCli {
         throw "cursor cleanup failure"
     }
     $mode = if ($Stage -eq "cursor-off-query") { "off" } else { "manual" }
+    $y2 = if ($Stage -in @("cursor-set-y2-partial", "cursor-query-y2-partial")) { 0.25 } else { 0.5 }
     return [pscustomobject]@{
-        result = [pscustomobject]@{ mode = $mode }
+        result = [pscustomobject]@{
+            mode = $mode
+            x1_seconds = 0.0005
+            x2_seconds = 0.001
+            y1_volts = 0
+            y2_volts = $y2
+        }
+        scpi = [pscustomobject]@{ sent = @() }
     }
 }
 
@@ -5407,8 +5435,8 @@ function Invoke-Scenario {
     assert "cursor cleanup failure" not in combined["detail"]
     assert any("cursor cleanup failure" in item for item in combined["diagnostics"])
     assert combined["events"] == [
-        "cursor-set",
-        "cursor-query",
+        "cursor-set-baseline",
+        "cursor-query-baseline",
         "drain:cursor-primary-error-drain",
         "cursor-off",
         "cursor-off-query",
@@ -5419,8 +5447,12 @@ function Invoke-Scenario {
     assert cleanup_only["passed"] is False
     assert "cursor cleanup failure" in cleanup_only["detail"]
     assert cleanup_only["events"] == [
-        "cursor-set",
-        "cursor-query",
+        "cursor-set-baseline",
+        "cursor-query-baseline",
+        "cursor-set-x1-partial",
+        "cursor-query-x1-partial",
+        "cursor-set-y2-partial",
+        "cursor-query-y2-partial",
         "cursor-off",
         "cursor-off-query",
         "drain:cursor-lifecycle-error-drain",
@@ -5430,7 +5462,7 @@ function Invoke-Scenario {
     assert configure["passed"] is False
     assert "cursor configure primary failure" in configure["detail"]
     assert configure["events"] == [
-        "cursor-set",
+        "cursor-set-baseline",
         "drain:cursor-lifecycle-error-drain",
     ]
 
@@ -5443,7 +5475,7 @@ function Invoke-Scenario {
         for item in configure_assert["diagnostics"]
     )
     assert configure_assert["events"] == [
-        "cursor-set",
+        "cursor-set-baseline",
         "drain:cursor-primary-error-drain",
         "cursor-off",
         "cursor-off-query",

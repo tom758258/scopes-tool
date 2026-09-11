@@ -846,15 +846,11 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             runtime._json_update_result(operation="off", command=":MARKer:MODE OFF")
             print("Command: :MARKer:MODE OFF")
         else:
-            if args.source_channel is None or args.x2 is None:
-                raise OscilloscopeError("cursor configure requires --source-channel, --x1, and --x2")
             channel = validate_analog_channel(args.source_channel, scope.capabilities)
-            if getattr(args, "auto_vertical", False) and args.y1 is None and args.y2 is None:
-                raise ParameterValidationError("--auto-vertical requires --y1 or --y2.")
             cursor_configure_commands(
                 channel,
-                args.x1,
-                args.x2,
+                x1_seconds=args.x1,
+                x2_seconds=args.x2,
                 y1_volts=args.y1,
                 y2_volts=args.y2,
                 capabilities=scope.capabilities,
@@ -863,7 +859,7 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             if getattr(args, "auto_timebase", False):
                 scale = scope.query_timebase_scale()
                 position = scope.query_timebase_position()
-                auto_timebase = cursor_auto_timebase_plan(scale, position, args.x1, args.x2)
+                auto_timebase = cursor_auto_timebase_plan(scale, position, x1_seconds=args.x1, x2_seconds=args.x2)
                 for command in (timebase_scale_query(), timebase_position_query()):
                     print(f"Command: {command}")
                 if auto_timebase.changed and auto_timebase.target_scale_seconds_per_division is not None:
@@ -903,11 +899,11 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
                             "Command: "
                             f"{channel_offset_command(channel, auto_vertical.target_offset_volts)}"
                         )
-            scope.configure_cursor(channel, args.x1, args.x2, y1_volts=args.y1, y2_volts=args.y2)
+            scope.configure_cursor(channel, x1_seconds=args.x1, x2_seconds=args.x2, y1_volts=args.y1, y2_volts=args.y2)
             commands = cursor_configure_commands(
                 channel,
-                args.x1,
-                args.x2,
+                x1_seconds=args.x1,
+                x2_seconds=args.x2,
                 y1_volts=args.y1,
                 y2_volts=args.y2,
                 capabilities=scope.capabilities,

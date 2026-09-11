@@ -1922,13 +1922,11 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             return commands + [":SYSTem:ERRor?"], [], {"operation": "query", "commands": commands}
         if args.cursor_off:
             return [":MARKer:MODE OFF", ":SYSTem:ERRor?"], [], {"operation": "off", "command": ":MARKer:MODE OFF"}
-        if args.source_channel is None or args.x2 is None:
-            raise OscilloscopeError("cursor configure requires --source-channel, --x1, and --x2")
         channel = validate_analog_channel(args.source_channel, capabilities)
         commands = cursor_configure_commands(
             channel,
-            args.x1,
-            args.x2,
+            x1_seconds=args.x1,
+            x2_seconds=args.x2,
             y1_volts=args.y1,
             y2_volts=args.y2,
             capabilities=capabilities,

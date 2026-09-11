@@ -54,7 +54,7 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
     ]
     assert {
         field["name"] for field in setters if field.get("required") is True
-    } == {"source_channel", "x1", "x2"}
+    } == {"source_channel"}
     assert {field["help_key"] for field in setters} == {
         "cursor.source_channel",
         "cursor.x1",
@@ -72,7 +72,7 @@ def test_cursor_set_form_layout_is_scoped() -> None:
     assert "grid-template-areas: none" in css
 
 
-def test_cursor_set_validation_requires_source_and_x_positions() -> None:
+def test_cursor_set_validation_requires_source_and_one_position() -> None:
     request = validate_job_request({
         "command": "cursor",
         "mode": "simulate",
@@ -81,19 +81,24 @@ def test_cursor_set_validation_requires_source_and_x_positions() -> None:
             "action": "set",
             "source_channel": 1,
             "x1": 0.0,
-            "x2": 0.001,
-            "y1": 0.0,
-            "y2": 0.5,
         },
     })
 
     assert request["parameters"]["source_channel"] == 1
+    assert request["parameters"]["x1"] == 0.0
     with pytest.raises(WebUIRequestError, match="source_channel"):
         validate_job_request({
             "command": "cursor",
             "mode": "simulate",
             "model_id": MODEL_ID,
-            "parameters": {"action": "set", "x1": 0.0, "x2": 0.001},
+            "parameters": {"action": "set", "x1": 0.0},
+        })
+    with pytest.raises(WebUIRequestError, match="at least one of"):
+        validate_job_request({
+            "command": "cursor",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"action": "set", "source_channel": 1},
         })
     with pytest.raises(WebUIRequestError, match="query, set, or off"):
         validate_job_request({
@@ -111,27 +116,32 @@ def test_cursor_set_validation_requires_source_and_x_positions() -> None:
         })
 
 
-def test_cursor_set_command_validation_requires_source_and_x_positions() -> None:
+def test_cursor_set_command_validation_requires_source_and_one_position() -> None:
     request = validate_job_request({
         "command": "cursor-set",
         "mode": "simulate",
         "model_id": MODEL_ID,
         "parameters": {
             "source_channel": 1,
-            "x1": 0.0,
-            "x2": 0.001,
-            "y1": 0.0,
             "y2": 0.5,
         },
     })
 
     assert request["parameters"]["source_channel"] == 1
+    assert request["parameters"]["y2"] == 0.5
     with pytest.raises(WebUIRequestError, match="source_channel"):
         validate_job_request({
             "command": "cursor-set",
             "mode": "simulate",
             "model_id": MODEL_ID,
-            "parameters": {"x1": 0.0, "x2": 0.001},
+            "parameters": {"x1": 0.0},
+        })
+    with pytest.raises(WebUIRequestError, match="at least one of"):
+        validate_job_request({
+            "command": "cursor-set",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"source_channel": 1},
         })
     with pytest.raises(WebUIRequestError, match="unknown parameter"):
         validate_job_request({
@@ -184,12 +194,37 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
 
     assert calls[0] == (
         "configure",
-        (1, 0.0, 0.001),
-        {"y1_volts": 0.0, "y2_volts": 0.5},
+        (1,),
+        {
+            "x1_seconds": 0.0,
+            "x2_seconds": 0.001,
+            "y1_volts": 0.0,
+            "y2_volts": 0.5,
+        },
     )
     assert "auto_timebase" not in calls[0][2]
     assert "auto_vertical" not in calls[0][2]
     assert result["result"]["cursor"]["x_delta_seconds"] == 0.001
+
+    calls.clear()
+    command_execution_module._execute_scope_command(
+        scope,
+        "cursor-set",
+        "SIM::INSTR",
+        {"source_channel": 1, "x1": 0.0},
+        tmp_path,
+    )
+
+    assert calls[0] == (
+        "configure",
+        (1,),
+        {
+            "x1_seconds": 0.0,
+            "x2_seconds": None,
+            "y1_volts": None,
+            "y2_volts": None,
+        },
+    )
 
     calls.clear()
     command_execution_module._execute_scope_command(

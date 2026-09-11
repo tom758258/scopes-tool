@@ -2383,6 +2383,8 @@ Additional DSO-X 4024A controls:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe cursor --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
+.\.venv\Scripts\scopes-tool.exe cursor --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --x1 0 --log-scpi
+.\.venv\Scripts\scopes-tool.exe cursor --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --y2 0.5 --log-scpi
 .\.venv\Scripts\scopes-tool.exe cursor --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --x1 0 --x2 1e-3 --y1 0 --y2 0.5 --log-scpi
 .\.venv\Scripts\scopes-tool.exe trigger-holdoff --resource "$env:SCOPES_TOOL_RESOURCE" --query --json --log-scpi
 .\.venv\Scripts\scopes-tool.exe trigger-holdoff --resource "$env:SCOPES_TOOL_RESOURCE" --seconds 1e-6 --log-scpi

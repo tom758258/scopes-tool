@@ -77,9 +77,9 @@ class CursorController:
     def set_manual(
         self,
         source_channel: int,
-        x1_seconds: float,
-        x2_seconds: float,
         *,
+        x1_seconds: float | None = None,
+        x2_seconds: float | None = None,
         y1_volts: float | None = None,
         y2_volts: float | None = None,
         auto_timebase: bool = False,
@@ -88,20 +88,24 @@ class CursorController:
         source_channel = validate_analog_channel(source_channel, self.capabilities)
         pending_commands = cursor_configure_commands(
             source_channel,
-            x1_seconds,
-            x2_seconds,
+            x1_seconds=x1_seconds,
+            x2_seconds=x2_seconds,
             y1_volts=y1_volts,
             y2_volts=y2_volts,
             capabilities=self.capabilities,
         )
+        if auto_timebase:
+            _cursor_x_targets(x1_seconds=x1_seconds, x2_seconds=x2_seconds)
+        if auto_vertical:
+            _cursor_y_targets(y1_volts=y1_volts, y2_volts=y2_volts)
         if auto_timebase:
             scale = self.scpi.query_float(":TIMebase:SCALe?")
             position = self.scpi.query_float(":TIMebase:POSition?")
             auto_result = cursor_auto_timebase_plan(
                 scale,
                 position,
-                x1_seconds,
-                x2_seconds,
+                x1_seconds=x1_seconds,
+                x2_seconds=x2_seconds,
             )
             if auto_result.changed and auto_result.target_scale_seconds_per_division is not None:
                 self.scpi.write(
@@ -171,9 +175,9 @@ class CursorController:
 
 def cursor_configure_commands(
     source_channel: int,
-    x1_seconds: float,
-    x2_seconds: float,
     *,
+    x1_seconds: float | None = None,
+    x2_seconds: float | None = None,
     y1_volts: float | None = None,
     y2_volts: float | None = None,
     capabilities: ScopeCapabilities | None = None,
@@ -183,30 +187,34 @@ def cursor_configure_commands(
         if capabilities is not None
         else source_channel
     )
-    x1_seconds = validate_finite_number(x1_seconds, "--x1")
-    x2_seconds = validate_finite_number(x2_seconds, "--x2")
+    positions = (
+        ("--x1", x1_seconds, ":MARKer:X1Position"),
+        ("--x2", x2_seconds, ":MARKer:X2Position"),
+        ("--y1", y1_volts, ":MARKer:Y1Position"),
+        ("--y2", y2_volts, ":MARKer:Y2Position"),
+    )
+    if not any(value is not None for _, value, _ in positions):
+        raise ParameterValidationError(
+            "cursor configure requires at least one of --x1, --x2, --y1, or --y2."
+        )
     commands = [
         ":MARKer:MODE MANual",
         f":MARKer:X1Y1source CHANnel{channel}",
         f":MARKer:X2Y2source CHANnel{channel}",
-        f":MARKer:X1Position {_format_scpi_number(x1_seconds)}",
-        f":MARKer:X2Position {_format_scpi_number(x2_seconds)}",
     ]
-    if y1_volts is not None:
-        commands.append(
-            f":MARKer:Y1Position {_format_scpi_number(validate_finite_number(y1_volts, '--y1'))}"
-        )
-    if y2_volts is not None:
-        commands.append(
-            f":MARKer:Y2Position {_format_scpi_number(validate_finite_number(y2_volts, '--y2'))}"
-        )
+    for name, value, command in positions:
+        if value is not None:
+            commands.append(
+                f"{command} {_format_scpi_number(validate_finite_number(value, name))}"
+            )
     return commands
 
 def cursor_auto_timebase_plan(
     current_scale_seconds_per_division: float,
     current_position_seconds: float,
-    x1_seconds: float,
-    x2_seconds: float,
+    *,
+    x1_seconds: float | None = None,
+    x2_seconds: float | None = None,
 ) -> CursorAutoTimebaseResult:
     current_scale_seconds_per_division = validate_finite_number(
         current_scale_seconds_per_division,
@@ -218,13 +226,11 @@ def cursor_auto_timebase_plan(
     )
     if current_scale_seconds_per_division <= 0:
         raise ParameterValidationError("timebase scale must be greater than 0 s/div.")
-    x1_seconds = validate_finite_number(x1_seconds, "--x1")
-    x2_seconds = validate_finite_number(x2_seconds, "--x2")
+    x_targets = _cursor_x_targets(x1_seconds=x1_seconds, x2_seconds=x2_seconds)
 
     visible_half_span_seconds = current_scale_seconds_per_division * 4.5
     max_delta_seconds = max(
-        abs(x1_seconds - current_position_seconds),
-        abs(x2_seconds - current_position_seconds),
+        abs(target - current_position_seconds) for target in x_targets
     )
     changed = max_delta_seconds > visible_half_span_seconds
     target_scale = (
@@ -375,6 +381,17 @@ def cursor_auto_vertical_json(result: CursorAutoVerticalResult) -> dict[str, obj
         "commands": list(result.commands),
         "reason": result.reason,
     }
+
+def _cursor_x_targets(*, x1_seconds: float | None, x2_seconds: float | None) -> tuple[float, ...]:
+    targets = []
+    if x1_seconds is not None:
+        targets.append(validate_finite_number(x1_seconds, "--x1"))
+    if x2_seconds is not None:
+        targets.append(validate_finite_number(x2_seconds, "--x2"))
+    if not targets:
+        raise ParameterValidationError("--auto-timebase requires --x1 or --x2.")
+    return tuple(targets)
+
 
 def _cursor_y_targets(*, y1_volts: float | None, y2_volts: float | None) -> tuple[float, ...]:
     targets = []

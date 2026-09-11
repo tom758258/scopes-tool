@@ -1303,8 +1303,8 @@ COMMANDS = (
         "modes": ("live", "simulate"),
         "fields": (
             {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required": True, "help_key": "cursor.source_channel"},
-            {"name": "x1", "type": "number", "required": True, "help_key": "cursor.x1"},
-            {"name": "x2", "type": "number", "required": True, "help_key": "cursor.x2"},
+            {"name": "x1", "type": "number", "help_key": "cursor.x1"},
+            {"name": "x2", "type": "number", "help_key": "cursor.x2"},
             {"name": "y1", "type": "number", "help_key": "cursor.y1"},
             {"name": "y2", "type": "number", "help_key": "cursor.y2"},
         ),

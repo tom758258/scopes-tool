@@ -28,27 +28,41 @@ _JSON_RECORD: dict[str, object] | None = None
 
 
 def _resolve_cli_mode(args: argparse.Namespace) -> str:
-    _validate_cursor_auto_args(args)
+    _validate_cursor_args(args)
     _validate_measure_log_args(args)
     if hasattr(args, "model"):
         physical_model_for_id(args.model)
     return resolve_run_mode(_run_mode_options(args))
 
-def _validate_cursor_auto_args(args: argparse.Namespace) -> None:
+def _validate_cursor_args(args: argparse.Namespace) -> None:
     if getattr(args, "command", None) != "cursor":
         return
-    setting_cursor = not getattr(args, "cursor_query", False) and not getattr(args, "cursor_off", False)
-    if getattr(args, "auto_timebase", False) and not setting_cursor:
-        raise OscilloscopeError("--auto-timebase is only valid when setting cursor positions")
-    if not getattr(args, "auto_vertical", False):
+    querying = getattr(args, "cursor_query", False)
+    turning_off = getattr(args, "cursor_off", False)
+    if querying or turning_off:
+        for name in (
+            "source_channel",
+            "x1",
+            "x2",
+            "y1",
+            "y2",
+            "auto_timebase",
+            "auto_vertical",
+        ):
+            if getattr(args, name, None):
+                raise OscilloscopeError(
+                    f"--{'query' if querying else 'off'} cannot be combined with --{name.replace('_', '-')}"
+                )
         return
-    if not setting_cursor:
-        raise OscilloscopeError("--auto-vertical is only valid when setting cursor positions")
-    if getattr(args, "source_channel", None) is None or getattr(args, "x2", None) is None:
+    if getattr(args, "source_channel", None) is None or all(
+        getattr(args, name, None) is None for name in ("x1", "x2", "y1", "y2")
+    ):
         raise OscilloscopeError(
-            "--auto-vertical requires --source-channel, --x1, and --x2"
+            "cursor configure requires --source-channel and at least one of --x1, --x2, --y1, --y2"
         )
-    if getattr(args, "y1", None) is None and getattr(args, "y2", None) is None:
+    if getattr(args, "auto_timebase", False) and getattr(args, "x1", None) is None and getattr(args, "x2", None) is None:
+        raise OscilloscopeError("--auto-timebase requires --x1 or --x2.")
+    if getattr(args, "auto_vertical", False) and getattr(args, "y1", None) is None and getattr(args, "y2", None) is None:
         raise OscilloscopeError("--auto-vertical requires --y1 or --y2")
 
 def _validate_measure_log_args(args: argparse.Namespace) -> None:
