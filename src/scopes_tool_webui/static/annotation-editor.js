@@ -1,16 +1,6 @@
 import { translate } from "/static/i18n.js";
 import { CommandForm } from "/static/command-form.js";
 
-const STATE_ROWS = [
-  ["slot", "slot"],
-  ["enabled", "enabled"],
-  ["text", "text"],
-  ["color", "color"],
-  ["background", "background"],
-  ["x", "x"],
-  ["y", "y"],
-];
-
 export class AnnotationEditor {
   constructor(container, catalog, hooks) {
     this.container = container;
@@ -30,10 +20,6 @@ export class AnnotationEditor {
     this.refreshButton?.remove?.();
     this.entry?.button.remove?.();
     this.container.replaceChildren();
-    this.headRow = document.createElement("div");
-    this.headRow.className = "trigger-editor-head";
-    this.groupHeading = document.createElement("strong");
-    this.groupHeading.className = "trigger-editor-heading";
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
     this.refreshButton.className = "secondary trigger-editor-refresh";
@@ -41,20 +27,19 @@ export class AnnotationEditor {
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
-    this.headRow.append(this.groupHeading);
     if (this.hooks.headerActions) {
       this.refreshButton.hidden = true;
       this.hooks.headerActions.append(this.refreshButton);
     } else {
-      this.headRow.append(this.refreshButton);
+      this.container.append(this.refreshButton);
     }
     this.sectionsHost = document.createElement("div");
     this.sectionsHost.className = "trigger-editor-sections";
-    this.container.append(this.headRow, this.sectionsHost);
+    this.container.append(this.sectionsHost);
   }
 
   definition() {
-    return this.catalog.commands.find((command) => command.id === "annotation") || null;
+    return this.selectedDefinition();
   }
 
   selectedDefinition() {
@@ -112,7 +97,6 @@ export class AnnotationEditor {
       return;
     }
     this.stateKey = key;
-    this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
     if (this.renderedKey !== key) this.rebuildSections(key);
     this.applyBusyState();
     if (!read || !this.hooks.isAvailable()) return;
@@ -129,7 +113,6 @@ export class AnnotationEditor {
     this.entry?.button.remove?.();
     this.entry = null;
     this.sectionsHost.replaceChildren();
-    this.groupHeading.textContent = "";
     this.refreshButton.disabled = true;
   }
 
@@ -144,37 +127,39 @@ export class AnnotationEditor {
     if (!command || !this.catalog.supported(command)) return;
     const section = document.createElement("section");
     section.className = "trigger-editor-section";
-    const heading = document.createElement("strong");
-    heading.className = "trigger-editor-heading";
-    heading.textContent = this.catalog.commandLabel(command);
     const formContainer = document.createElement("div");
     formContainer.className = "command-form";
     const actionButton = document.createElement("button");
     actionButton.type = "button";
     actionButton.className = "secondary trigger-editor-action";
-    actionButton.textContent = translate("actions.apply");
-    const statePanel = document.createElement("div");
-    statePanel.className = "annotation-editor-state";
-    section.append(heading, formContainer);
+    if (command.id === "annotation-set") {
+      actionButton.textContent = translate("actions.apply");
+    } else if (command.id === "annotation-on" || command.id === "annotation-off") {
+      actionButton.textContent = this.catalog.commandLabel(command);
+    } else {
+      actionButton.textContent = translate(`actions.${command.presentation?.action || "run"}`);
+    }
+    // annotation-query reuses the header Read action; a second query button
+    // would duplicate it, so only set/on/off/clear keep a section button. The
+    // button is recreated on every rebuild, so hidden state always follows
+    // the selection.
+    actionButton.hidden = command.id === "annotation-query";
+    section.append(formContainer);
     if (this.hooks.headerActions) {
-      actionButton.hidden = !this.selectedDefinition();
       this.hooks.headerActions.append(actionButton);
     } else {
       section.append(actionButton);
     }
-    section.append(statePanel);
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
-    this.entry = { form, button: actionButton, panel: statePanel, epoch };
+    this.entry = { form, button: actionButton, epoch };
     form.render(command, {});
+    const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    section.hidden = fields.length === 0;
+    formContainer.hidden = fields.length === 0;
     actionButton.addEventListener("click", () => {
       void this.submit();
     });
-  }
-
-  statePayload(job) {
-    const payload = job?.result?.result !== undefined ? job.result.result : job?.result;
-    return payload?.annotation || null;
   }
 
   currentSlot() {
@@ -185,44 +170,25 @@ export class AnnotationEditor {
 
   async readState() {
     if (!this.entry || this.entry.epoch !== this.epoch) return;
-    const job = await this.hooks.executeCommand(
-      "annotation",
-      { action: "query", slot: this.currentSlot() },
+    await this.hooks.executeCommand(
+      "annotation-query",
+      { slot: this.currentSlot() },
       { intent: "readback" },
     );
-    if (job?.status === "completed" && this.entry.epoch === this.epoch) {
-      this.renderState(this.statePayload(job));
-    }
-  }
-
-  renderState(state) {
-    const { panel } = this.entry;
-    panel.replaceChildren();
-    if (!state) return;
-    for (const [resultKey, labelSuffix] of STATE_ROWS) {
-      const value = state[resultKey];
-      if (value === undefined || value === null) continue;
-      const row = document.createElement("div");
-      row.className = "annotation-editor-state-row";
-      const label = document.createElement("span");
-      label.textContent = translate(`annotation.state.${labelSuffix}`);
-      const shown = document.createElement("span");
-      shown.textContent = typeof value === "boolean" ? translate(value ? "enum.enable" : "enum.disable") : String(value);
-      row.append(label, shown);
-      panel.append(row);
-    }
   }
 
   async submit() {
     const entry = this.entry;
     if (!entry || this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
+    const command = this.definition();
+    if (!command || command.id === "annotation-query") return;
     const submissionKey = this.currentStateKey();
     const parameters = entry.form.values();
     if (parameters === null) return;
     this.setBusy(true);
     try {
       const job = await this.hooks.executeCommand(
-        "annotation",
+        command.id,
         parameters,
         { intent: "apply" },
       );
@@ -232,7 +198,6 @@ export class AnnotationEditor {
         && submissionKey === this.currentStateKey()
       ) {
         entry.form.clearDirty();
-        this.renderState(this.statePayload(job));
       }
     } finally {
       this.setBusy(false);

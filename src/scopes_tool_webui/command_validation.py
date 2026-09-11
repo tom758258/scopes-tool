@@ -231,6 +231,15 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
         normalized.setdefault("save_artifacts", False)
     if command == "single-wait":
         _single_wait_config(normalized)
+    if command in {
+        "annotation",
+        "annotation-query",
+        "annotation-set",
+        "annotation-on",
+        "annotation-off",
+        "annotation-clear",
+    }:
+        normalized.setdefault("slot", 1)
     _validate_exclusive_minimum_fields(command, normalized)
     if mode == "live" and command != "list-resources":
         _validate_parameter_shapes(command, normalized, mode)
@@ -1380,6 +1389,54 @@ def _validate_parameters(
                 raise WebUIRequestError(
                     f"annotation {action} cannot include {unexpected}"
                 )
+    elif command in {
+        "annotation-query",
+        "annotation-set",
+        "annotation-on",
+        "annotation-off",
+        "annotation-clear",
+    }:
+        try:
+            parameters["slot"] = validate_annotation_slot(
+                _integer(parameters.get("slot", 1), "slot"), capabilities
+            )
+        except Exception as exc:
+            raise WebUIRequestError(str(exc)) from exc
+        if command == "annotation-set":
+            setter_names = ("text", "color", "background", "x", "y")
+            if (
+                parameters.get("x") is not None
+                or parameters.get("y") is not None
+            ) and not capabilities.supports_annotation_position:
+                raise WebUIRequestError(
+                    "annotation position is not supported by this model"
+                )
+            provided = [
+                name for name in setter_names if parameters.get(name) is not None
+            ]
+            if not provided:
+                raise WebUIRequestError(
+                    "annotation set requires at least one of text, color, background, x, or y"
+                )
+            try:
+                if parameters.get("text") is not None:
+                    parameters["text"] = validate_annotation_text(parameters["text"])
+                if parameters.get("color") is not None:
+                    parameters["color"] = normalize_annotation_color(parameters["color"])
+                if parameters.get("background") is not None:
+                    parameters["background"] = normalize_annotation_background(
+                        parameters["background"]
+                    )
+                if parameters.get("x") is not None:
+                    parameters["x"] = validate_annotation_x(
+                        _integer(parameters["x"], "x")
+                    )
+                if parameters.get("y") is not None:
+                    parameters["y"] = validate_annotation_y(
+                        _integer(parameters["y"], "y")
+                    )
+            except Exception as exc:
+                raise WebUIRequestError(str(exc)) from exc
     elif command in {
         "wgen-output",
         "wgen-function",

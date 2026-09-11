@@ -4980,6 +4980,24 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         assert.equal(cursorEditor.refreshButton.hidden, false);
         assert.equal(cursorEditor.entry.button.hidden, false);
 
+        selectedId = "annotation-query";
+        syncWorkspaceHeaderActions("annotation");
+        assert.equal(annotationEditor.refreshButton.hidden, false);
+        assert.equal(annotationEditor.entry.button.hidden, true);
+        syncWorkspaceHeaderActions("annotation");
+        assert.equal(annotationEditor.entry.button.hidden, true);
+
+        for (const id of ["annotation-set", "annotation-on", "annotation-off", "annotation-clear"]) {{
+          selectedId = id;
+          syncWorkspaceHeaderActions("annotation");
+          assert.equal(annotationEditor.refreshButton.hidden, false);
+          assert.equal(annotationEditor.entry.button.hidden, false);
+        }}
+
+        syncWorkspaceHeaderActions("serial");
+        assert.equal(annotationEditor.refreshButton.hidden, true);
+        assert.equal(annotationEditor.entry.button.hidden, true);
+
         syncWorkspaceHeaderActions("serial");
         assert.equal(cursorEditor.refreshButton.hidden, true);
         assert.equal(cursorEditor.entry.button.hidden, true);

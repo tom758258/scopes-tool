@@ -965,6 +965,9 @@ function isEnabledWorkspaceField(name) {
 }
 
 const RESULT_ENUM_CONTEXTS = {
+  annotation: {
+    background: "annotation-background",
+  },
   cursor: {
     mode: "cursor-mode",
   },

@@ -682,6 +682,34 @@ def _execute_scope_command(
         elif action == "clear":
             scope.clear_annotation(slot=slot)
         return _state_scope_result("annotation", scope.query_annotation(slot=slot))
+    if command == "annotation-query":
+        slot = parameters.get("slot", 1)
+        return _state_scope_result("annotation", scope.query_annotation(slot=slot))
+    if command == "annotation-set":
+        slot = parameters.get("slot", 1)
+        if parameters.get("text") is not None:
+            scope.set_annotation_text(parameters["text"], slot=slot)
+        if parameters.get("color") is not None:
+            scope.set_annotation_color(parameters["color"], slot=slot)
+        if parameters.get("background") is not None:
+            scope.set_annotation_background(parameters["background"], slot=slot)
+        if parameters.get("x") is not None or parameters.get("y") is not None:
+            scope.set_annotation_position(
+                parameters.get("x"), parameters.get("y"), slot=slot
+            )
+        return _state_scope_result("annotation", scope.query_annotation(slot=slot))
+    if command == "annotation-on":
+        slot = parameters.get("slot", 1)
+        scope.set_annotation_enabled(True, slot=slot)
+        return _state_scope_result("annotation", scope.query_annotation(slot=slot))
+    if command == "annotation-off":
+        slot = parameters.get("slot", 1)
+        scope.set_annotation_enabled(False, slot=slot)
+        return _state_scope_result("annotation", scope.query_annotation(slot=slot))
+    if command == "annotation-clear":
+        slot = parameters.get("slot", 1)
+        scope.clear_annotation(slot=slot)
+        return _state_scope_result("annotation", scope.query_annotation(slot=slot))
     if command == "wgen-query":
         return _state_scope_result("wgen", scope.query_wgen())
     if command == "wgen-output":

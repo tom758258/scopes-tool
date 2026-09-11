@@ -530,7 +530,7 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
             "\nfunction captureWorkspaceResult(", 1
         )[0]
     )
-    for selected_id in ("reference-waveform", "reference-labels", "cursor-set", "cursor-off"):
+    for selected_id in ("reference-waveform", "reference-labels", "cursor-set", "cursor-off", "annotation-set", "annotation-on", "annotation-off", "annotation-clear"):
         assert f'"{selected_id}"' in render_source
     script = textwrap.dedent(
         r'''
@@ -614,6 +614,14 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
         show("cursor-set", "cursor-set", false);
         show("cursor-off", "cursor-query", false);
         show("cursor-off", "cursor-off", false);
+        show("annotation-set", "annotation-query", false);
+        show("annotation-set", "annotation-set", false);
+        show("annotation-on", "annotation-query", false);
+        show("annotation-on", "annotation-on", false);
+        show("annotation-off", "annotation-query", false);
+        show("annotation-off", "annotation-off", false);
+        show("annotation-clear", "annotation-query", false);
+        show("annotation-clear", "annotation-clear", false);
 
         selected = { id: "reference-waveform", presentation_only: true };
         globalThis.state.workspaceResults = new Map();

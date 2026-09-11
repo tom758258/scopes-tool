@@ -231,8 +231,8 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     assert "cursorEditor?.rerender();" in app_source
     # Cursor uses the existing command-specific header path, so each of
     # cursor-query/cursor-set/cursor-off shows its own label/description.
-    assert '["cursor", "measurement", "reference-display", "save-export"].includes(editorKind)' in app_source
-    assert '["cursor", "measurement", "reference", "reference-display", "save-export"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference-display", "save-export"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export"].includes(editorKind)' in app_source
     assert 'id="cursor-editor"' in index_source
     for key in (
         '"command.cursor-query": "Cursor state"',

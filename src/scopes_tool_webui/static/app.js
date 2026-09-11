@@ -901,6 +901,10 @@ function renderWorkspace() {
     "reference-labels": ["reference-query", "reference-label", "display-label"],
     "cursor-set": ["cursor-query", "cursor-set"],
     "cursor-off": ["cursor-query", "cursor-off"],
+    "annotation-set": ["annotation-query", "annotation-set"],
+    "annotation-on": ["annotation-query", "annotation-on"],
+    "annotation-off": ["annotation-query", "annotation-off"],
+    "annotation-clear": ["annotation-query", "annotation-clear"],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
@@ -1024,7 +1028,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? ["cursor", "measurement", "reference-display", "save-export"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference-display", "save-export"].includes(editorKind)
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
@@ -1033,7 +1037,7 @@ function syncCommandSelection(draft = null) {
   elements.selectedCommand.title = selectedTitle;
   const selectedDescription = selected
     ? editorOwned
-      ? ["cursor", "measurement", "reference", "reference-display", "save-export"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
@@ -1179,7 +1183,10 @@ function syncWorkspaceHeaderActions(editorKind) {
       editorKind !== "cursor" || selected?.id === "cursor-query";
   }
   if (cursorEditor?.refreshButton) cursorEditor.refreshButton.hidden = editorKind !== "cursor";
-  if (annotationEditor?.entry?.button) annotationEditor.entry.button.hidden = editorKind !== "annotation";
+  if (annotationEditor?.entry?.button) {
+    annotationEditor.entry.button.hidden =
+      editorKind !== "annotation" || selected?.id === "annotation-query";
+  }
   if (annotationEditor?.refreshButton) annotationEditor.refreshButton.hidden = editorKind !== "annotation";
   if (wgenEditor?.refreshButton) wgenEditor.refreshButton.hidden = editorKind !== "wgen";
   if (demoEditor?.refreshButton) demoEditor.refreshButton.hidden = editorKind !== "demo";

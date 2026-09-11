@@ -1323,9 +1323,10 @@ COMMANDS = (
         "category": "Annotation",
         "label": "Annotation",
         "modes": ("live", "simulate"),
+        "hidden": True,
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set", "on", "off", "clear"), "default": "query"},
-            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 10, "options": (1,), "default": 1, "label_key": "annotation.slot", "option_label": "annotation-slot", "help_key": "annotation.slot"},
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 10, "default": 1, "label_key": "annotation.slot", "option_label": "annotation-slot", "help_key": "annotation.slot"},
             {"name": "text", "type": "string", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.text"},
             {"name": "color", "type": "string", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.color"},
             {"name": "background", "type": "string", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.background"},
@@ -1333,6 +1334,61 @@ COMMANDS = (
             {"name": "y", "type": "integer", "minimum": 0, "maximum": 480, "visible_if": [{"field": "action", "equals": "set"}], "help_key": "annotation.y"},
         ),
         "group": "annotation",
+        "editor": "annotation",
+    },
+    {
+        "id": "annotation-query",
+        "category": "Annotation",
+        "label": "Annotation state",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 10, "default": 1, "label_key": "annotation.slot", "option_label": "annotation-slot", "help_key": "annotation.slot"},
+        ),
+        "editor": "annotation",
+    },
+    {
+        "id": "annotation-set",
+        "category": "Annotation",
+        "label": "Set annotation",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 10, "default": 1, "label_key": "annotation.slot", "option_label": "annotation-slot", "help_key": "annotation.slot"},
+            {"name": "text", "type": "string", "help_key": "annotation.text"},
+            {"name": "color", "type": "enum", "options": ("CH1", "CH2", "CH3", "CH4", "DIG", "MATH", "REF", "MARK", "WHITE", "RED"), "option_label": "annotation-color", "help_key": "annotation.color"},
+            {"name": "background", "type": "enum", "options": ("OPAQ", "INV", "TRAN"), "option_label": "annotation-background", "help_key": "annotation.background"},
+            {"name": "x", "type": "integer", "minimum": 0, "maximum": 800, "help_key": "annotation.x"},
+            {"name": "y", "type": "integer", "minimum": 0, "maximum": 480, "help_key": "annotation.y"},
+        ),
+        "editor": "annotation",
+    },
+    {
+        "id": "annotation-on",
+        "category": "Annotation",
+        "label": "Turn on annotation",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 10, "default": 1, "label_key": "annotation.slot", "option_label": "annotation-slot", "help_key": "annotation.slot"},
+        ),
+        "editor": "annotation",
+    },
+    {
+        "id": "annotation-off",
+        "category": "Annotation",
+        "label": "Turn off annotation",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 10, "default": 1, "label_key": "annotation.slot", "option_label": "annotation-slot", "help_key": "annotation.slot"},
+        ),
+        "editor": "annotation",
+    },
+    {
+        "id": "annotation-clear",
+        "category": "Annotation",
+        "label": "Clear annotation text",
+        "modes": ("live", "simulate"),
+        "fields": (
+            {"name": "slot", "type": "integer", "minimum": 1, "maximum": 10, "default": 1, "label_key": "annotation.slot", "option_label": "annotation-slot", "help_key": "annotation.slot"},
+        ),
         "editor": "annotation",
     },
     {
@@ -1953,6 +2009,7 @@ _READ_COMMANDS = frozenset(
         "dvm-current",
         "dvm-query",
         "cursor-query",
+        "annotation-query",
         "wgen-query",
         "demo-query",
         "external-trigger-settings",
@@ -2172,12 +2229,26 @@ def _model_command_presentation(
         if entry["category"] == "Reference" and name == "slot" and capabilities.reference_waveforms:
             override["maximum"] = capabilities.reference_waveforms
             override["options"] = tuple(range(1, capabilities.reference_waveforms + 1))
-        if entry["id"] == "annotation" and name == "slot" and capabilities.annotation_slots:
+        if entry["id"] in {
+            "annotation",
+            "annotation-query",
+            "annotation-set",
+            "annotation-on",
+            "annotation-off",
+            "annotation-clear",
+        } and name == "slot" and capabilities.annotation_slots:
             override["maximum"] = capabilities.annotation_slots
             override["options"] = tuple(range(1, capabilities.annotation_slots + 1))
             if capabilities.annotation_slots <= 1:
                 override["hidden"] = True
-        if entry["id"] == "annotation" and name in ("x", "y") and not capabilities.supports_annotation_position:
+        if entry["id"] in {
+            "annotation",
+            "annotation-query",
+            "annotation-set",
+            "annotation-on",
+            "annotation-off",
+            "annotation-clear",
+        } and name in ("x", "y") and not capabilities.supports_annotation_position:
             override["hidden"] = True
         if entry["id"] == "channel-impedance" and name == "impedance":
             override["options"] = (
