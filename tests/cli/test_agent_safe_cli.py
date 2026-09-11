@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from scopes_tool_cli import cli, runtime
+from scopes_tool_cli.commands.measurement_analysis import _cursor_range_diagnostic
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.simulator_backend import SimulatorBackend
@@ -1500,6 +1502,54 @@ def test_cursor_without_auto_vertical_reports_y_range_diagnostic(capsys):
     payload = _json_stdout(capsys)
     assert payload["system_error"]["code"] == -222
     assert "cursor --auto-vertical" in payload["result"]["diagnostic"]
+
+
+def _cursor_range_error_entry():
+    return SimpleNamespace(code=-222, message='-222,"Data out of range"')
+
+
+def _cursor_partial_args(**overrides):
+    values = {
+        "command": "cursor",
+        "cursor_query": False,
+        "cursor_off": False,
+        "source_channel": 1,
+        "x1": None,
+        "x2": None,
+        "y1": None,
+        "y2": None,
+        "auto_timebase": False,
+        "auto_vertical": False,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_cursor_x_only_auto_timebase_diagnostic_omits_auto_vertical():
+    args = _cursor_partial_args(x1=0.0, auto_timebase=True)
+
+    diagnostic = _cursor_range_diagnostic(args, _cursor_range_error_entry())
+
+    assert diagnostic is not None
+    assert "--auto-vertical" not in diagnostic
+
+
+def test_cursor_y_only_auto_vertical_diagnostic_omits_auto_timebase():
+    args = _cursor_partial_args(y2=0.0, auto_vertical=True)
+
+    diagnostic = _cursor_range_diagnostic(args, _cursor_range_error_entry())
+
+    assert diagnostic is not None
+    assert "--auto-timebase" not in diagnostic
+
+
+def test_cursor_xy_auto_vertical_diagnostic_keeps_cross_axis_hint():
+    args = _cursor_partial_args(x1=0.0, y1=10.0, auto_vertical=True)
+
+    diagnostic = _cursor_range_diagnostic(args, _cursor_range_error_entry())
+
+    assert diagnostic is not None
+    assert "cursor --auto-timebase" in diagnostic
 
 
 def test_measure_simulate_json_reports_measurement_fields(capsys):

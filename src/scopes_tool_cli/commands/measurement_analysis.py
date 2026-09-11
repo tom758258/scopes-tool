@@ -212,6 +212,8 @@ def _cursor_range_diagnostic(args: argparse.Namespace, entry) -> str | None:
         or "data out of range" not in entry.message.lower()
     ):
         return None
+    has_x = getattr(args, "x1", None) is not None or getattr(args, "x2", None) is not None
+    has_y = getattr(args, "y1", None) is not None or getattr(args, "y2", None) is not None
     auto_timebase = getattr(args, "auto_timebase", False)
     auto_vertical = getattr(args, "auto_vertical", False)
     if auto_timebase and auto_vertical:
@@ -221,16 +223,26 @@ def _cursor_range_diagnostic(args: argparse.Namespace, entry) -> str | None:
             "scale/offset"
         )
     if auto_timebase:
+        if has_y:
+            return (
+                "cursor Y position may be outside the current vertical display range; "
+                "retry with cursor --auto-vertical, manually adjust channel scale/offset, "
+                "or choose smaller Y cursor positions"
+            )
         return (
-            "cursor Y position may be outside the current vertical display range; "
-            "retry with cursor --auto-vertical, manually adjust channel scale/offset, "
-            "or choose smaller Y cursor positions"
+            "cursor X position was rejected as out of range after auto adjustment; "
+            "check instrument limits or manually adjust the timebase"
         )
     if auto_vertical:
+        if has_x:
+            return (
+                "cursor X position may be outside the current horizontal display range; "
+                "retry with cursor --auto-timebase, use a wider timebase scale, or choose "
+                "smaller X cursor positions"
+            )
         return (
-            "cursor X position may be outside the current horizontal display range; "
-            "retry with cursor --auto-timebase, use a wider timebase scale, or choose "
-            "smaller X cursor positions"
+            "cursor Y position was rejected as out of range after auto adjustment; "
+            "check instrument limits or manually adjust channel scale/offset"
         )
     return (
         "cursor position was rejected as out of range; retry with cursor "

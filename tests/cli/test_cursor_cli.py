@@ -91,19 +91,19 @@ def test_cursor_configure_x_only_reports_other_positions_null(capsys):
 
 
 def test_cursor_configure_y_only_reports_other_positions_null(capsys):
-    payload = _cursor_dry_run_payload(capsys, ["--source-channel", "1", "--y2", "0.5"])
+    payload = _cursor_dry_run_payload(capsys, ["--source-channel", "1", "--y2", "0"])
     result = payload["result"]
 
     assert result["commands"] == [
         ":MARKer:MODE MANual",
         ":MARKer:X1Y1source CHANnel1",
         ":MARKer:X2Y2source CHANnel1",
-        ":MARKer:Y2Position 0.5",
+        ":MARKer:Y2Position 0",
     ]
     assert result["x1_seconds"] is None
     assert result["x2_seconds"] is None
     assert result["y1_volts"] is None
-    assert result["y2_volts"] == 0.5
+    assert result["y2_volts"] == 0.0
 
 
 def test_cursor_configure_rejects_missing_source_and_positions(capsys):
@@ -117,6 +117,12 @@ def test_cursor_configure_rejects_missing_source_and_positions(capsys):
 def test_cursor_query_rejects_configure_arguments(capsys):
     message = _cursor_dry_run_error(capsys, ["--query", "--x1", "0.001"])
     assert message == "--query cannot be combined with --x1"
+
+    message = _cursor_dry_run_error(capsys, ["--query", "--x1", "0"])
+    assert message == "--query cannot be combined with --x1"
+
+    message = _cursor_dry_run_error(capsys, ["--off", "--y2", "0"])
+    assert message == "--off cannot be combined with --y2"
 
     message = _cursor_dry_run_error(capsys, ["--off", "--auto-timebase"])
     assert message == "--off cannot be combined with --auto-timebase"

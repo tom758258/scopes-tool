@@ -46,6 +46,12 @@ def _validate_cursor_args(args: argparse.Namespace) -> None:
             "x2",
             "y1",
             "y2",
+        ):
+            if getattr(args, name, None) is not None:
+                raise OscilloscopeError(
+                    f"--{'query' if querying else 'off'} cannot be combined with --{name.replace('_', '-')}"
+                )
+        for name in (
             "auto_timebase",
             "auto_vertical",
         ):
