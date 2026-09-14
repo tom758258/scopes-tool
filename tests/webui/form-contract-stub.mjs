@@ -57,7 +57,10 @@ class FakeNode {
     if (sel === '[data-field="x"]') return out.filter((c) => c.dataset && c.dataset.field === "x");
     if (sel === '[data-field="y"]') return out.filter((c) => c.dataset && c.dataset.field === "y");
     if (sel === '[data-field]') return out;
-    return out.filter((c) => true); // minimal: return all with data-field if generic
+    // Unknown selectors (e.g. preset/multi controls absent from this harness)
+    // must not match data-field inputs; production setDisabled() would
+    // otherwise write disabled state onto unrelated fields.
+    return [];
   }
   get closest() { return () => null; }
   get validity() { return { badInput: false }; }
@@ -110,20 +113,28 @@ const vResult = form2.values();
 assert.strictEqual(vResult && vResult.x === undefined, true, "C2: capability-disabled omitted from values");
 
 // C3: setDisabled(true)->false preserves capability-disabled, restores normal.
+// Both fields come from the real production render; no manual marking, so a
+// missing marker or a missing element fails instead of silently passing.
 const c3 = new FakeNode("div");
-const form3 = new CommandForm(c3, stubCatalog([{ name: "x", type: "integer", disabled: true, required: false }]));
+const form3 = new CommandForm(c3, stubCatalog([
+  { name: "x", type: "integer", disabled: true, required: false },
+  { name: "y", type: "integer", disabled: false, required: false },
+]));
 form3.render({ id: "test" });
-// Find the rendered disabled input for x and mark it; then test setDisabled flow.
-const capInp = c3.children ? c3.children.find((ch) => ch.tagName === "INPUT" && ch.dataset && ch.dataset.field === "x") : null;
-if (capInp) {
-  capInp.value = "123";
-  capInp.disabled = true;
-  capInp.dataset.capabilityDisabled = "true";
-}
+const capInputs = c3.querySelectorAll('[data-field="x"]');
+const stdInputs = c3.querySelectorAll('[data-field="y"]');
+assert.ok(capInputs.length === 1, "C3: rendered capability-disabled input exists");
+assert.ok(stdInputs.length === 1, "C3: rendered normal input exists");
+const capInp = capInputs[0];
+const stdInp = stdInputs[0];
+assert.strictEqual(capInp.disabled, true, "C3: capability-disabled renders disabled");
+assert.strictEqual(stdInp.disabled, false, "C3: normal renders enabled");
 form3.setDisabled(true);
-if (capInp) assert.strictEqual(capInp.disabled, true, "C3a: busy keeps disabled");
+assert.strictEqual(capInp.disabled, true, "C3a: busy keeps capability-disabled");
+assert.strictEqual(stdInp.disabled, true, "C3a: busy disables normal");
 form3.setDisabled(false);
-if (capInp) assert.strictEqual(capInp.disabled, true, "C3b: capability-disabled preserved after false");
+assert.strictEqual(capInp.disabled, true, "C3b: capability-disabled preserved after false");
+assert.strictEqual(stdInp.disabled, false, "C3b: normal restored after false");
 
 // C4: enabled integer "0" preserved as numeric 0.
 const c4 = new FakeNode("div");
