@@ -12,7 +12,7 @@ import zlib
 
 from .capabilities import capabilities_for_model_id
 from .demo import DEMO_FUNCTION_TOKENS
-from .errors import BackendClosedError, OscilloscopeError
+from .errors import BackendClosedError, OscilloscopeError, ParameterValidationError
 from .identity import VENDOR_REGISTRY, physical_model_for_id
 from .segmented import segmented_waveform_all_supported
 from .serial import (
@@ -688,11 +688,14 @@ class SimulatorBackend:
             # a fixed simulator-only rule, so 4000X limits and function
             # dependency are preserved.
             canonical_function = parse_wgen_function(self.wgen_function)
-            validate_wgen_frequency(
-                value,
-                series=self._capabilities.series,
-                function=canonical_function,
-            )
+            try:
+                validate_wgen_frequency(
+                    value,
+                    series=self._capabilities.series,
+                    function=canonical_function,
+                )
+            except ParameterValidationError as exc:
+                raise SimulatorBackendError(str(exc)) from exc
             self.wgen_frequency_hz = value
         elif upper.startswith(f"{wgen_root}:VOLTAGE:OFFSET "):
             value = _parse_simulator_wgen_number(command, "offset")
@@ -708,13 +711,16 @@ class SimulatorBackend:
                 and canonical_function != "dc"
             ):
                 offset_amp = self.wgen_amplitude_volts
-            validate_wgen_offset(
-                value,
-                series=self._capabilities.series,
-                function=canonical_function,
-                load=canonical_load,
-                amplitude=offset_amp,
-            )
+            try:
+                validate_wgen_offset(
+                    value,
+                    series=self._capabilities.series,
+                    function=canonical_function,
+                    load=canonical_load,
+                    amplitude=offset_amp,
+                )
+            except ParameterValidationError as exc:
+                raise SimulatorBackendError(str(exc)) from exc
             self.wgen_offset_volts = value
         elif upper.startswith(f"{wgen_root}:VOLTAGE "):
             value = _parse_simulator_wgen_number(command, "amplitude")
@@ -727,13 +733,16 @@ class SimulatorBackend:
             amp_offset = None
             if self._capabilities.series == "4000X" and canonical_function != "dc":
                 amp_offset = self.wgen_offset_volts
-            validate_wgen_amplitude(
-                value,
-                series=self._capabilities.series,
-                function=canonical_function,
-                load=canonical_load,
-                offset=amp_offset,
-            )
+            try:
+                validate_wgen_amplitude(
+                    value,
+                    series=self._capabilities.series,
+                    function=canonical_function,
+                    load=canonical_load,
+                    offset=amp_offset,
+                )
+            except ParameterValidationError as exc:
+                raise SimulatorBackendError(str(exc)) from exc
             self.wgen_amplitude_volts = value
         elif upper.startswith(f"{wgen_root}:OUTPUT:LOAD "):
             token = command.rsplit(" ", 1)[1].upper()
@@ -746,7 +755,17 @@ class SimulatorBackend:
                 raise SimulatorBackendError(
                     f"Unsupported simulator WGEN load: {token}"
                 )
-            self.wgen_load = WGEN_LOAD_TOKENS[load]
+            old_load = parse_wgen_load(self.wgen_load) if self.wgen_load else None
+            new_load = load_by_token.get(token)
+            if new_load is not None:
+                if old_load is not None and old_load != new_load:
+                    if old_load == "one-meg" and new_load == "fifty":
+                        self.wgen_amplitude_volts /= 2.0
+                        self.wgen_offset_volts /= 2.0
+                    elif old_load == "fifty" and new_load == "one-meg":
+                        self.wgen_amplitude_volts *= 2.0
+                        self.wgen_offset_volts *= 2.0
+                self.wgen_load = WGEN_LOAD_TOKENS[new_load]
         elif match := re.fullmatch(r":SBUS(\d+):MODE (.+)", command, re.IGNORECASE):
             bus = self._validate_serial_bus(int(match.group(1)))
             canonical = parse_serial_mode(match.group(2))

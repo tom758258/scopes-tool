@@ -1725,8 +1725,7 @@ validates against the detected instrument identity before any SCPI write.
 Therefore a planning-accepted value may still be rejected by exact live-state
 validation when the current function, load, or 4000X counterpart interaction
 does not allow it. The software applies interaction protection only for the
-explicit High-Z (`one-meg`) evidence; the 50-ohm interaction threshold is not
-inferred from current documentation and is not applied by the simulator or CLI.
+explicit High-Z (`one-meg`). The software does not infer a 50-ohm interaction threshold.
 Aggregate `wgen-query` queries each field individually and preserves raw
 readbacks. Unknown or extended function readbacks produce `function: null`
 while preserving `function_raw`.
