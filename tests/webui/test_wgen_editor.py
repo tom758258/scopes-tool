@@ -41,7 +41,7 @@ def test_wgen_command_family_routes_to_one_editor() -> None:
     assert [entry["id"] for entry in entries] == WGEN_COMMAND_IDS
     for entry in entries:
         assert entry["category"] == "WGEN", entry["id"]
-        assert entry["group"] == "wgen", entry["id"]
+        assert "group" not in entry, entry["id"]
         assert entry["editor"] == "wgen", entry["id"]
         assert entry.get("browser_hidden") is not True, entry["id"]
         assert entry.get("hidden") is not True, entry["id"]
@@ -194,6 +194,10 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
     assert 'if (editorKind === "wgen") wgenEditor?.schedulePresentation();' in app_source
     assert 'wgenEditor.refreshButton.hidden = editorKind !== "wgen";' in app_source
     assert "wgenEditor?.rerender();" in app_source
+    # WGEN uses the existing command-specific header path, so each selected
+    # WGEN command shows its own label/description.
+    assert '["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen"].includes(editorKind)' in app_source
     assert 'id="wgen-editor"' in index_source
     for key in (
         '"command.wgen-query": "Waveform generator state"',
@@ -226,32 +230,35 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
 
         class FakeNode {
           constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; this.disabled = false; }
-          append(...nodes) { this.children.push(...nodes); }
+          append(...nodes) { for (const node of nodes) { node.remove(); node.parent = this; this.children.push(node); } }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           addEventListener(_name, handler) { this.handler = handler; }
           setAttribute() {}
-          remove() {}
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((node) => node !== this); this.parent = null; }
           querySelector() { return null; }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.queueMicrotask = (fn) => { fn(); };
 
         globalThis.translate = (key) => key;
+        let selectedId = "wgen-query";
         let currentMode = "live";
         let submittedLoad = "one-meg";
         globalThis.CommandForm = class CommandForm {
           constructor(container, _catalog) { this.container = container; this.command = null; this.disabled = false; }
           render(command) { this.command = command; }
           values() {
-            if (this.command?.id === "wgen-load") return { action: "set", load: submittedLoad };
-            return { action: "set", frequency_hz: 1000 };
+            if (selectedId === "wgen-frequency") return { action: "set", frequency_hz: 1000 };
+            if (selectedId === "wgen-offset") return { action: "set", offset_volts: 0 };
+            if (selectedId === "wgen-load") return { action: "set", load: submittedLoad };
+            return {};
           }
           setDisabled(disabled) { this.disabled = disabled; }
           clearDirty() {}
         };
 
         const calls = [];
-        let aggregate = {
+        const aggregate = {
           enabled: false, output_raw: "0", function: "sine",
           function_scpi: "SINusoid", function_raw: "SIN",
           frequency_hz: 1000, frequency_raw: "1.0E+3",
@@ -263,20 +270,17 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
           calls,
           contextKey: () => `${currentMode}||keysight-dsox4024a`,
           mode: () => currentMode,
-          selectedCommand: () => ({ id: "wgen-frequency", editor: "wgen", group: "wgen" }),
+          selectedCommand: () => catalog.commands.find((command) => command.id === selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,
           headerActions: new FakeNode("div"),
           async executeCommand(id, parameters, _options) {
             calls.push([id, parameters]);
             if (id === "wgen-query") {
-              return { status: "completed", result: { result: { wgen: aggregate } } };
+              return { status: "completed", result: { result: { wgen: { ...aggregate } } } };
             }
             if (id === "wgen-load") {
-              aggregate = {
-                ...aggregate, load: parameters.load,
-                amplitude_volts: 2.0, voltage_raw: "2.0E+0",
-              };
+              aggregate.load = parameters.load;
               return { status: "completed", result: { result: { load: { load: parameters.load } } } };
             }
             return { status: "completed", result: { result: { frequency: { frequency_hz: 1000 } } } };
@@ -301,60 +305,93 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
 
         const editor = new globalThis.WgenEditor(new FakeNode("div"), catalog, hooks);
         await editor.refresh(true, true);
-        assert.deepEqual(calls[0], ["wgen-query", {}]);
-        assert.equal(editor.entries.length, 7);
-        const panelText = (id) => editor.entryFor(id).panel.children.map(
-          (row) => [row.children[0].textContent, row.children[1].textContent],
-        );
-        assert.deepEqual(panelText("wgen-output"), [["wgen.state.output", "enum.disable"]]);
-        assert.deepEqual(panelText("wgen-frequency"), [["wgen.state.frequency", "1000"]]);
-        assert.deepEqual(panelText("wgen-voltage"), [["wgen.state.amplitude", "1"]]);
-        assert.deepEqual(panelText("wgen-load"), [["wgen.state.load", "fifty"]]);
+        assert.deepEqual(calls, [["wgen-query", {}]]);
+        assert.ok(hooks.headerActions.children.includes(editor.refreshButton));
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
+        assert.equal(editor.entry.form.container.className, "command-form");
+        assert.ok(!editor.sectionsHost.children[0].children.includes(editor.entry.button));
+        // Only the selected command is rendered; wgen-query has no fields.
+        assert.equal(editor.sectionsHost.children.length, 1);
+        assert.equal(editor.sectionsHost.children[0].hidden, true);
+        assert.equal(editor.entry.form.container.hidden, true);
+        // wgen-query reuses the header Read action; no second query button.
+        assert.equal(editor.entry.button.hidden, true);
 
-        const frequency = editor.entryFor("wgen-frequency");
+        selectedId = "wgen-frequency";
+        const queryButton = editor.entry.button;
+        const beforeFrequencyRead = calls.length;
+        await editor.refresh(true, true);
+        assert.deepEqual(calls.slice(beforeFrequencyRead), [["wgen-query", {}]]);
+        // Switching commands rebuilds: one section, no leftover header action.
+        assert.equal(editor.sectionsHost.children.length, 1);
+        assert.equal(hooks.headerActions.children.length, 2);
+        assert.ok(!hooks.headerActions.children.includes(queryButton));
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
+        assert.equal(editor.entry.button.hidden, false);
+        assert.equal(editor.entry.button.textContent, "actions.apply");
+        assert.equal(editor.sectionsHost.children[0].hidden, false);
+
         const beforeSubmit = calls.length;
-        await editor.submit(frequency);
+        await editor.submit();
         const setterCalls = calls.slice(beforeSubmit);
         assert.equal(setterCalls.length, 1);
         assert.deepEqual(setterCalls[0], ["wgen-frequency", { action: "set", frequency_hz: 1000 }]);
         assert.ok(!calls.slice(beforeSubmit).some((call) => call[0] === "wgen-output"));
         assert.ok(!calls.slice(beforeSubmit).some((call) => call[0] === "wgen-query"));
-        const frequencyPanel = editor.entryFor("wgen-frequency").panel.children.map(
-          (row) => [row.children[0].textContent, row.children[1].textContent],
-        );
-        assert.deepEqual(frequencyPanel, [["wgen.state.frequency", "1000"]]);
 
-        const beforeRefresh = calls.length;
+        // Numeric 0 is a valid submission and must reach its own command.
+        selectedId = "wgen-offset";
         await editor.refresh(true, true);
-        const refreshCalls = calls.slice(beforeRefresh).filter((call) => call[0] === "wgen-query");
-        assert.equal(refreshCalls.length, 1);
+        const beforeOffset = calls.length;
+        await editor.submit();
+        const offsetCalls = calls.slice(beforeOffset);
+        assert.equal(offsetCalls.length, 1);
+        assert.deepEqual(offsetCalls[0], ["wgen-offset", { action: "set", offset_volts: 0 }]);
+        assert.ok(!offsetCalls.some((call) => call[0] === "wgen-output"));
 
-        const queryEntry = editor.entryFor("wgen-query");
-        const beforeQuerySubmit = calls.length;
-        await editor.submit(queryEntry);
-        const querySubmitCalls = calls.slice(beforeQuerySubmit).filter((call) => call[0] === "wgen-query");
-        assert.equal(querySubmitCalls.length, 1);
-
-        const load = editor.entryFor("wgen-load");
+        // Live load set is followed by one aggregate refresh; simulate is not.
+        selectedId = "wgen-load";
+        await editor.refresh(true, true);
         const beforeLoad = calls.length;
-        await editor.submit(load);
+        await editor.submit();
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.deepEqual(calls.slice(beforeLoad), [
           ["wgen-load", { action: "set", load: "one-meg" }],
           ["wgen-query", {}],
         ]);
-        assert.deepEqual(panelText("wgen-load"), [["wgen.state.load", "one-meg"]]);
-        assert.deepEqual(panelText("wgen-voltage"), [["wgen.state.amplitude", "2"]]);
 
         currentMode = "simulate";
         submittedLoad = "fifty";
         const beforeSimulateLoad = calls.length;
-        await editor.submit(load);
+        await editor.submit();
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.deepEqual(calls.slice(beforeSimulateLoad), [
           ["wgen-load", { action: "set", load: "fifty" }],
         ]);
-        assert.deepEqual(panelText("wgen-load"), [["wgen.state.load", "fifty"]]);
+
+        // Switching back to wgen-query hides the section button again.
+        selectedId = "wgen-query";
+        const callsBeforeBack = calls.length;
+        await editor.refresh(true, false);
+        assert.equal(calls.length, callsBeforeBack);
+        assert.equal(editor.entry.button.hidden, true);
+        assert.equal(editor.sectionsHost.children.length, 1);
+
+        const headerCount = hooks.headerActions.children.length;
+        const oldApply = editor.entry.button;
+        const callsBeforeLayout = calls.length;
+        editor.rerender();
+        assert.equal(hooks.headerActions.children.length, headerCount);
+        assert.ok(!hooks.headerActions.children.includes(oldApply));
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
+        const local = new globalThis.WgenEditor(new FakeNode("div"), catalog, {
+          ...hooks, headerActions: null,
+        });
+        await local.refresh(false, false);
+        assert.ok(local.sectionsHost.children[0].children.includes(local.entry.button));
+        assert.equal(calls.length, callsBeforeLayout);
+        editor.clearSections();
+        assert.equal(hooks.headerActions.children.length, headerCount - 1);
 
         console.log(JSON.stringify({ ok: true }));
         '''

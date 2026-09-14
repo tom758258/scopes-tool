@@ -1028,7 +1028,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference-display", "save-export"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen"].includes(editorKind)
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
@@ -1037,7 +1037,7 @@ function syncCommandSelection(draft = null) {
   elements.selectedCommand.title = selectedTitle;
   const selectedDescription = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
@@ -1188,6 +1188,10 @@ function syncWorkspaceHeaderActions(editorKind) {
       editorKind !== "annotation" || selected?.id === "annotation-query";
   }
   if (annotationEditor?.refreshButton) annotationEditor.refreshButton.hidden = editorKind !== "annotation";
+  if (wgenEditor?.entry?.button) {
+    wgenEditor.entry.button.hidden =
+      editorKind !== "wgen" || selected?.id === "wgen-query";
+  }
   if (wgenEditor?.refreshButton) wgenEditor.refreshButton.hidden = editorKind !== "wgen";
   if (demoEditor?.refreshButton) demoEditor.refreshButton.hidden = editorKind !== "demo";
   if (channelDisplayEditor?.refreshButton) channelDisplayEditor.refreshButton.hidden = editorKind !== "channel-display";

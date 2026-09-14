@@ -209,7 +209,7 @@ Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
 
 The Command Browser keeps Category as its first level. Categories with group
-metadata (Trigger, Search, Serial, Workflow, WGEN, and
+metadata (Trigger, Search, Serial, Workflow, and
 DEMO) show
 Category → Group → Commands sections, while categories without group metadata
 keep the plain Category → Commands list. Groups start expanded and can be
@@ -380,7 +380,8 @@ Manual mode and enables them. Annotation offers explicit Read annotation setting
 switches the annotation on), on/off actions (`annotation-on`, `annotation-off`),
 clearing only the annotation text (`annotation-clear`), and current state readback;
 the slot selector is hidden on single-slot models and X/Y position controls appear only
-where Core capabilities report position support. The Read generator settings action reads the whole
+where Core capabilities report position support. Selecting a WGEN command shows
+only that command's form. The Read generator settings action reads the whole
 generator state through the single aggregate `wgen-query`; output, function,
 frequency, amplitude, offset, and load each keep an independent Apply over
 their existing command, and applying a setting never switches the output on.

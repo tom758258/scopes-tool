@@ -4929,7 +4929,7 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         const sequenceEditor = {{}};
         const cursorEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const annotationEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
-        const wgenEditor = {{}};
+        const wgenEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const demoEditor = {{}};
         const channelDisplayEditor = {{}};
         const channelScaleRangeEditor = {{}};
@@ -4993,6 +4993,16 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
           assert.equal(annotationEditor.refreshButton.hidden, false);
           assert.equal(annotationEditor.entry.button.hidden, false);
         }}
+
+        selectedId = "wgen-query";
+        syncWorkspaceHeaderActions("wgen");
+        assert.equal(wgenEditor.refreshButton.hidden, false);
+        assert.equal(wgenEditor.entry.button.hidden, true);
+
+        selectedId = "wgen-frequency";
+        syncWorkspaceHeaderActions("wgen");
+        assert.equal(wgenEditor.refreshButton.hidden, false);
+        assert.equal(wgenEditor.entry.button.hidden, false);
 
         syncWorkspaceHeaderActions("serial");
         assert.equal(annotationEditor.refreshButton.hidden, true);

@@ -1397,7 +1397,6 @@ COMMANDS = (
         "label": "Waveform generator state",
         "modes": ("live", "simulate"),
         "fields": (),
-        "group": "wgen",
         "editor": "wgen",
     },
     {
@@ -1409,7 +1408,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-output.enabled"},
         ),
-        "group": "wgen",
         "editor": "wgen",
     },
     {
@@ -1421,7 +1419,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "function", "type": "enum", "options": WGEN_FUNCTIONS, "option_label": "wgen-function", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-function.function"},
         ),
-        "group": "wgen",
         "editor": "wgen",
     },
     {
@@ -1433,7 +1430,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "frequency_hz", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-frequency.frequency_hz"},
         ),
-        "group": "wgen",
         "editor": "wgen",
     },
     {
@@ -1445,7 +1441,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "amplitude", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-voltage.amplitude"},
         ),
-        "group": "wgen",
         "editor": "wgen",
     },
     {
@@ -1457,7 +1452,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "offset_volts", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-offset.offset_volts"},
         ),
-        "group": "wgen",
         "editor": "wgen",
     },
     {
@@ -1469,7 +1463,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "load", "type": "enum", "options": WGEN_LOADS, "option_label": "wgen-load", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "wgen-load.load"},
         ),
-        "group": "wgen",
         "editor": "wgen",
     },
     {
