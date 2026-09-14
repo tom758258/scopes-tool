@@ -2249,7 +2249,7 @@ def _model_command_presentation(
             "annotation-off",
             "annotation-clear",
         } and name in ("x", "y") and not capabilities.supports_annotation_position:
-            override["hidden"] = True
+            override["disabled"] = True
         if entry["id"] == "channel-impedance" and name == "impedance":
             override["options"] = (
                 ("one_meg", "fifty")

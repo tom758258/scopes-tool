@@ -155,7 +155,9 @@ export class CommandForm {
 
   setDisabled(disabled) {
     this.container.querySelectorAll("[data-field]").forEach((input) => {
-      if (input.type !== "hidden") input.disabled = disabled;
+      if (input.type !== "hidden") {
+        input.disabled = disabled || input.dataset.capabilityDisabled === "true";
+      }
     });
     this.container.querySelectorAll(".timebase-scale-presets button").forEach((button) => {
       button.disabled = disabled;
@@ -171,6 +173,7 @@ export class CommandForm {
   values() {
     const values = {};
     for (const element of this.container.querySelectorAll("[data-field]")) {
+      if (element.dataset.capabilityDisabled === "true") continue;
       if (element.closest?.("[data-visible-if-hidden=\"true\"]")) continue;
       if (
         this.command?.id === "fft"
@@ -398,6 +401,10 @@ export class CommandForm {
     }
     input.dataset.field = field.name;
     input.dataset.type = field.type;
+    if (field.disabled === true) {
+      input.disabled = true;
+      input.dataset.capabilityDisabled = "true";
+    }
     if (field.serialize) input.dataset.serialize = field.serialize;
     input.dataset.queryField = String(
       (this.presentation?.query_fields || []).includes(field.name),

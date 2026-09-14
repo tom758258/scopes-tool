@@ -43,6 +43,7 @@ body {
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .55; }
+.command-form [data-capability-disabled="true"] { opacity: .55; }
 
 .page-head,
 .shell {

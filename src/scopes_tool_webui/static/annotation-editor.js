@@ -155,6 +155,17 @@ export class AnnotationEditor {
     this.entry = { form, button: actionButton, epoch };
     form.render(command, {});
     const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    if (
+      command.id === "annotation-set" &&
+      fields.some(
+        (f) => (f.name === "x" || f.name === "y") && f.disabled === true,
+      )
+    ) {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.textContent = translate("annotation.position.unsupported");
+      formContainer.append(note);
+    }
     section.hidden = fields.length === 0;
     formContainer.hidden = fields.length === 0;
     actionButton.addEventListener("click", () => {
