@@ -933,7 +933,7 @@ function appendWorkspaceFields(container, fields, resultContext = null) {
     const field = document.createElement("div");
     field.className = "workspace-result-field";
     const label = document.createElement("small");
-    label.textContent = resultFieldLabel(name);
+    label.textContent = resultFieldLabel(name, resultContext);
     const content = document.createElement("span");
     content.textContent = formatWorkspaceValue(name, value, resultContext);
     field.append(content, label);
@@ -941,7 +941,20 @@ function appendWorkspaceFields(container, fields, resultContext = null) {
   });
 }
 
-function resultFieldLabel(name) {
+const RESULT_FIELD_LABEL_CONTEXTS = {
+  wgen: {
+    enabled: "wgen.state.output",
+    function: "wgen.state.function",
+    frequency_hz: "wgen.state.frequency",
+    amplitude_volts: "wgen.state.amplitude",
+    offset_volts: "wgen.state.offset",
+    load: "wgen.state.load",
+  },
+};
+
+function resultFieldLabel(name, resultContext = null) {
+  const scopedLabel = RESULT_FIELD_LABEL_CONTEXTS[resultContext]?.[name];
+  if (scopedLabel && hasTranslation(scopedLabel)) return translate(scopedLabel);
   const resultKey = `results.field.${name}`;
   if (hasTranslation(resultKey)) return translate(resultKey);
   const fieldKey = `field.${name}`;
@@ -971,6 +984,10 @@ const RESULT_ENUM_CONTEXTS = {
   cursor: {
     mode: "cursor-mode",
   },
+  wgen: {
+    function: "wgen-function",
+    load: "wgen-load",
+  },
   fft: {
     operation_canonical: "fft-operation",
     gate: "fft-gate",
@@ -998,7 +1015,7 @@ function formatWorkspaceValue(name, value, resultContext = null) {
   if (value && typeof value === "object") {
     return Object.entries(value)
       .filter(([name]) => !isRawDiagnosticField(name))
-      .map(([itemName, item]) => `${resultFieldLabel(itemName)}: ${formatWorkspaceValue(itemName, item, resultContext)}`)
+      .map(([itemName, item]) => `${resultFieldLabel(itemName, resultContext)}: ${formatWorkspaceValue(itemName, item, resultContext)}`)
       .join("; ");
   }
   if (typeof value === "string" && !isLiteralWorkspaceField(name) && !isProtocolIdentifier(value)) {

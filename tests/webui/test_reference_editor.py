@@ -530,7 +530,7 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
             "\nfunction captureWorkspaceResult(", 1
         )[0]
     )
-    for selected_id in ("reference-waveform", "reference-labels", "cursor-set", "cursor-off", "annotation-set", "annotation-on", "annotation-off", "annotation-clear"):
+    for selected_id in ("reference-waveform", "reference-labels", "cursor-set", "cursor-off", "annotation-set", "annotation-on", "annotation-off", "annotation-clear", "wgen-frequency", "wgen-load"):
         assert f'"{selected_id}"' in render_source
     script = textwrap.dedent(
         r'''
@@ -622,6 +622,25 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
         show("annotation-off", "annotation-off", false);
         show("annotation-clear", "annotation-query", false);
         show("annotation-clear", "annotation-clear", false);
+        show("wgen-frequency", "wgen-query", false);
+
+        // A newer aggregate refresh wins over an older setter result.
+        selected = { id: "wgen-load", presentation_only: false };
+        {
+          const staleContext = buildWorkspaceContext("wgen-load", execContext, "keysight-dsox4024a");
+          const freshContext = buildWorkspaceContext("wgen-query", execContext, "keysight-dsox4024a");
+          const stale = { job_id: "job-wgen-load", command: "wgen-load", status: "completed", result: { result: { ok: true } } };
+          const fresh = { job_id: "job-wgen-query", command: "wgen-query", status: "completed", result: { result: { ok: true } } };
+          globalThis.state.workspaceResults = new Map([
+            [workspaceContextKey(staleContext), { context: staleContext, job: stale }],
+            [workspaceContextKey(freshContext), { context: freshContext, job: fresh }],
+          ]);
+          rendered.length = 0;
+          globalThis.elements.identityWorkspaceContent.replaceChildren();
+          renderWorkspace();
+          assert.equal(rendered.length, 1);
+          assert.equal(rendered[0].job, fresh);
+        }
 
         selected = { id: "reference-waveform", presentation_only: true };
         globalThis.state.workspaceResults = new Map();

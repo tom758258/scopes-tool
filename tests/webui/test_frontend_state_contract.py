@@ -2985,7 +2985,67 @@ def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
+def test_wgen_aggregate_result_uses_wgen_labels() -> None:
+    results_path = STATIC_ROOT / "results.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) { this.tagName = tag; this.children = []; this.className = ""; this.textContent = ""; }
+          append(...nodes) { this.children.push(...nodes); }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        const translations = {
+          "results.field.function": "Math function",
+          "wgen.state.output": "WGEN output",
+          "wgen.state.function": "WGEN function",
+          "wgen.state.load": "WGEN load",
+          "enum.wgen-function.sine": "Sine",
+          "enum.wgen-load.fifty": "50 Ω",
+          "status.disabled": "Disabled",
+        };
+        const source = [
+          `const translations = ${JSON.stringify(translations)};`,
+          "const hasTranslation = (key) => key in translations;",
+          "const translate = (key) => translations[key] ?? key;",
+          fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
+          "globalThis.resultsApi = { renderWorkspaceResult };",
+        ].join("\n");
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { renderWorkspaceResult } = globalThis.resultsApi;
+
+        const container = new FakeNode("div");
+        renderWorkspaceResult(container, {
+          command: "wgen-query",
+          status: "completed",
+          result: {
+            result: {
+              wgen: {
+                enabled: false,
+                function: "sine",
+                load: "fifty",
+              },
+            },
+          },
+        }, { mode: "simulate" });
+        const rows = Object.fromEntries(
+          container.children.map((row) => [row.children[1].textContent, row.children[0].textContent]),
+        );
+        assert.equal(rows["WGEN function"], "Sine");
+        assert.equal(rows["WGEN load"], "50 Ω");
+        assert.equal(rows["WGEN output"], "Disabled");
+        assert.ok(!Object.keys(rows).some((label) => label.includes("Math")));
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(results_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
     run_generic_form_ownership_behavior(
         r'''
         syncCommandSelection();

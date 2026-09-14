@@ -905,6 +905,12 @@ function renderWorkspace() {
     "annotation-on": ["annotation-query", "annotation-on"],
     "annotation-off": ["annotation-query", "annotation-off"],
     "annotation-clear": ["annotation-query", "annotation-clear"],
+    "wgen-output": ["wgen-query", "wgen-output"],
+    "wgen-function": ["wgen-query", "wgen-function"],
+    "wgen-frequency": ["wgen-query", "wgen-frequency"],
+    "wgen-voltage": ["wgen-query", "wgen-voltage"],
+    "wgen-offset": ["wgen-query", "wgen-offset"],
+    "wgen-load": ["wgen-query", "wgen-load"],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
