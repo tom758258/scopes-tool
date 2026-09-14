@@ -1721,11 +1721,16 @@ loads are `one-meg` and `fifty`. WGEN frequency, amplitude, and offset limits
 depend on the selected model series, waveform function, output load, and (for
 4000X amplitude/offset) the current counterpart value. Planning and pre-enqueue
 validation uses the selected planning model's series envelope; live execution
-validates against the detected instrument identity before any SCPI write.
-Therefore a planning-accepted value may still be rejected by exact live-state
-validation when the current function, load, or 4000X counterpart interaction
-does not allow it. The software applies interaction protection only for the
-explicit High-Z (`one-meg`). The software does not infer a 50-ohm interaction threshold.
+validates against the detected instrument identity before any SCPI write. For
+recognized common waveforms, live validation uses the detected model, current
+waveform, and output load, plus the current amplitude/offset where required on
+4000X. Unknown or extended waveform readbacks fall back to the applicable
+model/load envelope; the 4000X High-Z amplitude/offset interaction guard still
+applies where applicable, and the instrument remains authoritative. Therefore
+a planning-accepted value may still be rejected by live validation when the
+current function, load, or 4000X counterpart interaction does not allow it.
+The software applies interaction protection only for the explicit High-Z
+(`one-meg`). The software does not infer a 50-ohm interaction threshold.
 Aggregate `wgen-query` queries each field individually and preserves raw
 readbacks. Unknown or extended function readbacks produce `function: null`
 while preserving `function_raw`.

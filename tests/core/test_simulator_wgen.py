@@ -1,7 +1,7 @@
-from scopes_tool_core.scope import Oscilloscope
-from scopes_tool_core.simulator_backend import SimulatorBackend
 import pytest
-from scopes_tool_core.errors import OscilloscopeError
+
+from scopes_tool_core.scope import Oscilloscope
+from scopes_tool_core.simulator_backend import SimulatorBackend, SimulatorBackendError
 
 
 def test_simulator_4000x_legal_6vpp_and_3v_offset_accepted():
@@ -59,7 +59,7 @@ def test_simulator_invalid_write_rejected_and_state_preserved():
 
     before = backend.wgen_amplitude_volts
 
-    with pytest.raises(OscilloscopeError):
+    with pytest.raises(SimulatorBackendError):
         backend.write(":WGEN1:VOLTage 6")
 
     assert backend.wgen_amplitude_volts == before
