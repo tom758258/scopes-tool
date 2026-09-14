@@ -1,6 +1,9 @@
 import { translate } from "/static/i18n.js";
 import { CommandForm } from "/static/command-form.js";
 
+// Setter fields for annotation-set; slot selects the target and never counts.
+const ANNOTATION_SETTER_FIELDS = ["text", "color", "background", "x", "y"];
+
 export class AnnotationEditor {
   constructor(container, catalog, hooks) {
     this.container = container;
@@ -196,6 +199,18 @@ export class AnnotationEditor {
     const submissionKey = this.currentStateKey();
     const parameters = entry.form.values();
     if (parameters === null) return;
+    if (command.id === "annotation-set") {
+      // annotation-set always renders a text field; anchor the cross-field
+      // message there. values() omits blank fields, so any present setter
+      // key counts, including numeric 0. Slot never counts.
+      const textInput = entry.form.container.querySelector?.('[data-field="text"]');
+      textInput?.setCustomValidity?.("");
+      if (!ANNOTATION_SETTER_FIELDS.some((name) => parameters[name] !== undefined)) {
+        textInput?.setCustomValidity?.(translate("annotation.set.empty"));
+        textInput?.reportValidity?.();
+        return;
+      }
+    }
     this.setBusy(true);
     try {
       const job = await this.hooks.executeCommand(

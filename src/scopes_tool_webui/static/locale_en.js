@@ -1082,6 +1082,7 @@ export const en = {
   "help.annotation.x": "4000X annotation X position (optional). Leave blank to keep the current X position. The valid range starts at 0; the maximum is 800 minus the annotation width.",
   "help.annotation.y": "4000X annotation Y position (optional). Leave blank to keep the current Y position. The valid range starts at 0; the maximum is 480 minus the annotation height.",
   "annotation.position.unsupported": "This model does not support annotation positioning; X / Y position is available only on the 4000X series.",
+  "annotation.set.empty": "Set at least one of text, color, background, X position, or Y position.",
   "help.wgen-output.enabled": "Turn the waveform generator output on or off.",
   "help.wgen-function.function": "Select the waveform generator function.",
   "help.wgen-frequency.frequency_hz": "Waveform generator frequency in hertz.",

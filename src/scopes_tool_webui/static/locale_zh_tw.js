@@ -1082,6 +1082,7 @@ export const zhTW = {
   "help.annotation.x": "4000X 註解 X 位置（選填）。留空時保持目前 X 位置不變。有效範圍從 0 起，上限為 800 減去註解寬度。",
   "help.annotation.y": "4000X 註解 Y 位置（選填）。留空時保持目前 Y 位置不變。有效範圍從 0 起，上限為 480 減去註解高度。",
   "annotation.position.unsupported": "此型號不支援註解位置設定；X / Y 位置僅支援 4000X 系列。",
+  "annotation.set.empty": "請至少設定註解文字、顏色、背景、X 位置或 Y 位置其中一項。",
   "help.wgen-output.enabled": "開啟或關閉波形產生器輸出。",
   "help.wgen-function.function": "選擇波形產生器波形。",
   "help.wgen-frequency.frequency_hz": "波形產生器頻率（赫茲）。",

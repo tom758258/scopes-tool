@@ -384,6 +384,7 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         '"command.annotation-clear": "Clear annotation text"',
         '"description.annotation-clear":',
         '"annotation.editor.read": "Read annotation settings"',
+        '"annotation.set.empty": "Set at least one of text, color, background, X position, or Y position.",',
         '"annotation.state.enabled":',
         '"annotation.state.background":',
         '"enum.annotation-color.CH1": "CH1"',
@@ -408,6 +409,7 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         '"command.annotation-clear": "清除註解文字"',
         '"description.annotation-clear":',
         '"annotation.editor.read": "讀取註解設定"',
+        '"annotation.set.empty": "請至少設定註解文字、顏色、背景、X 位置或 Y 位置其中一項。",',
         '"annotation.state.enabled":',
         '"annotation.state.background":',
         '"enum.annotation-background.OPAQ": "不透明"',
@@ -422,13 +424,27 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         import path from "node:path";
 
         class FakeNode {
-          constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; this.disabled = false; }
+          constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; this.disabled = false; this.validityMessage = ""; this.validityReported = false; }
           append(...nodes) { for (const node of nodes) { node.remove(); node.parent = this; this.children.push(node); } }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           addEventListener(_name, handler) { this.handler = handler; }
           setAttribute() {}
           remove() { if (this.parent) this.parent.children = this.parent.children.filter((node) => node !== this); this.parent = null; }
-          querySelector() { return null; }
+          setCustomValidity(message) { this.validityMessage = message; }
+          reportValidity() { this.validityReported = true; return true; }
+          querySelector(sel) {
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (!match) return null;
+            const find = (nodes) => {
+              for (const node of nodes || []) {
+                if (node.dataset && node.dataset.field === match[1]) return node;
+                const found = find(node.children);
+                if (found) return found;
+              }
+              return null;
+            };
+            return find(this.children);
+          }
           get classList() {
             const node = this;
             return {
@@ -446,11 +462,20 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
 
         globalThis.translate = (key) => key;
         let selectedId = "annotation-query";
+        let setValues = { slot: 3, text: "note" };
         globalThis.CommandForm = class CommandForm {
           constructor(container, _catalog) { this.container = container; this.command = null; this.disabled = false; }
-          render(command) { this.command = command; }
+          render(command) {
+            this.command = command;
+            this.container.replaceChildren();
+            if (command.id === "annotation-set") {
+              const textInput = new FakeNode("input");
+              textInput.dataset = { field: "text" };
+              this.container.append(textInput);
+            }
+          }
           values() {
-            if (selectedId === "annotation-set") return { slot: 3, text: "note" };
+            if (selectedId === "annotation-set") return setValues;
             if (selectedId === "annotation-query") return {};
             return { slot: 3 };
           }
@@ -566,6 +591,24 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         const setCalls = calls.slice(beforeSet);
         assert.equal(setCalls.length, 1);
         assert.deepEqual(setCalls[0], ["annotation-set", { slot: 3, text: "note" }]);
+
+        // Empty annotation-set is blocked in the browser with a localized
+        // message instead of reaching the backend.
+        setValues = { slot: 3 };
+        const beforeEmpty = calls.length;
+        await editor.submit();
+        assert.equal(calls.length, beforeEmpty);
+        const emptyInput = editor.entry.form.container.querySelector('[data-field="text"]');
+        assert.ok(emptyInput);
+        assert.equal(emptyInput.validityMessage, "annotation.set.empty");
+        assert.equal(emptyInput.validityReported, true);
+
+        // A later valid submission clears the previous message and executes.
+        setValues = { slot: 3, text: "note" };
+        const beforeRetry = calls.length;
+        await editor.submit();
+        assert.deepEqual(calls.slice(beforeRetry), [["annotation-set", { slot: 3, text: "note" }]]);
+        assert.equal(emptyInput.validityMessage, "");
 
         // Note presence when position unsupported (disabled fields).
         annotationPositionSupported = false;
