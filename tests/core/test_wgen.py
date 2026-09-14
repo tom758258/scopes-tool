@@ -99,26 +99,78 @@ def test_wgen_offset_limits_follow_series_function_and_load():
         validate_wgen_offset(10.0, series="4000X", function="dc", load="fifty")
 
 
+def test_series_only_amplitude_planning_envelope():
+    # Unspecified load (load=None) must use union envelope: lower bound
+    # from 50-ohm halved minimum, upper bound from High-Z exact maximum.
+    assert validate_wgen_amplitude(0.01, series="3000X", load=None) == 0.01
+    assert validate_wgen_amplitude(5.0, series="3000X", load=None) == 5.0
+    assert validate_wgen_amplitude(0.01, series="4000X", load=None) == 0.01
+    assert validate_wgen_amplitude(10.0, series="4000X", load=None) == 10.0
+    # Below 50-ohm minimum should be rejected.
+    with pytest.raises(ParameterValidationError):
+        validate_wgen_amplitude(0.005, series="3000X", load=None)
+
+
+def test_4000x_interaction_not_applied_for_fifty_or_unspecified():
+    # Software interaction guard is only applied for explicit High-Z
+    # (one-meg) evidence; 50-ohm interaction is not inferred.
+    # A low amplitude with a large (but within 50-ohm bound) offset
+    # should succeed without interaction rejection.
+    assert validate_wgen_offset(
+        2.0, series="4000X", function="sine", load="fifty", amplitude=0.02
+    ) == 2.0
+    assert validate_wgen_offset(
+        2.0, series="4000X", function="sine", load=None, amplitude=0.02
+    ) == 2.0
+
+
+def test_dc_amplitude_rejected_without_extra_queries():
+    controller, backend = _wgen_live_controller({
+        ":WGEN1:FUNCtion?": "DC",
+    })
+    with pytest.raises(ParameterValidationError, match="not applicable"):
+        controller.configure_voltage(1.0)
+    # Should not query load or offset for DC.
+    assert ":WGEN1:OUTPut:LOAD?" not in backend.history
+    assert ":WGEN1:VOLTage:OFFSet?" not in backend.history
+
+
+def test_dc_offset_does_not_query_amplitude():
+    controller, backend = _wgen_live_controller({
+        ":WGEN1:FUNCtion?": "DC",
+        ":WGEN1:OUTPut:LOAD?": "ONEM",
+    })
+    # DC offset does not need current amplitude.
+    controller.configure_offset(3.0)
+    assert ":WGEN1:VOLTage?" not in backend.history
+
+
 def test_wgen_4000x_amplitude_offset_interaction():
+    # Interaction guard applies only for explicit High-Z (one-meg)
+    # evidence; 50-ohm interaction is not inferred by software.
     assert (
         validate_wgen_offset(
-            0.6, series="4000X", function="sine", amplitude=0.04
+            0.6, series="4000X", function="sine", amplitude=0.04,
+            load="one-meg",
         )
         == 0.6
     )
     with pytest.raises(ParameterValidationError, match="500 mV"):
         validate_wgen_offset(
-            0.6, series="4000X", function="sine", amplitude=0.02
+            0.6, series="4000X", function="sine", amplitude=0.02,
+            load="one-meg",
         )
     assert (
         validate_wgen_amplitude(
-            0.04, series="4000X", function="sine", load="one-meg", offset=0.6
+            0.04, series="4000X", function="sine", load="one-meg",
+            offset=0.6,
         )
         == 0.04
     )
     with pytest.raises(ParameterValidationError, match="500 mV"):
         validate_wgen_amplitude(
-            0.02, series="4000X", function="sine", load="one-meg", offset=0.6
+            0.02, series="4000X", function="sine", load="one-meg",
+            offset=0.6,
         )
 
 

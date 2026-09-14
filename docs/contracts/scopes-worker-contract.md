@@ -1665,10 +1665,19 @@ query/configure mixtures are rejected. Configure forms require exactly their
 shown value field. Output can be enabled only by the explicit JSON boolean
 `{"enabled": true}` form; no aggregate or batch request enables it. Functions
 are limited to `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`; loads are
-`one-meg` and `fifty`. Frequency must be finite and positive, amplitude must
-satisfy `0 < amplitude <= 5.0`, and offset must satisfy
-`-2.5 <= offset <= 2.5`. Invalid requests are rejected before enqueue,
-artifact creation, backend open, or SCPI.
+`one-meg` and `fifty`. WGEN frequency, amplitude, and offset limits depend
+on the selected model series, waveform function, load, and (for 4000X) the
+current amplitude/offset interaction. Planning and pre-enqueue validation uses
+the startup-bound series envelope; only series-envelope-invalid requests
+can be rejected before enqueue. Requests that depend on the exact live WGEN
+function, load, or current counterpart value (such as 4000X interaction) are
+validated at execution time, before any SCPI write, and may be rejected there
+even when the same numeric value was accepted during planning. The interaction
+guard is applied only for the explicit High-Z (`one-meg`) evidence; the 50-ohm
+interaction threshold is not established by current documentation evidence and
+is not inferred by the software. Invalid requests are rejected before enqueue,
+artifact creation, backend open, or SCPI where the series envelope applies, and
+always before SCPI write for exact live-state checks.
 
 The 2000X and 3000X route to `:WGEN`; the 4000X routes only to generator 1
 through `:WGEN1`. Multi-generator selection, modulation, arbitrary waveforms,

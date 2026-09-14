@@ -36,7 +36,15 @@ from .serial import (
     validate_serial_can_trigger_data_length,
 )
 from .trigger import OPERATION_CONDITION_RUI_ENAB_MASK, OPERATION_CONDITION_RUN_MASK
-from .wgen import WGEN_FUNCTION_TOKENS, WGEN_LOAD_TOKENS
+from .wgen import (
+    WGEN_FUNCTION_TOKENS,
+    WGEN_LOAD_TOKENS,
+    validate_wgen_frequency,
+    validate_wgen_amplitude,
+    validate_wgen_offset,
+    parse_wgen_function,
+    parse_wgen_load,
+)
 
 
 class SimulatorBackendError(OscilloscopeError):
@@ -676,25 +684,56 @@ class SimulatorBackend:
             self.wgen_function = WGEN_FUNCTION_TOKENS[function]
         elif upper.startswith(f"{wgen_root}:FREQUENCY "):
             value = _parse_simulator_wgen_number(command, "frequency")
-            if value <= 0.0:
-                raise SimulatorBackendError(
-                    "Simulator WGEN frequency must be greater than zero."
-                )
+            # Use the same series-aware validation as Core WGEN instead of
+            # a fixed simulator-only rule, so 4000X limits and function
+            # dependency are preserved.
+            canonical_function = parse_wgen_function(self.wgen_function)
+            validate_wgen_frequency(
+                value,
+                series=self._capabilities.series,
+                function=canonical_function,
+            )
             self.wgen_frequency_hz = value
         elif upper.startswith(f"{wgen_root}:VOLTAGE:OFFSET "):
             value = _parse_simulator_wgen_number(command, "offset")
-            if not -2.5 <= value <= 2.5:
-                raise SimulatorBackendError(
-                    "Simulator WGEN offset must be in range -2.5 to 2.5 volts."
-                )
+            # Reuse Core validator with the simulator's current state.
+            canonical_function = parse_wgen_function(self.wgen_function)
+            canonical_load = parse_wgen_load(self.wgen_load) if self.wgen_load else None
+            # Interaction guard applies only for High-Z (one-meg) per
+            # current evidence; 50-ohm interaction threshold remains
+            # unverified and is not inferred by software.
+            offset_amp = None
+            if (
+                self._capabilities.series == "4000X"
+                and canonical_function != "dc"
+            ):
+                offset_amp = self.wgen_amplitude_volts
+            validate_wgen_offset(
+                value,
+                series=self._capabilities.series,
+                function=canonical_function,
+                load=canonical_load,
+                amplitude=offset_amp,
+            )
             self.wgen_offset_volts = value
         elif upper.startswith(f"{wgen_root}:VOLTAGE "):
             value = _parse_simulator_wgen_number(command, "amplitude")
-            if not 0.0 < value <= 5.0:
-                raise SimulatorBackendError(
-                    "Simulator WGEN amplitude must be greater than zero "
-                    "and at most 5.0 volts."
-                )
+            # Reuse Core validator with current simulator state; this lets
+            # 4000X accept >5 Vpp (e.g. 6 Vpp High-Z) and keeps load/function
+            # interaction consistent with the core semantics.
+            canonical_function = parse_wgen_function(self.wgen_function)
+            canonical_load = parse_wgen_load(self.wgen_load) if self.wgen_load else None
+            # Interaction requires current offset on 4000X.
+            amp_offset = None
+            if self._capabilities.series == "4000X" and canonical_function != "dc":
+                amp_offset = self.wgen_offset_volts
+            validate_wgen_amplitude(
+                value,
+                series=self._capabilities.series,
+                function=canonical_function,
+                load=canonical_load,
+                offset=amp_offset,
+            )
             self.wgen_amplitude_volts = value
         elif upper.startswith(f"{wgen_root}:OUTPUT:LOAD "):
             token = command.rsplit(" ", 1)[1].upper()

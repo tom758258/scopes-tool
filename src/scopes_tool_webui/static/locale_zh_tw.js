@@ -1086,7 +1086,7 @@ export const zhTW = {
   "help.wgen-output.enabled": "開啟或關閉波形產生器輸出。",
   "help.wgen-function.function": "選擇波形產生器波形。",
   "help.wgen-frequency.frequency_hz": "波形產生器頻率（赫茲）。允許範圍依目前波形與型號而異。",
-  "help.wgen-voltage.amplitude": "波形產生器峰對峰振幅（伏特）。允許範圍依型號與輸出負載而異。",
+  "help.wgen-voltage.amplitude": "波形產生器峰對峰振幅（伏特）。允許範圍依型號、波形、輸出負載與目前偏移而異。",
   "help.wgen-offset.offset_volts": "波形產生器偏移（伏特）。允許範圍依型號、波形、輸出負載與目前振幅而異。",
   "help.wgen-load.load": "波形產生器負載。",
   "help.demo-output.enabled": "開啟或關閉內建 DEMO 輸出。",

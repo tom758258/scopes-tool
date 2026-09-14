@@ -2,6 +2,23 @@ from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
 
+def test_simulator_4000x_legal_6vpp_and_3v_offset_accepted():
+    # Simulator must reuse Core validators so 4000X values that exceed
+    # the old fixed 5 V / 2.5 V simulator-only rules are accepted.
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+
+    scope.configure_wgen_function("sine")
+    scope.configure_wgen_load("one-meg")
+    scope.configure_wgen_offset(3.0)
+    scope.configure_wgen_voltage(6.0)
+    scope.configure_wgen_frequency(1000)
+
+    assert scope.query_wgen().amplitude_volts == 6.0
+    assert scope.query_wgen().offset_volts == 3.0
+
+
 def test_simulator_wgen_conservative_roundtrip():
     backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
     scope = Oscilloscope(backend)

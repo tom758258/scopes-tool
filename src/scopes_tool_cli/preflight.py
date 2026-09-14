@@ -726,17 +726,47 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
     if args.command == "wgen-function":
         validate_wgen_function(args.function)
     elif args.command == "wgen-frequency":
-        validate_wgen_frequency(
-            args.hz, series=capabilities.series if capabilities is not None else None
-        )
+        if capabilities is not None:
+            validate_wgen_frequency(
+                args.hz, series=capabilities.series
+            )
+        else:
+            # Normal one-shot live: model identity has not been detected
+            # yet (no instrument session open). Only apply basic checks that
+            # cannot false-reject a model-valid value. Exact series/function
+            # dependent limits are deferred to execution-time validation.
+            value = float(args.hz)
+            if not math.isfinite(value) or value <= 0:
+                raise ParameterValidationError(
+                    "WGEN frequency must be a positive finite number."
+                )
     elif args.command == "wgen-voltage":
-        validate_wgen_amplitude(
-            args.amplitude, series=capabilities.series if capabilities is not None else None
-        )
+        if capabilities is not None:
+            validate_wgen_amplitude(
+                args.amplitude, series=capabilities.series
+            )
+        else:
+            # Normal one-shot live: avoid the legacy series=None 5 V / 2.5 V
+            # ceiling so model-valid values (e.g. 4000X 6 Vpp) are not
+            # rejected before the instrument session opens.
+            value = float(args.amplitude)
+            if not math.isfinite(value) or value <= 0:
+                raise ParameterValidationError(
+                    "WGEN amplitude must be a positive finite number."
+                )
     elif args.command == "wgen-offset":
-        validate_wgen_offset(
-            args.volts, series=capabilities.series if capabilities is not None else None
-        )
+        if capabilities is not None:
+            validate_wgen_offset(
+                args.volts, series=capabilities.series
+            )
+        else:
+            # Normal one-shot live: avoid the legacy series=None +/-2.5 V
+            # ceiling; exact model/load/function limits remain deferred.
+            value = float(args.volts)
+            if not math.isfinite(value):
+                raise ParameterValidationError(
+                    "WGEN offset must be a finite number."
+                )
 
 def _validate_serial_args(args: argparse.Namespace) -> None:
     if args.command in {

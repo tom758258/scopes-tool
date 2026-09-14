@@ -1717,11 +1717,19 @@ Control the waveform generator:
 
 Each focused command requires exactly one query or configure action. The
 settable functions are `sine`, `square`, `ramp`, `pulse`, `noise`, and `dc`;
-loads are `one-meg` and `fifty`. Frequency must be finite and greater than
-zero. The software guards are `0 < amplitude <= 5.0` volts and
-`-2.5 <= offset <= 2.5` volts. Aggregate `wgen-query` queries each field
-individually and preserves raw readbacks. Unknown or extended function
-readbacks produce `function: null` while preserving `function_raw`.
+loads are `one-meg` and `fifty`. WGEN frequency, amplitude, and offset limits
+depend on the selected model series, waveform function, output load, and (for
+4000X amplitude/offset) the current counterpart value. Planning and pre-enqueue
+validation uses the selected planning model's series envelope; live execution
+validates against the detected instrument identity before any SCPI write.
+Therefore a planning-accepted value may still be rejected by exact live-state
+validation when the current function, load, or 4000X counterpart interaction
+does not allow it. The software applies interaction protection only for the
+explicit High-Z (`one-meg`) evidence; the 50-ohm interaction threshold is not
+inferred from current documentation and is not applied by the simulator or CLI.
+Aggregate `wgen-query` queries each field individually and preserves raw
+readbacks. Unknown or extended function readbacks produce `function: null`
+while preserving `function_raw`.
 
 The 2000X and 3000X use `:WGEN`; the 4000X uses generator 1 through `:WGEN1`.
 The commands do not expose generator selection, extended functions, waveform-specific

@@ -1086,7 +1086,7 @@ export const en = {
   "help.wgen-output.enabled": "Turn the waveform generator output on or off.",
   "help.wgen-function.function": "Select the waveform generator function.",
   "help.wgen-frequency.frequency_hz": "Waveform generator frequency in hertz. The allowed range depends on the current waveform function and model.",
-  "help.wgen-voltage.amplitude": "Waveform generator peak-to-peak amplitude in volts. The allowed range depends on the model and output load.",
+  "help.wgen-voltage.amplitude": "Waveform generator peak-to-peak amplitude in volts. The allowed range depends on the model, waveform, output load, and current offset.",
   "help.wgen-offset.offset_volts": "Waveform generator offset in volts. The allowed range depends on the model, waveform function, output load, and current amplitude.",
   "help.wgen-load.load": "Waveform generator load.",
   "help.demo-output.enabled": "Turn the built-in DEMO output on or off.",

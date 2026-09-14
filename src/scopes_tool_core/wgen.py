@@ -257,11 +257,19 @@ class WgenController:
 
     def configure_voltage(self, amplitude_volts: float) -> None:
         function = self.query_function().function
+        if function == "dc":
+            # DC waveform does not use amplitude; reject early without
+            # querying load or current offset.
+            validate_wgen_amplitude(
+                amplitude_volts,
+                series=self.capabilities.series,
+                function="dc",
+            )
+            return
         load = self.query_load().load
+        offset = None
         if self.capabilities.series == "4000X":
             offset = self.query_offset().offset_volts
-        else:
-            offset = None
         self.scpi.write(
             wgen_voltage_command(
                 amplitude_volts,
@@ -279,11 +287,9 @@ class WgenController:
     def configure_offset(self, offset_volts: float) -> None:
         function = self.query_function().function
         load = self.query_load().load
-        amplitude = (
-            self.query_voltage().amplitude_volts
-            if self.capabilities.series == "4000X"
-            else None
-        )
+        amplitude = None
+        if self.capabilities.series == "4000X" and function != "dc":
+            amplitude = self.query_voltage().amplitude_volts
         self.scpi.write(
             wgen_offset_command(
                 offset_volts,
@@ -500,9 +506,19 @@ def validate_wgen_amplitude(
     if not lower <= value <= upper:
         raise ParameterValidationError(
             f"WGEN amplitude must be between {lower:g} and {upper:g} Vpp "
-            f"({_wgen_load_label(load)} load) on {series}."
+            f"({_wgen_load_label(load)}) on {series}."
         )
-    if series == "4000X" and function != "dc" and offset is not None:
+    # 4000X interaction guard is applied only for the explicitly documented
+    # High-Z (one-meg) evidence. The 50 ohm interaction threshold is not
+    # clearly established by the current Programmer's Guide evidence, so the
+    # software does not scale or infer it for fifty-ohm or unspecified-load
+    # contexts; only the High-Z exact guard is enforced.
+    if (
+        series == "4000X"
+        and function != "dc"
+        and offset is not None
+        and load == "one-meg"
+    ):
         _check_wgen_4000x_amplitude_offset_interaction(value, offset)
     return value
 
@@ -527,12 +543,16 @@ def validate_wgen_offset(
     if not -bound <= value <= bound:
         raise ParameterValidationError(
             f"WGEN offset must be between {-bound:g} and {bound:g} volts "
-            f"({_wgen_load_label(load)} load) on {series}."
+            f"({_wgen_load_label(load)}) on {series}."
         )
+    # Only apply the exact interaction guard for High-Z (one-meg), matching
+    # the amplitude guard above. 50 ohm interaction threshold remains
+    # unverified by current evidence and is not inferred in software.
     if (
         series == "4000X"
         and function != "dc"
         and amplitude is not None
+        and load == "one-meg"
     ):
         _check_wgen_4000x_amplitude_offset_interaction(amplitude, value)
     return value
@@ -610,6 +630,8 @@ def _format_wgen_hz(value: float) -> str:
 
 
 def _wgen_load_label(load: str | None) -> str:
+    if load is None:
+        return "unspecified-load / series planning envelope"
     if load == "fifty":
         return "50 ohm"
     return "High-Z"
@@ -625,7 +647,13 @@ def _wgen_halved_bounds(lower: float, upper: float, load: str | None) -> tuple[f
 
 def _wgen_amplitude_bounds(series: str, load: str | None) -> tuple[float, float]:
     table = _wgen_series_table(series, _WGEN_AMPLITUDE_LIMITS_VPP, "amplitude")
-    return _wgen_halved_bounds(table[0], table[1], load)
+    lower_high_z, upper_high_z = table[0], table[1]
+    if load is None:
+        # Unspecified-load / series planning envelope: union across supported
+        # load contexts. Lower bound uses the 50 ohm halved minimum; upper
+        # bound uses the High-Z exact maximum.
+        return lower_high_z / 2.0, upper_high_z
+    return _wgen_halved_bounds(lower_high_z, upper_high_z, load)
 
 
 def _check_wgen_4000x_amplitude_offset_interaction(
