@@ -1,4 +1,5 @@
 import { hasTranslation, translate, translateJobStatus } from "/static/i18n.js";
+import { formatEngineering } from "/static/live-data.js";
 
 const RESULT_HISTORY_LIMIT = 20;
 
@@ -594,9 +595,15 @@ export function renderWorkspaceResult(container, job, context = {}) {
     return;
   }
   if (result && typeof result === "object") {
-    const { display, context: resultContext } = structuredResultDisplay(result);
+    const { display, context } = structuredResultDisplay(result);
+    // Setter results ({frequency: {...}}, ...) carry their own top-level
+    // key; map every WGEN command to the shared WGEN presentation context.
+    const resultContext = context === "wgen" || WGEN_RESULT_COMMANDS.has(job.command)
+      ? "wgen"
+      : context;
     const fields = Object.entries(display).filter(([name, value]) => {
       if (isRawDiagnosticField(name)) return false;
+      if (resultContext === "wgen" && name.endsWith("_scpi")) return false;
       if (
         job.command === "fft"
         && (name === "units_canonical" || name === "window_canonical")
@@ -952,6 +959,16 @@ const RESULT_FIELD_LABEL_CONTEXTS = {
   },
 };
 
+const WGEN_RESULT_COMMANDS = new Set([
+  "wgen-query",
+  "wgen-output",
+  "wgen-function",
+  "wgen-frequency",
+  "wgen-voltage",
+  "wgen-offset",
+  "wgen-load",
+]);
+
 function resultFieldLabel(name, resultContext = null) {
   const scopedLabel = RESULT_FIELD_LABEL_CONTEXTS[resultContext]?.[name];
   if (scopedLabel && hasTranslation(scopedLabel)) return translate(scopedLabel);
@@ -1017,6 +1034,11 @@ function formatWorkspaceValue(name, value, resultContext = null) {
       .filter(([name]) => !isRawDiagnosticField(name))
       .map(([itemName, item]) => `${resultFieldLabel(itemName, resultContext)}: ${formatWorkspaceValue(itemName, item, resultContext)}`)
       .join("; ");
+  }
+  if (resultContext === "wgen" && typeof value === "number") {
+    if (name === "frequency_hz") return formatEngineering(value, "Hz");
+    if (name === "amplitude_volts") return formatEngineering(value, "Vpp");
+    if (name === "offset_volts") return formatEngineering(value, "V");
   }
   if (typeof value === "string" && !isLiteralWorkspaceField(name) && !isProtocolIdentifier(value)) {
     if (resultContext === "fft" && name === "operation") return String(value);

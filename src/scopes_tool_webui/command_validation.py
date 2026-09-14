@@ -1479,15 +1479,18 @@ def _validate_parameters(
                     )
                 elif command == "wgen-frequency":
                     parameters[value_name] = validate_wgen_frequency(
-                        _finite_number(parameters[value_name], value_name)
+                        _finite_number(parameters[value_name], value_name),
+                        series=capabilities.series,
                     )
                 elif command == "wgen-voltage":
                     parameters[value_name] = validate_wgen_amplitude(
-                        _finite_number(parameters[value_name], value_name)
+                        _finite_number(parameters[value_name], value_name),
+                        series=capabilities.series,
                     )
                 elif command == "wgen-offset":
                     parameters[value_name] = validate_wgen_offset(
-                        _finite_number(parameters[value_name], value_name)
+                        _finite_number(parameters[value_name], value_name),
+                        series=capabilities.series,
                     )
                 else:
                     parameters[value_name] = validate_wgen_load(parameters[value_name])

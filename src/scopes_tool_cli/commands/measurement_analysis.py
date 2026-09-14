@@ -655,7 +655,7 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
                 runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN frequency Hz: {state.frequency_hz}")
             else:
-                value = validate_wgen_frequency(args.hz)
+                value = validate_wgen_frequency(args.hz, series=capabilities.series)
                 command = wgen_frequency_command(value, capabilities)
                 scope.configure_wgen_frequency(value)
                 runtime._json_update_result(
@@ -673,7 +673,7 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
                 runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN amplitude volts: {state.amplitude_volts}")
             else:
-                value = validate_wgen_amplitude(args.amplitude)
+                value = validate_wgen_amplitude(args.amplitude, series=capabilities.series)
                 command = wgen_voltage_command(value, capabilities)
                 scope.configure_wgen_voltage(value)
                 runtime._json_update_result(
@@ -691,7 +691,7 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
                 runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"WGEN offset volts: {state.offset_volts}")
             else:
-                value = validate_wgen_offset(args.volts)
+                value = validate_wgen_offset(args.volts, series=capabilities.series)
                 command = wgen_offset_command(value, capabilities)
                 scope.configure_wgen_offset(value)
                 runtime._json_update_result(

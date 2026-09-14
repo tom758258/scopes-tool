@@ -726,11 +726,17 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
     if args.command == "wgen-function":
         validate_wgen_function(args.function)
     elif args.command == "wgen-frequency":
-        validate_wgen_frequency(args.hz)
+        validate_wgen_frequency(
+            args.hz, series=capabilities.series if capabilities is not None else None
+        )
     elif args.command == "wgen-voltage":
-        validate_wgen_amplitude(args.amplitude)
+        validate_wgen_amplitude(
+            args.amplitude, series=capabilities.series if capabilities is not None else None
+        )
     elif args.command == "wgen-offset":
-        validate_wgen_offset(args.volts)
+        validate_wgen_offset(
+            args.volts, series=capabilities.series if capabilities is not None else None
+        )
 
 def _validate_serial_args(args: argparse.Namespace) -> None:
     if args.command in {

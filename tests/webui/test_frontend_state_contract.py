@@ -2985,67 +2985,7 @@ def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_wgen_aggregate_result_uses_wgen_labels() -> None:
-    results_path = STATIC_ROOT / "results.js"
-    script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) { this.tagName = tag; this.children = []; this.className = ""; this.textContent = ""; }
-          append(...nodes) { this.children.push(...nodes); }
-        }
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
-        const translations = {
-          "results.field.function": "Math function",
-          "wgen.state.output": "WGEN output",
-          "wgen.state.function": "WGEN function",
-          "wgen.state.load": "WGEN load",
-          "enum.wgen-function.sine": "Sine",
-          "enum.wgen-load.fifty": "50 Ω",
-          "status.disabled": "Disabled",
-        };
-        const source = [
-          `const translations = ${JSON.stringify(translations)};`,
-          "const hasTranslation = (key) => key in translations;",
-          "const translate = (key) => translations[key] ?? key;",
-          fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
-          "globalThis.resultsApi = { renderWorkspaceResult };",
-        ].join("\n");
-        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
-        const { renderWorkspaceResult } = globalThis.resultsApi;
-
-        const container = new FakeNode("div");
-        renderWorkspaceResult(container, {
-          command: "wgen-query",
-          status: "completed",
-          result: {
-            result: {
-              wgen: {
-                enabled: false,
-                function: "sine",
-                load: "fifty",
-              },
-            },
-          },
-        }, { mode: "simulate" });
-        const rows = Object.fromEntries(
-          container.children.map((row) => [row.children[1].textContent, row.children[0].textContent]),
-        );
-        assert.equal(rows["WGEN function"], "Sine");
-        assert.equal(rows["WGEN load"], "50 Ω");
-        assert.equal(rows["WGEN output"], "Disabled");
-        assert.ok(!Object.keys(rows).some((label) => label.includes("Math")));
-        '''
-    )
-    completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(results_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
     run_generic_form_ownership_behavior(
         r'''
         syncCommandSelection();
@@ -3066,6 +3006,131 @@ def test_wgen_aggregate_result_uses_wgen_labels() -> None:
         assert.deepEqual(completedResults, ["job-1"]);
         '''
     )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_wgen_aggregate_result_uses_wgen_labels() -> None:
+    results_path = STATIC_ROOT / "results.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) { this.tagName = tag; this.children = []; this.className = ""; this.textContent = ""; }
+          append(...nodes) { this.children.push(...nodes); }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        const translationsEN = {
+          "results.field.function": "Math function",
+          "wgen.state.output": "WGEN output",
+          "wgen.state.function": "WGEN function",
+          "wgen.state.frequency": "WGEN frequency",
+          "wgen.state.amplitude": "WGEN amplitude",
+          "wgen.state.offset": "WGEN offset",
+          "wgen.state.load": "WGEN load",
+          "enum.wgen-function.sine": "Sine",
+          "enum.wgen-load.fifty": "50 Ω",
+          "status.disabled": "Disabled",
+        };
+        const translationsZH = {
+          "wgen.state.output": "輸出",
+          "wgen.state.function": "波形",
+          "wgen.state.load": "負載",
+          "enum.wgen-function.sine": "正弦波",
+          "enum.wgen-load.fifty": "50 Ω",
+          "status.disabled": "已停用",
+        };
+        const source = [
+          `const translationsEN = ${JSON.stringify(translationsEN)};`,
+          `const translationsZH = ${JSON.stringify(translationsZH)};`,
+          "let active = translationsEN;",
+          "const hasTranslation = (key) => key in active;",
+          "const translate = (key) => active[key] ?? key;",
+          "const formatEngineering = globalThis.formatEngineering;",
+          fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
+          "globalThis.resultsApi = { renderWorkspaceResult, setActive: (map) => { active = map; } };",
+        ].join("\n");
+        const liveData = fs.readFileSync(process.argv[2], "utf8").replace(/^export /gm, "")
+          + "\nglobalThis.formatEngineering = formatEngineering;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(liveData)}`);
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { renderWorkspaceResult, setActive } = globalThis.resultsApi;
+        const rowsOf = (container) => Object.fromEntries(
+          container.children.map((row) => [row.children[1].textContent, row.children[0].textContent]),
+        );
+
+        const container = new FakeNode("div");
+        renderWorkspaceResult(container, {
+          command: "wgen-query",
+          status: "completed",
+          result: {
+            result: {
+              wgen: {
+                enabled: false,
+                function: "sine",
+                function_scpi: "SINusoid",
+                function_raw: "SIN",
+                frequency_hz: 1000,
+                amplitude_volts: 0.5,
+                offset_volts: 0,
+                load: "fifty",
+                load_scpi: "ONEMeg",
+                load_raw: "FIFT",
+              },
+            },
+          },
+        }, { mode: "simulate" });
+        const rows = rowsOf(container);
+        assert.equal(rows["WGEN function"], "Sine");
+        assert.equal(rows["WGEN load"], "50 Ω");
+        assert.equal(rows["WGEN output"], "Disabled");
+        assert.equal(rows["WGEN frequency"], "1.00 kHz");
+        assert.equal(rows["WGEN amplitude"], "500 mVpp");
+        assert.equal(rows["WGEN offset"], "0.00 V");
+        assert.ok(!Object.keys(rows).some((label) => label.includes("Math")));
+        assert.ok(!Object.keys(rows).some((label) => /scpi|raw/i.test(label)));
+
+        // Setter results share the WGEN presentation context.
+        const setterContainer = new FakeNode("div");
+        renderWorkspaceResult(setterContainer, {
+          command: "wgen-function",
+          status: "completed",
+          result: {
+            result: {
+              function: { function: "sine", function_scpi: "SIN", function_raw: "SIN" },
+            },
+          },
+        }, { mode: "simulate" });
+        const setterRows = rowsOf(setterContainer);
+        assert.equal(setterRows["WGEN function"], "Sine");
+        assert.ok(!Object.keys(setterRows).some((label) => /scpi|raw/i.test(label)));
+
+        // Traditional Chinese labels resolve through the same context.
+        setActive(translationsZH);
+        const zhContainer = new FakeNode("div");
+        renderWorkspaceResult(zhContainer, {
+          command: "wgen-query",
+          status: "completed",
+          result: {
+            result: {
+              wgen: { enabled: false, function: "sine", load: "fifty" },
+            },
+          },
+        }, { mode: "simulate" });
+        const zhRows = rowsOf(zhContainer);
+        assert.equal(zhRows["波形"], "正弦波");
+        assert.equal(zhRows["輸出"], "已停用");
+        assert.equal(zhRows["負載"], "50 Ω");
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(results_path), str(STATIC_ROOT / "live-data.js")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

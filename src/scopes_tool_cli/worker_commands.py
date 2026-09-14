@@ -415,7 +415,9 @@ def parse_domain_command(
     )
     arguments = _normalize_dvm_worker_arguments(command, arguments, runtime)
     arguments = _normalize_demo_worker_arguments(command, arguments, runtime)
-    arguments = _normalize_wgen_worker_arguments(command, arguments)
+    arguments = _normalize_wgen_worker_arguments(
+        command, arguments, capabilities_for_model_id(runtime.model).series
+    )
     arguments = _normalize_serial_worker_arguments(
         command, arguments, capabilities_for_model_id(runtime.model)
     )
@@ -1864,7 +1866,7 @@ def _normalize_demo_worker_arguments(
 
 
 def _normalize_wgen_worker_arguments(
-    command: str, arguments: dict[str, Any]
+    command: str, arguments: dict[str, Any], series: str | None = None
 ) -> dict[str, Any]:
     if command not in {
         "wgen-query",
@@ -1917,11 +1919,11 @@ def _normalize_wgen_worker_arguments(
     if command == "wgen-function":
         validate_wgen_function(value)
     elif command == "wgen-frequency":
-        validate_wgen_frequency(value)
+        validate_wgen_frequency(value, series=series)
     elif command == "wgen-voltage":
-        validate_wgen_amplitude(value)
+        validate_wgen_amplitude(value, series=series)
     elif command == "wgen-offset":
-        validate_wgen_offset(value)
+        validate_wgen_offset(value, series=series)
     elif not isinstance(value, str) or value not in WGEN_LOADS:
         raise OscilloscopeError(
             "wgen-load argument load must be one of: one-meg, fifty"
