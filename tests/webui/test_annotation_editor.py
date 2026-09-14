@@ -461,7 +461,7 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         const calls = [];
         const hooks = {
           calls,
-          contextKey: () => "simulate||keysight-dsox4024a",
+          contextKey: () => `simulate||keysight-dsox4024a|${annotationPositionSupported ? "supported" : "unsupported"}`,
           selectedCommand: () => catalog.commands.find((command) => command.id === selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,
@@ -569,19 +569,30 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
 
         // Note presence when position unsupported (disabled fields).
         annotationPositionSupported = false;
+        hooks.contextKey = () => `simulate||keysight-dsox4024a|unsupported`;
         selectedId = "annotation-set";
         await editor.refresh(true, true);
-        // Durable contract: unsupported note appears when x/y disabled.
-        // FakeNode querySelector always returns null; rely on production code inspection
-        // (test_command_form_capability_disabled_contract) for behavior protection.
-        assert.equal(editor.entry.button.hidden, false);
-        assert.equal(editor.sectionsHost.children[0].hidden, false);
+        // Durable contract verification for unsupported note.
+        // Find any note child by className in form container children.
+        const unsupportedNotes = (editor.entry.form.container.children || []).filter(
+          (ch) => typeof ch.className === "string" && ch.className.includes("muted") && ch.className.includes("compact-note"),
+        );
+        assert.equal(unsupportedNotes.length === 1, true, "Unsupported note should appear when disabled");
+        assert.equal(unsupportedNotes[0].textContent, "annotation.position.unsupported", "Note text matches locale key");
+
+        assert.equal(editor.entry.button.hidden, false); // set action still available
+        assert.equal(editor.sectionsHost.children[0].hidden, false); // section rebuilt
 
         // Note absence when position supported (enabled fields, default state).
         annotationPositionSupported = true;
+        hooks.contextKey = () => `simulate||keysight-dsox4024a|supported`;
         selectedId = "annotation-set";
         await editor.refresh(true, true);
-        // When supported, no unsupported note is appended.
+        const supportedNotes = (editor.entry.form.container.children || []).filter(
+          (ch) => typeof ch.className === "string" && ch.className.includes("compact-note"),
+        );
+        assert.equal(supportedNotes.length, 0, "Unsupported note should not appear when enabled");
+        assert.equal(editor.sectionsHost.children[0].hidden, false);
 
         for (const [id, label] of [["annotation-on", "annotation-on"], ["annotation-off", "annotation-off"], ["annotation-clear", "actions.clear"]]) {
           selectedId = id;
@@ -639,12 +650,17 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     assert json.loads(completed.stdout) == {"ok": True}
 
 
-def test_command_form_capability_disabled_contract() -> None:
-    """Durable behavior: CommandForm renders disabled + capabilityDisabled marker,
-    skips marker fields in values(), preserves disabled through setDisabled(false),
-    and keeps 0 as numeric value."""
-    # Direct contract protection: verify production JS file contains the contract lines.
-    source = (STATIC_ROOT / "command-form.js").read_text(encoding="utf-8")
-    assert 'input.dataset.capabilityDisabled = "true"' in source
-    assert 'element.dataset.capabilityDisabled === "true"' in source
-    assert 'input.disabled = disabled || input.dataset.capabilityDisabled === "true"' in source
+def test_command_form_capability_disabled_contract(tmp_path: Path) -> None:
+    """Durable behavior: production CommandForm disabled+marker, skips marker,
+    setDisabled preservation, numeric 0. Real production JS executed."""
+    harness_path = tmp_path / "form-contract.mjs"
+    harness_path.write_text(open("tests/webui/form-contract-stub.mjs", encoding="utf-8").read(), encoding="utf-8")
+    completed = subprocess.run(
+        ["node", str(harness_path)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, f"Form contract harness failed: {completed.stderr}"
+    assert json.loads(completed.stdout) == {"ok": True}
