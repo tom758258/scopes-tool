@@ -4204,13 +4204,22 @@ function Invoke-LiveCli {
             return [pscustomobject]@{ result = [pscustomobject]@{} }
         }
         "wgen-output" {
-            if ($Arguments -contains "true") { $script:FakeWgen.enabled = $true }
-            if ($Arguments -contains "false") { $script:FakeWgen.enabled = $false }
+            if ($Arguments -contains "--query") {
+                $sent = @(":WGEN1:OUTPut?")
+            } elseif ($Arguments -contains "true") {
+                $script:FakeWgen.enabled = $true
+                $sent = @(":WGEN1:OUTPut ON")
+            } elseif ($Arguments -contains "false") {
+                $script:FakeWgen.enabled = $false
+                $sent = @(":WGEN1:OUTPut OFF")
+            } else {
+                throw "Unexpected fake wgen-output arguments."
+            }
             return [pscustomobject]@{
-                scpi = [pscustomobject]@{ sent = @(
-                    if ($Arguments -contains "true") { ":WGEN1:OUTPut ON" } else { ":WGEN1:OUTPut OFF" }
-                ) }
-                result = [pscustomobject]@{ enabled = [bool]$script:FakeWgen.enabled }
+                scpi = [pscustomobject]@{ sent = $sent }
+                result = [pscustomobject]@{
+                    enabled = [bool]$script:FakeWgen.enabled
+                }
             }
         }
         "wgen-query" {
@@ -4284,9 +4293,23 @@ function Invoke-Scenario {
     $wgenCommands = @($script:Invocations |
         Where-Object { $_.command -like "wgen-*" } |
         ForEach-Object { $_.command })
-    Invoke-Expression $wgenModelCode
-    $modelInvocations = @($script:Invocations |
-        Where-Object { $_.stage -like "wgen-model-*" })
+        Invoke-Expression $wgenModelCode
+        $modelInvocations = @($script:Invocations |
+            Where-Object { $_.stage -like "wgen-model-*" })
+        $rampFunctionInvocations = @($modelInvocations | Where-Object {
+            $_.stage -eq "wgen-model-function-ramp"
+        })
+        $outputOffQueryInvocations = @($modelInvocations | Where-Object {
+            $_.stage -eq "wgen-model-output-off-query"
+        })
+        if ($Name -eq "installed-4000x") {
+            if ($rampFunctionInvocations.Count -ne 1) {
+                throw "Expected exactly one WGEN model ramp function invocation."
+            }
+            if ($outputOffQueryInvocations.Count -ne 1) {
+                throw "Expected exactly one WGEN model output-off query invocation."
+            }
+        }
     if ($Name -eq "absent") {
         Invoke-Expression $demoCode
     }
@@ -4310,9 +4333,19 @@ function Invoke-Scenario {
         model_output_on = @($modelInvocations | Where-Object {
             $_.command -eq "wgen-output" -and $_.arguments -contains "true"
         }).Count
-        model_restore_amplitude = @($modelInvocations | Where-Object {
-            $_.stage -eq "wgen-model-restore-amplitude"
-        } | ForEach-Object { @($_.arguments) })
+            model_restore_amplitude = @($modelInvocations | Where-Object {
+                $_.stage -eq "wgen-model-restore-amplitude"
+            } | ForEach-Object { @($_.arguments) })
+            model_ramp_function = if ($rampFunctionInvocations.Count -eq 1) {
+                ,@($rampFunctionInvocations[0].arguments)
+            } else {
+                @()
+            }
+            model_output_off_query = if ($outputOffQueryInvocations.Count -eq 1) {
+                ,@($outputOffQueryInvocations[0].arguments)
+            } else {
+                @()
+            }
         demo_status = if ($script:CaseResults.Contains("demo-basic")) {
             [string]$script:CaseResults["demo-basic"].Status
         } else { "" }
@@ -4383,52 +4416,32 @@ function Invoke-Scenario {
     assert model4000x["model_status"] == "PASS"
     assert model4000x["functional_failed"] is False
     assert model4000x["model_output_on"] == 0
-    assert model4000x["model_commands"] == [
-        "wgen-query",
-        "wgen-output",
-        "wgen-output",
-        "wgen-function",
-        "wgen-load",
-        "wgen-offset",
-        "wgen-voltage",
-        "wgen-query",
-        "wgen-offset",
-        "wgen-query",
-        "wgen-offset",
-        "wgen-voltage",
-        "wgen-function",
-        "wgen-frequency",
-        "wgen-query",
-        "wgen-function",
-        "wgen-offset",
-        "wgen-load",
-        "wgen-voltage",
-        "wgen-query",
-        "wgen-load",
-        "wgen-voltage",
-        "wgen-offset",
-        "wgen-query",
-        "wgen-load",
-        "wgen-query",
-        "wgen-load",
-        "wgen-query",
-        "wgen-function",
-        "wgen-load",
-        "wgen-voltage",
-        "wgen-offset",
-        "wgen-query",
-        "wgen-output",
-        "wgen-function",
-        "wgen-load",
-        "wgen-offset",
-        "wgen-voltage",
-        "wgen-offset",
-        "wgen-frequency",
-        "wgen-query",
-    ]
-    assert "wgen-model-restore-amplitude" in model4000x["model_stages"]
-    assert "wgen-model-restore-off-query" in model4000x["model_stages"]
+    for stage in (
+        "wgen-model-snapshot",
+        "wgen-model-output-off",
+        "wgen-model-output-off-query",
+        "wgen-model-function-ramp",
+        "wgen-model-frequency-200khz",
+        "wgen-model-amplitude-15mv",
+        "wgen-model-transition-before-query",
+        "wgen-model-load-fifty-e",
+        "wgen-model-transition-halved-query",
+        "wgen-model-load-highz-restore-e",
+        "wgen-model-transition-restored-query",
+        "wgen-model-interaction-query",
+        "wgen-model-restore-amplitude",
+        "wgen-model-restore-off-query",
+    ):
+        assert stage in model4000x["model_stages"]
+    assert model4000x["model_ramp_function"] == ["--function", "ramp"]
+    assert model4000x["model_output_off_query"] == ["--query"]
     assert model4000x["model_restore_amplitude"] == ["--amplitude", "0.5"]
+    stages = model4000x["model_stages"]
+    assert stages.index("wgen-model-transition-before-query") < stages.index(
+        "wgen-model-load-fifty-e"
+    ) < stages.index("wgen-model-transition-halved-query") < stages.index(
+        "wgen-model-load-highz-restore-e"
+    ) < stages.index("wgen-model-transition-restored-query")
 
     absent = result["absent"]
     assert absent["applicability"]["Applicable"] is False

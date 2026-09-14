@@ -4986,6 +4986,9 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 Invoke-LiveCli -Stage "wgen-model-frequency-200khz" -Command "wgen-frequency" `
                     -Arguments @("--hz", "200000") | Out-Null
                 $frequency = Invoke-LiveCli -Stage "wgen-model-frequency-query" -Command "wgen-query"
+                if ([string]$frequency.result.function -ne "ramp") {
+                    throw "WGEN model ramp frequency check did not remain on ramp."
+                }
                 Assert-NearlyEqual -Actual ([double]$frequency.result.frequency_hz) `
                     -Expected 200000 -Label "WGEN model ramp frequency"
                 if ([bool]$frequency.result.enabled) {
@@ -5024,6 +5027,9 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                     -Expected 0.5 -Label "WGEN model pre-transition amplitude"
                 Assert-NearlyEqual -Actual ([double]$before.result.offset_volts) `
                     -Expected 0.2 -Label "WGEN model pre-transition offset"
+                if ([bool]$before.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
                 Invoke-LiveCli -Stage "wgen-model-load-fifty-e" -Command "wgen-load" `
                     -Arguments @("--load", "fifty") | Out-Null
                 $halved = Invoke-LiveCli -Stage "wgen-model-transition-halved-query" -Command "wgen-query"
@@ -5031,6 +5037,9 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                     -Expected 0.25 -Label "WGEN model halved amplitude"
                 Assert-NearlyEqual -Actual ([double]$halved.result.offset_volts) `
                     -Expected 0.1 -Label "WGEN model halved offset"
+                if ([bool]$halved.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
                 Invoke-LiveCli -Stage "wgen-model-load-highz-restore-e" -Command "wgen-load" `
                     -Arguments @("--load", "one-meg") | Out-Null
                 $restored = Invoke-LiveCli -Stage "wgen-model-transition-restored-query" -Command "wgen-query"
