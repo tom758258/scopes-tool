@@ -3635,6 +3635,7 @@ def test_baseline_live_script_contains_trigger_math_generator_save_and_safety_wi
         "fft",
         "fft-advanced",
         "wgen-basic",
+        "wgen-model-validation",
         "demo-basic",
         "demo-phase",
         "autoscale",
@@ -3903,7 +3904,8 @@ if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
 
 foreach ($functionName in @(
     "Add-CaseResult", "Add-NotApplicableCase", "Assert-NearlyEqual",
-    "Assert-FiniteNumber", "Assert-ScpiSent", "Invoke-BaselineCase"
+    "Assert-FiniteNumber", "Assert-ScpiSent", "ConvertTo-InvariantString",
+    "Invoke-BaselineCase"
 )) {
     $functionAst = $ast.Find({
         param($node)
@@ -3970,6 +3972,16 @@ $demoIf = $ast.Find({
 if ($null -eq $demoIf) { throw "Missing demo-basic continuation gate." }
 $demoCode = $demoIf.Extent.Text
 
+$wgenModelIf = $ast.Find({
+    param($node)
+    return (
+        $node -is [System.Management.Automation.Language.IfStatementAst] -and
+        $node.Extent.Text.TrimStart().StartsWith('if (-not $script:FunctionalFailed -and $snapshot.WgenApplicable -eq $true -and $snapshot.Is4000XSeries -eq $true)')
+    )
+}, $true)
+if ($null -eq $wgenModelIf) { throw "Missing wgen-model-validation applicability gate." }
+$wgenModelCode = $wgenModelIf.Extent.Text
+
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
@@ -4027,7 +4039,7 @@ function New-ProductionIdentity {
 }
 
 function Initialize-ProductionSnapshot {
-    param([Parameter(Mandatory = $true)] $Identity)
+    param([Parameter(Mandatory = $true)] $Identity, [bool] $Is4000X = $false)
 
     $acquisition = New-QueryPayload @{ type = "normal"; count = 1 }
     $channelDisplay = New-QueryPayload @{ display = $true }
@@ -4058,7 +4070,7 @@ function Initialize-ProductionSnapshot {
     $triggerHoldoff = New-QueryPayload @{ seconds = 0.000001 }
     $is2000XSeries = $false
     $is3000XSeries = $false
-    $is4000XSeries = $false
+    $is4000XSeries = $Is4000X
     $triggerEdgeCoupling = $null
     $triggerEdgeReject = $null
     $triggerSweep = $null
@@ -4161,21 +4173,54 @@ function Invoke-LiveCli {
                 }
             }
         }
+        "wgen-function" {
+            $script:FakeWgen.function = [string]$Arguments[1]
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
+        "wgen-frequency" {
+            $script:FakeWgen.frequency_hz = [double]$Arguments[1]
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
+        "wgen-voltage" {
+            $script:FakeWgen.amplitude_volts = [double]$Arguments[1]
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
+        "wgen-offset" {
+            $script:FakeWgen.offset_volts = [double]$Arguments[1]
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
+        "wgen-load" {
+            $newLoad = [string]$Arguments[1]
+            if ([string]$script:FakeWgen.load -ne $newLoad) {
+                if ($newLoad -eq "fifty") {
+                    $script:FakeWgen.amplitude_volts = [double]$script:FakeWgen.amplitude_volts / 2.0
+                    $script:FakeWgen.offset_volts = [double]$script:FakeWgen.offset_volts / 2.0
+                } elseif ($newLoad -eq "one-meg") {
+                    $script:FakeWgen.amplitude_volts = [double]$script:FakeWgen.amplitude_volts * 2.0
+                    $script:FakeWgen.offset_volts = [double]$script:FakeWgen.offset_volts * 2.0
+                }
+            }
+            $script:FakeWgen.load = $newLoad
+            return [pscustomobject]@{ result = [pscustomobject]@{} }
+        }
         "wgen-output" {
+            if ($Arguments -contains "true") { $script:FakeWgen.enabled = $true }
+            if ($Arguments -contains "false") { $script:FakeWgen.enabled = $false }
             return [pscustomobject]@{
                 scpi = [pscustomobject]@{ sent = @(
                     if ($Arguments -contains "true") { ":WGEN1:OUTPut ON" } else { ":WGEN1:OUTPut OFF" }
                 ) }
-                result = [pscustomobject]@{}
+                result = [pscustomobject]@{ enabled = [bool]$script:FakeWgen.enabled }
             }
         }
         "wgen-query" {
             return [pscustomobject]@{ result = [pscustomobject]@{
-                enabled = $true
-                function = "sine"
-                load = "one-meg"
-                frequency_hz = 1000
-                amplitude_volts = 0.5
+                enabled = [bool]$script:FakeWgen.enabled
+                function = [string]$script:FakeWgen.function
+                load = [string]$script:FakeWgen.load
+                frequency_hz = [double]$script:FakeWgen.frequency_hz
+                amplitude_volts = [double]$script:FakeWgen.amplitude_volts
+                offset_volts = [double]$script:FakeWgen.offset_volts
             } }
         }
         "demo-function" {
@@ -4206,20 +4251,28 @@ function Invoke-LiveCli {
 
 function Invoke-Scenario {
     param(
-        [ValidateSet("installed", "absent", "runtime-failure")]
+        [ValidateSet("installed", "installed-4000x", "absent", "runtime-failure")]
         [string] $Name
     )
     $script:Scenario = $Name
     $script:Invocations.Clear()
     $script:CaseResults = [ordered]@{}
     $script:FunctionalFailed = $false
+    $script:FakeWgen = [pscustomobject]@{
+        enabled = $true
+        function = "sine"
+        load = "one-meg"
+        frequency_hz = 1000
+        amplitude_volts = 0.5
+        offset_volts = 0.0
+    }
     $identity = New-ProductionIdentity
-    $script:InstalledOptions = if ($Name -eq "installed" -or $Name -eq "runtime-failure") {
+    $script:InstalledOptions = if ($Name -eq "installed" -or $Name -eq "installed-4000x" -or $Name -eq "runtime-failure") {
         @("WAVEGEN")
     } else {
         @("BASIC")
     }
-    $snapshot = Initialize-ProductionSnapshot -Identity $identity
+    $snapshot = Initialize-ProductionSnapshot -Identity $identity -Is4000X ($Name -eq "installed-4000x")
     $initialInstalledOptions = @($snapshot.InstalledOptions)
     $unknownBeforeSystemStatus = $null -eq $snapshot.WgenApplicable
     Invoke-ProductionSystemStatus
@@ -4231,6 +4284,9 @@ function Invoke-Scenario {
     $wgenCommands = @($script:Invocations |
         Where-Object { $_.command -like "wgen-*" } |
         ForEach-Object { $_.command })
+    Invoke-Expression $wgenModelCode
+    $modelInvocations = @($script:Invocations |
+        Where-Object { $_.stage -like "wgen-model-*" })
     if ($Name -eq "absent") {
         Invoke-Expression $demoCode
     }
@@ -4246,6 +4302,17 @@ function Invoke-Scenario {
             Where-Object { $_.command -eq "system-options" }).Count
         wgen_status = [string]$script:CaseResults["wgen-basic"].Status
         wgen_commands = $wgenCommands
+        model_status = if ($script:CaseResults.Contains("wgen-model-validation")) {
+            [string]$script:CaseResults["wgen-model-validation"].Status
+        } else { "" }
+        model_commands = @($modelInvocations | ForEach-Object { $_.command })
+        model_stages = @($modelInvocations | ForEach-Object { $_.stage })
+        model_output_on = @($modelInvocations | Where-Object {
+            $_.command -eq "wgen-output" -and $_.arguments -contains "true"
+        }).Count
+        model_restore_amplitude = @($modelInvocations | Where-Object {
+            $_.stage -eq "wgen-model-restore-amplitude"
+        } | ForEach-Object { @($_.arguments) })
         demo_status = if ($script:CaseResults.Contains("demo-basic")) {
             [string]$script:CaseResults["demo-basic"].Status
         } else { "" }
@@ -4255,6 +4322,7 @@ function Invoke-Scenario {
 
 [ordered]@{
     installed = Invoke-Scenario -Name "installed"
+    installed_4000x = Invoke-Scenario -Name "installed-4000x"
     absent = Invoke-Scenario -Name "absent"
     runtime_failure = Invoke-Scenario -Name "runtime-failure"
 } | ConvertTo-Json -Depth 10 -Compress
@@ -4305,6 +4373,62 @@ function Invoke-Scenario {
         "wgen-output",
     ]
     assert installed["functional_failed"] is False
+    assert installed["model_status"] == "N/A"
+    assert installed["model_commands"] == []
+    assert installed["model_output_on"] == 0
+
+    model4000x = result["installed_4000x"]
+    assert model4000x["system_status"] == "PASS"
+    assert model4000x["wgen_status"] == "PASS"
+    assert model4000x["model_status"] == "PASS"
+    assert model4000x["functional_failed"] is False
+    assert model4000x["model_output_on"] == 0
+    assert model4000x["model_commands"] == [
+        "wgen-query",
+        "wgen-output",
+        "wgen-output",
+        "wgen-function",
+        "wgen-load",
+        "wgen-offset",
+        "wgen-voltage",
+        "wgen-query",
+        "wgen-offset",
+        "wgen-query",
+        "wgen-offset",
+        "wgen-voltage",
+        "wgen-function",
+        "wgen-frequency",
+        "wgen-query",
+        "wgen-function",
+        "wgen-offset",
+        "wgen-load",
+        "wgen-voltage",
+        "wgen-query",
+        "wgen-load",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-query",
+        "wgen-load",
+        "wgen-query",
+        "wgen-load",
+        "wgen-query",
+        "wgen-function",
+        "wgen-load",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-query",
+        "wgen-output",
+        "wgen-function",
+        "wgen-load",
+        "wgen-offset",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-frequency",
+        "wgen-query",
+    ]
+    assert "wgen-model-restore-amplitude" in model4000x["model_stages"]
+    assert "wgen-model-restore-off-query" in model4000x["model_stages"]
+    assert model4000x["model_restore_amplitude"] == ["--amplitude", "0.5"]
 
     absent = result["absent"]
     assert absent["applicability"]["Applicable"] is False
@@ -4320,6 +4444,9 @@ function Invoke-Scenario {
     assert absent["wgen_commands"] == []
     assert absent["demo_status"] == "PASS"
     assert absent["functional_failed"] is False
+    assert absent["model_status"] == "N/A"
+    assert absent["model_commands"] == []
+    assert absent["model_output_on"] == 0
 
     runtime_failure = result["runtime_failure"]
     assert runtime_failure["applicability"]["Applicable"] is True
@@ -4330,6 +4457,8 @@ function Invoke-Scenario {
     assert runtime_failure["wgen_applicable"] is True
     assert runtime_failure["wgen_status"] == "FAIL"
     assert runtime_failure["functional_failed"] is True
+    assert runtime_failure["model_status"] == ""
+    assert runtime_failure["model_commands"] == []
 
 
 def test_save_pwd_validation_uses_fixed_usb_fixture_without_obsolete_logic() -> None:

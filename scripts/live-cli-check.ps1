@@ -4926,6 +4926,208 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
         Add-NotApplicableCase -Name "wgen-basic" -Detail $snapshot.WgenApplicabilityDetail
     }
 
+    if (-not $script:FunctionalFailed -and $snapshot.WgenApplicable -eq $true -and $snapshot.Is4000XSeries -eq $true) {
+        Invoke-BaselineCase -Name "wgen-model-validation" -Action {
+            # wgen-basic already established and read back sine / one-meg /
+            # ~1000 Hz / ~0.5 Vpp. Snapshot that baseline first; the snapshot
+            # itself mutates nothing, so it stays outside the try/finally
+            # mutation boundary below.
+            $snap = Invoke-LiveCli -Stage "wgen-model-snapshot" -Command "wgen-query"
+            $restoreFunction = [string]$snap.result.function
+            $restoreLoad = [string]$snap.result.load
+            $restoreFrequency = ConvertTo-InvariantString -Value ([double]$snap.result.frequency_hz)
+            $restoreAmplitude = ConvertTo-InvariantString -Value ([double]$snap.result.amplitude_volts)
+            $restoreOffset = ConvertTo-InvariantString -Value ([double]$snap.result.offset_volts)
+
+            try {
+                $off = Invoke-LiveCli -Stage "wgen-model-output-off" -Command "wgen-output" `
+                    -Arguments @("--enabled", "false")
+                Assert-ScpiSent -Payload $off -Label "WGEN model validation output disable" `
+                    -ExpectedCommands @(":WGEN1:OUTPut OFF")
+                $offQuery = Invoke-LiveCli -Stage "wgen-model-output-off-query" -Command "wgen-output" `
+                    -Arguments @("--query")
+                if ([bool]$offQuery.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
+
+                # A. High-Z newly-legal amplitude (old 5 V ceiling regression).
+                Invoke-LiveCli -Stage "wgen-model-function-sine" -Command "wgen-function" `
+                    -Arguments @("--function", "sine") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-load-highz" -Command "wgen-load" `
+                    -Arguments @("--load", "one-meg") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-offset-zero" -Command "wgen-offset" `
+                    -Arguments @("--volts", "0") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-amplitude-6v" -Command "wgen-voltage" `
+                    -Arguments @("--amplitude", "6") | Out-Null
+                $amplitude = Invoke-LiveCli -Stage "wgen-model-amplitude-query" -Command "wgen-query"
+                Assert-NearlyEqual -Actual ([double]$amplitude.result.amplitude_volts) `
+                    -Expected 6 -Label "WGEN model High-Z amplitude"
+                if ([bool]$amplitude.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
+
+                # B. High-Z newly-legal offset (old +/-2.5 V ceiling regression).
+                Invoke-LiveCli -Stage "wgen-model-offset-3v" -Command "wgen-offset" `
+                    -Arguments @("--volts", "3") | Out-Null
+                $offset = Invoke-LiveCli -Stage "wgen-model-offset-query" -Command "wgen-query"
+                Assert-NearlyEqual -Actual ([double]$offset.result.offset_volts) `
+                    -Expected 3 -Label "WGEN model High-Z offset"
+                if ([bool]$offset.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
+
+                # C. Waveform-specific frequency boundary (ramp 200 kHz on 4000X).
+                Invoke-LiveCli -Stage "wgen-model-offset-neutral" -Command "wgen-offset" `
+                    -Arguments @("--volts", "0") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-amplitude-conservative" -Command "wgen-voltage" `
+                    -Arguments @("--amplitude", "0.5") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-function-ramp" -Command "wgen-function" `
+                    -Arguments @("--function", "ramp") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-frequency-200khz" -Command "wgen-frequency" `
+                    -Arguments @("--hz", "200000") | Out-Null
+                $frequency = Invoke-LiveCli -Stage "wgen-model-frequency-query" -Command "wgen-query"
+                Assert-NearlyEqual -Actual ([double]$frequency.result.frequency_hz) `
+                    -Expected 200000 -Label "WGEN model ramp frequency"
+                if ([bool]$frequency.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
+
+                # D. 50-ohm low amplitude regression (15 mVpp sits between the
+                # 50-ohm 10 mVpp minimum and the High-Z 20 mVpp minimum).
+                Invoke-LiveCli -Stage "wgen-model-function-sine-50" -Command "wgen-function" `
+                    -Arguments @("--function", "sine") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-offset-zero-50" -Command "wgen-offset" `
+                    -Arguments @("--volts", "0") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-load-fifty" -Command "wgen-load" `
+                    -Arguments @("--load", "fifty") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-amplitude-15mv" -Command "wgen-voltage" `
+                    -Arguments @("--amplitude", "0.015") | Out-Null
+                $lowAmplitude = Invoke-LiveCli -Stage "wgen-model-amplitude-15mv-query" -Command "wgen-query"
+                Assert-NearlyEqual -Actual ([double]$lowAmplitude.result.amplitude_volts) `
+                    -Expected 0.015 -Label "WGEN model 50-ohm amplitude"
+                if ([bool]$lowAmplitude.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
+
+                # E. Load transition readback probe: one-meg 0.5/0.2 should read
+                # back halved on fifty and restored on one-meg. This probes
+                # whether the simulator load-transition assumption matches the
+                # instrument; a mismatch must FAIL honestly here.
+                Invoke-LiveCli -Stage "wgen-model-load-highz-e" -Command "wgen-load" `
+                    -Arguments @("--load", "one-meg") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-amplitude-half" -Command "wgen-voltage" `
+                    -Arguments @("--amplitude", "0.5") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-offset-point2" -Command "wgen-offset" `
+                    -Arguments @("--volts", "0.2") | Out-Null
+                $before = Invoke-LiveCli -Stage "wgen-model-transition-before-query" -Command "wgen-query"
+                Assert-NearlyEqual -Actual ([double]$before.result.amplitude_volts) `
+                    -Expected 0.5 -Label "WGEN model pre-transition amplitude"
+                Assert-NearlyEqual -Actual ([double]$before.result.offset_volts) `
+                    -Expected 0.2 -Label "WGEN model pre-transition offset"
+                Invoke-LiveCli -Stage "wgen-model-load-fifty-e" -Command "wgen-load" `
+                    -Arguments @("--load", "fifty") | Out-Null
+                $halved = Invoke-LiveCli -Stage "wgen-model-transition-halved-query" -Command "wgen-query"
+                Assert-NearlyEqual -Actual ([double]$halved.result.amplitude_volts) `
+                    -Expected 0.25 -Label "WGEN model halved amplitude"
+                Assert-NearlyEqual -Actual ([double]$halved.result.offset_volts) `
+                    -Expected 0.1 -Label "WGEN model halved offset"
+                Invoke-LiveCli -Stage "wgen-model-load-highz-restore-e" -Command "wgen-load" `
+                    -Arguments @("--load", "one-meg") | Out-Null
+                $restored = Invoke-LiveCli -Stage "wgen-model-transition-restored-query" -Command "wgen-query"
+                Assert-NearlyEqual -Actual ([double]$restored.result.amplitude_volts) `
+                    -Expected 0.5 -Label "WGEN model restored amplitude"
+                Assert-NearlyEqual -Actual ([double]$restored.result.offset_volts) `
+                    -Expected 0.2 -Label "WGEN model restored offset"
+                if ([bool]$restored.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
+
+                # F. High-Z interaction positive boundary (40 mVpp + 0.6 V is
+                # legal because the guard only rejects below 40 mVpp).
+                Invoke-LiveCli -Stage "wgen-model-function-sine-f" -Command "wgen-function" `
+                    -Arguments @("--function", "sine") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-load-highz-f" -Command "wgen-load" `
+                    -Arguments @("--load", "one-meg") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-amplitude-40mv" -Command "wgen-voltage" `
+                    -Arguments @("--amplitude", "0.04") | Out-Null
+                Invoke-LiveCli -Stage "wgen-model-offset-point6" -Command "wgen-offset" `
+                    -Arguments @("--volts", "0.6") | Out-Null
+                $interaction = Invoke-LiveCli -Stage "wgen-model-interaction-query" -Command "wgen-query"
+                Assert-NearlyEqual -Actual ([double]$interaction.result.amplitude_volts) `
+                    -Expected 0.04 -Label "WGEN model interaction amplitude"
+                Assert-NearlyEqual -Actual ([double]$interaction.result.offset_volts) `
+                    -Expected 0.6 -Label "WGEN model interaction offset"
+                if ([bool]$interaction.result.enabled) {
+                    throw "WGEN model validation did not leave output OFF."
+                }
+            } finally {
+                # Restore the snapshotted baseline. Offset moves to neutral 0
+                # first so the amplitude restore cannot trip the 4000X High-Z
+                # interaction guard; the original offset is restored last
+                # against the restored amplitude (its original legal pairing).
+                # Automated validation always leaves output OFF, even when the
+                # snapshot had output ON.
+                $restoreErrors = New-Object System.Collections.Generic.List[string]
+                try {
+                    Invoke-LiveCli -Stage "wgen-model-restore-output-off" -Command "wgen-output" `
+                        -Arguments @("--enabled", "false") | Out-Null
+                } catch {
+                    $restoreErrors.Add("restore output OFF: $($_.Exception.Message)")
+                }
+                try {
+                    Invoke-LiveCli -Stage "wgen-model-restore-function" -Command "wgen-function" `
+                        -Arguments @("--function", $restoreFunction) | Out-Null
+                } catch {
+                    $restoreErrors.Add("restore function: $($_.Exception.Message)")
+                }
+                try {
+                    Invoke-LiveCli -Stage "wgen-model-restore-load" -Command "wgen-load" `
+                        -Arguments @("--load", $restoreLoad) | Out-Null
+                } catch {
+                    $restoreErrors.Add("restore load: $($_.Exception.Message)")
+                }
+                try {
+                    Invoke-LiveCli -Stage "wgen-model-restore-offset-zero" -Command "wgen-offset" `
+                        -Arguments @("--volts", "0") | Out-Null
+                } catch {
+                    $restoreErrors.Add("restore neutral offset: $($_.Exception.Message)")
+                }
+                try {
+                    Invoke-LiveCli -Stage "wgen-model-restore-amplitude" -Command "wgen-voltage" `
+                        -Arguments @("--amplitude", $restoreAmplitude) | Out-Null
+                } catch {
+                    $restoreErrors.Add("restore amplitude: $($_.Exception.Message)")
+                }
+                try {
+                    Invoke-LiveCli -Stage "wgen-model-restore-offset" -Command "wgen-offset" `
+                        -Arguments @("--volts", $restoreOffset) | Out-Null
+                } catch {
+                    $restoreErrors.Add("restore offset: $($_.Exception.Message)")
+                }
+                try {
+                    Invoke-LiveCli -Stage "wgen-model-restore-frequency" -Command "wgen-frequency" `
+                        -Arguments @("--hz", $restoreFrequency) | Out-Null
+                } catch {
+                    $restoreErrors.Add("restore frequency: $($_.Exception.Message)")
+                }
+                if ($restoreErrors.Count -gt 0) {
+                    throw ($restoreErrors -join " | ")
+                }
+                $final = Invoke-LiveCli -Stage "wgen-model-restore-off-query" -Command "wgen-query"
+                if ([bool]$final.result.enabled) {
+                    throw "WGEN model validation restore did not leave output OFF."
+                }
+            }
+        }
+    } elseif (-not $script:FunctionalFailed) {
+        $wgenModelDetail = if ($snapshot.WgenApplicable -eq $true) {
+            "WGEN model validation targets the 4000X series."
+        } else {
+            $snapshot.WgenApplicabilityDetail
+        }
+        Add-NotApplicableCase -Name "wgen-model-validation" -Detail $wgenModelDetail
+    }
+
     if (-not $script:FunctionalFailed -and [bool]$identity.capabilities.supports_demo) {
         Invoke-BaselineCase -Name "demo-basic" -Action {
             try {
