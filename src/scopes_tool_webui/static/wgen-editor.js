@@ -12,6 +12,7 @@ export class WgenEditor {
     this.renderedKey = null;
     this.entry = null;
     this.frequencyFunction = null;
+    this.frequencyContextKey = null;
     this.frequencyNote = null;
     this.pendingRefresh = false;
     this.pendingPresentation = false;
@@ -100,9 +101,14 @@ export class WgenEditor {
       this.applyBusyState();
       return;
     }
-    // Model, device, or planning context changed: drop the cached waveform
-    // so the range warning never uses another context's state.
-    if (key !== this.stateKey) this.frequencyFunction = null;
+    // Execution context (mode/resource/model) changed: drop the cached
+    // waveform so the range warning never uses another context's state.
+    // Command navigation alone must not clear it.
+    const contextKey = this.hooks.contextKey();
+    if (contextKey !== this.frequencyContextKey) {
+      this.frequencyContextKey = contextKey;
+      this.frequencyFunction = null;
+    }
     this.stateKey = key;
     if (this.renderedKey !== key) this.rebuildSections(key);
     this.applyBusyState();

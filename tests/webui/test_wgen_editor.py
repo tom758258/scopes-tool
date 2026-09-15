@@ -580,9 +580,10 @@ def test_wgen_frequency_range_warning(tmp_path: Path) -> None:
 
         let selectedId = "wgen-frequency";
         let currentFunction = "sine";
+        let contextKeyValue = "simulate||keysight-dsox4024a";
         const calls = [];
         const hooks = {
-          contextKey: () => "simulate||keysight-dsox4024a",
+          contextKey: () => contextKeyValue,
           mode: () => "simulate",
           selectedCommand: () => commands.find((command) => command.id === selectedId),
           isAvailable: () => true,
@@ -625,18 +626,32 @@ def test_wgen_frequency_range_warning(tmp_path: Path) -> None:
         assert.equal(warningNote().hidden, true);
 
         // A verified wgen-function result updates the cached waveform, so the
-        // warning follows the new function without another explicit read.
+        // warning follows the new function.
         selectedId = "wgen-function";
         await editor.refresh(true, true);
         editor.entry.form.container.querySelector('[data-field="function"]').value = "square";
         await editor.submit();
         assert.equal(editor.frequencyFunction, "square");
+        // Command navigation keeps the cached waveform through the
+        // presentation-only path without another wgen-query.
         selectedId = "wgen-frequency";
-        await editor.refresh(true, true);
+        const callsBeforeNavigate = calls.length;
+        await editor.refresh(false, false);
+        assert.deepEqual(
+          calls.slice(callsBeforeNavigate).filter((call) => call[0] === "wgen-query"),
+          [],
+        );
+        assert.equal(editor.frequencyFunction, "square");
         // 15 MHz is legal for sine but out of range for square on 4000X.
         setFrequency("15000000");
         assert.equal(warningNote().hidden, false);
         assert.ok(warningNote().textContent.includes("10 MHz"));
+        // An execution context change drops the cached waveform instead of
+        // reusing the previous resource's state.
+        contextKeyValue = "simulate|OTHER::RESOURCE|keysight-dsox4024a";
+        await editor.refresh(false, false);
+        assert.equal(editor.frequencyFunction, null);
+        assert.equal(warningNote().hidden, true);
 
         console.log(JSON.stringify({ ok: true }));
         '''
