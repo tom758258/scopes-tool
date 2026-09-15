@@ -1424,6 +1424,7 @@ export const en = {
   "wgen.editor.title": "Waveform generator",
   "wgen.editor.read": "Read generator settings",
   "wgen.editor.description": "Read and control the waveform generator output, function, frequency, amplitude, offset, and load. Settings never switch the output on implicitly.",
+  "wgen.frequency.rangeWarning": "The allowed frequency range for the current waveform is {{min}} to {{max}}. The entered value is out of range.",
   "demo.editor.title": "Demo Signals",
   "demo.editor.read": "Read demo settings",
   "demo.editor.description": "Read and control the built-in DEMO output, function, and phase. DEMO uses the instrument Demo terminals, not simulation mode.",

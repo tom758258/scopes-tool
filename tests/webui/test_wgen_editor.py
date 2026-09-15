@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model_id
-from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS
+from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS, wgen_frequency_limits
 import scopes_tool_webui.command_execution as command_execution_module
 import scopes_tool_webui.commands as commands_module
 from scopes_tool_webui.command_catalog import _command_supported_by_capabilities
@@ -61,6 +61,25 @@ def test_wgen_options_come_from_core_constants() -> None:
     assert tuple(load["options"]) == WGEN_LOADS
 
 
+def test_wgen_frequency_model_presentation_projects_core_limits() -> None:
+    catalog = {entry["id"]: entry for entry in commands_module.command_catalog()}
+    models = catalog["wgen-frequency"]["presentation"]["models"]
+
+    projected = models["keysight-dsox4024a"]["fields"]["frequency_hz"]["frequency_limits"]
+    assert projected == wgen_frequency_limits("4000X")
+    assert projected["sine"] == {
+        "min_hz": 0.1,
+        "max_hz": 20.0e6,
+        "min_label": "100 mHz",
+        "max_label": "20 MHz",
+    }
+    older = models["keysight-dsox2004a"]["fields"]["frequency_hz"]["frequency_limits"]
+    assert older == wgen_frequency_limits("2000X")
+    assert older["ramp"]["max_hz"] == 100.0e3
+    assert "noise" not in projected
+    assert "dc" not in projected
+
+
 def test_wgen_commands_follow_model_support_flag() -> None:
     entries = {entry["id"]: entry for entry in commands_module.COMMANDS}
     supported = capabilities_for_model_id(MODEL_ID)
@@ -80,6 +99,13 @@ def test_wgen_set_validation_uses_core_rules() -> None:
     })
 
     assert request["parameters"]["frequency_hz"] == 1000.0
+    with pytest.raises(WebUIRequestError, match="frequency"):
+        validate_job_request({
+            "command": "wgen-frequency",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"action": "set", "frequency_hz": 30.0e6},
+        })
     with pytest.raises(WebUIRequestError, match="frequency"):
         validate_job_request({
             "command": "wgen-frequency",
@@ -205,6 +231,7 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         '"description.wgen-query":',
         '"wgen.editor.title": "Waveform generator"',
         '"wgen.editor.description":',
+        '"wgen.frequency.rangeWarning": "The allowed frequency range for the current waveform is {{min}} to {{max}}.',
         '"wgen.state.amplitude":',
         '"enum.wgen-function.sine":',
         '"enum.wgen-load.fifty":',
@@ -216,6 +243,7 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         '"description.wgen-query":',
         '"wgen.editor.title": "波形產生器"',
         '"wgen.editor.description":',
+        '"wgen.frequency.rangeWarning": "目前波形允許的頻率範圍為 {{min}} ～ {{max}}，',
         '"wgen.state.amplitude":',
         '"enum.wgen-function.sine":',
         '"enum.wgen-load.fifty":',
@@ -397,6 +425,223 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         '''
     ).replace("__CATALOG__", catalog_json)
     harness_path = tmp_path / "wgen-editor-harness.mjs"
+    harness_path.write_text(script, encoding="utf-8")
+    completed = subprocess.run(
+        ["node", str(harness_path)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout) == {"ok": True}
+
+
+@pytest.mark.skipif(
+    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_wgen_frequency_range_warning(tmp_path: Path) -> None:
+    catalog_json = json.dumps(commands_module.command_catalog())
+    english = read_static("locale_en.js")
+
+    assert '"wgen.frequency.rangeWarning"' in english
+
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeNode {
+          constructor(tag) {
+            this.tagName = (tag || "").toUpperCase();
+            this.children = [];
+            this.options = [];
+            this.hidden = false;
+            this.textContent = "";
+            this.className = "";
+            this.disabled = false;
+            this.value = "";
+            this.checked = false;
+            this.multiple = false;
+            this.listeners = {};
+            this.parent = null;
+          }
+          append(...nodes) {
+            for (const node of nodes) {
+              if (!node) continue;
+              node.remove();
+              node.parent = this;
+              this.children.push(node);
+              if (node.tagName === "OPTION") this.options.push(node);
+            }
+          }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatchEvent(event) {
+            for (const handler of this.listeners[event.type] || []) handler(event);
+            return true;
+          }
+          setAttribute() {}
+          remove() {
+            if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this);
+            this.parent = null;
+          }
+          get classList() {
+            return { add: (...names) => { this.className = [this.className, ...names].filter(Boolean).join(" "); } };
+          }
+          querySelector(sel) {
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (!match) return null;
+            const find = (list) => {
+              for (const child of list || []) {
+                if (child.dataset && child.dataset.field === match[1]) return child;
+                const found = find(child.children);
+                if (found) return found;
+              }
+              return null;
+            };
+            return find(this.children);
+          }
+          querySelectorAll(sel) {
+            const out = [];
+            const collect = (list) => {
+              for (const child of list || []) {
+                if (child.dataset && child.dataset.field) out.push(child);
+                collect(child.children);
+              }
+            };
+            collect(this.children);
+            if (sel === "[data-field]") return out;
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (match) return out.filter((child) => child.dataset.field === match[1]);
+            return [];
+          }
+          get closest() { return () => null; }
+          get validity() { return { badInput: false }; }
+          setCustomValidity() {}
+          reportValidity() {}
+          checkValidity() { return true; }
+          get dataset() { if (!this._dataset) this._dataset = {}; return this._dataset; }
+          set dataset(v) { this._dataset = v; }
+        }
+        globalThis.Option = class {
+          constructor(text, value) {
+            this.tagName = "OPTION";
+            this.textContent = text;
+            this.value = value;
+            this.selected = false;
+            this.children = [];
+          }
+          remove() {}
+        };
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.queueMicrotask = (fn) => { fn(); };
+
+        const localeSource = fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static/locale_en.js"), "utf8",
+        ).replace("export const en =", "globalThis.en =");
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(localeSource)}`);
+        globalThis.translate = (key, values = {}) => {
+          let text = (globalThis.en && globalThis.en[key]) || key;
+          for (const [name, value] of Object.entries(values || {})) {
+            text = text.replaceAll(`{{${name}}}`, String(value));
+          }
+          return text;
+        };
+        globalThis.hasTranslation = (key) => Boolean(globalThis.en && globalThis.en[key]);
+
+        const load = (name) => fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static", name), "utf8",
+        ).replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "");
+        const source = [
+          load("numeric-input.js"),
+          load("command-form.js"),
+          load("command-support.js"),
+          load("wgen-editor.js"),
+        ].join("\n") + [
+          "globalThis.CommandForm = CommandForm;",
+          "globalThis.fieldsForModel = fieldsForModel;",
+          "globalThis.WgenEditor = WgenEditor;",
+        ].join("\n");
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const commands = __CATALOG__;
+        const catalog = {
+          commands,
+          activeModelId: "keysight-dsox4024a",
+          supported: () => true,
+          fieldsFor: (command) => globalThis.fieldsForModel(command, "keysight-dsox4024a"),
+          optionsFor: (field) => field.options || [],
+          commandLabel: (command) => command.id,
+        };
+
+        let selectedId = "wgen-frequency";
+        let currentFunction = "sine";
+        const calls = [];
+        const hooks = {
+          contextKey: () => "simulate||keysight-dsox4024a",
+          mode: () => "simulate",
+          selectedCommand: () => commands.find((command) => command.id === selectedId),
+          isAvailable: () => true,
+          isExecutionBusy: () => false,
+          headerActions: new FakeNode("div"),
+          executeCommand: async (id, parameters) => {
+            calls.push([id, parameters]);
+            if (id === "wgen-query") {
+              return { status: "completed", result: { result: { wgen: { function: currentFunction } } } };
+            }
+            if (id === "wgen-function") {
+              currentFunction = parameters.function;
+              return { status: "completed", result: { result: { function: { function: parameters.function } } } };
+            }
+            return { status: "completed", result: { result: {} } };
+          },
+        };
+
+        const editor = new globalThis.WgenEditor(new FakeNode("div"), catalog, hooks);
+        await editor.refresh(true, true);
+        const frequencyInput = () => editor.entry.form.container.querySelector('[data-field="frequency_hz"]');
+        const warningNote = () => editor.entry.form.container.children.find((child) => child.tagName === "P");
+        const setFrequency = (value) => {
+          frequencyInput().value = value;
+          frequencyInput().dispatchEvent({ type: "input" });
+        };
+
+        // Empty input shows no range warning.
+        assert.equal(warningNote().className, "muted compact-note");
+        assert.equal(warningNote().hidden, true);
+        // A representative in-range value shows no range warning.
+        setFrequency("1000");
+        assert.equal(warningNote().hidden, true);
+        // An out-of-range value warns with the Core-projected 4000X sine limits.
+        setFrequency("30000000");
+        assert.equal(warningNote().hidden, false);
+        assert.ok(warningNote().textContent.includes("100 mHz"));
+        assert.ok(warningNote().textContent.includes("20 MHz"));
+        setFrequency("1000");
+        assert.equal(warningNote().hidden, true);
+
+        // A verified wgen-function result updates the cached waveform, so the
+        // warning follows the new function without another explicit read.
+        selectedId = "wgen-function";
+        await editor.refresh(true, true);
+        editor.entry.form.container.querySelector('[data-field="function"]').value = "square";
+        await editor.submit();
+        assert.equal(editor.frequencyFunction, "square");
+        selectedId = "wgen-frequency";
+        await editor.refresh(true, true);
+        // 15 MHz is legal for sine but out of range for square on 4000X.
+        setFrequency("15000000");
+        assert.equal(warningNote().hidden, false);
+        assert.ok(warningNote().textContent.includes("10 MHz"));
+
+        console.log(JSON.stringify({ ok: true }));
+        '''
+    ).replace("__CATALOG__", catalog_json)
+    harness_path = tmp_path / "wgen-frequency-warning-harness.mjs"
     harness_path.write_text(script, encoding="utf-8")
     completed = subprocess.run(
         ["node", str(harness_path)],

@@ -479,6 +479,26 @@ def validate_wgen_frequency(
     return value
 
 
+def wgen_frequency_limits(series: str) -> dict[str, dict[str, object]]:
+    """Project Core-owned WGEN frequency bounds for presentation use.
+
+    Returns per-waveform ``min_hz``/``max_hz`` bounds with preformatted
+    labels for every common waveform with an applicable frequency range.
+    This is presentation metadata only; enforcement stays with
+    :func:`validate_wgen_frequency`.
+    """
+    limits = _wgen_series_table(series, _WGEN_FREQUENCY_LIMITS_HZ, "frequency")
+    return {
+        function: {
+            "min_hz": lower,
+            "max_hz": upper,
+            "min_label": _format_wgen_hz(lower),
+            "max_label": _format_wgen_hz(upper),
+        }
+        for function, (lower, upper) in limits.items()
+    }
+
+
 def validate_wgen_amplitude(
     amplitude_volts: float,
     *,

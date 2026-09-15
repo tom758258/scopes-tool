@@ -76,7 +76,7 @@ from scopes_tool_core.serial import (
 )
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 from scopes_tool_core.demo import DEMO_FUNCTIONS
-from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS
+from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS, wgen_frequency_limits
 
 
 _DIRECT_MEASUREMENT_ITEMS = INSTALLABLE_MEASUREMENT_ITEMS
@@ -2327,6 +2327,11 @@ def _model_command_presentation(
             override["options"] = tuple(
                 value for value in DEMO_FUNCTIONS if value in capabilities.demo_functions
             )
+        if entry["id"] == "wgen-frequency" and name == "frequency_hz":
+            # Presentation-only range hint projected from Core-owned limits.
+            # Deliberately not named minimum/maximum so backend and frontend
+            # constraint enforcement stay untouched.
+            override["frequency_limits"] = wgen_frequency_limits(capabilities.series)
         if name == "pair_items" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"

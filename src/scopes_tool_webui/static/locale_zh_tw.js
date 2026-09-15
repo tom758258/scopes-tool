@@ -1427,6 +1427,7 @@ export const zhTW = {
   "demo.editor.read": "讀取示範訊號設定",
   "demo.editor.description": "讀取並控制內建 DEMO 輸出、功能與相位。DEMO 使用示波器 Demo 端子，而非模擬模式。",
   "wgen.editor.description": "讀取並控制波形產生器的輸出、波形、頻率、振幅、偏移與負載。設定不會隱含開啟輸出。",
+  "wgen.frequency.rangeWarning": "目前波形允許的頻率範圍為 {{min}} ～ {{max}}，輸入值已超出範圍。",
   "wgen.state.output": "輸出",
   "wgen.state.function": "波形",
   "wgen.state.frequency": "頻率",

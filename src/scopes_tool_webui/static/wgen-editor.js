@@ -11,6 +11,8 @@ export class WgenEditor {
     this.stateKey = null;
     this.renderedKey = null;
     this.entry = null;
+    this.frequencyFunction = null;
+    this.frequencyNote = null;
     this.pendingRefresh = false;
     this.pendingPresentation = false;
     this.buildDom();
@@ -20,6 +22,7 @@ export class WgenEditor {
     this.refreshButton?.remove?.();
     this.entry?.button.remove?.();
     this.entry = null;
+    this.frequencyNote = null;
     this.container.replaceChildren();
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
@@ -97,6 +100,9 @@ export class WgenEditor {
       this.applyBusyState();
       return;
     }
+    // Model, device, or planning context changed: drop the cached waveform
+    // so the range warning never uses another context's state.
+    if (key !== this.stateKey) this.frequencyFunction = null;
     this.stateKey = key;
     if (this.renderedKey !== key) this.rebuildSections(key);
     this.applyBusyState();
@@ -113,6 +119,7 @@ export class WgenEditor {
     this.renderedKey = null;
     this.entry?.button.remove?.();
     this.entry = null;
+    this.frequencyNote = null;
     this.sectionsHost.replaceChildren();
     this.refreshButton.disabled = true;
   }
@@ -123,6 +130,7 @@ export class WgenEditor {
     this.renderedKey = key;
     this.entry?.button.remove?.();
     this.entry = null;
+    this.frequencyNote = null;
     this.sectionsHost.replaceChildren();
     const command = this.definition();
     if (!command || !this.catalog.supported(command)) return;
@@ -151,7 +159,15 @@ export class WgenEditor {
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
     this.entry = { form, button: actionButton, epoch };
-    form.render(command, {});
+    form.render(command, { onDirty: () => this.updateFrequencyWarning() });
+    if (command.id === "wgen-frequency") {
+      const note = document.createElement("p");
+      note.className = "muted compact-note";
+      note.hidden = true;
+      formContainer.append(note);
+      this.frequencyNote = note;
+    }
+    this.updateFrequencyWarning();
     const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
     section.hidden = fields.length === 0;
     formContainer.hidden = fields.length === 0;
@@ -162,11 +178,78 @@ export class WgenEditor {
 
   async readState() {
     if (!this.entry || this.entry.epoch !== this.epoch) return;
-    await this.hooks.executeCommand(
+    const epoch = this.epoch;
+    const job = await this.hooks.executeCommand(
       "wgen-query",
       {},
       { intent: "readback" },
     );
+    if (!this.entry || this.entry.epoch !== epoch) return;
+    this.setFrequencyFunction(job?.result?.result?.wgen?.function);
+    this.updateFrequencyWarning();
+  }
+
+  setFrequencyFunction(value) {
+    if (value === undefined) return;
+    this.frequencyFunction = value;
+  }
+
+  frequencyRange() {
+    const command = this.definition();
+    if (!command || command.id !== "wgen-frequency") return null;
+    const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    const field = fields.find((item) => item?.name === "frequency_hz");
+    const limits = field?.frequency_limits;
+    if (!limits || typeof limits !== "object") return null;
+    const current = this.frequencyFunction;
+    // Recognized waveforms use their own limits; noise/dc and unknown
+    // non-null readbacks have no displayable range. A null readback falls
+    // back to the series envelope across the projected waveforms.
+    if (typeof current === "string") return limits[current] || null;
+    if (current !== null) return null;
+    let envelope = null;
+    for (const entry of Object.values(limits)) {
+      if (!entry) continue;
+      if (!envelope) {
+        envelope = {
+          min_hz: entry.min_hz,
+          max_hz: entry.max_hz,
+          min_label: entry.min_label,
+          max_label: entry.max_label,
+        };
+      } else {
+        if (entry.min_hz < envelope.min_hz) {
+          envelope.min_hz = entry.min_hz;
+          envelope.min_label = entry.min_label;
+        }
+        if (entry.max_hz > envelope.max_hz) {
+          envelope.max_hz = entry.max_hz;
+          envelope.max_label = entry.max_label;
+        }
+      }
+    }
+    return envelope;
+  }
+
+  updateFrequencyWarning() {
+    const note = this.frequencyNote;
+    if (!note) return;
+    let show = false;
+    const input = this.entry?.form?.container?.querySelector?.('[data-field="frequency_hz"]');
+    const raw = typeof input?.value === "string" ? input.value.trim() : "";
+    if (raw !== "") {
+      const value = Number(raw);
+      const range = this.frequencyRange();
+      show = Boolean(range) && Number.isFinite(value)
+        && (value < range.min_hz || value > range.max_hz);
+      if (show) {
+        note.textContent = translate("wgen.frequency.rangeWarning", {
+          min: range.min_label,
+          max: range.max_label,
+        });
+      }
+    }
+    note.hidden = !show;
   }
 
   async submit() {
@@ -195,6 +278,9 @@ export class WgenEditor {
         && entry.epoch === this.epoch
         && submissionKey === this.currentStateKey()
       ) {
+        if (command.id === "wgen-function") {
+          this.setFrequencyFunction(job?.result?.result?.function?.function);
+        }
         if (isSetting) {
           entry.form.clearDirty();
           if (
@@ -208,6 +294,7 @@ export class WgenEditor {
     } finally {
       this.setBusy(false);
     }
+    this.updateFrequencyWarning();
   }
 
   setBusy(value) {
