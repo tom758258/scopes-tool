@@ -208,10 +208,10 @@ The Command workbench exposes:
 Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
 
-The Command Browser keeps Category as its first level. Categories with group
-metadata (Trigger, Search, Serial, and Workflow) show
-Category → Group → Commands sections, while categories without group metadata
-keep the plain Category → Commands list. Groups start expanded and can be
+The Command Browser keeps Category as its first level. Commands with
+group metadata are shown under Category → Group → Commands sections,
+while commands without group metadata use the plain Category → Commands
+list. Groups start expanded and can be
 collapsed and reopened; collapse state lives only in the current page session
 and resets to all-expanded after a reload. The command filter still applies
 only to the active category. While a filter matches commands in a group, that

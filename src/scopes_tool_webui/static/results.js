@@ -606,7 +606,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
         : context;
     const fields = Object.entries(display).filter(([name, value]) => {
       if (isRawDiagnosticField(name)) return false;
-      if (resultContext === "wgen" && name.endsWith("_scpi")) return false;
+      if ((resultContext === "wgen" || resultContext === "demo") && name.endsWith("_scpi")) return false;
       if (
         job.command === "fft"
         && (name === "units_canonical" || name === "window_canonical")

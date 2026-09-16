@@ -3134,6 +3134,94 @@ def test_wgen_aggregate_result_uses_wgen_labels() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_demo_workspace_result_uses_demo_presentation() -> None:
+    results_path = STATIC_ROOT / "results.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) { this.tagName = tag; this.children = []; this.className = ""; this.textContent = ""; }
+          append(...nodes) { this.children.push(...nodes); }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        const translations = {
+          "results.field.function": "Math function",
+          "demo.state.output": "DEMO output",
+          "demo.state.function": "DEMO function",
+          "demo.state.phase": "DEMO phase",
+          "enum.demo-function.sine": "Sine",
+          "status.disabled": "Disabled",
+        };
+        const source = [
+          `const translations = ${JSON.stringify(translations)};`,
+          "const hasTranslation = (key) => key in translations;",
+          "const translate = (key) => translations[key] ?? key;",
+          "const formatEngineering = globalThis.formatEngineering;",
+          fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
+          "globalThis.resultsApi = { renderWorkspaceResult };",
+        ].join("\n");
+        const liveData = fs.readFileSync(process.argv[2], "utf8").replace(/^export /gm, "")
+          + "\nglobalThis.formatEngineering = formatEngineering;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(liveData)}`);
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { renderWorkspaceResult } = globalThis.resultsApi;
+        const rowsOf = (container) => Object.fromEntries(
+          container.children.map((row) => [row.children[1].textContent, row.children[0].textContent]),
+        );
+
+        const container = new FakeNode("div");
+        renderWorkspaceResult(container, {
+          command: "demo-query",
+          status: "completed",
+          result: {
+            result: {
+              demo: {
+                enabled: false,
+                output_raw: "0",
+                function: "sine",
+                function_scpi: "SIN",
+                function_raw: "SIN",
+                phase_degrees: 90,
+                phase_raw: "90",
+              },
+            },
+          },
+        }, { mode: "simulate" });
+        const rows = rowsOf(container);
+        assert.equal(rows["DEMO function"], "Sine");
+        assert.equal(rows["DEMO output"], "Disabled");
+        assert.equal(rows["DEMO phase"], "90");
+        assert.ok(!Object.keys(rows).some((label) => label.includes("Math")));
+        assert.ok(!Object.keys(rows).some((label) => /scpi|raw/i.test(label)));
+
+        // Setter results share the DEMO presentation context.
+        const setterContainer = new FakeNode("div");
+        renderWorkspaceResult(setterContainer, {
+          command: "demo-function",
+          status: "completed",
+          result: {
+            result: {
+              function: { function: "sine", function_scpi: "SIN", function_raw: "SIN" },
+            },
+          },
+        }, { mode: "simulate" });
+        const setterRows = rowsOf(setterContainer);
+        assert.equal(setterRows["DEMO function"], "Sine");
+        assert.ok(!Object.keys(setterRows).some((label) => /scpi|raw/i.test(label)));
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(results_path), str(STATIC_ROOT / "live-data.js")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_generic_rerender_rejects_stale_apply_form_updates() -> None:
     run_generic_form_ownership_behavior(
         r'''
