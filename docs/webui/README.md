@@ -296,25 +296,24 @@ hardware limits.
 Selecting a Trigger command opens the dedicated Trigger editor instead of a
 plain command form. The Command Browser remains the only Trigger navigation:
 Category → Group → Commands. The editor does not add a second set of tabs.
-Selecting any command inside a group opens that whole group on the right (for
-example, selecting any Edge command shows Edge trigger, source, slope, level,
-coupling, and reject together; selecting Runt shows only Runt), and the group
-label above the sections names the group being edited. The editor presents the
-group's existing settings for editing; it does not report or change which
+Selecting a Trigger command shows only that command's form in the workspace.
+Group metadata is navigation-only and does not cause sibling commands to
+render together. The editor presents the selected command's existing settings
+for editing; it does not report or change which
 trigger type the instrument currently uses. Selection and query-selector
-changes are presentation-only. The Read trigger settings action reads only the active group's
-setting commands, and a successful Apply is followed by an active-group
-readback so sibling forms do not go stale. Editor reads and applies are
+changes are presentation-only. The Read trigger settings action reads only the selected command's
+setting commands, and a successful Apply is followed by a selected-command
+readback. Editor reads and applies are
 serialized; the Apply and Read trigger settings actions stay
-disabled until the current readback or write finishes. Each child command
+disabled until the current readback or write finishes. Each command
 keeps its own metadata-driven form and its own independent Apply over the
 existing WebUI command; there is no Apply All, no transaction, and no merged
 payload. Informational commands such as `external-trigger-settings` keep their
 explicit Read action. Switching commands or groups discards unapplied edits
-without confirmation, and Read trigger settings re-reads the active group while
+without confirmation, and Read trigger settings re-reads the selected command while
 keeping unapplied edits. Model capability presentation continues to come from
 the shared Core capability projection; unsupported commands stay disabled in
-the Command Browser and are omitted from the group view.
+the Command Browser and are omitted from the editor view.
 
 Selecting a Search command opens the dedicated Search editor instead of a
 plain command form. The Command Browser groups remain Basic, Event, and

@@ -275,14 +275,11 @@ def test_trigger_actions_follow_global_execution_admission_and_recover() -> None
         const editor = buildEditor();
         editor.schedulePresentation();
         await settle();
-        const entry = editor.entries[0];
+        const entry = editor.entry;
+        assert.equal(entry.id, "trigger-edge-slope");
         assert.equal(entry.form.container.className, "command-form");
         assert.ok(editor.sectionsHost.children[0].children.includes(entry.button));
-        const section = editor.sectionsHost.children[0];
-        const note = section.children.find((node) => node.className === "muted compact-note");
-        assert.equal(note.textContent, catalog.description(entry.form.renderedCommand));
-        assert.ok(section.children.indexOf(note) > 0);
-        assert.ok(section.children.indexOf(note) < section.children.indexOf(entry.form.container));
+        assert.equal(editor.sectionsHost.children.length, 1);
 
         env.executionBusy = true;
         editor.applyBusyState();
@@ -311,54 +308,50 @@ def test_trigger_actions_follow_global_execution_admission_and_recover() -> None
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_trigger_editor_renders_active_group_and_scopes_readback_to_it() -> None:
+def test_trigger_editor_renders_only_selected_command_and_scopes_readback_to_it() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        // Selecting an Edge command renders the whole group without reading it.
+        // Selecting an Edge command renders only that command without reading it.
         const editor = buildEditor();
         editor.schedulePresentation();
         await settle();
 
-        assert.equal(editor.groupHeading.textContent, "edge");
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "trigger-edge-slope",
-          "trigger-edge-coupling",
-        ]);
+        assert.equal(editor.sectionsHost.children.length, 1);
+        assert.equal(editor.entry.id, "trigger-edge-slope");
         assert.deepEqual(submitted, []);
 
-        // Explicit Refresh reads only the active group.
+        // Explicit Refresh reads only the selected command.
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "trigger-edge-slope",
-          "trigger-edge-coupling",
         ]);
         assert.ok(submitted.every((entry) => entry.intent === "readback"));
-        for (const entry of editor.entries) {
-          assert.equal(entry.form.renderedCommand, commands.find((c) => c.id === entry.id));
-          assert.deepEqual(entry.form.syncCalls.at(-1), [submitted.find(
-            (item) => item.command === entry.id,
-          ).job.job_id, true]);
-        }
+        assert.equal(editor.entry.form.renderedCommand, commands.find((c) => c.id === "trigger-edge-slope"));
+        assert.deepEqual(editor.entry.form.syncCalls.at(-1), [submitted[0].job.job_id, true]);
 
-        // Manual refresh re-reads the same group without rebuilding forms.
+        // Manual refresh re-reads the same command without rebuilding forms.
         submitted.length = 0;
         const epochBeforeRefresh = editor.epoch;
+        const formBeforeRefresh = editor.entry.form;
         editor.refreshButton.dispatch("click");
         await settle();
         assert.equal(editor.epoch, epochBeforeRefresh);
+        assert.equal(editor.entry.form, formBeforeRefresh);
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "trigger-edge-slope",
-          "trigger-edge-coupling",
         ]);
 
-        // Switching to Runt replaces the section list without reading it.
+        // Switching within the group replaces the section without reading it.
+        // A dirty draft on the old form must not leak into the new one.
         submitted.length = 0;
-        env.selectedId = "trigger-runt";
+        editor.entry.form.valuesResult = { action: "set", slope: "positive" };
+        env.selectedId = "trigger-edge-coupling";
         editor.schedulePresentation();
         await settle();
-        assert.equal(editor.groupHeading.textContent, "runt");
-        assert.deepEqual(editor.entries.map((entry) => entry.id), ["trigger-runt"]);
+        assert.equal(editor.sectionsHost.children.length, 1);
+        assert.equal(editor.entry.id, "trigger-edge-coupling");
+        assert.equal(editor.entry.form.renderedCommand, commands.find((c) => c.id === "trigger-edge-coupling"));
         assert.deepEqual(submitted, []);
         '''
     )
@@ -379,7 +372,7 @@ def test_trigger_editor_applies_each_command_individually() -> None:
         const editor = buildEditor();
         editor.scheduleRefresh();
         await settle();
-        const runtEntry = editor.entries[0];
+        const runtEntry = editor.entry;
 
         // A rejected form submit executes nothing.
         submitted.length = 0;
@@ -389,7 +382,7 @@ def test_trigger_editor_applies_each_command_individually() -> None:
         assert.deepEqual(submitted, []);
 
         // Apply submits exactly this one existing command with action=set,
-        // then a forced active-group readback reconciles the group.
+        // then a forced selected-command readback reconciles it.
         submitted.length = 0;
         runtEntry.form.valuesResult = { action: "set", channel: 1 };
         runtEntry.button.dispatch("click");
@@ -406,7 +399,7 @@ def test_trigger_editor_applies_each_command_individually() -> None:
         assert.deepEqual(runtEntry.form.syncCalls.at(-1), [submitted[1].job.job_id, true]);
 
         // No aggregate transaction: a second Apply still runs only this command
-        // (plus its follow-up group readback).
+        // (plus its follow-up selected-command readback).
         submitted.length = 0;
         runtEntry.button.dispatch("click");
         await settle();
@@ -434,7 +427,7 @@ def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> N
         const editor = buildEditor();
         editor.scheduleRefresh();
         await settle();
-        const runtEntry = editor.entries[0];
+        const runtEntry = editor.entry;
 
         let releaseApply;
         const recordingExecute = hooks.executeCommand;
@@ -457,46 +450,57 @@ def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> N
         assert.equal(runtEntry.button.disabled, false);
         assert.equal(editor.refreshButton.disabled, false);
 
-        // Informational commands keep explicit Read semantics and are not auto-queried.
+        // Informational commands keep explicit Read semantics: selecting one
+        // reads it, the header Read re-runs it, and no second inline Read
+        // button is shown.
         submitted.length = 0;
         env.selectedId = "external-trigger-settings";
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "external-trigger-settings",
-        ]);
-        assert.deepEqual(submitted, []);
-        const readEntry = editor.entries[0];
+        const readEntry = editor.entry;
+        assert.equal(readEntry.id, "external-trigger-settings");
         assert.equal(readEntry.kind, "command");
         assert.equal(readEntry.button.textContent, "actions.read");
-        readEntry.button.dispatch("click");
-        await settle();
-        assert.deepEqual(submitted.map((entry) => entry.command), [
-          "external-trigger-settings",
+        assert.equal(readEntry.button.hidden, true);
+        assert.equal(editor.sectionsHost.children.length, 1);
+        assert.deepEqual(submitted.map((item) => [item.command, item.intent]), [
+          ["external-trigger-settings", undefined],
         ]);
-        assert.equal(submitted[0].intent, undefined);
         assert.deepEqual(submitted[0].parameters, {});
         assert.equal(readEntry.form.clearedDirty, 0);
 
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.map((item) => [item.command, item.intent]), [
+          ["external-trigger-settings", undefined],
+          ["external-trigger-settings", undefined],
+        ]);
+
+        // Setter commands still show their Apply after switching back.
+        submitted.length = 0;
+        env.selectedId = "trigger-runt";
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.entry.id, "trigger-runt");
+        assert.equal(editor.entry.button.hidden, false);
+        assert.equal(editor.entry.button.textContent, "actions.apply");
+
         // Runtime unavailability keeps the editor visible and disabled without I/O.
         submitted.length = 0;
+        env.selectedId = "external-trigger-settings";
         env.available = false;
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "external-trigger-settings",
-        ]);
+        assert.equal(editor.entry.id, "external-trigger-settings");
         assert.equal(editor.refreshButton.disabled, true);
-        assert.equal(editor.entries[0].button.disabled, true);
-        assert.equal(editor.entries[0].form.disableCalls.at(-1), true);
+        assert.equal(editor.entry.button.disabled, true);
+        assert.equal(editor.entry.form.disableCalls.at(-1), true);
         assert.deepEqual(submitted, []);
         env.available = true;
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "external-trigger-settings",
-        ]);
-        assert.equal(editor.entries[0].button.disabled, false);
+        assert.equal(editor.entry.id, "external-trigger-settings");
+        assert.equal(editor.entry.button.disabled, false);
         '''
     )
     completed = subprocess.run(
@@ -516,22 +520,18 @@ def test_trigger_editor_skips_unsupported_group_commands_and_keeps_projection_in
         const editor = buildEditor();
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "trigger-edge-slope",
-          "trigger-edge-coupling",
-        ]);
-        for (const entry of editor.entries) {
-          assert.equal(
-            entry.form.renderedCommand,
-            commands.find((command) => command.id === entry.id),
-          );
-        }
+        assert.equal(editor.entry.id, "trigger-edge-slope");
+        assert.equal(
+          editor.entry.form.renderedCommand,
+          commands.find((command) => command.id === "trigger-edge-slope"),
+        );
 
-        catalog.supported = (command) => command.id !== "trigger-edge-coupling";
+        catalog.supported = (command) => command.id !== "trigger-edge-slope";
         env.contextKey = "ctx-2";
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries.map((entry) => entry.id), ["trigger-edge-slope"]);
+        assert.equal(editor.entry, null);
+        assert.equal(editor.sectionsHost.children.length, 0);
         '''
     )
     completed = subprocess.run(
@@ -559,31 +559,24 @@ def test_trigger_editor_query_field_change_is_passive_until_refresh() -> None:
         const editor = buildEditor();
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "trigger-edge-level",
-          "trigger-edge-slope",
-        ]);
-        const levelEntry = editor.entries[0];
-        const slopeEntry = editor.entries[1];
+        assert.equal(editor.entry.id, "trigger-edge-level");
+        const levelEntry = editor.entry;
         assert.equal(levelEntry.form.renderOptions.onQueryFieldChange, undefined);
 
         submitted.length = 0;
-        const slopeSyncCount = slopeEntry.form.syncCalls.length;
         levelEntry.form.queryValuesResult = { action: "query", source_channel: 2 };
         await settle();
 
         assert.deepEqual(submitted, []);
 
-        // Explicit Refresh reads the group using the changed query selector.
+        // Explicit Refresh reads the selected command using the changed query selector.
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "trigger-edge-level",
-          "trigger-edge-slope",
         ]);
         assert.equal(submitted[0].intent, "readback");
         assert.deepEqual(submitted[0].parameters, { action: "query", source_channel: 2 });
-        assert.equal(slopeEntry.form.syncCalls.length, slopeSyncCount + 1);
         assert.deepEqual(levelEntry.form.syncCalls.at(-1), [submitted[0].job.job_id, true]);
         '''
     )
@@ -617,8 +610,8 @@ def test_trigger_editor_serializes_readback_and_disables_actions_while_busy() ->
         editor.scheduleRefresh();
         await settle();
 
-        // The active-group readback itself holds the busy gate.
-        const runtEntry = editor.entries[0];
+        // The selected-command readback itself holds the busy gate.
+        const runtEntry = editor.entry;
         assert.equal(queries, 1);
         assert.equal(editor.busy, true);
         assert.equal(runtEntry.button.disabled, true);
@@ -670,7 +663,7 @@ def test_trigger_editor_same_state_notifications_do_not_restart_group_readback()
         r'''
         // Simulate the real app contract: every completed executeCommand ends
         // with a plain unforced refresh notification (app-level
-        // scheduleEditorRead). The active-group readback must not restart.
+        // scheduleEditorRead). The selected-command readback must not restart.
         env.selectedId = "trigger-edge-slope";
         let editor;
         hooks.executeCommand = async (command, parameters, options) => {
@@ -692,7 +685,6 @@ def test_trigger_editor_same_state_notifications_do_not_restart_group_readback()
 
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent}`), [
           "trigger-edge-slope:readback",
-          "trigger-edge-coupling:readback",
         ]);
         assert.equal(editor.busy, false);
         assert.equal(editor.pendingRefresh, false);
@@ -715,7 +707,7 @@ def test_trigger_editor_same_state_notifications_do_not_restart_group_readback()
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_trigger_editor_apply_reconciles_sibling_forms_in_active_group() -> None:
+def test_trigger_editor_apply_reads_back_selected_command() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         catalog.commands = [
@@ -741,8 +733,8 @@ def test_trigger_editor_apply_reconciles_sibling_forms_in_active_group() -> None
         const editor = buildEditor();
         editor.scheduleRefresh();
         await settle();
-        const aggregateEntry = editor.entries.find((entry) => entry.id === "trigger-edge");
-        const sourceEntry = editor.entries.find((entry) => entry.id === "trigger-edge-source");
+        assert.equal(editor.entry.id, "trigger-edge-source");
+        const sourceEntry = editor.entry;
         sourceEntry.form.valuesResult = { action: "set", source_channel: 2 };
 
         submitted.length = 0;
@@ -752,19 +744,16 @@ def test_trigger_editor_apply_reconciles_sibling_forms_in_active_group() -> None
         releaseApply();
         await settle();
 
-        // Exactly one write, then a forced active-group readback so the
-        // aggregate sibling form does not stay stale.
+        // Exactly one write, then a forced selected-command readback.
         assert.equal(editor.busy, false);
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent}`), [
           "trigger-edge-source:apply",
-          "trigger-edge:readback",
           "trigger-edge-source:readback",
         ]);
         assert.deepEqual(
           sourceEntry.form.syncCalls.slice(-2).map((call) => call[1]),
           [false, true],
         );
-        assert.equal(aggregateEntry.form.syncCalls.at(-1)[1], true);
         '''
     )
     completed = subprocess.run(

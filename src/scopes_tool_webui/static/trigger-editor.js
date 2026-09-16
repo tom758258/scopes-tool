@@ -10,7 +10,7 @@ export class TriggerEditor {
     this.epoch = 0;
     this.stateKey = null;
     this.renderedKey = null;
-    this.entries = [];
+    this.entry = null;
     this.pendingRefresh = false;
     this.pendingPresentation = false;
     this.buildDom();
@@ -19,10 +19,6 @@ export class TriggerEditor {
   buildDom() {
     this.refreshButton?.remove?.();
     this.container.replaceChildren();
-    this.headRow = document.createElement("div");
-    this.headRow.className = "trigger-editor-head";
-    this.groupHeading = document.createElement("strong");
-    this.groupHeading.className = "trigger-editor-heading";
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
     this.refreshButton.className = "secondary trigger-editor-refresh";
@@ -30,16 +26,15 @@ export class TriggerEditor {
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
-    this.headRow.append(this.groupHeading);
     if (this.hooks.headerActions) {
       this.refreshButton.hidden = true;
       this.hooks.headerActions.append(this.refreshButton);
     } else {
-      this.headRow.append(this.refreshButton);
+      this.container.append(this.refreshButton);
     }
     this.sectionsHost = document.createElement("div");
     this.sectionsHost.className = "trigger-editor-sections";
-    this.container.append(this.headRow, this.sectionsHost);
+    this.container.append(this.sectionsHost);
   }
 
   selectedDefinition() {
@@ -97,13 +92,12 @@ export class TriggerEditor {
       return;
     }
     this.stateKey = key;
-    this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
     if (this.renderedKey !== key) this.rebuildSections(key);
     this.applyBusyState();
     if (!read || !this.hooks.isAvailable()) return;
     this.setBusy(true);
     try {
-      await this.readActiveGroup();
+      await this.readSelected();
     } finally {
       this.setBusy(false);
     }
@@ -111,9 +105,8 @@ export class TriggerEditor {
 
   clearSections() {
     this.renderedKey = null;
-    this.entries = [];
+    this.entry = null;
     this.sectionsHost.replaceChildren();
-    this.groupHeading.textContent = "";
     this.refreshButton.disabled = true;
   }
 
@@ -121,23 +114,16 @@ export class TriggerEditor {
     this.epoch += 1;
     const epoch = this.epoch;
     this.renderedKey = key;
-    this.entries = [];
+    this.entry = null;
     this.sectionsHost.replaceChildren();
-    const definition = this.selectedDefinition();
-    if (!definition) return;
-    for (const command of this.catalog.commands) {
-      if (command.editor !== "trigger" || command.group !== definition.group) continue;
-      if (!this.catalog.supported(command)) continue;
-      this.entries.push(this.buildSection(command, epoch));
-    }
+    const command = this.selectedDefinition();
+    if (!command || !this.catalog.supported(command)) return;
+    this.entry = this.buildSection(command, epoch);
   }
 
   buildSection(command, epoch) {
     const section = document.createElement("section");
     section.className = "trigger-editor-section";
-    const heading = document.createElement("strong");
-    heading.className = "trigger-editor-heading";
-    heading.textContent = this.catalog.commandLabel(command);
     const formContainer = document.createElement("div");
     formContainer.className = "command-form";
     const actionButton = document.createElement("button");
@@ -148,22 +134,20 @@ export class TriggerEditor {
     actionButton.textContent = translate(
       kind === "setting" ? "actions.apply" : `actions.${action}`,
     );
-    section.append(heading);
-    const description = this.catalog.description?.(command);
-    if (description) {
-      const note = document.createElement("p");
-      note.className = "muted compact-note";
-      note.textContent = description;
-      section.append(note);
-    }
+    // Informational read commands reuse the header Read action; a second
+    // inline Read button would duplicate it.
+    actionButton.hidden = kind === "command" && action === "read";
     section.append(formContainer, actionButton);
+    const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    section.hidden = fields.length === 0;
+    formContainer.hidden = fields.length === 0;
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
     const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch };
     form.render(command, {});
     entry.form = form;
     actionButton.addEventListener("click", () => {
-      void this.submit(entry);
+      void this.submit();
     });
     return entry;
   }
@@ -179,17 +163,19 @@ export class TriggerEditor {
     if (job?.status === "completed") entry.form.syncResult(job, true);
   }
 
-  async readActiveGroup() {
-    const epoch = this.epoch;
-    for (const entry of this.entries) {
-      if (epoch !== this.epoch) return;
-      if (entry.kind !== "setting") continue;
+  async readSelected() {
+    const entry = this.entry;
+    if (!entry || entry.epoch !== this.epoch) return;
+    if (entry.kind === "setting") {
       await this.readEntry(entry);
+    } else {
+      await this.hooks.executeCommand(entry.id, {}, {});
     }
   }
 
-  async submit(entry) {
-    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
+  async submit() {
+    const entry = this.entry;
+    if (!entry || this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     const submissionKey = this.currentStateKey();
     const isSetting = entry.kind === "setting";
     let parameters = {};
@@ -236,9 +222,9 @@ export class TriggerEditor {
   applyBusyState() {
     const disabled = this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable();
     this.refreshButton.disabled = disabled;
-    for (const entry of this.entries) {
-      entry.button.disabled = disabled;
-      entry.form?.setDisabled(disabled);
+    if (this.entry) {
+      this.entry.button.disabled = disabled;
+      this.entry.form?.setDisabled(disabled);
     }
   }
 }
