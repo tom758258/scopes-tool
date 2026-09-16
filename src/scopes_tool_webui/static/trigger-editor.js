@@ -1,5 +1,16 @@
 import { translate } from "/static/i18n.js";
 import { CommandForm } from "/static/command-form.js";
+import { formatEngineering } from "/static/live-data.js";
+
+const DIV_STEPS = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+
+function divLabel(div) {
+  return div > 0 ? `+${div}` : String(div);
+}
+
+function cleanFloatText(value) {
+  return String(Number(value.toPrecision(12)));
+}
 
 export class TriggerEditor {
   constructor(container, catalog, hooks) {
@@ -153,13 +164,198 @@ export class TriggerEditor {
     formContainer.hidden = fields.length === 0;
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
-    const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch };
-    form.render(command, {});
+    const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch, div: null };
+    const divCapable = this.divQualifies(command);
+    if (divCapable) {
+      const onDivField = (field) => this.handleDivField(entry, field);
+      form.render(command, { onDirty: onDivField, onQueryFieldChange: onDivField });
+    } else {
+      form.render(command, {});
+    }
     entry.form = form;
+    if (divCapable) this.buildDivSection(section, entry);
     actionButton.addEventListener("click", () => {
       void this.submit();
     });
     return entry;
+  }
+
+  divQualifies(command) {
+    if (command?.presentation?.kind !== "setting") return false;
+    const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    return fields.some((field) => field?.name === "level" && field?.type === "number")
+      && fields.some((field) => field?.name === "source_channel" && field?.type === "integer");
+  }
+
+  buildDivSection(section, entry) {
+    const heading = document.createElement("strong");
+    heading.className = "trigger-editor-heading";
+    heading.textContent = translate("trigger.editor.divHeading");
+    const hint = document.createElement("small");
+    hint.className = "field-help";
+    hint.textContent = translate("trigger.editor.divHint");
+    const host = document.createElement("div");
+    host.className = "div-slider-block";
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = String(DIV_STEPS[0]);
+    slider.max = String(DIV_STEPS[DIV_STEPS.length - 1]);
+    slider.step = "1";
+    slider.value = "0";
+    slider.disabled = true;
+    slider.setAttribute("aria-label", translate("trigger.editor.divHeading"));
+    slider.addEventListener("input", () => {
+      this.selectDiv(entry, Number(slider.value));
+    });
+    host.append(slider);
+    const ticks = document.createElement("div");
+    ticks.className = "div-slider-ticks";
+    ticks.style.gridTemplateColumns = `repeat(${DIV_STEPS.length}, minmax(0, 1fr))`;
+    for (const div of DIV_STEPS) {
+      const tick = document.createElement("span");
+      tick.textContent = divLabel(div);
+      ticks.append(tick);
+    }
+    const info = document.createElement("output");
+    info.className = "muted compact-note";
+    const selection = document.createElement("output");
+    selection.className = "muted compact-note div-slider-selection";
+    const status = document.createElement("output");
+    status.className = "muted compact-note";
+    section.append(heading, hint, host, ticks, info, selection, status);
+    entry.div = {
+      slider, info, selection, status,
+      scale: null, channel: null, units: null, offset: null,
+      selected: null, incomplete: false,
+    };
+    this.syncDivInfo(entry);
+  }
+
+  divLevelInput(entry) {
+    return entry?.form?.container?.querySelector?.('[data-field="level"]') || null;
+  }
+
+  divSourceValue(entry) {
+    const input = entry?.form?.container?.querySelector?.('[data-field="source_channel"]');
+    const value = Number(input?.value);
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  handleDivField(entry, field) {
+    if (!entry?.div || entry !== this.entry || entry.epoch !== this.epoch) return;
+    if (field === "source_channel") {
+      // The level draft belongs to the previous source; drop it and require
+      // a fresh read before Div quick-fill is available again.
+      const input = this.divLevelInput(entry);
+      if (input) {
+        input.value = "";
+        if (input.dataset) delete input.dataset.dirty;
+      }
+      entry.div.incomplete = false;
+      this.clearDivState(entry);
+    } else if (field === "level") {
+      entry.div.selected = null;
+      this.syncDivInfo(entry);
+    }
+  }
+
+  clearDivState(entry) {
+    if (!entry?.div) return;
+    entry.div.scale = null;
+    entry.div.channel = null;
+    entry.div.units = null;
+    entry.div.offset = null;
+    entry.div.selected = null;
+    this.syncDivInfo(entry);
+  }
+
+  syncDivInfo(entry) {
+    const div = entry?.div;
+    if (!div) return;
+    div.slider.value = div.selected === null ? "0" : String(div.selected);
+    if (div.scale === null || div.channel === null) {
+      div.info.textContent = "";
+    } else {
+      div.info.textContent = translate("trigger.editor.divCurrent", {
+        channel: div.channel,
+        scale: formatEngineering(div.scale, "V", { perDivision: true }),
+        offset: formatEngineering(div.offset, "V", { signed: true }),
+      });
+    }
+    if (div.selected === null || div.scale === null) {
+      div.selection.textContent = "";
+    } else {
+      div.selection.textContent = translate("trigger.editor.divSelection", {
+        div: divLabel(div.selected),
+        value: formatEngineering(Number(cleanFloatText(div.offset + div.selected * div.scale)), "V", { signed: true }),
+      });
+    }
+    div.status.textContent = div.incomplete ? translate("trigger.editor.divReadIncomplete") : "";
+    this.applyDivBusyState(entry);
+  }
+
+  applyDivBusyState(entry) {
+    const div = entry?.div;
+    if (!div) return;
+    div.slider.disabled = this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()
+      || div.scale === null || div.channel === null || div.channel !== this.divSourceValue(entry);
+  }
+
+  selectDiv(entry, div) {
+    if (!entry?.div || entry !== this.entry || entry.epoch !== this.epoch) return;
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable?.()) return;
+    const state = entry.div;
+    if (state.scale === null || state.channel === null) return;
+    if (state.channel !== this.divSourceValue(entry)) return;
+    const input = this.divLevelInput(entry);
+    if (!input || input.disabled) return;
+    state.selected = div;
+    input.value = cleanFloatText(state.offset + div * state.scale);
+    if (input.dataset) input.dataset.dirty = "true";
+    this.syncDivInfo(entry);
+  }
+
+  async refreshDivContext(entry) {
+    const contextKey = this.hooks.contextKey();
+    const source = this.divSourceValue(entry);
+    if (source === null) {
+      this.clearDivState(entry);
+      return;
+    }
+    const job = await this.hooks.executeCommand("channel-summary", {}, { intent: "readback" });
+    if (entry !== this.entry || entry.epoch !== this.epoch
+      || this.hooks.contextKey() !== contextKey || this.divSourceValue(entry) !== source) {
+      return;
+    }
+    if (job?.status !== "completed") {
+      entry.div.incomplete = true;
+      this.clearDivState(entry);
+      return;
+    }
+    const channels = job?.result?.result?.channels ?? job?.result?.channels;
+    const item = Array.isArray(channels)
+      ? channels.find((candidate) => Number(candidate?.channel) === source)
+      : undefined;
+    const scale = item?.scale;
+    const range = item?.range;
+    const offset = item?.offset;
+    const units = item?.units;
+    const complete = typeof scale === "number" && Number.isFinite(scale) && scale > 0
+      && typeof range === "number" && Number.isFinite(range) && range > 0
+      && typeof offset === "number" && Number.isFinite(offset)
+      && units === "volt";
+    if (!complete) {
+      entry.div.incomplete = true;
+      this.clearDivState(entry);
+      return;
+    }
+    entry.div.scale = scale;
+    entry.div.channel = source;
+    entry.div.units = units;
+    entry.div.offset = offset;
+    entry.div.selected = null;
+    entry.div.incomplete = false;
+    this.syncDivInfo(entry);
   }
 
   async readEntry(entry) {
@@ -171,6 +367,13 @@ export class TriggerEditor {
       { intent: "readback" },
     );
     if (job?.status === "completed") entry.form.syncResult(job, true);
+    if (!entry.div || entry !== this.entry || entry.epoch !== this.epoch) return;
+    if (job?.status !== "completed") {
+      entry.div.incomplete = true;
+      this.clearDivState(entry);
+      return;
+    }
+    await this.refreshDivContext(entry);
   }
 
   async readSelected() {
@@ -209,6 +412,10 @@ export class TriggerEditor {
       ) {
         entry.form.clearDirty();
         entry.form.syncResult(job, false);
+        if (entry.div) {
+          entry.div.selected = null;
+          this.syncDivInfo(entry);
+        }
       }
     } finally {
       this.setBusy(false);
@@ -234,6 +441,7 @@ export class TriggerEditor {
     if (this.entry) {
       this.entry.button.disabled = disabled;
       this.entry.form?.setDisabled(disabled);
+      this.applyDivBusyState(this.entry);
     }
   }
 }

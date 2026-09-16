@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import textwrap
@@ -152,6 +153,15 @@ def test_trigger_editor_locale_keys_are_localized() -> None:
     ):
         assert f'"{key}": "{value}"' in english
         assert f'"{key}": "{value}"' in chinese
+    for key in (
+        "trigger.editor.divHeading",
+        "trigger.editor.divHint",
+        "trigger.editor.divCurrent",
+        "trigger.editor.divSelection",
+        "trigger.editor.divReadIncomplete",
+    ):
+        assert f'"{key}":' in english, key
+        assert f'"{key}":' in chinese, key
 
 
 TRIGGER_EDITOR_HARNESS = r'''
@@ -788,3 +798,264 @@ def test_trigger_setting_fields_help_descriptions_and_enum_labels_are_localized(
     for key in ("enum.off", "enum.volts", "enum.amps"):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
+
+
+@pytest.mark.skipif(
+    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_trigger_level_div_quick_fill(tmp_path: Path) -> None:
+    catalog_json = json.dumps(command_catalog())
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.checked = false;
+            this.className = "";
+            this.textContent = "";
+            this.type = "";
+            this.value = "";
+            this.multiple = false;
+            this.options = [];
+            this.style = {};
+            this.attributes = {};
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) {
+            for (const node of nodes) {
+              node.remove();
+              node.parent = this;
+              this.children.push(node);
+              if (node.tagName === "OPTION") this.options.push(node);
+            }
+          }
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
+          setAttribute(k, v) { this.attributes[k] = String(v); }
+          querySelector(sel) {
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (!match) return null;
+            const find = (list) => {
+              for (const node of list || []) {
+                if (node.dataset && node.dataset.field === match[1]) return node;
+                const found = find(node.children);
+                if (found) return found;
+              }
+              return null;
+            };
+            return find(this.children);
+          }
+          querySelectorAll(sel) {
+            const out = [];
+            const collect = (list) => {
+              for (const node of list || []) {
+                if (node.dataset && node.dataset.field) out.push(node);
+                collect(node.children);
+              }
+            };
+            collect(this.children);
+            if (sel === "[data-field]") return out;
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (match) return out.filter((node) => node.dataset.field === match[1]);
+            return [];
+          }
+          closest() { return null; }
+          get validity() { return { badInput: false }; }
+          setCustomValidity() {}
+          reportValidity() {}
+          checkValidity() { return true; }
+        }
+        globalThis.Option = class {
+          constructor(text, value) {
+            this.tagName = "OPTION";
+            this.textContent = text;
+            this.value = String(value);
+            this.selected = false;
+            this.children = [];
+            this.dataset = {};
+          }
+          remove() {}
+        };
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.queueMicrotask = (fn) => { fn(); };
+        // Template shapes mirror the composition contract only, not locale prose.
+        const TEMPLATES = {
+          "trigger.editor.divCurrent": "CH={{channel}}|S={{scale}}|O={{offset}}",
+          "trigger.editor.divSelection": "D={{div}}|V={{value}}",
+        };
+        globalThis.translate = (key, values = {}) => {
+          let text = TEMPLATES[key] || key;
+          for (const [name, value] of Object.entries(values)) {
+            text = text.replaceAll(`{{${name}}}`, String(value));
+          }
+          return text;
+        };
+        globalThis.hasTranslation = () => true;
+        globalThis.formatEngineering = (value, unit) => `F:${String(value)}:${unit}`;
+
+        const strip = (name) => fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static", name), "utf8",
+        ).replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "");
+        let source = strip("command-form.js");
+        source += "\nfunction applyNumericFieldConstraints(input, field) { if (field.minimum !== undefined) input.min = String(field.minimum); if (field.maximum !== undefined) input.max = String(field.maximum); }\n";
+        source += strip("trigger-editor.js");
+        source += "\nglobalThis.TriggerEditor = TriggerEditor;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const commands = __CATALOG__;
+        const catalog = {
+          commands,
+          supported: () => true,
+          fieldsFor: (command) => command.fields || [],
+          optionsFor: (field) => field.options || [],
+          commandLabel: (command) => command.id,
+        };
+        const SUMMARY = [
+          { channel: 1, scale: 0.5, range: 4, offset: 1.0, units: "volt" },
+          { channel: 2, scale: 1, range: 8, offset: -0.5, units: "amp" },
+        ];
+        let summaryOverride = null;
+        let selectedId = "trigger-edge-level";
+        const calls = [];
+        const hooks = {
+          headerActions: new FakeNode("div"),
+          contextKey: () => "ctx",
+          mode: () => "live",
+          selectedCommand: () => commands.find((command) => command.id === selectedId),
+          isAvailable: () => true,
+          isExecutionBusy: () => false,
+          executeCommand: async (id, parameters, options) => {
+            calls.push([id, parameters, options?.intent]);
+            if (id === "channel-summary") {
+              return { status: "completed", result: { result: { channels: summaryOverride || SUMMARY } } };
+            }
+            if (id === "trigger-edge-level" && parameters.action === "set") {
+              return { status: "completed", result: { result: { level_volts: parameters.level } } };
+            }
+            if (id === "trigger-edge-level") {
+              return { status: "completed", result: { result: { level_volts: 0.4 } } };
+            }
+            return { status: "completed", result: { result: {} } };
+          },
+        };
+
+        const drain = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+        const findAll = (node, pred, out = []) => {
+          for (const child of node.children || []) {
+            if (pred(child)) out.push(child);
+            findAll(child, pred, out);
+          }
+          return out;
+        };
+
+        const editor = new globalThis.TriggerEditor(new FakeNode("div"), catalog, hooks);
+        await editor.refresh(true, true);
+        await drain();
+        const section = editor.sectionsHost.children[0];
+        const slider = findAll(section, (node) => node.tagName === "INPUT" && node.type === "range")[0];
+        const ticks = findAll(section, (node) => node.className === "div-slider-ticks")[0];
+        const levelInput = () => editor.entry.form.container.querySelector('[data-field="level"]');
+        const sourceInput = () => editor.entry.form.container.querySelector('[data-field="source_channel"]');
+        const outputs = () => findAll(section, (node) => node.tagName === "OUTPUT");
+        const infoText = () => outputs()[0].textContent;
+        const selectionText = () => outputs()[1].textContent;
+        const statusText = () => outputs()[2].textContent;
+
+        // 1. Slider exposes the Div range but stays disabled before a successful read.
+        assert.equal(slider.type, "range");
+        assert.equal(slider.min, "-4");
+        assert.equal(slider.max, "4");
+        assert.equal(slider.step, "1");
+        assert.equal(slider.value, "0");
+        assert.equal(slider.disabled, true);
+        assert.equal(slider.attributes["aria-label"], "trigger.editor.divHeading");
+        assert.equal(ticks.children.length, 9);
+        assert.deepEqual(
+          ticks.children.map((tick) => tick.textContent),
+          ["-4", "-3", "-2", "-1", "0", "+1", "+2", "+3", "+4"],
+        );
+        assert.equal(selectionText(), "");
+        assert.equal(statusText(), "");
+        assert.equal(levelInput().value, "0.4");
+        assert.ok(!calls.some(([id]) => id === "channel-summary"));
+
+        // 2. Picking a source then reading enables Div quick-fill for that channel.
+        sourceInput().value = "1";
+        sourceInput().dispatch("change");
+        assert.equal(levelInput().value, "");
+        assert.equal(slider.disabled, true);
+        await editor.refresh(true, true);
+        await drain();
+        assert.deepEqual(calls.filter(([id]) => id === "channel-summary").length, 1);
+        assert.equal(calls[calls.length - 1][0], "channel-summary");
+        assert.equal(calls[calls.length - 1][2], "readback");
+        assert.equal(slider.disabled, false);
+        assert.equal(infoText(), "CH=1|S=F:0.5:V|O=F:1:V");
+
+        // 3. Slider +2 on offset 1.0 V with 0.5 V/div fills 2 V without any write.
+        const callsBeforeFill = calls.length;
+        slider.value = "2";
+        slider.dispatch("input");
+        assert.equal(levelInput().value, "2");
+        assert.equal(levelInput().dataset.dirty, "true");
+        assert.equal(selectionText(), "D=+2|V=F:2:V");
+        assert.equal(calls.length, callsBeforeFill);
+
+        // 4. Manual level edits clear the quick-fill selection and reset the slider.
+        levelInput().value = "0.75";
+        levelInput().dispatch("input");
+        assert.equal(selectionText(), "");
+        assert.equal(slider.value, "0");
+        assert.equal(levelInput().value, "0.75");
+        assert.equal(slider.disabled, false);
+
+        // 5. Switching source drops the draft and requires a fresh read.
+        sourceInput().value = "2";
+        sourceInput().dispatch("change");
+        assert.equal(levelInput().value, "");
+        assert.equal(slider.disabled, true);
+        assert.equal(selectionText(), "");
+        await editor.refresh(true, true);
+        await drain();
+        assert.equal(slider.disabled, true);
+        assert.equal(statusText(), "trigger.editor.divReadIncomplete");
+
+        // 6. An incomplete summary never enables the slider and never guesses.
+        sourceInput().value = "1";
+        sourceInput().dispatch("change");
+        summaryOverride = [{ channel: 1, scale: 0.5, range: 4, offset: null, units: "volt" }];
+        await editor.refresh(true, true);
+        await drain();
+        summaryOverride = null;
+        assert.equal(slider.disabled, true);
+        assert.equal(selectionText(), "");
+        assert.equal(statusText(), "trigger.editor.divReadIncomplete");
+
+        console.log(JSON.stringify({ ok: true }));
+        '''
+    ).replace("__CATALOG__", catalog_json)
+
+    harness_path = tmp_path / "trigger-level-div-harness.mjs"
+    harness_path.write_text(script, encoding="utf-8")
+    completed = subprocess.run(
+        ["node", str(harness_path)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
+    assert json.loads(completed.stdout) == {"ok": True}
