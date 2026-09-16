@@ -44,6 +44,35 @@ RESULT_FIELDS = (
     "auto_range_enabled",
     "is_error",
     "unit",
+    # Trigger / generic workspace readback fields that must have real
+    # translations rather than snake_case-derived fallbacks.
+    "probe_attenuation",
+    "bandwidth_limit_enabled",
+    "level_volts",
+    "greater_than_seconds",
+    "less_than_seconds",
+    "range_min_seconds",
+    "range_max_seconds",
+    "low_level_volts",
+    "high_level_volts",
+    "digital",
+    "arm_source",
+    "arm_source_kind",
+    "arm_digital",
+    "trigger_source",
+    "trigger_source_kind",
+    "trigger_digital",
+    "clock_source_kind",
+    "clock_digital",
+    "data_source",
+    "data_source_kind",
+    "data_digital",
+    "tv_mode",
+    "format",
+    # Additional workspace fields that must have real translations.
+    "file",
+    "filename",
+    "filenames",
 )
 
 
@@ -109,3 +138,31 @@ def test_tool_neutral_user_facing_copy() -> None:
     assert '<title data-i18n="page.title">Scopes Tool</title>' in html
     assert '<span data-i18n="live_data.webui_state">Tool State</span>' in html
     assert '<p class="compact-note" data-i18n="pcOutput.helper">This is the only PC-side output location setting in this tool.' in html
+
+
+TRIGGER_RESULT_ENUMS = (
+    "glitch",
+    "runt",
+    "transition",
+    "delay",
+    "setup-hold",
+    "edge-burst",
+    "tv",
+    "pattern",
+    "or",
+    "edge",
+    "channel",
+    "digital",
+)
+
+
+def test_trigger_result_enum_labels_localized() -> None:
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    # Presence-only regression: these enum values must not fall back to raw
+    # lower-case in the workspace result renderer.
+    for value in TRIGGER_RESULT_ENUMS:
+        en_key = f'"enum.{value}":'
+        zh_key = f'"enum.{value}":'
+        assert en_key in english, f"missing enum.{value} in en"
+        assert zh_key in chinese, f"missing enum.{value} in zh"
