@@ -373,7 +373,28 @@ export class TriggerEditor {
       this.clearDivState(entry);
       return;
     }
+    this.reconcileDivLevel(entry);
     await this.refreshDivContext(entry);
+  }
+
+  reconcileDivLevel(entry) {
+    if (!entry?.div) return;
+    const queryFields = entry.form?.presentation?.query_fields || [];
+    if (queryFields.includes("source_channel")) return;
+    // A dirty source with a non-query source field means an unapplied draft
+    // source exists, so a generic readback level cannot be safely attributed
+    // to it. Blank a non-dirty level; the draft source itself is kept.
+    const source = entry.form.container?.querySelector?.(
+      '[data-field="source_channel"]',
+    );
+    const level = this.divLevelInput(entry);
+    if (
+      source?.dataset?.dirty === "true"
+      && level
+      && level.dataset?.dirty !== "true"
+    ) {
+      level.value = "";
+    }
   }
 
   async readSelected() {

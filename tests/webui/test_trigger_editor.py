@@ -1059,3 +1059,222 @@ def test_trigger_level_div_quick_fill(tmp_path: Path) -> None:
     )
     assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
     assert json.loads(completed.stdout) == {"ok": True}
+
+
+@pytest.mark.skipif(
+    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_trigger_edge_div_coherence_keeps_draft_source(tmp_path: Path) -> None:
+    catalog_json = json.dumps(command_catalog())
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.checked = false;
+            this.className = "";
+            this.textContent = "";
+            this.type = "";
+            this.value = "";
+            this.multiple = false;
+            this.options = [];
+            this.style = {};
+            this.attributes = {};
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) {
+            for (const node of nodes) {
+              node.remove();
+              node.parent = this;
+              this.children.push(node);
+              if (node.tagName === "OPTION") this.options.push(node);
+            }
+          }
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
+          setAttribute(k, v) { this.attributes[k] = String(v); }
+          querySelector(sel) {
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (!match) return null;
+            const find = (list) => {
+              for (const node of list || []) {
+                if (node.dataset && node.dataset.field === match[1]) return node;
+                const found = find(node.children);
+                if (found) return found;
+              }
+              return null;
+            };
+            return find(this.children);
+          }
+          querySelectorAll(sel) {
+            const out = [];
+            const collect = (list) => {
+              for (const node of list || []) {
+                if (node.dataset && node.dataset.field) out.push(node);
+                collect(node.children);
+              }
+            };
+            collect(this.children);
+            if (sel === "[data-field]") return out;
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (match) return out.filter((node) => node.dataset.field === match[1]);
+            return [];
+          }
+          closest() { return null; }
+          get validity() { return { badInput: false }; }
+          setCustomValidity() {}
+          reportValidity() {}
+          checkValidity() { return true; }
+        }
+        globalThis.Option = class {
+          constructor(text, value) {
+            this.tagName = "OPTION";
+            this.textContent = text;
+            this.value = String(value);
+            this.selected = false;
+            this.children = [];
+            this.dataset = {};
+          }
+          remove() {}
+        };
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.queueMicrotask = (fn) => { fn(); };
+        // Template shapes mirror the composition contract only, not locale prose.
+        const TEMPLATES = {
+          "trigger.editor.divCurrent": "CH={{channel}}|S={{scale}}|O={{offset}}",
+          "trigger.editor.divSelection": "D={{div}}|V={{value}}",
+        };
+        globalThis.translate = (key, values = {}) => {
+          let text = TEMPLATES[key] || key;
+          for (const [name, value] of Object.entries(values)) {
+            text = text.replaceAll(`{{${name}}}`, String(value));
+          }
+          return text;
+        };
+        globalThis.hasTranslation = () => true;
+        globalThis.formatEngineering = (value, unit) => `F:${String(value)}:${unit}`;
+
+        const strip = (name) => fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static", name), "utf8",
+        ).replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "");
+        let source = strip("command-form.js");
+        source += "\nfunction applyNumericFieldConstraints(input, field) { if (field.minimum !== undefined) input.min = String(field.minimum); if (field.maximum !== undefined) input.max = String(field.maximum); }\n";
+        source += strip("trigger-editor.js");
+        source += "\nglobalThis.TriggerEditor = TriggerEditor;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const commands = __CATALOG__;
+        const catalog = {
+          commands,
+          supported: () => true,
+          fieldsFor: (command) => command.fields || [],
+          optionsFor: (field) => field.options || [],
+          commandLabel: (command) => command.id,
+        };
+        const SUMMARY = [
+          { channel: 1, scale: 0.5, range: 4, offset: 0.4, units: "volt" },
+          { channel: 2, scale: 2, range: 16, offset: 10, units: "volt" },
+        ];
+        const selectedId = "trigger-edge";
+        const calls = [];
+        const hooks = {
+          headerActions: new FakeNode("div"),
+          contextKey: () => "ctx",
+          mode: () => "live",
+          selectedCommand: () => commands.find((command) => command.id === selectedId),
+          isAvailable: () => true,
+          isExecutionBusy: () => false,
+          executeCommand: async (id, parameters, options) => {
+            calls.push([id, parameters, options?.intent]);
+            if (id === "channel-summary") {
+              return { status: "completed", result: { result: { channels: SUMMARY } } };
+            }
+            // The instrument still holds the old CH1 state; the query is not
+            // source-scoped for trigger-edge.
+            return { status: "completed", result: { result: { level_volts: 0.4 } } };
+          },
+        };
+
+        const drain = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+        const findAll = (node, pred, out = []) => {
+          for (const child of node.children || []) {
+            if (pred(child)) out.push(child);
+            findAll(child, pred, out);
+          }
+          return out;
+        };
+
+        const editor = new globalThis.TriggerEditor(new FakeNode("div"), catalog, hooks);
+        const edgeBurst = commands.find((command) => command.id === "trigger-edge-burst");
+        assert.equal(editor.divQualifies(edgeBurst), true);
+        await editor.refresh(true, true);
+        await drain();
+        const section = editor.sectionsHost.children[0];
+        const slider = findAll(section, (node) => node.tagName === "INPUT" && node.type === "range")[0];
+        const levelInput = () => editor.entry.form.container.querySelector('[data-field="level"]');
+        const sourceInput = () => editor.entry.form.container.querySelector('[data-field="source_channel"]');
+        const outputs = () => findAll(section, (node) => node.tagName === "OUTPUT");
+
+        // Initial read fills the instrument level; no source draft exists yet.
+        assert.equal(levelInput().value, "0.4");
+        assert.equal(slider.disabled, true);
+        assert.ok(!calls.some(([id]) => id === "channel-summary"));
+
+        // Draft CH2 without applying, then read the stale CH1 instrument state.
+        sourceInput().value = "2";
+        sourceInput().dispatch("change");
+        assert.equal(levelInput().value, "");
+        await editor.refresh(true, true);
+        await drain();
+        // The draft source is kept, the stale CH1 level is not attributed to
+        // it, and the CH2 Div context is still established.
+        assert.equal(sourceInput().value, "2");
+        assert.equal(levelInput().value, "");
+        assert.equal(slider.disabled, false);
+        assert.equal(outputs()[0].textContent, "CH=2|S=F:2:V|O=F:10:V");
+        assert.deepEqual(calls.filter(([id]) => id === "channel-summary").length, 1);
+
+        // The slider computes from the CH2 context and never writes.
+        const callsBeforeFill = calls.length;
+        slider.value = "1";
+        slider.dispatch("input");
+        assert.equal(levelInput().value, "12");
+        assert.equal(calls.length, callsBeforeFill);
+
+        // A manually typed dirty level survives the next stale readback.
+        levelInput().value = "1.25";
+        levelInput().dispatch("input");
+        await editor.refresh(true, true);
+        await drain();
+        assert.equal(sourceInput().value, "2");
+        assert.equal(levelInput().value, "1.25");
+        assert.equal(slider.disabled, false);
+
+        console.log(JSON.stringify({ ok: true }));
+        '''
+    ).replace("__CATALOG__", catalog_json)
+
+    harness_path = tmp_path / "trigger-edge-div-coherence-harness.mjs"
+    harness_path.write_text(script, encoding="utf-8")
+    completed = subprocess.run(
+        ["node", str(harness_path)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
+    assert json.loads(completed.stdout) == {"ok": True}
