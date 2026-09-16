@@ -1653,7 +1653,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     ),
     _action_command(
         "trigger-edge-burst", "Trigger", "Nth edge burst trigger", (
-            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.source_channel"),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge-burst.source_channel"),
             _command_field("slope", "enum", options=_BINARY_SLOPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge-burst.slope"),
             _command_field("count", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge-burst.count"),
             _command_field("idle_time", "number", minimum=1e-8, maximum=10, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge-burst.idle_time"),
@@ -1664,7 +1664,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     ),
     _action_command(
         "trigger-tv", "Trigger", "TV trigger", (
-            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge.source_channel"),
+            _command_field("source_channel", "integer", minimum=1, maximum=4, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-tv.source_channel"),
             _command_field("standard", "enum", options=("ntsc", "pal", "palm", "secam"), visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-tv.standard"),
             _command_field("mode", "enum", options=("field1", "field2", "all-fields", "all-lines", *_TV_LINE_MODES), visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-tv.mode"),
             _command_field("polarity", "enum", options=("positive", "negative"), visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-tv.polarity"),

@@ -577,7 +577,18 @@ function resolveReadbackField(payload, alias) {
 function findResultValue(result, fieldName, onlyWritableField, depth = 0) {
   if (result === null || result === undefined || depth > 4) return undefined;
   if (typeof result !== "object") return onlyWritableField ? result : undefined;
-  if (Object.prototype.hasOwnProperty.call(result, fieldName)) return result[fieldName];
+  if (Object.prototype.hasOwnProperty.call(result, fieldName)) {
+    const direct = result[fieldName];
+    if (
+      direct !== null
+      && typeof direct === "object"
+      && Object.prototype.hasOwnProperty.call(direct, fieldName)
+    ) {
+      const nested = direct[fieldName];
+      if (nested === null || typeof nested !== "object") return nested;
+    }
+    return direct;
+  }
   if (fieldName === "enabled" && typeof result.state === "boolean") return result.state;
   const entries = Object.entries(result).filter(([name]) => name !== "raw");
   if (onlyWritableField && entries.length === 1 && typeof entries[0][1] !== "object") {

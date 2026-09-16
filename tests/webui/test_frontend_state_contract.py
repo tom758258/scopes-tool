@@ -3222,6 +3222,168 @@ def test_demo_workspace_result_uses_demo_presentation() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_trigger_nested_same_name_readback_hydrates_scalar() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    numeric_input_path = STATIC_ROOT / "numeric-input.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+
+        class FakeElement {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.attributes = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.required = false;
+            this.multiple = false;
+            this.tabIndex = 0;
+            this.type = "";
+            this.checked = false;
+            this.textContent = "";
+            this.className = "";
+            this.options = [];
+            this.validity = { badInput: false };
+            if (tag === "select") {
+              const owner = this;
+              Object.defineProperty(this, "value", {
+                get() {
+                  return owner.options.find((option) => option.selected)?.value ?? "";
+                },
+                set(next) {
+                  owner.options.forEach((option) => {
+                    option.selected = option.value === String(next);
+                  });
+                },
+              });
+            } else {
+              this.value = "";
+            }
+            const self = this;
+            this.classList = {
+              add: (...names) => {
+                const set = new Set(self.className.split(/\s+/).filter(Boolean));
+                names.forEach((name) => set.add(name));
+                self.className = [...set].join(" ");
+              },
+              contains: (name) => self.className.split(/\s+/).includes(name),
+            };
+          }
+          append(...nodes) {
+            for (const node of nodes) {
+              this.children.push(node);
+              if (this.tagName === "SELECT" && node.selected !== undefined) this.options.push(node);
+            }
+          }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          setAttribute(name, value) { this.attributes[name] = String(value); }
+          getAttribute(name) { return this.attributes[name]; }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatchEvent(event) { for (const handler of this.listeners[event.type] || []) handler(event); return true; }
+          get selectedOptions() { return this.options.filter((option) => option.selected); }
+          closest() { return null; }
+          setCustomValidity() {}
+          reportValidity() {}
+          checkValidity() { return true; }
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeElement(tag) };
+        globalThis.Option = function Option(text, value) {
+          return { textContent: text, value: String(value), selected: false };
+        };
+        globalThis.Event = function Event(type) { this.type = type; };
+
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.formApi = { CommandForm };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const matches = (element, selector) => {
+          const match = selector.match(/^\[data-([a-zA-Z-]+)(?:="([^"]*)")?\]$/);
+          if (!match || !element.dataset) return false;
+          const property = match[1].replace(/-([a-z])/g, (_all, char) => char.toUpperCase());
+          if (match[2] === undefined) return element.dataset[property] !== undefined;
+          return element.dataset[property] === match[2];
+        };
+        const collect = (node, out = []) => {
+          for (const child of node.children || []) {
+            out.push(child);
+            collect(child, out);
+          }
+          return out;
+        };
+        const catalog = { fieldsFor: (command) => command.fields, optionsFor: (field) => field.options || [] };
+        const setting = (id, fields) => ({
+          id,
+          presentation: { kind: "setting", action_field: "action", apply_value: "set", query_value: "query", query_fields: [] },
+          fields: [{ name: "action", type: "enum", options: ["query", "set"], default: "query" }, ...fields],
+        });
+        const runCase = (fieldName, expected, fields, payload) => {
+          const container = new FakeElement("div");
+          container.querySelectorAll = (selector) => collect(container).filter((node) => matches(node, selector));
+          container.querySelector = (selector) => container.querySelectorAll(selector)[0] || null;
+          const form = new globalThis.formApi.CommandForm(container, catalog);
+          form.render(setting(`test-${fieldName}`, fields), {});
+          form.syncResult({ status: "completed", result: { result: payload } }, false);
+          const input = collect(container).find((node) => node.dataset?.field === fieldName);
+          assert.equal(input.value, expected);
+        };
+
+        const enumField = (name, options) => ({ name, type: "enum", options });
+        // Production Trigger readbacks wrap the canonical field in a
+        // same-name object; the scalar inside must hydrate the control.
+        // The source case renders two writable fields so the fix cannot
+        // rely on the single-writable-field fallback.
+        const cases = [
+          ["source", "external", [
+            enumField("source", ["analog-channel", "external", "line"]),
+            { name: "source_channel", type: "integer" },
+          ], { source: { source: "external", source_channel: null, raw_source: "EXT" } }],
+          ["slope", "negative", [
+            enumField("slope", ["positive", "negative", "either", "alternate"]),
+          ], { slope: { slope: "negative", raw_slope: "NEG" } }],
+          ["units", "amps", [
+            enumField("units", ["volts", "amps"]),
+          ], { units: { units: "amps", raw_units: "AMP" } }],
+          ["coupling", "dc", [
+            enumField("coupling", ["ac", "dc", "lf-reject"]),
+          ], { coupling: { coupling: "dc", raw_value: "DC" } }],
+          ["reject", "off", [
+            enumField("reject", ["off", "lf-reject", "hf-reject"]),
+          ], { reject: { reject: "off", raw_value: "OFF" } }],
+        ];
+        for (const [fieldName, expected, fields, payload] of cases) {
+          runCase(fieldName, expected, fields, payload);
+        }
+
+        // A deeper same-name match must not hydrate the control; only the
+        // single-level wrapper collision is resolved.
+        runCase("foo", "", [enumField("foo", ["a", "b"])], { foo: { bar: { foo: "value" } } });
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(command_form_path), str(numeric_input_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_generic_rerender_rejects_stale_apply_form_updates() -> None:
     run_generic_form_ownership_behavior(
         r'''
