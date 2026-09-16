@@ -69,10 +69,6 @@ RESULT_FIELDS = (
     "data_digital",
     "tv_mode",
     "format",
-    # Additional workspace fields that must have real translations.
-    "file",
-    "filename",
-    "filenames",
 )
 
 
@@ -149,6 +145,9 @@ TRIGGER_RESULT_ENUMS = (
     "edge-burst",
     "tv",
     "pattern",
+    "ascii",
+    "hex",
+    "entered",
     "or",
     "edge",
     "channel",
