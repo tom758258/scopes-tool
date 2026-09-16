@@ -1471,7 +1471,6 @@ COMMANDS = (
         "label": "Demo Signals state",
         "modes": ("live", "simulate"),
         "fields": (),
-        "group": "demo",
         "editor": "demo",
     },
     {
@@ -1483,7 +1482,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "enabled", "type": "boolean", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "demo-output.enabled"},
         ),
-        "group": "demo",
         "editor": "demo",
     },
     {
@@ -1495,7 +1493,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "function", "type": "enum", "options": DEMO_FUNCTIONS, "option_label": "demo-function", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "demo-function.function"},
         ),
-        "group": "demo",
         "editor": "demo",
     },
     {
@@ -1507,7 +1504,6 @@ COMMANDS = (
             {"name": "action", "type": "enum", "options": ("query", "set"), "default": "query"},
             {"name": "degrees", "type": "number", "minimum": 0, "maximum": 360, "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "label_key": "demo-phase.degrees", "help_key": "demo-phase.degrees"},
         ),
-        "group": "demo",
         "editor": "demo",
     },
 )

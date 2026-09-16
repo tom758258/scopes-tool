@@ -209,8 +209,7 @@ Resource scanning uses the internal `list-resources` command. Its jobs remain
 in Result History, but it is not shown in the Command workbench.
 
 The Command Browser keeps Category as its first level. Categories with group
-metadata (Trigger, Search, Serial, Workflow, and
-DEMO) show
+metadata (Trigger, Search, Serial, and Workflow) show
 Category → Group → Commands sections, while categories without group metadata
 keep the plain Category → Commands list. Groups start expanded and can be
 collapsed and reopened; collapse state lives only in the current page session
@@ -385,7 +384,8 @@ only that command's form. The Read generator settings action reads the whole
 generator state through the single aggregate `wgen-query`; output, function,
 frequency, amplitude, offset, and load each keep an independent Apply over
 their existing command, and applying a setting never switches the output on.
-The Read demo settings action reads the whole DEMO state through the single aggregate
+Selecting a DEMO command shows
+only that command's form. The Read demo settings action reads the whole DEMO state through the single aggregate
 `demo-query`; output, function, and phase each keep an independent Apply over
 their existing command, and applying a setting never switches the output on.
 Unsupported commands stay disabled in the Command Browser with the existing

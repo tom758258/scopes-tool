@@ -911,6 +911,9 @@ function renderWorkspace() {
     "wgen-voltage": ["wgen-query", "wgen-voltage"],
     "wgen-offset": ["wgen-query", "wgen-offset"],
     "wgen-load": ["wgen-query", "wgen-load"],
+    "demo-output": ["demo-query", "demo-output"],
+    "demo-function": ["demo-query", "demo-function"],
+    "demo-phase": ["demo-query", "demo-phase"],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
@@ -1034,7 +1037,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo"].includes(editorKind)
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
@@ -1043,7 +1046,7 @@ function syncCommandSelection(draft = null) {
   elements.selectedCommand.title = selectedTitle;
   const selectedDescription = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
@@ -1199,6 +1202,10 @@ function syncWorkspaceHeaderActions(editorKind) {
       editorKind !== "wgen" || selected?.id === "wgen-query";
   }
   if (wgenEditor?.refreshButton) wgenEditor.refreshButton.hidden = editorKind !== "wgen";
+  if (demoEditor?.entry?.button) {
+    demoEditor.entry.button.hidden =
+      editorKind !== "demo" || selected?.id === "demo-query";
+  }
   if (demoEditor?.refreshButton) demoEditor.refreshButton.hidden = editorKind !== "demo";
   if (channelDisplayEditor?.refreshButton) channelDisplayEditor.refreshButton.hidden = editorKind !== "channel-display";
   if (channelDisplayEditor?.runButton) channelDisplayEditor.runButton.hidden = editorKind !== "channel-display";

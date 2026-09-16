@@ -597,10 +597,13 @@ export function renderWorkspaceResult(container, job, context = {}) {
   if (result && typeof result === "object") {
     const { display, context } = structuredResultDisplay(result);
     // Setter results ({frequency: {...}}, ...) carry their own top-level
-    // key; map every WGEN command to the shared WGEN presentation context.
+    // key; map every WGEN command to the shared WGEN presentation context
+    // and every DEMO command to the shared DEMO presentation context.
     const resultContext = context === "wgen" || WGEN_RESULT_COMMANDS.has(job.command)
       ? "wgen"
-      : context;
+      : context === "demo" || DEMO_RESULT_COMMANDS.has(job.command)
+        ? "demo"
+        : context;
     const fields = Object.entries(display).filter(([name, value]) => {
       if (isRawDiagnosticField(name)) return false;
       if (resultContext === "wgen" && name.endsWith("_scpi")) return false;
@@ -957,6 +960,11 @@ const RESULT_FIELD_LABEL_CONTEXTS = {
     offset_volts: "wgen.state.offset",
     load: "wgen.state.load",
   },
+  demo: {
+    enabled: "demo.state.output",
+    function: "demo.state.function",
+    phase_degrees: "demo.state.phase",
+  },
 };
 
 const WGEN_RESULT_COMMANDS = new Set([
@@ -967,6 +975,13 @@ const WGEN_RESULT_COMMANDS = new Set([
   "wgen-voltage",
   "wgen-offset",
   "wgen-load",
+]);
+
+const DEMO_RESULT_COMMANDS = new Set([
+  "demo-query",
+  "demo-output",
+  "demo-function",
+  "demo-phase",
 ]);
 
 function resultFieldLabel(name, resultContext = null) {
@@ -1004,6 +1019,9 @@ const RESULT_ENUM_CONTEXTS = {
   wgen: {
     function: "wgen-function",
     load: "wgen-load",
+  },
+  demo: {
+    function: "demo-function",
   },
   fft: {
     operation_canonical: "fft-operation",

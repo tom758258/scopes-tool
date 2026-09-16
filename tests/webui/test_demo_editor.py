@@ -38,7 +38,7 @@ def test_demo_command_family_routes_to_one_editor() -> None:
     assert [entry["id"] for entry in entries] == DEMO_COMMAND_IDS
     for entry in entries:
         assert entry["category"] == "DEMO", entry["id"]
-        assert entry["group"] == "demo", entry["id"]
+        assert entry.get("group") is None, entry["id"]
         assert entry["editor"] == "demo", entry["id"]
         assert entry.get("browser_hidden") is not True, entry["id"]
         assert entry.get("hidden") is not True, entry["id"]
@@ -234,7 +234,7 @@ def test_demo_localization_keys() -> None:
     subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
     reason="Node.js is required for frontend behavior checks",
 )
-def test_demo_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
+def test_demo_editor_selected_command_presentation(tmp_path: Path) -> None:
     catalog_json = json.dumps(commands_module.command_catalog())
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
@@ -246,6 +246,14 @@ def test_demo_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
     assert 'if (editorKind === "demo") demoEditor?.schedulePresentation();' in app_source
     assert "demoEditor.refreshButton.hidden = editorKind !== \"demo\";" in app_source
     assert "demoEditor?.rerender();" in app_source
+    # DEMO uses the existing command-specific header path, so each selected
+    # DEMO command shows its own label/description.
+    assert '["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo"].includes(editorKind)' in app_source
+    assert "demoEditor?.entry?.button" in app_source
+    assert '"demo-output": ["demo-query", "demo-output"]' in app_source
+    assert '"demo-function": ["demo-query", "demo-function"]' in app_source
+    assert '"demo-phase": ["demo-query", "demo-phase"]' in app_source
     assert 'id="demo-editor"' in index_source
     for key in (
         '"command.demo-query": "Demo Signals state"',
@@ -274,59 +282,52 @@ def test_demo_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
 
         class FakeNode {
           constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; this.disabled = false; }
-          append(...nodes) { this.children.push(...nodes); }
+          append(...nodes) { for (const node of nodes) { node.remove(); node.parent = this; this.children.push(node); } }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           addEventListener(_name, handler) { this.handler = handler; }
           setAttribute() {}
-          remove() {}
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((node) => node !== this); this.parent = null; }
           querySelector() { return null; }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.queueMicrotask = (fn) => { fn(); };
 
         globalThis.translate = (key) => key;
+        let selectedId = "demo-query";
         globalThis.CommandForm = class CommandForm {
           constructor(container, _catalog) { this.container = container; this.command = null; this.disabled = false; }
           render(command) { this.command = command; }
           values() {
-            if (this.command?.id === "demo-output") return { action: "set", enabled: true };
-            if (this.command?.id === "demo-function") return { action: "set", function: "sine" };
-            if (this.command?.id === "demo-phase") return { action: "set", degrees: 90 };
-            return { action: "query" };
+            if (selectedId === "demo-output") return { action: "set", enabled: true };
+            if (selectedId === "demo-function") return { action: "set", function: "sine" };
+            if (selectedId === "demo-phase") return { action: "set", degrees: 90 };
+            return {};
           }
           setDisabled(disabled) { this.disabled = disabled; }
           clearDirty() {}
         };
 
         const calls = [];
-        let aggregate = {
-          enabled: false, output_raw: "0",
-          function: "sine", function_scpi: "SIN", function_raw: "SIN",
-          phase_degrees: 10, phase_raw: "10",
-        };
         const hooks = {
           calls,
           contextKey: () => `live||keysight-dsox4024a`,
           mode: () => "live",
-          selectedCommand: () => ({ id: "demo-output", editor: "demo", group: "demo" }),
+          selectedCommand: () => catalog.commands.find((command) => command.id === selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,
           headerActions: new FakeNode("div"),
           async executeCommand(id, parameters, _options) {
             calls.push([id, parameters]);
             if (id === "demo-query") {
-              return { status: "completed", result: { result: { demo: aggregate } } };
+              return { status: "completed", result: { result: { demo: { enabled: false, function: "sine", phase_degrees: 10 } } } };
             }
             if (id === "demo-output") {
-              aggregate = { ...aggregate, enabled: parameters.enabled };
               return { status: "completed", result: { result: { output: { enabled: parameters.enabled } } } };
             }
             if (id === "demo-function") {
-              aggregate = { ...aggregate, function: parameters.function };
               return { status: "completed", result: { result: { function: { function: parameters.function } } } };
             }
             if (id === "demo-phase") {
-              aggregate = { ...aggregate, phase_degrees: parameters.degrees };
               return { status: "completed", result: { result: { phase: { phase_degrees: parameters.degrees } } } };
             }
             return { status: "completed", result: { result: {} } };
@@ -351,41 +352,69 @@ def test_demo_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
 
         const editor = new globalThis.DemoEditor(new FakeNode("div"), catalog, hooks);
         await editor.refresh(true, true);
-        assert.deepEqual(calls[0], ["demo-query", {}]);
-        assert.equal(editor.entries.length, 4);
-        const panelText = (id) => editor.entryFor(id).panel.children.map(
-          (row) => [row.children[0].textContent, row.children[1].textContent],
-        );
-        assert.deepEqual(panelText("demo-output"), [["demo.state.output", "enum.disable"]]);
-        assert.deepEqual(panelText("demo-function"), [["demo.state.function", "sine"]]);
-        assert.deepEqual(panelText("demo-phase"), [["demo.state.phase", "10"]]);
+        assert.deepEqual(calls, [["demo-query", {}]]);
+        assert.ok(hooks.headerActions.children.includes(editor.refreshButton));
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
+        assert.equal(editor.entry.form.container.className, "command-form");
+        assert.ok(!editor.sectionsHost.children[0].children.includes(editor.entry.button));
+        // Only the selected command is rendered; demo-query has no fields.
+        assert.equal(editor.sectionsHost.children.length, 1);
+        assert.equal(editor.sectionsHost.children[0].hidden, true);
+        assert.equal(editor.entry.form.container.hidden, true);
+        // demo-query reuses the header Read action; no second query button.
+        assert.equal(editor.entry.button.hidden, true);
 
-        const output = editor.entryFor("demo-output");
+        selectedId = "demo-phase";
+        const queryButton = editor.entry.button;
+        const beforePhaseRead = calls.length;
+        await editor.refresh(true, true);
+        assert.deepEqual(calls.slice(beforePhaseRead), [["demo-query", {}]]);
+        // Switching commands rebuilds: one section, no leftover header action.
+        assert.equal(editor.sectionsHost.children.length, 1);
+        assert.equal(hooks.headerActions.children.length, 2);
+        assert.ok(!hooks.headerActions.children.includes(queryButton));
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
+        assert.equal(editor.entry.button.hidden, false);
+        assert.equal(editor.entry.button.textContent, "actions.apply");
+        assert.equal(editor.sectionsHost.children[0].hidden, false);
+
         const beforeSubmit = calls.length;
-        await editor.submit(output);
+        await editor.submit();
         const setterCalls = calls.slice(beforeSubmit);
         assert.equal(setterCalls.length, 1);
-        assert.deepEqual(setterCalls[0], ["demo-output", { action: "set", enabled: true }]);
+        assert.deepEqual(setterCalls[0], ["demo-phase", { action: "set", degrees: 90 }]);
+        assert.ok(!calls.slice(beforeSubmit).some((call) => call[0] === "demo-output"));
         assert.ok(!calls.slice(beforeSubmit).some((call) => call[0] === "demo-function"));
-        const outputPanel = editor.entryFor("demo-output").panel.children.map(
-          (row) => [row.children[0].textContent, row.children[1].textContent],
-        );
-        assert.deepEqual(outputPanel, [["demo.state.output", "enum.enable"]]);
 
-        const beforeRefresh = calls.length;
+        selectedId = "demo-output";
         await editor.refresh(true, true);
-        const refreshCalls = calls.slice(beforeRefresh).filter((call) => call[0] === "demo-query");
-        assert.equal(refreshCalls.length, 1);
+        const beforeOutput = calls.length;
+        await editor.submit();
+        const outputCalls = calls.slice(beforeOutput);
+        assert.equal(outputCalls.length, 1);
+        assert.deepEqual(outputCalls[0], ["demo-output", { action: "set", enabled: true }]);
+        assert.ok(!outputCalls.some((call) => call[0] === "demo-function"));
 
-        const queryEntry = editor.entryFor("demo-query");
-        const beforeQuerySubmit = calls.length;
-        await editor.submit(queryEntry);
-        const querySubmitCalls = calls.slice(beforeQuerySubmit).filter((call) => call[0] === "demo-query");
-        assert.equal(querySubmitCalls.length, 1);
+        selectedId = "demo-function";
+        await editor.refresh(true, true);
+        const beforeFunction = calls.length;
+        await editor.submit();
+        const functionCalls = calls.slice(beforeFunction);
+        assert.equal(functionCalls.length, 1);
+        assert.deepEqual(functionCalls[0], ["demo-function", { action: "set", function: "sine" }]);
+        assert.ok(!functionCalls.some((call) => call[0] === "demo-output"));
 
-        const phase = editor.entryFor("demo-phase");
-        await editor.submit(phase);
-        assert.deepEqual(calls.slice(-1)[0], ["demo-phase", { action: "set", degrees: 90 }]);
+        // Switching back to demo-query hides the section button again.
+        selectedId = "demo-query";
+        await editor.refresh(true, true);
+        assert.equal(editor.entry.button.hidden, true);
+        assert.equal(editor.sectionsHost.children.length, 1);
+
+        const headerCount = hooks.headerActions.children.length;
+        const oldApply = editor.entry.button;
+        editor.rerender();
+        assert.equal(hooks.headerActions.children.length, headerCount);
+        assert.ok(!hooks.headerActions.children.includes(oldApply));
 
         console.log(JSON.stringify({ ok: true }));
         '''

@@ -530,7 +530,7 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
             "\nfunction captureWorkspaceResult(", 1
         )[0]
     )
-    for selected_id in ("reference-waveform", "reference-labels", "cursor-set", "cursor-off", "annotation-set", "annotation-on", "annotation-off", "annotation-clear", "wgen-frequency", "wgen-load"):
+    for selected_id in ("reference-waveform", "reference-labels", "cursor-set", "cursor-off", "annotation-set", "annotation-on", "annotation-off", "annotation-clear", "wgen-frequency", "wgen-load", "demo-function"):
         assert f'"{selected_id}"' in render_source
     script = textwrap.dedent(
         r'''
@@ -623,6 +623,8 @@ def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Pa
         show("annotation-clear", "annotation-query", false);
         show("annotation-clear", "annotation-clear", false);
         show("wgen-frequency", "wgen-query", false);
+        show("demo-function", "demo-query", false);
+        show("demo-function", "demo-function", false);
 
         // A newer aggregate refresh wins over an older setter result.
         selected = { id: "wgen-load", presentation_only: false };

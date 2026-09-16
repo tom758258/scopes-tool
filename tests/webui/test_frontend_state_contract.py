@@ -5055,7 +5055,7 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         const cursorEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const annotationEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const wgenEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
-        const demoEditor = {{}};
+        const demoEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const channelDisplayEditor = {{}};
         const channelScaleRangeEditor = {{}};
         const timebasePositionEditor = {{ readButton: {{}}, applyButton: {{}} }};
@@ -5128,6 +5128,16 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         syncWorkspaceHeaderActions("wgen");
         assert.equal(wgenEditor.refreshButton.hidden, false);
         assert.equal(wgenEditor.entry.button.hidden, false);
+
+        selectedId = "demo-query";
+        syncWorkspaceHeaderActions("demo");
+        assert.equal(demoEditor.refreshButton.hidden, false);
+        assert.equal(demoEditor.entry.button.hidden, true);
+
+        selectedId = "demo-function";
+        syncWorkspaceHeaderActions("demo");
+        assert.equal(demoEditor.refreshButton.hidden, false);
+        assert.equal(demoEditor.entry.button.hidden, false);
 
         syncWorkspaceHeaderActions("serial");
         assert.equal(annotationEditor.refreshButton.hidden, true);

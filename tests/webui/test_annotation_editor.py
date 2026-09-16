@@ -367,8 +367,8 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     assert 'annotationEditor.refreshButton.hidden = editorKind !== "annotation";' in app_source
     assert "annotationEditor?.rerender();" in app_source
     # annotation-query/set/on/off/clear shows its own label/description.
-    assert '["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen"].includes(editorKind)' in app_source
-    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo"].includes(editorKind)' in app_source
     assert '"annotation-set": ["annotation-query", "annotation-set"]' in app_source
     assert '"annotation-clear": ["annotation-query", "annotation-clear"]' in app_source
     assert 'id="annotation-editor"' in index_source
