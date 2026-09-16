@@ -134,7 +134,7 @@ export class CursorEditor {
     }
     const actionButton = document.createElement("button");
     actionButton.type = "button";
-    actionButton.className = "secondary trigger-editor-action";
+    actionButton.className = `${command.id === "cursor-set" ? "primary" : "secondary"} trigger-editor-action`;
     actionButton.textContent = translate(
       command.id === "cursor-set" ? "actions.apply" : `actions.${command.presentation?.action || "run"}`,
     );

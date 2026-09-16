@@ -5113,8 +5113,12 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         f'''
         import assert from "node:assert/strict";
         let selectedId = "setup-save";
+        const presentations = {{
+          "external-trigger-settings": {{ kind: "command", action: "read" }},
+          "trigger-edge-slope": {{ kind: "setting", action: "apply" }},
+        }};
         const catalog = {{
-          selected: () => ({{ id: selectedId }}),
+          selected: () => ({{ id: selectedId, presentation: presentations[selectedId] }}),
         }};
         const elements = {{
           refresh: {{ hidden: false }},
@@ -5135,7 +5139,7 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
           else if (id === "save-image") saveExportEditor.mode = "image";
         }};
         const serialEditor = {{}};
-        const triggerEditor = {{}};
+        const triggerEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const searchEditor = {{}};
         const segmentedEditor = {{}};
         const workflowEditor = {{}};
@@ -5226,6 +5230,20 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         syncWorkspaceHeaderActions("demo");
         assert.equal(demoEditor.refreshButton.hidden, false);
         assert.equal(demoEditor.entry.button.hidden, false);
+
+        selectedId = "external-trigger-settings";
+        syncWorkspaceHeaderActions("trigger");
+        assert.equal(triggerEditor.refreshButton.hidden, false);
+        assert.equal(triggerEditor.entry.button.hidden, true);
+
+        selectedId = "trigger-edge-slope";
+        syncWorkspaceHeaderActions("trigger");
+        assert.equal(triggerEditor.refreshButton.hidden, false);
+        assert.equal(triggerEditor.entry.button.hidden, false);
+
+        syncWorkspaceHeaderActions("serial");
+        assert.equal(triggerEditor.refreshButton.hidden, true);
+        assert.equal(triggerEditor.entry.button.hidden, true);
 
         syncWorkspaceHeaderActions("serial");
         assert.equal(annotationEditor.refreshButton.hidden, true);

@@ -18,6 +18,8 @@ export class TriggerEditor {
 
   buildDom() {
     this.refreshButton?.remove?.();
+    this.entry?.button.remove?.();
+    this.entry = null;
     this.container.replaceChildren();
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
@@ -105,6 +107,7 @@ export class TriggerEditor {
 
   clearSections() {
     this.renderedKey = null;
+    this.entry?.button.remove?.();
     this.entry = null;
     this.sectionsHost.replaceChildren();
     this.refreshButton.disabled = true;
@@ -114,6 +117,7 @@ export class TriggerEditor {
     this.epoch += 1;
     const epoch = this.epoch;
     this.renderedKey = key;
+    this.entry?.button.remove?.();
     this.entry = null;
     this.sectionsHost.replaceChildren();
     const command = this.selectedDefinition();
@@ -128,16 +132,22 @@ export class TriggerEditor {
     formContainer.className = "command-form";
     const actionButton = document.createElement("button");
     actionButton.type = "button";
-    actionButton.className = "secondary trigger-editor-action";
     const kind = command.presentation?.kind || "command";
     const action = command.presentation?.action || "run";
+    actionButton.className = `${kind === "setting" ? "primary" : "secondary"} trigger-editor-action`;
     actionButton.textContent = translate(
       kind === "setting" ? "actions.apply" : `actions.${action}`,
     );
     // Informational read commands reuse the header Read action; a second
-    // inline Read button would duplicate it.
+    // inline Read button would duplicate it. The button is recreated on
+    // every rebuild, so hidden state always follows the selection.
     actionButton.hidden = kind === "command" && action === "read";
-    section.append(formContainer, actionButton);
+    section.append(formContainer);
+    if (this.hooks.headerActions) {
+      this.hooks.headerActions.append(actionButton);
+    } else {
+      section.append(actionButton);
+    }
     const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
     section.hidden = fields.length === 0;
     formContainer.hidden = fields.length === 0;
@@ -199,7 +209,6 @@ export class TriggerEditor {
       ) {
         entry.form.clearDirty();
         entry.form.syncResult(job, false);
-        this.pendingRefresh = true;
       }
     } finally {
       this.setBusy(false);

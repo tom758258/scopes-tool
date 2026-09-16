@@ -1207,6 +1207,13 @@ function syncWorkspaceHeaderActions(editorKind) {
       editorKind !== "demo" || selected?.id === "demo-query";
   }
   if (demoEditor?.refreshButton) demoEditor.refreshButton.hidden = editorKind !== "demo";
+  if (triggerEditor?.entry?.button) {
+    const triggerKind = selected?.presentation?.kind || "command";
+    const triggerAction = selected?.presentation?.action || "run";
+    triggerEditor.entry.button.hidden =
+      editorKind !== "trigger"
+      || (triggerKind === "command" && triggerAction === "read");
+  }
   if (channelDisplayEditor?.refreshButton) channelDisplayEditor.refreshButton.hidden = editorKind !== "channel-display";
   if (channelDisplayEditor?.runButton) channelDisplayEditor.runButton.hidden = editorKind !== "channel-display";
   if (timebasePositionEditor?.readButton) timebasePositionEditor.readButton.hidden = editorKind !== "timebase-position";

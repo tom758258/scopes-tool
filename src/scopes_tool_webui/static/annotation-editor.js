@@ -134,7 +134,7 @@ export class AnnotationEditor {
     formContainer.className = "command-form";
     const actionButton = document.createElement("button");
     actionButton.type = "button";
-    actionButton.className = "secondary trigger-editor-action";
+    actionButton.className = `${command.id === "annotation-set" ? "primary" : "secondary"} trigger-editor-action`;
     if (command.id === "annotation-set") {
       actionButton.textContent = translate("actions.apply");
     } else if (command.id === "annotation-on" || command.id === "annotation-off") {

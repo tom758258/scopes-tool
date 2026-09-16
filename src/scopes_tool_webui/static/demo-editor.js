@@ -132,9 +132,9 @@ export class DemoEditor {
     formContainer.className = "command-form";
     const actionButton = document.createElement("button");
     actionButton.type = "button";
-    actionButton.className = "secondary trigger-editor-action";
     const kind = command.presentation?.kind || "command";
     const action = command.presentation?.action || "run";
+    actionButton.className = `${kind === "setting" ? "primary" : "secondary"} trigger-editor-action`;
     actionButton.textContent = translate(
       kind === "setting" ? "actions.apply" : `actions.${action}`,
     );

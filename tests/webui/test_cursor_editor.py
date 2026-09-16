@@ -433,6 +433,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.deepEqual(calls.slice(beforeSetRead), [["cursor-query", {}]]);
         assert.equal(editor.entry.button.hidden, false);
         assert.equal(editor.entry.button.textContent, "actions.apply");
+        assert.ok(editor.entry.button.className.split(" ").includes("primary"));
         assert.equal(editor.entry.form.container.hidden, false);
         const setSection = editor.sectionsHost.children[0];
         assert.equal(setSection.hidden, false);

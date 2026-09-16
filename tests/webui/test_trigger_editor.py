@@ -172,7 +172,8 @@ TRIGGER_EDITOR_HARNESS = r'''
           addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
           dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
           replaceChildren(...nodes) { this.children = [...nodes]; }
-          append(...nodes) { this.children.push(...nodes); }
+          append(...nodes) { for (const node of nodes) { node.remove(); node.parent = this; this.children.push(node); } }
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((node) => node !== this); this.parent = null; }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.translate = (key) => key;
@@ -249,6 +250,7 @@ TRIGGER_EDITOR_HARNESS = r'''
         };
         const submitted = [];
         const hooks = {
+          headerActions: new FakeNode("div"),
           executeCommand: async (command, parameters, options) => {
             const job = {
               job_id: `${command}-${submitted.length}`,
@@ -278,25 +280,27 @@ def test_trigger_actions_follow_global_execution_admission_and_recover() -> None
         const entry = editor.entry;
         assert.equal(entry.id, "trigger-edge-slope");
         assert.equal(entry.form.container.className, "command-form");
-        assert.ok(editor.sectionsHost.children[0].children.includes(entry.button));
+        assert.ok(hooks.headerActions.children.includes(editor.refreshButton));
+        assert.ok(hooks.headerActions.children.includes(entry.button));
+        assert.ok(!editor.sectionsHost.children[0].children.includes(entry.button));
         assert.equal(editor.sectionsHost.children.length, 1);
 
         env.executionBusy = true;
         editor.applyBusyState();
         assert.equal(editor.refreshButton.disabled, true);
         assert.equal(entry.button.disabled, true);
-        await editor.submit(entry);
+        await editor.submit();
         assert.deepEqual(submitted, []);
 
         env.executionBusy = false;
         editor.applyBusyState();
         assert.equal(editor.refreshButton.disabled, false);
         assert.equal(entry.button.disabled, false);
-        await editor.submit(entry);
+        await editor.submit();
         await settle();
         assert.equal(submitted[0].command, entry.id);
         assert.equal(submitted[0].intent, "apply");
-        assert.equal(submitted.slice(1).some((item) => item.intent === "readback"), true);
+        assert.equal(submitted.length, 1);
         ''')
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(TRIGGER_EDITOR_SOURCE)],
@@ -318,6 +322,8 @@ def test_trigger_editor_renders_only_selected_command_and_scopes_readback_to_it(
 
         assert.equal(editor.sectionsHost.children.length, 1);
         assert.equal(editor.entry.id, "trigger-edge-slope");
+        assert.ok(editor.entry.button.className.split(" ").includes("primary"));
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
         assert.deepEqual(submitted, []);
 
         // Explicit Refresh reads only the selected command.
@@ -352,6 +358,8 @@ def test_trigger_editor_renders_only_selected_command_and_scopes_readback_to_it(
         assert.equal(editor.sectionsHost.children.length, 1);
         assert.equal(editor.entry.id, "trigger-edge-coupling");
         assert.equal(editor.entry.form.renderedCommand, commands.find((c) => c.id === "trigger-edge-coupling"));
+        assert.equal(hooks.headerActions.children.length, 2);
+        assert.ok(hooks.headerActions.children.includes(editor.entry.button));
         assert.deepEqual(submitted, []);
         '''
     )
@@ -381,30 +389,25 @@ def test_trigger_editor_applies_each_command_individually() -> None:
         await settle();
         assert.deepEqual(submitted, []);
 
-        // Apply submits exactly this one existing command with action=set,
-        // then a forced selected-command readback reconciles it.
+        // Apply submits exactly this one existing command with action=set;
+        // the setter readback reconciles the form without a second query.
         submitted.length = 0;
         runtEntry.form.valuesResult = { action: "set", channel: 1 };
         runtEntry.button.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
           "trigger-runt",
-          "trigger-runt",
         ]);
         assert.equal(submitted[0].intent, "apply");
         assert.deepEqual(submitted[0].parameters, { action: "set", channel: 1 });
-        assert.equal(submitted[1].intent, "readback");
         assert.equal(runtEntry.form.clearedDirty, 1);
-        assert.deepEqual(runtEntry.form.syncCalls.at(-2), [submitted[0].job.job_id, false]);
-        assert.deepEqual(runtEntry.form.syncCalls.at(-1), [submitted[1].job.job_id, true]);
+        assert.deepEqual(runtEntry.form.syncCalls.at(-1), [submitted[0].job.job_id, false]);
 
-        // No aggregate transaction: a second Apply still runs only this command
-        // (plus its follow-up selected-command readback).
+        // No aggregate transaction: a second Apply still runs only this command.
         submitted.length = 0;
         runtEntry.button.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
-          "trigger-runt",
           "trigger-runt",
         ]);
         assert.equal(submitted[0].intent, "apply");
@@ -463,6 +466,8 @@ def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> N
         assert.equal(readEntry.button.textContent, "actions.read");
         assert.equal(readEntry.button.hidden, true);
         assert.equal(editor.sectionsHost.children.length, 1);
+        assert.equal(hooks.headerActions.children.length, 2);
+        assert.ok(hooks.headerActions.children.includes(readEntry.button));
         assert.deepEqual(submitted.map((item) => [item.command, item.intent]), [
           ["external-trigger-settings", undefined],
         ]);
@@ -484,6 +489,7 @@ def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> N
         assert.equal(editor.entry.id, "trigger-runt");
         assert.equal(editor.entry.button.hidden, false);
         assert.equal(editor.entry.button.textContent, "actions.apply");
+        assert.ok(editor.entry.button.className.split(" ").includes("primary"));
 
         // Runtime unavailability keeps the editor visible and disabled without I/O.
         submitted.length = 0;
@@ -707,7 +713,7 @@ def test_trigger_editor_same_state_notifications_do_not_restart_group_readback()
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_trigger_editor_apply_reads_back_selected_command() -> None:
+def test_trigger_editor_apply_uses_setter_readback_without_extra_query() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         catalog.commands = [
@@ -744,16 +750,13 @@ def test_trigger_editor_apply_reads_back_selected_command() -> None:
         releaseApply();
         await settle();
 
-        // Exactly one write, then a forced selected-command readback.
+        // Exactly one write; the setter readback reconciles the form with
+        // no extra query.
         assert.equal(editor.busy, false);
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent}`), [
           "trigger-edge-source:apply",
-          "trigger-edge-source:readback",
         ]);
-        assert.deepEqual(
-          sourceEntry.form.syncCalls.slice(-2).map((call) => call[1]),
-          [false, true],
-        );
+        assert.deepEqual(sourceEntry.form.syncCalls.at(-1), ["trigger-edge-source-0", false]);
         '''
     )
     completed = subprocess.run(
@@ -763,3 +766,25 @@ def test_trigger_editor_apply_reads_back_selected_command() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_trigger_setting_fields_help_descriptions_and_enum_labels_are_localized() -> None:
+    trigger_commands = [entry for entry in COMMANDS if entry.get("editor") == "trigger"]
+
+    assert len(trigger_commands) == len(EXPECTED_TRIGGER_GROUPS)
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+    for entry in trigger_commands:
+        assert entry.get("browser_hidden") is not True, entry["id"]
+        assert f'"description.{entry["id"]}":' in english, entry["id"]
+        assert f'"description.{entry["id"]}":' in chinese, entry["id"]
+        for field in entry["fields"]:
+            if field["name"] == "action":
+                continue
+            help_key = field.get("help_key")
+            assert help_key, (entry["id"], field["name"])
+            assert f'"help.{help_key}":' in english, (entry["id"], field["name"])
+            assert f'"help.{help_key}":' in chinese, (entry["id"], field["name"])
+    for key in ("enum.off", "enum.volts", "enum.amps"):
+        assert f'"{key}":' in english, key
+        assert f'"{key}":' in chinese, key

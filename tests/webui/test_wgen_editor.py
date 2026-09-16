@@ -357,6 +357,7 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
         assert.ok(hooks.headerActions.children.includes(editor.entry.button));
         assert.equal(editor.entry.button.hidden, false);
         assert.equal(editor.entry.button.textContent, "actions.apply");
+        assert.ok(editor.entry.button.className.split(" ").includes("primary"));
         assert.equal(editor.sectionsHost.children[0].hidden, false);
 
         const beforeSubmit = calls.length;
