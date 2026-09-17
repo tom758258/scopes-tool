@@ -161,7 +161,10 @@ The Command workbench exposes:
   or applied through the editor; `setup-recall` stays hidden from the Command
   Browser and is not exposed through the Save Setup UI
 - System: a Diagnostics workspace combining the `doctor` operation, which does
-  not change scope configuration but performs one final system-error check,
+  not change scope configuration, checks for an existing instrument error
+  before taking the snapshot, proceeds with the snapshot only when no
+  pre-existing error is found, and still performs a final system-error check
+  afterward,
   and the full `smoke` workflow, plus `check-error`, `system-status-byte`,
   `system-operation-status`,
   `system-clear-status`, `system-opc`, `system-standard-event`,
@@ -497,7 +500,10 @@ terminal job result; when saving is enabled, existing workflow files retain
 their persistence role.
 
 Diagnostics uses the existing Doctor and Smoke Core operations. Doctor does
-not change scope configuration and performs one final system-error check.
+not change scope configuration. It checks for an existing instrument error
+before taking the snapshot, proceeds with the snapshot only when no
+pre-existing error is found, and still performs a final system-error check
+afterward.
 Smoke drains stale system errors before validation and always runs its doctor
 snapshot, CH1 measurements, 1000-point BYTE waveform transfer, screenshot
 transfer, and final system error check.
