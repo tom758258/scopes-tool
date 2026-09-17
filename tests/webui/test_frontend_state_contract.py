@@ -3581,7 +3581,7 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 19
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 20
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
     styles = read_static("styles.css")
@@ -5312,14 +5312,16 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         const demoEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const channelDisplayEditor = {{}};
         const channelScaleRangeEditor = {{}};
+        const externalTriggerEditor = {{ readButton: {{}}, applyButton: {{}} }};
         const timebasePositionEditor = {{ readButton: {{}}, applyButton: {{}} }};
         const channelOffsetEditor = {{ readButton: {{}}, applyButton: {{}} }};
         const translate = (key) => key;
         {sync_header}
 
-        const actionPairs = [
-          ["timebase-position", timebasePositionEditor.readButton, timebasePositionEditor.applyButton],
-          ["channel-offset", channelOffsetEditor.readButton, channelOffsetEditor.applyButton],
+            const actionPairs = [
+              ["timebase-position", timebasePositionEditor.readButton, timebasePositionEditor.applyButton],
+              ["channel-offset", channelOffsetEditor.readButton, channelOffsetEditor.applyButton],
+              ["external-trigger", externalTriggerEditor.readButton, externalTriggerEditor.applyButton],
           ["cursor", cursorEditor.refreshButton, cursorEditor.entry.button],
           ["annotation", annotationEditor.refreshButton, annotationEditor.entry.button],
         ];

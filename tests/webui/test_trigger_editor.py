@@ -68,7 +68,10 @@ def test_trigger_commands_keep_groups_and_carry_trigger_editor_metadata() -> Non
 
     assert {entry["id"] for entry in trigger_commands} == set(EXPECTED_TRIGGER_GROUPS)
     for entry in trigger_commands:
-        assert entry.get("editor") == "trigger", entry["id"]
+        if entry["id"] in {"external-trigger-range", "trigger-edge-external-level"}:
+            assert entry.get("editor") == "external-trigger", entry["id"]
+        else:
+            assert entry.get("editor") == "trigger", entry["id"]
         assert entry["group"] == EXPECTED_TRIGGER_GROUPS[entry["id"]], entry["id"]
     assert [entry["id"] for entry in COMMANDS if entry.get("editor") == "serial"] == [
         "serial-mode",
@@ -309,151 +312,272 @@ TRIGGER_EDITOR_HARNESS = r'''
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_external_trigger_editor_routing() -> None:
+    app_source = read_static("app.js")
+    html = read_static("index.html")
+
+    assert 'import { ExternalTriggerEditor } from "/static/external-trigger-editor.js";' in app_source
+    assert 'id="external-trigger-editor" class="external-trigger-editor trigger-editor" hidden' in html
+    assert (
+        "externalTriggerEditor = new ExternalTriggerEditor(elements.externalTriggerEditor, catalog, {"
+        in app_source
+    )
+    routing_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
+    assert '"external-trigger": () => externalTriggerEditor,' in routing_map
+    assert 'elements.externalTriggerEditor.hidden = editorKind !== "external-trigger";' in app_source
+    assert 'if (editorKind === "external-trigger") externalTriggerEditor?.schedulePresentation();' in app_source
+    assert 'externalTriggerEditor.readButton.hidden = editorKind !== "external-trigger";' in app_source
+    assert 'externalTriggerEditor.applyButton.hidden = editorKind !== "external-trigger";' in app_source
+
+
 def test_external_trigger_level_uses_current_range() -> None:
-    script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
+    script = textwrap.dedent(
         r'''
-        FakeNode.prototype.querySelectorAll = function (selector) {
-          const nodes = this.children.flatMap((child) => [child, ...child.querySelectorAll("*")]);
-          if (selector === "*") return nodes;
-          if (selector === "[data-field]") return nodes.filter((node) => node.dataset.field);
-          const match = /^\[data-field="([^"]+)"\]$/.exec(selector);
-          return match ? nodes.filter((node) => node.dataset.field === match[1]) : [];
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.className = "";
+            this.textContent = "";
+            this.type = "";
+            this.value = "";
+            this.inputMode = "";
+            this.style = {};
+            this.attributes = {};
+            this.customValidity = "";
+            this.reported = [];
+            const classList = { toggled: {} };
+            classList.toggle = (name, force) => { classList.toggled[name] = force; };
+            this.classList = classList;
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) {
+            for (const node of nodes) {
+              node.remove();
+              node.parent = this;
+              this.children.push(node);
+            }
+          }
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
+          setAttribute(k, v) { this.attributes[k] = String(v); }
+          setCustomValidity(value) { this.customValidity = String(value); }
+          reportValidity() { this.reported.push(this.customValidity); }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        // Template shapes mirror the composition contract only, not locale prose.
+        const TEMPLATES = {
+          "external-trigger.editor.modeRange": "Range",
+          "external-trigger.editor.modeLevel": "Level",
+          "external-trigger.editor.readFirstHelp": "READFIRST",
+          "external-trigger.editor.levelDescription": "LEVELDESC",
+          "external-trigger.editor.levelOutOfRange": "OUT {{min}} {{max}}",
+          "field.channel-range.value": "Range value",
+          "field.level": "Level",
+          "help.external-trigger-range.range_volts": "RANGEHELP",
+          "help.trigger-edge-external-level.level": "LEVELHELP",
+          "actions.readSettings": "Read",
+          "actions.apply": "Apply",
+          "system.readFailed": "READFAILED",
         };
-        FakeNode.prototype.querySelector = function (selector) {
-          return this.querySelectorAll(selector)[0] || null;
+        globalThis.translate = (key, values = {}) => {
+          let text = TEMPLATES[key] || key;
+          for (const [name, value] of Object.entries(values)) {
+            text = text.replaceAll(`{{${name}}}`, String(value));
+          }
+          return text;
         };
-        FakeNode.prototype.closest = () => null;
-        FakeNode.prototype.classList = { add() {} };
+
         const strip = (filename) => fs.readFileSync(filename, "utf8")
           .replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "");
-        const formSource = strip(process.argv[2]) + strip(process.argv[3])
-          + "\nglobalThis.CommandForm = CommandForm;";
-        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(formSource)}`);
-        catalog.commands = __CATALOG__;
-        catalog.optionsFor = (field) => field.options || [];
-        env.selectedId = "trigger-edge-external-level";
-        let range = 1.6;
-        let levelStatus = "completed";
+        const editorSource = strip(process.argv[1])
+          + "\nglobalThis.ExternalTriggerEditor = ExternalTriggerEditor;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(editorSource)}`);
+
+        const commands = __CATALOG__;
+        const catalog = { commands, supported: () => true };
+        const env = { selectedId: "external-trigger-range", contextKey: "ctx" };
+        const calls = [];
+        let range = 8;
+        let levelVal = 0.5;
         let rangeStatus = "completed";
-        let releaseRange = null;
+        let levelStatus = "completed";
         let deferRange = false;
-        let editor;
-        hooks.executeCommand = async (command, parameters, options) => {
-          submitted.push({ command, parameters, intent: options?.intent });
-          if (command === "external-trigger-range" && parameters.action === "query") {
-            const input = editor.entry.form.container.querySelector('[data-field="level"]');
-            assert.equal(input.min, "");
-            assert.equal(input.max, "");
-            assert.equal(editor.busy, true);
-            if (deferRange) await new Promise((resolve) => { releaseRange = resolve; });
-            return { status: rangeStatus, result: {
-              exit_code: 0,
-              result: { range: { range_volts: range, raw_range: String(range) } },
-              artifacts: [],
-            } };
-          }
-          if (parameters.action === "query") {
-            const input = editor.entry.form.container.querySelector('[data-field="level"]');
-            assert.equal(input.min, "");
-            assert.equal(input.max, "");
-          }
-          return { status: parameters.action === "query" ? levelStatus : "completed", result: { result: {
-            level_volts: parameters.action === "set" ? parameters.level : 0.5,
-          } } };
+        let releaseRange = null;
+        const hooks = {
+          headerActions: new FakeNode("div"),
+          contextKey: () => env.contextKey,
+          mode: () => "live",
+          selectedCommand: () => commands.find((command) => command.id === env.selectedId),
+          isAvailable: () => true,
+          isExecutionBusy: () => false,
+          executeCommand: async (id, parameters, options) => {
+            calls.push([id, parameters, options?.intent]);
+            if (id === "external-trigger-range" && parameters.action === "query") {
+              if (deferRange) await new Promise((resolve) => { releaseRange = resolve; });
+              if (rangeStatus !== "completed") return { status: rangeStatus, result: { result: {} } };
+              return { status: "completed", result: { result: { range: { range_volts: range } } } };
+            }
+            if (id === "external-trigger-range") {
+              range = parameters.range_volts;
+              return { status: "completed", result: { result: { range: { range_volts: range } } } };
+            }
+            if (id === "trigger-edge-external-level" && parameters.action === "query") {
+              if (levelStatus !== "completed") return { status: levelStatus, result: { result: {} } };
+              return { status: "completed", result: { result: { level_volts: levelVal } } };
+            }
+            levelVal = parameters.level;
+            return { status: "completed", result: { result: { level_volts: levelVal } } };
+          },
         };
-        editor = buildEditor();
-        await editor.refresh(true, true);
-        const input = editor.entry.form.container.querySelector('[data-field="level"]');
-        assert.equal(input.type, "number");
-        assert.equal(input.value, "0.5");
-        assert.equal(input.min, "-1.6");
-        assert.equal(input.max, "1.6");
-        assert.deepEqual(submitted.map(({ command, parameters, intent }) => [command, parameters, intent]), [
+
+        const settle = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+        const findAll = (node, pred, out = []) => {
+          for (const child of node.children || []) {
+            if (pred(child)) out.push(child);
+            findAll(child, pred, out);
+          }
+          return out;
+        };
+
+        const editor = new globalThis.ExternalTriggerEditor(new FakeNode("div"), catalog, hooks);
+        await settle();
+        const rangeInput = () => findAll(editor.container, (node) => node.dataset.field === "range_volts")[0];
+        const levelInput = () => findAll(editor.container, (node) => node.dataset.field === "level")[0];
+        const modeButton = (mode) => findAll(
+          editor.container, (node) => node.tagName === "BUTTON" && node.dataset.mode === mode,
+        )[0];
+
+        // 1. The initial mode follows the selected command in both directions.
+        assert.equal(editor.mode, "range");
+        assert.equal(editor.rangeSection.hidden, false);
+        assert.equal(editor.levelSection.hidden, true);
+        assert.equal(modeButton("range").classList.toggled.selected, true);
+        env.selectedId = "trigger-edge-external-level";
+        editor.present();
+        assert.equal(editor.mode, "level");
+        assert.equal(editor.rangeSection.hidden, true);
+        assert.equal(editor.levelSection.hidden, false);
+        env.selectedId = "external-trigger-range";
+        editor.present();
+        assert.equal(editor.mode, "range");
+
+        // The header owns a single Read / Apply pair.
+        assert.deepEqual(hooks.headerActions.children, [editor.readButton, editor.applyButton]);
+
+        // 2. Range mode reads and applies; a successful apply clears the level side.
+        await editor.readCurrent();
+        assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
+        assert.equal(rangeInput().value, "8");
+        assert.equal(editor.rangeRead, 8);
+
+        env.selectedId = "trigger-edge-external-level";
+        editor.present();
+        await editor.readCurrent();
+        assert.deepEqual(calls.slice(1), [
           ["trigger-edge-external-level", { action: "query" }, "readback"],
           ["external-trigger-range", { action: "query" }, "readback"],
         ]);
-        for (const level of [1.0, -1.0, 1.7, -1.7]) {
-          submitted.length = 0;
-          globalThis.__reportedValidity.length = 0;
-          input.value = String(level);
-          input.dispatch("input");
-          await editor.submit();
-          const allowed = Math.abs(level) <= 1.6;
-          assert.deepEqual(submitted.map((item) => item.command), allowed
-            ? ["external-trigger-range", "trigger-edge-external-level"]
-            : ["external-trigger-range"]);
-          if (allowed) {
-            assert.deepEqual(submitted[1].parameters, { action: "set", level });
-            assert.equal(submitted[1].intent, "apply");
-          } else {
-            assert.equal(globalThis.__reportedValidity.length, 1);
-            assert.equal(input.dataset.dirty, "true");
-          }
+        assert.equal(levelInput().value, "0.5");
+        assert.equal(editor.levelRead, 0.5);
+        modeButton("range").dispatch("click");
+        assert.equal(editor.mode, "range");
+        assert.equal(levelInput().value, "0.5");
+        rangeInput().value = "1.6";
+        calls.length = 0;
+        await editor.applyCurrent();
+        assert.deepEqual(calls, [
+          ["external-trigger-range", { action: "set", range_volts: 1.6 }, "apply"],
+        ]);
+        assert.equal(rangeInput().value, "1.6");
+        assert.equal(editor.rangeValue, 1.6);
+        assert.equal(levelInput().value, "");
+        assert.equal(editor.levelRead, null);
+
+        // 3. Level entries are validated against the current range.
+        modeButton("level").dispatch("click");
+        assert.equal(editor.mode, "level");
+        await editor.readCurrent();
+        assert.equal(levelInput().value, "0.5");
+        for (const bad of ["2", "-2"]) {
+          calls.length = 0;
+          levelInput().value = bad;
+          await editor.applyCurrent();
+          assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
+          assert.equal(levelInput().customValidity, "OUT -1.6 1.6");
           assert.equal(editor.busy, false);
-          assert.equal(input.disabled, false);
         }
-        submitted.length = 0;
-        input.value = "2.0";
-        input.dispatch("input");
-        assert.equal(input.checkValidity(), false);
-        range = 8;
-        await editor.submit();
-        assert.equal(input.min, "-8");
-        assert.equal(input.max, "8");
-        assert.deepEqual(submitted[1].parameters, { action: "set", level: 2 });
-        assert.equal(input.value, "2");
-        assert.equal(input.dataset.dirty, undefined);
+        for (const good of ["1", "-1"]) {
+          calls.length = 0;
+          levelInput().value = good;
+          await editor.applyCurrent();
+          assert.deepEqual(calls, [
+            ["external-trigger-range", { action: "query" }, "readback"],
+            ["trigger-edge-external-level", { action: "set", level: Number(good) }, "apply"],
+          ]);
+          assert.equal(levelInput().value, good);
+          assert.equal(editor.levelRead, Number(good));
+        }
 
-        submitted.length = 0;
-        levelStatus = "failed";
-        await editor.refresh(true, true);
-        assert.deepEqual(submitted.map((item) => [item.command, item.parameters.action]), [
-          ["trigger-edge-external-level", "query"],
-        ]);
-        assert.equal(input.min, "");
-        assert.equal(input.max, "");
-        assert.equal(input.value, "2");
-
-        levelStatus = "completed";
+        // 4. A failed range blocks the level set without guessing.
         rangeStatus = "failed";
-        submitted.length = 0;
-        await editor.refresh(true, true);
-        assert.deepEqual(submitted.map((item) => item.command), [
-          "trigger-edge-external-level", "external-trigger-range",
-        ]);
-        assert.equal(input.min, "");
-        assert.equal(input.max, "");
-        submitted.length = 0;
-        await editor.submit();
-        assert.deepEqual(submitted.map((item) => item.command), ["external-trigger-range"]);
-        assert.equal(input.customValidity, "system.readFailed");
-
+        calls.length = 0;
+        levelInput().value = "0.5";
+        await editor.applyCurrent();
+        assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
+        assert.equal(levelInput().customValidity, "READFAILED");
+        assert.equal(editor.busy, false);
         rangeStatus = "completed";
+
+        // 5. A failed level query drops trust but keeps the draft.
+        levelStatus = "failed";
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.deepEqual(calls, [["trigger-edge-external-level", { action: "query" }, "readback"]]);
+        assert.equal(editor.levelRead, null);
+        assert.equal(levelInput().value, "0.5");
+        levelStatus = "completed";
+
+        // 6. A stale range response never leads to a set.
         deferRange = true;
-        submitted.length = 0;
-        const pending = editor.submit();
+        calls.length = 0;
+        const pending = editor.applyCurrent();
         await settle();
         env.contextKey = "new-context";
         releaseRange();
         await pending;
-        assert.deepEqual(submitted.map((item) => item.command), ["external-trigger-range"]);
-        assert.equal(input.min, "");
-        assert.equal(input.max, "");
+        assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
         assert.equal(editor.busy, false);
+
+        console.log(JSON.stringify({ ok: true }));
         '''
     ).replace("__CATALOG__", json.dumps([
-        entry for entry in command_catalog() if entry["id"] == "trigger-edge-external-level"
+        entry for entry in command_catalog() if entry["id"] in {
+            "external-trigger-range",
+            "trigger-edge-external-level",
+        }
     ]))
     completed = subprocess.run(
         [
-            "node", "--input-type=module", "--eval", script, str(TRIGGER_EDITOR_SOURCE),
-            str(STATIC_ROOT / "command-form.js"), str(STATIC_ROOT / "numeric-input.js"),
+            "node", "--input-type=module", "--eval", script,
+            str(STATIC_ROOT / "external-trigger-editor.js"),
         ],
         capture_output=True,
         text=True,
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) == {"ok": True}
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
@@ -955,7 +1079,7 @@ def test_trigger_editor_apply_uses_setter_readback_without_extra_query() -> None
 
 
 def test_trigger_setting_fields_help_descriptions_and_enum_labels_are_localized() -> None:
-    trigger_commands = [entry for entry in COMMANDS if entry.get("editor") == "trigger"]
+    trigger_commands = [entry for entry in COMMANDS if entry.get("editor") in {"trigger", "external-trigger"}]
 
     assert len(trigger_commands) == len(EXPECTED_TRIGGER_GROUPS)
     english = read_static("locale_en.js")

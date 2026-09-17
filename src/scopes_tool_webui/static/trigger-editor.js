@@ -358,40 +358,7 @@ export class TriggerEditor {
     this.syncDivInfo(entry);
   }
 
-  clearExternalRange(entry) {
-    const input = entry.form.container.querySelector('[data-field="level"]');
-    input.min = "";
-    input.max = "";
-    input.setCustomValidity("");
-    return input;
-  }
-
-  async refreshExternalRange(entry, key) {
-    const job = await this.hooks.executeCommand(
-      "external-trigger-range", { action: "query" }, { intent: "readback" },
-    );
-    if (entry !== this.entry || entry.epoch !== this.epoch
-      || key !== this.currentStateKey()) return false;
-    const input = entry.form.container.querySelector('[data-field="level"]');
-    const payload = job?.result?.result ?? job?.result;
-    const range = payload?.range?.range_volts ?? payload?.range_volts;
-    if (job?.status !== "completed" || typeof range !== "number"
-      || !Number.isFinite(range) || range <= 0) {
-      input.setCustomValidity(translate("system.readFailed"));
-      input.disabled = false;
-      input.reportValidity();
-      input.disabled = true;
-      return false;
-    }
-    input.min = String(-range);
-    input.max = String(range);
-    return true;
-  }
-
   async readEntry(entry) {
-    const externalLevel = entry.id === "trigger-edge-external-level";
-    const key = this.currentStateKey();
-    if (externalLevel) this.clearExternalRange(entry);
     const parameters = entry.form.queryValues();
     if (parameters === null) return;
     const job = await this.hooks.executeCommand(
@@ -399,14 +366,7 @@ export class TriggerEditor {
       parameters,
       { intent: "readback" },
     );
-    if (externalLevel && (entry !== this.entry || entry.epoch !== this.epoch
-      || key !== this.currentStateKey())) return;
-    if (externalLevel && job?.status !== "completed") return;
     if (job?.status === "completed") entry.form.syncResult(job, true);
-    if (externalLevel) {
-      await this.refreshExternalRange(entry, key);
-      return;
-    }
     if (!entry.div || entry !== this.entry || entry.epoch !== this.epoch) return;
     if (job?.status !== "completed") {
       entry.div.incomplete = true;
@@ -452,25 +412,14 @@ export class TriggerEditor {
     if (!entry || this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     const submissionKey = this.currentStateKey();
     const isSetting = entry.kind === "setting";
-    const externalLevel = entry.id === "trigger-edge-external-level";
     let parameters = {};
-    if (isSetting && !externalLevel) {
+    if (isSetting) {
       const values = entry.form.values();
       if (values === null) return;
       parameters = values;
     }
     this.setBusy(true);
     try {
-      if (externalLevel) {
-        const input = this.clearExternalRange(entry);
-        if (!await this.refreshExternalRange(entry, submissionKey)) return;
-        const disabled = input.disabled;
-        input.disabled = false;
-        const values = entry.form.values();
-        input.disabled = disabled;
-        if (values === null) return;
-        parameters = values;
-      }
       const job = await this.hooks.executeCommand(
         entry.id,
         parameters,
