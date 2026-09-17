@@ -380,7 +380,20 @@ function workflowProgressSummary(job) {
   });
 }
 
+function doctorPendingErrorsSummary(job) {
+  if (
+    job?.command !== "doctor"
+    || job?.status !== "failed"
+    || jobResultPayload(job)?.failure_reason !== "preexisting_system_error"
+  ) return null;
+  return translate("diagnostics.doctorPendingErrors", {
+    command: translate("command.system-clear-status"),
+  });
+}
+
 function jobErrorSummary(job) {
+  const pendingErrors = doctorPendingErrorsSummary(job);
+  if (pendingErrors) return pendingErrors;
   const result = jobResultPayload(job);
   if (typeof result?.error === "string") return result.error;
   if (typeof result?.error?.message === "string") return result.error.message;
@@ -693,9 +706,9 @@ function renderSystemWorkspaceResult(container, job) {
 export function renderDiagnosticsWorkspaceResult(container, job) {
   container.replaceChildren();
   const result = jobResultPayload(job);
-  const message = typeof result?.error === "string" && result.error
-    ? result.error
-    : job?.error;
+  const message = doctorPendingErrorsSummary(job) || (
+    typeof result?.error === "string" && result.error ? result.error : job?.error
+  );
   if (message && (job?.status === "failed" || result?.status === "error")) {
     appendError(container, message);
   }

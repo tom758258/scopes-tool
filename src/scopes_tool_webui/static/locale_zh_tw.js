@@ -1598,6 +1598,7 @@ export const zhTW = {
   "diagnostics.editor.description": "透過共用的結果歷程執行 Doctor 或完整 Smoke 工作流程。",
   "diagnostics.mode": "診斷模式",
   "diagnostics.doctor": "Doctor",
+  "diagnostics.doctorPendingErrors": "儀器目前存在先前的錯誤。請先執行「{{command}}」，再重新執行 Doctor。",
   "diagnostics.smoke": "Smoke",
   "diagnostics.saveArtifacts": "儲存診斷檔案",
   "diagnostics.doctorHelp": "Doctor 不會修改示波器設定，並會執行一次最終系統錯誤檢查。",

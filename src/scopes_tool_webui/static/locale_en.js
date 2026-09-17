@@ -1598,6 +1598,7 @@ export const en = {
   "diagnostics.editor.description": "Run Doctor or the full Smoke workflow through the shared Result History.",
   "diagnostics.mode": "Diagnostic mode",
   "diagnostics.doctor": "Doctor",
+  "diagnostics.doctorPendingErrors": "The instrument already has pending errors. Run \"{{command}}\" first, then run Doctor again.",
   "diagnostics.smoke": "Smoke",
   "diagnostics.saveArtifacts": "Save diagnostic artifacts",
   "diagnostics.doctorHelp": "Doctor does not change scope configuration and performs one final system-error check.",

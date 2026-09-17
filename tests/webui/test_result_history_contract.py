@@ -1091,6 +1091,10 @@ SYSTEM_SEMANTIC_WORKSPACE_HARNESS = r"""
 
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.testLocale = "zh-TW";
+        const actualLocales = process.argv[2] && process.argv[3] ? {
+          en: (await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(fs.readFileSync(process.argv[2], "utf8"))}`)).en,
+          "zh-TW": (await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(fs.readFileSync(process.argv[3], "utf8"))}`)).zhTW,
+        } : null;
         const labels = {
           "zh-TW": {
             noErrors: "未偵測到儀器錯誤。",
@@ -1155,13 +1159,17 @@ SYSTEM_SEMANTIC_WORKSPACE_HARNESS = r"""
         })[key];
         const translate = (key, values = {}) => {
           const name = keyFor(key);
-          const text = name ? labels[globalThis.testLocale][name] : key;
+          const text = actualLocales
+            ? actualLocales[globalThis.testLocale][key] || key
+            : name ? labels[globalThis.testLocale][name] : key;
           return Object.entries(values).reduce(
             (value, [field, replacement]) => value.replaceAll(`{{${field}}}`, String(replacement)),
             text,
           );
         };
-        const hasTranslation = (key) => keyFor(key) !== undefined;
+        const hasTranslation = (key) => actualLocales
+          ? key in actualLocales[globalThis.testLocale]
+          : keyFor(key) !== undefined;
         const translateJobStatus = (status) => translate(
           { failed: "status.failedJob" }[status] || `status.${status}`,
         );
@@ -1175,7 +1183,7 @@ SYSTEM_SEMANTIC_WORKSPACE_HARNESS = r"""
           "const translateJobStatus = globalThis.testTranslateJobStatus;",
           fs.readFileSync(process.argv[1], "utf8"),
         ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
-          + "\nglobalThis.resultApi = { renderJob, renderWorkspaceResult };";
+          + "\nglobalThis.resultApi = { renderJob, renderWorkspaceResult, renderDiagnosticsWorkspaceResult };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
         const api = globalThis.resultApi;
@@ -1294,6 +1302,76 @@ def test_system_semantic_workspace_results() -> None:
         ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
         capture_output=True,
         text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_doctor_pending_errors_guidance() -> None:
+    script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
+        r'''
+        const genericError = "Core command returned a non-zero exit code.";
+        const systemError = { code: -113, is_error: true, message: "Undefined header", raw: '-113,"Undefined header"' };
+        const job = {
+          job_id: "doctor-pending", command: "doctor", status: "failed", error: genericError,
+          result: { exit_code: 1, result: { failure_reason: "preexisting_system_error" }, system_error: systemError, artifacts: [] },
+        };
+        const original = JSON.stringify(job);
+        for (const locale of ["en", "zh-TW"]) {
+          globalThis.testLocale = locale;
+          const commandName = translate("command.system-clear-status");
+          const expected = translate("diagnostics.doctorPendingErrors", { command: commandName });
+          assert.notEqual(expected, "diagnostics.doctorPendingErrors");
+          assert.notEqual(expected, genericError);
+          assert.ok(expected.includes(commandName));
+          assert.ok(!expected.includes("{{command}}"));
+          const summary = new FakeNode("div");
+          const detail = new FakeNode("div");
+          const workspace = new FakeNode("div");
+          api.renderJob(summary, { ...job, job_id: `doctor-pending-${locale}` }, detail);
+          const row = summary.children[0].children;
+          assert.equal(row[2].textContent, expected);
+          assert.equal(row[1].className, "badge badge-failed");
+          assert.equal(row[1].textContent, actualLocales[locale]["status.failedJob"]);
+          api.renderDiagnosticsWorkspaceResult(workspace, job);
+          assert.equal(workspace.children[0].className, "error-block");
+          assert.equal(workspace.children[0].textContent, expected);
+          const systemField = workspace.children.at(-1).children;
+          assert.ok(systemField[0].textContent.includes("-113"));
+          assert.ok(systemField[0].textContent.includes("Undefined header"));
+          assert.equal(systemField[1].textContent, translate("results.field.system_error"));
+          assert.equal(detail.children[0].className, "error-block");
+          assert.equal(detail.children[0].textContent, genericError);
+          assert.equal(detail.children[1].textContent, JSON.stringify(job.result, null, 2));
+          assert.deepEqual(JSON.parse(detail.children[1].textContent).system_error, systemError);
+          assert.equal(JSON.stringify(job), original);
+
+          for (const error of [undefined, "Final Doctor check failed."]) {
+            const finalOnly = {
+              ...job, job_id: `doctor-final-${locale}-${error}`,
+              result: { ...job.result, result: error ? { error } : {} },
+            };
+            assert.equal(historyLine(finalOnly).summary, error || genericError);
+            api.renderDiagnosticsWorkspaceResult(workspace, finalOnly);
+            assert.equal(workspace.children[0].textContent, error || genericError);
+          }
+          const nonDoctor = { ...job, job_id: `other-${locale}`, command: "smoke" };
+          assert.equal(historyLine(nonDoctor).summary, genericError);
+          api.renderDiagnosticsWorkspaceResult(workspace, nonDoctor);
+          assert.equal(workspace.children[0].textContent, genericError);
+          const completedDoctor = { ...job, job_id: `doctor-completed-${locale}`, status: "completed" };
+          assert.notEqual(historyLine(completedDoctor).summary, expected);
+          api.renderDiagnosticsWorkspaceResult(workspace, completedDoctor);
+          assert.ok(workspace.children.every((node) => node.className !== "error-block"));
+        }
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS), str(LOCALE_EN_JS), str(LOCALE_ZH_TW_JS)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout

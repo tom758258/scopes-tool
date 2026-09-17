@@ -14,6 +14,7 @@ from scopes_tool_core.operations import (
     _OperationError,
     _prepare_output_dir,
     _trigger_wait_classifier_profile,
+    doctor_snapshot,
     run_acquisition_check,
     run_capture,
     run_doctor,
@@ -204,6 +205,67 @@ def test_run_doctor_returns_channel_snapshot():
     assert result.exit_code == 0
     assert len(result.result["channels"]) == 4
     assert result.system_error["is_error"] is False
+    assert "failure_reason" not in result.result
+    assert scope.backend.history[:2] == ["*IDN?", ":SYSTem:ERRor?"]
+    assert len(scope.backend.history[2:-1]) > 0
+    assert scope.backend.history[-1] == ":SYSTem:ERRor?"
+    assert scope.backend.history.count(":SYSTem:ERRor?") == 2
+    assert "*CLS" not in scope.backend.history
+
+
+def test_run_doctor_returns_early_on_preexisting_system_error():
+    first_error = '-113,"Undefined header"'
+    second_error = '-222,"Data out of range"'
+    with _scope(system_errors=[first_error, second_error]) as scope:
+        result = run_doctor(scope, "SIM::keysight-dsox4024a::INSTR")
+
+        assert scope.backend.system_errors == [second_error]
+        assert scope.backend.history == ["*IDN?", ":SYSTem:ERRor?"]
+
+    assert result.exit_code == 1
+    assert result.result == {"failure_reason": "preexisting_system_error"}
+    assert result.system_error == {
+        "code": -113,
+        "message": "Undefined header",
+        "raw": first_error,
+        "is_error": True,
+    }
+    assert any('-113, "Undefined header"' in line for line in result.human_lines)
+    assert result.idn == scope.idn
+    assert result.backend == scope.backend.backend
+    assert result.timeout_ms == scope.backend.timeout
+    assert result.files == []
+
+
+def test_run_doctor_final_system_error_is_not_preexisting(monkeypatch):
+    final_error = '-222,"Data out of range"'
+
+    def snapshot_with_error(scope):
+        snapshot = doctor_snapshot(scope)
+        scope.backend.system_errors.append(final_error)
+        return snapshot
+
+    monkeypatch.setattr(
+        "scopes_tool_core.operations.doctor_snapshot", snapshot_with_error
+    )
+    with _scope() as scope:
+        result = run_doctor(scope, "SIM::keysight-dsox4024a::INSTR")
+
+    assert result.exit_code == 1
+    assert "failure_reason" not in result.result
+    assert len(result.result["channels"]) == 4
+    assert result.system_error == {
+        "code": -222,
+        "message": "Data out of range",
+        "raw": final_error,
+        "is_error": True,
+    }
+    assert any('-222, "Data out of range"' in line for line in result.human_lines)
+    assert scope.backend.history[:2] == ["*IDN?", ":SYSTem:ERRor?"]
+    assert scope.backend.history[-1] == ":SYSTem:ERRor?"
+    assert scope.backend.history.count(":SYSTem:ERRor?") == 2
+    assert scope.backend.system_errors == []
+    assert "*CLS" not in scope.backend.history
 
 
 def test_run_measure_invalid_sentinel_exits_one():

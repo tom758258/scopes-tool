@@ -644,6 +644,17 @@ def run_doctor(scope: Oscilloscope, resource: str) -> OperationResult:
     if scope.capabilities is None:
         human.append("Capabilities: unavailable for this model")
         return OperationResult(1, {}, human_lines=human, idn=idn, **_scope_backend_json(scope))
+    entry = scope.query_system_error()
+    if entry.is_error:
+        human.append(f"System error: {entry.format()}")
+        return OperationResult(
+            1,
+            {"failure_reason": "preexisting_system_error"},
+            system_error=_system_error_json(entry),
+            human_lines=human,
+            idn=idn,
+            **_scope_backend_json(scope),
+        )
     snapshot = doctor_snapshot(scope)
     entry = scope.query_system_error()
     trigger = snapshot["edge_trigger"]

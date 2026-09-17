@@ -209,7 +209,12 @@ Discovery and identification:
   uses `null` for the final error state. `errors` is present only when the final
   error check reports an instrument error.
 - `doctor`: `backend`, `timeout_ms`, `acquisition`, `channels`, `timebase`,
-  and `edge_trigger`.
+  and `edge_trigger` when a snapshot is taken. Before the snapshot, Doctor reads
+  one system-error entry. If it reports an error, Doctor fails immediately with
+  `result.failure_reason: "preexisting_system_error"`, preserves that entry in
+  the outer `system_error`, and omits the snapshot fields. It does not clear
+  status or drain the error queue. Otherwise, the snapshot and final
+  system-error check proceed as usual.
 
 Control and setup:
 
