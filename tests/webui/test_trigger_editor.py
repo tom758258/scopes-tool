@@ -178,14 +178,42 @@ TRIGGER_EDITOR_HARNESS = r'''
             this.disabled = false;
             this.className = "";
             this.textContent = "";
+            this.type = "";
+            this.value = "";
+            this.min = "";
+            this.max = "";
+            this.customValidity = "";
           }
           addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
           dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           append(...nodes) { for (const node of nodes) { node.remove(); node.parent = this; this.children.push(node); } }
           remove() { if (this.parent) this.parent.children = this.parent.children.filter((node) => node !== this); this.parent = null; }
+          get validity() {
+            const value = Number(this.value);
+            return {
+              badInput: false,
+              rangeOverflow: this.max !== "" && Number.isFinite(value) && value > Number(this.max),
+              rangeUnderflow: this.min !== "" && Number.isFinite(value) && value < Number(this.min),
+            };
+          }
+          setCustomValidity(message) { this.customValidity = message; }
+          reportValidity() {
+            if (this.customValidity || !this.checkValidity()) {
+              globalThis.__reportedValidity.push(this.customValidity || `range:${this.value}`);
+              return false;
+            }
+            return true;
+          }
+          checkValidity() {
+            if (this.disabled || this.type !== "number") return true;
+            const { validity } = this;
+            return !this.customValidity && !validity.badInput
+              && !validity.rangeOverflow && !validity.rangeUnderflow;
+          }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.__reportedValidity = [];
         globalThis.translate = (key) => key;
         globalThis.hasTranslation = () => true;
         globalThis.CommandForm = class CommandForm {
@@ -278,6 +306,129 @@ TRIGGER_EDITOR_HARNESS = r'''
         const buildEditor = () =>
           new globalThis.triggerApi.TriggerEditor(new FakeNode(), catalog, hooks);
 '''
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_external_trigger_level_uses_current_range() -> None:
+    script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        FakeNode.prototype.querySelectorAll = function (selector) {
+          const nodes = this.children.flatMap((child) => [child, ...child.querySelectorAll("*")]);
+          if (selector === "*") return nodes;
+          if (selector === "[data-field]") return nodes.filter((node) => node.dataset.field);
+          const match = /^\[data-field="([^"]+)"\]$/.exec(selector);
+          return match ? nodes.filter((node) => node.dataset.field === match[1]) : [];
+        };
+        FakeNode.prototype.querySelector = function (selector) {
+          return this.querySelectorAll(selector)[0] || null;
+        };
+        FakeNode.prototype.closest = () => null;
+        FakeNode.prototype.classList = { add() {} };
+        const strip = (filename) => fs.readFileSync(filename, "utf8")
+          .replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "");
+        const formSource = strip(process.argv[2]) + strip(process.argv[3])
+          + "\nglobalThis.CommandForm = CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(formSource)}`);
+        catalog.commands = __CATALOG__;
+        catalog.optionsFor = (field) => field.options || [];
+        env.selectedId = "trigger-edge-external-level";
+        let range = 1.6;
+        let rangeStatus = "completed";
+        let releaseRange = null;
+        let deferRange = false;
+        let editor;
+        hooks.executeCommand = async (command, parameters, options) => {
+          submitted.push({ command, parameters, intent: options?.intent });
+          if (command === "external-trigger-range" && parameters.action === "query") {
+            const input = editor.entry.form.container.querySelector('[data-field="level"]');
+            assert.equal(input.min, "");
+            assert.equal(input.max, "");
+            assert.equal(editor.busy, true);
+            if (deferRange) await new Promise((resolve) => { releaseRange = resolve; });
+            return { status: rangeStatus, result: { result: { range_volts: range } } };
+          }
+          return { status: "completed", result: { result: {
+            level_volts: parameters.action === "set" ? parameters.level : 0.5,
+          } } };
+        };
+        editor = buildEditor();
+        await editor.refresh(true, true);
+        const input = editor.entry.form.container.querySelector('[data-field="level"]');
+        assert.equal(input.type, "number");
+        assert.equal(input.value, "0.5");
+        assert.equal(input.min, "-1.6");
+        assert.equal(input.max, "1.6");
+        assert.deepEqual(submitted.map(({ command, parameters, intent }) => [command, parameters, intent]), [
+          ["trigger-edge-external-level", { action: "query" }, "readback"],
+          ["external-trigger-range", { action: "query" }, "readback"],
+        ]);
+        for (const level of [1.0, -1.0, 1.7, -1.7]) {
+          submitted.length = 0;
+          globalThis.__reportedValidity.length = 0;
+          input.value = String(level);
+          input.dispatch("input");
+          await editor.submit();
+          const allowed = Math.abs(level) <= 1.6;
+          assert.deepEqual(submitted.map((item) => item.command), allowed
+            ? ["external-trigger-range", "trigger-edge-external-level"]
+            : ["external-trigger-range"]);
+          if (allowed) {
+            assert.deepEqual(submitted[1].parameters, { action: "set", level });
+            assert.equal(submitted[1].intent, "apply");
+          } else {
+            assert.equal(globalThis.__reportedValidity.length, 1);
+            assert.equal(input.dataset.dirty, "true");
+          }
+          assert.equal(editor.busy, false);
+          assert.equal(input.disabled, false);
+        }
+        submitted.length = 0;
+        input.value = "2.0";
+        input.dispatch("input");
+        assert.equal(input.checkValidity(), false);
+        range = 8;
+        await editor.submit();
+        assert.equal(input.min, "-8");
+        assert.equal(input.max, "8");
+        assert.deepEqual(submitted[1].parameters, { action: "set", level: 2 });
+        assert.equal(input.value, "2");
+        assert.equal(input.dataset.dirty, undefined);
+
+        rangeStatus = "failed";
+        await editor.refresh(true, true);
+        assert.equal(input.min, "");
+        assert.equal(input.max, "");
+        submitted.length = 0;
+        await editor.submit();
+        assert.deepEqual(submitted.map((item) => item.command), ["external-trigger-range"]);
+        assert.equal(input.customValidity, "system.readFailed");
+
+        rangeStatus = "completed";
+        deferRange = true;
+        submitted.length = 0;
+        const pending = editor.submit();
+        await settle();
+        env.contextKey = "new-context";
+        releaseRange();
+        await pending;
+        assert.deepEqual(submitted.map((item) => item.command), ["external-trigger-range"]);
+        assert.equal(input.min, "");
+        assert.equal(input.max, "");
+        assert.equal(editor.busy, false);
+        '''
+    ).replace("__CATALOG__", json.dumps([
+        entry for entry in command_catalog() if entry["id"] == "trigger-edge-external-level"
+    ]))
+    completed = subprocess.run(
+        [
+            "node", "--input-type=module", "--eval", script, str(TRIGGER_EDITOR_SOURCE),
+            str(STATIC_ROOT / "command-form.js"), str(STATIC_ROOT / "numeric-input.js"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
