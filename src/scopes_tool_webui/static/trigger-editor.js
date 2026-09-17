@@ -401,6 +401,7 @@ export class TriggerEditor {
     );
     if (externalLevel && (entry !== this.entry || entry.epoch !== this.epoch
       || key !== this.currentStateKey())) return;
+    if (externalLevel && job?.status !== "completed") return;
     if (job?.status === "completed") entry.form.syncResult(job, true);
     if (externalLevel) {
       await this.refreshExternalRange(entry, key);
