@@ -373,7 +373,8 @@ export class TriggerEditor {
     if (entry !== this.entry || entry.epoch !== this.epoch
       || key !== this.currentStateKey()) return false;
     const input = entry.form.container.querySelector('[data-field="level"]');
-    const range = job?.result?.result?.range_volts ?? job?.result?.range_volts;
+    const payload = job?.result?.result ?? job?.result;
+    const range = payload?.range?.range_volts ?? payload?.range_volts;
     if (job?.status !== "completed" || typeof range !== "number"
       || !Number.isFinite(range) || range <= 0) {
       input.setCustomValidity(translate("system.readFailed"));

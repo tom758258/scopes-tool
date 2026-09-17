@@ -333,6 +333,7 @@ def test_external_trigger_level_uses_current_range() -> None:
         catalog.optionsFor = (field) => field.options || [];
         env.selectedId = "trigger-edge-external-level";
         let range = 1.6;
+        let levelStatus = "completed";
         let rangeStatus = "completed";
         let releaseRange = null;
         let deferRange = false;
@@ -345,9 +346,18 @@ def test_external_trigger_level_uses_current_range() -> None:
             assert.equal(input.max, "");
             assert.equal(editor.busy, true);
             if (deferRange) await new Promise((resolve) => { releaseRange = resolve; });
-            return { status: rangeStatus, result: { result: { range_volts: range } } };
+            return { status: rangeStatus, result: {
+              exit_code: 0,
+              result: { range: { range_volts: range, raw_range: String(range) } },
+              artifacts: [],
+            } };
           }
-          return { status: "completed", result: { result: {
+          if (parameters.action === "query") {
+            const input = editor.entry.form.container.querySelector('[data-field="level"]');
+            assert.equal(input.min, "");
+            assert.equal(input.max, "");
+          }
+          return { status: parameters.action === "query" ? levelStatus : "completed", result: { result: {
             level_volts: parameters.action === "set" ? parameters.level : 0.5,
           } } };
         };
@@ -394,8 +404,23 @@ def test_external_trigger_level_uses_current_range() -> None:
         assert.equal(input.value, "2");
         assert.equal(input.dataset.dirty, undefined);
 
-        rangeStatus = "failed";
+        submitted.length = 0;
+        levelStatus = "failed";
         await editor.refresh(true, true);
+        assert.deepEqual(submitted.map((item) => [item.command, item.parameters.action]), [
+          ["trigger-edge-external-level", "query"],
+        ]);
+        assert.equal(input.min, "");
+        assert.equal(input.max, "");
+        assert.equal(input.value, "2");
+
+        levelStatus = "completed";
+        rangeStatus = "failed";
+        submitted.length = 0;
+        await editor.refresh(true, true);
+        assert.deepEqual(submitted.map((item) => item.command), [
+          "trigger-edge-external-level", "external-trigger-range",
+        ]);
         assert.equal(input.min, "");
         assert.equal(input.max, "");
         submitted.length = 0;
