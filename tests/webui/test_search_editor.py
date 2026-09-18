@@ -61,6 +61,11 @@ def test_search_commands_keep_groups_and_carry_search_editor_metadata() -> None:
         "external-trigger-range",
         "trigger-edge-external-level",
     }
+    catalog = {entry["id"]: entry for entry in command_catalog()}
+    composite = catalog["external-trigger-range-level"]
+    assert composite["editor"] == "external-trigger"
+    assert composite["group"] == "external"
+    assert composite["presentation_only"] is True
 
 
 def test_command_catalog_exposes_search_editor_presentation() -> None:

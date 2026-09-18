@@ -193,6 +193,16 @@ export class ExternalTriggerEditor {
     queueMicrotask(() => this.present());
   }
 
+  deactivate() {
+    this.stateKey = null;
+    this.mode = "range";
+    this.rangeInput.value = "";
+    this.levelInput.value = "";
+    this.levelInput.setCustomValidity?.("");
+    this.clearReadState();
+    this.renderMode();
+  }
+
   rerender() {
     this.introHelp.textContent = translate("external-trigger.editor.readFirstHelp");
     this.rangeHeading.textContent = translate("external-trigger.editor.modeRange");
@@ -401,7 +411,10 @@ export class ExternalTriggerEditor {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable?.()) return null;
     if (!this.selectedDefinition()) return null;
 
-    const value = Number(this.levelInput.value);
+    const raw = this.levelInput.value.trim();
+    if (!raw) return null;
+
+    const value = Number(raw);
     if (!Number.isFinite(value)) return null;
 
     const contextKey = this.hooks.contextKey();

@@ -1584,8 +1584,14 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         group="edge",
         editor="trigger",
     ),
-    _action_command("external-trigger-range", "Trigger", "External trigger range", (_command_field("range_volts", "number", exclusive_minimum=0, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="external-trigger-range.range_volts"),), group="external", editor="external-trigger"),
-    _action_command("trigger-edge-external-level", "Trigger", "External trigger level", (_command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge-external-level.level"),), group="external", editor="external-trigger"),
+    {
+        **_action_command("external-trigger-range", "Trigger", "External trigger range", (_command_field("range_volts", "number", exclusive_minimum=0, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="external-trigger-range.range_volts"),), group="external", editor="external-trigger"),
+        "browser_hidden": True,
+    },
+    {
+        **_action_command("trigger-edge-external-level", "Trigger", "External trigger level", (_command_field("level", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-edge-external-level.level"),), group="external", editor="external-trigger"),
+        "browser_hidden": True,
+    },
     _action_command("external-trigger-probe", "Trigger", "External trigger probe", (_command_field("attenuation", "number", exclusive_minimum=0, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="external-trigger-probe.attenuation"),), group="external", editor="trigger"),
     _action_command("external-trigger-units", "Trigger", "External trigger units", (_command_field("units", "enum", options=("volts", "amps"), visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="external-trigger-units.units"),), group="external", editor="trigger"),
     {"id": "external-trigger-settings", "category": "Trigger", "label": "External trigger settings", "modes": ("live", "simulate"), "fields": (), "group": "external", "editor": "trigger"},
@@ -2095,12 +2101,23 @@ def command_catalog() -> list[dict[str, Any]]:
                 "fields": (),
                 "group": "channel-basic",
             },
+            {
+                "id": "external-trigger-range-level",
+                "category": "Trigger",
+                "label": "External Trigger Range / Level",
+                "editor": "external-trigger",
+                "presentation_only": True,
+                "modes": ("live", "simulate"),
+                "fields": (),
+                "group": "external",
+            },
         )
     )
     for presentation_id, first_underlying_id in (
         ("acquisition-control", "run"),
         ("reference-waveform", "reference-save"),
         ("channel-scale-range", "channel-scale"),
+        ("external-trigger-range-level", "external-trigger-range"),
     ):
         presentation = next(entry for entry in catalog if entry["id"] == presentation_id)
         catalog.remove(presentation)

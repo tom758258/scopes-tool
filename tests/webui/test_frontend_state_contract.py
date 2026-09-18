@@ -446,6 +446,7 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
 
         let genericFormRevision = 0;
         let channelLabelVisibility = null;
+        let previousEditorKind = null;
         let executing = false;
         let currentJobId = null;
         let pendingResourceLiveSupport = null;

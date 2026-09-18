@@ -184,6 +184,7 @@ let pendingResourceLiveSupport = null;
 let updateBasicAvailability = () => {};
 let pcOutputSelectionStatus = null;
 let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false };
+let previousEditorKind = null;
 
 const INTERNAL_COMMANDS = {
   "live-data-snapshot": { id: "live-data-snapshot", modes: ["live", "simulate"], internal: true },
@@ -907,6 +908,10 @@ function renderWorkspace() {
   }
   const compositeCommands = {
     "channel-scale-range": ["channel-scale", "channel-range"],
+    "external-trigger-range-level": [
+      "external-trigger-range",
+      "trigger-edge-external-level",
+    ],
     "acquisition-control": ["run", "single", "single-wait", "stop-acquisition", "force-trigger"],
     "reference-waveform": [
       "reference-query",
@@ -1020,6 +1025,10 @@ function syncCommandSelection(draft = null) {
   const systemInformationSelected = selected?.id === "system-information";
   const editorKind = editorKindFor(selected);
   const editorOwned = editorKind !== null;
+  if (previousEditorKind === "external-trigger" && editorKind !== "external-trigger") {
+    externalTriggerEditor?.deactivate();
+  }
+  previousEditorKind = editorKind;
   invalidateGenericFormOwnership();
   commandForm.render(selected, {
     draft,

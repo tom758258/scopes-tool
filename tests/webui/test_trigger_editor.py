@@ -328,6 +328,44 @@ def test_external_trigger_editor_routing() -> None:
     assert 'if (editorKind === "external-trigger") externalTriggerEditor?.schedulePresentation();' in app_source
     assert 'externalTriggerEditor.readButton.hidden = editorKind !== "external-trigger";' in app_source
     assert 'externalTriggerEditor.applyButton.hidden = editorKind !== "external-trigger";' in app_source
+    assert '"external-trigger-range-level": [' in app_source
+    assert '"external-trigger-range",' in app_source
+    assert '"trigger-edge-external-level",' in app_source
+    assert "externalTriggerEditor?.deactivate();" in app_source
+
+
+def test_external_trigger_range_level_composite_workspace() -> None:
+    catalog = {entry["id"]: entry for entry in command_catalog()}
+    composite = catalog["external-trigger-range-level"]
+    assert composite["category"] == "Trigger"
+    assert composite["group"] == "external"
+    assert composite["editor"] == "external-trigger"
+    assert composite["presentation_only"] is True
+    assert composite["modes"] == ["live", "simulate"]
+    assert composite["fields"] == []
+
+    assert catalog["external-trigger-range"]["browser_hidden"] is True
+    assert catalog["trigger-edge-external-level"]["browser_hidden"] is True
+
+    ids = [entry["id"] for entry in command_catalog()]
+    assert ids.index("external-trigger-range-level") + 1 == ids.index("external-trigger-range")
+
+    visible = [entry["id"] for entry in command_catalog() if not entry.get("browser_hidden")]
+    assert "external-trigger-range-level" in visible
+    assert "external-trigger-range" not in visible
+    assert "trigger-edge-external-level" not in visible
+
+    range_fields = {field["name"]: field for field in catalog["external-trigger-range"]["fields"]}
+    assert "range_volts" in range_fields
+    level_fields = {field["name"]: field for field in catalog["trigger-edge-external-level"]["fields"]}
+    assert "level" in level_fields
+
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+    assert '"command.external-trigger-range-level": "External Trigger Range / Level"' in english
+    assert '"command.external-trigger-range-level": "外部觸發範圍 / 位準"' in chinese
+    assert '"description.external-trigger-range-level":' in english
+    assert '"description.external-trigger-range-level":' in chinese
 
 
 def test_external_trigger_level_uses_current_range() -> None:
@@ -404,7 +442,7 @@ def test_external_trigger_level_uses_current_range() -> None:
 
         const commands = __CATALOG__;
         const catalog = { commands, supported: () => true };
-        const env = { selectedId: "external-trigger-range", contextKey: "ctx" };
+        const env = { selectedId: "external-trigger-range-level", contextKey: "ctx" };
         const calls = [];
         let range = 8;
         let levelVal = 0.5;
@@ -458,17 +496,29 @@ def test_external_trigger_level_uses_current_range() -> None:
           editor.container, (node) => node.tagName === "BUTTON" && node.dataset.mode === mode,
         )[0];
 
-        // 1. The initial mode follows the selected command in both directions.
+        // 1. The presentation entry opens in Range; mode switches stay in the
+        // workspace without changing the selected command.
         assert.equal(editor.mode, "range");
         assert.equal(editor.rangeSection.hidden, false);
         assert.equal(editor.levelSection.hidden, true);
         assert.equal(modeButton("range").classList.toggled.selected, true);
-        env.selectedId = "trigger-edge-external-level";
-        editor.present();
+        modeButton("level").dispatch("click");
         assert.equal(editor.mode, "level");
         assert.equal(editor.rangeSection.hidden, true);
         assert.equal(editor.levelSection.hidden, false);
-        env.selectedId = "external-trigger-range";
+        assert.equal(env.selectedId, "external-trigger-range-level");
+        // Leaving the workspace resets trusted state; re-entering returns to Range.
+        editor.deactivate();
+        assert.equal(editor.mode, "range");
+        assert.equal(rangeInput().value, "");
+        assert.equal(levelInput().value, "");
+        editor.present();
+        assert.equal(editor.mode, "range");
+        // A direct underlying selection still resolves to its mode.
+        env.selectedId = "trigger-edge-external-level";
+        editor.present();
+        assert.equal(editor.mode, "level");
+        env.selectedId = "external-trigger-range-level";
         editor.present();
         assert.equal(editor.mode, "range");
 
@@ -559,11 +609,23 @@ def test_external_trigger_level_uses_current_range() -> None:
         assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
         assert.equal(editor.busy, false);
 
+        // 7. A blank level never reaches the instrument (Number("") === 0 guard).
+        modeButton("level").dispatch("click");
+        assert.equal(editor.mode, "level");
+        for (const blank of ["", "   "]) {
+          calls.length = 0;
+          levelInput().value = blank;
+          await editor.applyCurrent();
+          assert.deepEqual(calls, []);
+          assert.equal(editor.busy, false);
+        }
+
         console.log(JSON.stringify({ ok: true }));
         '''
     ).replace("__CATALOG__", json.dumps([
         entry for entry in command_catalog() if entry["id"] in {
             "external-trigger-range",
+            "external-trigger-range-level",
             "trigger-edge-external-level",
         }
     ]))
@@ -1085,7 +1147,10 @@ def test_trigger_setting_fields_help_descriptions_and_enum_labels_are_localized(
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     for entry in trigger_commands:
-        assert entry.get("browser_hidden") is not True, entry["id"]
+        if entry["id"] in {"external-trigger-range", "trigger-edge-external-level"}:
+            assert entry.get("browser_hidden") is True, entry["id"]
+        else:
+            assert entry.get("browser_hidden") is not True, entry["id"]
         assert f'"description.{entry["id"]}":' in english, entry["id"]
         assert f'"description.{entry["id"]}":' in chinese, entry["id"]
         for field in entry["fields"]:
