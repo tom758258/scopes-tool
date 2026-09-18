@@ -24,6 +24,7 @@ export class ExternalTriggerEditor {
     this.hooks = hooks;
     this.busy = false;
     this.stateKey = null;
+    this.revision = 0;
     this.mode = "range";
     this.rangeRead = null;
     this.levelRead = null;
@@ -164,6 +165,7 @@ export class ExternalTriggerEditor {
 
   setMode(mode) {
     if (mode === this.mode) return;
+    this.revision += 1;
     this.mode = mode;
     this.renderMode();
     this.applyBusyState();
@@ -195,6 +197,7 @@ export class ExternalTriggerEditor {
 
   deactivate() {
     this.stateKey = null;
+    this.revision += 1;
     this.mode = "range";
     this.rangeInput.value = "";
     this.levelInput.value = "";
@@ -260,6 +263,7 @@ export class ExternalTriggerEditor {
 
     const contextKey = this.hooks.contextKey();
     const commandId = this.currentCommandId();
+    const revision = this.revision;
 
     this.busy = true;
     this.applyBusyState();
@@ -271,7 +275,8 @@ export class ExternalTriggerEditor {
       );
 
       if (
-        this.hooks.contextKey() !== contextKey
+        revision !== this.revision
+        || this.hooks.contextKey() !== contextKey
         || this.currentCommandId() !== commandId
         || !this.selectedDefinition()
       ) {
@@ -306,6 +311,7 @@ export class ExternalTriggerEditor {
 
     const contextKey = this.hooks.contextKey();
     const commandId = this.currentCommandId();
+    const revision = this.revision;
 
     this.busy = true;
     this.applyBusyState();
@@ -317,7 +323,8 @@ export class ExternalTriggerEditor {
       );
 
       if (
-        job?.status !== "completed"
+        revision !== this.revision
+        || job?.status !== "completed"
         || this.hooks.contextKey() !== contextKey
         || this.currentCommandId() !== commandId
         || !this.selectedDefinition()
@@ -348,6 +355,7 @@ export class ExternalTriggerEditor {
 
     const contextKey = this.hooks.contextKey();
     const commandId = this.currentCommandId();
+    const revision = this.revision;
 
     this.busy = true;
     this.applyBusyState();
@@ -360,7 +368,8 @@ export class ExternalTriggerEditor {
       );
 
       if (
-        this.hooks.contextKey() !== contextKey
+        revision !== this.revision
+        || this.hooks.contextKey() !== contextKey
         || this.currentCommandId() !== commandId
         || !this.selectedDefinition()
       ) {
@@ -383,7 +392,8 @@ export class ExternalTriggerEditor {
         { intent: "readback" },
       );
       if (
-        this.hooks.contextKey() !== contextKey
+        revision !== this.revision
+        || this.hooks.contextKey() !== contextKey
         || this.currentCommandId() !== commandId
         || !this.selectedDefinition()
       ) {
@@ -411,6 +421,8 @@ export class ExternalTriggerEditor {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable?.()) return null;
     if (!this.selectedDefinition()) return null;
 
+    this.levelInput.setCustomValidity?.("");
+
     const raw = this.levelInput.value.trim();
     if (!raw) return null;
 
@@ -419,6 +431,7 @@ export class ExternalTriggerEditor {
 
     const contextKey = this.hooks.contextKey();
     const commandId = this.currentCommandId();
+    const revision = this.revision;
 
     this.busy = true;
     this.applyBusyState();
@@ -431,7 +444,8 @@ export class ExternalTriggerEditor {
         { intent: "readback" },
       );
       if (
-        this.hooks.contextKey() !== contextKey
+        revision !== this.revision
+        || this.hooks.contextKey() !== contextKey
         || this.currentCommandId() !== commandId
         || !this.selectedDefinition()
       ) {
@@ -461,7 +475,8 @@ export class ExternalTriggerEditor {
       );
 
       if (
-        job?.status !== "completed"
+        revision !== this.revision
+        || job?.status !== "completed"
         || this.hooks.contextKey() !== contextKey
         || this.currentCommandId() !== commandId
         || !this.selectedDefinition()
@@ -491,5 +506,8 @@ export class ExternalTriggerEditor {
     this.levelInput.disabled = disabled;
     this.readButton.disabled = disabled;
     this.applyButton.disabled = disabled;
+    for (const button of Object.values(this.modeButtons)) {
+      button.disabled = disabled;
+    }
   }
 }

@@ -615,10 +615,51 @@ def test_external_trigger_level_uses_current_range() -> None:
         for (const blank of ["", "   "]) {
           calls.length = 0;
           levelInput().value = blank;
+          levelInput().setCustomValidity("OUT -1.6 1.6");
           await editor.applyCurrent();
           assert.deepEqual(calls, []);
+          assert.equal(levelInput().customValidity, "");
           assert.equal(editor.busy, false);
         }
+
+        // 8. A mode switch during a pending Level apply invalidates the Level set.
+        levelInput().value = "0.5";
+        deferRange = true;
+        calls.length = 0;
+        const racing = editor.applyCurrent();
+        await settle();
+        assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
+        modeButton("range").dispatch("click");
+        assert.equal(editor.mode, "range");
+        assert.equal(modeButton("range").disabled, true);
+        assert.equal(modeButton("level").disabled, true);
+        releaseRange();
+        await racing;
+        assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
+        assert.equal(editor.busy, false);
+        assert.equal(modeButton("range").disabled, false);
+        assert.equal(modeButton("level").disabled, false);
+        deferRange = false;
+
+        // 9. deactivate/re-enter during a pending Level apply invalidates the Level set.
+        modeButton("level").dispatch("click");
+        assert.equal(editor.mode, "level");
+        levelInput().value = "0.5";
+        deferRange = true;
+        calls.length = 0;
+        const stale = editor.applyCurrent();
+        await settle();
+            assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
+            editor.deactivate();
+            env.selectedId = "external-trigger-range-level";
+            editor.present();
+            assert.equal(editor.mode, "range");
+        releaseRange();
+        await stale;
+        assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
+        assert.equal(editor.busy, false);
+        assert.equal(editor.mode, "range");
+        deferRange = false;
 
         console.log(JSON.stringify({ ok: true }));
         '''
