@@ -1509,7 +1509,7 @@ export const zhTW = {
   "external-trigger.editor.description": "外部觸發範圍與位準為連動設定。合法位準範圍跟隨目前外部觸發範圍（−Range … ＋Range）；套用新範圍後，之前讀回的位準即失效。",
   "external-trigger.editor.modeRange": "範圍",
   "external-trigger.editor.modeLevel": "位準",
-  "external-trigger.editor.readFirstHelp": "請先讀取目前設定；位準輸入會依目前回報的外部觸發範圍驗證。",
+  "external-trigger.editor.readFirstHelp": "請先讀取目前設定；成功讀取後才可使用快速填值，快速填值會依目前外部觸發範圍、探棒衰減比與單位決定。",
   "external-trigger.editor.levelDescription": "設定外部觸發位準，單位為伏特。合法範圍為目前外部觸發範圍的 −Range … ＋Range。",
   "external-trigger.editor.levelOutOfRange": "位準必須介於目前外部觸發範圍的 {{min}} V 與 {{max}} V 之間。",
   "timebase-position.editor.title": "時間偏移",

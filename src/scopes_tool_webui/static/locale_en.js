@@ -1509,7 +1509,7 @@ export const en = {
   "external-trigger.editor.description": "External trigger range and level are linked settings. The valid level span follows the current external trigger range (−Range … +Range); applying a new range invalidates the previously read level.",
   "external-trigger.editor.modeRange": "Range",
   "external-trigger.editor.modeLevel": "Level",
-  "external-trigger.editor.readFirstHelp": "Read the current settings first; level entries are validated against the currently reported external trigger range.",
+  "external-trigger.editor.readFirstHelp": "Read the current settings first; quick-fill presets become available after a successful read and follow the current external trigger range, probe attenuation, and units.",
   "external-trigger.editor.levelDescription": "Set the external trigger level in volts. The valid span is −Range … +Range of the current external trigger range.",
   "external-trigger.editor.levelOutOfRange": "Level must be between {{min}} V and {{max}} V for the current external trigger range.",
   "timebase-position.editor.title": "Timebase Position",

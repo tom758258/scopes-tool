@@ -328,6 +328,7 @@ def test_external_trigger_editor_routing() -> None:
     assert 'if (editorKind === "external-trigger") externalTriggerEditor?.schedulePresentation();' in app_source
     assert 'externalTriggerEditor.readButton.hidden = editorKind !== "external-trigger";' in app_source
     assert 'externalTriggerEditor.applyButton.hidden = editorKind !== "external-trigger";' in app_source
+    assert "modelSeries:" in app_source
     assert '"external-trigger-range-level": [' in app_source
     assert '"external-trigger-range",' in app_source
     assert '"trigger-edge-external-level",' in app_source
@@ -436,18 +437,24 @@ def test_external_trigger_level_uses_current_range() -> None:
 
         const strip = (filename) => fs.readFileSync(filename, "utf8")
           .replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "");
+        const liveDataSource = strip(process.argv[2])
+          + "\nglobalThis.formatEngineering = formatEngineering;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(liveDataSource)}`);
         const editorSource = strip(process.argv[1])
           + "\nglobalThis.ExternalTriggerEditor = ExternalTriggerEditor;";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(editorSource)}`);
 
         const commands = __CATALOG__;
         const catalog = { commands, supported: () => true };
-        const env = { selectedId: "external-trigger-range-level", contextKey: "ctx" };
+        const env = { selectedId: "external-trigger-range-level", contextKey: "ctx", series: "4000X" };
         const calls = [];
         let range = 8;
         let levelVal = 0.5;
+        let probeAttenuation = 1;
+        let units = "volts";
         let rangeStatus = "completed";
         let levelStatus = "completed";
+        let settingsStatus = "completed";
         let deferRange = false;
         let releaseRange = null;
         const hooks = {
@@ -457,8 +464,19 @@ def test_external_trigger_level_uses_current_range() -> None:
           selectedCommand: () => commands.find((command) => command.id === env.selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,
+          modelSeries: () => env.series,
           executeCommand: async (id, parameters, options) => {
             calls.push([id, parameters, options?.intent]);
+            if (id === "external-trigger-settings") {
+              if (settingsStatus !== "completed") return { status: settingsStatus, result: { result: {} } };
+              return { status: "completed", result: { result: { settings: {
+                probe_attenuation: probeAttenuation,
+                range_value: range,
+                units,
+                bandwidth_limit_enabled: false,
+                raw_response: "EXT",
+              } } } };
+            }
             if (id === "external-trigger-range" && parameters.action === "query") {
               if (deferRange) await new Promise((resolve) => { releaseRange = resolve; });
               if (rangeStatus !== "completed") return { status: rangeStatus, result: { result: {} } };
@@ -527,16 +545,19 @@ def test_external_trigger_level_uses_current_range() -> None:
 
         // 2. Range mode reads and applies; a successful apply clears the level side.
         await editor.readCurrent();
-        assert.deepEqual(calls, [["external-trigger-range", { action: "query" }, "readback"]]);
+        assert.deepEqual(calls, [
+          ["external-trigger-range", { action: "query" }, "readback"],
+          ["external-trigger-settings", {}, "readback"],
+        ]);
         assert.equal(rangeInput().value, "8");
         assert.equal(editor.rangeRead, 8);
 
         env.selectedId = "trigger-edge-external-level";
         editor.present();
         await editor.readCurrent();
-        assert.deepEqual(calls.slice(1), [
+        assert.deepEqual(calls.slice(2), [
           ["trigger-edge-external-level", { action: "query" }, "readback"],
-          ["external-trigger-range", { action: "query" }, "readback"],
+          ["external-trigger-settings", {}, "readback"],
         ]);
         assert.equal(levelInput().value, "0.5");
         assert.equal(editor.levelRead, 0.5);
@@ -674,6 +695,215 @@ def test_external_trigger_level_uses_current_range() -> None:
         [
             "node", "--input-type=module", "--eval", script,
             str(STATIC_ROOT / "external-trigger-editor.js"),
+            str(STATIC_ROOT / "live-data.js"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) == {"ok": True}
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_external_trigger_quick_fill() -> None:
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.className = "";
+            this.textContent = "";
+            this.type = "";
+            this.value = "";
+            this.inputMode = "";
+            this.style = {};
+            this.attributes = {};
+            this.customValidity = "";
+            this.reported = [];
+            const classList = { toggled: {} };
+            classList.toggle = (name, force) => { classList.toggled[name] = force; };
+            this.classList = classList;
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) {
+            for (const node of nodes) {
+              node.remove();
+              node.parent = this;
+              this.children.push(node);
+            }
+          }
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
+          setAttribute(k, v) { this.attributes[k] = String(v); }
+          setCustomValidity(value) { this.customValidity = String(value); }
+          reportValidity() { this.reported.push(this.customValidity); }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.translate = (key) => key;
+
+        const strip = (filename) => fs.readFileSync(filename, "utf8")
+          .replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "");
+        const liveDataSource = strip(process.argv[2])
+          + "\nglobalThis.formatEngineering = formatEngineering;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(liveDataSource)}`);
+        const editorSource = strip(process.argv[1])
+          + "\nglobalThis.ExternalTriggerEditor = ExternalTriggerEditor;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(editorSource)}`);
+
+        const commands = __CATALOG__;
+        const catalog = { commands, supported: () => true };
+        const env = { selectedId: "external-trigger-range-level", contextKey: "ctx", series: "4000X" };
+        const calls = [];
+        let range = 8;
+        let levelVal = 0.5;
+        let probeAttenuation = 1;
+        let units = "volts";
+        const hooks = {
+          headerActions: new FakeNode("div"),
+          contextKey: () => env.contextKey,
+          mode: () => "live",
+          selectedCommand: () => commands.find((command) => command.id === env.selectedId),
+          isAvailable: () => true,
+          isExecutionBusy: () => false,
+          modelSeries: () => env.series,
+          executeCommand: async (id, parameters, options) => {
+            calls.push([id, parameters, options?.intent]);
+            if (id === "external-trigger-settings") {
+              return { status: "completed", result: { result: { settings: {
+                probe_attenuation: probeAttenuation,
+                range_value: range,
+                units,
+                bandwidth_limit_enabled: false,
+                raw_response: "EXT",
+              } } } };
+            }
+            if (id === "external-trigger-range" && parameters.action === "query") {
+              return { status: "completed", result: { result: { range: { range_volts: range } } } };
+            }
+            if (id === "external-trigger-range") {
+              range = parameters.range_volts;
+              return { status: "completed", result: { result: { range: { range_volts: range } } } };
+            }
+            if (id === "trigger-edge-external-level" && parameters.action === "query") {
+              return { status: "completed", result: { result: { level_volts: levelVal } } };
+            }
+            levelVal = parameters.level;
+            return { status: "completed", result: { result: { level_volts: levelVal } } };
+          },
+        };
+
+        const settle = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+        const findAll = (node, pred, out = []) => {
+          for (const child of node.children || []) {
+            if (pred(child)) out.push(child);
+            findAll(child, pred, out);
+          }
+          return out;
+        };
+
+        const editor = new globalThis.ExternalTriggerEditor(new FakeNode("div"), catalog, hooks);
+        await settle();
+        const rangeInput = () => findAll(editor.container, (node) => node.dataset.field === "range_volts")[0];
+        const levelInput = () => findAll(editor.container, (node) => node.dataset.field === "level")[0];
+        const modeButton = (mode) => findAll(
+          editor.container, (node) => node.tagName === "BUTTON" && node.dataset.mode === mode,
+        )[0];
+        const rangePresets = () => findAll(editor.rangeSection, (node) => node.tagName === "BUTTON");
+        const levelPresets = () => findAll(editor.levelSection, (node) => node.tagName === "BUTTON");
+        const labels = (nodes) => nodes.map((node) => node.textContent);
+
+        // A. Quick-fill requires a successful read first.
+        assert.deepEqual(rangePresets(), []);
+        assert.deepEqual(levelPresets(), []);
+
+        // B. 4000X range presets follow the probe attenuation.
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.deepEqual(calls, [
+          ["external-trigger-range", { action: "query" }, "readback"],
+          ["external-trigger-settings", {}, "readback"],
+        ]);
+        assert.deepEqual(labels(rangePresets()), ["1.60 V", "8.00 V"]);
+        assert.ok(rangePresets().every((button) => button.disabled === false));
+        calls.length = 0;
+        rangePresets()[0].dispatch("click");
+        assert.equal(rangeInput().value, "1.6");
+        assert.deepEqual(calls, []);
+
+        probeAttenuation = 10;
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.deepEqual(labels(rangePresets()), ["16.0 V", "80.0 V"]);
+
+        // C. 3000X only offers 8 V at 1:1 attenuation.
+        env.series = "3000X";
+        probeAttenuation = 1;
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.deepEqual(labels(rangePresets()), ["8.00 V"]);
+
+        // D. Level presets follow the current range; a Range apply invalidates them.
+        range = 8;
+        modeButton("level").dispatch("click");
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.deepEqual(calls, [
+          ["trigger-edge-external-level", { action: "query" }, "readback"],
+          ["external-trigger-settings", {}, "readback"],
+        ]);
+        assert.deepEqual(labels(levelPresets()), ["-8.00 V", "-4.00 V", "0.00 V", "4.00 V", "8.00 V"]);
+        calls.length = 0;
+        levelPresets()[3].dispatch("click");
+        assert.equal(levelInput().value, "4");
+        assert.deepEqual(calls, []);
+
+        modeButton("range").dispatch("click");
+        rangeInput().value = "1.6";
+        calls.length = 0;
+        await editor.applyCurrent();
+        assert.equal(calls.length, 1);
+        assert.ok(levelPresets().length > 0);
+        assert.ok(levelPresets().every((button) => button.disabled === true));
+        calls.length = 0;
+        levelInput().value = "";
+        levelPresets()[0].dispatch("click");
+        assert.equal(levelInput().value, "");
+        assert.deepEqual(calls, []);
+
+        // E. Amps units change the preset labels.
+        env.series = "4000X";
+        units = "amps";
+        probeAttenuation = 1;
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.deepEqual(labels(rangePresets()), ["1.60 A", "8.00 A"]);
+
+        console.log(JSON.stringify({ ok: true }));
+        '''
+    ).replace("__CATALOG__", json.dumps([
+        entry for entry in command_catalog() if entry["id"] in {
+            "external-trigger-range",
+            "external-trigger-range-level",
+            "trigger-edge-external-level",
+        }
+    ]))
+    completed = subprocess.run(
+        [
+            "node", "--input-type=module", "--eval", script,
+            str(STATIC_ROOT / "external-trigger-editor.js"),
+            str(STATIC_ROOT / "live-data.js"),
         ],
         capture_output=True,
         text=True,

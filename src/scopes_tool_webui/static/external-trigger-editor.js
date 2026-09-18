@@ -1,7 +1,35 @@
 import { translate } from "/static/i18n.js";
+import { formatEngineering } from "/static/live-data.js";
 
 const RANGE_COMMAND = "external-trigger-range";
 const LEVEL_COMMAND = "trigger-edge-external-level";
+const SETTINGS_COMMAND = "external-trigger-settings";
+
+function cleanFloatText(value) {
+  return String(Number(value.toPrecision(12)));
+}
+
+function unitLetter(units) {
+  return units === "amps" ? "A" : "V";
+}
+
+function rangePresetValues(series, probeAttenuation) {
+  if (series === "4000X") return [1.6 * probeAttenuation, 8 * probeAttenuation];
+  if (series === "2000X" || series === "3000X") return [8 * probeAttenuation];
+  return null;
+}
+
+function settingsFromPayload(payload) {
+  const settings = payload?.settings;
+  if (!settings || typeof settings !== "object") return null;
+  const probeAttenuation = settings.probe_attenuation;
+  const units = settings.units;
+  if (typeof probeAttenuation !== "number" || !Number.isFinite(probeAttenuation) || probeAttenuation <= 0) {
+    return null;
+  }
+  if (units !== "volts" && units !== "amps") return null;
+  return { probeAttenuation, units, rangeValue: settings.range_value };
+}
 
 function payloadOf(job) {
   return job?.result?.result ?? job?.result;
@@ -29,6 +57,10 @@ export class ExternalTriggerEditor {
     this.rangeRead = null;
     this.levelRead = null;
     this.rangeValue = null;
+    this.rangeQuickFill = null;
+    this.rangePresetKey = null;
+    this.levelQuickFill = null;
+    this.levelPresetKey = null;
     this.buildDom();
   }
 
@@ -95,7 +127,11 @@ export class ExternalTriggerEditor {
     this.rangeHelp.className = "field-help";
     this.rangeHelp.textContent = translate("help.external-trigger-range.range_volts");
 
-    this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangeHelp);
+    this.rangePresets = document.createElement("div");
+    this.rangePresets.className = "channel-scale-range-presets";
+    this.rangePresetButtons = [];
+
+    this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangeHelp, this.rangePresets);
 
     // 3. Level section
     this.levelSection = document.createElement("div");
@@ -119,7 +155,11 @@ export class ExternalTriggerEditor {
     this.levelHelp.className = "field-help";
     this.levelHelp.textContent = translate("external-trigger.editor.levelDescription");
 
-    this.levelSection.append(this.levelHeading, this.levelField, this.levelHelp);
+    this.levelPresets = document.createElement("div");
+    this.levelPresets.className = "channel-scale-range-presets";
+    this.levelPresetButtons = [];
+
+    this.levelSection.append(this.levelHeading, this.levelField, this.levelHelp, this.levelPresets);
 
     // 4. Single Read / Apply pair in the content area, routed by the current mode
     this.actions = document.createElement("div");
@@ -181,6 +221,67 @@ export class ExternalTriggerEditor {
     this.levelSection.hidden = this.mode !== "level";
   }
 
+  modeReady(mode) {
+    if (mode === "range") return this.rangeRead !== null && this.rangeQuickFill !== null;
+    return this.levelRead !== null && this.levelQuickFill !== null;
+  }
+
+  quickFillReady() {
+    return this.modeReady(this.mode);
+  }
+
+  syncPresetLabels() {
+    this.syncRangePresets();
+    this.syncLevelPresets();
+    this.applyBusyState();
+  }
+
+  syncRangePresets() {
+    const context = this.rangeQuickFill;
+    const key = context ? `${context.units}|${context.values.join(",")}` : null;
+    if (key !== null && key !== this.rangePresetKey) {
+      this.rangePresetKey = key;
+      this.rangePresetButtons = [];
+      this.rangePresets.replaceChildren();
+      for (const value of context.values) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.disabled = true;
+        button.textContent = formatEngineering(value, unitLetter(context.units));
+        button.addEventListener("click", () => {
+          if (!this.modeReady("range")) return;
+          this.rangeInput.value = cleanFloatText(value);
+        });
+        this.rangePresets.append(button);
+        this.rangePresetButtons.push(button);
+      }
+    }
+  }
+
+  syncLevelPresets() {
+    const context = this.levelQuickFill;
+    const key = context ? `${context.units}|${context.values.join(",")}` : null;
+    if (key !== null && key !== this.levelPresetKey) {
+      this.levelPresetKey = key;
+      this.levelPresetButtons = [];
+      this.levelPresets.replaceChildren();
+      for (const value of context.values) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.disabled = true;
+        button.textContent = formatEngineering(value, unitLetter(context.units));
+        button.addEventListener("click", () => {
+          if (!this.modeReady("level")) return;
+          this.levelInput.value = cleanFloatText(value);
+        });
+        this.levelPresets.append(button);
+        this.levelPresetButtons.push(button);
+      }
+    }
+  }
+
   readCurrent() {
     if (this.mode === "range") return this.readRange();
     return this.readLevel();
@@ -218,6 +319,7 @@ export class ExternalTriggerEditor {
     this.applyButton.textContent = translate("actions.apply");
     this.modeButtons.range.textContent = translate("external-trigger.editor.modeRange");
     this.modeButtons.level.textContent = translate("external-trigger.editor.modeLevel");
+    this.syncPresetLabels();
     this.renderMode();
   }
 
@@ -245,12 +347,17 @@ export class ExternalTriggerEditor {
     this.rangeRead = null;
     this.levelRead = null;
     this.rangeValue = null;
+    this.rangeQuickFill = null;
+    this.levelQuickFill = null;
+    this.syncPresetLabels();
   }
 
   clearLevelRead() {
     this.levelRead = null;
+    this.levelQuickFill = null;
     this.levelInput.value = "";
     this.levelInput.setCustomValidity?.("");
+    this.syncPresetLabels();
   }
 
   currentCommandId() {
@@ -284,18 +391,48 @@ export class ExternalTriggerEditor {
       }
       if (job?.status !== "completed") {
         this.rangeRead = null;
+        this.rangeQuickFill = null;
+        this.syncPresetLabels();
         return job;
       }
 
       const value = rangeFromPayload(payloadOf(job));
       if (value === null) {
         this.rangeRead = null;
+        this.rangeQuickFill = null;
+        this.syncPresetLabels();
         return job;
       }
+      // The primary range readback stands on its own; the settings query below
+      // only builds the auxiliary quick-fill context.
       this.rangeInput.value = String(value);
       this.rangeRead = value;
       this.rangeValue = value;
-      return job;
+
+      const settingsJob = await this.hooks.executeCommand(
+        SETTINGS_COMMAND,
+        {},
+        { intent: "readback" },
+      );
+
+      if (
+        revision !== this.revision
+        || this.hooks.contextKey() !== contextKey
+        || this.currentCommandId() !== commandId
+        || !this.selectedDefinition()
+      ) {
+        return settingsJob;
+      }
+      const settings = settingsFromPayload(payloadOf(settingsJob));
+      const series = this.hooks.modelSeries?.() ?? null;
+      const values = settingsJob?.status === "completed" && settings !== null
+        ? rangePresetValues(series, settings.probeAttenuation)
+        : null;
+      this.rangeQuickFill = values === null || settings === null
+        ? null
+        : { values, units: settings.units };
+      this.syncPresetLabels();
+      return settingsJob;
     } finally {
       this.busy = false;
       this.applyBusyState();
@@ -377,18 +514,22 @@ export class ExternalTriggerEditor {
       }
       if (job?.status !== "completed") {
         this.levelRead = null;
+        this.levelQuickFill = null;
+        this.syncPresetLabels();
         return job;
       }
 
       const level = levelFromPayload(payloadOf(job));
       if (level === null) {
         this.levelRead = null;
+        this.levelQuickFill = null;
+        this.syncPresetLabels();
         return job;
       }
 
-      const rangeJob = await this.hooks.executeCommand(
-        RANGE_COMMAND,
-        { action: "query" },
+      const settingsJob = await this.hooks.executeCommand(
+        SETTINGS_COMMAND,
+        {},
         { intent: "readback" },
       );
       if (
@@ -397,20 +538,34 @@ export class ExternalTriggerEditor {
         || this.currentCommandId() !== commandId
         || !this.selectedDefinition()
       ) {
-        return rangeJob;
+        return settingsJob;
       }
-      const range = rangeJob?.status === "completed" ? rangeFromPayload(payloadOf(rangeJob)) : null;
+      const settings = settingsFromPayload(payloadOf(settingsJob));
+      const range = settingsJob?.status === "completed" && settings !== null
+        && typeof settings.rangeValue === "number"
+        && Number.isFinite(settings.rangeValue)
+        && settings.rangeValue > 0
+        ? settings.rangeValue
+        : null;
       if (range === null) {
         this.levelRead = null;
         this.rangeValue = null;
+        this.levelQuickFill = null;
         this.levelInput.setCustomValidity?.(translate("system.readFailed"));
         this.levelInput.reportValidity?.();
-        return rangeJob;
+        this.syncPresetLabels();
+        return settingsJob;
       }
       this.levelInput.value = String(level);
       this.levelRead = level;
       this.rangeValue = range;
-      return rangeJob;
+      this.levelQuickFill = {
+        range,
+        units: settings.units,
+        values: [-range, -range / 2, 0, range / 2, range],
+      };
+      this.syncPresetLabels();
+      return settingsJob;
     } finally {
       this.busy = false;
       this.applyBusyState();
@@ -508,6 +663,12 @@ export class ExternalTriggerEditor {
     this.applyButton.disabled = disabled;
     for (const button of Object.values(this.modeButtons)) {
       button.disabled = disabled;
+    }
+    for (const button of this.rangePresetButtons) {
+      button.disabled = disabled || !this.modeReady("range");
+    }
+    for (const button of this.levelPresetButtons) {
+      button.disabled = disabled || !this.modeReady("level");
     }
   }
 }
