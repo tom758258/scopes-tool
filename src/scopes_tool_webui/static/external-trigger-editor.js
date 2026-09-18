@@ -4,6 +4,9 @@ import { formatEngineering } from "/static/live-data.js";
 const RANGE_COMMAND = "external-trigger-range";
 const LEVEL_COMMAND = "trigger-edge-external-level";
 const SETTINGS_COMMAND = "external-trigger-settings";
+// Symbolic pre-read labels for the fixed level presets; these carry no units
+// and need no localization.
+const LEVEL_PRESET_SYMBOLS = ["−R", "−R/2", "0", "R/2", "R"];
 
 function cleanFloatText(value) {
   return String(Number(value.toPrecision(12)));
@@ -62,9 +65,8 @@ export class ExternalTriggerEditor {
     this.levelRead = null;
     this.rangeValue = null;
     this.rangeQuickFill = null;
-    this.rangePresetKey = null;
+    this.rangeStructureKey = null;
     this.levelQuickFill = null;
-    this.levelPresetKey = null;
     this.buildDom();
   }
 
@@ -94,7 +96,7 @@ export class ExternalTriggerEditor {
 
     // 1. Range / Level mode selector (mutually exclusive, follows the selected command)
     this.modeSelector = document.createElement("div");
-    this.modeSelector.className = "trigger-editor-segmented external-trigger-mode";
+    this.modeSelector.className = "trigger-editor-segmented channel-scale-range-mode";
     this.modeButtons = {};
     for (const key of ["range", "level"]) {
       const button = document.createElement("button");
@@ -118,7 +120,7 @@ export class ExternalTriggerEditor {
     this.rangeHeading.textContent = translate("external-trigger.editor.modeRange");
 
     this.rangeField = document.createElement("label");
-    this.rangeField.className = "field external-trigger-value";
+    this.rangeField.className = "field channel-scale-range-value";
     this.rangeFieldLabel = document.createElement("span");
     this.rangeFieldLabel.textContent = translate("field.channel-range.value");
     this.rangeInput = document.createElement("input");
@@ -134,6 +136,9 @@ export class ExternalTriggerEditor {
     this.rangePresets = document.createElement("div");
     this.rangePresets.className = "channel-scale-range-presets";
     this.rangePresetButtons = [];
+    // Best effort only: the structure is (re)synced on every present(), once
+    // the model capability is known. Unknown models stay button-free.
+    this.syncRangeStructure();
 
     this.rangeSection.append(this.rangeHeading, this.rangeField, this.rangeHelp, this.rangePresets);
 
@@ -146,7 +151,7 @@ export class ExternalTriggerEditor {
     this.levelHeading.textContent = translate("external-trigger.editor.modeLevel");
 
     this.levelField = document.createElement("label");
-    this.levelField.className = "field external-trigger-value";
+    this.levelField.className = "field channel-scale-range-value";
     this.levelFieldLabel = document.createElement("span");
     this.levelFieldLabel.textContent = translate("field.level");
     this.levelInput = document.createElement("input");
@@ -162,6 +167,22 @@ export class ExternalTriggerEditor {
     this.levelPresets = document.createElement("div");
     this.levelPresets.className = "channel-scale-range-presets";
     this.levelPresetButtons = [];
+    for (let index = 0; index < LEVEL_PRESET_SYMBOLS.length; index += 1) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.dataset.index = String(index);
+      button.dataset.value = "";
+      button.textContent = LEVEL_PRESET_SYMBOLS[index];
+      button.addEventListener("click", () => {
+        if (!this.modeReady("level")) return;
+        const current = Number(button.dataset.value);
+        if (!Number.isFinite(current)) return;
+        this.levelInput.value = cleanFloatText(current);
+      });
+      this.levelPresets.append(button);
+      this.levelPresetButtons.push(button);
+    }
 
     this.levelSection.append(this.levelHeading, this.levelField, this.levelHelp, this.levelPresets);
 
@@ -259,50 +280,72 @@ export class ExternalTriggerEditor {
     this.applyBusyState();
   }
 
+  // Range button structure follows the projected model capability, not reads.
+  // It is (re)built only when the base set changes: first present, model or
+  // capability change, or loss of the projection (fail-closed to zero
+  // buttons). Ordinary reads only sync the existing buttons below.
+  syncRangeStructure() {
+    const baseValues = this.quickFillBaseValues();
+    const key = baseValues === null ? null : `base:${baseValues.join(",")}`;
+    if (key === this.rangeStructureKey) return;
+    this.rangeStructureKey = key;
+    this.rangePresetButtons = [];
+    this.rangePresets.replaceChildren();
+    if (baseValues === null) return;
+    for (const base of baseValues) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.dataset.base = String(base);
+      button.dataset.value = "";
+      button.textContent = String(base);
+      button.addEventListener("click", () => {
+        if (!this.modeReady("range")) return;
+        const current = Number(button.dataset.value);
+        if (!Number.isFinite(current)) return;
+        this.rangeInput.value = cleanFloatText(current);
+      });
+      this.rangePresets.append(button);
+      this.rangePresetButtons.push(button);
+    }
+  }
+
   syncRangePresets() {
     const context = this.rangeQuickFill;
-    const key = context ? `${context.units}|${context.values.join(",")}` : null;
-    if (key !== null && key !== this.rangePresetKey) {
-      this.rangePresetKey = key;
-      this.rangePresetButtons = [];
-      this.rangePresets.replaceChildren();
-      for (const value of context.values) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "secondary";
-        button.disabled = true;
-        button.textContent = formatEngineering(value, unitLetter(context.units));
-        button.addEventListener("click", () => {
-          if (!this.modeReady("range")) return;
-          this.rangeInput.value = cleanFloatText(value);
-        });
-        this.rangePresets.append(button);
-        this.rangePresetButtons.push(button);
-      }
+    const buttons = this.rangePresetButtons;
+    if (context !== null && Array.isArray(context.values) && context.values.length === buttons.length) {
+      buttons.forEach((button, index) => {
+        const current = context.values[index];
+        button.dataset.value = cleanFloatText(current);
+        button.textContent = formatEngineering(current, unitLetter(context.units));
+      });
+      return;
     }
+    // No trusted quick-fill context: keep the buttons, drop readiness, and
+    // fall back to the projected base labels so stale values never mislead.
+    buttons.forEach((button) => {
+      button.dataset.value = "";
+      button.textContent = button.dataset.base;
+    });
   }
 
   syncLevelPresets() {
     const context = this.levelQuickFill;
-    const key = context ? `${context.units}|${context.values.join(",")}` : null;
-    if (key !== null && key !== this.levelPresetKey) {
-      this.levelPresetKey = key;
-      this.levelPresetButtons = [];
-      this.levelPresets.replaceChildren();
-      for (const value of context.values) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "secondary";
-        button.disabled = true;
-        button.textContent = formatEngineering(value, unitLetter(context.units));
-        button.addEventListener("click", () => {
-          if (!this.modeReady("level")) return;
-          this.levelInput.value = cleanFloatText(value);
-        });
-        this.levelPresets.append(button);
-        this.levelPresetButtons.push(button);
-      }
+    const buttons = this.levelPresetButtons;
+    if (context !== null && Array.isArray(context.values) && context.values.length === buttons.length) {
+      buttons.forEach((button, index) => {
+        const current = context.values[index];
+        button.dataset.value = cleanFloatText(current);
+        button.textContent = formatEngineering(current, unitLetter(context.units));
+      });
+      return;
     }
+    // No trusted quick-fill context: keep the five buttons, drop readiness,
+    // and fall back to the symbolic labels.
+    buttons.forEach((button, index) => {
+      button.dataset.value = "";
+      button.textContent = LEVEL_PRESET_SYMBOLS[index];
+    });
   }
 
   readCurrent() {
@@ -362,6 +405,7 @@ export class ExternalTriggerEditor {
     this.levelInput.value = "";
     this.levelInput.setCustomValidity?.("");
     this.clearReadState();
+    this.syncRangeStructure();
     this.renderMode();
     this.applyBusyState();
   }

@@ -846,9 +846,21 @@ def test_external_trigger_quick_fill() -> None:
         const levelPresets = () => findAll(editor.levelSection, (node) => node.tagName === "BUTTON");
         const labels = (nodes) => nodes.map((node) => node.textContent);
 
-        // A. Quick-fill requires a successful read first.
-        assert.deepEqual(rangePresets(), []);
-        assert.deepEqual(levelPresets(), []);
+        // A. Presets exist before any read: 4000X shows its two base values,
+        // Level shows its five symbolic presets, all visible but disabled.
+        assert.equal(editor.modeSelector.className, "trigger-editor-segmented channel-scale-range-mode");
+        assert.equal(editor.rangeField.className, "field channel-scale-range-value");
+        assert.equal(editor.levelField.className, "field channel-scale-range-value");
+        assert.equal(editor.rangePresets.className, "channel-scale-range-presets");
+        assert.equal(editor.levelPresets.className, "channel-scale-range-presets");
+        assert.equal(rangePresets().length, 2);
+        assert.deepEqual(labels(rangePresets()), ["1.6", "8"]);
+        assert.ok(rangePresets().every((button) => button.disabled === true));
+        assert.equal(levelPresets().length, 5);
+        assert.deepEqual(labels(levelPresets()), ["−R", "−R/2", "0", "R/2", "R"]);
+        assert.ok(levelPresets().every((button) => button.disabled === true));
+        const firstRangeButton = rangePresets()[0];
+        const firstLevelButton = levelPresets()[0];
 
         // B. 4000X range presets follow the probe attenuation.
         calls.length = 0;
@@ -858,6 +870,7 @@ def test_external_trigger_quick_fill() -> None:
           ["external-trigger-settings", {}, "readback"],
         ]);
         assert.deepEqual(labels(rangePresets()), ["1.60 V", "8.00 V"]);
+        assert.equal(rangePresets()[0], firstRangeButton);
         assert.ok(rangePresets().every((button) => button.disabled === false));
         calls.length = 0;
         rangePresets()[0].dispatch("click");
@@ -869,9 +882,16 @@ def test_external_trigger_quick_fill() -> None:
         await editor.readCurrent();
         assert.deepEqual(labels(rangePresets()), ["16.0 V", "80.0 V"]);
 
-        // C. 3000X only offers 8 V at 1:1 attenuation.
+        // C. 3000X only offers 8 V at 1:1 attenuation. A model switch is a
+        // context change in the real app, so the structure is rebuilt on the
+        // next present, before any read.
         env.modelId = "keysight-dsox3024a";
+        env.contextKey = "ctx-3000x";
         probeAttenuation = 1;
+        editor.present();
+        assert.equal(rangePresets().length, 1);
+        assert.deepEqual(labels(rangePresets()), ["8"]);
+        assert.ok(rangePresets().every((button) => button.disabled === true));
         calls.length = 0;
         await editor.readCurrent();
         assert.deepEqual(labels(rangePresets()), ["8.00 V"]);
@@ -886,6 +906,7 @@ def test_external_trigger_quick_fill() -> None:
           ["external-trigger-settings", {}, "readback"],
         ]);
         assert.deepEqual(labels(levelPresets()), ["-8.00 V", "-4.00 V", "0.00 V", "4.00 V", "8.00 V"]);
+        assert.equal(levelPresets()[0], firstLevelButton);
         calls.length = 0;
         levelPresets()[3].dispatch("click");
         assert.equal(levelInput().value, "4");
@@ -896,7 +917,7 @@ def test_external_trigger_quick_fill() -> None:
         calls.length = 0;
         await editor.applyCurrent();
         assert.equal(calls.length, 1);
-        assert.ok(levelPresets().length > 0);
+        assert.equal(levelPresets().length, 5);
         assert.ok(levelPresets().every((button) => button.disabled === true));
         calls.length = 0;
         levelInput().value = "";
@@ -906,8 +927,10 @@ def test_external_trigger_quick_fill() -> None:
 
         // E. Amps units change the preset labels.
         env.modelId = "keysight-dsox4024a";
+        env.contextKey = "ctx";
         units = "amps";
         probeAttenuation = 1;
+        editor.present();
         calls.length = 0;
         await editor.readCurrent();
         assert.deepEqual(labels(rangePresets()), ["1.60 A", "8.00 A"]);
