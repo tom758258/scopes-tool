@@ -317,7 +317,7 @@ def test_external_trigger_editor_routing() -> None:
     html = read_static("index.html")
 
     assert 'import { ExternalTriggerEditor } from "/static/external-trigger-editor.js";' in app_source
-    assert 'id="external-trigger-editor" class="external-trigger-editor trigger-editor" hidden' in html
+    assert 'id="external-trigger-editor" class="external-trigger-editor" hidden' in html
     assert (
         "externalTriggerEditor = new ExternalTriggerEditor(elements.externalTriggerEditor, catalog, {"
         in app_source

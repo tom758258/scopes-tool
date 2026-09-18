@@ -1035,7 +1035,7 @@ function syncCommandSelection(draft = null) {
     onDirty: () => updateAvailability(),
     onQueryFieldChange: invalidateGenericFormOwnership,
   });
-  elements.formHeading.hidden = (editorOwned && !["channel-display", "timebase-position", "channel-scale-range"].includes(editorKind)) || systemInformationSelected;
+  elements.formHeading.hidden = (editorOwned && !["channel-display", "timebase-position", "channel-scale-range", "external-trigger"].includes(editorKind)) || systemInformationSelected;
   elements.form.hidden = editorOwned || systemInformationSelected;
   channelLabelVisibility?.render(selected?.id === "channel-label");
   elements.referenceEditor.hidden = editorKind !== "reference";
