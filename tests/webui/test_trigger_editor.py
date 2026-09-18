@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model_id
-from scopes_tool_core.trigger import TRIGGER_MODES
+from scopes_tool_core.trigger import TRIGGER_MODES, TriggerModeState
+from scopes_tool_webui import command_execution as command_execution_module
+from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 from scopes_tool_webui.commands import COMMANDS, command_catalog
 
 
@@ -136,6 +138,73 @@ def test_trigger_mode_command_carries_core_sourced_options() -> None:
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
     assert '"command.trigger-pattern": "碼型觸發"' in chinese
+    for mode, label in (
+        ("glitch", "脈波寬度"),
+        ("edge-burst", "第 N 邊緣突波"),
+        ("runt", "最窄脈波"),
+        ("setup-hold", "設定和保持"),
+        ("transition", "上升/下降時間"),
+    ):
+        assert f'"enum.trigger-mode.{mode}": "{label}"' in chinese
+    for command, label in (
+        ("trigger-pulse-width", "脈波寬度觸發"),
+        ("trigger-delay", "邊緣後邊緣觸發"),
+        ("trigger-transition", "上升/下降時間觸發"),
+        ("trigger-edge-burst", "第 N 邊緣突波觸發"),
+        ("trigger-runt", "最窄脈波觸發"),
+        ("trigger-setup-hold", "設定和保持觸發"),
+    ):
+        assert f'"command.{command}": "{label}"' in chinese
+    assert '"group.pattern-or": "類型 / 碼型 / OR"' in chinese
+    assert '"group.pattern-or": "Type / Pattern / OR"' in english
+    for key in (
+        "enum.pattern-level.high",
+        "enum.pattern-level.low",
+        "enum.pattern-level.ignore",
+    ):
+        assert f'"{key}":' in english, key
+        assert f'"{key}":' in chinese, key
+
+
+def test_trigger_mode_request_passes_validation_into_execution(tmp_path: Path) -> None:
+    query = validate_job_request({
+        "command": "trigger-mode",
+        "mode": "simulate",
+        "model_id": "keysight-dsox4024a",
+        "parameters": {"action": "query"},
+    })
+    assert "mode" not in query["parameters"]
+
+    apply = validate_job_request({
+        "command": "trigger-mode",
+        "mode": "simulate",
+        "model_id": "keysight-dsox4024a",
+        "parameters": {"action": "set", "mode": "edge"},
+    })
+    assert apply["parameters"]["mode"] == "edge"
+
+    calls: list[tuple] = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def configure_trigger_mode(self, mode):  # type: ignore[no-untyped-def]
+            calls.append(("configure", mode))
+
+        def query_trigger_mode(self):  # type: ignore[no-untyped-def]
+            calls.append(("query",))
+            return TriggerModeState(mode="edge", raw_mode="EDGE")
+
+    result = command_execution_module._execute_scope_command(
+        FakeScope(),
+        "trigger-mode",
+        "SIM::INSTR",
+        {"action": "set", "mode": "edge"},
+        tmp_path,
+    )
+
+    assert calls == [("configure", "edge"), ("query",)]
+    assert result["result"]["trigger"]["mode"] == "edge"
 
 
 def test_trigger_channel_fields_follow_the_existing_model_projection() -> None:
@@ -1038,6 +1107,7 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
         entry for entry in command_catalog() if entry["id"] in {
             "trigger-mode",
             "trigger-or",
+            "trigger-pattern",
             "channel-scale",
         }
     ])
@@ -1151,7 +1221,8 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
         };
         let selectedId = "trigger-mode";
         let modeReadback = "or";
-        let orPattern = "RFEX";
+        let orPattern = "XXFR";
+        let patternReadback = "1X01";
         const calls = [];
         const hooks = {
           headerActions: new FakeNode("div"),
@@ -1169,6 +1240,10 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
             if (id === "trigger-or") {
               if (parameters.action === "set") orPattern = parameters.pattern;
               return { status: "completed", result: { result: { trigger: { mode: "or", pattern: orPattern } } } };
+            }
+            if (id === "trigger-pattern") {
+              if (parameters.action === "set") patternReadback = parameters.pattern;
+              return { status: "completed", result: { result: { trigger: { mode: "pattern", pattern: patternReadback } } } };
             }
             return { status: "completed", result: { result: {} } };
           },
@@ -1209,6 +1284,7 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
         assert.equal(modeInput().value, "edge");
 
         // 3. OR trigger renders one select per analog channel, no free text.
+        // Raw strings run MSB-first (CH4..CH1), so "XXFR" decodes to R/F/X/X.
         selectedId = "trigger-or";
         await editor.refresh(true, true);
         await drain();
@@ -1218,9 +1294,9 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
           orSection(), (node) => node.tagName === "SELECT",
         );
         assert.deepEqual(orSelects().map((node) => node.dataset.orChannel), ["1", "2", "3", "4"]);
-        assert.deepEqual(orSelects().map((node) => node.value), ["R", "F", "E", "X"]);
+        assert.deepEqual(orSelects().map((node) => node.value), ["R", "F", "X", "X"]);
 
-        // 4. Selects encode to one pattern string on a plain trigger-or apply.
+        // 4. Selects encode MSB-first on a plain trigger-or apply.
         orSelects()[0].value = "F";
         orSelects()[1].value = "R";
         orSelects()[2].value = "X";
@@ -1228,7 +1304,7 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
         calls.length = 0;
         await editor.submit();
         assert.deepEqual(calls, [
-          ["trigger-or", { action: "set", pattern: "FRXE" }, "apply"],
+          ["trigger-or", { action: "set", pattern: "EXRF" }, "apply"],
         ]);
 
         // 5. An unparseable readback keeps the current selects untouched.
@@ -1236,6 +1312,32 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
         await editor.refresh(true, true);
         await drain();
         assert.deepEqual(orSelects().map((node) => node.value), ["F", "R", "X", "E"]);
+
+        // 6. Pattern trigger renders level selects and encodes MSB-first.
+        selectedId = "trigger-pattern";
+        await editor.refresh(true, true);
+        await drain();
+        assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
+        const patternSelects = () => findAll(
+          editor.sectionsHost.children[0], (node) => node.tagName === "SELECT",
+        );
+        assert.deepEqual(patternSelects().map((node) => node.dataset.patternChannel), ["1", "2", "3", "4"]);
+        assert.deepEqual(patternSelects().map((node) => node.value), ["1", "0", "X", "1"]);
+        patternSelects()[0].value = "1";
+        patternSelects()[1].value = "0";
+        patternSelects()[2].value = "X";
+        patternSelects()[3].value = "1";
+        calls.length = 0;
+        await editor.submit();
+        assert.deepEqual(calls, [
+          ["trigger-pattern", { action: "set", pattern: "1X01" }, "apply"],
+        ]);
+
+        // 7. An invalid pattern readback keeps the current selects untouched.
+        patternReadback = "12AB";
+        await editor.refresh(true, true);
+        await drain();
+        assert.deepEqual(patternSelects().map((node) => node.value), ["1", "0", "X", "1"]);
 
         console.log(JSON.stringify({ ok: true }));
         '''

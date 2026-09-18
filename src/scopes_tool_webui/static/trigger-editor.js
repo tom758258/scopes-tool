@@ -5,12 +5,19 @@ import { formatEngineering } from "/static/live-data.js";
 const DIV_STEPS = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
 
 // OR trigger per-channel edge options; the select value is the SCPI pattern
-// character itself, so encode/decode is a plain join/split.
+// character itself, so encode/decode is a join/split around the channel order.
 const OR_EDGE_OPTIONS = [
   { value: "R", labelKey: "enum.or-edge.rising" },
   { value: "F", labelKey: "enum.or-edge.falling" },
   { value: "E", labelKey: "enum.or-edge.either" },
   { value: "X", labelKey: "enum.or-edge.ignore" },
+];
+
+// Pattern trigger per-channel level options; same mechanics, digits only.
+const PATTERN_LEVEL_OPTIONS = [
+  { value: "1", labelKey: "enum.pattern-level.high" },
+  { value: "0", labelKey: "enum.pattern-level.low" },
+  { value: "X", labelKey: "enum.pattern-level.ignore" },
 ];
 
 function divLabel(div) {
@@ -173,7 +180,7 @@ export class TriggerEditor {
     formContainer.hidden = fields.length === 0;
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
-    const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch, div: null, or: null };
+    const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch, div: null, channelPattern: null };
     const divCapable = this.divQualifies(command);
     if (divCapable) {
       const onDivField = (field) => this.handleDivField(entry, field);
@@ -183,18 +190,25 @@ export class TriggerEditor {
     }
     entry.form = form;
     if (divCapable) this.buildDivSection(section, entry);
-    const orChannels = command.id === "trigger-or" ? this.orAnalogChannels() : [];
-    if (orChannels.length > 0) entry.or = this.buildOrSection(section, entry, orChannels);
+    const patternChannels = command.id === "trigger-or" || command.id === "trigger-pattern"
+      ? this.analogChannels()
+      : [];
+    if (patternChannels.length > 0) {
+      entry.channelPattern = command.id === "trigger-or"
+        ? this.buildOrSection(section, entry, patternChannels)
+        : this.buildPatternSection(section, entry, patternChannels);
+    }
     actionButton.addEventListener("click", () => {
       void this.submit();
     });
     return entry;
   }
 
-  // Explicit, documented channel source for the OR editor: the model-projected
-  // analog channel options of the core channel-scale command. Returns [] when
-  // unavailable so the caller falls back to the generic pattern field.
-  orAnalogChannels() {
+  // Explicit, documented channel source shared by the OR and pattern channel
+  // editors: the model-projected analog channel options of the core
+  // channel-scale command. Returns [] when unavailable so the caller falls
+  // back to the generic pattern field.
+  analogChannels() {
     const definition = this.catalog.commands.find((command) => command.id === "channel-scale") || null;
     if (!definition) return [];
     const fields = this.catalog.fieldsFor?.(definition) ?? definition.fields ?? [];
@@ -206,7 +220,7 @@ export class TriggerEditor {
     return channels;
   }
 
-  orChannelLabel(channel) {
+  channelLabel(channel) {
     const key = `enum.channel${channel}`;
     return hasTranslation(key) ? translate(key) : `CH${channel}`;
   }
@@ -224,7 +238,7 @@ export class TriggerEditor {
       const row = document.createElement("label");
       row.className = "field";
       const name = document.createElement("span");
-      name.textContent = this.orChannelLabel(channel);
+      name.textContent = this.channelLabel(channel);
       const select = document.createElement("select");
       select.dataset.orChannel = String(channel);
       for (const option of OR_EDGE_OPTIONS) {
@@ -240,22 +254,56 @@ export class TriggerEditor {
     help.textContent = translate("help.trigger-or.pattern");
     box.append(help);
     section.append(box);
-    return { selects };
+    return { selects, charset: "RFEX" };
   }
 
-  orPattern(entry) {
-    return (entry?.or?.selects || []).map((select) => select.value).join("");
+  buildPatternSection(section, entry, channels) {
+    // Same detach mechanics as the OR section; the pattern vocabulary is
+    // digits only (1/0/X), validated against the channel count on apply.
+    const patternInput = entry.form.container?.querySelector?.('[data-field="pattern"]');
+    patternInput?.closest?.("label")?.remove?.();
+    const box = document.createElement("div");
+    box.className = "trigger-pattern-channels";
+    const selects = [];
+    for (const channel of channels) {
+      const row = document.createElement("label");
+      row.className = "field";
+      const name = document.createElement("span");
+      name.textContent = this.channelLabel(channel);
+      const select = document.createElement("select");
+      select.dataset.patternChannel = String(channel);
+      for (const option of PATTERN_LEVEL_OPTIONS) {
+        select.append(new Option(translate(option.labelKey), option.value));
+      }
+      select.value = "X";
+      row.append(name, select);
+      box.append(row);
+      selects.push(select);
+    }
+    const help = document.createElement("small");
+    help.className = "field-help";
+    help.textContent = translate("help.trigger-pattern.pattern");
+    box.append(help);
+    section.append(box);
+    return { selects, charset: "01X" };
   }
 
-  syncOrSelects(entry, job) {
-    const selects = entry?.or?.selects || [];
-    if (selects.length === 0) return;
+  // Raw Keysight strings run MSB-first (CH4..CH1 on 4-channel models), while
+  // the selects stay in ascending channel order, so encode reverses.
+  channelPatternValue(entry) {
+    return (entry?.channelPattern?.selects || []).map((select) => select.value).reverse().join("");
+  }
+
+  syncChannelPatternSelects(entry, job) {
+    const patternEntry = entry?.channelPattern || null;
+    const selects = patternEntry?.selects || [];
+    if (patternEntry === null || selects.length === 0) return;
     const payload = job?.result?.result ?? job?.result;
     const raw = payload?.pattern ?? payload?.trigger?.pattern;
     const pattern = typeof raw === "string" ? raw.trim().toUpperCase() : "";
-    if (pattern.length !== selects.length || [...pattern].some((char) => !"RFEX".includes(char))) return;
+    if (pattern.length !== selects.length || [...pattern].some((char) => !patternEntry.charset.includes(char))) return;
     selects.forEach((select, index) => {
-      select.value = pattern[index];
+      select.value = pattern[selects.length - 1 - index];
     });
   }
 
@@ -446,8 +494,9 @@ export class TriggerEditor {
       { intent: "readback" },
     );
     if (job?.status === "completed") entry.form.syncResult(job, true);
-    if (entry.id === "trigger-or" && entry === this.entry && entry.epoch === this.epoch) {
-      this.syncOrSelects(entry, job);
+    if ((entry.id === "trigger-or" || entry.id === "trigger-pattern")
+      && entry === this.entry && entry.epoch === this.epoch) {
+      this.syncChannelPatternSelects(entry, job);
     }
     if (!entry.div || entry !== this.entry || entry.epoch !== this.epoch) return;
     if (job?.status !== "completed") {
@@ -499,9 +548,9 @@ export class TriggerEditor {
       const values = entry.form.values();
       if (values === null) return;
       parameters = values;
-      // The OR pattern field is driven by the per-channel selects, which are
+      // The channel pattern field is driven by the per-channel selects, which are
       // not form fields; encode them here so the generic flow stays untouched.
-      if (entry.or) parameters.pattern = this.orPattern(entry);
+      if (entry.channelPattern) parameters.pattern = this.channelPatternValue(entry);
     }
     this.setBusy(true);
     try {
@@ -518,7 +567,9 @@ export class TriggerEditor {
       ) {
         entry.form.clearDirty();
         entry.form.syncResult(job, false);
-        if (entry.id === "trigger-or") this.syncOrSelects(entry, job);
+        if (entry.id === "trigger-or" || entry.id === "trigger-pattern") {
+          this.syncChannelPatternSelects(entry, job);
+        }
         if (entry.div) {
           entry.div.selected = null;
           this.syncDivInfo(entry);
@@ -548,7 +599,7 @@ export class TriggerEditor {
     if (this.entry) {
       this.entry.button.disabled = disabled;
       this.entry.form?.setDisabled(disabled);
-      for (const select of this.entry.or?.selects || []) select.disabled = disabled;
+      for (const select of this.entry.channelPattern?.selects || []) select.disabled = disabled;
       this.applyDivBusyState(this.entry);
     }
   }

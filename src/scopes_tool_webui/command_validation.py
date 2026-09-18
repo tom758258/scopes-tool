@@ -618,6 +618,7 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         "trigger-tv": ("source_channel", "standard", "mode", "polarity", "line"),
         "trigger-pattern": ("pattern",),
         "trigger-or": ("pattern",),
+        "trigger-mode": ("mode",),
         "trigger-sweep": ("mode",),
         "trigger-noise-reject": ("enabled",),
         "trigger-hf-reject": ("enabled",),
