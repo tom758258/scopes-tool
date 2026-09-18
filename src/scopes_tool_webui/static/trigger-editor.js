@@ -1,8 +1,17 @@
-import { translate } from "/static/i18n.js";
+import { hasTranslation, translate } from "/static/i18n.js";
 import { CommandForm } from "/static/command-form.js";
 import { formatEngineering } from "/static/live-data.js";
 
 const DIV_STEPS = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+
+// OR trigger per-channel edge options; the select value is the SCPI pattern
+// character itself, so encode/decode is a plain join/split.
+const OR_EDGE_OPTIONS = [
+  { value: "R", labelKey: "enum.or-edge.rising" },
+  { value: "F", labelKey: "enum.or-edge.falling" },
+  { value: "E", labelKey: "enum.or-edge.either" },
+  { value: "X", labelKey: "enum.or-edge.ignore" },
+];
 
 function divLabel(div) {
   return div > 0 ? `+${div}` : String(div);
@@ -164,7 +173,7 @@ export class TriggerEditor {
     formContainer.hidden = fields.length === 0;
     this.sectionsHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
-    const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch, div: null };
+    const entry = { id: command.id, kind, action, form: null, button: actionButton, epoch, div: null, or: null };
     const divCapable = this.divQualifies(command);
     if (divCapable) {
       const onDivField = (field) => this.handleDivField(entry, field);
@@ -174,10 +183,80 @@ export class TriggerEditor {
     }
     entry.form = form;
     if (divCapable) this.buildDivSection(section, entry);
+    const orChannels = command.id === "trigger-or" ? this.orAnalogChannels() : [];
+    if (orChannels.length > 0) entry.or = this.buildOrSection(section, entry, orChannels);
     actionButton.addEventListener("click", () => {
       void this.submit();
     });
     return entry;
+  }
+
+  // Explicit, documented channel source for the OR editor: the model-projected
+  // analog channel options of the core channel-scale command. Returns [] when
+  // unavailable so the caller falls back to the generic pattern field.
+  orAnalogChannels() {
+    const definition = this.catalog.commands.find((command) => command.id === "channel-scale") || null;
+    if (!definition) return [];
+    const fields = this.catalog.fieldsFor?.(definition) ?? definition.fields ?? [];
+    const field = fields.find((entry) => entry?.name === "channel");
+    const options = field ? (this.catalog.optionsFor?.(field) ?? field.options ?? []) : [];
+    const channels = [...new Set(
+      [...options].map(Number).filter((value) => Number.isInteger(value) && value > 0),
+    )].sort((a, b) => a - b);
+    return channels;
+  }
+
+  orChannelLabel(channel) {
+    const key = `enum.channel${channel}`;
+    return hasTranslation(key) ? translate(key) : `CH${channel}`;
+  }
+
+  buildOrSection(section, entry, channels) {
+    // The free-text pattern field stays out of the way: detach its wrapper so
+    // generic visibility handling cannot resurface it, and drive the pattern
+    // purely from the per-channel selects below.
+    const patternInput = entry.form.container?.querySelector?.('[data-field="pattern"]');
+    patternInput?.closest?.("label")?.remove?.();
+    const box = document.createElement("div");
+    box.className = "trigger-or-channels";
+    const selects = [];
+    for (const channel of channels) {
+      const row = document.createElement("label");
+      row.className = "field";
+      const name = document.createElement("span");
+      name.textContent = this.orChannelLabel(channel);
+      const select = document.createElement("select");
+      select.dataset.orChannel = String(channel);
+      for (const option of OR_EDGE_OPTIONS) {
+        select.append(new Option(translate(option.labelKey), option.value));
+      }
+      select.value = "X";
+      row.append(name, select);
+      box.append(row);
+      selects.push(select);
+    }
+    const help = document.createElement("small");
+    help.className = "field-help";
+    help.textContent = translate("help.trigger-or.pattern");
+    box.append(help);
+    section.append(box);
+    return { selects };
+  }
+
+  orPattern(entry) {
+    return (entry?.or?.selects || []).map((select) => select.value).join("");
+  }
+
+  syncOrSelects(entry, job) {
+    const selects = entry?.or?.selects || [];
+    if (selects.length === 0) return;
+    const payload = job?.result?.result ?? job?.result;
+    const raw = payload?.pattern ?? payload?.trigger?.pattern;
+    const pattern = typeof raw === "string" ? raw.trim().toUpperCase() : "";
+    if (pattern.length !== selects.length || [...pattern].some((char) => !"RFEX".includes(char))) return;
+    selects.forEach((select, index) => {
+      select.value = pattern[index];
+    });
   }
 
   divQualifies(command) {
@@ -367,6 +446,9 @@ export class TriggerEditor {
       { intent: "readback" },
     );
     if (job?.status === "completed") entry.form.syncResult(job, true);
+    if (entry.id === "trigger-or" && entry === this.entry && entry.epoch === this.epoch) {
+      this.syncOrSelects(entry, job);
+    }
     if (!entry.div || entry !== this.entry || entry.epoch !== this.epoch) return;
     if (job?.status !== "completed") {
       entry.div.incomplete = true;
@@ -417,6 +499,9 @@ export class TriggerEditor {
       const values = entry.form.values();
       if (values === null) return;
       parameters = values;
+      // The OR pattern field is driven by the per-channel selects, which are
+      // not form fields; encode them here so the generic flow stays untouched.
+      if (entry.or) parameters.pattern = this.orPattern(entry);
     }
     this.setBusy(true);
     try {
@@ -433,6 +518,7 @@ export class TriggerEditor {
       ) {
         entry.form.clearDirty();
         entry.form.syncResult(job, false);
+        if (entry.id === "trigger-or") this.syncOrSelects(entry, job);
         if (entry.div) {
           entry.div.selected = null;
           this.syncDivInfo(entry);
@@ -462,6 +548,7 @@ export class TriggerEditor {
     if (this.entry) {
       this.entry.button.disabled = disabled;
       this.entry.form?.setDisabled(disabled);
+      for (const select of this.entry.or?.selects || []) select.disabled = disabled;
       this.applyDivBusyState(this.entry);
     }
   }

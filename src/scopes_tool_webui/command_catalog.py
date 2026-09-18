@@ -76,6 +76,7 @@ from scopes_tool_core.serial import (
 )
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 from scopes_tool_core.demo import DEMO_FUNCTIONS
+from scopes_tool_core.trigger import TRIGGER_MODES
 from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS, wgen_frequency_limits
 
 
@@ -1679,6 +1680,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         group="tv",
         editor="trigger",
     ),
+    _action_command("trigger-mode", "Trigger", "Trigger type", (_command_field("mode", "enum", options=TRIGGER_MODES, option_label="trigger-mode", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-mode.mode"),), group="pattern-or", editor="trigger"),
     _action_command("trigger-pattern", "Trigger", "Pattern trigger", (_command_field("pattern", "string", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-pattern.pattern"),), group="pattern-or", editor="trigger"),
     _action_command("trigger-or", "Trigger", "OR trigger", (_command_field("pattern", "string", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-or.pattern"),), group="pattern-or", editor="trigger"),
     _action_command("trigger-sweep", "Trigger", "Trigger sweep", (_command_field("mode", "enum", options=("auto", "normal"), visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-sweep.mode"),), group="common", editor="trigger"),

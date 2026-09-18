@@ -2990,6 +2990,7 @@ def test_command_catalog_group_metadata_contract() -> None:
         "trigger-setup-hold": "setup-hold",
         "trigger-edge-burst": "edge-burst",
         "trigger-tv": "tv",
+        "trigger-mode": "pattern-or",
         "trigger-or": "pattern-or",
         "search-state": "basic",
         "search-event": "event",

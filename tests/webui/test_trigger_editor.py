@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model_id
+from scopes_tool_core.trigger import TRIGGER_MODES
 from scopes_tool_webui.commands import COMMANDS, command_catalog
 
 
@@ -54,6 +55,7 @@ EXPECTED_TRIGGER_GROUPS = {
     "trigger-setup-hold": "setup-hold",
     "trigger-edge-burst": "edge-burst",
     "trigger-tv": "tv",
+    "trigger-mode": "pattern-or",
     "trigger-pattern": "pattern-or",
     "trigger-or": "pattern-or",
     "trigger-sweep": "common",
@@ -99,6 +101,41 @@ def test_command_catalog_exposes_editor_metadata_for_browser_routing() -> None:
     assert catalog["external-trigger-settings"]["editor"] == "trigger"
     assert catalog["serial-mode"]["editor"] == "serial"
     assert "editor" not in catalog["channel-scale"]
+
+
+def test_trigger_mode_command_carries_core_sourced_options() -> None:
+    catalog = {entry["id"]: entry for entry in command_catalog()}
+
+    entry = catalog["trigger-mode"]
+    assert entry["editor"] == "trigger"
+    assert entry["group"] == "pattern-or"
+    mode_field = next(field for field in entry["fields"] if field["name"] == "mode")
+    assert mode_field["type"] == "enum"
+    assert list(mode_field["options"]) == list(TRIGGER_MODES)
+
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+    assert '"command.trigger-mode": "Trigger type"' in english
+    assert '"command.trigger-mode": "觸發類型"' in chinese
+    assert '"description.trigger-mode"' in english
+    assert '"description.trigger-mode"' in chinese
+    for mode, label in (
+        ("edge", "Edge"),
+        ("or", "OR"),
+        ("setup-hold", "Setup/Hold"),
+    ):
+        assert f'"enum.trigger-mode.{mode}": "{label}"' in english
+    for mode in TRIGGER_MODES:
+        assert f'"enum.trigger-mode.{mode}":' in chinese, mode
+    for key in (
+        "enum.or-edge.rising",
+        "enum.or-edge.falling",
+        "enum.or-edge.either",
+        "enum.or-edge.ignore",
+    ):
+        assert f'"{key}":' in english, key
+        assert f'"{key}":' in chinese, key
+    assert '"command.trigger-pattern": "碼型觸發"' in chinese
 
 
 def test_trigger_channel_fields_follow_the_existing_model_projection() -> None:
@@ -994,6 +1031,227 @@ def test_external_trigger_quick_fill() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
     assert json.loads(completed.stdout.strip().splitlines()[-1]) == {"ok": True}
+
+
+def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
+    catalog_json = json.dumps([
+        entry for entry in command_catalog() if entry["id"] in {
+            "trigger-mode",
+            "trigger-or",
+            "channel-scale",
+        }
+    ])
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.className = "";
+            this.textContent = "";
+            this.type = "";
+            this.value = "";
+            this.multiple = false;
+            this.style = {};
+            this.parent = null;
+            this.classList = { add() {}, toggle() {}, contains() { return false; } };
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) {
+            for (const node of nodes) {
+              node.remove();
+              node.parent = this;
+              this.children.push(node);
+            }
+          }
+          remove() {
+            if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this);
+            this.parent = null;
+          }
+          querySelector(sel) {
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (!match) return null;
+            const find = (list) => {
+              for (const node of list || []) {
+                if (node.dataset && node.dataset.field === match[1]) return node;
+                const found = find(node.children);
+                if (found) return found;
+              }
+              return null;
+            };
+            return find(this.children);
+          }
+          querySelectorAll(sel) {
+            const out = [];
+            if (sel !== "[data-field]") return out;
+            const collect = (list) => {
+              for (const node of list || []) {
+                if (node.dataset && node.dataset.field) out.push(node);
+                collect(node.children);
+              }
+            };
+            collect(this.children);
+            return out;
+          }
+          closest(sel) {
+            let node = this.parent;
+            while (node) {
+              if (sel === "label" && node.tagName === "LABEL") return node;
+              if (sel === '[data-visible-if-hidden="true"]'
+                && node.dataset && node.dataset.visibleIfHidden === "true") return node;
+              node = node.parent;
+            }
+            return null;
+          }
+          setCustomValidity() {}
+          reportValidity() { return true; }
+          checkValidity() { return true; }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.Option = function (text, value) {
+          const node = new FakeNode("option");
+          node.textContent = text;
+          node.value = String(value);
+          return node;
+        };
+        globalThis.translate = (key) => key;
+        globalThis.hasTranslation = () => true;
+        globalThis.formatEngineering = (value) => String(value);
+
+        const strip = (name) => fs.readFileSync(
+          path.join(process.cwd(), "src/scopes_tool_webui/static", name), "utf8",
+        ).replace(/^import[^\n]*\r?\n/gm, "").replace(/^export /gm, "");
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(
+          `${strip("numeric-input.js")}\nglobalThis.applyNumericFieldConstraints = applyNumericFieldConstraints;`,
+        )}`);
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(
+          `${strip("command-form.js")}\nglobalThis.CommandForm = CommandForm;`,
+        )}`);
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(
+          `${strip("trigger-editor.js")}\nglobalThis.TriggerEditor = TriggerEditor;`,
+        )}`);
+
+        const commands = __CATALOG__;
+        const catalog = {
+          commands,
+          supported: () => true,
+          fieldsFor: (command) => command.fields || [],
+          optionsFor: (field) => field.options || [],
+          commandLabel: (command) => command.id,
+        };
+        let selectedId = "trigger-mode";
+        let modeReadback = "or";
+        let orPattern = "RFEX";
+        const calls = [];
+        const hooks = {
+          headerActions: new FakeNode("div"),
+          contextKey: () => "ctx",
+          mode: () => "live",
+          selectedCommand: () => commands.find((command) => command.id === selectedId),
+          isAvailable: () => true,
+          isExecutionBusy: () => false,
+          executeCommand: async (id, parameters, options) => {
+            calls.push([id, parameters, options?.intent]);
+            if (id === "trigger-mode") {
+              if (parameters.action === "set") modeReadback = parameters.mode;
+              return { status: "completed", result: { result: { trigger: { mode: modeReadback } } } };
+            }
+            if (id === "trigger-or") {
+              if (parameters.action === "set") orPattern = parameters.pattern;
+              return { status: "completed", result: { result: { trigger: { mode: "or", pattern: orPattern } } } };
+            }
+            return { status: "completed", result: { result: {} } };
+          },
+        };
+
+        const drain = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+        const findAll = (node, pred, out = []) => {
+          for (const child of node.children || []) {
+            if (pred(child)) out.push(child);
+            findAll(child, pred, out);
+          }
+          return out;
+        };
+
+        const editor = new globalThis.TriggerEditor(new FakeNode("div"), catalog, hooks);
+        await editor.refresh(true, true);
+        await drain();
+
+        // 1. Trigger mode renders a dropdown fed by the catalog options.
+        const modeInput = () => editor.entry.form.container.querySelector('[data-field="mode"]');
+        assert.equal(modeInput().tagName, "SELECT");
+        const modeOptions = () => findAll(
+          editor.entry.form.container, (node) => node.tagName === "OPTION",
+        ).map((node) => node.value);
+        assert.deepEqual(modeOptions(), ["", "edge", "glitch", "pattern", "tv", "delay",
+          "edge-burst", "or", "runt", "setup-hold", "transition"]);
+        assert.equal(modeInput().value, "or");
+
+        // 2. Selecting a mode submits the canonical value.
+        modeInput().value = "edge";
+        calls.length = 0;
+        await editor.submit();
+        assert.deepEqual(calls, [
+          ["trigger-mode", { action: "set", mode: "edge" }, "apply"],
+        ]);
+        assert.equal(modeInput().value, "edge");
+
+        // 3. OR trigger renders one select per analog channel, no free text.
+        selectedId = "trigger-or";
+        await editor.refresh(true, true);
+        await drain();
+        assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
+        const orSection = () => editor.sectionsHost.children[0];
+        const orSelects = () => findAll(
+          orSection(), (node) => node.tagName === "SELECT",
+        );
+        assert.deepEqual(orSelects().map((node) => node.dataset.orChannel), ["1", "2", "3", "4"]);
+        assert.deepEqual(orSelects().map((node) => node.value), ["R", "F", "E", "X"]);
+
+        // 4. Selects encode to one pattern string on a plain trigger-or apply.
+        orSelects()[0].value = "F";
+        orSelects()[1].value = "R";
+        orSelects()[2].value = "X";
+        orSelects()[3].value = "E";
+        calls.length = 0;
+        await editor.submit();
+        assert.deepEqual(calls, [
+          ["trigger-or", { action: "set", pattern: "FRXE" }, "apply"],
+        ]);
+
+        // 5. An unparseable readback keeps the current selects untouched.
+        orPattern = "BAD!";
+        await editor.refresh(true, true);
+        await drain();
+        assert.deepEqual(orSelects().map((node) => node.value), ["F", "R", "X", "E"]);
+
+        console.log(JSON.stringify({ ok: true }));
+        '''
+    ).replace("__CATALOG__", catalog_json)
+
+    harness_path = tmp_path / "trigger-mode-or-harness.mjs"
+    harness_path.write_text(script, encoding="utf-8")
+    completed = subprocess.run(
+        ["node", str(harness_path)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
+    assert json.loads(completed.stdout) == {"ok": True}
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")

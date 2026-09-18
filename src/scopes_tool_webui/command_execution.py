@@ -981,6 +981,10 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 polarity=parameters["polarity"], line=parameters.get("line"),
             )
         return _state_scope_result("trigger", scope.query_tv_trigger())
+    if command == "trigger-mode":
+        if action == "set":
+            scope.configure_trigger_mode(parameters["mode"])
+        return _state_scope_result("trigger", scope.query_trigger_mode())
     if command == "trigger-pattern":
         if action == "set":
             scope.configure_pattern_trigger(parameters["pattern"])

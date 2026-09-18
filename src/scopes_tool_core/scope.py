@@ -163,6 +163,8 @@ from .trigger import (
     TransitionTriggerController,
     TransitionTriggerState,
     TriggerHfRejectController,
+    TriggerModeController,
+    TriggerModeState,
     TriggerNoiseRejectController,
     TriggerRejectState,
     TriggerSweepController,
@@ -1385,6 +1387,16 @@ class Oscilloscope:
 
         return self._or_trigger_controller().query()
 
+    def configure_trigger_mode(self, mode: str) -> None:
+        """Select the trigger mode."""
+
+        self._trigger_mode_controller().configure(mode)
+
+    def query_trigger_mode(self) -> TriggerModeState:
+        """Query the selected trigger mode."""
+
+        return self._trigger_mode_controller().query()
+
     def capture_waveform_byte(self, channel: int, points: int = 1000) -> WaveformCapture:
         """Capture one analog channel using BYTE waveform format."""
 
@@ -1906,6 +1918,14 @@ class Oscilloscope:
 
     def _edge_trigger_external_level_controller(self) -> EdgeTriggerExternalLevelController:
         return EdgeTriggerExternalLevelController(self.scpi)
+
+    def _trigger_mode_controller(self) -> TriggerModeController:
+        if self.capabilities is None:
+            raise ParameterValidationError(
+                "Trigger mode operations require known capabilities; "
+                "call query_idn() first."
+            )
+        return TriggerModeController(self.scpi)
 
     def _trigger_sweep_controller(self) -> TriggerSweepController:
         if self.capabilities is None:

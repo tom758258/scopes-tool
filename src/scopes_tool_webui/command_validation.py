@@ -141,6 +141,7 @@ from scopes_tool_core.trigger import (
     normalize_tv_mode,
     normalize_tv_polarity,
     normalize_tv_standard,
+    trigger_mode_command,
     validate_delay_trigger_count,
     validate_delay_trigger_time,
     validate_edge_burst_count,
@@ -720,6 +721,8 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         parameters["mode"] = normalize_tv_mode(parameters["mode"])
         parameters["polarity"] = normalize_tv_polarity(parameters["polarity"])
         parameters["line"] = validate_tv_line(parameters["standard"], parameters["mode"], parameters.get("line"))
+    elif command == "trigger-mode":
+        trigger_mode_command(parameters["mode"])
     elif command == "trigger-pattern":
         parameters["pattern"] = validate_pattern_trigger_pattern(parameters["pattern"], capabilities)
     elif command == "trigger-or":

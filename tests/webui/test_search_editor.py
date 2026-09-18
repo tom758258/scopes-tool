@@ -56,7 +56,7 @@ def test_search_commands_keep_groups_and_carry_search_editor_metadata() -> None:
         assert entry["group"] == EXPECTED_SEARCH_GROUPS[entry["id"]], entry["id"]
     assert [entry["group"] for entry in COMMANDS if entry.get("editor") == "serial"] != []
     trigger_commands = [entry for entry in COMMANDS if entry.get("editor") == "trigger"]
-    assert len(trigger_commands) == 22
+    assert len(trigger_commands) == 23
     assert {entry["id"] for entry in COMMANDS if entry.get("editor") == "external-trigger"} == {
         "external-trigger-range",
         "trigger-edge-external-level",

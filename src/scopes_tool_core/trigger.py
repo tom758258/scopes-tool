@@ -477,6 +477,17 @@ class TriggerSweepState:
 
 
 @dataclass(frozen=True)
+class TriggerModeState:
+    """Readback state for the selected trigger mode."""
+
+    mode: str | None
+    raw_mode: str
+
+    def to_json(self) -> dict[str, object]:
+        return {"mode": self.mode, "raw_mode": self.raw_mode}
+
+
+@dataclass(frozen=True)
 class TriggerRejectState:
     """Readback state for trigger reject filters."""
 
@@ -1014,6 +1025,20 @@ class TriggerSweepController:
     def query(self) -> TriggerSweepState:
         raw = self.scpi.query(trigger_sweep_query())
         return TriggerSweepState(mode=parse_trigger_sweep(raw), raw_value=raw.strip())
+
+
+class TriggerModeController:
+    """Controls for the selected trigger mode."""
+
+    def __init__(self, scpi: SCPIClient) -> None:
+        self.scpi = scpi
+
+    def configure(self, mode: str) -> None:
+        self.scpi.write(trigger_mode_command(mode))
+
+    def query(self) -> TriggerModeState:
+        raw = self.scpi.query(trigger_mode_query())
+        return TriggerModeState(mode=parse_trigger_mode(raw), raw_mode=raw.strip())
 
 
 class TriggerNoiseRejectController:
@@ -1982,6 +2007,48 @@ def trigger_mode_or_command() -> str:
     """Build the SCPI command that selects OR trigger mode."""
 
     return ":TRIGger:MODE OR"
+
+
+# Canonical non-serial DSO trigger modes in UI presentation order. Each name
+# must match parse_trigger_mode() output so set/query round-trip; the values
+# reuse the existing per-mode SCPI builders above.
+TRIGGER_MODES = (
+    "edge",
+    "glitch",
+    "pattern",
+    "tv",
+    "delay",
+    "edge-burst",
+    "or",
+    "runt",
+    "setup-hold",
+    "transition",
+)
+
+_TRIGGER_MODE_COMMAND_BUILDERS = {
+    "edge": trigger_mode_edge_command,
+    "glitch": trigger_mode_glitch_command,
+    "pattern": trigger_mode_pattern_command,
+    "tv": trigger_mode_tv_command,
+    "delay": trigger_mode_delay_command,
+    "edge-burst": trigger_mode_edge_burst_command,
+    "or": trigger_mode_or_command,
+    "runt": trigger_mode_runt_command,
+    "setup-hold": trigger_mode_setup_hold_command,
+    "transition": trigger_mode_transition_command,
+}
+
+
+def trigger_mode_command(mode: str) -> str:
+    """Build the SCPI command that selects a canonical trigger mode."""
+
+    try:
+        builder = _TRIGGER_MODE_COMMAND_BUILDERS[mode.strip().lower()]
+    except (AttributeError, KeyError) as exc:
+        raise ParameterValidationError(
+            "trigger mode must be one of: " + ", ".join(TRIGGER_MODES) + "."
+        ) from exc
+    return builder()
 
 
 def trigger_mode_serial_command(bus: int) -> str:
