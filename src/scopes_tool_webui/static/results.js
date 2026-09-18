@@ -616,7 +616,9 @@ export function renderWorkspaceResult(container, job, context = {}) {
       ? "wgen"
       : context === "demo" || DEMO_RESULT_COMMANDS.has(job.command)
         ? "demo"
-        : context;
+        : SEARCH_RESULT_COMMANDS.has(job.command)
+          ? job.command
+          : context;
     const fields = Object.entries(display).filter(([name, value]) => {
       if (isRawDiagnosticField(name)) return false;
       if ((resultContext === "wgen" || resultContext === "demo") && name.endsWith("_scpi")) return false;
@@ -997,6 +999,17 @@ const DEMO_RESULT_COMMANDS = new Set([
   "demo-phase",
 ]);
 
+const SEARCH_RESULT_COMMANDS = new Set([
+  "search-state",
+  "search-mode",
+  "search-count",
+  "search-event",
+  "serial-search-uart",
+  "serial-search-i2c",
+  "serial-search-spi",
+  "serial-search-can",
+]);
+
 function resultFieldLabel(name, resultContext = null) {
   const scopedLabel = RESULT_FIELD_LABEL_CONTEXTS[resultContext]?.[name];
   if (scopedLabel && hasTranslation(scopedLabel)) return translate(scopedLabel);
@@ -1051,6 +1064,28 @@ const RESULT_ENUM_CONTEXTS = {
   trigger: {
     mode: "trigger-mode",
   },
+  "search-mode": {
+    mode: "search-mode",
+  },
+  "serial-search-uart": {
+    search_mode: "search-mode",
+    mode: "serial-search-uart-mode",
+    qualifier: "search-qualifier",
+  },
+  "serial-search-i2c": {
+    search_mode: "search-mode",
+    mode: "serial-search-i2c-mode",
+    qualifier: "search-qualifier",
+  },
+  "serial-search-spi": {
+    search_mode: "search-mode",
+    mode: "serial-search-spi-mode",
+  },
+  "serial-search-can": {
+    search_mode: "search-mode",
+    mode: "serial-search-can-mode",
+    id_mode: "serial-search-can-id-mode",
+  },
 };
 
 function formatWorkspaceValue(name, value, resultContext = null) {
@@ -1083,6 +1118,16 @@ function formatWorkspaceValue(name, value, resultContext = null) {
     if (name === "action") keys.push(`actions.${value}`, `command.${value}`);
     const key = keys.find((candidate) => hasTranslation(candidate));
     if (key) return translate(key);
+  }
+  if (typeof value === "string" && !isLiteralWorkspaceField(name)) {
+    // Search-only exception: scoped Search enum labels win over the generic
+    // protocol-identifier passthrough (e.g. search_mode serial1). Other
+    // contexts keep the existing passthrough untouched.
+    const scopedEnum = RESULT_ENUM_CONTEXTS[resultContext]?.[name];
+    if (scopedEnum && SEARCH_RESULT_COMMANDS.has(resultContext)) {
+      const scopedKey = `enum.${scopedEnum}.${value}`;
+      if (hasTranslation(scopedKey)) return translate(scopedKey);
+    }
   }
   return String(value);
 }

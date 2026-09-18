@@ -23,7 +23,9 @@ function resultValue(payload, key, depth = 0) {
   return undefined;
 }
 
-function enumLabel(value) {
+function enumLabel(value, optionLabel = null) {
+  const scopedKey = optionLabel ? `enum.${optionLabel}.${String(value)}` : null;
+  if (scopedKey && hasTranslation(scopedKey)) return translate(scopedKey);
   const key = `enum.${String(value)}`;
   return hasTranslation(key) ? translate(key) : String(value);
 }
@@ -210,7 +212,7 @@ export class SearchEditor {
       return;
     }
     const statusRow = document.createElement("div");
-    statusRow.className = "search-editor-row";
+    statusRow.className = "search-editor-row search-editor-status-row";
     statusRow.append(
       this.labeledOutput("command.search-state", "state"),
       this.labeledOutput("command.search-mode", "mode"),
@@ -223,7 +225,7 @@ export class SearchEditor {
     this.busSelect.addEventListener("change", () => {
       this.selectBus(this.busSelect.value);
     });
-    busRow.append(this.labeledField("field.bus", this.busSelect));
+    busRow.append(this.labeledField("field.bus", this.busSelect, "search.editor.busHelp"));
     this.bodyHost.append(busRow);
     this.renderOptions(
       this.busSelect,
@@ -251,7 +253,7 @@ export class SearchEditor {
     formContainer.className = "command-form";
     const applyButton = document.createElement("button");
     applyButton.type = "button";
-    applyButton.className = "secondary search-editor-action";
+    applyButton.className = "primary search-editor-action";
     applyButton.textContent = translate("actions.apply");
     section.append(formContainer);
     if (this.hooks.headerActions) {
@@ -273,6 +275,12 @@ export class SearchEditor {
       void this.submit(entry);
     });
     const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    const editable = fields.filter(
+      (field) => field?.name !== command.presentation?.action_field,
+    );
+    if (!isSerial && editable.length === 1) {
+      section.className += " search-editor-single";
+    }
     section.hidden = fields.length === 0;
     formContainer.hidden = fields.length === 0;
     this.entry = entry;
@@ -294,12 +302,18 @@ export class SearchEditor {
     return note;
   }
 
-  labeledField(labelKey, input) {
+  labeledField(labelKey, input, helpKey = null) {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     const label = document.createElement("span");
     label.textContent = translate(labelKey);
     wrapper.append(label, input);
+    if (helpKey) {
+      const help = document.createElement("small");
+      help.className = "field-help";
+      help.textContent = translate(helpKey);
+      wrapper.append(help);
+    }
     return wrapper;
   }
 
@@ -365,7 +379,7 @@ export class SearchEditor {
 
     const mode = resultValue(job?.result, "search_mode");
     if (this.readouts.mode) {
-      this.readouts.mode.textContent = mode ? enumLabel(mode) : "-";
+      this.readouts.mode.textContent = mode ? enumLabel(mode, "search-mode") : "-";
     }
   }
 

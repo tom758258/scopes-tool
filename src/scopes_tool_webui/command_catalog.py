@@ -1688,47 +1688,47 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command("trigger-hf-reject", "Trigger", "HF reject", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-hf-reject.enabled"),), group="common", editor="trigger"),
     _action_command("trigger-holdoff", "Trigger", "Trigger holdoff", (_command_field("seconds", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-holdoff.seconds"),), group="common", editor="trigger"),
 
-    _action_command("search-state", "Search", "Search state", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), editor="search"),
-    _action_command("search-mode", "Search", "Search mode", (_command_field("mode", "enum", options=SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), editor="search"),
+    _action_command("search-state", "Search", "Search state", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="search-state.enabled"),), editor="search"),
+    _action_command("search-mode", "Search", "Search mode", (_command_field("mode", "enum", options=SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="search-mode.mode", option_label="search-mode"),), editor="search"),
     {"id": "search-count", "category": "Search", "label": "Search count", "modes": ("live", "simulate"), "fields": (), "editor": "search"},
-    _action_command("search-event", "Search", "Search event", (_command_field("event", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), editor="search"),
+    _action_command("search-event", "Search", "Search event", (_command_field("event", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="search-event.event"),), editor="search"),
     _action_command(
-        "serial-search-uart", "Search", "UART serial search", (
+        "serial-search-uart", "Search", "UART Serial Search", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("mode", "enum", options=UART_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
-            _command_field("data", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
-            _command_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_set_action_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
+            _command_field("mode", "enum", options=UART_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-search-uart.mode", option_label="serial-search-uart-mode"),
+            _command_field("data", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "mode", "in": ("rx-data", "tx-data")}), help_key="serial-search-uart.data"),
+            _command_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_set_action_visibility({"field": "mode", "in": ("rx-data", "tx-data")}), help_key="serial-search-uart.qualifier", option_label="search-qualifier"),
         ),
         editor="search",
     ),
     _action_command(
-        "serial-search-i2c", "Search", "I2C serial search", (
+        "serial-search-i2c", "Search", "I2C Serial Search", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("mode", "enum", options=I2C_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
-            _command_field("address", "integer", visible_if=_set_action_visibility()),
-            _command_field("data", "integer", visible_if=_set_action_visibility()),
-            _command_field("data2", "integer", visible_if=_set_action_visibility({"field": "mode", "in": ("read7-data2", "write7-data2")})),
-            _command_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_set_action_visibility({"field": "mode", "equals": "eeprom-read"})),
+            _command_field("mode", "enum", options=I2C_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-search-i2c.mode", option_label="serial-search-i2c-mode"),
+            _command_field("address", "integer", visible_if=_set_action_visibility(), help_key="serial-search-i2c.address"),
+            _command_field("data", "integer", visible_if=_set_action_visibility(), help_key="serial-search-i2c.data"),
+            _command_field("data2", "integer", visible_if=_set_action_visibility({"field": "mode", "in": ("read7-data2", "write7-data2")}), help_key="serial-search-i2c.data2"),
+            _command_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_set_action_visibility({"field": "mode", "equals": "eeprom-read"}), help_key="serial-search-i2c.qualifier", option_label="search-qualifier"),
         ),
         editor="search",
     ),
     _action_command(
-        "serial-search-spi", "Search", "SPI serial search", (
+        "serial-search-spi", "Search", "SPI Serial Search", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("mode", "enum", options=SPI_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
-            _command_field("data", "string", visible_if=_set_action_visibility()),
-            _command_field("width", "integer", minimum=1, maximum=10, visible_if=_set_action_visibility()),
+            _command_field("mode", "enum", options=SPI_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-search-spi.mode", option_label="serial-search-spi-mode"),
+            _command_field("data", "string", visible_if=_set_action_visibility(), help_key="serial-search-spi.data"),
+            _command_field("width", "integer", minimum=1, maximum=10, visible_if=_set_action_visibility(), help_key="serial-search-spi.width"),
         ),
         editor="search",
     ),
     _action_command(
-        "serial-search-can", "Search", "CAN serial search", (
+        "serial-search-can", "Search", "CAN Serial Search", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("mode", "enum", options=CAN_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),
-            _command_field("data", "string", visible_if=_set_action_visibility()),
-            _command_field("data_length", "integer", minimum=1, maximum=8, visible_if=_set_action_visibility()),
-            _command_field("id", "string", visible_if=_set_action_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
-            _command_field("id_mode", "enum", options=CAN_SEARCH_ID_MODES, visible_if=_set_action_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
+            _command_field("mode", "enum", options=CAN_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-search-can.mode", option_label="serial-search-can-mode"),
+            _command_field("data", "string", visible_if=_set_action_visibility(), help_key="serial-search-can.data"),
+            _command_field("data_length", "integer", minimum=1, maximum=8, visible_if=_set_action_visibility(), help_key="serial-search-can.data_length"),
+            _command_field("id", "string", visible_if=_set_action_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")}), help_key="serial-search-can.id"),
+            _command_field("id_mode", "enum", options=CAN_SEARCH_ID_MODES, visible_if=_set_action_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")}), help_key="serial-search-can.id_mode", option_label="serial-search-can-id-mode"),
         ),
         editor="search",
     ),

@@ -3023,6 +3023,69 @@ def test_trigger_mode_structured_result_prefers_scoped_labels() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_search_serial_result_uses_scoped_labels() -> None:
+    source = read_static("results.js")
+    commands_block = source.split("const SEARCH_RESULT_COMMANDS", 1)[1].split("]);", 1)[0]
+    for command_id in (
+        "search-state",
+        "search-mode",
+        "search-count",
+        "search-event",
+        "serial-search-uart",
+        "serial-search-i2c",
+        "serial-search-spi",
+        "serial-search-can",
+    ):
+        assert f'"{command_id}"' in commands_block, command_id
+    assert "SEARCH_RESULT_COMMANDS.has(job.command)" in source
+
+    results_path = STATIC_ROOT / "results.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const translations = {
+          "results.field.search_enabled": "搜尋狀態",
+          "results.field.search_mode": "搜尋模式",
+          "results.field.selected": "已選取",
+          "status.enabled": "已啟用",
+          "status.disabled": "已停用",
+          "status.yes": "是",
+          "status.no": "否",
+          "enum.search-mode.serial1": "串列 1",
+          "enum.serial-search-can-mode.data": "資料",
+          "enum.serial-search-can-id-mode.standard": "標準",
+        };
+        const source = [
+          `const translations = ${JSON.stringify(translations)};`,
+          "const hasTranslation = (key) => key in translations;",
+          "const translate = (key) => translations[key] ?? key;",
+          fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
+          "globalThis.resultsApi = { formatWorkspaceValue, resultFieldLabel };",
+        ].join("\n");
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { formatWorkspaceValue, resultFieldLabel } = globalThis.resultsApi;
+
+        assert.equal(resultFieldLabel("search_enabled", "serial-search-can"), "搜尋狀態");
+        assert.equal(resultFieldLabel("selected", "serial-search-can"), "已選取");
+        assert.equal(formatWorkspaceValue("search_enabled", false, "serial-search-can"), "已停用");
+        assert.equal(formatWorkspaceValue("selected", false, "serial-search-can"), "否");
+        assert.equal(formatWorkspaceValue("mode", "data", "serial-search-can"), "資料");
+        assert.equal(formatWorkspaceValue("id_mode", "standard", "serial-search-can"), "標準");
+        assert.equal(formatWorkspaceValue("search_mode", "serial1", "serial-search-can"), "串列 1");
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(results_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
     run_generic_form_ownership_behavior(
         r'''

@@ -84,6 +84,74 @@ def test_search_event_apply_validation_is_unchanged() -> None:
     assert event_field["minimum"] == 1
 
 
+def test_search_catalog_fields_carry_help_and_scoped_option_labels() -> None:
+    catalog = {entry["id"]: entry for entry in command_catalog()}
+
+    expected_help = {
+        "search-state": {"enabled": "search-state.enabled"},
+        "search-mode": {"mode": "search-mode.mode"},
+        "search-event": {"event": "search-event.event"},
+        "serial-search-uart": {
+            "mode": "serial-search-uart.mode",
+            "data": "serial-search-uart.data",
+            "qualifier": "serial-search-uart.qualifier",
+        },
+        "serial-search-i2c": {
+            "mode": "serial-search-i2c.mode",
+            "address": "serial-search-i2c.address",
+            "data": "serial-search-i2c.data",
+            "data2": "serial-search-i2c.data2",
+            "qualifier": "serial-search-i2c.qualifier",
+        },
+        "serial-search-spi": {
+            "mode": "serial-search-spi.mode",
+            "data": "serial-search-spi.data",
+            "width": "serial-search-spi.width",
+        },
+        "serial-search-can": {
+            "mode": "serial-search-can.mode",
+            "data": "serial-search-can.data",
+            "data_length": "serial-search-can.data_length",
+            "id": "serial-search-can.id",
+            "id_mode": "serial-search-can.id_mode",
+        },
+    }
+    expected_option_labels = {
+        "search-mode": {"mode": "search-mode"},
+        "serial-search-uart": {"mode": "serial-search-uart-mode", "qualifier": "search-qualifier"},
+        "serial-search-i2c": {"mode": "serial-search-i2c-mode", "qualifier": "search-qualifier"},
+        "serial-search-spi": {"mode": "serial-search-spi-mode"},
+        "serial-search-can": {"mode": "serial-search-can-mode", "id_mode": "serial-search-can-id-mode"},
+    }
+    for command_id, fields in expected_help.items():
+        by_name = {field["name"]: field for field in catalog[command_id]["fields"]}
+        for name, help_key in fields.items():
+            assert by_name[name].get("help_key") == help_key, (command_id, name)
+        for name, option_label in expected_option_labels.get(command_id, {}).items():
+            assert by_name[name].get("option_label") == option_label, (command_id, name)
+
+    # Bus stays editor-driven: no catalog help may shadow the editor Bus help.
+    for command_id in (
+        "serial-search-uart",
+        "serial-search-i2c",
+        "serial-search-spi",
+        "serial-search-can",
+    ):
+        bus_field = next(
+            field for field in catalog[command_id]["fields"] if field["name"] == "bus"
+        )
+        assert "help_key" not in bus_field, command_id
+
+    # Display labels never rewrite canonical option values.
+    by_name = {field["name"]: field for field in catalog["search-mode"]["fields"]}
+    assert "serial1" in by_name["mode"]["options"]
+    by_name = {field["name"]: field for field in catalog["serial-search-uart"]["fields"]}
+    assert "rx-data" in by_name["mode"]["options"]
+    by_name = {field["name"]: field for field in catalog["serial-search-can"]["fields"]}
+    assert "id-data" in by_name["mode"]["options"]
+    assert "standard" in by_name["id_mode"]["options"]
+
+
 def test_app_routes_editors_by_command_metadata() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
@@ -112,9 +180,25 @@ def test_search_editor_locale_keys_are_localized() -> None:
     assert '"search.editor.read": "Read search settings"' in english
     assert '"search.editor.eventUnavailable"' in english
     assert '"search.editor.serialUnavailable"' in english
+    assert '"search.editor.busHelp"' in english
+    assert '"field.event": "Event"' in english
+    assert '"help.search-event.event"' in english
+    assert '"help.serial-search-can.id_mode"' in english
+    assert '"enum.search-mode.serial1"' in english
+    assert '"enum.serial-search-uart-mode.rx-data"' in english
+    assert '"enum.serial-search-can-mode.id-data"' in english
+    assert '"enum.serial-search-spi-mode.mosi"' in english
     assert '"search.editor.read": "讀取搜尋設定"' in chinese
     assert '"search.editor.eventUnavailable"' in chinese
     assert '"search.editor.serialUnavailable"' in chinese
+    assert '"search.editor.busHelp"' in chinese
+    assert '"field.event": "事件"' in chinese
+    assert '"help.search-event.event"' in chinese
+    assert '"help.serial-search-can.id_mode"' in chinese
+    assert '"enum.search-mode.serial1"' in chinese
+    assert '"enum.serial-search-uart-mode.rx-data"' in chinese
+    assert '"enum.serial-search-can-mode.id-data"' in chinese
+    assert '"enum.serial-search-spi-mode.mosi"' in chinese
 
 
 def test_serial_search_projection_follows_core_capabilities() -> None:
@@ -182,8 +266,9 @@ SEARCH_EDITOR_HARNESS = r'''
         globalThis.Option = function Option(label, value) {
           return { textContent: label, value: String(value) };
         };
-        globalThis.translate = (key) => key;
-        globalThis.hasTranslation = () => false;
+        const translations = {};
+        globalThis.translate = (key) => translations[key] ?? key;
+        globalThis.hasTranslation = (key) => key in translations;
         globalThis.CommandForm = class CommandForm {
           constructor(container) {
             this.container = container;
@@ -238,10 +323,10 @@ SEARCH_EDITOR_HARNESS = r'''
         ]);
 
         const originalCommands = [
-          def("search-state"),
-          def("search-mode"),
+          def("search-state", settingPresentation, [{ name: "enabled" }]),
+          def("search-mode", settingPresentation, [{ name: "mode" }]),
           def("search-count", readPresentation),
-          def("search-event"),
+          def("search-event", settingPresentation, [{ name: "event" }]),
           def("serial-search-uart", busQueryPresentation, serialFields()),
           def("serial-search-i2c", busQueryPresentation, serialFields()),
           def("serial-search-spi", busQueryPresentation, serialFields()),
@@ -465,6 +550,8 @@ def test_search_basic_apply_writes_once_without_reconciliation() -> None:
         submitted.length = 0;
 
         const stateEntry = editor.entry;
+        assert.ok(stateEntry.button.className.split(" ").includes("primary"));
+        assert.ok(editor.bodyHost.children[0].className.split(" ").includes("search-editor-single"));
         stateEntry.form.valuesResult = { action: "set", enabled: true };
         stateEntry.button.dispatch("click");
         await settle();
@@ -645,6 +732,10 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
         await settle();
         assert.equal(editor.entry.id, "serial-search-i2c");
         assert.deepEqual(editor.busSelect.children.map((option) => option.value), ["1", "2"]);
+        assert.ok(editor.bodyHost.children.some((node) =>
+          node.tagName === "DIV" && node.className.split(" ").includes("search-editor-status-row")));
+        assert.ok(!editor.bodyHost.children.some((node) =>
+          node.tagName === "SECTION" && node.className.split(" ").includes("search-editor-single")));
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.parameters.bus}`), [
           "serial-search-i2c:1",
         ]);
@@ -767,6 +858,7 @@ def test_search_serial_apply_writes_once_without_reconciliation() -> None:
 
         const criteriaEntry = editor.entry;
         criteriaEntry.form.valuesResult = { action: "set", mode: "rx-data", data: 85 };
+        translations["enum.search-mode.serial1"] = "Serial 1";
         hooks.executeCommand = async (command, parameters, options) =>
           recordJob(command, parameters, options,
             { search: { search_enabled: true, search_mode: "serial1" } });
@@ -784,7 +876,7 @@ def test_search_serial_apply_writes_once_without_reconciliation() -> None:
         assert.equal(criteriaEntry.form.clearedDirty, 1);
         assert.deepEqual(criteriaEntry.form.syncCalls.at(-1), [submitted[0].job.job_id, false]);
         assert.equal(editor.readouts.state.textContent, "status.enabled");
-        assert.equal(editor.readouts.mode.textContent, "serial1");
+        assert.equal(editor.readouts.mode.textContent, "Serial 1");
         assert.equal(editor.pendingRefresh, false);
 
         // Failed Apply: no reconciliation, draft handling untouched, and the
@@ -810,7 +902,7 @@ def test_search_serial_apply_writes_once_without_reconciliation() -> None:
         assert.equal(criteriaEntry.form.clearedDirty, 0);
         assert.equal(criteriaEntry.form.syncCalls.length, syncCountBefore);
         assert.equal(editor.readouts.state.textContent, "status.enabled");
-        assert.equal(editor.readouts.mode.textContent, "serial1");
+        assert.equal(editor.readouts.mode.textContent, "Serial 1");
         assert.equal(editor.pendingRefresh, false);
         hooks.executeCommand = recordingExecute;
         '''
