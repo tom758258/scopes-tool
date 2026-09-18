@@ -1365,6 +1365,10 @@ def test_trigger_mode_dropdown_and_or_channel_buttons(tmp_path: Path) -> None:
         assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
         assert.equal(findAll(orSection(), (node) => node.tagName === "SELECT").length, 0);
         assert.equal(orGroups().length, 4);
+        assert.equal(
+          orGroups().every((node) => node.classList.contains("trigger-channel-options")),
+          true,
+        );
         assert.deepEqual(
           [...new Set(orButtons().map((node) => node.dataset.channel))],
           ["1", "2", "3", "4"],
@@ -1411,6 +1415,10 @@ def test_trigger_mode_dropdown_and_or_channel_buttons(tmp_path: Path) -> None:
         await editor.submit();
         assert.deepEqual(calls, []);
         assert.equal(editor.busy, false);
+        assert.equal(
+          orButtons().find((node) => node.dataset.channel === "2" && node.dataset.value === "R").focused,
+          true,
+        );
 
         // 7. Pattern trigger renders level buttons and encodes MSB-first.
         selectedId = "trigger-pattern";

@@ -272,6 +272,7 @@ export class TriggerEditor {
       const row = document.createElement("div");
       row.className = "trigger-channel-row";
       const name = document.createElement("span");
+      name.className = "field-label";
       name.textContent = label;
       const group = document.createElement("div");
       group.className = "trigger-editor-segmented trigger-channel-options";
