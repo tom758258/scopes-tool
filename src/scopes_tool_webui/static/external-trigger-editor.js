@@ -13,22 +13,26 @@ function unitLetter(units) {
   return units === "amps" ? "A" : "V";
 }
 
-function rangePresetValues(series, probeAttenuation) {
-  if (series === "4000X") return [1.6 * probeAttenuation, 8 * probeAttenuation];
-  if (series === "2000X" || series === "3000X") return [8 * probeAttenuation];
-  return null;
+function settingsOf(payload) {
+  const settings = payload?.settings;
+  return settings && typeof settings === "object" ? settings : null;
 }
 
-function settingsFromPayload(payload) {
-  const settings = payload?.settings;
-  if (!settings || typeof settings !== "object") return null;
-  const probeAttenuation = settings.probe_attenuation;
-  const units = settings.units;
-  if (typeof probeAttenuation !== "number" || !Number.isFinite(probeAttenuation) || probeAttenuation <= 0) {
-    return null;
-  }
-  if (units !== "volts" && units !== "amps") return null;
-  return { probeAttenuation, units, rangeValue: settings.range_value };
+function positiveFinite(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function validProbeAttenuation(settings) {
+  return positiveFinite(settings?.probe_attenuation);
+}
+
+function validUnits(settings) {
+  const units = settings?.units;
+  return units === "volts" || units === "amps" ? units : null;
+}
+
+function validSettingsRange(settings) {
+  return positiveFinite(settings?.range_value);
 }
 
 function payloadOf(job) {
@@ -219,6 +223,25 @@ export class ExternalTriggerEditor {
     }
     this.rangeSection.hidden = this.mode !== "range";
     this.levelSection.hidden = this.mode !== "level";
+  }
+
+  rangeDefinition() {
+    return this.catalog.commands.find((command) => command.id === RANGE_COMMAND) || null;
+  }
+
+  quickFillBaseValues() {
+    const definition = this.rangeDefinition();
+    if (!definition) return null;
+    const fields = this.catalog.fieldsFor
+      ? this.catalog.fieldsFor(definition)
+      : definition.fields || [];
+    const field = fields.find((entry) => entry.name === "range_volts");
+    const values = field?.quick_fill_probe_1x_values;
+    return Array.isArray(values)
+      && values.length > 0
+      && values.every((value) => typeof value === "number" && Number.isFinite(value) && value > 0)
+      ? values
+      : null;
   }
 
   modeReady(mode) {
@@ -423,14 +446,16 @@ export class ExternalTriggerEditor {
       ) {
         return settingsJob;
       }
-      const settings = settingsFromPayload(payloadOf(settingsJob));
-      const series = this.hooks.modelSeries?.() ?? null;
-      const values = settingsJob?.status === "completed" && settings !== null
-        ? rangePresetValues(series, settings.probeAttenuation)
+      const settings = settingsJob?.status === "completed" ? settingsOf(payloadOf(settingsJob)) : null;
+      const probeAttenuation = validProbeAttenuation(settings);
+      const units = validUnits(settings);
+      const baseValues = this.quickFillBaseValues();
+      const values = probeAttenuation !== null && units !== null && baseValues !== null
+        ? baseValues.map((base) => base * probeAttenuation)
         : null;
-      this.rangeQuickFill = values === null || settings === null
+      this.rangeQuickFill = values === null || units === null
         ? null
-        : { values, units: settings.units };
+        : { values, units };
       this.syncPresetLabels();
       return settingsJob;
     } finally {
@@ -540,13 +565,8 @@ export class ExternalTriggerEditor {
       ) {
         return settingsJob;
       }
-      const settings = settingsFromPayload(payloadOf(settingsJob));
-      const range = settingsJob?.status === "completed" && settings !== null
-        && typeof settings.rangeValue === "number"
-        && Number.isFinite(settings.rangeValue)
-        && settings.rangeValue > 0
-        ? settings.rangeValue
-        : null;
+      const settings = settingsJob?.status === "completed" ? settingsOf(payloadOf(settingsJob)) : null;
+      const range = validSettingsRange(settings);
       if (range === null) {
         this.levelRead = null;
         this.rangeValue = null;
@@ -559,11 +579,14 @@ export class ExternalTriggerEditor {
       this.levelInput.value = String(level);
       this.levelRead = level;
       this.rangeValue = range;
-      this.levelQuickFill = {
-        range,
-        units: settings.units,
-        values: [-range, -range / 2, 0, range / 2, range],
-      };
+      const units = validUnits(settings);
+      this.levelQuickFill = units === null
+        ? null
+        : {
+          range,
+          units,
+          values: [-range, -range / 2, 0, range / 2, range],
+        };
       this.syncPresetLabels();
       return settingsJob;
     } finally {

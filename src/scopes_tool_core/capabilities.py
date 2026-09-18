@@ -53,6 +53,7 @@ class ScopeCapabilities:
     serial_modes: frozenset[str] = frozenset()
     segmented_max_segments: int = 0
     supports_segmented_waveform_all: bool = False
+    external_trigger_range_probe_1x_values: tuple[float, ...] = ()
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
@@ -105,6 +106,7 @@ _CAPABILITY_PROFILES = {
         segmented_max_segments=250,
         supports_area_measurement=False,
         supports_measure_statistics=False,
+        external_trigger_range_probe_1x_values=(8.0,),
     ),
     "keysight-infiniivision-3000x": ScopeCapabilities(
         series="3000X",
@@ -147,6 +149,7 @@ _CAPABILITY_PROFILES = {
         segmented_max_segments=1000,
         supports_area_measurement=True,
         supports_measure_statistics=True,
+        external_trigger_range_probe_1x_values=(8.0,),
     ),
     "keysight-infiniivision-4000x": ScopeCapabilities(
         series="4000X",
@@ -229,6 +232,7 @@ _CAPABILITY_PROFILES = {
         supports_area_measurement=True,
         supports_measure_statistics=True,
         supports_segmented_waveform_all=True,
+        external_trigger_range_probe_1x_values=(1.6, 8.0),
     ),
 }
 

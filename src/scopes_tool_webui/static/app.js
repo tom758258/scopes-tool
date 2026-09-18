@@ -417,7 +417,6 @@ async function initialize() {
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     selectedCommand: () => catalog.selected(),
-    modelSeries: () => models.find((model) => model.id === currentModelId())?.series || null,
   });
   timebasePositionEditor = new TimebasePositionEditor(elements.timebasePositionEditor, catalog, {
     executeCommand,

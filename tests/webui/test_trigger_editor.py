@@ -328,7 +328,7 @@ def test_external_trigger_editor_routing() -> None:
     assert 'if (editorKind === "external-trigger") externalTriggerEditor?.schedulePresentation();' in app_source
     assert 'externalTriggerEditor.readButton.hidden = editorKind !== "external-trigger";' in app_source
     assert 'externalTriggerEditor.applyButton.hidden = editorKind !== "external-trigger";' in app_source
-    assert "modelSeries:" in app_source
+    assert "modelSeries" not in app_source
     assert '"external-trigger-range-level": [' in app_source
     assert '"external-trigger-range",' in app_source
     assert '"trigger-edge-external-level",' in app_source
@@ -347,6 +347,10 @@ def test_external_trigger_range_level_composite_workspace() -> None:
 
     assert catalog["external-trigger-range"]["browser_hidden"] is True
     assert catalog["trigger-edge-external-level"]["browser_hidden"] is True
+
+    models = catalog["external-trigger-range"]["presentation"]["models"]
+    assert models["keysight-dsox4034a"]["fields"]["range_volts"]["quick_fill_probe_1x_values"] == [1.6, 8.0]
+    assert models["keysight-dsox3024a"]["fields"]["range_volts"]["quick_fill_probe_1x_values"] == [8.0]
 
     ids = [entry["id"] for entry in command_catalog()]
     assert ids.index("external-trigger-range-level") + 1 == ids.index("external-trigger-range")
@@ -445,8 +449,18 @@ def test_external_trigger_level_uses_current_range() -> None:
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(editorSource)}`);
 
         const commands = __CATALOG__;
-        const catalog = { commands, supported: () => true };
-        const env = { selectedId: "external-trigger-range-level", contextKey: "ctx", series: "4000X" };
+        const catalog = {
+          commands,
+          supported: () => true,
+          fieldsFor: (command) => {
+            const overrides = command.presentation?.models?.[env.modelId]?.fields || {};
+            return (command.fields || []).filter((field) => !overrides[field.name]?.hidden).map((field) => ({
+              ...field,
+              ...(overrides[field.name] || {}),
+            }));
+          },
+        };
+        const env = { selectedId: "external-trigger-range-level", contextKey: "ctx", modelId: "keysight-dsox4024a" };
         const calls = [];
         let range = 8;
         let levelVal = 0.5;
@@ -464,7 +478,6 @@ def test_external_trigger_level_uses_current_range() -> None:
           selectedCommand: () => commands.find((command) => command.id === env.selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,
-          modelSeries: () => env.series,
           executeCommand: async (id, parameters, options) => {
             calls.push([id, parameters, options?.intent]);
             if (id === "external-trigger-settings") {
@@ -761,8 +774,18 @@ def test_external_trigger_quick_fill() -> None:
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(editorSource)}`);
 
         const commands = __CATALOG__;
-        const catalog = { commands, supported: () => true };
-        const env = { selectedId: "external-trigger-range-level", contextKey: "ctx", series: "4000X" };
+        const catalog = {
+          commands,
+          supported: () => true,
+          fieldsFor: (command) => {
+            const overrides = command.presentation?.models?.[env.modelId]?.fields || {};
+            return (command.fields || []).filter((field) => !overrides[field.name]?.hidden).map((field) => ({
+              ...field,
+              ...(overrides[field.name] || {}),
+            }));
+          },
+        };
+        const env = { selectedId: "external-trigger-range-level", contextKey: "ctx", modelId: "keysight-dsox4024a" };
         const calls = [];
         let range = 8;
         let levelVal = 0.5;
@@ -775,7 +798,6 @@ def test_external_trigger_quick_fill() -> None:
           selectedCommand: () => commands.find((command) => command.id === env.selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,
-          modelSeries: () => env.series,
           executeCommand: async (id, parameters, options) => {
             calls.push([id, parameters, options?.intent]);
             if (id === "external-trigger-settings") {
@@ -848,7 +870,7 @@ def test_external_trigger_quick_fill() -> None:
         assert.deepEqual(labels(rangePresets()), ["16.0 V", "80.0 V"]);
 
         // C. 3000X only offers 8 V at 1:1 attenuation.
-        env.series = "3000X";
+        env.modelId = "keysight-dsox3024a";
         probeAttenuation = 1;
         calls.length = 0;
         await editor.readCurrent();
@@ -883,12 +905,50 @@ def test_external_trigger_quick_fill() -> None:
         assert.deepEqual(calls, []);
 
         // E. Amps units change the preset labels.
-        env.series = "4000X";
+        env.modelId = "keysight-dsox4024a";
         units = "amps";
         probeAttenuation = 1;
         calls.length = 0;
         await editor.readCurrent();
         assert.deepEqual(labels(rangePresets()), ["1.60 A", "8.00 A"]);
+
+        // F. Range partial settings: a null probe keeps the primary readback.
+        probeAttenuation = null;
+        units = "volts";
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.equal(rangeInput().value, "1.6");
+        assert.equal(editor.rangeRead, 1.6);
+        assert.ok(rangePresets().length > 0);
+        assert.ok(rangePresets().every((button) => button.disabled === true));
+
+        // G. Level tolerates a null probe attenuation.
+        probeAttenuation = null;
+        range = 8;
+        units = "volts";
+        modeButton("level").dispatch("click");
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.deepEqual(calls, [
+          ["trigger-edge-external-level", { action: "query" }, "readback"],
+          ["external-trigger-settings", {}, "readback"],
+        ]);
+        assert.equal(levelInput().value, "0.5");
+        assert.equal(editor.levelRead, 0.5);
+        assert.equal(editor.rangeValue, 8);
+        assert.deepEqual(labels(levelPresets()), ["-8.00 V", "-4.00 V", "0.00 V", "4.00 V", "8.00 V"]);
+        assert.ok(levelPresets().every((button) => button.disabled === false));
+
+        // H. Level tolerates missing units for the primary read; only quick-fill stops.
+        units = null;
+        calls.length = 0;
+        await editor.readCurrent();
+        assert.equal(levelInput().value, "0.5");
+        assert.equal(editor.levelRead, 0.5);
+        assert.equal(editor.rangeValue, 8);
+        assert.equal(levelInput().customValidity, "");
+        assert.deepEqual(levelInput().reported, []);
+        assert.ok(levelPresets().every((button) => button.disabled === true));
 
         console.log(JSON.stringify({ ok: true }));
         '''

@@ -2345,6 +2345,13 @@ def _model_command_presentation(
             # Deliberately not named minimum/maximum so backend and frontend
             # constraint enforcement stay untouched.
             override["frequency_limits"] = wgen_frequency_limits(capabilities.series)
+        if entry["id"] == "external-trigger-range" and name == "range_volts":
+            # Presentation-only quick-fill hint projected from Core-owned limits.
+            # Deliberately not named minimum/maximum so backend and frontend
+            # constraint enforcement stay untouched.
+            override["quick_fill_probe_1x_values"] = (
+                capabilities.external_trigger_range_probe_1x_values
+            )
         if name == "pair_items" and not capabilities.supports_delay_measurement:
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"
