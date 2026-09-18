@@ -1063,7 +1063,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search"].includes(editorKind)
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
@@ -1072,7 +1072,7 @@ function syncCommandSelection(draft = null) {
   elements.selectedCommand.title = selectedTitle;
   const selectedDescription = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
@@ -1211,6 +1211,9 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (serialEditor?.refreshButton) serialEditor.refreshButton.hidden = editorKind !== "serial";
   if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
   if (searchEditor?.refreshButton) searchEditor.refreshButton.hidden = editorKind !== "search";
+  if (searchEditor?.entry?.button) {
+    searchEditor.entry.button.hidden = editorKind !== "search";
+  }
   if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = editorKind !== "segmented";
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
   if (sequenceEditor?.executeButton) sequenceEditor.executeButton.hidden = editorKind !== "sequence";

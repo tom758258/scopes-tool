@@ -35,25 +35,25 @@ def extract_function(source: str, signature: str) -> str:
     raise AssertionError(f"Unclosed function: {signature}")
 
 
-EXPECTED_SEARCH_GROUPS = {
-    "search-state": "basic",
-    "search-mode": "basic",
-    "search-count": "basic",
-    "search-event": "event",
-    "serial-search-uart": "serial",
-    "serial-search-i2c": "serial",
-    "serial-search-spi": "serial",
-    "serial-search-can": "serial",
+EXPECTED_SEARCH_COMMANDS = {
+    "search-state",
+    "search-mode",
+    "search-count",
+    "search-event",
+    "serial-search-uart",
+    "serial-search-i2c",
+    "serial-search-spi",
+    "serial-search-can",
 }
 
 
-def test_search_commands_keep_groups_and_carry_search_editor_metadata() -> None:
+def test_search_commands_carry_search_editor_metadata_without_groups() -> None:
     search_commands = [entry for entry in COMMANDS if entry["category"] == "Search"]
 
-    assert {entry["id"] for entry in search_commands} == set(EXPECTED_SEARCH_GROUPS)
+    assert {entry["id"] for entry in search_commands} == EXPECTED_SEARCH_COMMANDS
     for entry in search_commands:
         assert entry.get("editor") == "search", entry["id"]
-        assert entry["group"] == EXPECTED_SEARCH_GROUPS[entry["id"]], entry["id"]
+        assert "group" not in entry, entry["id"]
     assert [entry["group"] for entry in COMMANDS if entry.get("editor") == "serial"] != []
     trigger_commands = [entry for entry in COMMANDS if entry.get("editor") == "trigger"]
     assert len(trigger_commands) == 23
@@ -109,12 +109,12 @@ def test_search_editor_locale_keys_are_localized() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
 
-    assert '"search.editor.title": "Search editor"' in english
-    assert '"search.editor.description"' in english
-    assert '"group.serial": "Serial"' in english
-    assert '"search.editor.title": "搜尋編輯器"' in chinese
-    assert '"search.editor.description"' in chinese
-    assert '"group.serial": "串列"' in chinese
+    assert '"search.editor.read": "Read search settings"' in english
+    assert '"search.editor.eventUnavailable"' in english
+    assert '"search.editor.serialUnavailable"' in english
+    assert '"search.editor.read": "讀取搜尋設定"' in chinese
+    assert '"search.editor.eventUnavailable"' in chinese
+    assert '"search.editor.serialUnavailable"' in chinese
 
 
 def test_serial_search_projection_follows_core_capabilities() -> None:
@@ -155,11 +155,28 @@ SEARCH_EDITOR_HARNESS = r'''
             this.className = "";
             this.textContent = "";
             this.value = "";
+            this.parent = null;
           }
           addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
           dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
-          replaceChildren(...nodes) { this.children = [...nodes]; }
-          append(...nodes) { this.children.push(...nodes); }
+          replaceChildren(...nodes) {
+            for (const child of this.children) child.parent = null;
+            this.children = [...nodes];
+            for (const node of nodes) node.parent = this;
+          }
+          append(...nodes) {
+            for (const node of nodes) {
+              if (node && typeof node.remove === "function") node.remove();
+              if (node) node.parent = this;
+              this.children.push(node);
+            }
+          }
+          remove() {
+            if (this.parent) {
+              this.parent.children = this.parent.children.filter((node) => node !== this);
+              this.parent = null;
+            }
+          }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.Option = function Option(label, value) {
@@ -189,7 +206,7 @@ SEARCH_EDITOR_HARNESS = r'''
         const source = fs.readFileSync(process.argv[1], "utf8")
           .replace(/^import[^\n]*\r?\n/gm, "")
           .replace(/^export /gm, "")
-          + "\nglobalThis.searchApi = { SearchEditor, serialSearchCommand, buildBusOptions };";
+          + "\nglobalThis.searchApi = { SearchEditor, buildBusOptions };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
         const settle = async () => {
@@ -206,13 +223,12 @@ SEARCH_EDITOR_HARNESS = r'''
           query_value: "query", query_fields: ["bus"],
         };
         const readPresentation = { kind: "command", action: "read" };
-        const def = (id, group, presentation = settingPresentation, fields = []) => ({
+        const def = (id, presentation = settingPresentation, fields = []) => ({
           id,
           editor: "search",
           category: "Search",
           label: id,
           modes: ["live"],
-          group,
           presentation,
           fields,
         });
@@ -222,19 +238,18 @@ SEARCH_EDITOR_HARNESS = r'''
         ]);
 
         const originalCommands = [
-          def("search-state", "basic"),
-          def("search-mode", "basic"),
-          def("search-count", "basic", readPresentation),
-          def("search-event", "event"),
-          def("serial-search-uart", "serial", busQueryPresentation, serialFields()),
-          def("serial-search-i2c", "serial", busQueryPresentation, serialFields()),
-          def("serial-search-spi", "serial", busQueryPresentation, serialFields()),
-          def("serial-search-can", "serial", busQueryPresentation, serialFields()),
+          def("search-state"),
+          def("search-mode"),
+          def("search-count", readPresentation),
+          def("search-event"),
+          def("serial-search-uart", busQueryPresentation, serialFields()),
+          def("serial-search-i2c", busQueryPresentation, serialFields()),
+          def("serial-search-spi", busQueryPresentation, serialFields()),
+          def("serial-search-can", busQueryPresentation, serialFields()),
         ];
         const catalog = {
           commands: originalCommands,
           supported: () => true,
-          groupLabel: (group) => group,
           commandLabel: (command) => command.label,
           fieldsFor: (command) => command.fields,
         };
@@ -269,8 +284,8 @@ SEARCH_EDITOR_HARNESS = r'''
           contextKey: () => env.contextKey,
           selectedCommand,
         };
-        const buildEditor = () =>
-          new globalThis.searchApi.SearchEditor(new FakeNode(), catalog, hooks);
+        const buildEditor = (customHooks = null) =>
+          new globalThis.searchApi.SearchEditor(new FakeNode(), catalog, customHooks || hooks);
 '''
 
 
@@ -282,24 +297,21 @@ def test_search_runtime_unavailable_view_stays_visible_and_recovers() -> None:
         const editor = buildEditor();
         editor.schedulePresentation();
         await settle();
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "search-state", "search-mode",
-        ]);
-        assert.ok(editor.readouts.count);
+        assert.equal(editor.entry.id, "search-state");
         assert.equal(editor.refreshButton.disabled, true);
-        assert.ok(editor.entries.every((entry) => entry.button.disabled));
+        assert.equal(editor.entry.button.disabled, true);
         assert.deepEqual(submitted, []);
 
         env.available = true;
         editor.schedulePresentation();
         await settle();
         assert.equal(editor.refreshButton.disabled, false);
-        assert.ok(editor.entries.every((entry) => !entry.button.disabled));
+        assert.equal(editor.entry.button.disabled, false);
         assert.deepEqual(submitted, []);
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), [
-          "search-state", "search-mode", "search-count",
+          "search-state",
         ]);
         ''')
     completed = subprocess.run(
@@ -318,7 +330,7 @@ def test_search_actions_follow_global_execution_admission_and_recover() -> None:
         const editor = buildEditor();
         editor.schedulePresentation();
         await settle();
-        const entry = editor.entries[0];
+        const entry = editor.entry;
 
         env.executionBusy = true;
         editor.applyBusyState();
@@ -334,7 +346,7 @@ def test_search_actions_follow_global_execution_admission_and_recover() -> None:
         await settle();
         assert.equal(submitted[0].command, entry.id);
         assert.equal(submitted[0].intent, "apply");
-        assert.equal(submitted.slice(1).some((item) => item.intent === "readback"), true);
+        assert.equal(submitted.length, 1);
         ''')
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(SEARCH_EDITOR_SOURCE)],
@@ -346,25 +358,44 @@ def test_search_actions_follow_global_execution_admission_and_recover() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_search_basic_view_reads_only_basic_commands_with_readonly_count() -> None:
+def test_search_basic_view_renders_only_the_selected_command() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         const editor = buildEditor();
         editor.schedulePresentation();
         await settle();
 
-        assert.equal(editor.groupHeading.textContent, "basic");
+        assert.equal(editor.entry.id, "search-state");
         assert.deepEqual(submitted, []);
-        assert.deepEqual(editor.entries.map((entry) => entry.id), [
-          "search-state",
-          "search-mode",
+
+        // Command navigation only re-renders; it never executes.
+        env.selectedId = "search-mode";
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.entry.id, "search-mode");
+        assert.deepEqual(submitted, []);
+
+        // Header Read reads only the selected command.
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
+          "search-mode:readback",
         ]);
+
+        // search-count is query-only: a bare readout, no form, no Apply.
+        env.selectedId = "search-count";
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.entry, null);
         assert.ok(editor.readouts.count);
+        assert.equal(editor.bodyHost.children.length, 1);
+        assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
+          "search-mode:readback",
+        ]);
 
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
-          "search-state:readback",
           "search-mode:readback",
           "search-count:",
         ]);
@@ -389,7 +420,43 @@ def test_search_basic_view_reads_only_basic_commands_with_readonly_count() -> No
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_search_basic_apply_writes_once_then_reconciles_the_group() -> None:
+def test_search_header_apply_follows_the_selected_command() -> None:
+    script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const headerActions = new FakeNode("div");
+        const headerHooks = { ...hooks, headerActions };
+        env.selectedId = "search-state";
+        const editor = buildEditor(headerHooks);
+        editor.schedulePresentation();
+        await settle();
+        const headerButtons = () => headerActions.children.filter(
+          (node) => node.tagName === "BUTTON",
+        );
+        // Header Read plus exactly one Apply for the selected command.
+        assert.equal(headerButtons().length, 2);
+        assert.equal(editor.entry.id, "search-state");
+
+        // Switching commands swaps the Apply button instead of stacking it.
+        submitted.length = 0;
+        env.selectedId = "search-mode";
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(headerButtons().length, 2);
+        assert.equal(editor.entry.id, "search-mode");
+        assert.deepEqual(submitted, []);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(SEARCH_EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_search_basic_apply_writes_once_without_reconciliation() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         const editor = buildEditor();
@@ -397,20 +464,17 @@ def test_search_basic_apply_writes_once_then_reconciles_the_group() -> None:
         await settle();
         submitted.length = 0;
 
-        const stateEntry = editor.entries[0];
+        const stateEntry = editor.entry;
         stateEntry.form.valuesResult = { action: "set", enabled: true };
         stateEntry.button.dispatch("click");
         await settle();
 
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
           "search-state:apply",
-          "search-state:readback",
-          "search-mode:readback",
-          "search-count:",
         ]);
         assert.deepEqual(submitted[0].parameters, { action: "set", enabled: true });
         assert.equal(stateEntry.form.clearedDirty, 1);
-        assert.deepEqual(stateEntry.form.syncCalls.at(-2), [submitted[0].job.job_id, false]);
+        assert.deepEqual(stateEntry.form.syncCalls.at(-1), [submitted[0].job.job_id, false]);
         assert.equal(editor.pendingRefresh, false);
         '''
     )
@@ -434,13 +498,12 @@ def test_search_event_view_queries_applies_and_hides_when_unsupported() -> None:
         assert.deepEqual(submitted.map((entry) => entry.command), ["search-event"]);
 
         submitted.length = 0;
-        const eventEntry = editor.entries[0];
+        const eventEntry = editor.entry;
         eventEntry.form.valuesResult = { action: "set", event: 5 };
         eventEntry.button.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
           "search-event:apply",
-          "search-event:readback",
         ]);
         assert.equal(eventEntry.form.clearedDirty, 1);
 
@@ -450,7 +513,7 @@ def test_search_event_view_queries_applies_and_hides_when_unsupported() -> None:
         env.contextKey = "ctx-unavailable";
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries, []);
+        assert.equal(editor.entry, null);
         assert.deepEqual(submitted, []);
         const note = editor.bodyHost.children.find((node) => node.tagName === "P");
         assert.equal(note.textContent, "search.editor.eventUnavailable");
@@ -532,7 +595,7 @@ def test_search_event_capability_loss_shows_unavailable_state_and_recovers() -> 
         editor.scheduleRefresh();
         await settle();
         assert.deepEqual(submitted.map((entry) => entry.command), ["search-event"]);
-        assert.equal(editor.entries.length, 1);
+        assert.ok(editor.entry);
         assert.equal(editor.refreshButton.disabled, false);
 
         // Capability loss on model switch: the view stays presentable with an
@@ -542,11 +605,10 @@ def test_search_event_capability_loss_shows_unavailable_state_and_recovers() -> 
         env.contextKey = "ctx-3000x";
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries, []);
+        assert.equal(editor.entry, null);
         assert.deepEqual(submitted, []);
         const note = editor.bodyHost.children.find((node) => node.tagName === "P");
         assert.equal(note.textContent, "search.editor.eventUnavailable");
-        assert.equal(editor.groupHeading.textContent, "event");
         assert.equal(editor.refreshButton.disabled, true);
 
         // Recovery re-renders the form and re-reads the event.
@@ -554,7 +616,7 @@ def test_search_event_capability_loss_shows_unavailable_state_and_recovers() -> 
         env.contextKey = "ctx-back-4000x";
         editor.scheduleRefresh();
         await settle();
-        assert.equal(editor.entries.length, 1);
+        assert.ok(editor.entry);
         assert.deepEqual(submitted.map((entry) => entry.command), ["search-event"]);
         assert.equal(editor.refreshButton.disabled, false);
         '''
@@ -572,19 +634,7 @@ def test_search_event_capability_loss_shows_unavailable_state_and_recovers() -> 
 def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        // Mapping table contract.
-        assert.deepEqual(
-          ["uart", "i2c", "spi", "can"].map(
-            (protocol) => globalThis.searchApi.serialSearchCommand(protocol),
-          ),
-          [
-            "serial-search-uart",
-            "serial-search-i2c",
-            "serial-search-spi",
-            "serial-search-can",
-          ],
-        );
-        assert.equal(globalThis.searchApi.serialSearchCommand("lin"), null);
+        // Bus option contract follows the projected bus maximum.
         assert.deepEqual(globalThis.searchApi.buildBusOptions(0), []);
         assert.deepEqual(globalThis.searchApi.buildBusOptions(2), [1, 2]);
 
@@ -593,16 +643,12 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
         const editor = buildEditor();
         editor.scheduleRefresh();
         await settle();
-        assert.equal(editor.groupHeading.textContent, "serial");
-        assert.equal(editor.protocol, "i2c");
+        assert.equal(editor.entry.id, "serial-search-i2c");
         assert.deepEqual(editor.busSelect.children.map((option) => option.value), ["1", "2"]);
-        assert.deepEqual(editor.protocolSelect.children.map((option) => option.value), [
-          "uart", "i2c", "spi", "can",
-        ]);
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.parameters.bus}`), [
           "serial-search-i2c:1",
         ]);
-        const criteriaEntry = editor.entries[0];
+        const criteriaEntry = editor.entry;
         assert.deepEqual(
           criteriaEntry.form.renderedCommand.fields.map((field) => field.name),
           ["mode"],
@@ -613,23 +659,35 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
           ["bus", "mode"],
         );
 
-        // Protocol switch only changes presentation.
-        submitted.length = 0;
-        editor.selectProtocol("uart");
+        // The status row follows the same serial-search result: no extra jobs.
+        assert.equal(editor.readouts.state.textContent, "-");
+        assert.equal(editor.readouts.mode.textContent, "-");
+        hooks.executeCommand = async (command, parameters, options) =>
+          recordJob(command, parameters, options,
+            { search_enabled: true, search_mode: "edge" });
+        editor.refreshButton.dispatch("click");
         await settle();
-        assert.equal(editor.protocol, "uart");
+        assert.equal(editor.readouts.state.textContent, "status.enabled");
+        assert.equal(editor.readouts.mode.textContent, "edge");
+
+        // Browser selection drives the protocol: switching to UART re-renders
+        // with zero I/O instead of a second protocol navigation layer.
+        submitted.length = 0;
+        hooks.executeCommand = makeRecordingExecute();
+        env.selectedId = "serial-search-uart";
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.entry.id, "serial-search-uart");
         assert.deepEqual(submitted, []);
 
         // Bus switch is also passive; Refresh reads the selected view.
-        editor.selectProtocol("i2c");
-        await settle();
         editor.selectBus("2");
         await settle();
         assert.deepEqual(submitted, []);
         editor.refreshButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.parameters.bus}`), [
-          "serial-search-i2c:2",
+          "serial-search-uart:2",
         ]);
         '''
     )
@@ -652,7 +710,7 @@ def test_search_serial_view_reports_unavailable_without_fake_buses() -> None:
         const editor = buildEditor();
         editor.scheduleRefresh();
         await settle();
-        assert.deepEqual(editor.entries, []);
+        assert.equal(editor.entry, null);
         assert.deepEqual(submitted, []);
         assert.equal(editor.busSelect, null);
         let note = editor.bodyHost.children.find((node) => node.tagName === "P");
@@ -667,7 +725,7 @@ def test_search_serial_view_reports_unavailable_without_fake_buses() -> None:
         editor.scheduleRefresh();
         await settle();
         assert.deepEqual(submitted, []);
-        assert.deepEqual(editor.entries, []);
+        assert.equal(editor.entry, null);
         note = editor.bodyHost.children.find((node) => node.tagName === "P");
         assert.equal(note.textContent, "search.editor.serialUnavailable");
         '''
@@ -682,7 +740,7 @@ def test_search_serial_view_reports_unavailable_without_fake_buses() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_search_serial_apply_writes_once_then_reconciles_state_mode_criteria() -> None:
+def test_search_serial_apply_writes_once_without_reconciliation() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         env.selectedId = "serial-search-i2c";
@@ -691,22 +749,22 @@ def test_search_serial_apply_writes_once_then_reconciles_state_mode_criteria() -
         await settle();
         submitted.length = 0;
 
-        const criteriaEntry = editor.entries[0];
+        const criteriaEntry = editor.entry;
         criteriaEntry.form.valuesResult = { action: "set", mode: "rx-data", data: 85 };
         criteriaEntry.button.dispatch("click");
         await settle();
 
-        // Exactly one write; no search-state/search-mode writes anywhere.
+        // Exactly one write; the Apply result syncs the form and the status
+        // row with no follow-up queries of any kind.
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
           "serial-search-i2c:apply",
-          "search-state:readback",
-          "search-mode:readback",
-          "serial-search-i2c:readback",
         ]);
         assert.deepEqual(submitted[0].parameters, {
           action: "set", mode: "rx-data", data: 85, bus: 1,
         });
         assert.equal(criteriaEntry.form.clearedDirty, 1);
+        assert.equal(editor.readouts.state.textContent, "-");
+        assert.equal(editor.readouts.mode.textContent, "-");
         assert.equal(editor.pendingRefresh, false);
 
         // Failed Apply: no reconciliation, draft handling untouched.
@@ -767,9 +825,8 @@ def test_search_editor_serializes_lifecycle_and_suppresses_same_state_refresh() 
         assert.equal(queries, 1);
         assert.equal(editor.busy, true);
         assert.equal(editor.refreshButton.disabled, true);
-        assert.equal(editor.entries[0].button.disabled, true);
+        assert.equal(editor.entry.button.disabled, true);
         assert.equal(editor.busSelect.disabled, true);
-        assert.equal(editor.protocolSelect.disabled, true);
 
         // Same-state ordinary notifications do not queue anything.
         editor.scheduleRefresh();
@@ -790,7 +847,7 @@ def test_search_editor_serializes_lifecycle_and_suppresses_same_state_refresh() 
         assert.equal(queries, 1);
         assert.equal(editor.busy, false);
         assert.equal(editor.pendingRefresh, false);
-        assert.equal(editor.protocol, "spi");
+        assert.equal(editor.entry.id, "serial-search-spi");
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
           "serial-search-spi:readback",
         ]);
@@ -806,20 +863,19 @@ def test_search_editor_serializes_lifecycle_and_suppresses_same_state_refresh() 
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_search_editor_auto_notifications_do_not_restart_group_readback() -> None:
+def test_search_editor_auto_notifications_do_not_restart_command_readback() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
         // Simulate the real app contract: every completed executeCommand ends
-        // with a plain unforced refresh notification. The Basic readback must
-        // run exactly once and end idle.
+        // with a plain unforced refresh notification. The selected command
+        // readback must run exactly once and end idle.
         env.selectedId = "search-state";
         let editor;
         hooks.executeCommand = async (command, parameters, options) => {
-          if (submitted.length > 6) {
+          if (submitted.length > 2) {
             throw new Error("Search readback refresh loop detected");
           }
-          const job = recordJob(command, parameters, options,
-            command === "search-count" ? { count: 4 } : {});
+          const job = recordJob(command, parameters, options, {});
           editor.scheduleRefresh();
           return job;
         };
@@ -829,10 +885,7 @@ def test_search_editor_auto_notifications_do_not_restart_group_readback() -> Non
 
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
           "search-state:readback",
-          "search-mode:readback",
-          "search-count:",
         ]);
-        assert.equal(editor.readouts.count.textContent, "4");
         assert.equal(editor.busy, false);
         assert.equal(editor.pendingRefresh, false);
         '''

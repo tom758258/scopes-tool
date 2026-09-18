@@ -179,9 +179,9 @@ The Command workbench exposes:
 - Trigger: a dedicated Trigger editor over the existing Edge, external,
   glitch/pulse-width, runt, transition, delay, setup/hold, edge-burst, TV,
   pattern/OR, sweep, reject, coupling, and holdoff commands
-- Search: a dedicated Search editor covering Basic Search state, mode, and
-  count, capability-gated Search event navigation, and Serial Search over
-  UART/I2C/SPI/CAN with Bus and Protocol selection
+- Search: a dedicated Search editor covering independent Search state, mode,
+  and count commands, capability-gated Search event navigation, and Serial
+  Search over UART/I2C/SPI/CAN with Bus selection
 - Serial: a dedicated mode-aware Serial editor covering bus selection, Serial
   Mode, Serial Display, UART/I2C/SPI/CAN configuration and triggers, and a
   protocol-independent Serial Lister section (display, reference, and
@@ -319,25 +319,28 @@ the shared Core capability projection; unsupported commands stay disabled in
 the Command Browser and are omitted from the editor view.
 
 Selecting a Search command opens the dedicated Search editor instead of a
-plain command form. The Command Browser groups remain Basic, Event, and
-Serial; the editor adds no second tab layer. Basic shows Search State and
-Search Mode as independent read-edit-Apply settings plus a read-only Search
-Count that is refreshed with the group. The Read search settings action in Basic reads only
-these three commands. Event exposes capability-gated event navigation: models
-without Search event navigation show an unavailable note instead of controls,
+plain command form. Search commands are ungrouped: selecting one renders only
+that command, and navigation between commands is presentation-only. Each
+setting keeps its own metadata-driven form and its own independent Apply over
+the existing WebUI command; there is no Apply All, no transaction, and no
+merged payload. `search-count` is query-only and keeps its explicit Read
+action with a read-only count and no Apply. Event exposes capability-gated
+event navigation: models without Search event navigation show an unavailable
+note instead of controls,
 a reported current event of 0 displays verbatim as readback, and Apply keeps
 the existing Core validation rather than turning a displayed 0 into an editable
-target. Selecting any Serial Search command opens the Serial Search view with
-a Bus selector projected from the model's serial bus count and a Protocol
-selector whose UART/I2C/SPI/CAN availability comes from the existing model
-projection; the clicked command chooses the initial protocol. Switching Bus or
-Protocol discards unapplied edits and changes presentation without querying;
-explicit Read serial settings reads only the active protocol. A Serial Search Apply submits
+target. Selecting any Serial Search command opens the Serial Search view for
+that protocol with a Bus selector projected from the model's serial bus count;
+the clicked command chooses the protocol and there is no separate Protocol
+selector. Switching Bus or commands discards unapplied edits and changes
+presentation without querying;
+explicit Read serial settings reads only the active protocol and bus. A Serial
+Search Apply submits
 exactly one existing `serial-search-*`
 write with the selected bus and the metadata-driven criteria form — no separate
-`search-state`/`search-mode` writes and no Serial decode mode recheck — then
-runs `search-state`, `search-mode`, and the active criteria query again for
-reconciliation. There is no Apply All, transaction, frontend capability
+`search-state`/`search-mode` writes and no Serial decode mode recheck — and
+then syncs the form and the status row from that Apply result without further
+queries. There is no Apply All, transaction, frontend capability
 database, or SCPI generation in the editor, and non-Serial Search criteria
 editors remain out of scope.
 

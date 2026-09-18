@@ -2992,10 +2992,6 @@ def test_command_catalog_group_metadata_contract() -> None:
         "trigger-tv": "tv",
         "trigger-mode": "pattern-or",
         "trigger-or": "pattern-or",
-        "search-state": "basic",
-        "search-event": "event",
-        "serial-search-uart": "serial",
-        "serial-search-can": "serial",
         "serial-mode": "bus",
         "serial-uart": "uart",
         "serial-trigger-i2c": "i2c",
@@ -3012,7 +3008,7 @@ def test_command_catalog_group_metadata_contract() -> None:
     for command_id, group in expected_groups.items():
         assert commands[command_id]["group"] == group, command_id
 
-    for command_id in ("acquisition", "screenshot", "save-image", "save-waveform", "setup-save", "cursor-query", "cursor-set", "cursor-off", "annotation-query", "annotation-set", "annotation-on", "annotation-off", "annotation-clear", "wgen-query", "wgen-output", "wgen-function", "wgen-frequency", "wgen-voltage", "wgen-offset", "wgen-load"):
+    for command_id in ("acquisition", "screenshot", "save-image", "save-waveform", "setup-save", "cursor-query", "cursor-set", "cursor-off", "annotation-query", "annotation-set", "annotation-on", "annotation-off", "annotation-clear", "wgen-query", "wgen-output", "wgen-function", "wgen-frequency", "wgen-voltage", "wgen-offset", "wgen-load", "search-state", "search-mode", "search-count", "search-event", "serial-search-uart", "serial-search-i2c", "serial-search-spi", "serial-search-can"):
         assert "group" not in commands[command_id], command_id
 
 
@@ -3058,13 +3054,12 @@ def test_catalog_group_keys_stay_scoped_and_localized() -> None:
     grouped = [entry for entry in entries if "group" in entry]
 
     assert {entry["category"] for entry in grouped} <= {
-        "Channel", "Trigger", "Search", "Serial", "Save / Export", "Workflow",
+        "Channel", "Trigger", "Serial", "Save / Export", "Workflow",
     }
     assert {entry["group"] for entry in grouped} == {
         "edge", "common", "external", "pulse-width", "runt", "transition",
         "delay", "setup-hold", "edge-burst", "tv", "pattern-or",
         "channel-basic", "channel-advanced",
-        "basic", "event", "serial",
         "uart", "i2c", "spi", "can",
         "bus", "lister",
         "path-filename", "image", "waveform",

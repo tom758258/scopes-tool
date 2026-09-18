@@ -1688,10 +1688,10 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command("trigger-hf-reject", "Trigger", "HF reject", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-hf-reject.enabled"),), group="common", editor="trigger"),
     _action_command("trigger-holdoff", "Trigger", "Trigger holdoff", (_command_field("seconds", "number", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="trigger-holdoff.seconds"),), group="common", editor="trigger"),
 
-    _action_command("search-state", "Search", "Search state", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="basic", editor="search"),
-    _action_command("search-mode", "Search", "Search mode", (_command_field("mode", "enum", options=SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="basic", editor="search"),
-    {"id": "search-count", "category": "Search", "label": "Search count", "modes": ("live", "simulate"), "fields": (), "group": "basic", "editor": "search"},
-    _action_command("search-event", "Search", "Search event", (_command_field("event", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="event", editor="search"),
+    _action_command("search-state", "Search", "Search state", (_command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), editor="search"),
+    _action_command("search-mode", "Search", "Search mode", (_command_field("mode", "enum", options=SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), editor="search"),
+    {"id": "search-count", "category": "Search", "label": "Search count", "modes": ("live", "simulate"), "fields": (), "editor": "search"},
+    _action_command("search-event", "Search", "Search event", (_command_field("event", "integer", minimum=1, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), editor="search"),
     _action_command(
         "serial-search-uart", "Search", "UART serial search", (
             _command_field("bus", "integer", minimum=1),
@@ -1699,7 +1699,6 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
             _command_field("data", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
             _command_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_set_action_visibility({"field": "mode", "in": ("rx-data", "tx-data")})),
         ),
-        group="serial",
         editor="search",
     ),
     _action_command(
@@ -1711,7 +1710,6 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
             _command_field("data2", "integer", visible_if=_set_action_visibility({"field": "mode", "in": ("read7-data2", "write7-data2")})),
             _command_field("qualifier", "enum", options=SEARCH_QUALIFIERS, visible_if=_set_action_visibility({"field": "mode", "equals": "eeprom-read"})),
         ),
-        group="serial",
         editor="search",
     ),
     _action_command(
@@ -1721,7 +1719,6 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
             _command_field("data", "string", visible_if=_set_action_visibility()),
             _command_field("width", "integer", minimum=1, maximum=10, visible_if=_set_action_visibility()),
         ),
-        group="serial",
         editor="search",
     ),
     _action_command(
@@ -1733,7 +1730,6 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
             _command_field("id", "string", visible_if=_set_action_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
             _command_field("id_mode", "enum", options=CAN_SEARCH_ID_MODES, visible_if=_set_action_visibility({"field": "mode", "in": ("id-data", "id-either", "id-remote")})),
         ),
-        group="serial",
         editor="search",
     ),
 

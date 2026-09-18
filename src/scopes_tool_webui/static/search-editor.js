@@ -1,14 +1,7 @@
 import { hasTranslation, translate } from "/static/i18n.js";
 import { CommandForm } from "/static/command-form.js";
 
-const SERIAL_PROTOCOLS = ["uart", "i2c", "spi", "can"];
 const SERIAL_SEARCH_PREFIX = "serial-search-";
-
-export function serialSearchCommand(protocol) {
-  return SERIAL_PROTOCOLS.includes(protocol)
-    ? `${SERIAL_SEARCH_PREFIX}${protocol}`
-    : null;
-}
 
 export function buildBusOptions(maxBus) {
   const limit = Math.max(0, Math.floor(Number(maxBus) || 0));
@@ -51,23 +44,18 @@ export class SearchEditor {
     this.renderedKey = null;
     this.pendingRefresh = false;
     this.pendingPresentation = false;
-    this.entries = [];
+    this.entry = null;
     this.readouts = {};
     this.bus = 1;
     this.maxBus = 0;
-    this.protocols = [];
-    this.protocol = null;
-    this.selectedSerialCommandId = null;
     this.buildDom();
   }
 
   buildDom() {
     this.refreshButton?.remove?.();
+    this.entry?.button.remove?.();
+    this.entry = null;
     this.container.replaceChildren();
-    this.headRow = document.createElement("div");
-    this.headRow.className = "search-editor-head";
-    this.groupHeading = document.createElement("strong");
-    this.groupHeading.className = "search-editor-heading";
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
     this.refreshButton.className = "secondary search-editor-refresh";
@@ -75,18 +63,16 @@ export class SearchEditor {
     this.refreshButton.addEventListener("click", () => {
       this.scheduleRefresh(true);
     });
-    this.headRow.append(this.groupHeading);
     if (this.hooks.headerActions) {
       this.refreshButton.hidden = true;
       this.hooks.headerActions.append(this.refreshButton);
     } else {
-      this.headRow.append(this.refreshButton);
+      this.container.append(this.refreshButton);
     }
     this.bodyHost = document.createElement("div");
     this.bodyHost.className = "search-editor-sections";
-    this.container.append(this.headRow, this.bodyHost);
+    this.container.append(this.bodyHost);
     this.busSelect = null;
-    this.protocolSelect = null;
   }
 
   commandById(id) {
@@ -98,14 +84,23 @@ export class SearchEditor {
     return selected?.editor === "search" ? selected : null;
   }
 
+  isSerialCommand(definition) {
+    return (definition?.id || "").startsWith(SERIAL_SEARCH_PREFIX);
+  }
+
+  serialBusMaximum(definition) {
+    const fields = this.catalog.fieldsFor?.(definition) ?? definition?.fields ?? [];
+    const busField = fields.find((field) => field?.name === "bus");
+    return Math.max(0, Number(busField?.maximum) || 0);
+  }
+
   currentStateKey() {
     const selected = this.selectedDefinition();
+    const bus = selected && this.isSerialCommand(selected) ? this.bus : "";
     return [
       this.hooks.contextKey(),
       selected?.id || "",
-      selected?.group || "",
-      String(this.bus),
-      this.protocol || "",
+      String(bus),
     ].join("|");
   }
 
@@ -128,38 +123,6 @@ export class SearchEditor {
     this.schedulePresentation();
   }
 
-  refreshSerialContext(definition) {
-    if (!definition || definition.group !== "serial") {
-      this.protocols = [];
-      this.maxBus = 0;
-      this.protocol = null;
-      this.selectedSerialCommandId = null;
-      return;
-    }
-    const supported = [];
-    let maxBus = 0;
-    for (const protocol of SERIAL_PROTOCOLS) {
-      const command = this.commandById(serialSearchCommand(protocol));
-      if (!command || !this.catalog.supported(command)) continue;
-      supported.push(protocol);
-      const busField = this.catalog
-        .fieldsFor(command)
-        .find((field) => field.name === "bus");
-      maxBus = Math.max(maxBus, Number(busField?.maximum) || 0);
-    }
-    this.protocols = supported;
-    this.maxBus = maxBus;
-    if (this.bus < 1 || this.bus > maxBus) this.bus = 1;
-    const derived = definition.id.slice(SERIAL_SEARCH_PREFIX.length);
-    if (
-      this.selectedSerialCommandId !== definition.id
-      || !supported.includes(this.protocol)
-    ) {
-      this.protocol = derived;
-    }
-    this.selectedSerialCommandId = definition.id;
-  }
-
   async refresh(force = false, read = true) {
     if (this.busy) {
       if (read && (force || this.currentStateKey() !== this.stateKey)) {
@@ -173,29 +136,16 @@ export class SearchEditor {
     const definition = this.selectedDefinition();
     if (!definition) {
       this.stateKey = null;
-      this.clearView();
+      this.clearSections();
       return;
     }
-    this.refreshSerialContext(definition);
     const key = this.currentStateKey();
-
-    // Capability-unsupported selections render their own unavailable state.
-    if (!this.catalog.supported(definition)) {
-      if (!force && key === this.stateKey) return;
-      this.stateKey = key;
-      this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
-      if (this.renderedKey !== key) this.rebuildView(definition);
-      this.applyBusyState();
-      return;
-    }
-
     if (!force && key === this.stateKey) {
       this.applyBusyState();
       return;
     }
     this.stateKey = key;
-    this.groupHeading.textContent = this.catalog.groupLabel(definition.group);
-    if (this.renderedKey !== key) this.rebuildView(definition);
+    if (this.renderedKey !== key) this.rebuildSections(definition);
     this.applyBusyState();
     if (!read || !this.hooks.isAvailable()) return;
     this.setBusy(true);
@@ -206,57 +156,52 @@ export class SearchEditor {
     }
   }
 
-  clearView() {
+  clearSections() {
     this.renderedKey = null;
-    this.entries = [];
+    this.entry?.button.remove?.();
+    this.entry = null;
     this.readouts = {};
     this.busSelect = null;
-    this.protocolSelect = null;
     this.bodyHost.replaceChildren();
-    this.groupHeading.textContent = "";
     this.refreshButton.disabled = true;
   }
 
-  rebuildView(definition) {
+  rebuildSections(definition) {
     this.epoch += 1;
     this.renderedKey = this.currentStateKey();
-    this.entries = [];
+    this.entry?.button.remove?.();
+    this.entry = null;
     this.readouts = {};
     this.busSelect = null;
-    this.protocolSelect = null;
     this.bodyHost.replaceChildren();
-    if (definition.group === "basic") this.buildBasicView();
-    else if (definition.group === "event") this.buildEventView();
-    else if (definition.group === "serial") this.buildSerialView();
-  }
-
-  buildBasicView() {
-    for (const id of ["search-state", "search-mode"]) {
-      const command = this.commandById(id);
-      if (command && this.catalog.supported(command)) {
-        this.buildSettingSection(command, false);
+    // Capability-unsupported selections render their own unavailable state
+    // instead of controls. Nothing is read and nothing can be applied.
+    if (!this.catalog.supported(definition)) {
+      if (definition.id === "search-event") {
+        this.buildUnavailableNote("search.editor.eventUnavailable");
+      } else if (this.isSerialCommand(definition)) {
+        this.buildUnavailableNote("search.editor.serialUnavailable");
       }
+      return;
     }
-    const countCommand = this.commandById("search-count");
-    if (countCommand && this.catalog.supported(countCommand)) {
-      this.readouts.count = this.buildReadonlyRow(countCommand);
+    if (definition.id === "search-count") {
+      this.buildCountView();
+      return;
     }
+    if (this.isSerialCommand(definition)) {
+      this.buildSerialView(definition);
+      return;
+    }
+    this.buildSettingSection(definition, false);
   }
 
-  buildEventView() {
-    const command = this.commandById("search-event");
-    if (command && this.catalog.supported(command)) {
-      this.buildSettingSection(command, false);
-    } else {
-      this.buildUnavailableNote("search.editor.eventUnavailable");
-    }
-  }
-
-  buildSerialView() {
-    if (!this.protocols.length || this.maxBus < 1) {
+  buildSerialView(definition) {
+    this.maxBus = this.serialBusMaximum(definition);
+    if (this.maxBus < 1) {
       this.buildUnavailableNote("search.editor.serialUnavailable");
       return;
     }
+    if (this.bus < 1 || this.bus > this.maxBus) this.bus = 1;
     const statusRow = document.createElement("div");
     statusRow.className = "search-editor-row";
     statusRow.append(
@@ -265,22 +210,14 @@ export class SearchEditor {
     );
     this.bodyHost.append(statusRow);
 
-    const selectorRow = document.createElement("div");
-    selectorRow.className = "search-editor-row";
+    const busRow = document.createElement("div");
+    busRow.className = "search-editor-row";
     this.busSelect = document.createElement("select");
     this.busSelect.addEventListener("change", () => {
       this.selectBus(this.busSelect.value);
     });
-    this.protocolSelect = document.createElement("select");
-    this.protocolSelect.addEventListener("change", () => {
-      this.selectProtocol(this.protocolSelect.value);
-    });
-    selectorRow.append(
-      this.labeledField("field.bus", this.busSelect),
-      this.labeledField("search.editor.protocol", this.protocolSelect),
-    );
-    this.bodyHost.append(selectorRow);
-
+    busRow.append(this.labeledField("field.bus", this.busSelect));
+    this.bodyHost.append(busRow);
     this.renderOptions(
       this.busSelect,
       buildBusOptions(this.maxBus).map((value) => ({
@@ -289,17 +226,8 @@ export class SearchEditor {
       })),
       this.bus,
     );
-    this.renderOptions(
-      this.protocolSelect,
-      this.protocols.map((protocol) => ({
-        value: protocol,
-        label: protocol.toUpperCase(),
-      })),
-      this.protocol,
-    );
 
-    const command = this.commandById(serialSearchCommand(this.protocol));
-    if (command) this.buildSettingSection(this.criteriaDefinition(command), true);
+    this.buildSettingSection(this.criteriaDefinition(definition), true);
   }
 
   criteriaDefinition(command) {
@@ -309,54 +237,46 @@ export class SearchEditor {
     };
   }
 
-  buildSettingSection(command, isSerialCriteria) {
+  buildSettingSection(command, isSerial) {
     const section = document.createElement("section");
     section.className = "search-editor-section";
-    const heading = document.createElement("strong");
-    heading.className = "search-editor-heading";
-    heading.textContent = this.catalog.commandLabel(command);
     const formContainer = document.createElement("div");
     formContainer.className = "command-form";
     const applyButton = document.createElement("button");
     applyButton.type = "button";
     applyButton.className = "secondary search-editor-action";
     applyButton.textContent = translate("actions.apply");
-    section.append(heading);
-    const description = this.catalog.description?.(command);
-    if (description) {
-      const note = document.createElement("p");
-      note.className = "muted compact-note";
-      note.textContent = description;
-      section.append(note);
+    section.append(formContainer);
+    if (this.hooks.headerActions) {
+      this.hooks.headerActions.append(applyButton);
+    } else {
+      section.append(applyButton);
     }
-    section.append(formContainer, applyButton);
     this.bodyHost.append(section);
     const form = new CommandForm(formContainer, this.catalog);
     form.render(command, {});
     const entry = {
       id: command.id,
-      view: isSerialCriteria ? "serial" : command.group,
       form,
       button: applyButton,
+      epoch: this.epoch,
+      serial: isSerial,
     };
     applyButton.addEventListener("click", () => {
       void this.submit(entry);
     });
-    this.entries.push(entry);
+    const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
+    section.hidden = fields.length === 0;
+    formContainer.hidden = fields.length === 0;
+    this.entry = entry;
     return entry;
   }
 
-  buildReadonlyRow(command) {
-    const section = document.createElement("section");
-    section.className = "search-editor-section";
-    const heading = document.createElement("strong");
-    heading.className = "search-editor-heading";
-    heading.textContent = this.catalog.commandLabel(command);
+  buildCountView() {
     const output = document.createElement("output");
     output.className = "readonly-value";
-    section.append(heading, output);
-    this.bodyHost.append(section);
-    return output;
+    this.bodyHost.append(output);
+    this.readouts.count = output;
   }
 
   buildUnavailableNote(messageKey) {
@@ -407,12 +327,6 @@ export class SearchEditor {
     this.schedulePresentation();
   }
 
-  selectProtocol(value) {
-    if (this.busy || !this.protocols.includes(value) || value === this.protocol) return;
-    this.protocol = value;
-    this.schedulePresentation();
-  }
-
   async readEntry(entry) {
     const parameters = entry.form.queryValues();
     if (parameters === null) return;
@@ -433,7 +347,11 @@ export class SearchEditor {
     );
     if (job?.status !== "completed") return;
     entry.form.syncResult(job, true);
-    const payload = job.result?.result ?? job.result ?? {};
+    this.syncSerialStatus(job);
+  }
+
+  syncSerialStatus(job) {
+    const payload = job?.result?.result ?? job?.result ?? {};
     if (this.readouts.state) {
       this.readouts.state.textContent = enabledLabel(payload.search_enabled);
     }
@@ -455,28 +373,23 @@ export class SearchEditor {
   async readActiveView() {
     const definition = this.selectedDefinition();
     if (!definition) return;
-    const epoch = this.epoch;
-    if (definition.group === "serial") {
-      for (const entry of this.entries) {
-        if (epoch !== this.epoch) return;
-        await this.readSerialEntry(entry);
-      }
+    if (definition.id === "search-count") {
+      await this.readCount();
       return;
     }
-    for (const entry of this.entries) {
-      if (epoch !== this.epoch) return;
-      await this.readEntry(entry);
-    }
-    if (definition.group === "basic") await this.readCount();
+    const entry = this.entry;
+    if (!entry || entry.epoch !== this.epoch) return;
+    if (entry.serial) await this.readSerialEntry(entry);
+    else await this.readEntry(entry);
   }
 
   async submit(entry) {
-    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
-    if (!this.entries.includes(entry)) return;
+    if (!entry || entry !== this.entry || this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return;
     const submissionKey = this.currentStateKey();
+    const epoch = this.epoch;
     const values = entry.form.values();
     if (values === null) return;
-    const parameters = entry.view === "serial"
+    const parameters = entry.serial
       ? { ...values, bus: this.bus }
       : values;
     this.setBusy(true);
@@ -486,17 +399,17 @@ export class SearchEditor {
         parameters,
         { intent: "apply" },
       );
-      if (job?.status !== "completed" || !this.entries.includes(entry)) return;
+      if (
+        job?.status !== "completed"
+        || entry !== this.entry
+        || entry.epoch !== epoch
+        || submissionKey !== this.currentStateKey()
+      ) {
+        return;
+      }
       entry.form.clearDirty();
       entry.form.syncResult(job, false);
-      if (submissionKey !== this.currentStateKey()) return;
-      if (entry.view === "serial") {
-        await this.hooks.executeCommand("search-state", {}, { intent: "readback" });
-        await this.hooks.executeCommand("search-mode", {}, { intent: "readback" });
-        await this.readSerialEntry(entry);
-      } else {
-        this.pendingRefresh = true;
-      }
+      if (entry.serial) this.syncSerialStatus(job);
     } finally {
       this.setBusy(false);
     }
@@ -519,15 +432,12 @@ export class SearchEditor {
     const unavailable = !this.hooks.isAvailable();
     const disabled = this.busy || this.hooks.isExecutionBusy?.() || unavailable;
     this.refreshButton.disabled = disabled;
-    for (const entry of this.entries) {
-      entry.button.disabled = disabled;
-      entry.form?.setDisabled(disabled);
+    if (this.entry) {
+      this.entry.button.disabled = disabled;
+      this.entry.form?.setDisabled(disabled);
     }
     if (this.busSelect) {
       this.busSelect.disabled = disabled;
-    }
-    if (this.protocolSelect) {
-      this.protocolSelect.disabled = disabled;
     }
   }
 }
