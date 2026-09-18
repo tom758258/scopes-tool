@@ -86,7 +86,7 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
           triggerSweep: node(),
         };
         const translate = (key) => ({
-          "live_data.type.glitch": "\u6bdb\u523a",
+          "live_data.type.glitch": "\u8108\u6ce2\u5bec\u5ea6",
           "live_data.source.line": "\u7dda\u8def",
         })[key] || key;
         renderInstrumentSummary(elements, {
@@ -94,7 +94,7 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
           timebase: {},
           trigger: { type: "glitch", source: "line" },
         }, translate);
-        assert.equal(elements.triggerType.textContent, "\u6bdb\u523a");
+        assert.equal(elements.triggerType.textContent, "\u8108\u6ce2\u5bec\u5ea6");
         assert.notEqual(elements.triggerType.textContent, "Glitch");
         assert.equal(elements.triggerSource.textContent, "\u7dda\u8def");
         '''
@@ -2974,6 +2974,43 @@ def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
         assert.equal(formatWorkspaceValue("mode", "OFF", "cursor"), "Off");
         assert.equal(formatWorkspaceValue("mode", "TRACK", "cursor"), "TRACK");
         assert.equal(formatWorkspaceValue("mode", "MAN", null), "MAN");
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(results_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_trigger_mode_structured_result_prefers_scoped_labels() -> None:
+    results_path = STATIC_ROOT / "results.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const translations = {
+          "enum.trigger-mode.delay": "邊緣後邊緣",
+          "enum.delay": "延遲",
+          "enum.trigger-mode.pattern": "碼型",
+          "enum.pattern": "模式",
+        };
+        const source = [
+          `const translations = ${JSON.stringify(translations)};`,
+          "const hasTranslation = (key) => key in translations;",
+          "const translate = (key) => translations[key] ?? key;",
+          fs.readFileSync(process.argv[1], "utf8").replace(/^import[^\n]*\r?\n/gm, ""),
+          "globalThis.resultsApi = { formatWorkspaceValue };",
+        ].join("\n");
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { formatWorkspaceValue } = globalThis.resultsApi;
+
+        assert.equal(formatWorkspaceValue("mode", "delay", "trigger"), "邊緣後邊緣");
+        assert.equal(formatWorkspaceValue("mode", "pattern", "trigger"), "碼型");
         '''
     )
     completed = subprocess.run(

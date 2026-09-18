@@ -1048,6 +1048,9 @@ const RESULT_ENUM_CONTEXTS = {
     operation: "math-visualization",
     measurement: "math-trend-measurement",
   },
+  trigger: {
+    mode: "trigger-mode",
+  },
 };
 
 function formatWorkspaceValue(name, value, resultContext = null) {
