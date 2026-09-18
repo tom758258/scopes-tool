@@ -94,6 +94,11 @@ export class SearchEditor {
     return Math.max(0, Number(busField?.maximum) || 0);
   }
 
+  normalizeSerialBus(definition) {
+    this.maxBus = this.serialBusMaximum(definition);
+    if (this.bus < 1 || this.bus > this.maxBus) this.bus = 1;
+  }
+
   currentStateKey() {
     const selected = this.selectedDefinition();
     const bus = selected && this.isSerialCommand(selected) ? this.bus : "";
@@ -138,6 +143,9 @@ export class SearchEditor {
       this.stateKey = null;
       this.clearSections();
       return;
+    }
+    if (this.isSerialCommand(definition)) {
+      this.normalizeSerialBus(definition);
     }
     const key = this.currentStateKey();
     if (!force && key === this.stateKey) {
@@ -196,12 +204,11 @@ export class SearchEditor {
   }
 
   buildSerialView(definition) {
-    this.maxBus = this.serialBusMaximum(definition);
+    this.normalizeSerialBus(definition);
     if (this.maxBus < 1) {
       this.buildUnavailableNote("search.editor.serialUnavailable");
       return;
     }
-    if (this.bus < 1 || this.bus > this.maxBus) this.bus = 1;
     const statusRow = document.createElement("div");
     statusRow.className = "search-editor-row";
     statusRow.append(
@@ -351,12 +358,13 @@ export class SearchEditor {
   }
 
   syncSerialStatus(job) {
-    const payload = job?.result?.result ?? job?.result ?? {};
+    const enabled = resultValue(job?.result, "search_enabled");
     if (this.readouts.state) {
-      this.readouts.state.textContent = enabledLabel(payload.search_enabled);
+      this.readouts.state.textContent = enabledLabel(enabled);
     }
+
+    const mode = resultValue(job?.result, "search_mode");
     if (this.readouts.mode) {
-      const mode = payload.search_mode;
       this.readouts.mode.textContent = mode ? enumLabel(mode) : "-";
     }
   }

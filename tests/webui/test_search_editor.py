@@ -664,7 +664,7 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
         assert.equal(editor.readouts.mode.textContent, "-");
         hooks.executeCommand = async (command, parameters, options) =>
           recordJob(command, parameters, options,
-            { search_enabled: true, search_mode: "edge" });
+            { search: { search_enabled: true, search_mode: "edge" } });
         editor.refreshButton.dispatch("click");
         await settle();
         assert.equal(editor.readouts.state.textContent, "status.enabled");
@@ -689,6 +689,22 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.parameters.bus}`), [
           "serial-search-uart:2",
         ]);
+
+        // A projection shrink normalizes the bus before the state key is
+        // built: no extra rebuild, no automatic execution.
+        catalog.fieldsFor = (command) => command.fields.map((field) => (
+          field.name === "bus" ? { ...field, maximum: 1 } : field
+        ));
+        env.contextKey = "ctx-one-bus";
+        submitted.length = 0;
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.bus, 1);
+        assert.deepEqual(editor.busSelect.children.map((option) => option.value), ["1"]);
+        assert.equal(editor.currentStateKey(), "ctx-one-bus|serial-search-uart|1");
+        assert.equal(editor.stateKey, editor.currentStateKey());
+        assert.equal(editor.renderedKey, editor.currentStateKey());
+        assert.deepEqual(submitted, []);
         '''
     )
     completed = subprocess.run(
@@ -751,6 +767,9 @@ def test_search_serial_apply_writes_once_without_reconciliation() -> None:
 
         const criteriaEntry = editor.entry;
         criteriaEntry.form.valuesResult = { action: "set", mode: "rx-data", data: 85 };
+        hooks.executeCommand = async (command, parameters, options) =>
+          recordJob(command, parameters, options,
+            { search: { search_enabled: true, search_mode: "serial1" } });
         criteriaEntry.button.dispatch("click");
         await settle();
 
@@ -763,11 +782,13 @@ def test_search_serial_apply_writes_once_without_reconciliation() -> None:
           action: "set", mode: "rx-data", data: 85, bus: 1,
         });
         assert.equal(criteriaEntry.form.clearedDirty, 1);
-        assert.equal(editor.readouts.state.textContent, "-");
-        assert.equal(editor.readouts.mode.textContent, "-");
+        assert.deepEqual(criteriaEntry.form.syncCalls.at(-1), [submitted[0].job.job_id, false]);
+        assert.equal(editor.readouts.state.textContent, "status.enabled");
+        assert.equal(editor.readouts.mode.textContent, "serial1");
         assert.equal(editor.pendingRefresh, false);
 
-        // Failed Apply: no reconciliation, draft handling untouched.
+        // Failed Apply: no reconciliation, draft handling untouched, and the
+        // status row keeps the previous successful values.
         submitted.length = 0;
         const recordingExecute = hooks.executeCommand;
         hooks.executeCommand = async (command, parameters, options) => {
@@ -788,6 +809,8 @@ def test_search_serial_apply_writes_once_without_reconciliation() -> None:
         ]);
         assert.equal(criteriaEntry.form.clearedDirty, 0);
         assert.equal(criteriaEntry.form.syncCalls.length, syncCountBefore);
+        assert.equal(editor.readouts.state.textContent, "status.enabled");
+        assert.equal(editor.readouts.mode.textContent, "serial1");
         assert.equal(editor.pendingRefresh, false);
         hooks.executeCommand = recordingExecute;
         '''
