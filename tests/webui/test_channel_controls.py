@@ -998,7 +998,7 @@ def test_channel_scale_range_composite_workspace() -> None:
     narrow_presets = narrow.split(".channel-scale-range-presets {", 1)[1].split("}", 1)[0]
     assert "repeat(2, minmax(0, 1fr))" in narrow_presets
     assert ".channel-scale-range-mode button.selected" in css
-    assert ".channel-scale-range-mode button:not(.selected) {" in css
+    assert ".channel-scale-range-mode button:not(.selected)" in css
     # Scale/Range uses content-area actions (no header wiring).
 
     # Shared quick-fill help key exists in both locales

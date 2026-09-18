@@ -560,7 +560,7 @@ export const zhTW = {
   "description.trigger-edge-burst": "設定第 N 邊緣突波觸發來源、次數與閒置時間。",
   "description.trigger-mode": "選擇示波器使用的觸發類型。",
   "description.trigger-pattern": "設定各通道的高位準、低位準或忽略條件。",
-  "trigger.pattern.unsupportedNote": "目前儀器的碼型包含此介面尚未支援的條件；下拉選單未代表目前設定。",
+  "trigger.pattern.unsupportedNote": "目前儀器的碼型包含此介面尚未支援的條件；目前選項未代表儀器設定。",
   "description.trigger-or": "當任一已啟用通道出現指定邊緣時觸發。",
   "description.trigger-sweep": "選擇觸發掃描模式。",
   "description.trigger-noise-reject": "開啟或關閉觸發雜訊抑制。",

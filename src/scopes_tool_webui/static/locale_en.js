@@ -587,7 +587,7 @@ export const en = {
   "description.trigger-edge-burst": "Configure Nth edge burst trigger source, count, and idle time.",
   "description.trigger-mode": "Select the trigger type used by the oscilloscope.",
   "description.trigger-pattern": "Configure High, Low, or Ignore for each channel.",
-  "trigger.pattern.unsupportedNote": "The current instrument pattern cannot be fully represented here; the dropdowns do not reflect the current setting.",
+  "trigger.pattern.unsupportedNote": "The current instrument pattern contains conditions this interface does not support; the current choices do not reflect the instrument setting.",
   "description.trigger-or": "Trigger when any enabled channel sees its assigned edge.",
   "description.trigger-sweep": "Select the trigger sweep mode.",
   "description.trigger-noise-reject": "Turn trigger noise reject on or off.",

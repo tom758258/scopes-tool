@@ -166,7 +166,7 @@ def test_trigger_mode_command_carries_core_sourced_options() -> None:
         assert f'"{key}":' in chinese, key
     assert '"description.trigger-pattern": "設定各通道的高位準、低位準或忽略條件。"' in chinese
     assert '"description.trigger-pattern": "Configure High, Low, or Ignore for each channel."' in english
-    assert '"trigger.pattern.unsupportedNote": "目前儀器的碼型包含此介面尚未支援的條件；下拉選單未代表目前設定。"' in chinese
+    assert '"trigger.pattern.unsupportedNote": "目前儀器的碼型包含此介面尚未支援的條件；目前選項未代表儀器設定。"' in chinese
     assert '"trigger.pattern.unsupportedNote"' in english
     for group, label in (
         ("pulse-width", "脈波寬度"),
@@ -1134,7 +1134,7 @@ def test_external_trigger_quick_fill() -> None:
     assert json.loads(completed.stdout.strip().splitlines()[-1]) == {"ok": True}
 
 
-def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
+def test_trigger_mode_dropdown_and_or_channel_buttons(tmp_path: Path) -> None:
     catalog_json = json.dumps([
         entry for entry in command_catalog() if entry["id"] in {
             "trigger-mode",
@@ -1164,7 +1164,30 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
             this.multiple = false;
             this.style = {};
             this.parent = null;
-            this.classList = { add() {}, toggle() {}, contains() { return false; } };
+            this.attributes = {};
+            this.focused = false;
+            const classes = () => String(this.className || "").split(/\s+/).filter(Boolean);
+            const writeClasses = (list) => { this.className = list.join(" "); };
+            this.classList = {
+              add: (...tokens) => {
+                const next = new Set(classes());
+                tokens.forEach((token) => next.add(token));
+                writeClasses([...next]);
+              },
+              remove: (...tokens) => {
+                const next = new Set(classes());
+                tokens.forEach((token) => next.delete(token));
+                writeClasses([...next]);
+              },
+              toggle: (token, force) => {
+                const next = new Set(classes());
+                const on = force === undefined ? !next.has(token) : Boolean(force);
+                if (on) next.add(token); else next.delete(token);
+                writeClasses([...next]);
+                return on;
+              },
+              contains: (token) => classes().includes(token),
+            };
           }
           addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
           dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
@@ -1216,6 +1239,12 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
             return null;
           }
           setCustomValidity() {}
+          setAttribute(name, value) { this.attributes[String(name)] = String(value); }
+          getAttribute(name) {
+            const key = String(name);
+            return key in this.attributes ? this.attributes[key] : null;
+          }
+          focus() { this.focused = true; }
           reportValidity() { return true; }
           checkValidity() { return true; }
         }
@@ -1315,84 +1344,122 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
         ]);
         assert.equal(modeInput().value, "edge");
 
-        // 3. OR trigger renders one select per analog channel, no free text.
-        // Before any readback the selects are unselected, never fake X.
+        // 3. OR trigger renders one button group per analog channel, no selects.
+        // Before any readback no button is selected, never fake X.
         selectedId = "trigger-or";
         await editor.refresh(false, false);
         await drain();
         const orSection = () => editor.sectionsHost.children[0];
-        const orSelects = () => findAll(
-          orSection(), (node) => node.tagName === "SELECT",
+        const orButtons = () => findAll(
+          orSection(), (node) => node.tagName === "BUTTON" && node.dataset.value,
         );
-        assert.deepEqual(orSelects().map((node) => node.value), ["", "", "", ""]);
+        const orGroups = () => findAll(
+          orSection(), (node) => node.tagName === "DIV" && node.classList.contains("trigger-editor-segmented"),
+        );
+        const orSelected = () => orButtons().filter(
+          (node) => node.classList.contains("selected"),
+        ).map((node) => `${node.dataset.channel}:${node.dataset.value}`);
+        const orClick = (channel, value) => orButtons().find(
+          (node) => node.dataset.channel === channel && node.dataset.value === value,
+        ).dispatch("click");
+        assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
+        assert.equal(findAll(orSection(), (node) => node.tagName === "SELECT").length, 0);
+        assert.equal(orGroups().length, 4);
+        assert.deepEqual(
+          [...new Set(orButtons().map((node) => node.dataset.channel))],
+          ["1", "2", "3", "4"],
+        );
+        assert.equal(orButtons().length, 16);
+        // Shared segmented look with scale/range: secondary base, selected
+        // marker, and aria-pressed on every choice button.
+        for (const button of orButtons()) {
+          assert.equal(button.classList.contains("secondary"), true);
+          assert.equal(button.classList.contains("selected"), false);
+          assert.equal(button.getAttribute("aria-pressed"), "false");
+        }
+        assert.deepEqual(
+          orGroups().map((node) => node.getAttribute("role")),
+          ["group", "group", "group", "group"],
+        );
         // Raw strings run MSB-first (CH4..CH1), so "XXFR" decodes to R/F/X/X.
         await editor.refresh(true, true);
         await drain();
-        assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
-        assert.deepEqual(orSelects().map((node) => node.dataset.orChannel), ["1", "2", "3", "4"]);
-        assert.deepEqual(orSelects().map((node) => node.value), ["R", "F", "X", "X"]);
+        assert.deepEqual(orSelected(), ["1:R", "2:F", "3:X", "4:X"]);
 
-        // 4. Selects encode MSB-first on a plain trigger-or apply.
-        orSelects()[0].value = "F";
-        orSelects()[1].value = "R";
-        orSelects()[2].value = "X";
-        orSelects()[3].value = "E";
+        // 4. Button clicks encode MSB-first on a plain trigger-or apply.
+        orClick("1", "F");
+        orClick("2", "R");
+        orClick("3", "X");
+        orClick("4", "E");
+        assert.deepEqual(orSelected(), ["1:F", "2:R", "3:X", "4:E"]);
         calls.length = 0;
         await editor.submit();
         assert.deepEqual(calls, [
           ["trigger-or", { action: "set", pattern: "EXRF" }, "apply"],
         ]);
 
-        // 5. An undecodable readback resets the selects instead of faking state.
+        // 5. An undecodable readback resets the groups instead of faking state.
         orPattern = "BAD!";
         await editor.refresh(true, true);
         await drain();
-        assert.deepEqual(orSelects().map((node) => node.value), ["", "", "", ""]);
+        assert.equal(orSelected().length, 0);
+        assert.deepEqual(editor.entry.channelPattern.groups.map((group) => group.value), ["", "", "", ""]);
 
         // 6. An incomplete selection blocks the apply without any I/O.
-        orSelects()[0].value = "R";
+        orClick("1", "R");
         calls.length = 0;
         await editor.submit();
         assert.deepEqual(calls, []);
         assert.equal(editor.busy, false);
 
-        // 7. Pattern trigger renders level selects and encodes MSB-first.
+        // 7. Pattern trigger renders level buttons and encodes MSB-first.
         selectedId = "trigger-pattern";
         await editor.refresh(false, false);
         await drain();
-        const patternSelects = () => findAll(
-          editor.sectionsHost.children[0], (node) => node.tagName === "SELECT",
+        const patternSection = () => editor.sectionsHost.children[0];
+        const patternButtons = () => findAll(
+          patternSection(), (node) => node.tagName === "BUTTON" && node.dataset.value,
         );
+        const patternSelected = () => patternButtons().filter(
+          (node) => node.classList.contains("selected"),
+        ).map((node) => `${node.dataset.channel}:${node.dataset.value}`);
+        const patternClick = (channel, value) => patternButtons().find(
+          (node) => node.dataset.channel === channel && node.dataset.value === value,
+        ).dispatch("click");
         const patternNote = () => findAll(
-          editor.sectionsHost.children[0], (node) => node.tagName === "OUTPUT",
+          patternSection(), (node) => node.tagName === "OUTPUT",
         )[0];
         assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
-        assert.deepEqual(patternSelects().map((node) => node.dataset.patternChannel), ["1", "2", "3", "4"]);
-        assert.deepEqual(patternSelects().map((node) => node.value), ["", "", "", ""]);
+        assert.equal(findAll(patternSection(), (node) => node.tagName === "SELECT").length, 0);
+        assert.equal(patternButtons().length, 12);
+        assert.equal(patternSelected().length, 0);
         await editor.refresh(true, true);
         await drain();
-        assert.deepEqual(patternSelects().map((node) => node.value), ["1", "0", "X", "1"]);
-        patternSelects()[0].value = "1";
-        patternSelects()[1].value = "0";
-        patternSelects()[2].value = "X";
-        patternSelects()[3].value = "1";
+        assert.deepEqual(patternSelected(), ["1:1", "2:0", "3:X", "4:1"]);
+        // Mutual exclusion within a channel; other channels are unaffected.
+        patternClick("1", "0");
+        assert.deepEqual(patternSelected(), ["1:0", "2:0", "3:X", "4:1"]);
+        patternClick("1", "1");
+        patternClick("2", "0");
+        patternClick("3", "X");
+        patternClick("4", "1");
         calls.length = 0;
         await editor.submit();
         assert.deepEqual(calls, [
           ["trigger-pattern", { action: "set", pattern: "1X01" }, "apply"],
         ]);
 
-        // 8. An invalid pattern readback resets the selects instead of faking state.
+        // 8. An invalid pattern readback resets the groups instead of faking state.
         patternReadback = "12AB";
         await editor.refresh(true, true);
         await drain();
-        assert.deepEqual(patternSelects().map((node) => node.value), ["", "", "", ""]);
+        assert.equal(patternSelected().length, 0);
 
-        // 9. A valid-but-unsupported readback clears the selects and explains why.
+        // 9. A valid-but-unsupported readback clears the groups and explains why.
         patternReadback = "XXXR";
         await editor.refresh(true, true);
         await drain();
-        assert.deepEqual(patternSelects().map((node) => node.value), ["", "", "", ""]);
+        assert.equal(patternSelected().length, 0);
         assert.equal(patternNote().hidden, false);
         assert.equal(patternNote().textContent, "trigger.pattern.unsupportedNote");
 
@@ -1400,14 +1467,14 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
         patternReadback = "XXXX";
         await editor.refresh(true, true);
         await drain();
-        assert.deepEqual(patternSelects().map((node) => node.value), ["X", "X", "X", "X"]);
+        assert.deepEqual(patternSelected(), ["1:X", "2:X", "3:X", "4:X"]);
         assert.equal(patternNote().hidden, true);
 
         // 11. A locale rerender returns to unselected without pretending state.
         editor.rerender();
         await drain();
         await drain();
-        assert.deepEqual(patternSelects().map((node) => node.value), ["", "", "", ""]);
+        assert.equal(patternSelected().length, 0);
         assert.equal(patternNote().hidden, true);
 
         console.log(JSON.stringify({ ok: true }));

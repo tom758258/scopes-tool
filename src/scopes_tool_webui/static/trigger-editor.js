@@ -228,35 +228,18 @@ export class TriggerEditor {
   buildOrSection(section, entry, channels) {
     // The free-text pattern field stays out of the way: detach its wrapper so
     // generic visibility handling cannot resurface it, and drive the pattern
-    // purely from the per-channel selects below.
+    // purely from the per-channel button groups below.
     const patternInput = entry.form.container?.querySelector?.('[data-field="pattern"]');
     patternInput?.closest?.("label")?.remove?.();
     const box = document.createElement("div");
     box.className = "trigger-or-channels";
-    const selects = [];
-    for (const channel of channels) {
-      const row = document.createElement("label");
-      row.className = "field";
-      const name = document.createElement("span");
-      name.textContent = this.channelLabel(channel);
-      const select = document.createElement("select");
-      select.dataset.orChannel = String(channel);
-      select.append(new Option(translate("form.selectValue"), ""));
-      for (const option of OR_EDGE_OPTIONS) {
-        select.append(new Option(translate(option.labelKey), option.value));
-      }
-      select.required = true;
-      select.value = "";
-      row.append(name, select);
-      box.append(row);
-      selects.push(select);
-    }
+    const groups = this.buildChannelPatternGroups(box, channels, OR_EDGE_OPTIONS);
     const help = document.createElement("small");
     help.className = "field-help";
     help.textContent = translate("help.trigger-or.pattern");
     box.append(help);
     section.append(box);
-    return { selects, charset: "RFEX" };
+    return { groups, charset: "RFEX" };
   }
 
   buildPatternSection(section, entry, channels) {
@@ -266,24 +249,7 @@ export class TriggerEditor {
     patternInput?.closest?.("label")?.remove?.();
     const box = document.createElement("div");
     box.className = "trigger-pattern-channels";
-    const selects = [];
-    for (const channel of channels) {
-      const row = document.createElement("label");
-      row.className = "field";
-      const name = document.createElement("span");
-      name.textContent = this.channelLabel(channel);
-      const select = document.createElement("select");
-      select.dataset.patternChannel = String(channel);
-      select.append(new Option(translate("form.selectValue"), ""));
-      for (const option of PATTERN_LEVEL_OPTIONS) {
-        select.append(new Option(translate(option.labelKey), option.value));
-      }
-      select.required = true;
-      select.value = "";
-      row.append(name, select);
-      box.append(row);
-      selects.push(select);
-    }
+    const groups = this.buildChannelPatternGroups(box, channels, PATTERN_LEVEL_OPTIONS);
     const help = document.createElement("small");
     help.className = "field-help";
     help.textContent = translate("help.trigger-pattern.pattern");
@@ -293,26 +259,73 @@ export class TriggerEditor {
     note.hidden = true;
     box.append(note);
     section.append(box);
-    return { selects, charset: "01X", note };
+    return { groups, charset: "01X", note };
+  }
+
+  // One mutually-exclusive button group per channel. Buttons share the
+  // scale/range segmented look (secondary + selected + aria-pressed); only
+  // the row layout is trigger-specific.
+  buildChannelPatternGroups(box, channels, options) {
+    const groups = [];
+    for (const channel of channels) {
+      const label = this.channelLabel(channel);
+      const row = document.createElement("div");
+      row.className = "trigger-channel-row";
+      const name = document.createElement("span");
+      name.textContent = label;
+      const group = document.createElement("div");
+      group.className = "trigger-editor-segmented trigger-channel-options";
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", label);
+      const entry = { channel, buttons: [], value: "" };
+      for (const option of options) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.dataset.channel = String(channel);
+        button.dataset.value = option.value;
+        button.textContent = translate(option.labelKey);
+        button.setAttribute("aria-pressed", "false");
+        button.addEventListener("click", () => {
+          this.setChannelPatternGroupValue(entry, option.value);
+        });
+        group.append(button);
+        entry.buttons.push(button);
+      }
+      row.append(name, group);
+      box.append(row);
+      groups.push(entry);
+    }
+    return groups;
+  }
+
+  // Single place that keeps group.value, .selected, and aria-pressed in
+  // sync; click, reset, and readback all go through it so an empty value
+  // never leaves a stale highlight behind.
+  setChannelPatternGroupValue(group, value) {
+    group.value = value;
+    for (const button of group.buttons) {
+      const selected = button.dataset.value === value;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    }
   }
 
   // Raw Keysight strings run MSB-first (CH4..CH1 on 4-channel models), while
-  // the selects stay in ascending channel order, so encode reverses. Any
+  // the groups stay in ascending channel order, so encode reverses. Any
   // unselected channel blocks the encode with null instead of guessing X.
   channelPatternValue(entry) {
-    const values = (entry?.channelPattern?.selects || []).map((select) => select.value);
+    const values = (entry?.channelPattern?.groups || []).map((group) => group.value);
     if (values.some((value) => value === "")) return null;
     return values.reverse().join("");
   }
 
-  syncChannelPatternSelects(entry, job) {
+  syncChannelPatternGroups(entry, job) {
     const patternEntry = entry?.channelPattern || null;
-    const selects = patternEntry?.selects || [];
-    if (patternEntry === null || selects.length === 0) return;
+    const groups = patternEntry?.groups || [];
+    if (patternEntry === null || groups.length === 0) return;
     const reset = () => {
-      selects.forEach((select) => {
-        select.value = "";
-      });
+      for (const group of groups) this.setChannelPatternGroupValue(group, "");
       if (patternEntry.note) patternEntry.note.hidden = true;
     };
     if (job?.status !== "completed") {
@@ -322,19 +335,19 @@ export class TriggerEditor {
     const payload = job?.result?.result ?? job?.result;
     const raw = payload?.pattern ?? payload?.trigger?.pattern;
     const pattern = typeof raw === "string" ? raw.trim().toUpperCase() : "";
-    if (pattern.length !== selects.length
+    if (pattern.length !== groups.length
       || [...pattern].some((char) => !patternEntry.charset.includes(char))) {
       reset();
       // A completed readback with channel-count length but an unrepresentable
       // vocabulary (e.g. XXXR) is only described, never claimed as valid.
-      if (patternEntry.note && pattern.length === selects.length && pattern !== "") {
+      if (patternEntry.note && pattern.length === groups.length && pattern !== "") {
         patternEntry.note.textContent = translate("trigger.pattern.unsupportedNote");
         patternEntry.note.hidden = false;
       }
       return;
     }
-    selects.forEach((select, index) => {
-      select.value = pattern[selects.length - 1 - index];
+    groups.forEach((group, index) => {
+      this.setChannelPatternGroupValue(group, pattern[groups.length - 1 - index]);
     });
     if (patternEntry.note) patternEntry.note.hidden = true;
   }
@@ -528,7 +541,7 @@ export class TriggerEditor {
     if (job?.status === "completed") entry.form.syncResult(job, true);
     if ((entry.id === "trigger-or" || entry.id === "trigger-pattern")
       && entry === this.entry && entry.epoch === this.epoch) {
-      this.syncChannelPatternSelects(entry, job);
+      this.syncChannelPatternGroups(entry, job);
     }
     if (!entry.div || entry !== this.entry || entry.epoch !== this.epoch) return;
     if (job?.status !== "completed") {
@@ -580,14 +593,15 @@ export class TriggerEditor {
       const values = entry.form.values();
       if (values === null) return;
       parameters = values;
-      // The channel pattern field is driven by the per-channel selects, which are
-      // not form fields; encode them here so the generic flow stays untouched.
-      // An unselected channel blocks the submit before any busy state or I/O.
+      // The channel pattern field is driven by the per-channel button groups,
+      // which are not form fields; encode them here so the generic flow stays
+      // untouched. An unselected channel focuses its group and blocks the
+      // submit before any busy state or I/O.
       if (entry.channelPattern) {
         const pattern = this.channelPatternValue(entry);
         if (pattern === null) {
-          const missing = entry.channelPattern.selects.find((select) => select.value === "");
-          missing?.reportValidity?.();
+          const missing = entry.channelPattern.groups.find((group) => group.value === "");
+          missing?.buttons[0]?.focus?.();
           return;
         }
         parameters.pattern = pattern;
@@ -609,7 +623,7 @@ export class TriggerEditor {
         entry.form.clearDirty();
         entry.form.syncResult(job, false);
         if (entry.id === "trigger-or" || entry.id === "trigger-pattern") {
-          this.syncChannelPatternSelects(entry, job);
+          this.syncChannelPatternGroups(entry, job);
         }
         if (entry.div) {
           entry.div.selected = null;
@@ -640,7 +654,9 @@ export class TriggerEditor {
     if (this.entry) {
       this.entry.button.disabled = disabled;
       this.entry.form?.setDisabled(disabled);
-      for (const select of this.entry.channelPattern?.selects || []) select.disabled = disabled;
+      for (const group of this.entry.channelPattern?.groups || []) {
+        for (const button of group.buttons) button.disabled = disabled;
+      }
       this.applyDivBusyState(this.entry);
     }
   }
