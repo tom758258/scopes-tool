@@ -49,8 +49,8 @@ def extract_css_rule(source: str, selector: str) -> str:
 def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     live_data_path = STATIC_ROOT / "live-data.js"
     chinese = read_static("locale_zh_tw.js")
-    assert '"live_data.type.glitch": "毛刺"' in chinese
-    assert '"live_data.type.runt": "欠幅"' in chinese
+    assert '"live_data.type.glitch": "脈波寬度"' in chinese
+    assert '"live_data.type.runt": "最窄脈波"' in chinese
     assert '"live_data.source.line": "線路"' in chinese
     script = textwrap.dedent(
         r'''

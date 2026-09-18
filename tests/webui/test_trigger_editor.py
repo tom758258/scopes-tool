@@ -164,6 +164,38 @@ def test_trigger_mode_command_carries_core_sourced_options() -> None:
     ):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
+    assert '"description.trigger-pattern": "設定各通道的高位準、低位準或忽略條件。"' in chinese
+    assert '"description.trigger-pattern": "Configure High, Low, or Ignore for each channel."' in english
+    assert '"trigger.pattern.unsupportedNote": "目前儀器的碼型包含此介面尚未支援的條件；下拉選單未代表目前設定。"' in chinese
+    assert '"trigger.pattern.unsupportedNote"' in english
+    for group, label in (
+        ("pulse-width", "脈波寬度"),
+        ("runt", "最窄脈波"),
+        ("transition", "上升/下降時間"),
+        ("delay", "邊緣後邊緣"),
+        ("setup-hold", "設定和保持"),
+        ("edge-burst", "第 N 邊緣突波"),
+        ("tv", "視訊"),
+    ):
+        assert f'"group.{group}": "{label}"' in chinese
+    assert '"group.pattern-or": "類型 / 碼型 / OR"' in chinese
+    assert '"group.pattern-or": "Type / Pattern / OR"' in english
+    for key, label in (
+        ("live_data.type.glitch", "脈波寬度"),
+        ("live_data.type.runt", "最窄脈波"),
+        ("live_data.type.transition", "上升/下降時間"),
+        ("live_data.type.delay", "邊緣後邊緣"),
+        ("live_data.type.setup-hold", "設定和保持"),
+        ("live_data.type.edge-burst", "第 N 邊緣突波"),
+        ("live_data.type.tv", "視訊"),
+    ):
+        assert f'"{key}": "{label}"' in chinese
+    for key, label in (
+        ("enum.glitch", "脈波寬度"),
+        ("enum.runt", "最窄脈波"),
+        ("enum.transition", "上升/下降時間"),
+    ):
+        assert f'"{key}": "{label}"' in chinese
 
 
 def test_trigger_mode_request_passes_validation_into_execution(tmp_path: Path) -> None:
@@ -1284,15 +1316,19 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
         assert.equal(modeInput().value, "edge");
 
         // 3. OR trigger renders one select per analog channel, no free text.
-        // Raw strings run MSB-first (CH4..CH1), so "XXFR" decodes to R/F/X/X.
+        // Before any readback the selects are unselected, never fake X.
         selectedId = "trigger-or";
-        await editor.refresh(true, true);
+        await editor.refresh(false, false);
         await drain();
-        assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
         const orSection = () => editor.sectionsHost.children[0];
         const orSelects = () => findAll(
           orSection(), (node) => node.tagName === "SELECT",
         );
+        assert.deepEqual(orSelects().map((node) => node.value), ["", "", "", ""]);
+        // Raw strings run MSB-first (CH4..CH1), so "XXFR" decodes to R/F/X/X.
+        await editor.refresh(true, true);
+        await drain();
+        assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
         assert.deepEqual(orSelects().map((node) => node.dataset.orChannel), ["1", "2", "3", "4"]);
         assert.deepEqual(orSelects().map((node) => node.value), ["R", "F", "X", "X"]);
 
@@ -1307,21 +1343,34 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
           ["trigger-or", { action: "set", pattern: "EXRF" }, "apply"],
         ]);
 
-        // 5. An unparseable readback keeps the current selects untouched.
+        // 5. An undecodable readback resets the selects instead of faking state.
         orPattern = "BAD!";
         await editor.refresh(true, true);
         await drain();
-        assert.deepEqual(orSelects().map((node) => node.value), ["F", "R", "X", "E"]);
+        assert.deepEqual(orSelects().map((node) => node.value), ["", "", "", ""]);
 
-        // 6. Pattern trigger renders level selects and encodes MSB-first.
+        // 6. An incomplete selection blocks the apply without any I/O.
+        orSelects()[0].value = "R";
+        calls.length = 0;
+        await editor.submit();
+        assert.deepEqual(calls, []);
+        assert.equal(editor.busy, false);
+
+        // 7. Pattern trigger renders level selects and encodes MSB-first.
         selectedId = "trigger-pattern";
-        await editor.refresh(true, true);
+        await editor.refresh(false, false);
         await drain();
-        assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
         const patternSelects = () => findAll(
           editor.sectionsHost.children[0], (node) => node.tagName === "SELECT",
         );
+        const patternNote = () => findAll(
+          editor.sectionsHost.children[0], (node) => node.tagName === "OUTPUT",
+        )[0];
+        assert.equal(editor.entry.form.container.querySelector('[data-field="pattern"]'), null);
         assert.deepEqual(patternSelects().map((node) => node.dataset.patternChannel), ["1", "2", "3", "4"]);
+        assert.deepEqual(patternSelects().map((node) => node.value), ["", "", "", ""]);
+        await editor.refresh(true, true);
+        await drain();
         assert.deepEqual(patternSelects().map((node) => node.value), ["1", "0", "X", "1"]);
         patternSelects()[0].value = "1";
         patternSelects()[1].value = "0";
@@ -1333,11 +1382,33 @@ def test_trigger_mode_dropdown_and_or_channel_selects(tmp_path: Path) -> None:
           ["trigger-pattern", { action: "set", pattern: "1X01" }, "apply"],
         ]);
 
-        // 7. An invalid pattern readback keeps the current selects untouched.
+        // 8. An invalid pattern readback resets the selects instead of faking state.
         patternReadback = "12AB";
         await editor.refresh(true, true);
         await drain();
-        assert.deepEqual(patternSelects().map((node) => node.value), ["1", "0", "X", "1"]);
+        assert.deepEqual(patternSelects().map((node) => node.value), ["", "", "", ""]);
+
+        // 9. A valid-but-unsupported readback clears the selects and explains why.
+        patternReadback = "XXXR";
+        await editor.refresh(true, true);
+        await drain();
+        assert.deepEqual(patternSelects().map((node) => node.value), ["", "", "", ""]);
+        assert.equal(patternNote().hidden, false);
+        assert.equal(patternNote().textContent, "trigger.pattern.unsupportedNote");
+
+        // 10. A genuine XXXX readback still decodes to four don't-cares.
+        patternReadback = "XXXX";
+        await editor.refresh(true, true);
+        await drain();
+        assert.deepEqual(patternSelects().map((node) => node.value), ["X", "X", "X", "X"]);
+        assert.equal(patternNote().hidden, true);
+
+        // 11. A locale rerender returns to unselected without pretending state.
+        editor.rerender();
+        await drain();
+        await drain();
+        assert.deepEqual(patternSelects().map((node) => node.value), ["", "", "", ""]);
+        assert.equal(patternNote().hidden, true);
 
         console.log(JSON.stringify({ ok: true }));
         '''

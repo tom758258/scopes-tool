@@ -241,10 +241,12 @@ export class TriggerEditor {
       name.textContent = this.channelLabel(channel);
       const select = document.createElement("select");
       select.dataset.orChannel = String(channel);
+      select.append(new Option(translate("form.selectValue"), ""));
       for (const option of OR_EDGE_OPTIONS) {
         select.append(new Option(translate(option.labelKey), option.value));
       }
-      select.value = "X";
+      select.required = true;
+      select.value = "";
       row.append(name, select);
       box.append(row);
       selects.push(select);
@@ -272,10 +274,12 @@ export class TriggerEditor {
       name.textContent = this.channelLabel(channel);
       const select = document.createElement("select");
       select.dataset.patternChannel = String(channel);
+      select.append(new Option(translate("form.selectValue"), ""));
       for (const option of PATTERN_LEVEL_OPTIONS) {
         select.append(new Option(translate(option.labelKey), option.value));
       }
-      select.value = "X";
+      select.required = true;
+      select.value = "";
       row.append(name, select);
       box.append(row);
       selects.push(select);
@@ -284,27 +288,55 @@ export class TriggerEditor {
     help.className = "field-help";
     help.textContent = translate("help.trigger-pattern.pattern");
     box.append(help);
+    const note = document.createElement("output");
+    note.className = "muted compact-note";
+    note.hidden = true;
+    box.append(note);
     section.append(box);
-    return { selects, charset: "01X" };
+    return { selects, charset: "01X", note };
   }
 
   // Raw Keysight strings run MSB-first (CH4..CH1 on 4-channel models), while
-  // the selects stay in ascending channel order, so encode reverses.
+  // the selects stay in ascending channel order, so encode reverses. Any
+  // unselected channel blocks the encode with null instead of guessing X.
   channelPatternValue(entry) {
-    return (entry?.channelPattern?.selects || []).map((select) => select.value).reverse().join("");
+    const values = (entry?.channelPattern?.selects || []).map((select) => select.value);
+    if (values.some((value) => value === "")) return null;
+    return values.reverse().join("");
   }
 
   syncChannelPatternSelects(entry, job) {
     const patternEntry = entry?.channelPattern || null;
     const selects = patternEntry?.selects || [];
     if (patternEntry === null || selects.length === 0) return;
+    const reset = () => {
+      selects.forEach((select) => {
+        select.value = "";
+      });
+      if (patternEntry.note) patternEntry.note.hidden = true;
+    };
+    if (job?.status !== "completed") {
+      reset();
+      return;
+    }
     const payload = job?.result?.result ?? job?.result;
     const raw = payload?.pattern ?? payload?.trigger?.pattern;
     const pattern = typeof raw === "string" ? raw.trim().toUpperCase() : "";
-    if (pattern.length !== selects.length || [...pattern].some((char) => !patternEntry.charset.includes(char))) return;
+    if (pattern.length !== selects.length
+      || [...pattern].some((char) => !patternEntry.charset.includes(char))) {
+      reset();
+      // A completed readback with channel-count length but an unrepresentable
+      // vocabulary (e.g. XXXR) is only described, never claimed as valid.
+      if (patternEntry.note && pattern.length === selects.length && pattern !== "") {
+        patternEntry.note.textContent = translate("trigger.pattern.unsupportedNote");
+        patternEntry.note.hidden = false;
+      }
+      return;
+    }
     selects.forEach((select, index) => {
       select.value = pattern[selects.length - 1 - index];
     });
+    if (patternEntry.note) patternEntry.note.hidden = true;
   }
 
   divQualifies(command) {
@@ -550,7 +582,16 @@ export class TriggerEditor {
       parameters = values;
       // The channel pattern field is driven by the per-channel selects, which are
       // not form fields; encode them here so the generic flow stays untouched.
-      if (entry.channelPattern) parameters.pattern = this.channelPatternValue(entry);
+      // An unselected channel blocks the submit before any busy state or I/O.
+      if (entry.channelPattern) {
+        const pattern = this.channelPatternValue(entry);
+        if (pattern === null) {
+          const missing = entry.channelPattern.selects.find((select) => select.value === "");
+          missing?.reportValidity?.();
+          return;
+        }
+        parameters.pattern = pattern;
+      }
     }
     this.setBusy(true);
     try {
