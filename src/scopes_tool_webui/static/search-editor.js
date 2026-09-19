@@ -323,7 +323,7 @@ export class SearchEditor {
     const label = document.createElement("span");
     label.textContent = translate(labelKey);
     const output = document.createElement("output");
-    output.className = "readonly-value";
+    output.className = "search-editor-status-value";
     wrapper.append(label, output);
     this.readouts[name] = output;
     return wrapper;

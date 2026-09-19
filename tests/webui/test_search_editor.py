@@ -761,6 +761,11 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
         assert.deepEqual(editor.busSelect.children.map((option) => option.value), ["1", "2"]);
         assert.ok(editor.bodyHost.children.some((node) =>
           node.tagName === "DIV" && node.className.split(" ").includes("search-editor-status-row")));
+        for (const name of ["state", "mode"]) {
+          const classes = editor.readouts[name].className.split(" ");
+          assert.ok(classes.includes("search-editor-status-value"));
+          assert.ok(!classes.includes("readonly-value"));
+        }
         assert.ok(!editor.bodyHost.children.some((node) =>
           node.tagName === "SECTION" && node.className.split(" ").includes("search-editor-single")));
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.parameters.bus}`), [
