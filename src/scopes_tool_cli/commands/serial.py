@@ -371,7 +371,7 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                     "spi": serial_spi_query_commands,
                     "can": serial_can_query_commands,
                 }[protocol]
-                commands.extend(query_commands(args.bus).values())
+                commands.extend([serial_mode_query(args.bus), *query_commands(args.bus).values()])
                 config = _serial_status_config(protocol_state)
             runtime._json_update_result(
                 operation="status",

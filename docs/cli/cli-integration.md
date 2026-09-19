@@ -57,8 +57,9 @@ Serial configuration also provides `serial-uart-set`, `serial-i2c-set`,
 `serial-spi-set`, and `serial-can-set` for basic protocol source and decode
 settings, plus matching `serial-uart-show`, `serial-i2c-show`,
 `serial-spi-show`, and `serial-can-show` readers. Each set command requires
-one or more protocol options, queries `MODE?` before protocol fields, and
-fails before field queries when the mode does not match. Sources use
+one or more protocol options and writes the protocol mode before the supplied
+settings. Each show command queries `MODE?` first and fails before
+protocol-specific queries when the current mode does not match. Sources use
 `channelN` (bounded by the model's analog-channel capability) or `external`;
 I2C emits the instrument `IIC` token, and CAN uses `difl` as the canonical
 differential signal value. Capability profiles determine bus count and

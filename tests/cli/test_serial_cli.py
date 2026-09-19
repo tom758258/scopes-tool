@@ -34,7 +34,8 @@ def test_serial_status_simulator_json_locks_aggregate_shape(capsys):
         )
         == 0
     )
-    result = _payload(capsys)["result"]
+    payload = _payload(capsys)
+    result = payload["result"]
     assert result["operation"] == "status"
     assert result["bus"] == 1
     assert result["mode"] == "uart"
@@ -45,8 +46,100 @@ def test_serial_status_simulator_json_locks_aggregate_shape(capsys):
     assert result["config"]["rx_source"] == "channel1"
     assert "bus" not in result["config"]
     assert "mode" not in result["config"]
-    assert result["commands"][0] == ":SBUS1:MODE?"
-    assert ":SBUS1:UART:BAUDrate?" in result["commands"]
+    expected_commands = [
+        ":SBUS1:MODE?",
+        ":SBUS1:DISPlay?",
+        ":SBUS1:MODE?",
+        ":SBUS1:UART:SOURce:RX?",
+        ":SBUS1:UART:SOURce:TX?",
+        ":SBUS1:UART:BAUDrate?",
+        ":SBUS1:UART:WIDTh?",
+        ":SBUS1:UART:PARity?",
+        ":SBUS1:UART:POLarity?",
+        ":SBUS1:UART:BITorder?",
+    ]
+    assert result["commands"] == expected_commands
+    sent_serial = [
+        command
+        for command in payload["scpi"]["sent"]
+        if command.startswith(":SBUS")
+    ]
+    assert sent_serial == expected_commands
+
+
+def test_serial_status_unsupported_protocol_mode_reports_null_config(
+    monkeypatch, capsys
+):
+    backend = SimulatorBackend(physical_model_id="keysight-dsox4034a")
+    backend.serial_modes[1] = "USBPd"
+    scope = Oscilloscope(backend)
+    monkeypatch.setattr(runtime, "_open_scope", lambda args, resource: nullcontext(scope))
+
+    assert (
+        cli.main(
+            [
+                "serial-status",
+                "--bus",
+                "1",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox4034a",
+            ]
+        )
+        == 0
+    )
+    payload = _payload(capsys)
+    result = payload["result"]
+    assert result["operation"] == "status"
+    assert result["mode"] == "usb-pd"
+    assert result["raw_mode"] == "USBPd"
+    assert result["protocol"] is None
+    assert result["config"] is None
+    assert result["commands"] == [":SBUS1:MODE?", ":SBUS1:DISPlay?"]
+    sent_serial = [
+        command for command in backend.history if command.startswith(":SBUS")
+    ]
+    assert sent_serial == [":SBUS1:MODE?", ":SBUS1:DISPlay?"]
+    assert not any(
+        command.startswith(
+            (":SBUS1:UART", ":SBUS1:IIC", ":SBUS1:SPI", ":SBUS1:CAN")
+        )
+        for command in sent_serial
+    )
+
+
+def test_serial_status_fails_closed_when_display_query_fails(monkeypatch, capsys):
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4034A,MY00000000,02.50",
+            ":SBUS1:MODE?": "UART",
+            ":SYSTem:ERRor?": '+0,"No error"',
+        }
+    )
+    scope = Oscilloscope(backend)
+    install_scope(monkeypatch, scope)
+
+    assert (
+        cli.main(
+            [
+                "serial-status",
+                "--bus",
+                "1",
+                "--resource",
+                "FAKE::SCOPE",
+                "--json",
+            ]
+        )
+        == 1
+    )
+    payload = _payload(capsys)
+    assert payload["ok"] is False
+    assert payload["error"]["type"] == "FakeBackendError"
+    assert backend.history == ["*IDN?", ":SBUS1:MODE?", ":SBUS1:DISPlay?"]
+    assert not any(
+        command.startswith(":SBUS1:UART") for command in backend.history
+    )
 
 
 def test_serial_uart_trigger_simulator_json_configure_preserves_readback_and_order(
