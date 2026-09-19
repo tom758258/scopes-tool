@@ -188,11 +188,15 @@ Worker `/command` supports the existing Scopes capability surface:
 - `demo-query`, `demo-output`, `demo-function`, `demo-phase`
 - `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
   `wgen-voltage`, `wgen-offset`, `wgen-load`
-- `serial-query`, `serial-mode`, `serial-display`, `serial-uart`,
-  `serial-trigger-uart`, `serial-trigger-i2c`, `serial-trigger-spi`,
-  `serial-trigger-can`, `serial-i2c`, `serial-spi`, `serial-can`,
-  `serial-lister-query`, `serial-lister-display`,
-  `serial-lister-reference`, `serial-lister-export`
+- `serial-status`, `serial-mode`, `serial-enable`, `serial-disable`,
+  `serial-uart-set`, `serial-uart-show`, `serial-trigger-uart-set`,
+  `serial-trigger-uart-show`, `serial-trigger-i2c-set`,
+  `serial-trigger-i2c-show`, `serial-trigger-spi-set`,
+  `serial-trigger-spi-show`, `serial-trigger-can-set`,
+  `serial-trigger-can-show`, `serial-i2c-set`, `serial-i2c-show`,
+  `serial-spi-set`, `serial-spi-show`, `serial-can-set`, `serial-can-show`,
+  `serial-lister-status`, `serial-lister-display`,
+  `serial-lister-reference`, `serial-data`
 - `search-state`, `search-mode`, `search-count`, `search-event`, `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, `serial-search-can`
 - `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
   `save-image-ink-saver`, `save-image-factors`, `save-image`,
@@ -1970,7 +1974,7 @@ reserved for them.
 The worker accepts only these canonical argument shapes:
 
 ```json
-{"command": "serial-query", "arguments": {"bus": 1}}
+{"command": "serial-status", "arguments": {"bus": 1}}
 ```
 
 ```json
@@ -1982,22 +1986,23 @@ The worker accepts only these canonical argument shapes:
 ```
 
 ```json
-{"command": "serial-display", "arguments": {"bus": 1, "query": true}}
+{"command": "serial-enable", "arguments": {"bus": 1}}
 ```
 
 ```json
-{"command": "serial-display", "arguments": {"bus": 1, "enabled": true}}
+{"command": "serial-disable", "arguments": {"bus": 1}}
 ```
 
 Bus is a non-boolean integer validated against the startup model profile:
 2000X accepts bus 1, while 3000X and 4000X accept buses 1 and 2. Configure
 mode values are lowercase canonical names validated against that profile.
-Display configuration requires a JSON boolean. Query/configure mixes, unknown
-fields, wrong types, unavailable buses, and unsupported configure modes fail
-before enqueue, artifacts, backend open, or SCPI.
+Query/configure mixes, unknown fields, wrong types, unavailable buses, and
+unsupported configure modes fail before enqueue, artifacts, backend open,
+or SCPI.
 
-`serial-query` sends only `:SBUS<n>?` and preserves the trimmed raw subsystem
-response. Mode and display configuration each send only their target write.
+`serial-status` composes the bus mode, display, and active-protocol decode
+configuration (see the CLI JSONL contract for the exact result shape). Mode
+and display configuration each send only their target write.
 The worker reuses the CLI/Core result without worker-only business behavior.
 This command set does not configure protocol parameters, sources, triggers,
 Search, Lister, or export. It does not probe licenses; unavailable serial
@@ -2005,15 +2010,17 @@ decode options remain normal instrument errors.
 
 ### Serial Protocol Configuration Commands
 
-The worker also accepts `serial-uart`, `serial-i2c`, `serial-spi`, and
-`serial-can`. Each request requires an integer `bus` and either
-`{"query": true}` or one or more protocol-specific configure fields. The
-canonical fields are the CLI names in snake_case: UART uses `rx_source`,
-`tx_source`, `baud_rate`, `data_bits`, `parity`, `polarity`, and `bit_order`;
-I2C uses `clock_source`, `data_source`, and `address_size`; SPI uses
-`clock_source`, `mosi_source`, `miso_source`, `frame_source`, `clock_slope`,
-`bit_order`, `word_width`, `framing`, and `clock_timeout`; CAN uses `source`,
-`baud_rate`, `signal_definition`, and `sample_point`.
+The worker also accepts `serial-uart-set`, `serial-i2c-set`, `serial-spi-set`,
+and `serial-can-set` for configuration, plus `serial-uart-show`,
+`serial-i2c-show`, `serial-spi-show`, and `serial-can-show` for reads. Each
+request requires an integer `bus`; set requests additionally require one or
+more protocol-specific configure fields, while show requests accept only
+`bus`. The canonical fields are the CLI names in snake_case: UART uses
+`rx_source`, `tx_source`, `baud_rate`, `data_bits`, `parity`, `polarity`, and
+`bit_order`; I2C uses `clock_source`, `data_source`, and `address_size`; SPI
+uses `clock_source`, `mosi_source`, `miso_source`, `frame_source`,
+`clock_slope`, `bit_order`, `word_width`, `framing`, and `clock_timeout`;
+CAN uses `source`, `baud_rate`, `signal_definition`, and `sample_point`.
 
 Sources are canonical `channelN` or `external`, bounded by the selected model's
 analog-channel capability. CAN signal definitions use `canh`, `canl`, `rx`,
@@ -2029,18 +2036,18 @@ Instrument license errors remain normal instrument errors.
 The worker accepts only these canonical UART trigger request shapes:
 
 ```json
-{"command": "serial-trigger-uart", "arguments": {"bus": 1, "type": "rx-data", "data": 85, "qualifier": "equal"}}
+{"command": "serial-trigger-uart-set", "arguments": {"bus": 1, "type": "rx-data", "data": 85, "qualifier": "equal"}}
 ```
 
 ```json
-{"command": "serial-trigger-uart", "arguments": {"bus": 1, "query": true}}
+{"command": "serial-trigger-uart-show", "arguments": {"bus": 1}}
 ```
 
 The canonical types are `rx-start`, `rx-stop`, `rx-data`, `tx-start`,
 `tx-stop`, `tx-data`, and `parity-error`. Data types require both `data` in
 the range 0 through 255 and one of `equal`, `not-equal`, `greater-than`, or
 `less-than`. Non-data types reject both fields. Unknown fields, non-canonical
-values, query/configure mixes, unavailable buses, and models without UART
+values, unavailable buses, and models without UART
 decode support fail before enqueue, artifact creation, backend open, or SCPI.
 The worker uses the shared Core request validator and creates no artifact.
 
@@ -2061,19 +2068,19 @@ triggers.
 The worker accepts these strict canonical request shapes:
 
 ```json
-{"command": "serial-trigger-i2c", "arguments": {"bus": 1, "type": "read-eeprom", "address": 80, "data": 16, "qualifier": "equal"}}
+{"command": "serial-trigger-i2c-set", "arguments": {"bus": 1, "type": "read-eeprom", "address": 80, "data": 16, "qualifier": "equal"}}
 ```
 
 ```json
-{"command": "serial-trigger-spi", "arguments": {"bus": 1, "type": "mosi", "width": 8, "data": "1010XX01"}}
+{"command": "serial-trigger-spi-set", "arguments": {"bus": 1, "type": "mosi", "width": 8, "data": "1010XX01"}}
 ```
 
 ```json
-{"command": "serial-trigger-can", "arguments": {"bus": 1, "type": "start-of-frame"}}
+{"command": "serial-trigger-can-set", "arguments": {"bus": 1, "type": "start-of-frame"}}
 ```
 
-Each command also accepts exactly `{"bus": 1, "query": true}` for query.
-Unknown fields, non-canonical values, query/configure mixes, unavailable
+Each `serial-trigger-<protocol>-show` command accepts exactly `{"bus": 1}`.
+Unknown fields, non-canonical values, unavailable
 buses, unsupported protocol modes, and invalid cross-field combinations fail
 before enqueue, artifact creation, backend open, or SCPI. I2C address/data
 values are unsigned integer or hexadecimal values; SPI and CAN patterns use
@@ -2096,7 +2103,7 @@ remain separate commands.
 The worker accepts these exact Lister request shapes:
 
 ```json
-{"command": "serial-lister-query", "arguments": {}}
+{"command": "serial-lister-status", "arguments": {}}
 ```
 
 ```json
@@ -2116,7 +2123,7 @@ The worker accepts these exact Lister request shapes:
 ```
 
 ```json
-{"command": "serial-lister-export", "arguments": {"output": "C:/results/lister.csv"}}
+{"command": "serial-data", "arguments": {"output": "C:/results/lister.csv"}}
 ```
 
 Display selections are canonical `off`, `bus1`, `bus2`, and `all`; references
@@ -2371,7 +2378,7 @@ HTTP `400` before enqueue, backend open, or SCPI when file saving is enabled:
   one successful capture it saves the stopped retained window while Worker
   state remains `cancelled`; cancellation before the first capture creates no
   empty waveform CSV.
-- `serial-lister-export`: requires an `output` CSV path.
+- `serial-data`: requires an `output` CSV path.
 
 Command artifacts keep existing Scopes meanings: CSV waveform data, PNG plots
 or screenshots, metadata JSON, manifests, reports, and `scpi.log` files.
@@ -2404,14 +2411,16 @@ The `measure-clear`, `measure-show`, `measure-source`, `measure-window`,
 `reference-query`, `dvm-enable`, `dvm-source`, `dvm-mode`, `dvm-auto-range`,
 `dvm-current`, `dvm-query`, `demo-query`, `demo-output`, `demo-function`,
 `demo-phase`, `wgen-query`, `wgen-output`, `wgen-function`, `wgen-frequency`,
-`wgen-voltage`, `wgen-offset`, `wgen-load`, `serial-query`, `serial-mode`,
-`serial-display`, `serial-uart`, `serial-i2c`, `serial-spi`, `serial-can`,
-`serial-lister-query`, `serial-lister-display`, `serial-lister-reference`,
+`wgen-voltage`, `wgen-offset`, `wgen-load`, `serial-status`, `serial-mode`,
+`serial-enable`, `serial-disable`, `serial-uart-set`, `serial-uart-show`,
+`serial-i2c-set`, `serial-i2c-show`, `serial-spi-set`, `serial-spi-show`,
+`serial-can-set`, `serial-can-show`, `serial-lister-status`,
+`serial-lister-display`, `serial-lister-reference`,
 `search-state`, `search-mode`, `search-count`, `search-event`,
 `serial-search-uart`, `serial-search-i2c`, `serial-search-spi`, and
 `serial-search-can`
 commands also do not create command artifacts.
-`serial-lister-export` creates one CSV command artifact at the requested output
+`serial-data` creates one CSV command artifact at the requested output
 path and otherwise follows the standard worker in-memory job lifecycle.
 The `save-pwd`, `save-filename`, `save-image-format`, `save-image-palette`,
 `save-image-ink-saver`, `save-image-factors`, `save-image`,

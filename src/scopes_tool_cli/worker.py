@@ -573,7 +573,7 @@ def _planned_artifact_paths(args: argparse.Namespace) -> list[Path]:
     if command == "acquisition-check":
         output_dir = Path(args.output_dir)
         return [output_dir / "report.json", output_dir / "scpi.log"]
-    if command == "serial-lister-export":
+    if command == "serial-data":
         return [Path(args.output_path)]
     return []
 

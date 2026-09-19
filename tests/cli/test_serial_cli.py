@@ -19,11 +19,11 @@ def _payload(capsys):
     return json.loads(captured.out)
 
 
-def test_serial_query_simulator_json_preserves_bus_and_raw(capsys):
+def test_serial_status_simulator_json_locks_aggregate_shape(capsys):
     assert (
         cli.main(
             [
-                "serial-query",
+                "serial-status",
                 "--bus",
                 "1",
                 "--simulate",
@@ -35,8 +35,18 @@ def test_serial_query_simulator_json_preserves_bus_and_raw(capsys):
         == 0
     )
     result = _payload(capsys)["result"]
+    assert result["operation"] == "status"
     assert result["bus"] == 1
-    assert result["raw"] == ":SBUS1:DISP 0;MODE UART;"
+    assert result["mode"] == "uart"
+    assert result["raw_mode"] == "UART"
+    assert result["display"] is False
+    assert result["protocol"] == "uart"
+    assert result["config"]["baud_rate"] == 115200
+    assert result["config"]["rx_source"] == "channel1"
+    assert "bus" not in result["config"]
+    assert "mode" not in result["config"]
+    assert result["commands"][0] == ":SBUS1:MODE?"
+    assert ":SBUS1:UART:BAUDrate?" in result["commands"]
 
 
 def test_serial_uart_trigger_simulator_json_configure_preserves_readback_and_order(
@@ -45,7 +55,7 @@ def test_serial_uart_trigger_simulator_json_configure_preserves_readback_and_ord
     assert (
         cli.main(
             [
-                "serial-trigger-uart",
+                "serial-trigger-uart-set",
                 "--bus",
                 "1",
                 "--type",
@@ -97,7 +107,7 @@ def test_serial_uart_trigger_rejects_non_data_qualifier_before_backend_open(
     assert (
         cli.main(
             [
-                "serial-trigger-uart",
+                "serial-trigger-uart-set",
                 "--bus",
                 "1",
                 "--type",
@@ -122,10 +132,9 @@ def test_serial_uart_trigger_query_dry_run_plans_only_unconditional_queries(caps
     assert (
         cli.main(
             [
-                "serial-trigger-uart",
+                "serial-trigger-uart-show",
                 "--bus",
                 "1",
-                "--query",
                 "--dry-run",
                 "--json",
                 "--model",
@@ -145,22 +154,25 @@ def test_serial_uart_trigger_query_dry_run_plans_only_unconditional_queries(caps
 
 
 @pytest.mark.parametrize(
-    "command, mode, configure_args, protocol",
+    "command, show_command, mode, configure_args, protocol",
     [
         (
-            "serial-trigger-i2c",
+            "serial-trigger-i2c-set",
+            "serial-trigger-i2c-show",
             "IIC",
             ["--type", "read-eeprom", "--address", "0x50", "--data", "0x10", "--qualifier", "greater-than"],
             "i2c",
         ),
         (
-            "serial-trigger-spi",
+            "serial-trigger-spi-set",
+            "serial-trigger-spi-show",
             "SPI",
             ["--type", "mosi", "--width", "8", "--data", "1010XX01"],
             "spi",
         ),
         (
-            "serial-trigger-can",
+            "serial-trigger-can-set",
+            "serial-trigger-can-show",
             "CAN",
             ["--type", "id-and-data", "--id", "0x1", "--id-mode", "standard", "--data", "1010XX01", "--data-length", "1"],
             "can",
@@ -168,7 +180,7 @@ def test_serial_uart_trigger_query_dry_run_plans_only_unconditional_queries(caps
     ],
 )
 def test_serial_trigger_simulator_configure_query_roundtrip(
-    monkeypatch, capsys, command, mode, configure_args, protocol
+    monkeypatch, capsys, command, show_command, mode, configure_args, protocol
 ):
     backend = SimulatorBackend(physical_model_id="keysight-dsox2004a")
     backend.serial_modes[1] = mode
@@ -185,7 +197,7 @@ def test_serial_trigger_simulator_configure_query_roundtrip(
         assert configured["qualifier"] == "greater-than"
         assert configured["raw_qualifier"] == "GRE"
 
-    assert cli.main([*common, "--query"]) == 0
+    assert cli.main([show_command, "--bus", "1", "--simulate", "--json", "--model", "keysight-dsox2004a"]) == 0
     queried = _payload(capsys)["result"]
     assert queried["protocol"] == protocol
     assert queried["selected"] is True
@@ -197,9 +209,9 @@ def test_serial_trigger_simulator_configure_query_roundtrip(
 @pytest.mark.parametrize(
     "command, protocol_specific",
     [
-        ("serial-trigger-i2c", ":SBUS1:IIC:TRIGger:TYPE?"),
-        ("serial-trigger-spi", ":SBUS1:SPI:TRIGger:TYPE?"),
-        ("serial-trigger-can", ":SBUS1:CAN:TRIGger?"),
+        ("serial-trigger-i2c-show", ":SBUS1:IIC:TRIGger:TYPE?"),
+        ("serial-trigger-spi-show", ":SBUS1:SPI:TRIGger:TYPE?"),
+        ("serial-trigger-can-show", ":SBUS1:CAN:TRIGger?"),
     ],
 )
 def test_serial_trigger_query_dry_run_plans_only_unconditional_queries(
@@ -210,7 +222,6 @@ def test_serial_trigger_query_dry_run_plans_only_unconditional_queries(
             command,
             "--bus",
             "1",
-            "--query",
             "--dry-run",
             "--json",
             "--model",
@@ -223,11 +234,11 @@ def test_serial_trigger_query_dry_run_plans_only_unconditional_queries(
     assert protocol_specific not in result["commands"]
 
 
-def test_serial_lister_query_simulator_json_does_not_query_data(capsys):
+def test_serial_lister_status_simulator_json_does_not_query_data(capsys):
     assert (
         cli.main(
             [
-                "serial-lister-query",
+                "serial-lister-status",
                 "--simulate",
                 "--json",
                 "--model",
@@ -286,12 +297,12 @@ def test_serial_lister_reference_simulator_configure(capsys):
     assert payload["result"]["command"] == ":LISTer:REFerence PREVious"
 
 
-def test_serial_lister_export_simulator_preserves_file_and_metadata(tmp_path, capsys):
+def test_serial_data_simulator_preserves_file_and_metadata(tmp_path, capsys):
     output = tmp_path / "lister.csv"
     assert (
         cli.main(
             [
-                "serial-lister-export",
+                "serial-data",
                 "--output",
                 str(output),
                 "--simulate",
@@ -312,7 +323,7 @@ def test_serial_lister_export_simulator_preserves_file_and_metadata(tmp_path, ca
     assert "bus,time,value" not in json.dumps(payload)
 
 
-def test_serial_lister_export_simulator_uses_default_output(
+def test_serial_data_simulator_uses_default_output(
     tmp_path, capsys, monkeypatch
 ):
     default_output = Path("data/2026-08-24-15-35-10-lister.csv")
@@ -326,7 +337,7 @@ def test_serial_lister_export_simulator_uses_default_output(
     assert (
         cli.main(
             [
-                "serial-lister-export",
+                "serial-data",
                 "--simulate",
                 "--json",
                 "--model",
@@ -342,7 +353,7 @@ def test_serial_lister_export_simulator_uses_default_output(
     assert payload["files"] == [{"kind": "csv", "path": str(default_output)}]
 
 
-def test_serial_lister_export_dry_run_uses_default_output_without_writing(
+def test_serial_data_dry_run_uses_default_output_without_writing(
     tmp_path, capsys, monkeypatch
 ):
     default_output = Path("data/2026-08-24-15-35-10-lister.csv")
@@ -353,7 +364,7 @@ def test_serial_lister_export_dry_run_uses_default_output_without_writing(
         lambda: Path("data/2026-08-24-15-35-10.csv"),
     )
 
-    assert cli.main(["serial-lister-export", "--dry-run", "--json"]) == 0
+    assert cli.main(["serial-data", "--dry-run", "--json"]) == 0
 
     payload = _payload(capsys)
     assert not (tmp_path / "data").exists()
@@ -385,10 +396,10 @@ def test_serial_simulator_mode_and_display_round_trip():
 @pytest.mark.parametrize(
     "command, options, field, expected",
     [
-        ("serial-uart", ["--rx-source", "channel1", "--baud-rate", "115200"], "rx_source", "channel1"),
-        ("serial-i2c", ["--clock-source", "external"], "clock_source", "external"),
-        ("serial-spi", ["--framing", "timeout"], "framing", "timeout"),
-        ("serial-can", ["--signal-definition", "difl"], "signal_definition", "difl"),
+        ("serial-uart-set", ["--rx-source", "channel1", "--baud-rate", "115200"], "rx_source", "channel1"),
+        ("serial-i2c-set", ["--clock-source", "external"], "clock_source", "external"),
+        ("serial-spi-set", ["--framing", "timeout"], "framing", "timeout"),
+        ("serial-can-set", ["--signal-definition", "difl"], "signal_definition", "difl"),
     ],
 )
 def test_serial_protocol_simulator_configure_json(command, options, field, expected, capsys):
@@ -412,17 +423,16 @@ def test_serial_protocol_simulator_configure_json(command, options, field, expec
     assert result["commands"][0].startswith(":SBUS1:MODE ")
 
 
-def test_serial_protocol_query_parser_and_json(capsys):
+def test_serial_protocol_show_parser_and_json(capsys):
     parser = cli_parser._build_parser()
-    parsed = parser.parse_args(["serial-can", "--bus", "1", "--query"])
-    assert parsed.command == "serial-can"
+    parsed = parser.parse_args(["serial-can-show", "--bus", "1"])
+    assert parsed.command == "serial-can-show"
     assert (
         cli.main(
             [
-                "serial-uart",
+                "serial-uart-show",
                 "--bus",
                 "1",
-                "--query",
                 "--simulate",
                 "--model",
                 "keysight-dsox4034a",
@@ -440,7 +450,7 @@ def test_serial_cli_rejects_noncanonical_source_before_serial_scpi(capsys):
     assert (
         cli.main(
             [
-                "serial-uart",
+                "serial-uart-set",
                 "--bus",
                 "1",
                 "--rx-source",
@@ -463,7 +473,7 @@ def test_serial_spi_rejects_incompatible_framing_and_clock_timeout(capsys):
     assert (
         cli.main(
             [
-                "serial-spi",
+                "serial-spi-set",
                 "--bus",
                 "1",
                 "--framing",
@@ -495,7 +505,7 @@ def test_serial_spi_live_rejects_before_serial_scpi(monkeypatch, capsys):
     assert (
         cli.main(
             [
-                "serial-spi",
+                "serial-spi-set",
                 "--bus",
                 "2",
                 "--framing",
@@ -521,7 +531,7 @@ def test_serial_spi_live_rejects_before_serial_scpi(monkeypatch, capsys):
 
 def test_serial_spi_help_describes_timeout_framing_and_source_availability(capsys):
     with pytest.raises(SystemExit) as exc_info:
-        cli.main(["serial-spi", "--help"])
+        cli.main(["serial-spi-set", "--help"])
 
     assert exc_info.value.code == 0
     help_text = " ".join(capsys.readouterr().out.split())
@@ -545,7 +555,7 @@ def test_serial_settings_conflict_hint_preserves_system_error_json(
     assert (
         cli.main(
             [
-                "serial-uart",
+                "serial-uart-set",
                 "--bus",
                 "2",
                 "--rx-source",
@@ -630,7 +640,7 @@ def test_serial_live_uses_detected_2000x_capabilities_before_target_scpi(
     assert (
         cli.main(
             [
-                "serial-query",
+                "serial-status",
                 "--bus",
                 "2",
                 "--resource",
@@ -650,7 +660,7 @@ def test_serial_live_uses_detected_2000x_capabilities_before_target_scpi(
 @pytest.mark.parametrize(
     "args",
     [
-        ["serial-query", "--bus", "2"],
+        ["serial-status", "--bus", "2"],
         ["serial-mode", "--bus", "1", "--mode", "usb-pd"],
     ],
 )
@@ -672,3 +682,107 @@ def test_serial_2000x_profile_rejection_happens_before_open(
         == 1
     )
     assert _payload(capsys)["ok"] is False
+
+
+def test_serial_enable_simulator_json_configures_display(capsys):
+    assert (
+        cli.main(
+            [
+                "serial-enable",
+                "--bus",
+                "1",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 0
+    )
+    result = _payload(capsys)["result"]
+    assert result["operation"] == "configure"
+    assert result["enabled"] is True
+    assert result["command"] == ":SBUS1:DISPlay 1"
+
+
+def test_serial_uart_set_rejects_missing_settings_before_backend_open(
+    monkeypatch, capsys
+):
+    opened = False
+
+    def fail_open(*args, **kwargs):
+        nonlocal opened
+        opened = True
+        raise AssertionError("backend must not open")
+
+    monkeypatch.setattr(runtime, "_open_scope", fail_open)
+    assert (
+        cli.main(
+            [
+                "serial-uart-set",
+                "--bus",
+                "1",
+                "--simulate",
+                "--json",
+                "--model",
+                "keysight-dsox2004a",
+            ]
+        )
+        == 1
+    )
+    payload = _payload(capsys)
+    assert payload["error"]["type"] == "ParameterValidationError"
+    assert not opened
+    assert payload["scpi"]["sent"] == []
+
+
+@pytest.mark.parametrize(
+    "argv, accepted",
+    [
+        (["serial-status", "--bus", "1"], True),
+        (["serial-mode", "--bus", "1", "--mode", "uart"], True),
+        (["serial-mode", "--bus", "1", "--query"], True),
+        (["serial-enable", "--bus", "1"], True),
+        (["serial-disable", "--bus", "1"], True),
+        (["serial-uart-set", "--bus", "1", "--baud-rate", "115200"], True),
+        (["serial-uart-show", "--bus", "1"], True),
+        (["serial-i2c-set", "--bus", "1", "--address-size", "bit7"], True),
+        (["serial-i2c-show", "--bus", "1"], True),
+        (["serial-spi-set", "--bus", "1", "--word-width", "8"], True),
+        (["serial-spi-show", "--bus", "1"], True),
+        (["serial-can-set", "--bus", "1", "--baud-rate", "500000"], True),
+        (["serial-can-show", "--bus", "1"], True),
+        (["serial-trigger-uart-set", "--bus", "1", "--type", "rx-start"], True),
+        (["serial-trigger-uart-show", "--bus", "1"], True),
+        (["serial-trigger-i2c-set", "--bus", "1", "--type", "start"], True),
+        (["serial-trigger-i2c-show", "--bus", "1"], True),
+        (["serial-trigger-spi-set", "--bus", "1", "--type", "mosi"], True),
+        (["serial-trigger-spi-show", "--bus", "1"], True),
+        (["serial-trigger-can-set", "--bus", "1", "--type", "start-of-frame"], True),
+        (["serial-trigger-can-show", "--bus", "1"], True),
+        (["serial-lister-status"], True),
+        (["serial-lister-display", "--query"], True),
+        (["serial-lister-reference", "--reference", "previous"], True),
+        (["serial-data"], True),
+        (["serial-query", "--bus", "1"], False),
+        (["serial-display", "--bus", "1", "--query"], False),
+        (["serial-display", "--bus", "1", "--enabled", "true"], False),
+        (["serial-uart", "--bus", "1", "--query"], False),
+        (["serial-i2c", "--bus", "1", "--query"], False),
+        (["serial-spi", "--bus", "1", "--query"], False),
+        (["serial-can", "--bus", "1", "--query"], False),
+        (["serial-trigger-uart", "--bus", "1", "--query"], False),
+        (["serial-trigger-i2c", "--bus", "1", "--query"], False),
+        (["serial-trigger-spi", "--bus", "1", "--query"], False),
+        (["serial-trigger-can", "--bus", "1", "--query"], False),
+        (["serial-lister-query"], False),
+        (["serial-lister-export"], False),
+    ],
+)
+def test_serial_command_spellings_parser_acceptance(argv, accepted):
+    parser = cli_parser._build_parser()
+    if accepted:
+        assert parser.parse_args(argv).command == argv[0]
+    else:
+        with pytest.raises(SystemExit):
+            parser.parse_args(argv)

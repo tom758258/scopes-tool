@@ -811,39 +811,39 @@ function Invoke-HardwareFreePreflight {
     $dryRun = @("--dry-run", "--model", $model)
     $simulate = @("--simulate", "--model", $model)
 
-    Invoke-ModeCli -Stage "preflight-serial-query" -Command "serial-query" `
+    Invoke-ModeCli -Stage "preflight-serial-query" -Command "serial-status" `
         -ModeArguments $simulate -Arguments @("--bus", "1") | Out-Null
-    Invoke-ModeCli -Stage "preflight-uart-configure" -Command "serial-uart" `
+    Invoke-ModeCli -Stage "preflight-uart-configure" -Command "serial-uart-set" `
         -ModeArguments $dryRun -Arguments @(
             "--bus", "1",
             "--baud-rate", "115200", "--data-bits", "8", "--parity", "none",
             "--polarity", "high", "--bit-order", "lsb-first"
         ) | Out-Null
-    Invoke-ModeCli -Stage "preflight-uart-query" -Command "serial-uart" `
-        -ModeArguments $simulate -Arguments @("--bus", "1", "--query") | Out-Null
-    Invoke-ModeCli -Stage "preflight-i2c-configure" -Command "serial-i2c" `
+    Invoke-ModeCli -Stage "preflight-uart-query" -Command "serial-uart-show" `
+        -ModeArguments $simulate -Arguments @("--bus", "1") | Out-Null
+    Invoke-ModeCli -Stage "preflight-i2c-configure" -Command "serial-i2c-set" `
         -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--clock-source", "channel1",
             "--data-source", "channel2", "--address-size", "bit7"
         ) | Out-Null
-    Invoke-ModeCli -Stage "preflight-i2c-query" -Command "serial-i2c" `
-        -ModeArguments $dryRun -Arguments @("--bus", "1", "--query") | Out-Null
-    Invoke-ModeCli -Stage "preflight-spi-configure" -Command "serial-spi" `
+    Invoke-ModeCli -Stage "preflight-i2c-query" -Command "serial-i2c-show" `
+        -ModeArguments $dryRun -Arguments @("--bus", "1") | Out-Null
+    Invoke-ModeCli -Stage "preflight-spi-configure" -Command "serial-spi-set" `
         -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--clock-source", "channel1",
             "--mosi-source", "channel2", "--clock-slope", "positive",
             "--bit-order", "msb-first", "--word-width", "8",
             "--framing", "timeout", "--clock-timeout", "1e-5"
         ) | Out-Null
-    Invoke-ModeCli -Stage "preflight-spi-query" -Command "serial-spi" `
-        -ModeArguments $dryRun -Arguments @("--bus", "1", "--query") | Out-Null
-    Invoke-ModeCli -Stage "preflight-can-configure" -Command "serial-can" `
+    Invoke-ModeCli -Stage "preflight-spi-query" -Command "serial-spi-show" `
+        -ModeArguments $dryRun -Arguments @("--bus", "1") | Out-Null
+    Invoke-ModeCli -Stage "preflight-can-configure" -Command "serial-can-set" `
         -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--source", "channel1", "--baud-rate", "500000",
             "--signal-definition", "difl", "--sample-point", "75"
         ) | Out-Null
-    Invoke-ModeCli -Stage "preflight-can-query" -Command "serial-can" `
-        -ModeArguments $dryRun -Arguments @("--bus", "1", "--query") | Out-Null
+    Invoke-ModeCli -Stage "preflight-can-query" -Command "serial-can-show" `
+        -ModeArguments $dryRun -Arguments @("--bus", "1") | Out-Null
 
     Invoke-ModeCli -Stage "preflight-operation-status" `
         -Command "system-operation-status" -ModeArguments $simulate `
@@ -853,7 +853,7 @@ function Invoke-HardwareFreePreflight {
             -ModeArguments $dryRun | Out-Null
     }
 
-    Invoke-ModeCli -Stage "preflight-lister-query" -Command "serial-lister-query" `
+    Invoke-ModeCli -Stage "preflight-lister-query" -Command "serial-lister-status" `
         -ModeArguments $simulate | Out-Null
     Invoke-ModeCli -Stage "preflight-lister-display" `
         -Command "serial-lister-display" -ModeArguments $dryRun `
@@ -869,7 +869,7 @@ function Invoke-HardwareFreePreflight {
         -Arguments @("--query") | Out-Null
     $preflightExport = Join-Path $script:RunRoot "preflight-uart-lister.csv"
     Invoke-ModeCli -Stage "preflight-lister-export" `
-        -Command "serial-lister-export" -ModeArguments $dryRun `
+        -Command "serial-data" -ModeArguments $dryRun `
         -Arguments @("--output", $preflightExport) | Out-Null
     if (Test-Path -LiteralPath $preflightExport) {
         throw "Dry-run Serial Lister export unexpectedly created ${preflightExport}."
@@ -908,37 +908,37 @@ function Invoke-HardwareFreePreflight {
         -Command "serial-search-can" -ModeArguments $simulate `
         -Arguments @("--bus", "1", "--query") | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-configure" `
-        -Command "serial-trigger-uart" -ModeArguments $dryRun -Arguments @(
+        -Command "serial-trigger-uart-set" -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--type", "rx-data", "--data", "1",
             "--qualifier", "equal"
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-query" `
-        -Command "serial-trigger-uart" -ModeArguments $simulate `
-        -Arguments @("--bus", "1", "--query") | Out-Null
+        -Command "serial-trigger-uart-show" -ModeArguments $simulate `
+        -Arguments @("--bus", "1") | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-i2c-configure" `
-        -Command "serial-trigger-i2c" -ModeArguments $dryRun -Arguments @(
+        -Command "serial-trigger-i2c-set" -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--type", "read7", "--address", "80",
             "--data", "1"
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-i2c-query" `
-        -Command "serial-trigger-i2c" -ModeArguments $simulate `
-        -Arguments @("--bus", "1", "--query") | Out-Null
+        -Command "serial-trigger-i2c-show" -ModeArguments $simulate `
+        -Arguments @("--bus", "1") | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-spi-configure" `
-        -Command "serial-trigger-spi" -ModeArguments $dryRun -Arguments @(
+        -Command "serial-trigger-spi-set" -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--type", "mosi", "--width", "8",
             "--data", "0x01"
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-spi-query" `
-        -Command "serial-trigger-spi" -ModeArguments $simulate `
-        -Arguments @("--bus", "1", "--query") | Out-Null
+        -Command "serial-trigger-spi-show" -ModeArguments $simulate `
+        -Arguments @("--bus", "1") | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-can-configure" `
-        -Command "serial-trigger-can" -ModeArguments $dryRun -Arguments @(
+        -Command "serial-trigger-can-set" -ModeArguments $dryRun -Arguments @(
             "--bus", "1", "--type", "id-and-data", "--id-mode", "standard",
             "--id", "0x123", "--data", "0x01", "--data-length", "1"
         ) | Out-Null
     Invoke-ModeCli -Stage "preflight-trigger-can-query" `
-        -Command "serial-trigger-can" -ModeArguments $simulate `
-        -Arguments @("--bus", "1", "--query") | Out-Null
+        -Command "serial-trigger-can-show" -ModeArguments $simulate `
+        -Arguments @("--bus", "1") | Out-Null
     Invoke-ModeCli -Stage "preflight-search-disable" -Command "search-state" `
         -ModeArguments $dryRun -Arguments @("--enabled", "false") | Out-Null
     Invoke-ModeCli -Stage "preflight-search-state-query" -Command "search-state" `
@@ -1026,7 +1026,7 @@ function Restore-SerialState {
         }
         try {
             $lister = Invoke-LiveCli -Stage "cleanup-lister-query" `
-                -Command "serial-lister-query"
+                -Command "serial-lister-status"
             if ([string](Get-RequiredResultValue -Payload $lister -Name "display" `
                 -Stage "Lister cleanup") -ne [string]$Snapshot.ListerDisplay -or
                 [string](Get-RequiredResultValue -Payload $lister -Name "reference" `
@@ -1046,15 +1046,15 @@ function Restore-SerialState {
     if ($RestoreSerialDisplay) {
         try {
             $expectedEnabled = [bool]$Snapshot.SerialDisplayEnabled
-            $enabledText = if ($expectedEnabled) { "true" } else { "false" }
+            $restoreCommand = if ($expectedEnabled) { "serial-enable" } else { "serial-disable" }
             Invoke-LiveCli -Stage "cleanup-serial-display" `
-                -Command "serial-display" -Arguments @(
-                    "--bus", "1", "--enabled", $enabledText
+                -Command $restoreCommand -Arguments @(
+                    "--bus", "1"
                 ) | Out-Null
             $serialDisplay = Invoke-LiveCli -Stage "cleanup-serial-display-query" `
-                -Command "serial-display" -Arguments @("--bus", "1", "--query")
+                -Command "serial-status" -Arguments @("--bus", "1")
             $actualEnabled = [bool](Get-RequiredResultValue `
-                -Payload $serialDisplay -Name "enabled" -Stage "Serial display cleanup")
+                -Payload $serialDisplay -Name "display" -Stage "Serial display cleanup")
             if ($actualEnabled -ne $expectedEnabled) {
                 $expectedText = if ($expectedEnabled) { "ON" } else { "OFF" }
                 throw "Serial display cleanup did not restore ${expectedText}."
@@ -1068,7 +1068,7 @@ function Restore-SerialState {
 
     if ($RestoreUartBaseline) {
         try {
-            Invoke-LiveCli -Stage "cleanup-uart-configure" -Command "serial-uart" `
+            Invoke-LiveCli -Stage "cleanup-uart-configure" -Command "serial-uart-set" `
                 -Arguments @(
                     "--bus", "1",
                     "--baud-rate", "115200", "--data-bits", "8", "--parity", "none",
@@ -1076,7 +1076,7 @@ function Restore-SerialState {
                 ) | Out-Null
             Start-Sleep -Milliseconds 500
             $uart = Invoke-LiveCli -Stage "cleanup-uart-query" `
-                -Command "serial-uart" -Arguments @("--bus", "1", "--query")
+                -Command "serial-uart-show" -Arguments @("--bus", "1")
             Assert-UartReadback -Payload $uart
         } catch {
             $restoreErrors.Add("UART baseline: $($_.Exception.Message)")
@@ -1271,7 +1271,7 @@ $availabilityDrain = $null
 $availabilityFailure = ""
 try {
     $availabilityInvocation = Invoke-CliRaw -Stage "availability" -Arguments (
-        @("serial-query") + $script:LiveConnectionArguments + `
+        @("serial-status") + $script:LiveConnectionArguments + `
             @("--json", "--bus", "1")
     )
 } catch {
@@ -1357,9 +1357,9 @@ $snapshot = $null
 if ($searchPreconditionPassed -and -not $script:FunctionalFailed) {
     try {
         $lister = Invoke-LiveCli -Stage "snapshot-lister" `
-            -Command "serial-lister-query"
+            -Command "serial-lister-status"
         $serialDisplay = Invoke-LiveCli -Stage "snapshot-serial-display" `
-            -Command "serial-display" -Arguments @("--bus", "1", "--query")
+            -Command "serial-status" -Arguments @("--bus", "1")
         $edgeSource = Invoke-LiveCli -Stage "snapshot-edge-source" `
             -Command "trigger-edge-source" -Arguments @("--query")
         $edgeSlope = Invoke-LiveCli -Stage "snapshot-edge-slope" `
@@ -1408,7 +1408,7 @@ if ($searchPreconditionPassed -and -not $script:FunctionalFailed) {
             ListerReference = [string](Get-RequiredResultValue -Payload $lister `
                 -Name "reference" -Stage "Lister snapshot")
             SerialDisplayEnabled = [bool](Get-RequiredResultValue `
-                -Payload $serialDisplay -Name "enabled" -Stage "Serial display snapshot")
+                -Payload $serialDisplay -Name "display" -Stage "Serial display snapshot")
             EdgeSource = $source
             EdgeSourceChannel = $sourceChannel
             EdgeSlope = $slope
@@ -1474,14 +1474,14 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
 
     $stateChangeStarted = $true
     Invoke-SerialCase -Name "UART configuration roundtrip" -Action {
-        Invoke-LiveCli -Stage "uart-configure" -Command "serial-uart" -Arguments @(
+        Invoke-LiveCli -Stage "uart-configure" -Command "serial-uart-set" -Arguments @(
             "--bus", "1",
             "--baud-rate", "115200", "--data-bits", "8", "--parity", "none",
             "--polarity", "high", "--bit-order", "lsb-first"
         ) | Out-Null
         Start-Sleep -Milliseconds 500
-        $uart = Invoke-LiveCli -Stage "uart-query" -Command "serial-uart" `
-            -Arguments @("--bus", "1", "--query")
+        $uart = Invoke-LiveCli -Stage "uart-query" -Command "serial-uart-show" `
+            -Arguments @("--bus", "1")
         Assert-UartReadback -Payload $uart
     }
 
@@ -1491,8 +1491,8 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
             $listerCsvPath = Join-Path $script:RunRoot "uart-lister.csv"
             if (-not [bool]$snapshot.SerialDisplayEnabled) {
                 Invoke-LiveCli -Stage "serial-display-enable" `
-                    -Command "serial-display" `
-                    -Arguments @("--bus", "1", "--enabled", "true") | Out-Null
+                    -Command "serial-enable" `
+                    -Arguments @("--bus", "1") | Out-Null
             }
             Invoke-LiveCli -Stage "lister-display" -Command "serial-lister-display" `
                 -Arguments @("--selection", "bus1") | Out-Null
@@ -1500,7 +1500,7 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
                 -Command "serial-lister-reference" `
                 -Arguments @("--reference", "trigger") | Out-Null
             $lister = Invoke-LiveCli -Stage "lister-query" `
-                -Command "serial-lister-query"
+                -Command "serial-lister-status"
             if ([string](Get-RequiredResultValue -Payload $lister -Name "display" `
                 -Stage "Lister readback") -ne "bus1" -or
                 [string](Get-RequiredResultValue -Payload $lister -Name "reference" `
@@ -1586,7 +1586,7 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
             }
 
             $exportInvocation = Invoke-CliRaw -Stage "lister-export" -Arguments (
-                @("serial-lister-export") + $script:LiveConnectionArguments + @(
+                @("serial-data") + $script:LiveConnectionArguments + @(
                     "--json",
                     "--output", $listerCsvPath
                 )
@@ -1682,27 +1682,27 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
         $triggerChangeStarted = $true
         Invoke-SerialCase -Name "UART Serial Trigger" -Action {
             Invoke-LiveCli -Stage "serial-trigger-configure" `
-                -Command "serial-trigger-uart" -Arguments @(
+                -Command "serial-trigger-uart-set" -Arguments @(
                     "--bus", "1", "--type", "rx-data", "--data", "1",
                     "--qualifier", "equal"
                 ) | Out-Null
             Start-Sleep -Milliseconds 500
             $trigger = Invoke-LiveCli -Stage "serial-trigger-query" `
-                -Command "serial-trigger-uart" `
-                -Arguments @("--bus", "1", "--query")
+                -Command "serial-trigger-uart-show" `
+                -Arguments @("--bus", "1")
             Assert-SerialCriteriaReadback -Payload $trigger -Kind "Trigger"
         }
     }
 
     if (-not $script:FunctionalFailed) {
         Invoke-SerialCase -Name "I2C configuration roundtrip" -Action {
-            Invoke-LiveCli -Stage "i2c-configure" -Command "serial-i2c" -Arguments @(
+            Invoke-LiveCli -Stage "i2c-configure" -Command "serial-i2c-set" -Arguments @(
                 "--bus", "1", "--clock-source", "channel1",
                 "--data-source", "channel2", "--address-size", "bit7"
             ) | Out-Null
             Start-Sleep -Milliseconds 500
-            $i2c = Invoke-LiveCli -Stage "i2c-query" -Command "serial-i2c" `
-                -Arguments @("--bus", "1", "--query")
+            $i2c = Invoke-LiveCli -Stage "i2c-query" -Command "serial-i2c-show" `
+                -Arguments @("--bus", "1")
             Assert-I2cReadback -Payload $i2c
         }
     }
@@ -1727,29 +1727,29 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
         $triggerChangeStarted = $true
         Invoke-SerialCase -Name "I2C Serial Trigger" -Action {
             Invoke-LiveCli -Stage "i2c-trigger-configure" `
-                -Command "serial-trigger-i2c" -Arguments @(
+                -Command "serial-trigger-i2c-set" -Arguments @(
                     "--bus", "1", "--type", "read7", "--address", "80",
                     "--data", "1"
                 ) | Out-Null
             Start-Sleep -Milliseconds 500
             $trigger = Invoke-LiveCli -Stage "i2c-trigger-query" `
-                -Command "serial-trigger-i2c" `
-                -Arguments @("--bus", "1", "--query")
+                -Command "serial-trigger-i2c-show" `
+                -Arguments @("--bus", "1")
             Assert-I2cCriteriaReadback -Payload $trigger -Kind "Trigger"
         }
     }
 
     if (-not $script:FunctionalFailed) {
         Invoke-SerialCase -Name "SPI configuration roundtrip" -Action {
-            Invoke-LiveCli -Stage "spi-configure" -Command "serial-spi" -Arguments @(
+            Invoke-LiveCli -Stage "spi-configure" -Command "serial-spi-set" -Arguments @(
                 "--bus", "1", "--clock-source", "channel1",
                 "--mosi-source", "channel2", "--clock-slope", "positive",
                 "--bit-order", "msb-first", "--word-width", "8",
                 "--framing", "timeout", "--clock-timeout", "1e-5"
             ) | Out-Null
             Start-Sleep -Milliseconds 500
-            $spi = Invoke-LiveCli -Stage "spi-query" -Command "serial-spi" `
-                -Arguments @("--bus", "1", "--query")
+            $spi = Invoke-LiveCli -Stage "spi-query" -Command "serial-spi-show" `
+                -Arguments @("--bus", "1")
             Assert-SpiReadback -Payload $spi
         }
     }
@@ -1774,27 +1774,27 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
         $triggerChangeStarted = $true
         Invoke-SerialCase -Name "SPI Serial Trigger" -Action {
             Invoke-LiveCli -Stage "spi-trigger-configure" `
-                -Command "serial-trigger-spi" -Arguments @(
+                -Command "serial-trigger-spi-set" -Arguments @(
                     "--bus", "1", "--type", "mosi", "--width", "8",
                     "--data", "0x01"
                 ) | Out-Null
             Start-Sleep -Milliseconds 500
             $trigger = Invoke-LiveCli -Stage "spi-trigger-query" `
-                -Command "serial-trigger-spi" `
-                -Arguments @("--bus", "1", "--query")
+                -Command "serial-trigger-spi-show" `
+                -Arguments @("--bus", "1")
             Assert-SpiCriteriaReadback -Payload $trigger -Kind "Trigger"
         }
     }
 
     if (-not $script:FunctionalFailed) {
         Invoke-SerialCase -Name "CAN configuration roundtrip" -Action {
-            Invoke-LiveCli -Stage "can-configure" -Command "serial-can" -Arguments @(
+            Invoke-LiveCli -Stage "can-configure" -Command "serial-can-set" -Arguments @(
                 "--bus", "1", "--source", "channel1", "--baud-rate", "500000",
                 "--signal-definition", "difl", "--sample-point", "75"
             ) | Out-Null
             Start-Sleep -Milliseconds 500
-            $can = Invoke-LiveCli -Stage "can-query" -Command "serial-can" `
-                -Arguments @("--bus", "1", "--query")
+            $can = Invoke-LiveCli -Stage "can-query" -Command "serial-can-show" `
+                -Arguments @("--bus", "1")
             Assert-CanReadback -Payload $can
         }
     }
@@ -1819,14 +1819,14 @@ if ($null -ne $snapshot -and -not $script:FunctionalFailed) {
         $triggerChangeStarted = $true
         Invoke-SerialCase -Name "CAN Serial Trigger" -Action {
             Invoke-LiveCli -Stage "can-trigger-configure" `
-                -Command "serial-trigger-can" -Arguments @(
+                -Command "serial-trigger-can-set" -Arguments @(
                     "--bus", "1", "--type", "id-and-data", "--id-mode", "standard",
                     "--id", "0x123", "--data", "0x01", "--data-length", "1"
                 ) | Out-Null
             Start-Sleep -Milliseconds 500
             $trigger = Invoke-LiveCli -Stage "can-trigger-query" `
-                -Command "serial-trigger-can" `
-                -Arguments @("--bus", "1", "--query")
+                -Command "serial-trigger-can-show" `
+                -Arguments @("--bus", "1")
             Assert-CanCriteriaReadback -Payload $trigger -Kind "Trigger"
         }
     }

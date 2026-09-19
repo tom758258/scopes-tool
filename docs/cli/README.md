@@ -164,8 +164,10 @@ Current implemented scope:
   `demo-query`, `demo-output`, `demo-function`, and `demo-phase`.
 - Query or configure waveform generator output, function, frequency, amplitude,
   offset, and load with the `wgen-*` commands.
-- Configure or query basic UART, I2C, SPI, and CAN serial decode settings with
-  `serial-uart`, `serial-i2c`, `serial-spi`, and `serial-can`.
+- Show Serial bus status and configure or show basic UART, I2C, SPI, and CAN
+  serial decode settings with `serial-status`, `serial-uart-set`,
+  `serial-uart-show`, `serial-i2c-set`, `serial-i2c-show`, `serial-spi-set`,
+  `serial-spi-show`, `serial-can-set`, and `serial-can-show`.
 - Collect read-only diagnostic snapshots with `doctor`.
 - Query multi-channel and optional pair measurement sweeps with
   continue-and-summarize failure handling.
@@ -1743,20 +1745,54 @@ aggregate and focused commands. Configure requests require exactly their
 canonical value field, and WGEN output is enabled only by an explicit
 `{"enabled": true}` request.
 
+Serial bus status composes the bus mode, display state, and active-protocol
+decode configuration into one readable block:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe serial-status --bus 1 --simulate --json
+```
+
+```text
+Bus 1
+Protocol   UART
+Display    ON
+RX         CH1
+TX         OFF
+Baud       115200
+Bits       8
+Parity     None
+Polarity   Idle High
+```
+
+`serial-status` requires `--bus`. When the bus mode is UART, I2C, SPI, or
+CAN, status also queries that protocol's decode settings; any other mode
+reports mode and display with a null protocol and config. Trigger state is
+not part of status; use the trigger show commands below.
+
+`serial-mode` selects the bus protocol, while `serial-enable` and
+`serial-disable` control the bus decode display independently of protocol
+configuration:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe serial-mode --bus 1 --mode uart --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-enable --bus 1 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-disable --bus 1 --simulate --json
+```
+
 Serial protocol configuration controls common UART, I2C, SPI, and CAN decode settings:
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe serial-uart --bus 1 --rx-source channel1 --baud-rate 115200 --simulate --json
-.\.venv\Scripts\scopes-tool.exe serial-i2c --bus 1 --clock-source channel1 --data-source channel2 --simulate --json
-.\.venv\Scripts\scopes-tool.exe serial-spi --bus 1 --framing chip-select --word-width 8 --simulate --json
-.\.venv\Scripts\scopes-tool.exe serial-can --bus 1 --source channel1 --signal-definition difl --sample-point 75 --simulate --json
-.\.venv\Scripts\scopes-tool.exe serial-uart --bus 1 --query --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-uart-set --bus 1 --rx-source channel1 --baud-rate 115200 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-i2c-set --bus 1 --clock-source channel1 --data-source channel2 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-spi-set --bus 1 --framing chip-select --word-width 8 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-can-set --bus 1 --source channel1 --signal-definition difl --sample-point 75 --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-uart-show --bus 1 --simulate --json
 ```
 
-Each command requires `--bus` and accepts either `--query` or one or more
-configure options. Sources are `channelN` (bounded by the selected model's
+Each set command requires `--bus` and one or more configure options.
+Sources are `channelN` (bounded by the selected model's
 analog channels) or `external`; I2C emits `IIC`; CAN uses canonical signal
-values `canh`, `canl`, `rx`, `tx`, `difl`, and `difh`. Query operations read
+values `canh`, `canl`, `rx`, `tx`, `difl`, and `difh`. Show operations read
 `MODE?` first and preserve raw protocol readbacks. Availability is controlled
 by capability profiles and instrument licensing. Serial Search and advanced
 protocol parameters are outside this Serial protocol configuration surface.
@@ -1765,17 +1801,17 @@ Serial UART Trigger configures trigger criteria on a UART bus that the user
 has already configured through the matching Serial protocol command:
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe serial-trigger-uart `
+.\.venv\Scripts\scopes-tool.exe serial-trigger-uart-set `
     --bus 1 `
     --type rx-data `
     --data 85 `
     --qualifier equal
 
-.\.venv\Scripts\scopes-tool.exe serial-trigger-uart `
+.\.venv\Scripts\scopes-tool.exe serial-trigger-uart-set `
     --bus 1 `
     --type rx-start
 
-.\.venv\Scripts\scopes-tool.exe serial-trigger-uart --bus 1 --query
+.\.venv\Scripts\scopes-tool.exe serial-trigger-uart-show --bus 1
 ```
 
 The canonical types are `rx-start`, `rx-stop`, `rx-data`, `tx-start`,
@@ -1797,9 +1833,9 @@ run, single, wait, or capture. The surface excludes 4000X-only I2C additions, CA
 and other extended protocol conditions.
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe serial-trigger-i2c --bus 1 --type read-eeprom --address 0x50 --data 0x10 --qualifier equal
-.\.venv\Scripts\scopes-tool.exe serial-trigger-spi --bus 1 --type mosi --width 8 --data 1010XX01
-.\.venv\Scripts\scopes-tool.exe serial-trigger-can --bus 1 --type id-and-data --id 0x1 --id-mode standard --data 1010XX01 --data-length 1
+.\.venv\Scripts\scopes-tool.exe serial-trigger-i2c-set --bus 1 --type read-eeprom --address 0x50 --data 0x10 --qualifier equal
+.\.venv\Scripts\scopes-tool.exe serial-trigger-spi-set --bus 1 --type mosi --width 8 --data 1010XX01
+.\.venv\Scripts\scopes-tool.exe serial-trigger-can-set --bus 1 --type id-and-data --id 0x1 --id-mode standard --data 1010XX01 --data-length 1
 ```
 
 I2C trigger address/data values are unsigned integer or hexadecimal values.
@@ -1815,14 +1851,14 @@ with `--clock-timeout`; timeout framing requires `--framing timeout` in the same
 configure request:
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe serial-spi `
+.\.venv\Scripts\scopes-tool.exe serial-spi-set `
     --bus 2 `
     --framing chip-select `
     --word-width 8
 ```
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe serial-spi `
+.\.venv\Scripts\scopes-tool.exe serial-spi-set `
     --bus 2 `
     --framing timeout `
     --clock-timeout 1e-6 `
@@ -1834,26 +1870,26 @@ instrument reports a settings conflict, query both buses before changing
 resources:
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe serial-query --bus 1 --json
-.\.venv\Scripts\scopes-tool.exe serial-query --bus 2 --json
+.\.venv\Scripts\scopes-tool.exe serial-status --bus 1 --json
+.\.venv\Scripts\scopes-tool.exe serial-status --bus 2 --json
 ```
 
 Serial Lister provides global display/reference queries and a host-side CSV
 export. It does not enable Serial decode, enable an SBUS display, acquire new
 traffic, or parse CSV rows. Serial decode must already be configured and the
-instrument must contain decoded Lister data. `serial-lister-export` queries
+instrument must contain decoded Lister data. `serial-data` queries
 `:LISTer:DATA?` and writes the payload to the host; it is not the instrument-side
 `:SAVE:LISTer` operation. The canonical display selections are `off`, `bus1`,
 `bus2`, and `all`. DSO-X 2000X does not support selecting `bus2`; DSO-X 3000X
 and 4000X support it.
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe serial-lister-query --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-lister-status --simulate --json
 .\.venv\Scripts\scopes-tool.exe serial-lister-display --selection bus1 --simulate --json
 .\.venv\Scripts\scopes-tool.exe serial-lister-display --query --simulate --json
 .\.venv\Scripts\scopes-tool.exe serial-lister-reference --reference previous --simulate --json
-.\.venv\Scripts\scopes-tool.exe serial-lister-export --simulate --json
-.\.venv\Scripts\scopes-tool.exe serial-lister-export --output data\lister.csv --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-data --simulate --json
+.\.venv\Scripts\scopes-tool.exe serial-data --output data\lister.csv --simulate --json
 ```
 
 `--output` is optional. When omitted, the export path defaults to
@@ -1864,8 +1900,8 @@ protocol-specific parsing. Query both Serial buses when diagnosing a source or
 resource conflict:
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe serial-query --bus 1 --json
-.\.venv\Scripts\scopes-tool.exe serial-query --bus 2 --json
+.\.venv\Scripts\scopes-tool.exe serial-status --bus 1 --json
+.\.venv\Scripts\scopes-tool.exe serial-status --bus 2 --json
 ```
 
 Control reference waveform slots:
@@ -1918,7 +1954,7 @@ Runtime support is capability-profile guarded: 2000X supports `serial1` only;
 before search SCPI is sent. Serial Search adds `serial-search-uart`,
 `serial-search-i2c`, `serial-search-spi`, and `serial-search-can` for
 protocol-specific criteria. Configure the selected Serial bus first with the
-matching `serial-uart`, `serial-i2c`, `serial-spi`, or `serial-can` command;
+matching `serial-uart-set`, `serial-i2c-set`, `serial-spi-set`, or `serial-can-set` command;
 Serial Search does not change or revalidate that bus configuration. SPI Search
 width is measured in bytes, and a supplied pattern must contain exactly
 `width * 2` hexadecimal/wildcard digits. CAN `id-data` is ID-only; use `data`

@@ -155,21 +155,30 @@ _NON_MATH_DOMAIN_COMMANDS = {
     "wgen-voltage",
     "wgen-offset",
     "wgen-load",
-    "serial-query",
+    "serial-status",
     "serial-mode",
-    "serial-display",
-    "serial-uart",
-    "serial-trigger-uart",
-    "serial-trigger-i2c",
-    "serial-trigger-spi",
-    "serial-trigger-can",
-    "serial-i2c",
-    "serial-spi",
-    "serial-can",
-    "serial-lister-query",
+    "serial-enable",
+    "serial-disable",
+    "serial-uart-set",
+    "serial-uart-show",
+    "serial-trigger-uart-set",
+    "serial-trigger-uart-show",
+    "serial-trigger-i2c-set",
+    "serial-trigger-i2c-show",
+    "serial-trigger-spi-set",
+    "serial-trigger-spi-show",
+    "serial-trigger-can-set",
+    "serial-trigger-can-show",
+    "serial-i2c-set",
+    "serial-i2c-show",
+    "serial-spi-set",
+    "serial-spi-show",
+    "serial-can-set",
+    "serial-can-show",
+    "serial-lister-status",
     "serial-lister-display",
     "serial-lister-reference",
-    "serial-lister-export",
+    "serial-data",
     "search-state",
     "search-mode",
     "search-count",
@@ -422,7 +431,10 @@ def parse_domain_command(
         command, arguments, capabilities_for_model_id(runtime.model)
     )
     if command in {
-        "serial-trigger-uart", "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"
+        "serial-trigger-uart-set", "serial-trigger-uart-show",
+        "serial-trigger-i2c-set", "serial-trigger-i2c-show",
+        "serial-trigger-spi-set", "serial-trigger-spi-show",
+        "serial-trigger-can-set", "serial-trigger-can-show",
     }:
         arguments = {"command": command, **arguments}
         return _serial_uart_trigger_worker_namespace(arguments, runtime)
@@ -2177,27 +2189,36 @@ def _normalize_serial_worker_arguments(
     capabilities: ScopeCapabilities | None = None,
 ) -> dict[str, Any]:
     if command not in {
-        "serial-query",
+        "serial-status",
         "serial-mode",
-        "serial-display",
-        "serial-uart",
-        "serial-trigger-uart",
-        "serial-trigger-i2c",
-        "serial-trigger-spi",
-        "serial-trigger-can",
-        "serial-i2c",
-        "serial-spi",
-        "serial-can",
-        "serial-lister-query",
+        "serial-enable",
+        "serial-disable",
+        "serial-uart-set",
+        "serial-uart-show",
+        "serial-trigger-uart-set",
+        "serial-trigger-uart-show",
+        "serial-trigger-i2c-set",
+        "serial-trigger-i2c-show",
+        "serial-trigger-spi-set",
+        "serial-trigger-spi-show",
+        "serial-trigger-can-set",
+        "serial-trigger-can-show",
+        "serial-i2c-set",
+        "serial-i2c-show",
+        "serial-spi-set",
+        "serial-spi-show",
+        "serial-can-set",
+        "serial-can-show",
+        "serial-lister-status",
         "serial-lister-display",
         "serial-lister-reference",
-        "serial-lister-export",
+        "serial-data",
     }:
         return arguments
 
-    if command == "serial-lister-query":
+    if command == "serial-lister-status":
         if arguments:
-            raise OscilloscopeError("serial-lister-query accepts only an empty object")
+            raise OscilloscopeError("serial-lister-status accepts only an empty object")
         return {}
     if command == "serial-lister-display":
         allowed = {"query", "selection"}
@@ -2251,34 +2272,38 @@ def _normalize_serial_worker_arguments(
                 f"{command} argument reference must be one of: trigger, previous"
             )
         return dict(arguments)
-    if command == "serial-lister-export":
+    if command == "serial-data":
         if set(arguments) != {"output"} or not isinstance(arguments["output"], str):
             raise OscilloscopeError(
-                "serial-lister-export requires exactly a string output"
+                "serial-data requires exactly a string output"
             )
         if not arguments["output"]:
-            raise OscilloscopeError("serial-lister-export output must not be empty")
+            raise OscilloscopeError("serial-data output must not be empty")
         return dict(arguments)
 
-    if command in {"serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"}:
+    if command in {"serial-trigger-i2c-set", "serial-trigger-i2c-show", "serial-trigger-spi-set", "serial-trigger-spi-show", "serial-trigger-can-set", "serial-trigger-can-show"}:
         fields_by_command = {
-            "serial-trigger-i2c": {"type", "address", "data", "data2", "qualifier"},
-            "serial-trigger-spi": {"type", "width", "data"},
-            "serial-trigger-can": {"type", "id", "id_mode", "data", "data_length"},
+            "serial-trigger-i2c-set": {"type", "address", "data", "data2", "qualifier"},
+            "serial-trigger-i2c-show": set(),
+            "serial-trigger-spi-set": {"type", "width", "data"},
+            "serial-trigger-spi-show": set(),
+            "serial-trigger-can-set": {"type", "id", "id_mode", "data", "data_length"},
+            "serial-trigger-can-show": set(),
         }
-        allowed = {"bus", "query"} | fields_by_command[command]
+        allowed = {"bus"} | fields_by_command[command]
         unknown = set(arguments) - allowed
         if unknown:
             raise OscilloscopeError(
                 f"unknown argument for {command}: {sorted(unknown)[0]}"
             )
-        query = arguments.get("query", False)
-        if "query" in arguments and query is not True:
-            raise OscilloscopeError(f"{command} argument query must be exactly true")
+        query = command.endswith("-show")
         validator = {
-            "serial-trigger-i2c": validate_serial_i2c_trigger_request,
-            "serial-trigger-spi": validate_serial_spi_trigger_request,
-            "serial-trigger-can": validate_serial_can_trigger_request,
+            "serial-trigger-i2c-set": validate_serial_i2c_trigger_request,
+            "serial-trigger-i2c-show": validate_serial_i2c_trigger_request,
+            "serial-trigger-spi-set": validate_serial_spi_trigger_request,
+            "serial-trigger-spi-show": validate_serial_spi_trigger_request,
+            "serial-trigger-can-set": validate_serial_can_trigger_request,
+            "serial-trigger-can-show": validate_serial_can_trigger_request,
         }[command]
         values = {
             key: arguments.get(key) for key in fields_by_command[command]
@@ -2288,8 +2313,8 @@ def _normalize_serial_worker_arguments(
         )
         normalized: dict[str, Any] = {"bus": canonical[0]}
         if query:
-            normalized["query"] = True
-        elif command == "serial-trigger-i2c":
+            return normalized
+        elif command == "serial-trigger-i2c-set":
             _, trigger_type, address, data, data2, qualifier = canonical
             normalized.update(type=trigger_type)
             for key, value in {
@@ -2297,7 +2322,7 @@ def _normalize_serial_worker_arguments(
             }.items():
                 if value is not None:
                     normalized[key] = value
-        elif command == "serial-trigger-spi":
+        elif command == "serial-trigger-spi-set":
             _, trigger_type, width, data = canonical
             normalized.update(type=trigger_type, width=width, data=data)
         else:
@@ -2311,29 +2336,25 @@ def _normalize_serial_worker_arguments(
                     normalized[key] = value
         return normalized
 
-    if command == "serial-trigger-uart":
-        allowed = {"bus", "query", "type", "data", "qualifier"}
+    if command in {"serial-trigger-uart-set", "serial-trigger-uart-show"}:
+        query = command.endswith("-show")
+        allowed = {"bus"} | (set() if query else {"type", "data", "qualifier"})
         unknown = set(arguments) - allowed
         if unknown:
             raise OscilloscopeError(
                 f"unknown argument for {command}: {sorted(unknown)[0]}"
             )
-        query = arguments.get("query", False)
-        if "query" in arguments and query is not True:
-            raise OscilloscopeError(
-                f"{command} argument query must be exactly true"
-            )
         bus, trigger_type, data, qualifier = validate_serial_uart_trigger_request(
             arguments.get("bus"),
             query=query,
-            type=arguments.get("type"),
-            data=arguments.get("data"),
-            qualifier=arguments.get("qualifier"),
+            type=None if query else arguments.get("type"),
+            data=None if query else arguments.get("data"),
+            qualifier=None if query else arguments.get("qualifier"),
             capabilities=capabilities,
         )
         normalized: dict[str, Any] = {"bus": bus}
         if query:
-            normalized["query"] = True
+            return normalized
         else:
             normalized.update(
                 type=trigger_type,
@@ -2345,14 +2366,19 @@ def _normalize_serial_worker_arguments(
             )
         return normalized
 
-    if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
+    if command in {"serial-uart-set", "serial-uart-show", "serial-i2c-set", "serial-i2c-show", "serial-spi-set", "serial-spi-show", "serial-can-set", "serial-can-show"}:
+        query = command.endswith("-show")
         fields_by_command = {
-            "serial-uart": {"rx_source", "tx_source", "baud_rate", "data_bits", "parity", "polarity", "bit_order"},
-            "serial-i2c": {"clock_source", "data_source", "address_size"},
-            "serial-spi": {"clock_source", "mosi_source", "miso_source", "frame_source", "clock_slope", "bit_order", "word_width", "framing", "clock_timeout"},
-            "serial-can": {"source", "baud_rate", "signal_definition", "sample_point"},
+            "serial-uart-set": {"rx_source", "tx_source", "baud_rate", "data_bits", "parity", "polarity", "bit_order"},
+            "serial-uart-show": set(),
+            "serial-i2c-set": {"clock_source", "data_source", "address_size"},
+            "serial-i2c-show": set(),
+            "serial-spi-set": {"clock_source", "mosi_source", "miso_source", "frame_source", "clock_slope", "bit_order", "word_width", "framing", "clock_timeout"},
+            "serial-spi-show": set(),
+            "serial-can-set": {"source", "baud_rate", "signal_definition", "sample_point"},
+            "serial-can-show": set(),
         }
-        allowed = {"bus", "query"} | fields_by_command[command]
+        allowed = {"bus"} | fields_by_command[command]
         unknown = set(arguments) - allowed
         if unknown:
             raise OscilloscopeError(
@@ -2361,14 +2387,8 @@ def _normalize_serial_worker_arguments(
         bus = arguments.get("bus")
         if isinstance(bus, bool) or not isinstance(bus, int):
             raise OscilloscopeError(f"{command} argument bus must be an integer")
-        if arguments.get("query") is True:
-            if set(arguments) != {"bus", "query"}:
-                raise OscilloscopeError(
-                    f"{command} query cannot be combined with configure arguments"
-                )
-            return dict(arguments)
-        if "query" in arguments:
-            raise OscilloscopeError(f"{command} argument query must be exactly true")
+        if query:
+            return {"bus": bus}
         fields = fields_by_command[command]
         if not any(field in arguments for field in fields):
             raise OscilloscopeError(
@@ -2383,16 +2403,25 @@ def _normalize_serial_worker_arguments(
                 raise OscilloscopeError(f"{command} argument {field} must be a number")
         return dict(arguments)
 
-    if command == "serial-query":
+    if command == "serial-status":
         if set(arguments) != {"bus"}:
-            raise OscilloscopeError("serial-query requires exactly bus")
+            raise OscilloscopeError("serial-status requires exactly bus")
         bus = arguments["bus"]
         if isinstance(bus, bool) or not isinstance(bus, int):
-            raise OscilloscopeError("serial-query argument bus must be an integer")
+            raise OscilloscopeError("serial-status argument bus must be an integer")
         return dict(arguments)
 
-    configure_key = "mode" if command == "serial-mode" else "enabled"
-    allowed = {"bus", "query", configure_key}
+    if command in {"serial-enable", "serial-disable"}:
+        if set(arguments) != {"bus"}:
+            raise OscilloscopeError(f"{command} requires exactly bus")
+        bus = arguments["bus"]
+        if isinstance(bus, bool) or not isinstance(bus, int):
+            raise OscilloscopeError(f"{command} argument bus must be an integer")
+        return {"bus": bus}
+
+    if command != "serial-mode":
+        return arguments
+    allowed = {"bus", "query", "mode"}
     unknown = set(arguments) - allowed
     if unknown:
         raise OscilloscopeError(
@@ -2409,21 +2438,14 @@ def _normalize_serial_worker_arguments(
         return dict(arguments)
     if "query" in arguments:
         raise OscilloscopeError(f"{command} argument query must be exactly true")
-    if set(arguments) != {"bus", configure_key}:
+    if set(arguments) != {"bus", "mode"}:
         raise OscilloscopeError(
-            f"{command} configure requires exactly bus and {configure_key}"
+            f"{command} configure requires exactly bus and mode"
         )
-
-    value = arguments[configure_key]
-    if command == "serial-mode":
-        if not isinstance(value, str):
-            raise OscilloscopeError("serial-mode argument mode must be a string")
-        return dict(arguments)
-    if not isinstance(value, bool):
-        raise OscilloscopeError(
-            "serial-display argument enabled must be a boolean"
-        )
-    return {"bus": bus, "enabled": "true" if value else "false"}
+    value = arguments["mode"]
+    if not isinstance(value, str):
+        raise OscilloscopeError("serial-mode argument mode must be a string")
+    return dict(arguments)
 
 
 def _normalize_save_export_worker_arguments(

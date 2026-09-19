@@ -811,13 +811,13 @@ def _build_parser() -> argparse.ArgumentParser:
     wgen_load_action.add_argument("--query", action="store_true")
     wgen_load_action.add_argument("--load", choices=WGEN_LOADS)
 
-    serial_query_parser = subparsers.add_parser(
-        "serial-query",
+    serial_status_parser = subparsers.add_parser(
+        "serial-status",
         allow_abbrev=False,
-        help="query raw aggregate serial decode bus setup",
+        help="show readable serial bus status (mode, display, protocol config)",
     )
-    _add_scope_connection_args(serial_query_parser)
-    _add_bus_arg(serial_query_parser)
+    _add_scope_connection_args(serial_status_parser)
+    _add_bus_arg(serial_status_parser)
 
     serial_mode_parser = subparsers.add_parser(
         "serial-mode",
@@ -830,25 +830,24 @@ def _build_parser() -> argparse.ArgumentParser:
     serial_mode_action.add_argument("--query", action="store_true")
     serial_mode_action.add_argument("--mode", choices=SERIAL_MODES)
 
-    serial_display_parser = subparsers.add_parser(
-        "serial-display",
-        allow_abbrev=False,
-        help="configure or query serial decode bus display state",
-    )
-    _add_scope_connection_args(serial_display_parser)
-    _add_bus_arg(serial_display_parser)
-    serial_display_action = serial_display_parser.add_mutually_exclusive_group(
-        required=True
-    )
-    serial_display_action.add_argument("--query", action="store_true")
-    serial_display_action.add_argument("--enabled", type=_strict_bool_arg)
+    for serial_switch_command, serial_switch_help in (
+        ("serial-enable", "enable serial decode bus display"),
+        ("serial-disable", "disable serial decode bus display"),
+    ):
+        serial_switch_parser = subparsers.add_parser(
+            serial_switch_command,
+            allow_abbrev=False,
+            help=serial_switch_help,
+        )
+        _add_scope_connection_args(serial_switch_parser)
+        _add_bus_arg(serial_switch_parser)
 
-    serial_lister_query_parser = subparsers.add_parser(
-        "serial-lister-query",
+    serial_lister_status_parser = subparsers.add_parser(
+        "serial-lister-status",
         allow_abbrev=False,
-        help="query global Serial Lister display and reference state",
+        help="show global Serial Lister display and reference state",
     )
-    _add_scope_connection_args(serial_lister_query_parser)
+    _add_scope_connection_args(serial_lister_status_parser)
 
     serial_lister_display_parser = subparsers.add_parser(
         "serial-lister-display",
@@ -880,13 +879,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--reference", choices=SERIAL_LISTER_REFERENCES
     )
 
-    serial_lister_export_parser = subparsers.add_parser(
-        "serial-lister-export",
+    serial_data_parser = subparsers.add_parser(
+        "serial-data",
         allow_abbrev=False,
         help="export host-side Serial Lister CSV data",
     )
-    _add_scope_connection_args(serial_lister_export_parser)
-    serial_lister_export_parser.add_argument(
+    _add_scope_connection_args(serial_data_parser)
+    serial_data_parser.add_argument(
         "--output",
         dest="output_path",
         default=None,
@@ -896,105 +895,142 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    serial_uart_parser = subparsers.add_parser(
-        "serial-uart", allow_abbrev=False, help="configure or query basic UART decode settings"
+    serial_uart_set_parser = subparsers.add_parser(
+        "serial-uart-set", allow_abbrev=False, help="configure UART decode settings"
     )
-    _add_scope_connection_args(serial_uart_parser)
-    _add_bus_arg(serial_uart_parser)
-    serial_uart_parser.add_argument("--query", action="store_true")
-    serial_uart_parser.add_argument("--rx-source", help=_SERIAL_SOURCE_HELP)
-    serial_uart_parser.add_argument("--tx-source", help=_SERIAL_SOURCE_HELP)
-    serial_uart_parser.add_argument("--baud-rate", type=int)
-    serial_uart_parser.add_argument("--data-bits", type=int)
-    serial_uart_parser.add_argument("--parity", choices=UART_PARITIES)
-    serial_uart_parser.add_argument("--polarity", choices=UART_POLARITIES)
-    serial_uart_parser.add_argument("--bit-order", choices=SERIAL_BIT_ORDERS)
+    _add_scope_connection_args(serial_uart_set_parser)
+    _add_bus_arg(serial_uart_set_parser)
+    serial_uart_set_parser.add_argument("--rx-source", help=_SERIAL_SOURCE_HELP)
+    serial_uart_set_parser.add_argument("--tx-source", help=_SERIAL_SOURCE_HELP)
+    serial_uart_set_parser.add_argument("--baud-rate", type=int)
+    serial_uart_set_parser.add_argument("--data-bits", type=int)
+    serial_uart_set_parser.add_argument("--parity", choices=UART_PARITIES)
+    serial_uart_set_parser.add_argument("--polarity", choices=UART_POLARITIES)
+    serial_uart_set_parser.add_argument("--bit-order", choices=SERIAL_BIT_ORDERS)
 
-    serial_uart_trigger_parser = subparsers.add_parser(
-        "serial-trigger-uart",
-        allow_abbrev=False,
-        help="configure or query basic UART trigger criteria",
+    serial_uart_show_parser = subparsers.add_parser(
+        "serial-uart-show", allow_abbrev=False, help="show UART decode settings"
     )
-    _add_scope_connection_args(serial_uart_trigger_parser)
-    _add_bus_arg(serial_uart_trigger_parser)
-    serial_uart_trigger_parser.add_argument("--query", action="store_true")
-    serial_uart_trigger_parser.add_argument("--type", choices=UART_TRIGGER_TYPES)
-    serial_uart_trigger_parser.add_argument("--data", type=int)
-    serial_uart_trigger_parser.add_argument(
+    _add_scope_connection_args(serial_uart_show_parser)
+    _add_bus_arg(serial_uart_show_parser)
+
+    serial_uart_trigger_set_parser = subparsers.add_parser(
+        "serial-trigger-uart-set",
+        allow_abbrev=False,
+        help="configure UART trigger criteria",
+    )
+    _add_scope_connection_args(serial_uart_trigger_set_parser)
+    _add_bus_arg(serial_uart_trigger_set_parser)
+    serial_uart_trigger_set_parser.add_argument("--type", choices=UART_TRIGGER_TYPES)
+    serial_uart_trigger_set_parser.add_argument("--data", type=int)
+    serial_uart_trigger_set_parser.add_argument(
         "--qualifier", choices=UART_TRIGGER_QUALIFIERS
     )
 
-    serial_i2c_trigger_parser = subparsers.add_parser(
-        "serial-trigger-i2c",
+    serial_uart_trigger_show_parser = subparsers.add_parser(
+        "serial-trigger-uart-show",
         allow_abbrev=False,
-        help="configure or query basic I2C trigger criteria",
+        help="show UART trigger criteria",
     )
-    _add_scope_connection_args(serial_i2c_trigger_parser)
-    _add_bus_arg(serial_i2c_trigger_parser)
-    serial_i2c_trigger_parser.add_argument("--query", action="store_true")
-    serial_i2c_trigger_parser.add_argument("--type", choices=I2C_TRIGGER_TYPES)
-    serial_i2c_trigger_parser.add_argument("--address", type=_integer_value)
-    serial_i2c_trigger_parser.add_argument("--data", type=_integer_value)
-    serial_i2c_trigger_parser.add_argument("--data2", type=_integer_value)
-    serial_i2c_trigger_parser.add_argument(
+    _add_scope_connection_args(serial_uart_trigger_show_parser)
+    _add_bus_arg(serial_uart_trigger_show_parser)
+
+    serial_i2c_trigger_set_parser = subparsers.add_parser(
+        "serial-trigger-i2c-set",
+        allow_abbrev=False,
+        help="configure I2C trigger criteria",
+    )
+    _add_scope_connection_args(serial_i2c_trigger_set_parser)
+    _add_bus_arg(serial_i2c_trigger_set_parser)
+    serial_i2c_trigger_set_parser.add_argument("--type", choices=I2C_TRIGGER_TYPES)
+    serial_i2c_trigger_set_parser.add_argument("--address", type=_integer_value)
+    serial_i2c_trigger_set_parser.add_argument("--data", type=_integer_value)
+    serial_i2c_trigger_set_parser.add_argument("--data2", type=_integer_value)
+    serial_i2c_trigger_set_parser.add_argument(
         "--qualifier", choices=I2C_TRIGGER_QUALIFIERS
     )
 
-    serial_spi_trigger_parser = subparsers.add_parser(
-        "serial-trigger-spi",
+    serial_i2c_trigger_show_parser = subparsers.add_parser(
+        "serial-trigger-i2c-show",
         allow_abbrev=False,
-        help="configure or query basic SPI trigger criteria",
+        help="show I2C trigger criteria",
     )
-    _add_scope_connection_args(serial_spi_trigger_parser)
-    _add_bus_arg(serial_spi_trigger_parser)
-    serial_spi_trigger_parser.add_argument("--query", action="store_true")
-    serial_spi_trigger_parser.add_argument("--type", choices=SPI_TRIGGER_TYPES)
-    serial_spi_trigger_parser.add_argument("--width", type=int)
-    serial_spi_trigger_parser.add_argument("--data")
+    _add_scope_connection_args(serial_i2c_trigger_show_parser)
+    _add_bus_arg(serial_i2c_trigger_show_parser)
 
-    serial_can_trigger_parser = subparsers.add_parser(
-        "serial-trigger-can",
+    serial_spi_trigger_set_parser = subparsers.add_parser(
+        "serial-trigger-spi-set",
         allow_abbrev=False,
-        help="configure or query basic CAN trigger criteria",
+        help="configure SPI trigger criteria",
     )
-    _add_scope_connection_args(serial_can_trigger_parser)
-    _add_bus_arg(serial_can_trigger_parser)
-    serial_can_trigger_parser.add_argument("--query", action="store_true")
-    serial_can_trigger_parser.add_argument("--type", choices=CAN_TRIGGER_TYPES)
-    serial_can_trigger_parser.add_argument("--id")
-    serial_can_trigger_parser.add_argument("--id-mode", choices=CAN_TRIGGER_ID_MODES)
-    serial_can_trigger_parser.add_argument("--data")
-    serial_can_trigger_parser.add_argument("--data-length", type=int)
+    _add_scope_connection_args(serial_spi_trigger_set_parser)
+    _add_bus_arg(serial_spi_trigger_set_parser)
+    serial_spi_trigger_set_parser.add_argument("--type", choices=SPI_TRIGGER_TYPES)
+    serial_spi_trigger_set_parser.add_argument("--width", type=int)
+    serial_spi_trigger_set_parser.add_argument("--data")
 
-    serial_i2c_parser = subparsers.add_parser(
-        "serial-i2c", allow_abbrev=False, help="configure or query basic I2C decode settings"
+    serial_spi_trigger_show_parser = subparsers.add_parser(
+        "serial-trigger-spi-show",
+        allow_abbrev=False,
+        help="show SPI trigger criteria",
     )
-    _add_scope_connection_args(serial_i2c_parser)
-    _add_bus_arg(serial_i2c_parser)
-    serial_i2c_parser.add_argument("--query", action="store_true")
-    serial_i2c_parser.add_argument("--clock-source", help=_SERIAL_SOURCE_HELP)
-    serial_i2c_parser.add_argument("--data-source", help=_SERIAL_SOURCE_HELP)
-    serial_i2c_parser.add_argument("--address-size", choices=I2C_ADDRESS_SIZES)
+    _add_scope_connection_args(serial_spi_trigger_show_parser)
+    _add_bus_arg(serial_spi_trigger_show_parser)
 
-    serial_spi_parser = subparsers.add_parser(
-        "serial-spi", allow_abbrev=False, help="configure or query basic SPI decode settings"
+    serial_can_trigger_set_parser = subparsers.add_parser(
+        "serial-trigger-can-set",
+        allow_abbrev=False,
+        help="configure CAN trigger criteria",
     )
-    _add_scope_connection_args(serial_spi_parser)
-    _add_bus_arg(serial_spi_parser)
-    serial_spi_parser.add_argument("--query", action="store_true")
-    serial_spi_parser.add_argument("--clock-source", help=_SERIAL_SOURCE_HELP)
-    serial_spi_parser.add_argument("--mosi-source", help=_SERIAL_SOURCE_HELP)
-    serial_spi_parser.add_argument("--miso-source", help=_SERIAL_SOURCE_HELP)
-    serial_spi_parser.add_argument("--frame-source", help=_SERIAL_SOURCE_HELP)
-    serial_spi_parser.add_argument("--clock-slope", choices=SPI_CLOCK_SLOPES)
-    serial_spi_parser.add_argument("--bit-order", choices=SERIAL_BIT_ORDERS)
-    serial_spi_parser.add_argument("--word-width", type=int)
-    serial_spi_parser.add_argument(
+    _add_scope_connection_args(serial_can_trigger_set_parser)
+    _add_bus_arg(serial_can_trigger_set_parser)
+    serial_can_trigger_set_parser.add_argument("--type", choices=CAN_TRIGGER_TYPES)
+    serial_can_trigger_set_parser.add_argument("--id")
+    serial_can_trigger_set_parser.add_argument("--id-mode", choices=CAN_TRIGGER_ID_MODES)
+    serial_can_trigger_set_parser.add_argument("--data")
+    serial_can_trigger_set_parser.add_argument("--data-length", type=int)
+
+    serial_can_trigger_show_parser = subparsers.add_parser(
+        "serial-trigger-can-show",
+        allow_abbrev=False,
+        help="show CAN trigger criteria",
+    )
+    _add_scope_connection_args(serial_can_trigger_show_parser)
+    _add_bus_arg(serial_can_trigger_show_parser)
+
+    serial_i2c_set_parser = subparsers.add_parser(
+        "serial-i2c-set", allow_abbrev=False, help="configure I2C decode settings"
+    )
+    _add_scope_connection_args(serial_i2c_set_parser)
+    _add_bus_arg(serial_i2c_set_parser)
+    serial_i2c_set_parser.add_argument("--clock-source", help=_SERIAL_SOURCE_HELP)
+    serial_i2c_set_parser.add_argument("--data-source", help=_SERIAL_SOURCE_HELP)
+    serial_i2c_set_parser.add_argument("--address-size", choices=I2C_ADDRESS_SIZES)
+
+    serial_i2c_show_parser = subparsers.add_parser(
+        "serial-i2c-show", allow_abbrev=False, help="show I2C decode settings"
+    )
+    _add_scope_connection_args(serial_i2c_show_parser)
+    _add_bus_arg(serial_i2c_show_parser)
+
+    serial_spi_set_parser = subparsers.add_parser(
+        "serial-spi-set", allow_abbrev=False, help="configure SPI decode settings"
+    )
+    _add_scope_connection_args(serial_spi_set_parser)
+    _add_bus_arg(serial_spi_set_parser)
+    serial_spi_set_parser.add_argument("--clock-source", help=_SERIAL_SOURCE_HELP)
+    serial_spi_set_parser.add_argument("--mosi-source", help=_SERIAL_SOURCE_HELP)
+    serial_spi_set_parser.add_argument("--miso-source", help=_SERIAL_SOURCE_HELP)
+    serial_spi_set_parser.add_argument("--frame-source", help=_SERIAL_SOURCE_HELP)
+    serial_spi_set_parser.add_argument("--clock-slope", choices=SPI_CLOCK_SLOPES)
+    serial_spi_set_parser.add_argument("--bit-order", choices=SERIAL_BIT_ORDERS)
+    serial_spi_set_parser.add_argument("--word-width", type=int)
+    serial_spi_set_parser.add_argument(
         "--framing",
         choices=SPI_FRAMINGS,
         help="canonical framing: chip-select, no-chip-select, or timeout",
     )
-    serial_spi_parser.add_argument(
+    serial_spi_set_parser.add_argument(
         "--clock-timeout",
         type=float,
         help=(
@@ -1003,16 +1039,27 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    serial_can_parser = subparsers.add_parser(
-        "serial-can", allow_abbrev=False, help="configure or query basic CAN decode settings"
+    serial_spi_show_parser = subparsers.add_parser(
+        "serial-spi-show", allow_abbrev=False, help="show SPI decode settings"
     )
-    _add_scope_connection_args(serial_can_parser)
-    _add_bus_arg(serial_can_parser)
-    serial_can_parser.add_argument("--query", action="store_true")
-    serial_can_parser.add_argument("--source", help=_SERIAL_SOURCE_HELP)
-    serial_can_parser.add_argument("--baud-rate", type=int)
-    serial_can_parser.add_argument("--signal-definition", choices=CAN_SIGNAL_DEFINITIONS)
-    serial_can_parser.add_argument("--sample-point", type=float)
+    _add_scope_connection_args(serial_spi_show_parser)
+    _add_bus_arg(serial_spi_show_parser)
+
+    serial_can_set_parser = subparsers.add_parser(
+        "serial-can-set", allow_abbrev=False, help="configure CAN decode settings"
+    )
+    _add_scope_connection_args(serial_can_set_parser)
+    _add_bus_arg(serial_can_set_parser)
+    serial_can_set_parser.add_argument("--source", help=_SERIAL_SOURCE_HELP)
+    serial_can_set_parser.add_argument("--baud-rate", type=int)
+    serial_can_set_parser.add_argument("--signal-definition", choices=CAN_SIGNAL_DEFINITIONS)
+    serial_can_set_parser.add_argument("--sample-point", type=float)
+
+    serial_can_show_parser = subparsers.add_parser(
+        "serial-can-show", allow_abbrev=False, help="show CAN decode settings"
+    )
+    _add_scope_connection_args(serial_can_show_parser)
+    _add_bus_arg(serial_can_show_parser)
 
     search_state_parser = subparsers.add_parser(
         "search-state", allow_abbrev=False, help="configure or query waveform search state"

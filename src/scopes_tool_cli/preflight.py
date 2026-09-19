@@ -385,18 +385,24 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
     }:
         _validate_wgen_args(args)
     if getattr(args, "command", None) in {
-        "serial-query",
+        "serial-status",
         "serial-mode",
-        "serial-display",
-        "serial-uart",
-        "serial-trigger-uart",
-        "serial-i2c",
-        "serial-spi",
-        "serial-can",
-        "serial-lister-query",
+        "serial-enable",
+        "serial-disable",
+        "serial-uart-set",
+        "serial-uart-show",
+        "serial-trigger-uart-set",
+        "serial-trigger-uart-show",
+        "serial-i2c-set",
+        "serial-i2c-show",
+        "serial-spi-set",
+        "serial-spi-show",
+        "serial-can-set",
+        "serial-can-show",
+        "serial-lister-status",
         "serial-lister-display",
         "serial-lister-reference",
-        "serial-lister-export",
+        "serial-data",
     }:
         _validate_serial_args(args)
     if getattr(args, "command", None) in {
@@ -770,39 +776,47 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
 
 def _validate_serial_args(args: argparse.Namespace) -> None:
     if args.command in {
-        "serial-lister-query",
+        "serial-lister-status",
         "serial-lister-display",
         "serial-lister-reference",
-        "serial-lister-export",
+        "serial-data",
     }:
         _validate_serial_lister_args(args)
         return
     capabilities = _pre_open_capabilities(args)
-    if args.command == "serial-trigger-uart":
+    if args.command in {"serial-trigger-uart-set", "serial-trigger-uart-show"}:
+        query = args.command.endswith("-show")
         validate_serial_uart_trigger_request(
             args.bus,
-            query=args.query,
-            type=args.type,
-            data=args.data,
-            qualifier=args.qualifier,
+            query=query,
+            type=None if query else args.type,
+            data=None if query else args.data,
+            qualifier=None if query else args.qualifier,
             capabilities=capabilities,
         )
         return
     trigger_validators = {
-        "serial-trigger-i2c": validate_serial_i2c_trigger_request,
-        "serial-trigger-spi": validate_serial_spi_trigger_request,
-        "serial-trigger-can": validate_serial_can_trigger_request,
+        "serial-trigger-i2c-set": validate_serial_i2c_trigger_request,
+        "serial-trigger-i2c-show": validate_serial_i2c_trigger_request,
+        "serial-trigger-spi-set": validate_serial_spi_trigger_request,
+        "serial-trigger-spi-show": validate_serial_spi_trigger_request,
+        "serial-trigger-can-set": validate_serial_can_trigger_request,
+        "serial-trigger-can-show": validate_serial_can_trigger_request,
     }
     if args.command in trigger_validators:
+        query = args.command.endswith("-show")
         trigger_validators[args.command](
             args.bus,
-            query=args.query,
+            query=query,
             **{
-                key: getattr(args, key)
+                key: getattr(args, key, None)
                 for key in {
-                    "serial-trigger-i2c": {"type", "address", "data", "data2", "qualifier"},
-                    "serial-trigger-spi": {"type", "width", "data"},
-                    "serial-trigger-can": {"type", "id", "id_mode", "data", "data_length"},
+                    "serial-trigger-i2c-set": {"type", "address", "data", "data2", "qualifier"},
+                    "serial-trigger-i2c-show": {"type", "address", "data", "data2", "qualifier"},
+                    "serial-trigger-spi-set": {"type", "width", "data"},
+                    "serial-trigger-spi-show": {"type", "width", "data"},
+                    "serial-trigger-can-set": {"type", "id", "id_mode", "data", "data_length"},
+                    "serial-trigger-can-show": {"type", "id", "id_mode", "data", "data_length"},
                 }[args.command]
             },
             capabilities=capabilities,
@@ -812,7 +826,7 @@ def _validate_serial_args(args: argparse.Namespace) -> None:
         validate_serial_bus(args.bus, capabilities)
         if args.command == "serial-mode" and not args.query:
             validate_serial_mode(args.mode, capabilities)
-    if args.command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
+    if args.command in {"serial-uart-set", "serial-i2c-set", "serial-spi-set", "serial-can-set"}:
         _validate_serial_protocol_args(args, capabilities)
 
 def _validate_serial_lister_args(args: argparse.Namespace) -> None:
@@ -829,19 +843,13 @@ def _validate_serial_protocol_args(
     args: argparse.Namespace, capabilities: ScopeCapabilities | None
 ) -> None:
     fields_by_command = {
-        "serial-uart": ("rx_source", "tx_source", "baud_rate", "data_bits", "parity", "polarity", "bit_order"),
-        "serial-i2c": ("clock_source", "data_source", "address_size"),
-        "serial-spi": ("clock_source", "mosi_source", "miso_source", "frame_source", "clock_slope", "bit_order", "word_width", "framing", "clock_timeout"),
-        "serial-can": ("source", "baud_rate", "signal_definition", "sample_point"),
+        "serial-uart-set": ("rx_source", "tx_source", "baud_rate", "data_bits", "parity", "polarity", "bit_order"),
+        "serial-i2c-set": ("clock_source", "data_source", "address_size"),
+        "serial-spi-set": ("clock_source", "mosi_source", "miso_source", "frame_source", "clock_slope", "bit_order", "word_width", "framing", "clock_timeout"),
+        "serial-can-set": ("source", "baud_rate", "signal_definition", "sample_point"),
     }
     fields = fields_by_command[args.command]
     supplied = {field: getattr(args, field) for field in fields if getattr(args, field) is not None}
-    if args.query:
-        if supplied:
-            raise ParameterValidationError(
-                f"{args.command} --query cannot be combined with configure arguments."
-            )
-        return
     if not supplied:
         raise ParameterValidationError(
             f"{args.command} configure requires at least one setting."
@@ -849,13 +857,13 @@ def _validate_serial_protocol_args(
     if capabilities is None:
         return
     protocol_mode = {
-        "serial-uart": "uart",
-        "serial-i2c": "i2c",
-        "serial-spi": "spi",
-        "serial-can": "can",
+        "serial-uart-set": "uart",
+        "serial-i2c-set": "i2c",
+        "serial-spi-set": "spi",
+        "serial-can-set": "can",
     }[args.command]
     validate_serial_mode(protocol_mode, capabilities)
-    if args.command == "serial-uart":
+    if args.command == "serial-uart-set":
         serial_uart_configure_commands(
             args.bus,
             _serial_cli_values(
@@ -870,7 +878,7 @@ def _validate_serial_protocol_args(
                 bit_order=args.bit_order,
             ),
         )
-    elif args.command == "serial-i2c":
+    elif args.command == "serial-i2c-set":
         serial_i2c_configure_commands(
             args.bus,
             _serial_cli_values(
@@ -881,7 +889,7 @@ def _validate_serial_protocol_args(
                 address_size=args.address_size,
             ),
         )
-    elif args.command == "serial-spi":
+    elif args.command == "serial-spi-set":
         serial_spi_configure_commands(
             args.bus,
             _serial_cli_values(
@@ -937,7 +945,7 @@ def _serial_cli_values(
     if normalized.get("signal_definition") is not None:
         normalized["signal_definition"] = normalize_can_signal_definition(normalized["signal_definition"])
     if normalized.get("baud_rate") is not None:
-        if protocol == "serial-can":
+        if protocol == "serial-can-set":
             normalized["baud_rate"] = validate_can_baud_rate(normalized["baud_rate"])
         else:
             normalized["baud_rate"] = validate_uart_baud_rate(normalized["baud_rate"], capabilities)
@@ -951,7 +959,7 @@ def _serial_cli_values(
         value = normalized["clock_timeout"]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 1e-7 <= float(value) <= 10.0 or not math.isfinite(float(value)):
             raise ParameterValidationError("SPI clock timeout must be a number in range 1e-07-10.0.")
-    if protocol == "serial-spi":
+    if protocol == "serial-spi-set":
         validate_spi_framing_clock_timeout(
             normalized.get("framing"), normalized.get("clock_timeout")
         )

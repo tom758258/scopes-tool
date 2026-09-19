@@ -310,25 +310,34 @@ Control and setup:
   nullable `function` plus `function_raw`, `frequency_hz`/`frequency_raw`,
   `amplitude_volts`/`voltage_raw`, `offset_volts`/`offset_raw`, and
   `load`/`load_raw`. Unknown function readbacks use `function: null`.
-- `serial-query`: `operation: "query"`, `command`, integer `bus`, and the
-  trimmed raw aggregate subsystem response in `raw`. It does not derive mode
-  or display fields.
+- `serial-status`: `operation: "status"`, ordered `commands`, integer `bus`,
+  nullable canonical `mode` with preserved `raw_mode`, boolean `display`,
+  nullable `protocol` (`uart`, `i2c`, `spi`, or `can`), and nullable `config`.
+  When the bus mode is one of the four CLI-supported protocols, status queries
+  that protocol's decode settings and `config` carries the same canonical and
+  `raw_*` fields as the matching `serial-<protocol>-show` result, minus the
+  duplicated `bus`/`mode`/`raw_mode`. Any other mode uses `protocol: null`
+  and `config: null` without querying unrelated subsystems. A failed mode,
+  display, or protocol query fails the whole status; `null` never marks a
+  partial success.
 - `serial-mode`: `operation`, `command`, integer `bus`, nullable canonical
   `mode`, and nullable `raw_mode`. Configure results use the configured mode,
   `raw_mode: null`, and `state_changing: true`; query results preserve
   `raw_mode`. A `NONE` readback uses `mode: null`.
-- `serial-display`: `operation`, `command`, integer `bus`, boolean `enabled`,
-  and nullable `raw_state`. Configure results use `raw_state: null` and
-  `state_changing: true`; query results preserve `raw_state`.
-- `serial-uart`, `serial-i2c`, `serial-spi`, and `serial-can`: `operation`,
-  `commands`, integer `bus`, canonical protocol fields, and corresponding
-  nullable `raw_*` readbacks. Configure results preserve supplied canonical
-  values, set raw fields to `null`, and include `state_changing: true`; query
-  results query `MODE?` first, preserve raw values, and fail before protocol
-  fields when the current mode does not match. Sources are `channelN` or
-  `external`; I2C is represented by the instrument `IIC` token, and CAN uses
-  `difl` as the canonical differential signal value.
-- `serial-trigger-uart`: `operation`, `protocol: "uart"`, integer `bus`,
+- `serial-enable` and `serial-disable`: `operation: "configure"`, `command`,
+  integer `bus`, boolean `enabled`, nullable `raw_state` (always `null` for
+  configure results), and `state_changing: true`. There is no display query
+  spelling; display state is read through `serial-status`.
+- `serial-uart-set`, `serial-i2c-set`, `serial-spi-set`, and `serial-can-set`:
+  `operation: "configure"`, ordered `commands`, integer `bus`, supplied
+  canonical protocol fields with `null` raw fields, and `state_changing:
+  true`. The matching `serial-uart-show`, `serial-i2c-show`,
+  `serial-spi-show`, and `serial-can-show` commands return `operation:
+  "query"`, query `MODE?` first, preserve raw values, and fail before
+  protocol fields when the current mode does not match. Sources are
+  `channelN` or `external`; I2C is represented by the instrument `IIC`
+  token, and CAN uses `difl` as the canonical differential signal value.
+- `serial-trigger-uart-set` and `serial-trigger-uart-show`: `operation`,
   `mode`/`raw_mode`, `selected`, `trigger_mode`/`raw_trigger_mode`, and
   UART trigger `type`/`raw_type`. Data trigger results also include
   `data`/`raw_data` and `qualifier`/`raw_qualifier`; these fields are null for
@@ -342,7 +351,9 @@ Control and setup:
   command does not modify decode settings or run, single, wait, or capture.
   The supported UART trigger subset excludes burst, idle-time, 9-bit,
   pattern-sequence, and other protocol triggers.
-- `serial-trigger-i2c`, `serial-trigger-spi`, and `serial-trigger-can`:
+- `serial-trigger-i2c-set`, `serial-trigger-i2c-show`,
+  `serial-trigger-spi-set`, `serial-trigger-spi-show`,
+  `serial-trigger-can-set`, and `serial-trigger-can-show`:
   `operation`, protocol, integer `bus`, `mode`/`raw_mode`, `selected`,
   `trigger_mode`/`raw_trigger_mode`, canonical `type`/`raw_type`, and
   protocol-specific canonical/raw fields. Configure results include
@@ -353,7 +364,7 @@ Control and setup:
   `:SBUS<n>:MODE?` and `:TRIGger:MODE?`. These commands require Serial
   configuration first, do not change decode settings or display, and do not
   run, single, wait, or capture.
-- `serial-lister-query`: `operation: "query"`, ordered `commands`, canonical
+- `serial-lister-status`: `operation: "query"`, ordered `commands`, canonical
   `display` and `reference`, and preserved `raw_display` and `raw_reference`.
   The aggregate query does not request `:LISTer:DATA?`.
 - `serial-lister-display`: `operation`, `command`, canonical `display`, and
@@ -361,7 +372,7 @@ Control and setup:
 - `serial-lister-reference`: `operation`, `command`, canonical `reference`,
   and nullable `raw_reference`. Configure results include
   `state_changing: true`.
-- `serial-lister-export`: `operation: "export"`, `command: ":LISTer:DATA?"`,
+- `serial-data`: `operation: "export"`, `command: ":LISTer:DATA?"`,
   `output_path`, and `bytes_written`. The host CSV is listed in the existing
   top-level `files` artifact list; CSV bytes are not embedded in JSON. Dry-run
   results do not claim transferred bytes and use the existing null/omitted

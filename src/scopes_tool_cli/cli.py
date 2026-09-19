@@ -225,7 +225,6 @@ from scopes_tool_core.search import (
     validate_search_mode,
 )
 from scopes_tool_core.serial import (
-    serial_bus_query,
     serial_display_command,
     serial_display_query,
     serial_mode_command,
@@ -1196,12 +1195,17 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         if not args.query:
             result.update(load=args.load, state_changing=True)
         return [target, ":SYSTem:ERRor?"], [], result
-    if command == "serial-query":
-        target = serial_bus_query(args.bus)
-        return [target, ":SYSTem:ERRor?"], [], {
-            "operation": "query",
-            "command": target,
+    if command == "serial-status":
+        commands = [serial_mode_query(args.bus), serial_display_query(args.bus)]
+        return [*commands, ":SYSTem:ERRor?"], [], {
+            "operation": "status",
+            "commands": commands,
             "bus": args.bus,
+            "mode": None,
+            "raw_mode": None,
+            "display": None,
+            "protocol": None,
+            "config": None,
         }
     if command == "serial-mode":
         target = (
@@ -1219,21 +1223,17 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         if not args.query:
             result.update(mode=args.mode, state_changing=True)
         return [target, ":SYSTem:ERRor?"], [], result
-    if command == "serial-display":
-        target = (
-            serial_display_query(args.bus)
-            if args.query
-            else serial_display_command(args.bus, args.enabled)
-        )
-        result = {
-            "operation": "query" if args.query else "configure",
+    if command in {"serial-enable", "serial-disable"}:
+        enabled = command == "serial-enable"
+        target = serial_display_command(args.bus, enabled)
+        return [target, ":SYSTem:ERRor?"], [], {
+            "operation": "configure",
             "command": target,
             "bus": args.bus,
+            "enabled": enabled,
+            "state_changing": True,
         }
-        if not args.query:
-            result.update(enabled=args.enabled, state_changing=True)
-        return [target, ":SYSTem:ERRor?"], [], result
-    if command == "serial-lister-query":
+    if command == "serial-lister-status":
         commands = list(serial_lister_query_commands().values())
         return [*commands, ":SYSTem:ERRor?"], [], {
             "operation": "query",
@@ -1269,7 +1269,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         if not args.query:
             result.update(reference=args.reference, state_changing=True)
         return [target, ":SYSTem:ERRor?"], [], result
-    if command == "serial-lister-export":
+    if command == "serial-data":
         output_path = serial._serial_lister_output_path(args)
         target = serial_lister_data_query()
         return [target, ":SYSTem:ERRor?"], [
@@ -1280,16 +1280,17 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
             "output_path": str(output_path),
             "bytes_written": None,
         }
-    if command == "serial-trigger-uart":
+    if command in {"serial-trigger-uart-set", "serial-trigger-uart-show"}:
+        query = command.endswith("-show")
         bus, trigger_type, data, qualifier = validate_serial_uart_trigger_request(
             args.bus,
-            query=args.query,
-            type=args.type,
-            data=args.data,
-            qualifier=args.qualifier,
+            query=query,
+            type=None if query else args.type,
+            data=None if query else args.data,
+            qualifier=None if query else args.qualifier,
             capabilities=capabilities,
         )
-        if args.query:
+        if query:
             commands = [
                 serial_mode_query(bus),
                 trigger_mode_query(),
@@ -1325,13 +1326,14 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 "state_changing": True,
             }
         return [*commands, ":SYSTem:ERRor?"], [], result
-    if command == "serial-trigger-i2c":
+    if command in {"serial-trigger-i2c-set", "serial-trigger-i2c-show"}:
+        query = command.endswith("-show")
         bus, trigger_type, address, data, data2, qualifier = validate_serial_i2c_trigger_request(
-            args.bus, query=args.query, type=args.type, address=args.address,
-            data=args.data, data2=args.data2, qualifier=args.qualifier,
+            args.bus, query=query, type=None if query else args.type, address=None if query else args.address,
+            data=None if query else args.data, data2=None if query else args.data2, qualifier=None if query else args.qualifier,
             capabilities=capabilities,
         )
-        if args.query:
+        if query:
             commands = [serial_mode_query(bus), trigger_mode_query()]
             result = {"operation": "query", "commands": commands, "protocol": "i2c", "bus": bus}
         else:
@@ -1348,12 +1350,13 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 "state_changing": True,
             }
         return [*commands, ":SYSTem:ERRor?"], [], result
-    if command == "serial-trigger-spi":
+    if command in {"serial-trigger-spi-set", "serial-trigger-spi-show"}:
+        query = command.endswith("-show")
         bus, trigger_type, width, data = validate_serial_spi_trigger_request(
-            args.bus, query=args.query, type=args.type, width=args.width, data=args.data,
+            args.bus, query=query, type=None if query else args.type, width=None if query else args.width, data=None if query else args.data,
             capabilities=capabilities,
         )
-        if args.query:
+        if query:
             commands = [serial_mode_query(bus), trigger_mode_query()]
             result = {"operation": "query", "commands": commands, "protocol": "spi", "bus": bus}
         else:
@@ -1367,12 +1370,13 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 "state_changing": True,
             }
         return [*commands, ":SYSTem:ERRor?"], [], result
-    if command == "serial-trigger-can":
+    if command in {"serial-trigger-can-set", "serial-trigger-can-show"}:
+        query = command.endswith("-show")
         bus, trigger_type, id_value, id_mode, data, data_length = validate_serial_can_trigger_request(
-            args.bus, query=args.query, type=args.type, id=args.id, id_mode=args.id_mode,
-            data=args.data, data_length=args.data_length, capabilities=capabilities,
+            args.bus, query=query, type=None if query else args.type, id=None if query else args.id, id_mode=None if query else args.id_mode,
+            data=None if query else args.data, data_length=None if query else args.data_length, capabilities=capabilities,
         )
-        if args.query:
+        if query:
             commands = [serial_mode_query(bus), trigger_mode_query()]
             result = {"operation": "query", "commands": commands, "protocol": "can", "bus": bus}
         else:
@@ -1387,14 +1391,15 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 "raw_data_length": None, "state_changing": True,
             }
         return [*commands, ":SYSTem:ERRor?"], [], result
-    if command in {"serial-uart", "serial-i2c", "serial-spi", "serial-can"}:
+    if command in {"serial-uart-set", "serial-uart-show", "serial-i2c-set", "serial-i2c-show", "serial-spi-set", "serial-spi-show", "serial-can-set", "serial-can-show"}:
+        query = command.endswith("-show")
         commands = serial._serial_protocol_commands(args, capabilities)
         result = {
-            "operation": "query" if args.query else "configure",
+            "operation": "query" if query else "configure",
             "commands": commands,
             "bus": args.bus,
         }
-        if not args.query:
+        if not query:
             result.update(
                 preflight._serial_cli_values(
                     capabilities,

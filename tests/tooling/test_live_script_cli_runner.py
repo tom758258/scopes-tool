@@ -1591,9 +1591,9 @@ def test_serial_lister_acquisition_safety_structure() -> None:
         'Invoke-SerialCase -Name "UART Serial Search"', lister_case_start
     )
     lister_case = script[lister_case_start:search_case_start]
-    assert lister_case.count('"serial-lister-export"') == 1
-    assert lister_case.count('"serial-display"') == 1
-    assert lister_case.index('"serial-display"') < lister_case.index(
+    assert lister_case.count('"serial-data"') == 1
+    assert lister_case.count('"serial-enable"') == 1
+    assert lister_case.index('"serial-enable"') < lister_case.index(
         '"serial-lister-display"'
     )
     assert ":SAVE:LISTer" not in script
@@ -1607,18 +1607,26 @@ def test_serial_protocol_coverage_structure() -> None:
     )
 
     expected_preflight = [
-        '-Command "serial-uart"',
-        '-Command "serial-i2c"',
-        '-Command "serial-spi"',
-        '-Command "serial-can"',
+        '-Command "serial-uart-set"',
+        '-Command "serial-uart-show"',
+        '-Command "serial-i2c-set"',
+        '-Command "serial-i2c-show"',
+        '-Command "serial-spi-set"',
+        '-Command "serial-spi-show"',
+        '-Command "serial-can-set"',
+        '-Command "serial-can-show"',
         '-Command "serial-search-uart"',
         '-Command "serial-search-i2c"',
         '-Command "serial-search-spi"',
         '-Command "serial-search-can"',
-        '-Command "serial-trigger-uart"',
-        '-Command "serial-trigger-i2c"',
-        '-Command "serial-trigger-spi"',
-        '-Command "serial-trigger-can"',
+        '-Command "serial-trigger-uart-set"',
+        '-Command "serial-trigger-uart-show"',
+        '-Command "serial-trigger-i2c-set"',
+        '-Command "serial-trigger-i2c-show"',
+        '-Command "serial-trigger-spi-set"',
+        '-Command "serial-trigger-spi-show"',
+        '-Command "serial-trigger-can-set"',
+        '-Command "serial-trigger-can-show"',
     ]
     for marker in expected_preflight:
         assert marker in script
@@ -1693,7 +1701,7 @@ def test_serial_protocol_query_preflights_preserve_simulator_contract() -> None:
     for protocol in ("i2c", "spi", "can"):
         stage_start = preflight.index(
             f'Invoke-ModeCli -Stage "preflight-{protocol}-query" '
-            f'-Command "serial-{protocol}"'
+            f'-Command "serial-{protocol}-show"'
         )
         stage_end = preflight.find("\n    Invoke-ModeCli", stage_start + 1)
         if stage_end == -1:
@@ -1706,14 +1714,13 @@ def test_serial_protocol_query_preflights_preserve_simulator_contract() -> None:
             sys.executable,
             "-m",
             "scopes_tool_cli.cli",
-            f"serial-{protocol}",
+            f"serial-{protocol}-show",
             "--simulate",
             "--model",
             "keysight-dsox4034a",
             "--json",
             "--bus",
             "1",
-            "--query",
         ]
         simulated = subprocess.run(
             command,
@@ -1890,7 +1897,7 @@ function Invoke-LiveCli {
     if ($Command -eq "single" -and $Scenario -eq "single-failure") {
         throw "single rejected"
     }
-    if ($Command -eq "serial-lister-query") {
+    if ($Command -eq "serial-lister-status") {
         return [pscustomobject]@{
             result = [pscustomobject]@{
                 display = "bus1"
@@ -1898,9 +1905,9 @@ function Invoke-LiveCli {
             }
         }
     }
-    if ($Command -eq "serial-display") {
+    if ($Command -in @("serial-enable", "serial-disable")) {
         return [pscustomobject]@{
-            result = [pscustomobject]@{ enabled = $true }
+            result = [pscustomobject]@{ enabled = ($Command -eq "serial-enable") }
         }
     }
     if ($Command -eq "system-operation-status") {
@@ -1963,14 +1970,14 @@ function Invoke-CliRaw {
             )
         }
         Stderr = ""
-        Command = "fake-cli serial-lister-export"
+        Command = "fake-cli serial-data"
     }
 }
 
 Invoke-Expression $listerCommands[0].Extent.Text
 
 $exportInvocations = @($script:Invocations | Where-Object {
-    $_.command -eq "serial-lister-export"
+    $_.command -eq "serial-data"
 })
 $outputExists = Test-Path -LiteralPath $OutputPath -PathType Leaf
 $outputBytes = if ($outputExists) {
@@ -2042,20 +2049,18 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
     expected_lister_prefix = [
         "serial-lister-display",
         "serial-lister-reference",
-        "serial-lister-query",
+        "serial-lister-status",
         "single",
     ]
     expected_prefix = expected_lister_prefix
     if not serial_display_enabled:
-        expected_prefix = ["serial-display"] + expected_lister_prefix
+        expected_prefix = ["serial-enable"] + expected_lister_prefix
     assert commands[: len(expected_prefix)] == expected_prefix
     lister_display_index = 0
     if not serial_display_enabled:
         assert result["invocations"][0]["arguments"] == [
             "--bus",
             "1",
-            "--enabled",
-            "true",
         ]
         lister_display_index = 1
     assert result["invocations"][lister_display_index]["arguments"] == [
@@ -2068,7 +2073,8 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
         assert all(
             entry["command"]
             not in {
-                "serial-display",
+                "serial-enable",
+                "serial-disable",
                 "run",
                 "stop-acquisition",
                 "force-trigger",
@@ -2077,7 +2083,7 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
             for entry in result["invocations"]
         )
     else:
-        assert commands.count("serial-display") == 1
+        assert commands.count("serial-enable") == 1
         assert all(
             entry["command"]
             not in {"run", "stop-acquisition", "force-trigger", "digitize"}
@@ -2105,7 +2111,7 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
         assert result["status"] == "PASS", result["detail"]
         assert result["detail"] == ""
         assert result["export_count"] == 1
-        assert commands[-1] == "serial-lister-export"
+        assert commands[-1] == "serial-data"
         assert result["invocations"][-1]["arguments"][-2:] == [
             "--output",
             str(output_path),
@@ -2352,15 +2358,16 @@ function Invoke-LiveCli {
         $Stage -eq "cleanup-serial-display") {
         throw "display restore rejected"
     }
-    if ($Command -ne "serial-display") {
+    if ($Command -in @("serial-enable", "serial-disable")) {
+        $script:DisplayState = $Command -eq "serial-enable"
+    } elseif ($Command -eq "serial-status") {
+        # Readback only; display state is tracked locally.
+    } else {
         throw ("Unexpected cleanup command: " + $Command)
-    }
-    if ($Arguments -contains "--enabled") {
-        $script:DisplayState = $Arguments[3] -eq "true"
     }
     return [pscustomobject]@{
         result = [pscustomobject]@{
-            enabled = $script:DisplayState
+            display = $script:DisplayState
         }
     }
 }
@@ -2431,7 +2438,7 @@ try {
     assert result["initial_enabled"] is original_enabled
     if scenario == "restore-failure":
         assert result["final_enabled"] is False
-        assert result["commands"] == ["serial-display"]
+        assert result["commands"] == ["serial-disable"]
         assert result["stages"] == ["cleanup-serial-display"]
         assert result["drain_calls"] == [
             {
@@ -2441,16 +2448,16 @@ try {
         ]
         assert "Serial display: display restore rejected" in result["restore_error"]
     else:
-        expected_text = "true" if original_enabled else "false"
+        expected_restore = "serial-enable" if original_enabled else "serial-disable"
         assert result["final_enabled"] is original_enabled
-        assert result["commands"] == ["serial-display", "serial-display"]
+        assert result["commands"] == [expected_restore, "serial-status"]
         assert result["stages"] == [
             "cleanup-serial-display",
             "cleanup-serial-display-query",
         ]
         assert result["arguments"] == [
-            ["--bus", "1", "--enabled", expected_text],
-            ["--bus", "1", "--query"],
+            ["--bus", "1"],
+            ["--bus", "1"],
         ]
         assert result["drain_calls"] == []
         assert result["restore_error"] == ""
@@ -2540,7 +2547,13 @@ function Invoke-LiveCli {
             mode = "rx-data"; data = 1; qualifier = "equal"
         }}
     }
-    if ($Command -eq "serial-trigger-uart") {
+    if ($Command -eq "serial-trigger-uart-set") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "uart"; bus = 1; selected = $true
+            type = "rx-data"; data = 1; qualifier = "equal"
+        }}
+    }
+    if ($Command -eq "serial-trigger-uart-show") {
         return [pscustomobject]@{ result = [pscustomobject]@{
             protocol = "uart"; bus = 1; selected = $true
             type = "rx-data"; data = 1; qualifier = "equal"
@@ -2552,7 +2565,13 @@ function Invoke-LiveCli {
             mode = "read7"; address = 80; data = 1; qualifier = "equal"
         }}
     }
-    if ($Command -eq "serial-trigger-i2c") {
+    if ($Command -eq "serial-trigger-i2c-set") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "i2c"; bus = 1; selected = $true
+            type = "read7"; address = 80; data = 1
+        }}
+    }
+    if ($Command -eq "serial-trigger-i2c-show") {
         return [pscustomobject]@{ result = [pscustomobject]@{
             protocol = "i2c"; bus = 1; selected = $true
             type = "read7"; address = 80; data = 1
@@ -2564,7 +2583,13 @@ function Invoke-LiveCli {
             mode = "mosi"; width = 1; data = "0x01"
         }}
     }
-    if ($Command -eq "serial-trigger-spi") {
+    if ($Command -eq "serial-trigger-spi-set") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "spi"; bus = 1; selected = $true
+            type = "mosi"; width = 8; data = "00000001"
+        }}
+    }
+    if ($Command -eq "serial-trigger-spi-show") {
         return [pscustomobject]@{ result = [pscustomobject]@{
             protocol = "spi"; bus = 1; selected = $true
             type = "mosi"; width = 8; data = "00000001"
@@ -2577,7 +2602,15 @@ function Invoke-LiveCli {
             data = "0x01"; data_length = 1
         }}
     }
-    if ($Command -eq "serial-trigger-can") {
+    if ($Command -eq "serial-trigger-can-set") {
+        return [pscustomobject]@{ result = [pscustomobject]@{
+            protocol = "can"; bus = 1; selected = $true
+            type = "id-and-data"; id_mode = "standard"
+            id = "00000000000000000000100100011"
+            data = "00000001"; data_length = 1
+        }}
+    }
+    if ($Command -eq "serial-trigger-can-show") {
         return [pscustomobject]@{ result = [pscustomobject]@{
             protocol = "can"; bus = 1; selected = $true
             type = "id-and-data"; id_mode = "standard"
@@ -2622,20 +2655,20 @@ foreach ($caseCommand in $caseCommands) {
     assert commands == [
         "serial-search-uart",
         "serial-search-uart",
-        "serial-trigger-uart",
-        "serial-trigger-uart",
+        "serial-trigger-uart-set",
+        "serial-trigger-uart-show",
         "serial-search-i2c",
         "serial-search-i2c",
-        "serial-trigger-i2c",
-        "serial-trigger-i2c",
+        "serial-trigger-i2c-set",
+        "serial-trigger-i2c-show",
         "serial-search-spi",
         "serial-search-spi",
-        "serial-trigger-spi",
-        "serial-trigger-spi",
+        "serial-trigger-spi-set",
+        "serial-trigger-spi-show",
         "serial-search-can",
         "serial-search-can",
-        "serial-trigger-can",
-        "serial-trigger-can",
+        "serial-trigger-can-set",
+        "serial-trigger-can-show",
     ]
     assert not {
         "single",
@@ -2643,7 +2676,7 @@ foreach ($caseCommand in $caseCommands) {
         "stop-acquisition",
         "force-trigger",
         "digitize",
-        "serial-lister-export",
+        "serial-data",
     }.intersection(commands)
 
     def arguments_for(command: str) -> list[list[str]]:
@@ -2653,9 +2686,11 @@ foreach ($caseCommand in $caseCommands) {
         ["--bus", "1", "--mode", "mosi", "--width", "1", "--data", "0x01"],
         ["--bus", "1", "--query"],
     ]
-    assert arguments_for("serial-trigger-spi") == [
+    assert arguments_for("serial-trigger-spi-set") == [
         ["--bus", "1", "--type", "mosi", "--width", "8", "--data", "0x01"],
-        ["--bus", "1", "--query"],
+    ]
+    assert arguments_for("serial-trigger-spi-show") == [
+        ["--bus", "1"],
     ]
     assert arguments_for("serial-search-can") == [
         [
@@ -2664,12 +2699,14 @@ foreach ($caseCommand in $caseCommands) {
         ],
         ["--bus", "1", "--query"],
     ]
-    assert arguments_for("serial-trigger-can") == [
+    assert arguments_for("serial-trigger-can-set") == [
         [
             "--bus", "1", "--type", "id-and-data", "--id-mode", "standard",
             "--id", "0x123", "--data", "0x01", "--data-length", "1",
         ],
-        ["--bus", "1", "--query"],
+    ]
+    assert arguments_for("serial-trigger-can-show") == [
+        ["--bus", "1"],
     ]
 
 
