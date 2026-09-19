@@ -152,6 +152,33 @@ def test_search_catalog_fields_carry_help_and_scoped_option_labels() -> None:
     assert "standard" in by_name["id_mode"]["options"]
 
 
+def test_search_serial_field_visibility_follows_search_criteria() -> None:
+    catalog = {entry["id"]: entry for entry in command_catalog()}
+
+    can_fields = {field["name"]: field for field in catalog["serial-search-can"]["fields"]}
+    for name in ("data", "data_length"):
+        mode_condition = next(
+            item for item in can_fields[name]["visible_if"] if item["field"] == "mode"
+        )
+        assert mode_condition == {"field": "mode", "equals": "data"}, name
+    for name in ("id", "id_mode"):
+        mode_condition = next(
+            item for item in can_fields[name]["visible_if"] if item["field"] == "mode"
+        )
+        assert set(mode_condition["in"]) == {"data", "id-data", "id-either", "id-remote"}, name
+
+    uart_fields = {field["name"]: field for field in catalog["serial-search-uart"]["fields"]}
+    expected_data_modes = {
+        "rx-data", "rx-1", "rx-0", "rx-any",
+        "tx-data", "tx-1", "tx-0", "tx-any",
+    }
+    for name in ("data", "qualifier"):
+        mode_condition = next(
+            item for item in uart_fields[name]["visible_if"] if item["field"] == "mode"
+        )
+        assert set(mode_condition["in"]) == expected_data_modes, name
+
+
 def test_app_routes_editors_by_command_metadata() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
