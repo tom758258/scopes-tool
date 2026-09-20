@@ -1042,8 +1042,11 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.equal(linBus.controller.state.supported, false);
           assert.equal(linBus.controller.state.triggerCommand, null);
           assert.equal(linBus.controller.state.currentLabel, "LIN");
+          assert.equal(linBus.controller.state.selectedProtocol, null);
+          assert.equal(linBus.controller.state.protocolPending, false);
           linBus.controller.selectProtocol("spi");
           assert.equal(linBus.controller.state.selectedProtocol, "spi");
+          assert.equal(linBus.controller.state.protocolPending, true);
           await linBus.controller.refreshTrigger();
           await settle();
           assert.deepEqual(commandsOf(linBus).slice(2), ["serial-mode:query"]);
@@ -1056,6 +1059,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           switched.controller.selectProtocol("can");
           await settle();
           assert.deepEqual(switched.confirmations, []);
+          assert.equal(switched.controller.state.protocolPending, true);
           switched.controller.setDirty("config", true);
           await switched.controller.applyDecode({}, { source: "channel1" });
           await settle();
@@ -1072,6 +1076,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             "serial-can:query",
           ]);
           assert.equal(switched.controller.state.confirmedMode, "can");
+          assert.equal(switched.controller.state.protocolPending, false);
           assert.equal(switched.controller.state.dirtyConfig, false);
           assert.equal(switched.controller.state.dirtyTrigger, false);
           assert.equal(switched.controller.state.triggerCommand, "serial-trigger-can");
@@ -1107,7 +1112,8 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.equal(commands.includes("serial-uart:set"), false);
           assert.equal(commands.includes("serial-uart:query"), false);
           assert.equal(mismatch.controller.state.confirmedMode, "can");
-          assert.equal(mismatch.controller.state.selectedProtocol, "can");
+          assert.equal(mismatch.controller.state.selectedProtocol, "uart");
+          assert.equal(mismatch.controller.state.protocolPending, true);
         }
 
         {
@@ -1123,8 +1129,134 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.deepEqual(cancelled.confirmations, ["asked"]);
           assert.equal(cancelled.controller.state.confirmedMode, "uart");
           assert.equal(cancelled.controller.state.dirtyTrigger, true);
+          assert.equal(cancelled.controller.state.protocolPending, true);
           assert.equal(cancelled.submitted.length, before);
-          assert.equal(cancelled.controller.state.formEpoch, epochBefore + 1);
+          assert.equal(cancelled.controller.state.formEpoch, epochBefore);
+        }
+
+        {
+          const triggerDraft = makeHarness({ initialMode: "can" });
+          await triggerDraft.controller.refreshTrigger();
+          await settle();
+          const epochBefore = triggerDraft.controller.state.formEpoch;
+          triggerDraft.controller.setDirty("trigger", true);
+          triggerDraft.controller.selectProtocol("uart");
+          await settle();
+          assert.deepEqual(triggerDraft.confirmations, []);
+          assert.equal(triggerDraft.controller.state.dirtyTrigger, true);
+          assert.equal(triggerDraft.controller.state.formEpoch, epochBefore);
+          assert.equal(triggerDraft.controller.state.protocolPending, true);
+          assert.equal(triggerDraft.controller.state.selectedProtocol, "uart");
+          assert.deepEqual(commandsOf(triggerDraft), [
+            "serial-mode:query",
+            "serial-trigger-can:query",
+          ]);
+        }
+
+        {
+          const pendingBus = makeHarness({ initialMode: "can", maxBus: 2 });
+          await pendingBus.controller.refreshDecode();
+          await settle();
+          pendingBus.controller.selectProtocol("uart");
+          await pendingBus.controller.refreshTrigger();
+          await settle();
+          assert.deepEqual(pendingBus.confirmations, []);
+          assert.equal(pendingBus.controller.state.confirmedMode, "can");
+          assert.equal(pendingBus.controller.state.selectedProtocol, "uart");
+          assert.equal(pendingBus.controller.state.protocolPending, true);
+          assert.deepEqual(commandsOf(pendingBus).slice(3), [
+            "serial-mode:query",
+            "serial-trigger-can:query",
+          ]);
+          pendingBus.controller.selectBus(2);
+          await settle();
+          assert.deepEqual(pendingBus.confirmations, ["asked"]);
+          assert.equal(pendingBus.controller.state.bus, 2);
+          assert.equal(pendingBus.controller.state.protocolPending, false);
+          assert.equal(pendingBus.controller.state.selectedProtocol, null);
+        }
+
+        {
+          const linDisplay = makeHarness({ initialMode: "lin" });
+          await linDisplay.controller.refreshDecode();
+          await settle();
+          assert.equal(linDisplay.controller.state.selectedProtocol, null);
+          assert.equal(linDisplay.controller.state.protocolPending, false);
+          linDisplay.controller.setDirty("display", true);
+          await linDisplay.controller.applyDecode({ enabled: true }, {});
+          await settle();
+          assert.deepEqual(commandsOf(linDisplay), [
+            "serial-mode:query",
+            "serial-display:query",
+            "serial-display:set",
+            "serial-mode:query",
+            "serial-display:query",
+          ]);
+          assert.equal(commandsOf(linDisplay).some((entry) => entry === "serial-mode:set"), false);
+          assert.equal(linDisplay.controller.state.confirmedMode, "lin");
+          linDisplay.controller.selectProtocol("uart");
+          await linDisplay.controller.applyDecode({}, {});
+          await settle();
+          const after = commandsOf(linDisplay);
+          assert.equal(after.includes("serial-mode:set"), true);
+          assert.equal(after.some((entry) => entry === "serial-uart:set"), false);
+          assert.equal(linDisplay.controller.state.confirmedMode, "uart");
+          assert.equal(linDisplay.controller.state.protocolPending, false);
+        }
+
+        {
+          const submitted = [];
+          let releaseDisplay = null;
+          let busyDuringTrigger = "unset";
+          let ctrl = null;
+          const execute = async (command, parameters) => {
+            submitted.push(command);
+            if (command === "serial-display" && releaseDisplay === null) {
+              let release = null;
+              const gate = new Promise((resolve) => { release = resolve; });
+              releaseDisplay = release;
+              await gate;
+            }
+            if (command === "serial-trigger-can") busyDuringTrigger = ctrl.state.busy;
+            const completed = (suffix, result) => ({
+              job_id: `${suffix}-${submitted.length}`,
+              status: "completed",
+              result: { result },
+            });
+            if (command === "serial-mode") {
+              return completed("mode", { mode: { bus: 1, mode: "can", raw_mode: "CAN" } });
+            }
+            if (command === "serial-display") {
+              return completed("display", { display: { bus: 1, enabled: true } });
+            }
+            if (command === "serial-can") {
+              return completed("can", { can: { bus: 1 } });
+            }
+            return completed("trigger", { trigger: { protocol: "can", bus: 1, mode: "can", selected: true } });
+          };
+          ctrl = createSerialEditorController({
+            execute,
+            confirmDiscard: () => true,
+            available: () => true,
+          });
+          ctrl.reset({ maxBus: 1, protocolChoices: ["uart", "i2c", "spi", "can"] });
+          const decodePromise = ctrl.refreshDecode();
+          await settle();
+          assert.deepEqual(submitted, ["serial-mode", "serial-display"]);
+          await ctrl.refreshTrigger();
+          assert.deepEqual(submitted, ["serial-mode", "serial-display"]);
+          releaseDisplay();
+          await decodePromise;
+          await settle();
+          assert.deepEqual(submitted, [
+            "serial-mode",
+            "serial-display",
+            "serial-can",
+            "serial-mode",
+            "serial-trigger-can",
+          ]);
+          assert.equal(busyDuringTrigger, true);
+          assert.equal(ctrl.state.busy, false);
         }
 
         {
@@ -1520,6 +1652,7 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         const submitted = [];
         let executionBusy = false;
         let currentMode = "can";
+        const setCurrentMode = (mode) => { currentMode = mode; };
         const respond = (command, parameters) => {
           if (command === "serial-mode") {
             if (parameters.action === "set") currentMode = parameters.mode;
@@ -1601,11 +1734,13 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         decodeEditor.busSelect.dispatch("change");
         await settle();
         assert.equal(controller.state.bus, 2);
-        assert.equal(decodeEditor.protocolSelect.value, "can");
+        assert.equal(controller.state.selectedProtocol, null);
+        assert.equal(decodeEditor.protocolSelect.value, "");
         assert.equal(submitted.length, 6);
 
         decodeEditor.refreshButton.dispatch("click");
         await settle();
+        assert.equal(decodeEditor.protocolSelect.value, "can");
 
         assert.equal(listerEditor.listerDisplayForm.lastSyncArgs?.[1], true);
         assert.equal(listerEditor.listerReferenceForm.lastSyncArgs?.[1], true);
@@ -1642,6 +1777,48 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.equal(listerEditor.exportButton.disabled, false);
         await listerEditor.submitExport();
         assert.equal(submitted[blockedAt].command, "serial-lister-export");
+
+        const cleanBase = submitted.length;
+        decodeEditor.displayForm.values = () => ({ enabled: true });
+        await decodeEditor.submitDecode();
+        assert.equal(submitted.length, cleanBase);
+
+        decodeEditor.displayForm.dirty = true;
+        await decodeEditor.submitDecode();
+        assert.deepEqual(submitted.slice(cleanBase).map((entry) => entry.command), [
+          "serial-display",
+          "serial-mode",
+          "serial-display",
+          "serial-can",
+        ]);
+
+        setCurrentMode("lin");
+        await controller.refreshDecode();
+        await settle();
+        assert.equal(controller.state.selectedProtocol, null);
+        assert.equal(decodeEditor.protocolSelect.value, "");
+        const linBase = submitted.length;
+        decodeEditor.displayForm.values = () => ({ enabled: true });
+        decodeEditor.displayForm.dirty = true;
+        await decodeEditor.submitDecode();
+        assert.deepEqual(submitted.slice(linBase).map((entry) => entry.command), [
+          "serial-display",
+          "serial-mode",
+          "serial-display",
+        ]);
+
+        decodeEditor.protocolSelect.value = "uart";
+        decodeEditor.protocolSelect.dispatch("change");
+        assert.equal(controller.state.protocolPending, true);
+        decodeEditor.displayForm.dirty = false;
+        await decodeEditor.submitDecode();
+        assert.deepEqual(submitted.slice(linBase + 3).map((entry) => entry.command), [
+          "serial-mode",
+          "serial-mode",
+          "serial-display",
+          "serial-uart",
+        ]);
+        assert.equal(controller.state.protocolPending, false);
         '''
     )
     completed = subprocess.run(

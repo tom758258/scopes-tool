@@ -45,10 +45,12 @@ export function createSerialEditorController({
 } = {}) {
   const stateListeners = new Set();
   let presentationKey = null;
+  let queuedReader = null;
+  let protocolPending = false;
   let bus = 1;
   let maxBus = 1;
   let protocols = [...EDITOR_PROTOCOLS];
-  let selectedProtocol = EDITOR_PROTOCOLS[0];
+  let selectedProtocol = null;
   let confirmedMode = null;
   let rawMode = null;
   let dirtyConfig = false;
@@ -57,7 +59,6 @@ export function createSerialEditorController({
   let dirtyListerDisplay = false;
   let dirtyListerReference = false;
   let busyCount = 0;
-  let refreshQueued = false;
   let formEpoch = 0;
   let listerEpoch = 0;
   const jobs = {
@@ -74,6 +75,7 @@ export function createSerialEditorController({
     maxBus,
     protocols: [...protocols],
     selectedProtocol,
+    protocolPending,
     confirmedMode,
     rawMode,
     currentLabel: displayModeLabel(confirmedMode, rawMode),
@@ -104,8 +106,11 @@ export function createSerialEditorController({
   };
 
   function syncSelectedProtocol() {
+    if (protocolPending) return;
     if (confirmedMode && protocols.includes(confirmedMode)) {
       selectedProtocol = confirmedMode;
+    } else {
+      selectedProtocol = null;
     }
   }
 
@@ -173,7 +178,7 @@ export function createSerialEditorController({
 
   async function runRefresh(reader) {
     if (busyCount > 0) {
-      refreshQueued = true;
+      queuedReader = reader;
       return;
     }
     if (!available()) return;
@@ -183,9 +188,10 @@ export function createSerialEditorController({
     } finally {
       busyCount -= 1;
       notifyState();
-      if (refreshQueued) {
-        refreshQueued = false;
-        await reader();
+      if (queuedReader) {
+        const next = queuedReader;
+        queuedReader = null;
+        await runRefresh(next);
       }
     }
   }
@@ -226,6 +232,7 @@ export function createSerialEditorController({
     if (reported.mode !== target) return job;
     confirmedMode = target;
     rawMode = reported.rawMode;
+    protocolPending = false;
     dirtyTrigger = false;
     jobs.mode = { job, applied: true };
     jobs.trigger = null;
@@ -253,10 +260,11 @@ export function createSerialEditorController({
     },
     reset({ maxBus: busLimit = 1, protocolChoices = [...EDITOR_PROTOCOLS] } = {}) {
       presentationKey = null;
+      protocolPending = false;
       bus = 1;
       maxBus = busLimit;
       protocols = [...protocolChoices];
-      selectedProtocol = protocols[0] || null;
+      selectedProtocol = null;
       confirmedMode = null;
       rawMode = null;
       dirtyConfig = false;
@@ -284,13 +292,15 @@ export function createSerialEditorController({
       const candidate = Number(nextBus);
       if (busyCount > 0 || candidate === bus) return;
       if (!busOptions(maxBus).includes(candidate)) return;
-      if ((dirtyConfig || dirtyDisplay || dirtyTrigger) && !confirmDiscard()) {
+      if ((dirtyConfig || dirtyDisplay || dirtyTrigger || protocolPending) && !confirmDiscard()) {
         notifyState();
         return;
       }
       bus = candidate;
       confirmedMode = null;
       rawMode = null;
+      selectedProtocol = null;
+      protocolPending = false;
       dirtyConfig = false;
       dirtyDisplay = false;
       dirtyTrigger = false;
@@ -309,9 +319,9 @@ export function createSerialEditorController({
         return;
       }
       selectedProtocol = protocol;
+      protocolPending = true;
       dirtyConfig = false;
       jobs.config = null;
-      formEpoch += 1;
       notifyState();
     },
     setDirty(kind, value) {
@@ -332,18 +342,24 @@ export function createSerialEditorController({
       );
     },
     applyDecode: async function applyDecode(displayValues, configValues) {
-      const target = selectedProtocol;
-      if (busyCount > 0 || !available() || !target) return null;
+      if (busyCount > 0 || !available()) return null;
       const displayPayload = displayValues || {};
       const configPayload = configValues || {};
       const wantsDisplay = Object.keys(displayPayload).length > 0;
       const wantsConfig = Object.keys(configPayload).length > 0;
-      if (target === confirmedMode && !wantsDisplay && !wantsConfig) return null;
-      const configCommand = configCommandFor(target);
-      if (!configCommand) return null;
+      const target = protocolPending
+        ? selectedProtocol
+        : (configCommandFor(confirmedMode) ? confirmedMode : null);
+      if (!target && !wantsDisplay && !wantsConfig) return null;
+      if (target && target === confirmedMode && !wantsDisplay && !wantsConfig) {
+        protocolPending = false;
+        return null;
+      }
+      const configCommand = target ? configCommandFor(target) : null;
+      if (target && !configCommand) return null;
       beginBusy();
       try {
-        if (target !== confirmedMode) {
+        if (target && target !== confirmedMode) {
           if (dirtyTrigger && !confirmDiscard()) {
             notifyState();
             return null;
@@ -367,6 +383,7 @@ export function createSerialEditorController({
           notifyState();
         }
         if (wantsConfig) {
+          if (!configCommand) return null;
           const modeJob = await runQuery("serial-mode", { action: "query", bus });
           if (!modeJob) return null;
           const reported = modeFromJob(modeJob);
@@ -392,6 +409,7 @@ export function createSerialEditorController({
           jobs.config = { job, applied: true };
           notifyState();
         }
+        protocolPending = false;
         await readDecode();
         return jobs.config?.job ?? jobs.display?.job ?? jobs.mode?.job ?? null;
       } finally {
@@ -730,13 +748,22 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
 
   async submitDecode() {
     if (this.controller.state.busy || this.hooks.isExecutionBusy?.()) return;
-    const displayValues = this.displayForm?.values() ?? null;
-    const configValues = this.configForm?.values() ?? null;
-    const display = displayValues === null ? {} : { ...displayValues };
-    const config = configValues === null ? {} : { ...configValues };
-    delete display.action;
-    delete config.action;
-    if (!Object.keys(display).length && !Object.keys(config).length) return;
+    const pending = this.controller.state.protocolPending;
+    let display = {};
+    if (this.displayForm?.isDirty()) {
+      const displayValues = this.displayForm.values();
+      if (displayValues === null) return;
+      display = { ...displayValues };
+      delete display.action;
+    }
+    let config = {};
+    if (this.configForm?.isDirty()) {
+      const configValues = this.configForm.values();
+      if (configValues === null) return;
+      config = { ...configValues };
+      delete config.action;
+    }
+    if (!Object.keys(display).length && !Object.keys(config).length && !pending) return;
     await this.controller.applyDecode(display, config);
   }
 
@@ -772,14 +799,17 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
       this.renderedProtocols = [...stateSnapshot.protocols];
       this.renderOptions(
         this.protocolSelect,
-        stateSnapshot.protocols.map((protocol) => ({
-          value: protocol,
-          label: protocol.toUpperCase(),
-        })),
-        stateSnapshot.selectedProtocol,
+        [
+          { value: "", label: translate("form.selectValue") },
+          ...stateSnapshot.protocols.map((protocol) => ({
+            value: protocol,
+            label: protocol.toUpperCase(),
+          })),
+        ],
+        stateSnapshot.selectedProtocol ?? "",
       );
     }
-    this.protocolSelect.value = String(stateSnapshot.selectedProtocol);
+    this.protocolSelect.value = stateSnapshot.selectedProtocol ?? "";
     this.protocolSelect.disabled = disabled;
 
     this.currentValue.textContent = stateSnapshot.currentLabel || "-";
@@ -802,7 +832,8 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     this.ensureDecodeConfigForm(stateSnapshot.selectedProtocol);
     this.configForm?.setDisabled(disabled);
 
-    this.applyDecodeButton.disabled = disabled || !stateSnapshot.selectedProtocol;
+    this.applyDecodeButton.disabled = disabled
+      || (!stateSnapshot.selectedProtocol && !stateSnapshot.dirtyDisplay && !stateSnapshot.dirtyConfig);
 
     this.syncFormSlot(this.displayForm, "display", stateSnapshot.jobs);
     if (!showUnsupported) {
