@@ -1090,6 +1090,11 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.equal(configEntry.parameters.source, "channel1");
           const readEntry = switched.submitted[6];
           assert.equal(readEntry.intent, "readback");
+          switched.controller.selectProtocol("can");
+          await settle();
+          assert.equal(switched.controller.state.protocolPending, false);
+          assert.deepEqual(switched.confirmations, []);
+          assert.equal(switched.submitted.length, 9);
         }
 
         {
@@ -1254,6 +1259,61 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             "serial-can",
             "serial-mode",
             "serial-trigger-can",
+          ]);
+          assert.equal(busyDuringTrigger, true);
+          assert.equal(ctrl.state.busy, false);
+        }
+
+        {
+          const submitted = [];
+          let releaseModeSet = null;
+          let busyDuringTrigger = "unset";
+          let ctrl = null;
+          let currentMode = "can";
+          const execute = async (command, parameters) => {
+            submitted.push(`${command}:${parameters.action}`);
+            if (command === "serial-mode" && parameters.action === "set" && releaseModeSet === null) {
+              let release = null;
+              const gate = new Promise((resolve) => { release = resolve; });
+              releaseModeSet = release;
+              await gate;
+              currentMode = parameters.mode;
+            }
+            if (command === "serial-trigger-uart") busyDuringTrigger = ctrl.state.busy;
+            return {
+              job_id: `job-${submitted.length}`,
+              status: "completed",
+              result: { result: {
+                mode: { bus: 1, mode: currentMode, raw_mode: String(currentMode).toUpperCase() },
+                display: { bus: 1, enabled: true },
+                uart: { bus: 1 },
+              } },
+            };
+          };
+          ctrl = createSerialEditorController({
+            execute,
+            confirmDiscard: () => true,
+            available: () => true,
+          });
+          ctrl.reset({ maxBus: 1, protocolChoices: ["uart", "i2c", "spi", "can"] });
+          await ctrl.refreshDecode();
+          await settle();
+          ctrl.selectProtocol("uart");
+          const applyPromise = ctrl.applyDecode({}, {});
+          await settle();
+          assert.deepEqual(submitted.slice(3), ["serial-mode:set"]);
+          await ctrl.refreshTrigger();
+          assert.deepEqual(submitted.slice(3), ["serial-mode:set"]);
+          releaseModeSet();
+          await applyPromise;
+          await settle();
+          assert.deepEqual(submitted.slice(3), [
+            "serial-mode:set",
+            "serial-mode:query",
+            "serial-display:query",
+            "serial-uart:query",
+            "serial-mode:query",
+            "serial-trigger-uart:query",
           ]);
           assert.equal(busyDuringTrigger, true);
           assert.equal(ctrl.state.busy, false);
@@ -1708,6 +1768,8 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           "serial-display",
           "serial-can",
         ]);
+        assert.equal(decodeEditor.protocolSelect.children[0].value, "");
+        assert.equal(decodeEditor.protocolSelect.children[0].disabled, true);
 
         triggerEditor.schedulePresentation();
         await settle();
@@ -1819,6 +1881,36 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           "serial-uart",
         ]);
         assert.equal(controller.state.protocolPending, false);
+
+        setCurrentMode("uart");
+        await controller.refreshDecode();
+        await settle();
+        decodeEditor.protocolSelect.value = "can";
+        decodeEditor.protocolSelect.dispatch("change");
+        decodeEditor.configForm.values = () => ({ baud_rate: 9600 });
+        decodeEditor.configForm.dirty = true;
+        const draftBefore = decodeEditor.configForm.values();
+        await controller.refreshDecode();
+        await settle();
+        assert.equal(decodeEditor.configForm.lastSyncArgs, null);
+        assert.deepEqual(decodeEditor.configForm.values(), draftBefore);
+        assert.equal(controller.state.protocolPending, true);
+        assert.equal(controller.state.selectedProtocol, "can");
+
+        executionBusy = true;
+        const schedBase = submitted.length;
+        const decodeInFlight = controller.refreshDecode();
+        triggerEditor.schedulePresentation();
+        await decodeInFlight;
+        await settle();
+        executionBusy = false;
+        assert.deepEqual(submitted.slice(schedBase).map((entry) => entry.command), [
+          "serial-mode",
+          "serial-display",
+          "serial-uart",
+          "serial-mode",
+          "serial-trigger-uart",
+        ]);
         '''
     )
     completed = subprocess.run(
