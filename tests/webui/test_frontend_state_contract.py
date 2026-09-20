@@ -736,6 +736,9 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     assert 'elements.serialTriggerEditor.hidden = editorKind !== "serial-trigger";' in app_source
     assert 'elements.serialListerEditor.hidden = editorKind !== "serial-lister";' in app_source
     assert "syncWorkspaceHeaderActions(editorKind);" in app_source
+    assert "serialDecodeEditor?.applyDecodeButton" in app_source
+    assert "serialTriggerEditor?.applyTriggerButton" in app_source
+    assert 'className = `${primary ? "primary" : "secondary"} serial-editor-action`' in editor_source
     assert "SERIAL_EDITOR_COMMANDS" not in app_source
     assert "serialDecodeEditor?.rerender();" in app_source
     assert "serialTriggerEditor?.rerender();" in app_source
@@ -763,6 +766,7 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     chinese = read_static("locale_zh_tw.js")
     for key in (
         "serial.editor.busOption",
+        "serial.editor.busHelp",
         "serial.editor.protocol",
         "serial.editor.applyTrigger",
         "serial.editor.export",
@@ -776,9 +780,16 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
         "serial.decode.readSettings",
         "serial.decode.applySettings",
         "serial.decode.currentProtocol",
+        "serial.decode.currentProtocolHelp",
+        "serial.decode.protocolToApply",
+        "serial.decode.protocolHelp",
+        "serial.decode.readbackHint",
+        "serial.decode.pendingProtocol",
         "serial.trigger.readSettings",
         "serial.trigger.currentProtocol",
+        "serial.trigger.currentProtocolHelp",
         "serial.lister.readSettings",
+        "serial.lister.usage",
     ):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
@@ -1749,6 +1760,7 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           isAvailable: () => true,
           isExecutionBusy: () => executionBusy,
           contextKey: () => "ctx",
+          headerActions: new FakeNode(),
           modelInfo: () => ({ supported: true, maxBus: 2, protocols: ["uart", "i2c", "spi", "can"] }),
         };
         const controller = createSerialEditorController({
@@ -1770,11 +1782,19 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         ]);
         assert.equal(decodeEditor.protocolSelect.children[0].value, "");
         assert.equal(decodeEditor.protocolSelect.children[0].disabled, true);
+        assert.ok(decodeEditor.displayForm.lastSyncArgs);
+        assert.ok(decodeEditor.configForm.lastSyncArgs);
+        assert.equal(decodeEditor.configForm.lastSyncArgs[1], true);
+        assert.ok(decodeEditor.applyDecodeButton.className.startsWith("primary"));
+        assert.ok(hooks.headerActions.children.includes(decodeEditor.refreshButton));
+        assert.ok(hooks.headerActions.children.includes(decodeEditor.applyDecodeButton));
 
         triggerEditor.schedulePresentation();
         await settle();
         assert.equal(triggerEditor.triggerSection.hidden, false);
         assert.ok(triggerEditor.triggerForm);
+        assert.ok(triggerEditor.applyTriggerButton.className.startsWith("primary"));
+        assert.ok(hooks.headerActions.children.includes(triggerEditor.applyTriggerButton));
         assert.deepEqual(submitted.slice(3).map((entry) => entry.command), [
           "serial-mode",
           "serial-trigger-can",
@@ -1885,6 +1905,17 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         setCurrentMode("uart");
         await controller.refreshDecode();
         await settle();
+
+        decodeEditor.protocolSelect.value = "can";
+        decodeEditor.protocolSelect.dispatch("change");
+        assert.equal(controller.state.protocolPending, true);
+        decodeEditor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(controller.state.protocolPending, false);
+        assert.equal(controller.state.selectedProtocol, "uart");
+        assert.equal(decodeEditor.protocolSelect.value, "uart");
+        assert.ok(decodeEditor.configForm.lastSyncArgs);
+
         decodeEditor.protocolSelect.value = "can";
         decodeEditor.protocolSelect.dispatch("change");
         decodeEditor.configForm.values = () => ({ baud_rate: 9600 });
