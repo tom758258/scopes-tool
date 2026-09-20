@@ -1230,7 +1230,9 @@ function syncWorkspaceHeaderActions(editorKind) {
       editorKind !== "save-export" || saveExportEditor.mode === "setup";
   }
   if (serialDecodeEditor?.refreshButton) serialDecodeEditor.refreshButton.hidden = editorKind !== "serial-decode";
+  if (serialDecodeEditor?.applyDecodeButton) serialDecodeEditor.applyDecodeButton.hidden = editorKind !== "serial-decode";
   if (serialTriggerEditor?.refreshButton) serialTriggerEditor.refreshButton.hidden = editorKind !== "serial-trigger";
+  if (serialTriggerEditor?.applyTriggerButton) serialTriggerEditor.applyTriggerButton.hidden = editorKind !== "serial-trigger";
   if (serialListerEditor?.refreshButton) serialListerEditor.refreshButton.hidden = editorKind !== "serial-lister";
   if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
   if (searchEditor?.refreshButton) searchEditor.refreshButton.hidden = editorKind !== "search";

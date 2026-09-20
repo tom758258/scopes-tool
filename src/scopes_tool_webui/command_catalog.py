@@ -1741,31 +1741,141 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         "modes": ("live", "simulate"), "fields": (_command_field("bus", "integer", minimum=1),),
         "group": "bus", "browser_hidden": True,
     },
-    _action_command("serial-mode", "Serial", "Serial mode", (_command_field("bus", "integer", minimum=1), _command_field("mode", "enum", options=SERIAL_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility())), group="bus", editor="serial", browser_hidden=True),
-    _action_command("serial-display", "Serial", "Serial display", (_command_field("bus", "integer", minimum=1), _command_field("enabled", "boolean", visible_if=_set_action_visibility(), required_if=_set_action_visibility())), group="bus", editor="serial", browser_hidden=True),
+    _action_command(
+        "serial-mode", "Serial", "Serial mode", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field(
+                "mode", "enum", options=SERIAL_MODES,
+                visible_if=_set_action_visibility(),
+                required_if=_set_action_visibility(),
+            ),
+        ),
+        group="bus", editor="serial", browser_hidden=True,
+    ),
+    _action_command(
+        "serial-display", "Serial", "Serial display", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field(
+                "enabled", "boolean",
+                visible_if=_set_action_visibility(),
+                required_if=_set_action_visibility(),
+                help_key="serial-display.enabled",
+            ),
+        ),
+        group="bus", editor="serial", browser_hidden=True,
+    ),
     _action_command(
         "serial-uart", "Serial", "UART configuration", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("rx_source", "string", visible_if=_set_action_visibility()), _command_field("tx_source", "string", visible_if=_set_action_visibility()),
-            _command_field("baud_rate", "integer", minimum=100, maximum=12_000_000, spinner=False, visible_if=_set_action_visibility()), _command_field("data_bits", "integer", minimum=5, maximum=9, visible_if=_set_action_visibility()),
-            _command_field("parity", "enum", options=UART_PARITIES, visible_if=_set_action_visibility()), _command_field("polarity", "enum", options=UART_POLARITIES, visible_if=_set_action_visibility()),
-            _command_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_set_action_visibility()),
+            _command_field("rx_source", "string", visible_if=_set_action_visibility(), help_key="serial-uart.rx_source"),
+            _command_field("tx_source", "string", visible_if=_set_action_visibility(), help_key="serial-uart.tx_source"),
+            _command_field("baud_rate", "integer", minimum=100, maximum=12_000_000, spinner=False, visible_if=_set_action_visibility(), help_key="serial-uart.baud_rate"),
+            _command_field("data_bits", "integer", minimum=5, maximum=9, visible_if=_set_action_visibility(), help_key="serial-uart.data_bits"),
+            _command_field("parity", "enum", options=UART_PARITIES, option_label="serial-uart-parity", visible_if=_set_action_visibility(), help_key="serial-uart.parity"),
+            _command_field("polarity", "enum", options=UART_POLARITIES, option_label="serial-uart-polarity", visible_if=_set_action_visibility(), help_key="serial-uart.polarity"),
+            _command_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, option_label="serial-bit-order", visible_if=_set_action_visibility(), help_key="serial-uart.bit_order"),
         ),
         group="uart",
         editor="serial",
         browser_hidden=True,
     ),
-    _action_command("serial-i2c", "Serial", "I2C configuration", (_command_field("bus", "integer", minimum=1), _command_field("clock_source", "string", visible_if=_set_action_visibility()), _command_field("data_source", "string", visible_if=_set_action_visibility()), _command_field("address_size", "enum", options=I2C_ADDRESS_SIZES, visible_if=_set_action_visibility())), group="i2c", editor="serial", browser_hidden=True),
-    _action_command("serial-spi", "Serial", "SPI configuration", (_command_field("bus", "integer", minimum=1), _command_field("clock_source", "string", visible_if=_set_action_visibility()), _command_field("mosi_source", "string", visible_if=_set_action_visibility()), _command_field("miso_source", "string", visible_if=_set_action_visibility()), _command_field("frame_source", "string", visible_if=_set_action_visibility()), _command_field("clock_slope", "enum", options=SPI_CLOCK_SLOPES, visible_if=_set_action_visibility()), _command_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, visible_if=_set_action_visibility()), _command_field("word_width", "integer", minimum=4, maximum=16, visible_if=_set_action_visibility()), _command_field("framing", "enum", options=SPI_FRAMINGS, visible_if=_set_action_visibility()), _command_field("clock_timeout", "number", minimum=1e-7, maximum=10, visible_if=_set_action_visibility())), group="spi", editor="serial", browser_hidden=True),
-    _action_command("serial-can", "Serial", "CAN configuration", (_command_field("bus", "integer", minimum=1), _command_field("source", "string", visible_if=_set_action_visibility()), _command_field("baud_rate", "integer", minimum=10_000, maximum=5_000_000, spinner=False, visible_if=_set_action_visibility()), _command_field("signal_definition", "enum", options=CAN_SIGNAL_DEFINITIONS, visible_if=_set_action_visibility()), _command_field("sample_point", "number", minimum=30, maximum=90, visible_if=_set_action_visibility())), group="can", editor="serial", browser_hidden=True),
-    _action_command("serial-trigger-uart", "Serial", "UART serial trigger", (_command_field("bus", "integer", minimum=1), _command_field("type", "enum", options=UART_TRIGGER_TYPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("data", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")})), _command_field("qualifier", "enum", options=UART_TRIGGER_QUALIFIERS, visible_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}))), group="uart", editor="serial", browser_hidden=True),
-    _action_command("serial-trigger-i2c", "Serial", "I2C serial trigger", (_command_field("bus", "integer", minimum=1), _command_field("type", "enum", options=I2C_TRIGGER_TYPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("address", "integer", visible_if=_set_action_visibility(), required_if=_set_action_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")})), _command_field("data", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility(), required_if=_set_action_visibility({"field": "type", "in": ("read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")})), _command_field("data2", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "type", "in": ("read7-data2", "write7-data2")}), required_if=_set_action_visibility({"field": "type", "in": ("read7-data2", "write7-data2")})), _command_field("qualifier", "enum", options=I2C_TRIGGER_QUALIFIERS, visible_if=_set_action_visibility({"field": "type", "equals": "read-eeprom"}), required_if=_set_action_visibility({"field": "type", "equals": "read-eeprom"}))), group="i2c", editor="serial", browser_hidden=True),
-    _action_command("serial-trigger-spi", "Serial", "SPI serial trigger", (_command_field("bus", "integer", minimum=1), _command_field("type", "enum", options=SPI_TRIGGER_TYPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("width", "integer", minimum=4, maximum=64, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("data", "string", visible_if=_set_action_visibility(), required_if=_set_action_visibility())), group="spi", editor="serial", browser_hidden=True),
-    _action_command("serial-trigger-can", "Serial", "CAN serial trigger", (_command_field("bus", "integer", minimum=1), _command_field("type", "enum", options=CAN_TRIGGER_TYPES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()), _command_field("id", "string", visible_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")})), _command_field("id_mode", "enum", options=CAN_TRIGGER_ID_MODES, visible_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")})), _command_field("data", "string", visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"})), _command_field("data_length", "integer", minimum=1, maximum=8, visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}))), group="can", editor="serial", browser_hidden=True),
-    {"id": "serial-lister-query", "category": "Serial", "label": "Serial Lister state", "modes": ("live", "simulate"), "fields": (), "group": "lister", "editor": "serial", "browser_hidden": True},
-    _action_command("serial-lister-display", "Serial", "Serial Lister display", (_command_field("display", "enum", options=SERIAL_LISTER_DISPLAYS, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="lister", editor="serial", browser_hidden=True),
-    _action_command("serial-lister-reference", "Serial", "Serial Lister reference", (_command_field("reference", "enum", options=SERIAL_LISTER_REFERENCES, visible_if=_set_action_visibility(), required_if=_set_action_visibility()),), group="lister", editor="serial", browser_hidden=True),
-    {"id": "serial-lister-export", "category": "Serial", "label": "Export Serial Lister", "modes": ("live", "simulate"), "fields": (_command_field("filename", "string", required=True),), "group": "lister", "editor": "serial", "browser_hidden": True},
+    _action_command(
+        "serial-i2c", "Serial", "I2C configuration", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field("clock_source", "string", visible_if=_set_action_visibility(), help_key="serial-i2c.clock_source"),
+            _command_field("data_source", "string", visible_if=_set_action_visibility(), help_key="serial-i2c.data_source"),
+            _command_field("address_size", "enum", options=I2C_ADDRESS_SIZES, option_label="serial-i2c-address-size", visible_if=_set_action_visibility(), help_key="serial-i2c.address_size"),
+        ),
+        group="i2c", editor="serial", browser_hidden=True,
+    ),
+    _action_command(
+        "serial-spi", "Serial", "SPI configuration", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field("clock_source", "string", visible_if=_set_action_visibility(), help_key="serial-spi.clock_source"),
+            _command_field("mosi_source", "string", visible_if=_set_action_visibility(), help_key="serial-spi.mosi_source"),
+            _command_field("miso_source", "string", visible_if=_set_action_visibility(), help_key="serial-spi.miso_source"),
+            _command_field("frame_source", "string", visible_if=_set_action_visibility(), help_key="serial-spi.frame_source"),
+            _command_field("clock_slope", "enum", options=SPI_CLOCK_SLOPES, option_label="serial-spi-clock-slope", visible_if=_set_action_visibility(), help_key="serial-spi.clock_slope"),
+            _command_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, option_label="serial-bit-order", visible_if=_set_action_visibility(), help_key="serial-spi.bit_order"),
+            _command_field("word_width", "integer", minimum=4, maximum=16, visible_if=_set_action_visibility(), help_key="serial-spi.word_width"),
+            _command_field("framing", "enum", options=SPI_FRAMINGS, option_label="serial-spi-framing", visible_if=_set_action_visibility(), help_key="serial-spi.framing"),
+            _command_field("clock_timeout", "number", minimum=1e-7, maximum=10, visible_if=_set_action_visibility(), help_key="serial-spi.clock_timeout"),
+        ),
+        group="spi", editor="serial", browser_hidden=True,
+    ),
+    _action_command(
+        "serial-can", "Serial", "CAN configuration", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field("source", "string", visible_if=_set_action_visibility(), help_key="serial-can.source"),
+            _command_field("baud_rate", "integer", minimum=10_000, maximum=5_000_000, spinner=False, visible_if=_set_action_visibility(), help_key="serial-can.baud_rate"),
+            _command_field("signal_definition", "enum", options=CAN_SIGNAL_DEFINITIONS, option_label="serial-can-signal-definition", visible_if=_set_action_visibility(), help_key="serial-can.signal_definition"),
+            _command_field("sample_point", "number", minimum=30, maximum=90, visible_if=_set_action_visibility(), help_key="serial-can.sample_point"),
+        ),
+        group="can", editor="serial", browser_hidden=True,
+    ),
+    _action_command(
+        "serial-trigger-uart", "Serial", "UART serial trigger", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field("type", "enum", options=UART_TRIGGER_TYPES, option_label="serial-trigger-uart-type", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-uart.type"),
+            _command_field("data", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}), help_key="serial-trigger-uart.data"),
+            _command_field("qualifier", "enum", options=UART_TRIGGER_QUALIFIERS, option_label="serial-trigger-qualifier", visible_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}), required_if=_set_action_visibility({"field": "type", "in": ("rx-data", "tx-data")}), help_key="serial-trigger-uart.qualifier"),
+        ),
+        group="uart", editor="serial", browser_hidden=True,
+    ),
+    _action_command(
+        "serial-trigger-i2c", "Serial", "I2C serial trigger", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field("type", "enum", options=I2C_TRIGGER_TYPES, option_label="serial-trigger-i2c-type", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-i2c.type"),
+            _command_field("address", "integer", visible_if=_set_action_visibility(), required_if=_set_action_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")}), help_key="serial-trigger-i2c.address"),
+            _command_field("data", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility(), required_if=_set_action_visibility({"field": "type", "in": ("read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")}), help_key="serial-trigger-i2c.data"),
+            _command_field("data2", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "type", "in": ("read7-data2", "write7-data2")}), required_if=_set_action_visibility({"field": "type", "in": ("read7-data2", "write7-data2")}), help_key="serial-trigger-i2c.data2"),
+            _command_field("qualifier", "enum", options=I2C_TRIGGER_QUALIFIERS, option_label="serial-trigger-qualifier", visible_if=_set_action_visibility({"field": "type", "equals": "read-eeprom"}), required_if=_set_action_visibility({"field": "type", "equals": "read-eeprom"}), help_key="serial-trigger-i2c.qualifier"),
+        ),
+        group="i2c", editor="serial", browser_hidden=True,
+    ),
+    _action_command(
+        "serial-trigger-spi", "Serial", "SPI serial trigger", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field("type", "enum", options=SPI_TRIGGER_TYPES, option_label="serial-trigger-spi-type", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-spi.type"),
+            _command_field("width", "integer", minimum=4, maximum=64, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-spi.width"),
+            _command_field("data", "string", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-spi.data"),
+        ),
+        group="spi", editor="serial", browser_hidden=True,
+    ),
+    _action_command(
+        "serial-trigger-can", "Serial", "CAN serial trigger", (
+            _command_field("bus", "integer", minimum=1),
+            _command_field("type", "enum", options=CAN_TRIGGER_TYPES, option_label="serial-trigger-can-type", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-can.type"),
+            _command_field("id", "string", visible_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), help_key="serial-trigger-can.id"),
+            _command_field("id_mode", "enum", options=CAN_TRIGGER_ID_MODES, option_label="serial-trigger-can-id-mode", visible_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), help_key="serial-trigger-can.id_mode"),
+            _command_field("data", "string", visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), help_key="serial-trigger-can.data"),
+            _command_field("data_length", "integer", minimum=1, maximum=8, visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), help_key="serial-trigger-can.data_length"),
+        ),
+        group="can", editor="serial", browser_hidden=True,
+    ),
+    {
+        "id": "serial-lister-query", "category": "Serial", "label": "Serial Lister state",
+        "modes": ("live", "simulate"), "fields": (), "group": "lister",
+        "editor": "serial", "browser_hidden": True,
+    },
+    _action_command(
+        "serial-lister-display", "Serial", "Serial Lister display", (
+            _command_field("display", "enum", options=SERIAL_LISTER_DISPLAYS, option_label="serial-lister-display", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-lister.display"),
+        ),
+        group="lister", editor="serial", browser_hidden=True,
+    ),
+    _action_command(
+        "serial-lister-reference", "Serial", "Serial Lister reference", (
+            _command_field("reference", "enum", options=SERIAL_LISTER_REFERENCES, option_label="serial-lister-reference", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-lister.reference"),
+        ),
+        group="lister", editor="serial", browser_hidden=True,
+    ),
+    {
+        "id": "serial-lister-export", "category": "Serial", "label": "Export Serial Lister",
+        "modes": ("live", "simulate"),
+        "fields": (_command_field("filename", "string", required=True, help_key="serial-lister.filename"),),
+        "group": "lister", "editor": "serial", "browser_hidden": True,
+    },
 
     {
         "id": "segmented-memory", "category": "Segmented Memory", "label": "Segmented memory", "modes": ("live", "simulate"),

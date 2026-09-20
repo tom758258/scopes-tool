@@ -3087,10 +3087,36 @@ def test_serial_workspaces_expose_three_task_entries() -> None:
     assert '"command.serial-lister": "Serial Lister"' in english
     assert '"command.serial-decode": "串列解碼設定"' in chinese
     assert '"command.serial-trigger": "串列觸發"' in chinese
-    assert '"command.serial-lister": "Serial Lister"' in chinese
+    assert '"command.serial-lister": "串列資料清單（Lister）"' in chinese
     assert '"serial-decode.editor.title": "Serial Decode"' in english
     assert '"serial-trigger.editor.title": "Serial Trigger"' in english
     assert '"serial-lister.editor.title": "Serial Lister"' in english
+
+    uart_fields = {field["name"]: field for field in commands["serial-uart"]["fields"]}
+    assert uart_fields["rx_source"]["help_key"] == "serial-uart.rx_source"
+    assert uart_fields["parity"]["option_label"] == "serial-uart-parity"
+    i2c_fields = {field["name"]: field for field in commands["serial-i2c"]["fields"]}
+    assert i2c_fields["data_source"]["help_key"] == "serial-i2c.data_source"
+    assert i2c_fields["address_size"]["option_label"] == "serial-i2c-address-size"
+    trigger_uart_fields = {
+        field["name"]: field for field in commands["serial-trigger-uart"]["fields"]
+    }
+    assert trigger_uart_fields["type"]["option_label"] == "serial-trigger-uart-type"
+    assert trigger_uart_fields["qualifier"]["option_label"] == "serial-trigger-qualifier"
+    lister_display_fields = {
+        field["name"]: field for field in commands["serial-lister-display"]["fields"]
+    }
+    assert lister_display_fields["display"]["help_key"] == "serial-lister.display"
+    assert lister_display_fields["display"]["option_label"] == "serial-lister-display"
+
+    assert '"field.data_source": "Data source"' in english
+    assert '"field.data_source": "資料來源"' in chinese
+    assert '"enum.serial-trigger-qualifier.equal": "相等"' in chinese
+    assert '"enum.serial-trigger-qualifier.not-equal": "不相等"' in chinese
+    assert '"enum.serial-trigger-uart-type.rx-data": "RX Data"' in chinese
+    assert '"help.serial-uart.baud_rate":' in chinese
+    assert '"help.serial-lister.display":' in chinese
+    assert '"serial-lister.editor.title": "串列資料清單（Lister）"' in chinese
 
 
 def test_catalog_group_keys_stay_scoped_and_localized() -> None:

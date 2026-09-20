@@ -137,12 +137,15 @@ export function createSerialEditorController({
     notifyState();
   }
 
-  async function readDecode() {
+  async function readDecode({ preferCurrent = false } = {}) {
     const modeJob = await runQuery("serial-mode", { action: "query", bus });
     jobs.mode = modeJob ? { job: modeJob, applied: false } : null;
     const reported = modeFromJob(modeJob);
     confirmedMode = reported.mode;
     rawMode = reported.rawMode;
+    if (preferCurrent && protocolPending && !dirtyConfig) {
+      protocolPending = false;
+    }
     syncSelectedProtocol();
     notifyState();
     const displayJob = await runQuery("serial-display", { action: "query", bus });
@@ -205,8 +208,8 @@ export function createSerialEditorController({
     }
   }
 
-  function refreshDecode() {
-    return runRefresh(readDecode);
+  function refreshDecode(options = {}) {
+    return runRefresh(() => readDecode(options));
   }
 
   function refreshTrigger() {
@@ -259,8 +262,8 @@ export function createSerialEditorController({
       if (typeof callback === "function") stateListeners.add(callback);
       return () => stateListeners.delete(callback);
     },
-    refreshDecode() {
-      return refreshDecode();
+    refreshDecode(options = {}) {
+      return refreshDecode(options);
     },
     refreshTrigger() {
       return refreshTrigger();
@@ -528,13 +531,20 @@ class SerialWorkspaceBase {
     this.unsubscribe = controller.onStateChange((stateSnapshot) => this.render(stateSnapshot));
   }
 
-  labeledField(labelKey, input) {
+  labeledField(labelKey, input, helpKey = null) {
     const wrapper = document.createElement("label");
     wrapper.className = "field serial-editor-field";
     const label = document.createElement("span");
     label.dataset.i18nKey = labelKey;
     label.textContent = translate(labelKey);
     wrapper.append(label, input);
+    if (helpKey) {
+      const help = document.createElement("small");
+      help.className = "field-help";
+      help.dataset.i18nKey = helpKey;
+      help.textContent = translate(helpKey);
+      wrapper.append(help);
+    }
     return wrapper;
   }
 
@@ -551,10 +561,10 @@ class SerialWorkspaceBase {
     return root;
   }
 
-  actionButton(labelText, onClick) {
+  actionButton(labelText, onClick, primary = false) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "secondary serial-editor-action";
+    button.className = `${primary ? "primary" : "secondary"} serial-editor-action`;
     button.textContent = labelText;
     button.addEventListener("click", onClick);
     return button;
@@ -665,13 +675,13 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     const topRow = document.createElement("div");
     topRow.className = "serial-editor-row";
     topRow.append(
-      this.labeledField("serial.editor.bus", this.busSelect),
-      this.labeledField("serial.decode.currentProtocol", this.currentValue),
-      this.labeledField("serial.editor.protocol", this.protocolSelect),
+      this.labeledField("serial.editor.bus", this.busSelect, "serial.editor.busHelp"),
+      this.labeledField("serial.decode.currentProtocol", this.currentValue, "serial.decode.currentProtocolHelp"),
+      this.labeledField("serial.decode.protocolToApply", this.protocolSelect, "serial.decode.protocolHelp"),
     );
 
     this.refreshButton = this.makeReadButton("serial.decode.readSettings", () => {
-      queueMicrotask(() => void this.controller.refreshDecode());
+      queueMicrotask(() => void this.controller.refreshDecode({ preferCurrent: true }));
     });
 
     this.displayDescription = document.createElement("p");
@@ -686,6 +696,13 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
 
     this.configNote = document.createElement("p");
     this.configNote.className = "muted compact-note";
+    this.pendingProtocolNote = document.createElement("p");
+    this.pendingProtocolNote.className = "muted compact-note";
+    this.pendingProtocolNote.hidden = true;
+    this.readbackHint = document.createElement("small");
+    this.readbackHint.className = "field-help";
+    this.readbackHint.dataset.i18nKey = "serial.decode.readbackHint";
+    this.readbackHint.textContent = translate("serial.decode.readbackHint");
     this.configDescription = document.createElement("p");
     this.configDescription.className = "muted compact-note";
     this.configFormContainer = document.createElement("div");
@@ -693,11 +710,22 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     this.applyDecodeButton = this.actionButton(
       translate("serial.decode.applySettings"),
       () => void this.submitDecode(),
+      true,
     );
+    if (this.hooks.headerActions) {
+      this.applyDecodeButton.hidden = true;
+      this.hooks.headerActions.append(this.applyDecodeButton);
+    }
     this.configSection = this.section(
       "serial.editor.configuration",
-      [this.configNote, this.configDescription, this.configFormContainer],
-      this.applyDecodeButton,
+      [
+        this.configNote,
+        this.pendingProtocolNote,
+        this.readbackHint,
+        this.configDescription,
+        this.configFormContainer,
+      ],
+      this.hooks.headerActions ? null : this.applyDecodeButton,
     );
 
     this.container.append(
@@ -840,6 +868,19 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     } else {
       this.configNote.hidden = true;
     }
+    const hasPendingProtocol = Boolean(
+      stateSnapshot.protocolPending
+      && stateSnapshot.selectedProtocol
+      && stateSnapshot.selectedProtocol !== stateSnapshot.confirmedMode
+    );
+    this.pendingProtocolNote.hidden = !hasPendingProtocol;
+    if (hasPendingProtocol) {
+      this.pendingProtocolNote.textContent = translate("serial.decode.pendingProtocol", {
+        pending: String(stateSnapshot.selectedProtocol).toUpperCase(),
+        current: stateSnapshot.currentLabel || "-",
+      });
+    }
+
     this.ensureDecodeConfigForm(stateSnapshot.selectedProtocol);
     this.configForm?.setDisabled(disabled);
 
@@ -872,8 +913,8 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
     const topRow = document.createElement("div");
     topRow.className = "serial-editor-row";
     topRow.append(
-      this.labeledField("serial.editor.bus", this.busSelect),
-      this.labeledField("serial.trigger.currentProtocol", this.currentValue),
+      this.labeledField("serial.editor.bus", this.busSelect, "serial.editor.busHelp"),
+      this.labeledField("serial.trigger.currentProtocol", this.currentValue, "serial.trigger.currentProtocolHelp"),
     );
 
     this.refreshButton = this.makeReadButton("serial.trigger.readSettings", () => {
@@ -889,11 +930,16 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
     this.applyTriggerButton = this.actionButton(
       translate("serial.editor.applyTrigger"),
       () => void this.submitTrigger(),
+      true,
     );
+    if (this.hooks.headerActions) {
+      this.applyTriggerButton.hidden = true;
+      this.hooks.headerActions.append(this.applyTriggerButton);
+    }
     this.triggerSection = this.section(
       "serial.editor.triggerSection",
       [this.triggerNote, this.triggerDescription, this.triggerFormContainer],
-      this.applyTriggerButton,
+      this.hooks.headerActions ? null : this.applyTriggerButton,
     );
 
     this.container.append(
@@ -1002,6 +1048,11 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     heading.dataset.i18nKey = "serial.editor.listerSection";
     heading.textContent = translate("serial.editor.listerSection");
     root.append(heading);
+    this.usageNote = document.createElement("p");
+    this.usageNote.className = "muted compact-note";
+    this.usageNote.dataset.i18nKey = "serial.lister.usage";
+    this.usageNote.textContent = translate("serial.lister.usage");
+    root.append(this.usageNote);
 
     const addRow = (container, button) => {
       const row = document.createElement("div");
@@ -1014,6 +1065,7 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     this.applyListerDisplayButton = this.actionButton(
       translate("actions.apply"),
       () => void this.submitListerSetting("display"),
+      true,
     );
     addRow(this.listerDisplayFormContainer, this.applyListerDisplayButton);
 
@@ -1021,6 +1073,7 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     this.applyListerReferenceButton = this.actionButton(
       translate("actions.apply"),
       () => void this.submitListerSetting("reference"),
+      true,
     );
     addRow(this.listerReferenceFormContainer, this.applyListerReferenceButton);
 
@@ -1028,6 +1081,7 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     this.exportButton = this.actionButton(
       translate("serial.editor.export"),
       () => void this.submitExport(),
+      true,
     );
     addRow(this.exportFormContainer, this.exportButton);
 
