@@ -1967,7 +1967,7 @@ def test_serial_editor_locale_keys_are_localized() -> None:
     assert '"serial-lister.editor.title": "Serial Lister"' in english
     assert '"serial-decode.editor.title": "串列解碼設定"' in chinese
     assert '"serial-trigger.editor.title": "串列觸發"' in chinese
-    assert '"serial-lister.editor.title": "Serial Lister"' in chinese
+    assert '"serial-lister.editor.title": "串列資料清單（Lister）"' in chinese
     assert '"serial.decode.applySettings": "Apply decode settings"' in english
     assert '"serial.decode.applySettings": "套用解碼設定"' in chinese
 
