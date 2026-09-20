@@ -269,7 +269,9 @@ def test_app_routes_editors_by_command_metadata() -> None:
         in app_source
     )
     routing_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
-    assert 'serial: () => serialEditor,' in routing_map
+    assert '"serial-decode": () => serialDecodeEditor,' in routing_map
+    assert '"serial-trigger": () => serialTriggerEditor,' in routing_map
+    assert '"serial-lister": () => serialListerEditor,' in routing_map
     assert 'trigger: () => triggerEditor,' in routing_map
     routing = extract_function(app_source, "function editorKindFor(command)")
     assert "EDITOR_RENDERERS[kind]" in routing

@@ -463,7 +463,9 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
           form: {},
           referenceEditor: {},
           saveExportEditor: {},
-          serialEditor: {},
+          serialDecodeEditor: {},
+          serialTriggerEditor: {},
+          serialListerEditor: {},
           triggerEditor: {},
           searchEditor: {},
           segmentedEditor: {},
@@ -703,30 +705,41 @@ def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-def test_serial_editor_replaces_generic_form_with_passive_selection() -> None:
+def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
     editor_source = read_static("serial-editor.js")
 
-    assert 'import { SerialEditor } from "/static/serial-editor.js";' in app_source
+    assert 'import { SerialDecodeEditor, SerialTriggerEditor, SerialListerEditor, createSerialEditorController } from "/static/serial-editor.js";' in app_source
     assert 'id="form-heading"' in html
-    assert 'id="serial-editor" class="serial-editor" hidden' in html
+    assert 'id="serial-decode-editor" class="serial-editor" hidden' in html
+    assert 'id="serial-trigger-editor" class="serial-editor" hidden' in html
+    assert 'id="serial-lister-editor" class="serial-editor" hidden' in html
+    assert 'id="serial-editor"' not in html
     routing = extract_function(app_source, "function editorKindFor(command)")
     assert "command?.editor" in routing
     assert "EDITOR_RENDERERS[kind]" in routing
     renderer_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
-    assert 'serial: () => serialEditor,' in renderer_map
-    assert 'trigger: () => triggerEditor,' in renderer_map
+    assert '"serial-decode": () => serialDecodeEditor,' in renderer_map
+    assert '"serial-trigger": () => serialTriggerEditor,' in renderer_map
+    assert '"serial-lister": () => serialListerEditor,' in renderer_map
+    assert "serial: () => serialEditor," not in renderer_map
     assert "function scheduleEditorRead()" not in app_source
     presentation = extract_function(app_source, "function syncEditorPresentation(editorKind)")
-    assert "serialEditor?.schedulePresentation();" in presentation
+    assert "serialDecodeEditor?.schedulePresentation();" in presentation
+    assert "serialTriggerEditor?.schedulePresentation();" in presentation
+    assert "serialListerEditor?.schedulePresentation();" in presentation
+    assert "serialEditor?.schedulePresentation();" not in presentation
     assert "elements.formHeading.hidden = (editorOwned && ![\"channel-display\", \"timebase-position\", \"channel-scale-range\", \"external-trigger\"].includes(editorKind)) || systemInformationSelected;" in app_source
     assert "elements.form.hidden = editorOwned || systemInformationSelected;" in app_source
-    assert 'elements.serialEditor.hidden = editorKind !== "serial";' in app_source
+    assert 'elements.serialDecodeEditor.hidden = editorKind !== "serial-decode";' in app_source
+    assert 'elements.serialTriggerEditor.hidden = editorKind !== "serial-trigger";' in app_source
+    assert 'elements.serialListerEditor.hidden = editorKind !== "serial-lister";' in app_source
     assert "syncWorkspaceHeaderActions(editorKind);" in app_source
-    assert "elements.serialEditor.hidden = !editorOwned;" not in app_source
     assert "SERIAL_EDITOR_COMMANDS" not in app_source
-    assert "serialEditor?.rerender();" in app_source
+    assert "serialDecodeEditor?.rerender();" in app_source
+    assert "serialTriggerEditor?.rerender();" in app_source
+    assert "serialListerEditor?.rerender();" in app_source
     assert 'translate(`${editorKind}.editor.title`)' in app_source
     for command_id in (
         "serial-mode",
@@ -749,23 +762,34 @@ def test_serial_editor_replaces_generic_form_with_passive_selection() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     for key in (
-        "serial.editor.title",
-        "serial.editor.description",
         "serial.editor.busOption",
-        "serial.editor.currentProtocol",
         "serial.editor.protocol",
-        "serial.editor.applyMode",
-        "serial.editor.applyDisplay",
-        "serial.editor.applyConfiguration",
         "serial.editor.applyTrigger",
         "serial.editor.export",
         "serial.editor.triggerSection",
         "serial.editor.listerSection",
         "serial.editor.unsupported",
         "serial.editor.discardConfirm",
+        "serial-decode.editor.title",
+        "serial-trigger.editor.title",
+        "serial-lister.editor.title",
+        "serial.decode.readSettings",
+        "serial.decode.applySettings",
+        "serial.decode.currentProtocol",
+        "serial.trigger.readSettings",
+        "serial.trigger.currentProtocol",
+        "serial.lister.readSettings",
     ):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
+    for key in (
+        "serial.editor.title",
+        "serial.editor.applyMode",
+        "serial.editor.applyDisplay",
+        "serial.editor.applyConfiguration",
+    ):
+        assert f'"{key}":' not in english, key
+        assert f'"{key}":' not in chinese, key
 
 
 def test_channel_display_editor_uses_workflow_editor_layout() -> None:
@@ -870,13 +894,14 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             };
           };
           const execute = async (command, parameters, options) => {
-            submitted.push({ command, action: parameters.action, intent: options?.intent });
+            submitted.push({ command, action: parameters.action, intent: options?.intent, parameters });
             return respond(command, parameters);
           };
           const confirmations = [];
+          let confirmValue = confirmResult;
           const controller = createSerialEditorController({
             execute,
-            confirmDiscard: () => { confirmations.push("asked"); return confirmResult; },
+            confirmDiscard: () => { confirmations.push("asked"); return confirmValue; },
             available: () => true,
           });
           controller.reset({
@@ -889,6 +914,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             confirmations,
             setCurrentMode: (mode) => { currentMode = mode; },
             setModeQueryFails: (value) => { modeQueryFails = Boolean(value); },
+            setConfirmResult: (value) => { confirmValue = Boolean(value); },
           };
         };
 
@@ -902,6 +928,16 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           `${triggerCommand}:query`,
           "serial-lister-query",
         ];
+        const decodeRefreshCommands = (configCommand) => [
+          "serial-mode:query",
+          "serial-display:query",
+          `${configCommand}:query`,
+        ];
+        const triggerRefreshCommands = (triggerCommand) => [
+          "serial-mode:query",
+          `${triggerCommand}:query`,
+        ];
+        const listerRefreshCommands = ["serial-lister-query"];
 
         assert.deepEqual(busOptions(1), [1]);
         assert.deepEqual(busOptions(2), [1, 2]);
@@ -932,38 +968,37 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
         {
           const dual = makeHarness({ initialMode: "can", maxBus: 2 });
-          dual.controller.scheduleRefresh();
+          await dual.controller.refreshDecode();
           await settle();
-          assert.deepEqual(commandsOf(dual), initialRefreshCommands(
-            "serial-can",
-            "serial-trigger-can",
-          ));
+          assert.deepEqual(commandsOf(dual), decodeRefreshCommands("serial-can"));
           dual.controller.selectBus(2);
           await settle();
           assert.equal(dual.controller.state.bus, 2);
-          assert.deepEqual(commandsOf(dual).slice(5), []);
-          dual.controller.scheduleRefresh();
+          assert.deepEqual(commandsOf(dual).slice(3), []);
+          await dual.controller.refreshDecode();
           await settle();
-          assert.deepEqual(commandsOf(dual).slice(5), [
-            "serial-mode:query",
-            "serial-display:query",
-            "serial-can:query",
-            "serial-trigger-can:query",
-            "serial-lister-query",
-          ]);
+          assert.deepEqual(commandsOf(dual).slice(3), decodeRefreshCommands("serial-can"));
           assert.equal(dual.controller.state.formEpoch, 2);
         }
 
         {
+          const triggerBus = makeHarness({ initialMode: "can", maxBus: 2 });
+          await triggerBus.controller.refreshTrigger();
+          await settle();
+          assert.deepEqual(commandsOf(triggerBus), triggerRefreshCommands("serial-trigger-can"));
+          await triggerBus.controller.refreshLister();
+          await settle();
+          assert.deepEqual(commandsOf(triggerBus).slice(2), listerRefreshCommands);
+        }
+
+        {
           const canBus = makeHarness({ initialMode: "can" });
-          canBus.controller.scheduleRefresh();
+          await canBus.controller.refreshDecode();
           await settle();
           const canCommands = commandsOf(canBus);
           assert.equal(canCommands.includes("serial-uart:query"), false);
-          assert.deepEqual(canCommands, initialRefreshCommands(
-            "serial-can",
-            "serial-trigger-can",
-          ));
+          assert.equal(canCommands.includes("serial-lister-query"), false);
+          assert.deepEqual(canCommands, decodeRefreshCommands("serial-can"));
           assert.equal(canCommands.some((entry) =>
             entry.startsWith("serial-trigger-")
             && entry !== "serial-trigger-can:query"), false);
@@ -974,12 +1009,9 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
         {
           const uartBus = makeHarness({ initialMode: "uart" });
-          uartBus.controller.scheduleRefresh();
+          await uartBus.controller.refreshDecode();
           await settle();
-          assert.deepEqual(commandsOf(uartBus), initialRefreshCommands(
-            "serial-uart",
-            "serial-trigger-uart",
-          ));
+          assert.deepEqual(commandsOf(uartBus), decodeRefreshCommands("serial-uart"));
           assert.equal(uartBus.controller.state.configCommand, "serial-uart");
           assert.equal(uartBus.controller.state.triggerCommand, "serial-trigger-uart");
         }
@@ -987,11 +1019,11 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
         {
           for (const protocol of ["i2c", "spi"]) {
             const scoped = makeHarness({ initialMode: protocol });
-            scoped.controller.scheduleRefresh();
+            await scoped.controller.refreshDecode();
             await settle();
             assert.deepEqual(
               commandsOf(scoped),
-              initialRefreshCommands(`serial-${protocol}`, `serial-trigger-${protocol}`),
+              decodeRefreshCommands(`serial-${protocol}`),
               protocol,
             );
           }
@@ -999,12 +1031,11 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
         {
           const linBus = makeHarness({ initialMode: "lin" });
-          linBus.controller.scheduleRefresh();
+          await linBus.controller.refreshDecode();
           await settle();
           assert.deepEqual(commandsOf(linBus), [
             "serial-mode:query",
             "serial-display:query",
-            "serial-lister-query",
           ]);
           assert.equal(commandsOf(linBus).some((entry) =>
             entry.startsWith("serial-trigger-")), false);
@@ -1013,115 +1044,98 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.equal(linBus.controller.state.currentLabel, "LIN");
           linBus.controller.selectProtocol("spi");
           assert.equal(linBus.controller.state.selectedProtocol, "spi");
+          await linBus.controller.refreshTrigger();
+          await settle();
+          assert.deepEqual(commandsOf(linBus).slice(2), ["serial-mode:query"]);
         }
 
         {
-          const switched = makeHarness({ initialMode: "can" });
-          switched.controller.scheduleRefresh();
+          const switched = makeHarness({ initialMode: "uart" });
+          await switched.controller.refreshDecode();
           await settle();
+          switched.controller.selectProtocol("can");
+          await settle();
+          assert.deepEqual(switched.confirmations, []);
           switched.controller.setDirty("config", true);
-          switched.controller.selectProtocol("uart");
-          await switched.controller.applyMode();
+          await switched.controller.applyDecode({}, { source: "channel1" });
           await settle();
           const commands = commandsOf(switched);
-          assert.equal(switched.confirmations.length, 1);
-          assert.equal(commands[5], "serial-mode:set");
-          assert.deepEqual(commands.slice(-3), [
-            "serial-mode:set",
+          assert.deepEqual(commands, [
+            "serial-mode:query",
+            "serial-display:query",
             "serial-uart:query",
-            "serial-trigger-uart:query",
+            "serial-mode:set",
+            "serial-mode:query",
+            "serial-can:set",
+            "serial-mode:query",
+            "serial-display:query",
+            "serial-can:query",
           ]);
-          assert.equal(commands.includes("serial-i2c:query"), false);
-          assert.equal(switched.controller.state.confirmedMode, "uart");
+          assert.equal(switched.controller.state.confirmedMode, "can");
           assert.equal(switched.controller.state.dirtyConfig, false);
           assert.equal(switched.controller.state.dirtyTrigger, false);
-          assert.equal(switched.controller.state.triggerCommand, "serial-trigger-uart");
-          const setEntry = switched.submitted[5];
+          assert.equal(switched.controller.state.triggerCommand, "serial-trigger-can");
+          const setEntry = switched.submitted[3];
           assert.equal(setEntry.intent, "apply");
           assert.equal(setEntry.action, "set");
+          assert.equal(setEntry.parameters.mode, "can");
+          const configEntry = switched.submitted[5];
+          assert.equal(configEntry.command, "serial-can");
+          assert.equal(configEntry.action, "set");
+          assert.equal(configEntry.parameters.source, "channel1");
           const readEntry = switched.submitted[6];
           assert.equal(readEntry.intent, "readback");
         }
 
         {
           const mismatch = makeHarness({ initialMode: "can", setTakesEffect: false });
-          mismatch.controller.scheduleRefresh();
+          await mismatch.controller.refreshDecode();
           await settle();
-          mismatch.controller.setDirty("config", true);
           mismatch.controller.selectProtocol("uart");
-          await mismatch.controller.applyMode();
+          await mismatch.controller.applyDecode({}, { baud_rate: 115200 });
           await settle();
           const commands = commandsOf(mismatch);
-          assert.equal(mismatch.confirmations.length, 1);
-          assert.equal(commands[5], "serial-mode:set");
-          assert.deepEqual(commands.slice(-5), [
+          assert.deepEqual(commands, [
             "serial-mode:query",
             "serial-display:query",
             "serial-can:query",
-            "serial-trigger-can:query",
-            "serial-lister-query",
+            "serial-mode:set",
+            "serial-mode:query",
+            "serial-display:query",
+            "serial-can:query",
           ]);
+          assert.equal(commands.includes("serial-uart:set"), false);
           assert.equal(commands.includes("serial-uart:query"), false);
-          assert.equal(commands.includes("serial-trigger-uart:query"), false);
           assert.equal(mismatch.controller.state.confirmedMode, "can");
           assert.equal(mismatch.controller.state.selectedProtocol, "can");
-          assert.equal(mismatch.controller.state.dirtyConfig, true);
         }
 
         {
-          const cancelled = makeHarness({ initialMode: "can", maxBus: 2, confirmResult: false });
-          cancelled.controller.scheduleRefresh();
+          const cancelled = makeHarness({ initialMode: "uart", maxBus: 2, confirmResult: false });
+          await cancelled.controller.refreshDecode();
           await settle();
           const before = cancelled.submitted.length;
           const epochBefore = cancelled.controller.state.formEpoch;
-          cancelled.controller.setDirty("config", true);
-          cancelled.controller.selectBus(2);
+          cancelled.controller.setDirty("trigger", true);
+          cancelled.controller.selectProtocol("can");
+          await cancelled.controller.applyDecode({}, { source: "channel1" });
           await settle();
           assert.deepEqual(cancelled.confirmations, ["asked"]);
-          assert.equal(cancelled.controller.state.bus, 1);
-          assert.equal(cancelled.controller.state.dirtyConfig, true);
-          assert.equal(cancelled.controller.state.formEpoch, epochBefore);
+          assert.equal(cancelled.controller.state.confirmedMode, "uart");
+          assert.equal(cancelled.controller.state.dirtyTrigger, true);
           assert.equal(cancelled.submitted.length, before);
-
-          const discarded = makeHarness({ initialMode: "can", maxBus: 2 });
-          discarded.controller.scheduleRefresh();
-          await settle();
-          discarded.controller.setDirty("config", true);
-          discarded.controller.selectBus(2);
-          await settle();
-          assert.deepEqual(discarded.confirmations, ["asked"]);
-          assert.equal(discarded.controller.state.bus, 2);
-          assert.equal(discarded.controller.state.dirtyConfig, false);
-          assert.equal(discarded.submitted.length, 5);
-          discarded.controller.scheduleRefresh();
-          await settle();
-          assert.equal(commandsOf(discarded)[5], "serial-mode:query");
-        }
-
-        {
-          const cancelled = makeHarness({ initialMode: "can", confirmResult: false });
-          cancelled.controller.scheduleRefresh();
-          await settle();
-          const before = cancelled.submitted.length;
-          cancelled.controller.setDirty("config", true);
-          cancelled.controller.selectProtocol("uart");
-          await cancelled.controller.applyMode();
-          await settle();
-          assert.deepEqual(cancelled.confirmations, ["asked"]);
-          assert.equal(cancelled.controller.state.confirmedMode, "can");
-          assert.equal(cancelled.controller.state.dirtyConfig, true);
-          assert.equal(cancelled.submitted.length, before);
+          assert.equal(cancelled.controller.state.formEpoch, epochBefore + 1);
         }
 
         {
           const idle = makeHarness({ initialMode: "can" });
-          idle.controller.scheduleRefresh();
+          await idle.controller.refreshDecode();
           await settle();
           idle.controller.selectProtocol("can");
-          await idle.controller.applyMode();
+          await idle.controller.applyDecode({}, {});
           await settle();
           assert.deepEqual(idle.confirmations, []);
-          assert.equal(idle.submitted.length, 5);
+          assert.equal(idle.submitted.length, 3);
         }
 
         {
@@ -1129,14 +1143,14 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             initialMode: "can",
             maxBus: 2,
           });
-          dualModes.controller.scheduleRefresh();
+          await dualModes.controller.refreshDecode();
           await settle();
           assert.equal(dualModes.controller.state.selectedProtocol, "can");
           dualModes.setCurrentMode("uart");
           dualModes.controller.selectBus(2);
           await settle();
           assert.equal(dualModes.controller.state.confirmedMode, null);
-          dualModes.controller.scheduleRefresh();
+          await dualModes.controller.refreshDecode();
           await settle();
           assert.equal(dualModes.controller.state.confirmedMode, "uart");
           assert.equal(dualModes.controller.state.selectedProtocol, "uart");
@@ -1144,38 +1158,40 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
         {
           const displayOnly = makeHarness({ initialMode: "can" });
-          displayOnly.controller.scheduleRefresh();
+          await displayOnly.controller.refreshDecode();
           await settle();
           displayOnly.controller.setDirty("display", true);
-          displayOnly.controller.selectProtocol("uart");
-          await displayOnly.controller.applyMode();
+          await displayOnly.controller.applyDecode({ enabled: true }, {});
           await settle();
           assert.deepEqual(displayOnly.confirmations, []);
-          assert.equal(displayOnly.controller.state.confirmedMode, "uart");
-          assert.equal(displayOnly.controller.state.dirtyDisplay, true);
+          assert.equal(displayOnly.controller.state.dirtyDisplay, false);
           const commands = commandsOf(displayOnly);
-          assert.deepEqual(commands.slice(-3), [
-            "serial-mode:set",
-            "serial-uart:query",
-            "serial-trigger-uart:query",
+          assert.deepEqual(commands, [
+            "serial-mode:query",
+            "serial-display:query",
+            "serial-can:query",
+            "serial-display:set",
+            "serial-mode:query",
+            "serial-display:query",
+            "serial-can:query",
           ]);
         }
 
         {
           const external = makeHarness({ initialMode: "uart" });
-          external.controller.scheduleRefresh();
+          await external.controller.refreshDecode();
           await settle();
           external.setCurrentMode("can");
           external.controller.setDirty("config", true);
-          await external.controller.applyConfig({ baud_rate: 115200 });
+          await external.controller.applyDecode({}, { baud_rate: 115200 });
           await settle();
-          const tail = commandsOf(external).slice(5);
+          const tail = commandsOf(external).slice(3);
           assert.equal(tail[0], "serial-mode:query");
           assert.equal(tail.some((entry) => entry === "serial-uart:set"), false);
           assert.deepEqual(tail.slice(1), [
+            "serial-mode:query",
             "serial-display:query",
             "serial-can:query",
-            "serial-trigger-can:query",
           ]);
           assert.equal(external.controller.state.confirmedMode, "can");
           assert.equal(external.controller.state.selectedProtocol, "can");
@@ -1184,29 +1200,33 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
         {
           const stable = makeHarness({ initialMode: "can" });
-          stable.controller.scheduleRefresh();
+          await stable.controller.refreshDecode();
           await settle();
           stable.controller.setDirty("config", true);
-          await stable.controller.applyConfig({ baud_rate: 500000 });
+          await stable.controller.applyDecode({}, { baud_rate: 500000 });
           await settle();
-          assert.deepEqual(commandsOf(stable).slice(5), [
+          assert.deepEqual(commandsOf(stable).slice(3), [
             "serial-mode:query",
             "serial-can:set",
+            "serial-mode:query",
+            "serial-display:query",
+            "serial-can:query",
           ]);
-          assert.equal(stable.submitted[6].intent, "apply");
+          assert.equal(stable.submitted[4].intent, "apply");
+          assert.equal(stable.submitted[4].parameters.baud_rate, 500000);
           assert.equal(stable.controller.state.dirtyConfig, false);
           assert.equal(stable.controller.state.confirmedMode, "can");
         }
 
         {
           const failedRecheck = makeHarness({ initialMode: "uart" });
-          failedRecheck.controller.scheduleRefresh();
+          await failedRecheck.controller.refreshDecode();
           await settle();
           failedRecheck.controller.setDirty("config", true);
           failedRecheck.setModeQueryFails(true);
-          await failedRecheck.controller.applyConfig({ baud_rate: 115200 });
+          await failedRecheck.controller.applyDecode({}, { baud_rate: 115200 });
           await settle();
-          assert.deepEqual(commandsOf(failedRecheck).slice(5), [
+          assert.deepEqual(commandsOf(failedRecheck).slice(3), [
             "serial-mode:query",
           ]);
           assert.equal(failedRecheck.controller.state.confirmedMode, "uart");
@@ -1214,40 +1234,47 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.equal(failedRecheck.controller.state.dirtyConfig, true);
 
           failedRecheck.setModeQueryFails(false);
-          await failedRecheck.controller.applyConfig({ baud_rate: 115200 });
+          await failedRecheck.controller.applyDecode({}, { baud_rate: 115200 });
           await settle();
-          assert.deepEqual(commandsOf(failedRecheck).slice(6), [
+          assert.deepEqual(commandsOf(failedRecheck).slice(4), [
             "serial-mode:query",
             "serial-uart:set",
+            "serial-mode:query",
+            "serial-display:query",
+            "serial-uart:query",
           ]);
           assert.equal(failedRecheck.controller.state.dirtyConfig, false);
         }
 
         {
           const triggerApply = makeHarness({ initialMode: "can" });
-          triggerApply.controller.scheduleRefresh();
+          await triggerApply.controller.refreshTrigger();
           await settle();
+          assert.deepEqual(commandsOf(triggerApply), [
+            "serial-mode:query",
+            "serial-trigger-can:query",
+          ]);
           triggerApply.controller.setDirty("trigger", true);
           await triggerApply.controller.applyTrigger({ type: "start-of-frame" });
           await settle();
-          assert.deepEqual(commandsOf(triggerApply).slice(5), [
+          assert.deepEqual(commandsOf(triggerApply).slice(2), [
             "serial-mode:query",
             "serial-trigger-can:set",
           ]);
-          assert.equal(triggerApply.submitted[6].intent, "apply");
+          assert.equal(triggerApply.submitted[3].intent, "apply");
           assert.equal(triggerApply.controller.state.dirtyTrigger, false);
           assert.equal(triggerApply.controller.state.confirmedMode, "can");
         }
 
         {
           const failedTriggerRecheck = makeHarness({ initialMode: "uart" });
-          failedTriggerRecheck.controller.scheduleRefresh();
+          await failedTriggerRecheck.controller.refreshTrigger();
           await settle();
           failedTriggerRecheck.controller.setDirty("trigger", true);
           failedTriggerRecheck.setModeQueryFails(true);
           await failedTriggerRecheck.controller.applyTrigger({ type: "rx-start" });
           await settle();
-          assert.deepEqual(commandsOf(failedTriggerRecheck).slice(5), [
+          assert.deepEqual(commandsOf(failedTriggerRecheck).slice(2), [
             "serial-mode:query",
           ]);
           assert.equal(failedTriggerRecheck.controller.state.confirmedMode, "uart");
@@ -1259,12 +1286,11 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           failedTriggerRecheck.setCurrentMode("can");
           await failedTriggerRecheck.controller.applyTrigger({ type: "rx-start" });
           await settle();
-          const tail = commandsOf(failedTriggerRecheck).slice(6);
+          const tail = commandsOf(failedTriggerRecheck).slice(2);
           assert.equal(tail[0], "serial-mode:query");
           assert.equal(tail.some((entry) => entry === "serial-trigger-uart:set"), false);
           assert.deepEqual(tail.slice(1), [
-            "serial-display:query",
-            "serial-can:query",
+            "serial-mode:query",
             "serial-trigger-can:query",
           ]);
           assert.equal(failedTriggerRecheck.controller.state.confirmedMode, "can");
@@ -1277,7 +1303,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           const dirtyBusCancel = makeHarness({
             initialMode: "can", maxBus: 2, confirmResult: false,
           });
-          dirtyBusCancel.controller.scheduleRefresh();
+          dirtyBusCancel.controller.refreshDecode();
           await settle();
           const before = dirtyBusCancel.submitted.length;
           dirtyBusCancel.controller.setDirty("trigger", true);
@@ -1289,7 +1315,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.equal(dirtyBusCancel.submitted.length, before);
 
           const dirtyBusDiscard = makeHarness({ initialMode: "can", maxBus: 2 });
-          dirtyBusDiscard.controller.scheduleRefresh();
+          dirtyBusDiscard.controller.refreshDecode();
           await settle();
           dirtyBusDiscard.controller.setDirty("trigger", true);
           dirtyBusDiscard.controller.selectBus(2);
@@ -1297,34 +1323,33 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.deepEqual(dirtyBusDiscard.confirmations, ["asked"]);
           assert.equal(dirtyBusDiscard.controller.state.bus, 2);
           assert.equal(dirtyBusDiscard.controller.state.dirtyTrigger, false);
-          assert.equal(dirtyBusDiscard.submitted.length, 5);
-          dirtyBusDiscard.controller.scheduleRefresh();
+          assert.equal(dirtyBusDiscard.submitted.length, 3);
+          await dirtyBusDiscard.controller.refreshDecode();
           await settle();
-          assert.equal(commandsOf(dirtyBusDiscard)[5], "serial-mode:query");
+          assert.equal(commandsOf(dirtyBusDiscard)[3], "serial-mode:query");
         }
 
         {
           const dirtyProtocol = makeHarness({ initialMode: "can", confirmResult: false });
-          dirtyProtocol.controller.scheduleRefresh();
+          await dirtyProtocol.controller.refreshDecode();
           await settle();
           const before = dirtyProtocol.submitted.length;
-          dirtyProtocol.controller.setDirty("trigger", true);
+          dirtyProtocol.controller.setDirty("config", true);
           dirtyProtocol.controller.selectProtocol("uart");
-          await dirtyProtocol.controller.applyMode();
           await settle();
           assert.deepEqual(dirtyProtocol.confirmations, ["asked"]);
-          assert.equal(dirtyProtocol.controller.state.confirmedMode, "can");
-          assert.equal(dirtyProtocol.controller.state.dirtyTrigger, true);
+          assert.equal(dirtyProtocol.controller.state.selectedProtocol, "can");
+          assert.equal(dirtyProtocol.controller.state.dirtyConfig, true);
           assert.equal(dirtyProtocol.submitted.length, before);
         }
 
         {
           const listerKept = makeHarness({ initialMode: "can" });
-          listerKept.controller.scheduleRefresh();
+          await listerKept.controller.refreshDecode();
           await settle();
           listerKept.controller.setDirty("listerDisplay", true);
           listerKept.controller.selectProtocol("uart");
-          await listerKept.controller.applyMode();
+          await listerKept.controller.applyDecode({}, {});
           await settle();
           assert.deepEqual(listerKept.confirmations, []);
           assert.equal(listerKept.controller.state.confirmedMode, "uart");
@@ -1333,7 +1358,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           const busTwoLister = makeHarness({
             initialMode: "can", maxBus: 2,
           });
-          busTwoLister.controller.scheduleRefresh();
+          busTwoLister.controller.refreshDecode();
           await settle();
           busTwoLister.controller.setDirty("display", true);
           busTwoLister.controller.setDirty("listerReference", true);
@@ -1346,7 +1371,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
         {
           const listerRouting = makeHarness({ initialMode: "can" });
-          listerRouting.controller.scheduleRefresh();
+          await listerRouting.controller.refreshDecode();
           await settle();
           listerRouting.controller.setDirty("listerDisplay", true);
           await listerRouting.controller.applyListerSetting("display", { display: "all" });
@@ -1379,21 +1404,19 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
         {
           const relister = makeHarness({ initialMode: "can" });
-          relister.controller.scheduleRefresh();
+          await relister.controller.refreshDecode();
           await settle();
           const firstCommands = commandsOf(relister);
-          assert.equal(firstCommands.includes("serial-lister-query"), true);
-          assert.equal(firstCommands.includes("serial-lister-display:query"), false);
-          assert.equal(firstCommands.includes("serial-lister-reference:query"), false);
+          assert.equal(firstCommands.includes("serial-lister-query"), false);
+          assert.equal(firstCommands.includes("serial-trigger-can:query"), false);
+          await relister.controller.refreshLister();
+          await settle();
+          assert.deepEqual(commandsOf(relister).slice(3), listerRefreshCommands);
           const before = relister.submitted.length;
-          relister.controller.scheduleRefresh();
+          await relister.controller.refreshLister();
           await settle();
           const refreshed = relister.submitted.slice(before);
           assert.deepEqual(refreshed.map((entry) => entry.command), [
-            "serial-mode",
-            "serial-display",
-            "serial-can",
-            "serial-trigger-can",
             "serial-lister-query",
           ]);
         }
@@ -1409,7 +1432,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback() -> None:
+def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> None:
     serial_editor_path = STATIC_ROOT / "serial-editor.js"
     script = textwrap.dedent(
         r'''
@@ -1457,9 +1480,9 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
         const source = fs.readFileSync(process.argv[1], "utf8")
           .replace(/^import[^\n]*\r?\n/gm, "")
           .replace(/^export /gm, "")
-          + "\nglobalThis.serialApi = { SerialEditor };";
+          + "\nglobalThis.serialApi = { SerialDecodeEditor, SerialTriggerEditor, SerialListerEditor, createSerialEditorController };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
-        const { SerialEditor } = globalThis.serialApi;
+        const { SerialDecodeEditor, SerialTriggerEditor, SerialListerEditor, createSerialEditorController } = globalThis.serialApi;
 
         const settle = async () => {
           await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1497,7 +1520,6 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
         const submitted = [];
         let executionBusy = false;
         let currentMode = "can";
-        let editor = null;
         const respond = (command, parameters) => {
           if (command === "serial-mode") {
             if (parameters.action === "set") currentMode = parameters.mode;
@@ -1525,58 +1547,70 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
             result: { result: { [protocol]: { bus: parameters.bus } } },
           };
         };
-        const executeCommand = async (command, parameters) => {
-          const job = respond(command, parameters);
-          submitted.push({ command, bus: parameters.bus, action: parameters.action });
-          queueMicrotask(() => editor.scheduleRefresh());
-          return job;
-        };
-
-        editor = new SerialEditor(new FakeNode(), catalog, {
-          executeCommand,
+        const hooks = {
+          executeCommand: async (command, parameters) => {
+            const job = respond(command, parameters);
+            submitted.push({ command, bus: parameters.bus, action: parameters.action });
+            return job;
+          },
           isAvailable: () => true,
           isExecutionBusy: () => executionBusy,
           contextKey: () => "ctx",
           modelInfo: () => ({ supported: true, maxBus: 2, protocols: ["uart", "i2c", "spi", "can"] }),
-        });
-
-        editor.scheduleRefresh();
-        await settle();
-        assert.equal(editor.protocolSelect.value, "can");
-        assert.equal(editor.triggerSection.hidden, false);
-        assert.ok(editor.triggerForm);
-        assert.ok(editor.listerDisplayForm);
-        assert.ok(editor.listerReferenceForm);
-        assert.ok(editor.exportForm);
-        assert.equal(submitted.length, 5);
-        assert.deepEqual(submitted.slice(0, 4).map((entry) => entry.bus), [1, 1, 1, 1]);
-        assert.equal(submitted[4].command, "serial-lister-query");
-        assert.equal(editor.listerDisplayForm.lastSyncArgs?.[1], true);
-        assert.equal(editor.listerReferenceForm.lastSyncArgs?.[1], true);
-
-        editor.listerDisplayForm.dirty = true;
-        editor.listerReferenceForm.dirty = true;
-
-        editor.busSelect.value = "2";
-        editor.busSelect.dispatch("change");
-        await settle();
-        assert.equal(editor.controller.state.bus, 2);
-        assert.equal(editor.protocolSelect.value, "can");
-        assert.equal(submitted.length, 5);
-
-        const listerDirtyBefore = {
-          display: editor.listerDisplayForm.dirty,
-          reference: editor.listerReferenceForm.dirty,
         };
+        const controller = createSerialEditorController({
+          execute: hooks.executeCommand,
+          confirmDiscard: () => true,
+          available: () => true,
+        });
+        const decodeEditor = new SerialDecodeEditor(new FakeNode(), catalog, hooks, controller);
+        const triggerEditor = new SerialTriggerEditor(new FakeNode(), catalog, hooks, controller);
+        const listerEditor = new SerialListerEditor(new FakeNode(), catalog, hooks, controller);
 
-        editor.refreshButton.dispatch("click");
+        decodeEditor.schedulePresentation();
+        await settle();
+        assert.equal(decodeEditor.protocolSelect.value, "can");
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "serial-mode",
+          "serial-display",
+          "serial-can",
+        ]);
+
+        triggerEditor.schedulePresentation();
+        await settle();
+        assert.equal(triggerEditor.triggerSection.hidden, false);
+        assert.ok(triggerEditor.triggerForm);
+        assert.deepEqual(submitted.slice(3).map((entry) => entry.command), [
+          "serial-mode",
+          "serial-trigger-can",
+        ]);
+
+        listerEditor.schedulePresentation();
+        await settle();
+        assert.ok(listerEditor.listerDisplayForm);
+        assert.ok(listerEditor.listerReferenceForm);
+        assert.ok(listerEditor.exportForm);
+        assert.equal(submitted[5].command, "serial-lister-query");
+        assert.equal(listerEditor.listerDisplayForm.lastSyncArgs?.[1], true);
+        assert.equal(listerEditor.listerReferenceForm.lastSyncArgs?.[1], true);
+
+        listerEditor.listerDisplayForm.dirty = true;
+        listerEditor.listerReferenceForm.dirty = true;
+
+        decodeEditor.busSelect.value = "2";
+        decodeEditor.busSelect.dispatch("change");
+        await settle();
+        assert.equal(controller.state.bus, 2);
+        assert.equal(decodeEditor.protocolSelect.value, "can");
+        assert.equal(submitted.length, 6);
+
+        decodeEditor.refreshButton.dispatch("click");
         await settle();
 
-        assert.deepEqual(listerDirtyBefore, { display: true, reference: true });
-        assert.equal(editor.listerDisplayForm.lastSyncArgs?.[1], true);
-        assert.equal(editor.listerReferenceForm.lastSyncArgs?.[1], true);
+        assert.equal(listerEditor.listerDisplayForm.lastSyncArgs?.[1], true);
+        assert.equal(listerEditor.listerReferenceForm.lastSyncArgs?.[1], true);
 
-        const laterSubmissions = submitted.slice(5);
+        const laterSubmissions = submitted.slice(6);
         assert.equal(laterSubmissions.length > 0, true);
         assert.equal(laterSubmissions.every((entry) =>
           entry.bus === 2 || entry.command === "serial-lister-query"), true);
@@ -1585,26 +1619,28 @@ def test_serial_editor_view_refresh_keeps_selected_bus_and_follows_mode_readback
         assert.equal(laterSubmissions.some((entry) =>
           entry.command === "serial-display" && entry.action === "query"), true);
         assert.equal(laterSubmissions.some((entry) =>
-          entry.command.startsWith("serial-trigger-") && entry.action === "query"), true);
-        assert.equal(laterSubmissions.filter((entry) =>
-          entry.command === "serial-lister-query").length >= 1, true);
+          entry.command.startsWith("serial-trigger-")), false);
+        assert.equal(laterSubmissions.some((entry) =>
+          entry.command === "serial-lister-query"), false);
 
-        editor.displayForm.values = () => ({ enabled: true });
-        editor.exportForm.values = () => ({ filename: "serial.csv" });
+        decodeEditor.displayForm.values = () => ({ enabled: true });
+        listerEditor.exportForm.values = () => ({ filename: "serial.csv" });
         executionBusy = true;
-        editor.render(editor.controller.state);
-        assert.equal(editor.applyDisplayButton.disabled, true);
-        assert.equal(editor.exportButton.disabled, true);
+        decodeEditor.render(controller.state);
+        listerEditor.render(controller.state);
+        assert.equal(decodeEditor.applyDecodeButton.disabled, true);
+        assert.equal(listerEditor.exportButton.disabled, true);
         const blockedAt = submitted.length;
-        await editor.submitDisplay();
-        await editor.submitExport();
+        await decodeEditor.submitDecode();
+        await listerEditor.submitExport();
         assert.equal(submitted.length, blockedAt);
 
         executionBusy = false;
-        editor.render(editor.controller.state);
-        assert.equal(editor.applyDisplayButton.disabled, false);
-        assert.equal(editor.exportButton.disabled, false);
-        await editor.submitExport();
+        decodeEditor.render(controller.state);
+        listerEditor.render(controller.state);
+        assert.equal(decodeEditor.applyDecodeButton.disabled, false);
+        assert.equal(listerEditor.exportButton.disabled, false);
+        await listerEditor.submitExport();
         assert.equal(submitted[blockedAt].command, "serial-lister-export");
         '''
     )
@@ -1626,8 +1662,14 @@ def test_serial_editor_locale_keys_are_localized() -> None:
     assert '"serial.editor.discardConfirm": "Discard unapplied Serial changes?"' in english
     assert '"serial.editor.unavailable": "請先連接並識別支援的儀器，再設定串列。"' in chinese
     assert '"serial.editor.discardConfirm": "要捨棄未套用的串列變更嗎？"' in chinese
-    assert '"serial.editor.title": "Serial editor"' in english
-    assert '"serial.editor.title": "串列編輯器"' in chinese
+    assert '"serial-decode.editor.title": "Serial Decode"' in english
+    assert '"serial-trigger.editor.title": "Serial Trigger"' in english
+    assert '"serial-lister.editor.title": "Serial Lister"' in english
+    assert '"serial-decode.editor.title": "串列解碼設定"' in chinese
+    assert '"serial-trigger.editor.title": "串列觸發"' in chinese
+    assert '"serial-lister.editor.title": "Serial Lister"' in chinese
+    assert '"serial.decode.applySettings": "Apply decode settings"' in english
+    assert '"serial.decode.applySettings": "套用解碼設定"' in chinese
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
@@ -5401,7 +5443,9 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
           else if (id === "setup-save") saveExportEditor.mode = "setup";
           else if (id === "save-image") saveExportEditor.mode = "image";
         }};
-        const serialEditor = {{}};
+        const serialDecodeEditor = {{}};
+        const serialTriggerEditor = {{}};
+        const serialListerEditor = {{}};
         const triggerEditor = {{ refreshButton: {{}}, entry: {{ button: {{}} }} }};
         const searchEditor = {{}};
         const segmentedEditor = {{}};

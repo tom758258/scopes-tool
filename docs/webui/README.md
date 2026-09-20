@@ -182,10 +182,12 @@ The Command workbench exposes:
 - Search: a dedicated Search editor covering independent Search state, mode,
   and count commands, capability-gated Search event navigation, and Serial
   Search over UART/I2C/SPI/CAN with Bus selection
-- Serial: a dedicated mode-aware Serial editor covering bus selection, Serial
-  Mode, Serial Display, UART/I2C/SPI/CAN configuration and triggers, and a
-  protocol-independent Serial Lister section (display, reference, and
-  host-side export), plus `serial-query`
+- Serial: three task workspaces — Serial Decode (bus, current and pending
+  protocol, display, and UART/I2C/SPI/CAN configuration with one ordered
+  Apply), Serial Trigger (current decode protocol plus its trigger criteria
+  with Apply and a mode re-check), and a protocol-independent Serial Lister
+  workspace (display, reference, and host-side export) — over the existing
+  hidden Serial building-block commands
 - Segmented Memory: a dedicated state view for explicit Read current state, Enter, Exit,
   segment selection, and current Time Tag readback over `segmented-memory`,
   plus `segmented-capture`
@@ -344,32 +346,34 @@ queries. There is no Apply All, transaction, frontend capability
 database, or SCPI generation in the editor, and non-Serial Search criteria
 editors remain out of scope.
 
-Selecting a Serial bus/mode/display/configuration/trigger/lister command opens
-the dedicated Serial editor instead of a plain command form. The editor
-projects the model's serial bus count and available protocols from Core
-capabilities, shows the current protocol reported by the instrument, and
-offers only UART, I2C, SPI, and CAN with an explicit Apply Mode action.
-Configuration and Trigger queries run only after `serial-mode` readback
-confirms the bus is in that protocol; when the bus reports another recognized
-protocol such as LIN, FlexRay, or A429, the editor shows the current protocol
-with an unsupported-configuration note instead of issuing protocol-specific
-reads. The Protocol selector follows the protocol confirmed by the latest
-readback. Mode, Display, each protocol Configuration, and the matching
-Trigger remain separate Apply operations over the existing commands; an
-Apply Trigger re-checks `serial-mode` first and skips stale writes the same
-way as configuration applies. Switching Bus asks for confirmation before
-discarding any unapplied Display/Configuration/Trigger edits, and applying a
-different protocol asks before discarding old-protocol Configuration or
-Trigger edits. Bus and Protocol navigation does not query the instrument;
-explicit Read serial settings performs the existing mode, display, active-protocol, trigger,
-and lister read sequence. A configuration Apply first re-checks `serial-mode` and skips
-the write when the instrument no longer reports the expected protocol. The
-Serial Lister section is independent of protocol and Bus: its state is
-refreshed through the existing aggregate `serial-lister-query`, display and
-reference settings apply through their existing commands, and Export performs
-the existing host-side raw CSV retrieval with its registered job artifact. Its
-filename-only field writes under the PC output folder selected in Basic
-Controls and fails rather than overwriting an existing file with that name.
+Selecting a Serial workspace opens one of three task entries instead of a
+plain command form: Serial Decode (`serial-decode`), Serial Trigger
+(`serial-trigger`), and Serial Lister (`serial-lister`). The underlying
+Serial commands remain executable building blocks but are hidden from normal
+Command Browser navigation. The workspaces project the model's serial bus
+count and available protocols from Core capabilities. Serial Decode shows
+the instrument-reported current protocol read-only next to a pending
+protocol selector, keeps display and protocol configuration in the same
+workspace, and applies them with one Apply decode settings action that
+writes only dirty sections in mode, display, then guarded-configuration
+order before a Decode-only readback; a pending target-protocol draft
+survives the mode change, while an externally changed bus mode still skips
+stale writes. Serial Trigger shows the current decode protocol without its
+own protocol selector, reads only the mode guard plus the active protocol
+trigger state, and applies through the existing trigger command with the
+same mode re-check. When the bus reports another recognized protocol such
+as LIN, FlexRay, or A429, the workspaces show the current protocol with an
+unsupported-configuration note instead of issuing protocol-specific reads.
+Switching Bus asks for confirmation before discarding unapplied edits, and
+changing the pending Decode protocol asks before discarding the previous
+protocol's configuration draft; Bus and Protocol navigation does not query
+the instrument. The Serial Lister workspace is independent of protocol and
+Bus: its state is refreshed through the existing aggregate
+`serial-lister-query`, display and reference settings apply through their
+existing commands, and Export performs the existing host-side raw CSV
+retrieval with its registered job artifact. Its filename-only field writes
+under the PC output folder selected in Basic Controls and fails rather
+than overwriting an existing file with that name.
 
 Selecting a Cursor, Annotation, WGEN, or DEMO command opens the matching dedicated
 editor instead of a plain command form. The Command Browser remains the only

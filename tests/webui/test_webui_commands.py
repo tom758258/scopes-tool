@@ -3012,11 +3012,45 @@ def test_command_catalog_group_metadata_contract() -> None:
         assert "group" not in commands[command_id], command_id
 
 
-def test_serial_editor_marks_dedicated_editor_commands() -> None:
-    commands = {
-        entry["id"]: entry
-        for entry in TestClient(app).get("/api/commands").json()
-    }
+def test_serial_workspaces_expose_three_task_entries() -> None:
+    entries = TestClient(app).get("/api/commands").json()
+    commands = {entry["id"]: entry for entry in entries}
+
+    for workspace_id, editor in (
+        ("serial-decode", "serial-decode"),
+        ("serial-trigger", "serial-trigger"),
+        ("serial-lister", "serial-lister"),
+    ):
+        entry = commands[workspace_id]
+        assert entry["presentation_only"] is True, workspace_id
+        assert entry["editor"] == editor, workspace_id
+        assert entry["category"] == "Serial", workspace_id
+        assert entry["modes"] == ["live", "simulate"], workspace_id
+
+    assert [
+        entry["id"]
+        for entry in entries
+        if entry["category"] == "Serial" and not entry.get("browser_hidden")
+    ] == ["serial-decode", "serial-trigger", "serial-lister"]
+
+    for command_id in (
+        "serial-query",
+        "serial-mode",
+        "serial-display",
+        "serial-uart",
+        "serial-i2c",
+        "serial-spi",
+        "serial-can",
+        "serial-trigger-uart",
+        "serial-trigger-i2c",
+        "serial-trigger-spi",
+        "serial-trigger-can",
+        "serial-lister-query",
+        "serial-lister-display",
+        "serial-lister-reference",
+        "serial-lister-export",
+    ):
+        assert commands[command_id]["browser_hidden"] is True, command_id
 
     for command_id in (
         "serial-mode",
@@ -3042,10 +3076,21 @@ def test_serial_editor_marks_dedicated_editor_commands() -> None:
         assert entry["presentation"]["query_fields"] == [], command_id
 
     for command_id in ("serial-lister-query", "serial-lister-export"):
-        entry = commands[command_id]
-        assert entry["editor"] == "serial", command_id
+        assert commands[command_id]["editor"] == "serial", command_id
 
     assert "editor" not in commands["serial-query"]
+
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    assert '"command.serial-decode": "Serial Decode"' in english
+    assert '"command.serial-trigger": "Serial Trigger"' in english
+    assert '"command.serial-lister": "Serial Lister"' in english
+    assert '"command.serial-decode": "串列解碼設定"' in chinese
+    assert '"command.serial-trigger": "串列觸發"' in chinese
+    assert '"command.serial-lister": "Serial Lister"' in chinese
+    assert '"serial-decode.editor.title": "Serial Decode"' in english
+    assert '"serial-trigger.editor.title": "Serial Trigger"' in english
+    assert '"serial-lister.editor.title": "Serial Lister"' in english
 
 
 def test_catalog_group_keys_stay_scoped_and_localized() -> None:

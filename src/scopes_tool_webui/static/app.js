@@ -33,7 +33,7 @@ import { ReferenceLabelsEditor } from "/static/reference-labels-editor.js";
 import { SaveExportEditor } from "/static/save-export-editor.js";
 import { SearchEditor } from "/static/search-editor.js";
 import { SegmentedEditor } from "/static/segmented-editor.js";
-import { SerialEditor } from "/static/serial-editor.js";
+import { SerialDecodeEditor, SerialTriggerEditor, SerialListerEditor, createSerialEditorController } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
 import { TriggerEditor } from "/static/trigger-editor.js";
 import { WorkflowEditor } from "/static/workflow-editor.js";
@@ -93,7 +93,9 @@ const elements = {
   referenceDisplayEditor: document.querySelector("#reference-display-editor"),
   referenceLabelsEditor: document.querySelector("#reference-labels-editor"),
   saveExportEditor: document.querySelector("#save-export-editor"),
-  serialEditor: document.querySelector("#serial-editor"),
+  serialDecodeEditor: document.querySelector("#serial-decode-editor"),
+  serialTriggerEditor: document.querySelector("#serial-trigger-editor"),
+  serialListerEditor: document.querySelector("#serial-lister-editor"),
   triggerEditor: document.querySelector("#trigger-editor"),
   searchEditor: document.querySelector("#search-editor"),
   segmentedEditor: document.querySelector("#segmented-editor"),
@@ -157,7 +159,10 @@ let referenceEditor;
 let referenceDisplayEditor;
 let referenceLabelsEditor;
 let saveExportEditor;
-let serialEditor;
+let serialController;
+let serialDecodeEditor;
+let serialTriggerEditor;
+let serialListerEditor;
 let triggerEditor;
 let searchEditor;
 let segmentedEditor;
@@ -199,7 +204,9 @@ const EDITOR_RENDERERS = {
   "reference-display": () => referenceDisplayEditor,
   "reference-labels": () => referenceLabelsEditor,
   "save-export": () => saveExportEditor,
-  serial: () => serialEditor,
+  "serial-decode": () => serialDecodeEditor,
+  "serial-trigger": () => serialTriggerEditor,
+  "serial-lister": () => serialListerEditor,
   trigger: () => triggerEditor,
   search: () => searchEditor,
   segmented: () => segmentedEditor,
@@ -309,7 +316,7 @@ async function initialize() {
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     selectedCommand: () => catalog.selected(),
   });
-  serialEditor = new SerialEditor(elements.serialEditor, catalog, {
+  const serialWorkspaceHooks = {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
@@ -319,7 +326,15 @@ async function initialize() {
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     modelInfo: serialEditorModelInfo,
+  };
+  serialController = createSerialEditorController({
+    execute: (command, parameters, options) => executeCommand(command, parameters, options),
+    confirmDiscard: () => window.confirm(translate("serial.editor.discardConfirm")),
+    available: () => serialWorkspaceHooks.isAvailable() && !isExecutionBusy?.(),
   });
+  serialDecodeEditor = new SerialDecodeEditor(elements.serialDecodeEditor, catalog, serialWorkspaceHooks, serialController);
+  serialTriggerEditor = new SerialTriggerEditor(elements.serialTriggerEditor, catalog, serialWorkspaceHooks, serialController);
+  serialListerEditor = new SerialListerEditor(elements.serialListerEditor, catalog, serialWorkspaceHooks, serialController);
   triggerEditor = new TriggerEditor(elements.triggerEditor, catalog, {
     executeCommand,
     headerActions: elements.workspaceHeaderActions,
@@ -994,7 +1009,9 @@ document.addEventListener("localechange", () => {
   referenceDisplayEditor?.rerender();
   referenceLabelsEditor?.rerender();
   saveExportEditor?.rerender();
-  serialEditor?.rerender();
+  serialDecodeEditor?.rerender();
+  serialTriggerEditor?.rerender();
+  serialListerEditor?.rerender();
   triggerEditor?.rerender();
   searchEditor?.rerender();
   segmentedEditor?.rerender();
@@ -1042,7 +1059,9 @@ function syncCommandSelection(draft = null) {
   if (elements.referenceDisplayEditor) elements.referenceDisplayEditor.hidden = editorKind !== "reference-display";
   if (elements.referenceLabelsEditor) elements.referenceLabelsEditor.hidden = editorKind !== "reference-labels";
   elements.saveExportEditor.hidden = editorKind !== "save-export";
-  elements.serialEditor.hidden = editorKind !== "serial";
+  elements.serialDecodeEditor.hidden = editorKind !== "serial-decode";
+  elements.serialTriggerEditor.hidden = editorKind !== "serial-trigger";
+  elements.serialListerEditor.hidden = editorKind !== "serial-lister";
   elements.triggerEditor.hidden = editorKind !== "trigger";
   elements.searchEditor.hidden = editorKind !== "search";
   elements.segmentedEditor.hidden = editorKind !== "segmented";
@@ -1129,7 +1148,9 @@ function updateAvailability() {
   referenceLabelsEditor?.applyBusyState();
   channelLabelVisibility?.applyBusyState();
   saveExportEditor?.applyBusyState();
-  serialEditor?.render(serialEditor.controller.state);
+  serialDecodeEditor?.render(serialController.state);
+  serialTriggerEditor?.render(serialController.state);
+  serialListerEditor?.render(serialController.state);
   workflowEditor?.applyBusyState();
   sequenceEditor?.applyBusyState();
   measurementEditor?.applyBusyState();
@@ -1208,7 +1229,9 @@ function syncWorkspaceHeaderActions(editorKind) {
     saveExportEditor.refreshButton.hidden =
       editorKind !== "save-export" || saveExportEditor.mode === "setup";
   }
-  if (serialEditor?.refreshButton) serialEditor.refreshButton.hidden = editorKind !== "serial";
+  if (serialDecodeEditor?.refreshButton) serialDecodeEditor.refreshButton.hidden = editorKind !== "serial-decode";
+  if (serialTriggerEditor?.refreshButton) serialTriggerEditor.refreshButton.hidden = editorKind !== "serial-trigger";
+  if (serialListerEditor?.refreshButton) serialListerEditor.refreshButton.hidden = editorKind !== "serial-lister";
   if (triggerEditor?.refreshButton) triggerEditor.refreshButton.hidden = editorKind !== "trigger";
   if (searchEditor?.refreshButton) searchEditor.refreshButton.hidden = editorKind !== "search";
   if (searchEditor?.entry?.button) {
@@ -1264,7 +1287,9 @@ function syncEditorPresentation(editorKind) {
   if (editorKind === "reference-display") referenceDisplayEditor?.schedulePresentation();
   if (editorKind === "reference-labels") referenceLabelsEditor?.schedulePresentation();
   if (editorKind === "save-export") saveExportEditor?.schedulePresentation();
-  if (editorKind === "serial") serialEditor?.schedulePresentation();
+  if (editorKind === "serial-decode") serialDecodeEditor?.schedulePresentation();
+  if (editorKind === "serial-trigger") serialTriggerEditor?.schedulePresentation();
+  if (editorKind === "serial-lister") serialListerEditor?.schedulePresentation();
   if (editorKind === "trigger") triggerEditor?.schedulePresentation();
   if (editorKind === "search") searchEditor?.schedulePresentation();
   if (editorKind === "segmented") segmentedEditor?.schedulePresentation();
