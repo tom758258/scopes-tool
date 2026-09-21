@@ -333,6 +333,7 @@ export class CommandForm {
         const required = field.required === true || Boolean(field.required_if);
         input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
       }
+      const disabledOptions = new Set((field.disabled_options || []).map(String));
       const options = actionChoices || this.catalog.optionsFor(field);
       options.forEach((option) => {
         let label;
@@ -342,7 +343,9 @@ export class CommandForm {
         } else {
           label = translateEnum(option, field.option_label);
         }
-        input.append(new Option(label, String(option)));
+        const opt = new Option(label, String(option));
+        if (disabledOptions.has(String(option))) opt.disabled = true;
+        input.append(opt);
       });
       if (input.multiple) {
         input.size = Math.min(Math.max(options.length, 2), 6);
@@ -358,6 +361,7 @@ export class CommandForm {
         const required = field.required === true || Boolean(field.required_if);
         input.append(new Option(translate(required ? "form.selectValue" : "form.leaveUnchanged"), ""));
       }
+      const disabledOptions = new Set((field.disabled_options || []).map(String));
       const options = this.catalog.optionsFor(field);
       options.forEach((option) => {
         let label;
@@ -367,7 +371,9 @@ export class CommandForm {
         } else {
           label = translateEnum(option, field.option_label);
         }
-        input.append(new Option(label, String(option)));
+        const opt = new Option(label, String(option));
+        if (disabledOptions.has(String(option))) opt.disabled = true;
+        input.append(opt);
       });
     } else if (field.type === "boolean") {
       if (field.default !== undefined) {

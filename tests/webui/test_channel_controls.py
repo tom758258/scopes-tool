@@ -1526,3 +1526,73 @@ def test_channel_scale_range_workspace_latest_result() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_serial_uart_source_and_data_bits_select_and_model_disabled_options() -> None:
+    """Regression: UART RX/TX Source must render as model-aware enum selects,
+    Data Bits as integer select, and model projection must disable unsupported
+    channel options without removing them from the dropdown."""
+    by_id = {entry["id"]: entry for entry in COMMANDS}
+    uart = by_id["serial-uart"]
+    rx = next(f for f in uart["fields"] if f["name"] == "rx_source")
+    tx = next(f for f in uart["fields"] if f["name"] == "tx_source")
+    bits = next(f for f in uart["fields"] if f["name"] == "data_bits")
+
+    # Source fields changed from string to enum with canonical values
+    assert rx.get("type") == "enum"
+    assert rx.get("options") == ("channel1", "channel2", "channel3", "channel4", "external")
+    assert rx.get("option_label") == "channel"
+    assert tx.get("type") == "enum"
+    assert tx.get("options") == ("channel1", "channel2", "channel3", "channel4", "external")
+    assert tx.get("option_label") == "channel"
+
+    # Data bits changed from plain integer to integer with fixed discrete options
+    assert bits.get("type") == "integer"
+    assert bits.get("options") == (5, 6, 7, 8, 9)
+
+    # Catalog projection (unknown model) keeps full options and no disabled options
+    catalog = {e["id"]: e for e in command_catalog()}
+    unknown_pres = catalog["serial-uart"]["presentation"]["models"].get("keysight-dsox2004a")
+    # 4-channel model: no disabled options
+    rx4 = unknown_pres["fields"].get("rx_source", {})
+    # Catalog projection converts tuples to lists; 4-channel model has none disabled
+    disabled4 = rx4.get("disabled_options", [])
+    assert (disabled4 is None or len(disabled4) == 0)
+
+    # Fake 2-channel model must disable channel3 and channel4
+    fake = ScopeCapabilities(
+        series="2000X",
+        analog_channels=2,
+        default_waveform_points=1000,
+        safe_max_waveform_points=10000,
+        supports_word_format=True,
+        supports_raw_points_mode=False,
+        supports_measurements=True,
+        supports_delay_measurement=False,
+        supports_screenshot=True,
+        supports_segmented_memory=True,
+        supports_serial_decode=True,
+        serial_bus_count=1,
+        serial_modes=frozenset({"uart"}),
+        math_function_count=1,
+        supports_math_goft=False,
+        reference_waveforms=2,
+        supports_channel_label=True,
+        channel_label_max_length=10,
+        supports_display_label=True,
+        supports_annotation=True,
+        annotation_slots=1,
+        supports_50_ohm_impedance=False,
+        supports_search_basic=True,
+        search_modes=frozenset({"serial1"}),
+    )
+    original = catalog_module.capabilities_for_model_id
+    try:
+        catalog_module.capabilities_for_model_id = lambda _mid: fake  # type: ignore[assignment]
+        pres2 = _model_command_presentation(by_id["serial-uart"], "fake-2ch")
+        rx2 = pres2["fields"]["rx_source"]
+        assert rx2.get("disabled_options") == ("channel3", "channel4")
+        tx2 = pres2["fields"]["tx_source"]
+        assert tx2.get("disabled_options") == ("channel3", "channel4")
+    finally:
+        catalog_module.capabilities_for_model_id = original  # type: ignore[assignment]

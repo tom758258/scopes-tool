@@ -1767,10 +1767,10 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command(
         "serial-uart", "Serial", "UART configuration", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("rx_source", "string", visible_if=_set_action_visibility(), help_key="serial-uart.rx_source"),
-            _command_field("tx_source", "string", visible_if=_set_action_visibility(), help_key="serial-uart.tx_source"),
+            _command_field("rx_source", "enum", options=("channel1", "channel2", "channel3", "channel4", "external"), option_label="channel", visible_if=_set_action_visibility(), help_key="serial-uart.rx_source"),
+            _command_field("tx_source", "enum", options=("channel1", "channel2", "channel3", "channel4", "external"), option_label="channel", visible_if=_set_action_visibility(), help_key="serial-uart.tx_source"),
             _command_field("baud_rate", "integer", minimum=100, maximum=12_000_000, spinner=False, visible_if=_set_action_visibility(), help_key="serial-uart.baud_rate"),
-            _command_field("data_bits", "integer", minimum=5, maximum=9, visible_if=_set_action_visibility(), help_key="serial-uart.data_bits"),
+            _command_field("data_bits", "integer", options=(5, 6, 7, 8, 9), minimum=5, maximum=9, visible_if=_set_action_visibility(), help_key="serial-uart.data_bits"),
             _command_field("parity", "enum", options=UART_PARITIES, option_label="serial-uart-parity", visible_if=_set_action_visibility(), help_key="serial-uart.parity"),
             _command_field("polarity", "enum", options=UART_POLARITIES, option_label="serial-uart-polarity", visible_if=_set_action_visibility(), help_key="serial-uart.polarity"),
             _command_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, option_label="serial-bit-order", visible_if=_set_action_visibility(), help_key="serial-uart.bit_order"),
@@ -2398,6 +2398,10 @@ def _model_command_presentation(
             "annotation-clear",
         } and name in ("x", "y") and not capabilities.supports_annotation_position:
             override["disabled"] = True
+        if entry["id"] == "serial-uart" and name in ("rx_source", "tx_source"):
+            max_channel = capabilities.analog_channels
+            disabled_options = tuple(f"channel{i}" for i in range(max_channel + 1, 5))
+            override["disabled_options"] = disabled_options
         if entry["id"] == "channel-impedance" and name == "impedance":
             override["options"] = (
                 ("one_meg", "fifty")
