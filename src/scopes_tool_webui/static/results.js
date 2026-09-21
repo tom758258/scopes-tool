@@ -616,7 +616,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
       ? "wgen"
       : context === "demo" || DEMO_RESULT_COMMANDS.has(job.command)
         ? "demo"
-        : SEARCH_RESULT_COMMANDS.has(job.command)
+        : SEARCH_RESULT_COMMANDS.has(job.command) || SERIAL_RESULT_COMMANDS.has(job.command)
           ? job.command
           : context;
     const fields = Object.entries(display).filter(([name, value]) => {
@@ -1010,6 +1010,23 @@ const SEARCH_RESULT_COMMANDS = new Set([
   "serial-search-can",
 ]);
 
+const SERIAL_RESULT_COMMANDS = new Set([
+  "serial-mode",
+  "serial-display",
+  "serial-uart",
+  "serial-i2c",
+  "serial-spi",
+  "serial-can",
+  "serial-trigger-uart",
+  "serial-trigger-i2c",
+  "serial-trigger-spi",
+  "serial-trigger-can",
+  "serial-lister-query",
+  "serial-lister-display",
+  "serial-lister-reference",
+  "serial-lister-export",
+]);
+
 function resultFieldLabel(name, resultContext = null) {
   const scopedLabel = RESULT_FIELD_LABEL_CONTEXTS[resultContext]?.[name];
   if (scopedLabel && hasTranslation(scopedLabel)) return translate(scopedLabel);
@@ -1085,6 +1102,47 @@ const RESULT_ENUM_CONTEXTS = {
     search_mode: "search-mode",
     mode: "serial-search-can-mode",
     id_mode: "serial-search-can-id-mode",
+  },
+  "serial-uart": {
+    parity: "serial-uart-parity",
+    polarity: "serial-uart-polarity",
+    bit_order: "serial-bit-order",
+  },
+  "serial-i2c": {
+    address_size: "serial-i2c-address-size",
+  },
+  "serial-spi": {
+    clock_slope: "serial-spi-clock-slope",
+    bit_order: "serial-bit-order",
+    framing: "serial-spi-framing",
+  },
+  "serial-can": {
+    signal_definition: "serial-can-signal-definition",
+  },
+  "serial-trigger-uart": {
+    type: "serial-trigger-uart-type",
+    qualifier: "serial-trigger-qualifier",
+  },
+  "serial-trigger-i2c": {
+    type: "serial-trigger-i2c-type",
+    qualifier: "serial-trigger-qualifier",
+  },
+  "serial-trigger-spi": {
+    type: "serial-trigger-spi-type",
+  },
+  "serial-trigger-can": {
+    type: "serial-trigger-can-type",
+    id_mode: "serial-trigger-can-id-mode",
+  },
+  "serial-lister-query": {
+    display: "serial-lister-display",
+    reference: "serial-lister-reference",
+  },
+  "serial-lister-display": {
+    display: "serial-lister-display",
+  },
+  "serial-lister-reference": {
+    reference: "serial-lister-reference",
   },
 };
 

@@ -951,7 +951,7 @@ function renderWorkspace() {
     "demo-phase": ["demo-query", "demo-phase"],
     "serial-decode": ["serial-mode", "serial-display", "serial-uart", "serial-i2c", "serial-spi", "serial-can"],
     "serial-trigger": ["serial-mode", "serial-trigger-uart", "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"],
-    "serial-lister": ["serial-lister-query"],
+    "serial-lister": ["serial-lister-query", "serial-lister-display", "serial-lister-reference", "serial-lister-export"],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
