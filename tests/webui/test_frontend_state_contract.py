@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -7,6 +8,8 @@ import textwrap
 from pathlib import Path
 
 import pytest
+
+from scopes_tool_webui.command_catalog import command_catalog
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -5153,6 +5156,127 @@ def test_generic_form_applies_conditional_required_fields() -> None:
     )
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(command_form_path), str(NUMERIC_INPUT_PATH)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_i2c_trigger_type_controls_visible_and_submitted_fields_without_io() -> None:
+    command_form_path = STATIC_ROOT / "command-form.js"
+    command = next(
+        entry for entry in command_catalog() if entry["id"] == "serial-trigger-i2c"
+    )
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testTranslate = (key) => key;
+        globalThis.testHasTranslation = () => false;
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          fs.readFileSync(process.argv[2], "utf8"),
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
+          .replace(/^export class /gm, "class ")
+          + "\nglobalThis.CommandForm = CommandForm;";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const metadata = JSON.parse(process.argv[3]);
+        const values = {
+          action: "set",
+          bus: "1",
+          type: "start",
+          address: "80",
+          data: "165",
+          data2: "90",
+          qualifier: "equal",
+        };
+        const inputs = new Map();
+        const wrappers = [];
+        for (const field of metadata.fields) {
+          const wrapper = {
+            hidden: false,
+            dataset: field.visible_if
+              ? { visibleIf: JSON.stringify(field.visible_if), visibleIfHidden: "false" }
+              : {},
+          };
+          const input = {
+            value: values[field.name] ?? "",
+            required: field.required === true,
+            type: ["integer", "number"].includes(field.type) ? "number" : "select-one",
+            dataset: {
+              field: field.name,
+              type: field.type,
+              required: String(field.required === true),
+              ...(field.required_if ? { requiredIf: JSON.stringify(field.required_if) } : {}),
+            },
+            validity: { badInput: false },
+            closest: (selector) => (
+              selector === '[data-visible-if-hidden="true"]'
+              && wrapper.dataset.visibleIfHidden === "true" ? wrapper : null
+            ),
+            setCustomValidity() {},
+            checkValidity() { return true; },
+            reportValidity() { return false; },
+          };
+          inputs.set(field.name, input);
+          if (field.visible_if) wrappers.push(wrapper);
+        }
+        const container = {
+          querySelectorAll(selector) {
+            if (selector === "[data-help-by-value]") return [];
+            if (selector === "[data-visible-if]") return wrappers;
+            if (selector === "[data-field]") return [...inputs.values()];
+            return [];
+          },
+          querySelector(selector) {
+            const match = selector.match(/^\[data-field="(.+)"\]$/);
+            return inputs.get(match?.[1]) ?? null;
+          },
+        };
+        const form = new globalThis.CommandForm(container, null);
+        form.command = metadata;
+        let ioCalls = 0;
+        form.onQueryFieldChange = () => { ioCalls += 1; };
+
+        const cases = [
+          ["start", []],
+          ["address-no-ack", ["address"]],
+          ["read7", ["address", "data"]],
+          ["read7-data2", ["address", "data", "data2"]],
+          ["read-eeprom", ["address", "data", "qualifier"]],
+        ];
+        for (const [type, expected] of cases) {
+          inputs.get("type").value = type;
+          form.refreshVisibility();
+          const submitted = form.values();
+          const optionalNames = ["address", "data", "data2", "qualifier"];
+          assert.deepEqual(optionalNames.filter((name) => name in submitted), expected, type);
+          assert.deepEqual(
+            optionalNames.filter((name) => !inputs.get(name).closest('[data-visible-if-hidden="true"]')),
+            expected,
+            type,
+          );
+        }
+        assert.equal(ioCalls, 0);
+        '''
+    )
+    completed = subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "--eval",
+            script,
+            str(command_form_path),
+            str(NUMERIC_INPUT_PATH),
+            json.dumps(command),
+        ],
         capture_output=True,
         text=True,
         check=False,

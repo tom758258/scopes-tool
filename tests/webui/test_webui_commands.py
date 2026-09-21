@@ -3103,6 +3103,24 @@ def test_serial_workspaces_expose_three_task_entries() -> None:
     }
     assert trigger_uart_fields["type"]["option_label"] == "serial-trigger-uart-type"
     assert trigger_uart_fields["qualifier"]["option_label"] == "serial-trigger-qualifier"
+    expected_help_fields = {
+        "serial-trigger-i2c": {
+            "address": "serial-trigger-i2c.address",
+            "data": "serial-trigger-i2c.data",
+        },
+        "serial-trigger-spi": {"data": "serial-trigger-spi.data"},
+        "serial-trigger-can": {
+            "id": "serial-trigger-can.id",
+            "data": "serial-trigger-can.data",
+        },
+        "serial-lister-export": {"filename": "serial-lister.filename"},
+        "save-image": {"filename": "save-image.filename"},
+        "save-waveform": {"filename": "save-waveform.filename"},
+    }
+    for command_id, help_keys in expected_help_fields.items():
+        fields = {field["name"]: field for field in commands[command_id]["fields"]}
+        for field_name, help_key in help_keys.items():
+            assert fields[field_name]["help_key"] == help_key
     lister_display_fields = {
         field["name"]: field for field in commands["serial-lister-display"]["fields"]
     }
@@ -3117,6 +3135,9 @@ def test_serial_workspaces_expose_three_task_entries() -> None:
     assert '"help.serial-uart.baud_rate":' in chinese
     assert '"help.serial-lister.display":' in chinese
     assert '"serial-lister.editor.title": "串列資料清單（Lister）"' in chinese
+    assert "0x" in english.split('"help.serial-trigger-spi.data":', 1)[1].split("\n", 1)[0]
+    assert "X" in english.split('"help.serial-trigger-spi.data":', 1)[1].split("\n", 1)[0]
+    assert ".csv" in english.split('"help.serial-lister.filename":', 1)[1].split("\n", 1)[0]
 
 
 def test_catalog_group_keys_stay_scoped_and_localized() -> None:
