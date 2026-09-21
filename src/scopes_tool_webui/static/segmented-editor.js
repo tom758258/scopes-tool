@@ -72,6 +72,7 @@ export class SegmentedEditor {
 
     const countRow = document.createElement("div");
     countRow.className = "segmented-editor-actions segmented-editor-count-row";
+    this.countRow = countRow;
     const countField = document.createElement("label");
     countField.className = "field segmented-editor-count";
     const countLabel = document.createElement("span");
@@ -646,7 +647,7 @@ export class SegmentedEditor {
     this.stateHelp.hidden = unsupported || !segmented;
     this.unavailableNote.hidden = !unsupported;
     this.readouts.hidden = unsupported;
-    this.countInput.parentNode.hidden = unsupported;
+    this.countRow.hidden = unsupported;
     if (unsupported) this.segmentBrowser.hidden = true;
     this.captureSection.hidden = unsupported || !this.captureSupported();
   }
@@ -664,9 +665,11 @@ export class SegmentedEditor {
     if (configuredRaw === null || configuredRaw === undefined) return false;
     const value = Number(this.countInput.value);
     const configured = Number(configuredRaw);
+    const validity = this.countInput.validity;
+    const valid = validity ? validity.valid : this.countInput.checkValidity();
     return Number.isInteger(value)
       && Number.isInteger(configured)
-      && this.countInput.checkValidity()
+      && valid
       && value !== configured;
   }
 

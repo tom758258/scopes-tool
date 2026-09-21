@@ -177,12 +177,18 @@ EDITOR_HARNESS = r'''
           setAttribute() {}
           setCustomValidity(message) { this.customValidity = message; }
           checkValidity() {
+            if (this.disabled) return true;
+            return this.validity.valid;
+          }
+          get validity() {
             const value = Number(this.value);
-            return !(this.required && this.value === "")
-              && Number.isFinite(value)
-              && (!this.min || value >= Number(this.min))
-              && (!this.max || value <= Number(this.max))
-              && (!this.step || Number.isInteger(value));
+            return {
+              valid: !(this.required && this.value === "")
+                && Number.isFinite(value)
+                && (!this.min || value >= Number(this.min))
+                && (!this.max || value <= Number(this.max))
+                && (!this.step || Number.isInteger(value)),
+            };
           }
           reportValidity() { this.reported = true; }
         }
@@ -855,6 +861,7 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
         assert.equal(editor.modeButton.textContent, "segmented.editor.exit");
         assert.equal(editor.modeButton.className, "secondary");
         assert.equal(editor.applySegmentsButton.hidden, false);
+        assert.equal(editor.countRow.hidden, false);
         assert.equal(editor.modeOutput.output.textContent, "Segmented");
         assert.equal(editor.countInput.value, "100");
         assert.equal(editor.applySegmentsButton.disabled, true);
@@ -867,6 +874,15 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
 
         editor.countInput.value = "999";
         editor.countInput.dispatch("input");
+        assert.equal(editor.applySegmentsButton.disabled, true);
+        assert.equal(editor.applySegmentsButton.className, "secondary");
+
+        editor.setBusy(true);
+        assert.equal(editor.countInput.disabled, true);
+        assert.equal(editor.applySegmentsButton.disabled, true);
+        assert.equal(editor.applySegmentsButton.className, "secondary");
+        editor.setBusy(false);
+        assert.equal(editor.countInput.disabled, false);
         assert.equal(editor.applySegmentsButton.disabled, true);
         assert.equal(editor.applySegmentsButton.className, "secondary");
 
@@ -914,6 +930,7 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
         await settle();
         assert.equal(editor.modeButton.hidden, true);
         assert.equal(editor.applySegmentsButton.hidden, true);
+        assert.equal(editor.countRow.hidden, true);
         assert.equal(editor.unavailableNote.hidden, false);
         assert.equal(editor.readouts.hidden, true);
         assert.equal(editor.segmentBrowser.hidden, true);
