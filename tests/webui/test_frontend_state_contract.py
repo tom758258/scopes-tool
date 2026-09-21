@@ -1886,6 +1886,7 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           clearDirty() { this.clearedDirty = true; this.dirty = false; }
           syncResult(job, preserveDirty) { this.lastSyncArgs = [job, preserveDirty]; }
           isDirty() { return this.dirty; }
+          refreshLocale() {}
         };
 
         const source = fs.readFileSync(process.argv[1], "utf8")
@@ -5279,6 +5280,350 @@ def test_i2c_trigger_type_controls_visible_and_submitted_fields_without_io() -> 
         ],
         capture_output=True,
         text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+_SERIAL_REAL_FORM_HARNESS = textwrap.dedent(
+    r'''
+    import assert from "node:assert/strict";
+    import fs from "node:fs";
+
+    function datasetKeyName(name) {
+      return name.split("-").map((part, index) => (
+        index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)
+      )).join("");
+    }
+    function matchesAttributeSelector(node, selector) {
+      const match = selector.match(/^\[data-([a-z-]+)(?:="([^"]*)")?\]$/);
+      if (!match || !node || !node.dataset) return false;
+      const actual = node.dataset[datasetKeyName(match[1])];
+      if (match[2] === undefined) return actual !== undefined;
+      return String(actual) === match[2];
+    }
+
+    class FakeNode {
+      constructor(tag = "div") {
+        this.tagName = tag.toUpperCase();
+        this.children = [];
+        this.parentNode = null;
+        this.dataset = {};
+        this.listeners = {};
+        this.attributes = {};
+        this.hidden = false;
+        this.disabled = false;
+        this.required = false;
+        this.checked = false;
+        this.multiple = false;
+        this.value = "";
+        this.type = "";
+        this.min = "";
+        this.max = "";
+        this.step = "";
+        this.textContent = "";
+        this.className = "";
+        this.options = [];
+        this.validity = { badInput: false };
+        this.reported = false;
+        this.customMessage = "";
+        this.classList = { add: () => {}, remove: () => {}, contains: () => false };
+      }
+      setAttribute(name, value) { this.attributes[name] = String(value); }
+      getAttribute(name) { return this.attributes[name]; }
+      addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+      dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+      replaceChildren(...nodes) { this.children = []; this.options = []; this.append(...nodes); }
+      append(...nodes) {
+        for (const node of nodes) {
+          if (!node || typeof node !== "object") continue;
+          this.children.push(node);
+          node.parentNode = this;
+          if (this.tagName === "SELECT" && node.tagName === "OPTION") this.options.push(node);
+        }
+      }
+      closest(selector) {
+        let node = this;
+        while (node) {
+          if (matchesAttributeSelector(node, selector)) return node;
+          node = node.parentNode;
+        }
+        return null;
+      }
+      querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+      querySelectorAll(selector) {
+        const matches = [];
+        const visit = (node) => {
+          for (const child of node?.children || []) {
+            if (matchesAttributeSelector(child, selector)) matches.push(child);
+            visit(child);
+          }
+        };
+        visit(this);
+        return matches;
+      }
+      checkValidity() {
+        if (this.required && String(this.value ?? "") === "") return false;
+        if (this.type === "number" && String(this.value ?? "") !== "") {
+          const num = Number(this.value);
+          if (!Number.isFinite(num)) return false;
+          if (this.min !== "" && this.min !== undefined && num < Number(this.min)) return false;
+          if (this.max !== "" && this.max !== undefined && num > Number(this.max)) return false;
+        }
+        return true;
+      }
+      reportValidity() { this.reported = true; return this.checkValidity(); }
+      setCustomValidity(message) { this.customMessage = String(message); }
+    }
+    globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+    globalThis.Option = function Option(text, value) {
+      const option = new FakeNode("option");
+      option.textContent = text;
+      option.value = String(value);
+      return option;
+    };
+    globalThis.window = { confirm: () => true };
+
+    const source = [
+      "let runtimeLocale = \"en\";",
+      fs.readFileSync(process.argv[4], "utf8"),
+      fs.readFileSync(process.argv[5], "utf8"),
+      "const testDicts = { en, zhTW, \"zh-TW\": zhTW };",
+      "const translate = (key, values = {}) => {",
+      "  const table = testDicts[runtimeLocale] || {};",
+      "  let text = Object.prototype.hasOwnProperty.call(table, key) ? table[key] : key;",
+      "  for (const [name, value] of Object.entries(values)) {",
+      "    text = String(text).split(\"{\" + name + \"}\").join(String(value));",
+      "  }",
+      "  return text;",
+      "};",
+      "const hasTranslation = (key) => Object.prototype.hasOwnProperty.call(testDicts[runtimeLocale] || {}, key);",
+      "globalThis.setRuntimeLocale = (value) => { runtimeLocale = value; };",
+      fs.readFileSync(process.argv[3], "utf8"),
+      fs.readFileSync(process.argv[2], "utf8"),
+      fs.readFileSync(process.argv[1], "utf8"),
+    ].join("\n").replace(/^import[^\n]*\r?\n/gm, "")
+      .replace(/^export function /gm, "function ")
+      .replace(/^export class /gm, "class ")
+      .replace(/^export const /gm, "const ")
+      + "\nglobalThis.serialApi = { SerialTriggerEditor, createSerialEditorController, CommandForm, testDicts };";
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+    const { SerialTriggerEditor, createSerialEditorController, testDicts } = globalThis.serialApi;
+
+    const settle = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    const triggerDefinition = JSON.parse(process.argv[6]);
+    const catalog = {
+      commands: [triggerDefinition],
+      fieldsFor: (definition) => definition.fields,
+      optionsFor: (field) => field.options || [],
+      description: () => "",
+    };
+    const submitted = [];
+    const respond = (command, parameters) => {
+      if (command === "serial-mode") {
+        return {
+          job_id: "mode-1",
+          status: "completed",
+          result: { result: { mode: { bus: parameters.bus ?? 1, mode: "i2c", raw_mode: "I2C" } } },
+        };
+      }
+      if (command === "serial-trigger-i2c") {
+        return {
+          job_id: "trigger-1",
+          status: "completed",
+          result: { result: { trigger: { bus: parameters.bus ?? 1 } } },
+        };
+      }
+      return { job_id: `${command}-1`, status: "completed", result: { result: {} } };
+    };
+    const hooks = {
+      executeCommand: async (command, parameters) => {
+        submitted.push({ command, parameters });
+        return respond(command, parameters);
+      },
+      isAvailable: () => true,
+      isExecutionBusy: () => false,
+      contextKey: () => "ctx",
+      headerActions: new FakeNode(),
+      modelInfo: () => ({ supported: true, maxBus: 2, protocols: ["uart", "i2c", "spi", "can"] }),
+    };
+    const controller = createSerialEditorController({
+      execute: hooks.executeCommand,
+      confirmDiscard: () => true,
+      available: () => true,
+    });
+    const editor = new SerialTriggerEditor(new FakeNode(), catalog, hooks, controller);
+
+    async function bootTriggerForm() {
+      editor.schedulePresentation();
+      await settle();
+      assert.deepEqual(submitted, []);
+      editor.refreshButton.dispatch("click");
+      await settle();
+      assert.deepEqual(submitted.map((entry) => entry.command), ["serial-mode", "serial-trigger-i2c"]);
+      const readCalls = submitted.length;
+      assert.ok(editor.triggerForm);
+      assert.equal(editor.triggerForm.command.id, "serial-trigger-i2c");
+      assert.equal(editor.applyTriggerButton.disabled, false);
+      return {
+        typeInput: editor.triggerForm.container.querySelector('[data-field="type"]'),
+        addressInput: editor.triggerForm.container.querySelector('[data-field="address"]'),
+        dataInput: editor.triggerForm.container.querySelector('[data-field="data"]'),
+        readCalls,
+      };
+    }
+    '''
+)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_i2c_trigger_address_maximum_follows_type_without_io() -> None:
+    command = next(
+        entry for entry in command_catalog() if entry["id"] == "serial-trigger-i2c"
+    )
+    address = next(field for field in command["fields"] if field["name"] == "address")
+    assert address["minimum"] == 0
+    assert address["maximum"] == 1023
+    assert address["maximum_by_type"]["write10"] == 1023
+    assert address["maximum_by_type"]["read7"] == 127
+    script = _SERIAL_REAL_FORM_HARNESS + textwrap.dedent(
+        r'''
+        const { typeInput, addressInput, dataInput, readCalls } = await bootTriggerForm();
+        assert.ok(typeInput && addressInput && dataInput);
+        assert.equal(addressInput.min, "0");
+        assert.equal(addressInput.max, "1023");
+        assert.equal(dataInput.min, "0");
+        assert.equal(dataInput.max, "255");
+
+        typeInput.value = "write10";
+        typeInput.dispatch("change");
+        assert.equal(addressInput.max, "1023");
+
+        addressInput.value = "500";
+        addressInput.dispatch("change");
+        dataInput.value = "165";
+        dataInput.dispatch("change");
+
+        const accepted = editor.triggerForm.values();
+        assert.equal(accepted.type, "write10");
+        assert.equal(accepted.address, 500);
+        assert.equal(accepted.data, 165);
+        assert.ok(!("data2" in accepted));
+
+        const applyCalls = [];
+        controller.applyTrigger = async (values) => { applyCalls.push(values); return null; };
+        await editor.submitTrigger();
+        assert.equal(applyCalls.length, 1);
+        assert.deepEqual(applyCalls[0], { type: "write10", address: 500, data: 165 });
+        assert.equal(submitted.length, readCalls);
+
+        typeInput.value = "read7";
+        typeInput.dispatch("change");
+        assert.equal(addressInput.max, "127");
+        assert.equal(addressInput.value, "500");
+
+        addressInput.reported = false;
+        assert.equal(editor.triggerForm.values(), null);
+        assert.equal(addressInput.reported, true);
+        assert.ok(editor.triggerForm.isDirty());
+        await editor.submitTrigger();
+        assert.equal(applyCalls.length, 1);
+        assert.equal(submitted.length, readCalls);
+
+        typeInput.value = "start";
+        typeInput.dispatch("change");
+        assert.equal(addressInput.value, "500");
+        const hiddenValues = editor.triggerForm.values();
+        assert.ok(!("address" in hiddenValues));
+        await editor.submitTrigger();
+        assert.equal(applyCalls.length, 2);
+        assert.deepEqual(applyCalls[1], { type: "start" });
+        assert.equal(submitted.length, readCalls);
+        '''
+    )
+    completed = subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "--eval",
+            script,
+            str(STATIC_ROOT / "serial-editor.js"),
+            str(STATIC_ROOT / "command-form.js"),
+            str(NUMERIC_INPUT_PATH),
+            str(STATIC_ROOT / "locale_en.js"),
+            str(STATIC_ROOT / "locale_zh_tw.js"),
+            json.dumps(command),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_serial_trigger_form_refreshes_locale_without_io() -> None:
+    command = next(
+        entry for entry in command_catalog() if entry["id"] == "serial-trigger-i2c"
+    )
+    script = _SERIAL_REAL_FORM_HARNESS + textwrap.dedent(
+        r'''
+        const { typeInput, addressInput, dataInput, readCalls } = await bootTriggerForm();
+
+        typeInput.value = "read7";
+        typeInput.dispatch("change");
+        addressInput.value = "80";
+        addressInput.dispatch("change");
+        dataInput.value = "165";
+        dataInput.dispatch("change");
+
+        const helpFor = (name) => editor.triggerForm.container.querySelectorAll("[data-field-help]")
+          .find((node) => node.dataset.fieldHelp === name);
+        const labelFor = (name) => editor.triggerForm.container.querySelectorAll("[data-field-label]")
+          .find((node) => node.dataset.fieldLabel === name);
+        const addressHelp = helpFor("address");
+        const addressLabel = labelFor("address");
+        assert.ok(addressHelp && addressLabel);
+        assert.equal(
+          addressHelp.textContent,
+          testDicts.en["help.serial-trigger-i2c.address"],
+        );
+        assert.equal(addressLabel.textContent, testDicts.en["field.address"]);
+
+        globalThis.setRuntimeLocale("zh-TW");
+        editor.rerender();
+
+        assert.equal(
+          addressHelp.textContent,
+          testDicts.zhTW["help.serial-trigger-i2c.address"],
+        );
+        assert.equal(addressLabel.textContent, testDicts.zhTW["field.address"]);
+        assert.equal(addressInput.value, "80");
+        assert.ok(editor.triggerForm.isDirty());
+        assert.equal(submitted.length, readCalls);
+        '''
+    )
+    completed = subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "--eval",
+            script,
+            str(STATIC_ROOT / "serial-editor.js"),
+            str(STATIC_ROOT / "command-form.js"),
+            str(NUMERIC_INPUT_PATH),
+            str(STATIC_ROOT / "locale_en.js"),
+            str(STATIC_ROOT / "locale_zh_tw.js"),
+            json.dumps(command),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout

@@ -27,6 +27,47 @@ function translateEnum(value, optionLabel = null) {
   return hasTranslation(key) ? translate(key) : String(value);
 }
 
+function optionDisplayText(option, field) {
+  if (field.option_label === "channel") {
+    const channelKey = `enum.channel${option}`;
+    return hasTranslation(channelKey) ? translate(channelKey) : String(option);
+  }
+  return translateEnum(option, field.option_label);
+}
+
+function selectOptionTexts(field, presentation, optionsFor) {
+  const texts = [];
+  const required = field.required === true || Boolean(field.required_if);
+  const pushPlaceholder = () => {
+    texts.push({
+      value: "",
+      text: translate(required ? "form.selectValue" : "form.leaveUnchanged"),
+    });
+  };
+  if (field.type === "boolean" && field.default === undefined) {
+    pushPlaceholder();
+    if (field.option_label === "enabled" || field.name === "enabled") {
+      texts.push({ value: "true", text: translate("enum.enable") });
+      texts.push({ value: "false", text: translate("enum.disable") });
+    } else {
+      texts.push({ value: "true", text: translate("enum.true") });
+      texts.push({ value: "false", text: translate("enum.false") });
+    }
+    return texts;
+  }
+  if (field.default === undefined && field.type !== "multi-enum") {
+    pushPlaceholder();
+  }
+  const actionChoices = field.name === presentation?.action_field
+    ? presentation?.action_choices
+    : null;
+  const options = actionChoices || (optionsFor ? optionsFor(field) : []);
+  options.forEach((option) => {
+    texts.push({ value: String(option), text: optionDisplayText(option, field) });
+  });
+  return texts;
+}
+
 export class CommandForm {
   constructor(container, catalog) {
     this.container = container;
@@ -321,6 +362,7 @@ export class CommandForm {
     const label = document.createElement("span");
     const labelKey = field.label_key ? `field.${field.label_key}` : `field.${field.name}`;
     label.textContent = hasTranslation(labelKey) ? translate(labelKey) : translate(`field.${field.name}`);
+    label.dataset.fieldLabel = field.name;
     wrapper.append(label);
     let input;
     if (["enum", "multi-enum"].includes(field.type)) {
@@ -336,13 +378,7 @@ export class CommandForm {
       const disabledOptions = new Set((field.disabled_options || []).map(String));
       const options = actionChoices || this.catalog.optionsFor(field);
       options.forEach((option) => {
-        let label;
-        if (field.option_label === "channel") {
-          const channelKey = `enum.channel${option}`;
-          label = hasTranslation(channelKey) ? translate(channelKey) : String(option);
-        } else {
-          label = translateEnum(option, field.option_label);
-        }
+        const label = optionDisplayText(option, field);
         const opt = new Option(label, String(option));
         if (disabledOptions.has(String(option))) opt.disabled = true;
         input.append(opt);
@@ -365,13 +401,7 @@ export class CommandForm {
       const disabledOptions = new Set((field.disabled_options || []).map(String));
       const options = this.catalog.optionsFor(field);
       options.forEach((option) => {
-        let label;
-        if (field.option_label === "channel") {
-          const channelKey = `enum.channel${option}`;
-          label = hasTranslation(channelKey) ? translate(channelKey) : String(option);
-        } else {
-          label = translateEnum(option, field.option_label);
-        }
+        const label = optionDisplayText(option, field);
         const opt = new Option(label, String(option));
         if (disabledOptions.has(String(option))) opt.disabled = true;
         input.append(opt);
@@ -464,6 +494,7 @@ export class CommandForm {
       } else {
         const helpKey = field.help_key ? `help.${field.help_key}` : `help.${field.name}`;
         help.textContent = hasTranslation(helpKey) ? translate(helpKey) : field.help;
+        help.dataset.fieldHelp = field.name;
       }
       wrapper.append(help);
     }
@@ -572,6 +603,43 @@ export class CommandForm {
       }
       input.required = !hidden && (input.dataset.required === "true" || conditionallyRequired);
     });
+  }
+
+  refreshLocale() {
+    if (!this.command) return;
+    const fields = this.catalog?.fieldsFor
+      ? this.catalog.fieldsFor(this.command)
+      : this.command.fields;
+    const byName = new Map((fields || []).map((field) => [field.name, field]));
+    this.container.querySelectorAll("[data-field-label]").forEach((label) => {
+      const field = byName.get(label.dataset.fieldLabel);
+      if (!field) return;
+      const labelKey = field.label_key ? `field.${field.label_key}` : `field.${field.name}`;
+      label.textContent = hasTranslation(labelKey)
+        ? translate(labelKey)
+        : translate(`field.${field.name}`);
+    });
+    this.container.querySelectorAll("[data-field-help]").forEach((help) => {
+      const field = byName.get(help.dataset.fieldHelp);
+      if (!field || field.help_by_value) return;
+      const helpKey = field.help_key ? `help.${field.help_key}` : `help.${field.name}`;
+      help.textContent = hasTranslation(helpKey) ? translate(helpKey) : field.help;
+    });
+    const optionsFor = this.catalog?.optionsFor
+      ? (field) => this.catalog.optionsFor(field)
+      : null;
+    this.container.querySelectorAll("[data-field]").forEach((input) => {
+      const field = byName.get(input.dataset.field);
+      if (!field || input.tagName !== "SELECT") return;
+      const expected = new Map(
+        selectOptionTexts(field, this.presentation, optionsFor)
+          .map((entry) => [entry.value, entry.text]),
+      );
+      [...input.options].forEach((option) => {
+        if (expected.has(option.value)) option.textContent = expected.get(option.value);
+      });
+    });
+    this.refreshVisibility();
   }
 }
 

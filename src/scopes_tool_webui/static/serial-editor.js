@@ -943,6 +943,8 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     }
 
     this.refreshI18n();
+    this.displayForm?.refreshLocale();
+    this.configForm?.refreshLocale();
     this.applyDecodeButton.textContent = translate("serial.decode.applySettings");
     this.refreshButton.textContent = translate("serial.decode.readSettings");
 
@@ -1092,8 +1094,30 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
     this.triggerDescription.textContent = this.catalog.description?.(definition) || "";
     this.triggerDescription.hidden = !this.triggerDescription.textContent;
     this.triggerForm.render(definition, {
-      onDirty: () => this.controller.setDirty("trigger", this.triggerForm.isDirty()),
+      onDirty: (fieldName) => {
+        this.controller.setDirty("trigger", this.triggerForm.isDirty());
+        if (fieldName === "type") this.syncI2cTriggerAddressMaximum();
+      },
     });
+  }
+
+  syncI2cTriggerAddressMaximum() {
+    const form = this.triggerForm;
+    if (!form || form.command?.id !== "serial-trigger-i2c") return;
+    const fields = form.catalog?.fieldsFor
+      ? form.catalog.fieldsFor(form.command)
+      : form.command.fields;
+    const addressField = (fields || []).find((field) => field.name === "address");
+    if (!addressField) return;
+    const typeInput = form.container.querySelector('[data-field="type"]');
+    const addressInput = form.container.querySelector('[data-field="address"]');
+    if (!typeInput || !addressInput) return;
+    const maximumByType = addressField.maximum_by_type || {};
+    const maximum = Object.prototype.hasOwnProperty.call(maximumByType, typeInput.value)
+      ? maximumByType[typeInput.value]
+      : addressField.maximum;
+    if (maximum === undefined || maximum === null) return;
+    addressInput.max = String(maximum);
   }
 
   async submitTrigger() {
@@ -1127,6 +1151,7 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
     }
 
     this.refreshI18n();
+    this.triggerForm?.refreshLocale();
     this.applyTriggerButton.textContent = translate("serial.editor.applyTrigger");
     this.refreshButton.textContent = translate("serial.trigger.readSettings");
 
@@ -1167,6 +1192,8 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
       this.triggerForm?.setDisabled(disabled || !hasReadbackForm);
       if (hasReadbackForm) this.syncFormSlot(this.triggerForm, "trigger", stateSnapshot.jobs);
     }
+
+    this.syncI2cTriggerAddressMaximum();
 
     this.applyTriggerButton.disabled = disabled
       || !stateSnapshot.triggerModeReady
@@ -1352,6 +1379,9 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     }
 
     this.refreshI18n();
+    this.listerDisplayForm?.refreshLocale();
+    this.listerReferenceForm?.refreshLocale();
+    this.exportForm?.refreshLocale();
     this.refreshPcOutputNote();
     this.applyListerDisplayButton.textContent = translate("actions.apply");
     this.applyListerReferenceButton.textContent = translate("actions.apply");

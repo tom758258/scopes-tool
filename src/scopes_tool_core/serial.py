@@ -85,6 +85,15 @@ I2C_TRIGGER_TYPES = (
     "write7-data2",
 )
 I2C_TRIGGER_QUALIFIERS = UART_TRIGGER_QUALIFIERS
+I2C_TRIGGER_ADDRESS_MAXIMUM_BY_TYPE = {
+    "address-no-ack": 0x7F,
+    "read7": 0x7F,
+    "write7": 0x7F,
+    "write10": 0x3FF,
+    "read7-data2": 0x7F,
+    "write7-data2": 0x7F,
+    "read-eeprom": 0x7F,
+}
 SPI_TRIGGER_TYPES = ("mosi", "miso")
 CAN_TRIGGER_TYPES = (
     "start-of-frame",
@@ -2372,7 +2381,7 @@ def _coerce_i2c_trigger_value(value: object, label: str, maximum: int) -> int:
 
 
 def _validate_i2c_trigger_address(value: object, trigger_type: str) -> int:
-    maximum = 0x3FF if trigger_type == "write10" else 0x7F
+    maximum = I2C_TRIGGER_ADDRESS_MAXIMUM_BY_TYPE.get(trigger_type, 0x7F)
     return _coerce_i2c_trigger_value(value, "I2C trigger address", maximum)
 
 

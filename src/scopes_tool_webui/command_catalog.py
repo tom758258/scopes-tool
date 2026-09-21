@@ -60,6 +60,7 @@ from scopes_tool_core.serial import (
     CAN_TRIGGER_ID_MODES,
     CAN_TRIGGER_TYPES,
     I2C_ADDRESS_SIZES,
+    I2C_TRIGGER_ADDRESS_MAXIMUM_BY_TYPE,
     I2C_TRIGGER_QUALIFIERS,
     I2C_TRIGGER_TYPES,
     SERIAL_BIT_ORDERS,
@@ -1836,7 +1837,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         "serial-trigger-i2c", "Serial", "I2C serial trigger", (
             _command_field("bus", "integer", minimum=1),
             _command_field("type", "enum", options=I2C_TRIGGER_TYPES, option_label="serial-trigger-i2c-type", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-i2c.type"),
-            _command_field("address", "integer", visible_if=_set_action_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")}), required_if=_set_action_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")}), help_key="serial-trigger-i2c.address"),
+            _command_field("address", "integer", minimum=0, maximum=1023, maximum_by_type=dict(I2C_TRIGGER_ADDRESS_MAXIMUM_BY_TYPE), visible_if=_set_action_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")}), required_if=_set_action_visibility({"field": "type", "in": ("address-no-ack", "read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")}), help_key="serial-trigger-i2c.address"),
             _command_field("data", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "type", "in": ("read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")}), required_if=_set_action_visibility({"field": "type", "in": ("read7", "write7", "write10", "read7-data2", "write7-data2", "read-eeprom")}), help_key="serial-trigger-i2c.data"),
             _command_field("data2", "integer", minimum=0, maximum=255, visible_if=_set_action_visibility({"field": "type", "in": ("read7-data2", "write7-data2")}), required_if=_set_action_visibility({"field": "type", "in": ("read7-data2", "write7-data2")}), help_key="serial-trigger-i2c.data2"),
             _command_field("qualifier", "enum", options=I2C_TRIGGER_QUALIFIERS, option_label="serial-trigger-qualifier", visible_if=_set_action_visibility({"field": "type", "equals": "read-eeprom"}), required_if=_set_action_visibility({"field": "type", "equals": "read-eeprom"}), help_key="serial-trigger-i2c.qualifier"),
