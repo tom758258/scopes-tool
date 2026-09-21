@@ -56,6 +56,9 @@ export class SegmentedEditor {
     this.modeOutput = this.appendReadout("segmented.editor.mode");
     this.configuredRow = this.appendReadout("segmented.editor.configuredSegments");
     this.acquiredRow = this.appendReadout("segmented.editor.acquiredSegments");
+    const stateHelp = document.createElement("small");
+    stateHelp.className = "field-help";
+    stateHelp.textContent = translate("segmented.editor.stateHelp");
 
     const countField = document.createElement("label");
     countField.className = "field segmented-editor-count";
@@ -69,6 +72,7 @@ export class SegmentedEditor {
       this.dirty = true;
     });
     countField.append(countLabel, this.countInput);
+    this.appendFieldHelp(countField, this.fieldDefinition(this.definition(), "segments"));
 
     this.segmentBrowser = document.createElement("section");
     this.segmentBrowser.className = "segmented-editor-browser";
@@ -113,7 +117,12 @@ export class SegmentedEditor {
     timeTagLabel.textContent = translate("segmented.editor.timeTag");
     this.timeTagOutput = document.createElement("dd");
     timeTag.append(timeTagLabel, this.timeTagOutput);
-    this.segmentBrowser.append(browserLabel, browserControls, timeTag);
+    this.segmentBrowser.append(browserLabel, browserControls);
+    this.appendFieldHelp(
+      this.segmentBrowser,
+      this.fieldDefinition(this.definition(), "index"),
+    );
+    this.segmentBrowser.append(timeTag);
 
     const actions = document.createElement("div");
     actions.className = "segmented-editor-actions";
@@ -132,6 +141,9 @@ export class SegmentedEditor {
     this.captureSection.className = "segmented-editor-browser";
     const captureHeading = document.createElement("strong");
     captureHeading.textContent = translate("command.segmented-capture");
+    this.captureForm = document.createElement("div");
+    this.captureForm.className = "command-form segmented-editor-capture-form";
+    const captureDefinition = this.captureDefinition();
     const captureChannelField = document.createElement("label");
     captureChannelField.className = "field";
     const captureChannelLabel = document.createElement("span");
@@ -141,6 +153,10 @@ export class SegmentedEditor {
     this.captureChannelInput.step = "1";
     this.captureChannelInput.required = true;
     captureChannelField.append(captureChannelLabel, this.captureChannelInput);
+    this.appendFieldHelp(
+      captureChannelField,
+      this.fieldDefinition(captureDefinition, "channel"),
+    );
     const captureSegmentsField = document.createElement("label");
     captureSegmentsField.className = "field";
     const captureSegmentsLabel = document.createElement("span");
@@ -150,6 +166,10 @@ export class SegmentedEditor {
     this.captureSegmentsInput.step = "1";
     this.captureSegmentsInput.required = true;
     captureSegmentsField.append(captureSegmentsLabel, this.captureSegmentsInput);
+    this.appendFieldHelp(
+      captureSegmentsField,
+      this.fieldDefinition(captureDefinition, "segments"),
+    );
     const capturePointsField = document.createElement("label");
     capturePointsField.className = "field";
     const capturePointsLabel = document.createElement("span");
@@ -157,6 +177,10 @@ export class SegmentedEditor {
     this.capturePointsSelect = document.createElement("select");
     this.capturePointsSelect.required = true;
     capturePointsField.append(capturePointsLabel, this.capturePointsSelect);
+    this.appendFieldHelp(
+      capturePointsField,
+      this.fieldDefinition(captureDefinition, "points"),
+    );
     const captureFormatField = document.createElement("label");
     captureFormatField.className = "field";
     const captureFormatLabel = document.createElement("span");
@@ -164,6 +188,10 @@ export class SegmentedEditor {
     this.captureFormatSelect = document.createElement("select");
     this.captureFormatSelect.required = true;
     captureFormatField.append(captureFormatLabel, this.captureFormatSelect);
+    this.appendFieldHelp(
+      captureFormatField,
+      this.fieldDefinition(captureDefinition, "format"),
+    );
     this.captureButton = document.createElement("button");
     this.captureButton.type = "button";
     this.captureButton.className = "primary";
@@ -177,13 +205,13 @@ export class SegmentedEditor {
       note.textContent = captureDescription;
       this.captureSection.append(note);
     }
-    this.captureSection.append(
+    this.captureForm.append(
       captureChannelField,
       captureSegmentsField,
       capturePointsField,
       captureFormatField,
-      this.captureButton,
     );
+    this.captureSection.append(this.captureForm, this.captureButton);
 
     this.unavailableNote = document.createElement("p");
     this.unavailableNote.className = "muted compact-note";
@@ -192,6 +220,7 @@ export class SegmentedEditor {
       head,
       this.unavailableNote,
       this.readouts,
+      stateHelp,
       countField,
       this.segmentBrowser,
       this.captureSection,
@@ -208,6 +237,23 @@ export class SegmentedEditor {
     const output = document.createElement("dd");
     this.readouts.append(label, output);
     return { label, output };
+  }
+
+  fieldDefinition(definition, name) {
+    if (!definition) return null;
+    const fields = this.catalog.fieldsFor?.(definition) || definition.fields || [];
+    return fields.find((field) => field.name === name) || null;
+  }
+
+  appendFieldHelp(container, field) {
+    if (!field || (!field.help && !field.help_key)) return;
+    const helpKey = field.help_key ? `help.${field.help_key}` : `help.${field.name}`;
+    const text = hasTranslation(helpKey) ? translate(helpKey) : field.help;
+    if (!text) return;
+    const help = document.createElement("small");
+    help.className = "field-help";
+    help.textContent = text;
+    container.append(help);
   }
 
   definition() {

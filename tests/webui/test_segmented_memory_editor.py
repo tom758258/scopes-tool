@@ -23,6 +23,9 @@ def read_static(name: str) -> str:
 
 def test_segmented_memory_uses_dedicated_editor_and_existing_command_contract() -> None:
     definition = next(entry for entry in COMMANDS if entry["id"] == "segmented-memory")
+    capture_definition = next(
+        entry for entry in COMMANDS if entry["id"] == "segmented-capture"
+    )
     projected = next(
         entry for entry in command_catalog() if entry["id"] == "segmented-memory"
     )
@@ -39,6 +42,21 @@ def test_segmented_memory_uses_dedicated_editor_and_existing_command_contract() 
         "disable",
         "select",
     ]
+    assert {field["name"]: field.get("help_key") for field in definition["fields"]} == {
+        "action": "segmented-memory.action",
+        "segments": "segmented-memory.segments",
+        "index": "segmented-memory.index",
+    }
+    assert {
+        field["name"]: field.get("help_key") for field in capture_definition["fields"]
+    } == {
+        "channel": "capture.channel",
+        "segments": "segmented-capture.segments",
+        "points": "capture.points",
+        "format": "capture.format",
+        "timeout_ms": "segmented-capture.timeout_ms",
+        "poll_interval_ms": "segmented-capture.poll_interval_ms",
+    }
 
 
 def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
@@ -53,6 +71,17 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert 'elements.segmentedEditor.hidden = editorKind !== "segmented";' in app
     assert '"segmented.editor.enter": "Enter Segmented"' in english
     assert '"segmented.editor.exit": "Exit Segmented"' in english
+    for key in (
+        "help.segmented-memory.action",
+        "help.segmented-memory.segments",
+        "help.segmented-memory.index",
+        "help.segmented-capture.segments",
+        "help.segmented-capture.timeout_ms",
+        "help.segmented-capture.poll_interval_ms",
+        "segmented.editor.stateHelp",
+    ):
+        assert f'"{key}"' in english
+        assert f'"{key}"' in chinese
     for key in (
         "segmented.editor.title",
         "segmented.editor.mode",
@@ -121,7 +150,7 @@ EDITOR_HARNESS = r'''
           "enum.realtime": "Realtime",
           "enum.segmented": "Segmented",
         })[key] || key;
-        globalThis.hasTranslation = (key) => key.startsWith("enum.");
+        globalThis.hasTranslation = (key) => key.startsWith("enum.") || key.startsWith("help.");
 
         const source = fs.readFileSync(process.argv[1], "utf8")
           .replace(/^import[^\n]*\r?\n/gm, "")
@@ -138,9 +167,9 @@ EDITOR_HARNESS = r'''
           id: "segmented-memory",
           editor: "segmented",
           fields: [
-            { name: "action", type: "enum" },
-            { name: "segments", type: "integer", minimum: 2, maximum: 250 },
-            { name: "index", type: "integer", minimum: 1 },
+            { name: "action", type: "enum", help_key: "segmented-memory.action" },
+            { name: "segments", type: "integer", minimum: 2, maximum: 250, help_key: "segmented-memory.segments" },
+            { name: "index", type: "integer", minimum: 1, help_key: "segmented-memory.index" },
           ],
         };
         let supported = true;
@@ -431,10 +460,10 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         const captureDefinition = {
           id: "segmented-capture",
           fields: [
-            { name: "channel", type: "integer", minimum: 1, maximum: 4, default: 1 },
-            { name: "segments", type: "integer", minimum: 2, maximum: 5000 },
-            { name: "points", type: "integer", options: [1000, 5000, 10000], default: 1000 },
-            { name: "format", type: "enum", options: ["byte", "word"], default: "byte" },
+            { name: "channel", type: "integer", minimum: 1, maximum: 4, default: 1, help_key: "capture.channel" },
+            { name: "segments", type: "integer", minimum: 2, maximum: 5000, help_key: "segmented-capture.segments" },
+            { name: "points", type: "integer", options: [1000, 5000, 10000], default: 1000, help_key: "capture.points" },
+            { name: "format", type: "enum", options: ["byte", "word"], default: "byte", help_key: "capture.format" },
           ],
         };
         catalog.commands = [definition, captureDefinition];
@@ -448,6 +477,17 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         assert.equal(editor.capturePointsSelect.value, "1000");
         assert.equal(editor.captureFormatSelect.value, "byte");
         assert.equal(editor.segmentBrowser.hidden, true);
+        assert.deepEqual({
+          classes: editor.captureForm.className.split(" "),
+          fieldCount: editor.captureForm.children.length,
+          helpClasses: editor.captureForm.children.map((field) => field.children.at(-1).className),
+          buttonOutsideGrid: editor.captureButton.parentNode === editor.captureSection,
+        }, {
+          classes: ["command-form", "segmented-editor-capture-form"],
+          fieldCount: 4,
+          helpClasses: ["field-help", "field-help", "field-help", "field-help"],
+          buttonOutsideGrid: true,
+        });
 
         const countBeforeInput = submitted.length;
         editor.captureChannelInput.value = "2";

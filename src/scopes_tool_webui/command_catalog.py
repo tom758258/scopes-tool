@@ -1890,11 +1890,11 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     {
         "id": "segmented-memory", "category": "Segmented Memory", "label": "Segmented memory", "modes": ("live", "simulate"),
         "editor": "segmented",
-        "fields": ({"name": "action", "type": "enum", "options": ("query", "enable", "disable", "select"), "default": "query"}, _command_field("segments", "integer", minimum=2, visible_if=[{"field": "action", "equals": "enable"}], required_if=[{"field": "action", "equals": "enable"}]), _command_field("index", "integer", minimum=1, visible_if=[{"field": "action", "equals": "select"}], required_if=[{"field": "action", "equals": "select"}])),
+        "fields": ({"name": "action", "type": "enum", "options": ("query", "enable", "disable", "select"), "default": "query", "help_key": "segmented-memory.action"}, _command_field("segments", "integer", minimum=2, visible_if=[{"field": "action", "equals": "enable"}], required_if=[{"field": "action", "equals": "enable"}], help_key="segmented-memory.segments"), _command_field("index", "integer", minimum=1, visible_if=[{"field": "action", "equals": "select"}], required_if=[{"field": "action", "equals": "select"}], help_key="segmented-memory.index")),
     },
     {
         "id": "segmented-capture", "category": "Segmented Memory", "label": "Segmented capture", "modes": ("live", "simulate", "dry-run"),
-        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1, help_key="capture.channel"), _command_field("segments", "integer", minimum=2, required=True), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("timeout_ms", "integer", minimum=1, default=30000), _command_field("poll_interval_ms", "integer", minimum=1, default=100)),
+        "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1, help_key="capture.channel"), _command_field("segments", "integer", minimum=2, required=True, help_key="segmented-capture.segments"), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("timeout_ms", "integer", minimum=1, default=30000, help_key="segmented-capture.timeout_ms"), _command_field("poll_interval_ms", "integer", minimum=1, default=100, help_key="segmented-capture.poll_interval_ms")),
     },
     {
         "id": "capture-batch", "category": "Workflow", "label": "Periodic Capture", "modes": ("live", "simulate"),
