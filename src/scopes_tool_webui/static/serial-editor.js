@@ -782,7 +782,7 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     });
 
     const topRow = document.createElement("div");
-    topRow.className = "serial-editor-row";
+    topRow.className = "command-form";
     topRow.append(
       this.labeledField("serial.editor.bus", this.busSelect, "serial.editor.busHelp"),
       this.labeledField("serial.decode.currentProtocol", this.currentValue, "serial.decode.currentProtocolHelp"),

@@ -71,7 +71,7 @@ export class SegmentedEditor {
     this.stateHelp = stateHelp;
 
     const countRow = document.createElement("div");
-    countRow.className = "segmented-editor-actions";
+    countRow.className = "segmented-editor-actions segmented-editor-count-row";
     const countField = document.createElement("label");
     countField.className = "field segmented-editor-count";
     const countLabel = document.createElement("span");
@@ -82,15 +82,16 @@ export class SegmentedEditor {
     this.countInput.required = true;
     this.countInput.addEventListener("input", () => {
       this.dirty = true;
+      this.applyBusyState();
     });
     countField.append(countLabel, this.countInput);
-    this.appendFieldHelp(countField, this.fieldDefinition(this.segmentedMemoryDefinition(), "segments"));
     this.applySegmentsButton = document.createElement("button");
     this.applySegmentsButton.type = "button";
     this.applySegmentsButton.className = "secondary";
     this.applySegmentsButton.textContent = translate("segmented.editor.applySegments");
     this.applySegmentsButton.addEventListener("click", () => void this.enter());
     countRow.append(countField, this.applySegmentsButton);
+    this.appendFieldHelp(countRow, this.fieldDefinition(this.segmentedMemoryDefinition(), "segments"));
 
     this.segmentBrowser = document.createElement("section");
     this.segmentBrowser.className = "segmented-editor-browser";
@@ -657,6 +658,18 @@ export class SegmentedEditor {
       && Number.isInteger(this.state?.selected_segment);
   }
 
+  countPending() {
+    if (this.state?.mode !== "segmented") return false;
+    const configuredRaw = this.state?.configured_segments;
+    if (configuredRaw === null || configuredRaw === undefined) return false;
+    const value = Number(this.countInput.value);
+    const configured = Number(configuredRaw);
+    return Number.isInteger(value)
+      && Number.isInteger(configured)
+      && this.countInput.checkValidity()
+      && value !== configured;
+  }
+
   canExecute() {
     return !this.busy && !this.hooks.isExecutionBusy?.() && this.hooks.isAvailable();
   }
@@ -671,7 +684,9 @@ export class SegmentedEditor {
     this.refreshButton.disabled = disabled;
     this.countInput.disabled = disabled;
     this.modeButton.disabled = disabled;
-    this.applySegmentsButton.disabled = disabled;
+    const countPending = this.countPending();
+    this.applySegmentsButton.disabled = disabled || !countPending;
+    this.applySegmentsButton.className = countPending ? "primary" : "secondary";
     const browserAvailable = this.browserAvailable();
     const selected = this.state?.selected_segment;
     const acquired = this.state?.acquired_segments;

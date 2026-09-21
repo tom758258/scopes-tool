@@ -10,6 +10,14 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_serial_decode_top_row_uses_command_form_grid() -> None:
+    source = (
+        REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "serial-editor.js"
+    ).read_text(encoding="utf-8")
+    assert source.count('topRow.className = "command-form";') == 1
+    assert 'topRow.className = "serial-editor-row";' in source
+
+
 @pytest.mark.skipif(
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",

@@ -130,6 +130,14 @@ def test_segmented_editor_removes_standalone_status_indicator() -> None:
     state_rule = styles.split(".segmented-editor-state {", 1)[1].split("}", 1)[0]
     assert "width: fit-content;" in state_rule
     assert "max-width: 100%;" in state_rule
+    count_row_rule = styles.split(
+        ".segmented-editor-actions.segmented-editor-count-row {", 1
+    )[1].split("}", 1)[0]
+    assert "align-items: end;" in count_row_rule
+    count_help_rule = styles.split(
+        ".segmented-editor-count-row > .field-help {", 1
+    )[1].split("}", 1)[0]
+    assert "flex-basis: 100%;" in count_help_rule
 
 
 EDITOR_HARNESS = r'''
@@ -649,7 +657,15 @@ def test_segmented_editor_builds_field_help_before_command_selected() -> None:
         await settle();
 
         const countField = fresh.countInput.parentNode;
-        const countHelp = countField.children.find((node) => node.tagName === "SMALL");
+        assert.equal(countField.tagName, "LABEL");
+        assert.deepEqual(
+          countField.children.map((node) => node.tagName),
+          ["SPAN", "INPUT"],
+        );
+        const countRow = countField.parentNode;
+        assert.equal(countRow.className, "segmented-editor-actions segmented-editor-count-row");
+        assert.equal(fresh.applySegmentsButton.parentNode, countRow);
+        const countHelp = countRow.children.find((node) => node.tagName === "SMALL");
         assert.ok(countHelp);
         assert.equal(countHelp.className, "field-help");
         assert.equal(countHelp.textContent, "help.segmented-memory.segments");
@@ -664,7 +680,7 @@ def test_segmented_editor_builds_field_help_before_command_selected() -> None:
         await settle();
         assert.equal(fresh.countInput.min, "2");
         assert.equal(fresh.countInput.max, "250");
-        assert.ok(countField.children.includes(countHelp));
+        assert.ok(countRow.children.includes(countHelp));
         assert.equal(countHelp.textContent, "help.segmented-memory.segments");
         assert.ok(fresh.segmentBrowser.children.includes(indexHelp));
         assert.equal(indexHelp.textContent, "help.segmented-memory.index");
@@ -841,9 +857,22 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
         assert.equal(editor.applySegmentsButton.hidden, false);
         assert.equal(editor.modeOutput.output.textContent, "Segmented");
         assert.equal(editor.countInput.value, "100");
+        assert.equal(editor.applySegmentsButton.disabled, true);
+        assert.equal(editor.applySegmentsButton.className, "secondary");
 
         editor.countInput.value = "50";
         editor.countInput.dispatch("input");
+        assert.equal(editor.applySegmentsButton.disabled, false);
+        assert.equal(editor.applySegmentsButton.className, "primary");
+
+        editor.countInput.value = "999";
+        editor.countInput.dispatch("input");
+        assert.equal(editor.applySegmentsButton.disabled, true);
+        assert.equal(editor.applySegmentsButton.className, "secondary");
+
+        editor.countInput.value = "50";
+        editor.countInput.dispatch("input");
+        assert.equal(editor.applySegmentsButton.disabled, false);
         responses.push({
           status: "completed",
           result: { result: { segmented: {
@@ -858,6 +887,8 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
           intent: "apply",
         });
         assert.equal(editor.modeButton.textContent, "segmented.editor.exit");
+        assert.equal(editor.applySegmentsButton.disabled, true);
+        assert.equal(editor.applySegmentsButton.className, "secondary");
 
         responses.push({
           status: "completed",

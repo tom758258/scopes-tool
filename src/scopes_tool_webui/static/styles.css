@@ -398,6 +398,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .segmented-editor-state dt { color: var(--muted); font-size: 12px; }
 .segmented-editor-state dd { margin: 0; font-weight: 600; }
 .segmented-editor-count { max-width: 220px; }
+.segmented-editor-actions.segmented-editor-count-row { align-items: end; }
+.segmented-editor-count-row > .field-help { flex-basis: 100%; }
 .segmented-editor-browser { display: grid; gap: 8px; }
 .segmented-editor-browser-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .segmented-editor-browser-controls input { width: 90px; }
