@@ -346,6 +346,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .serial-editor-field select { min-width: 120px; }
 .serial-editor-current-value { display: inline-flex; align-items: center; min-width: 90px; }
 .serial-editor-action { align-self: end; min-height: var(--control-h); }
+.serial-lister-row > .command-form { flex: 0 1 50%; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.serial-lister-row > .command-form input,
+.serial-lister-row > .command-form select { width: 100%; min-width: 0; }
 .serial-editor-refresh { justify-self: start; }
 .serial-editor-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); min-width: 0; }
 .serial-editor-heading { font-size: 12px; font-weight: 700; }
@@ -582,6 +585,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .device-resource-actions { margin-top: -3px; }
   .live-resource-field { grid-template-columns: 1fr; }
   .command-form { grid-template-columns: 1fr; }
+  .serial-lister-row { align-items: stretch; }
+  .serial-lister-row > .command-form { flex-basis: 100%; }
+  .serial-lister-row > .serial-editor-action { width: 100%; }
   .cursor-set-form { grid-template-areas: none; }
   .cursor-set-form .field { grid-area: auto; }
   .command-form-advanced-fields { grid-template-columns: 1fr; }

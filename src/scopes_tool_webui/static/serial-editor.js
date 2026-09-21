@@ -33,9 +33,29 @@ export function busOptions(maxBus) {
   return Array.from({ length: limit }, (_item, index) => index + 1);
 }
 
+function availableBusOptions(maxBus) {
+  const limit = Math.floor(Number(maxBus) || 0);
+  return limit > 0 ? busOptions(limit) : [];
+}
+
 export function displayModeLabel(mode, rawMode) {
   if (mode) return String(mode).toUpperCase();
   return rawMode ? String(rawMode) : null;
+}
+
+function normalizedListerDisplay(value) {
+  const normalized = String(value ?? "").toLowerCase();
+  return ["off", "bus1", "bus2", "all"].includes(normalized) ? normalized : null;
+}
+
+function listerDisplayFromJob(job) {
+  const result = job?.result?.result || {};
+  return normalizedListerDisplay(result.lister?.display ?? result.display?.display);
+}
+
+function serialDisplayFromJob(job) {
+  const enabled = job?.result?.result?.display?.enabled;
+  return typeof enabled === "boolean" ? enabled : null;
 }
 
 export function createSerialEditorController({
@@ -53,6 +73,7 @@ export function createSerialEditorController({
   let selectedProtocol = null;
   let confirmedMode = null;
   let rawMode = null;
+  let modeRead = false;
   let dirtyConfig = false;
   let dirtyDisplay = false;
   let dirtyTrigger = false;
@@ -61,6 +82,8 @@ export function createSerialEditorController({
   let busyCount = 0;
   let formEpoch = 0;
   let listerEpoch = 0;
+  let listerDisplay = null;
+  let decodeDisplayByBus = {};
   const jobs = {
     mode: null,
     display: null,
@@ -78,6 +101,7 @@ export function createSerialEditorController({
     protocolPending,
     confirmedMode,
     rawMode,
+    readbackReady: modeRead,
     currentLabel: displayModeLabel(confirmedMode, rawMode),
     configCommand: configCommandFor(confirmedMode),
     triggerCommand: triggerCommandFor(confirmedMode),
@@ -87,6 +111,8 @@ export function createSerialEditorController({
     dirtyTrigger,
     dirtyListerDisplay,
     dirtyListerReference,
+    listerDisplay,
+    decodeDisplayByBus: { ...decodeDisplayByBus },
     busy: busyCount > 0,
     formEpoch,
     listerEpoch,
@@ -137,15 +163,13 @@ export function createSerialEditorController({
     notifyState();
   }
 
-  async function readDecode({ preferCurrent = false } = {}) {
+  async function readDecode() {
     const modeJob = await runQuery("serial-mode", { action: "query", bus });
     jobs.mode = modeJob ? { job: modeJob, applied: false } : null;
+    modeRead = Boolean(modeJob);
     const reported = modeFromJob(modeJob);
     confirmedMode = reported.mode;
     rawMode = reported.rawMode;
-    if (preferCurrent && protocolPending && !dirtyConfig) {
-      protocolPending = false;
-    }
     syncSelectedProtocol();
     notifyState();
     const displayJob = await runQuery("serial-display", { action: "query", bus });
@@ -169,6 +193,7 @@ export function createSerialEditorController({
   async function readTrigger() {
     const modeJob = await runQuery("serial-mode", { action: "query", bus });
     jobs.mode = modeJob ? { job: modeJob, applied: false } : null;
+    modeRead = Boolean(modeJob);
     const reported = modeFromJob(modeJob);
     confirmedMode = reported.mode;
     rawMode = reported.rawMode;
@@ -179,10 +204,25 @@ export function createSerialEditorController({
 
   async function readListerState() {
     const listerJob = await runQuery("serial-lister-query", {});
-    const entry = listerJob ? { job: listerJob, applied: false } : null;
-    jobs.listerDisplay = entry;
-    jobs.listerReference = entry;
+    if (listerJob) {
+      const entry = { job: listerJob, applied: false };
+      const reportedDisplay = listerDisplayFromJob(listerJob);
+      if (reportedDisplay) listerDisplay = reportedDisplay;
+      jobs.listerDisplay = entry;
+      jobs.listerReference = entry;
+    }
     notifyState();
+
+    for (const prerequisiteBus of availableBusOptions(maxBus)) {
+      const displayJob = await runQuery("serial-display", {
+        action: "query",
+        bus: prerequisiteBus,
+      });
+      decodeDisplayByBus[prerequisiteBus] = displayJob
+        ? (serialDisplayFromJob(displayJob) ?? "unknown")
+        : "unknown";
+      notifyState();
+    }
   }
 
   async function drainQueuedRefresh() {
@@ -208,8 +248,8 @@ export function createSerialEditorController({
     }
   }
 
-  function refreshDecode(options = {}) {
-    return runRefresh(() => readDecode(options));
+  function refreshDecode() {
+    return runRefresh(readDecode);
   }
 
   function refreshTrigger() {
@@ -245,6 +285,7 @@ export function createSerialEditorController({
     if (reported.mode !== target) return job;
     confirmedMode = target;
     rawMode = reported.rawMode;
+    modeRead = true;
     protocolPending = false;
     dirtyTrigger = false;
     jobs.mode = { job, applied: true };
@@ -262,8 +303,8 @@ export function createSerialEditorController({
       if (typeof callback === "function") stateListeners.add(callback);
       return () => stateListeners.delete(callback);
     },
-    refreshDecode(options = {}) {
-      return refreshDecode(options);
+    refreshDecode() {
+      return refreshDecode();
     },
     refreshTrigger() {
       return refreshTrigger();
@@ -280,6 +321,7 @@ export function createSerialEditorController({
       selectedProtocol = null;
       confirmedMode = null;
       rawMode = null;
+      modeRead = false;
       dirtyConfig = false;
       dirtyDisplay = false;
       dirtyTrigger = false;
@@ -291,6 +333,10 @@ export function createSerialEditorController({
       jobs.trigger = null;
       jobs.listerDisplay = null;
       jobs.listerReference = null;
+      listerDisplay = null;
+      decodeDisplayByBus = Object.fromEntries(
+        availableBusOptions(maxBus).map((availableBus) => [availableBus, "unknown"]),
+      );
       formEpoch += 1;
       listerEpoch += 1;
       notifyState();
@@ -312,6 +358,7 @@ export function createSerialEditorController({
       bus = candidate;
       confirmedMode = null;
       rawMode = null;
+      modeRead = false;
       selectedProtocol = null;
       protocolPending = false;
       dirtyConfig = false;
@@ -325,7 +372,7 @@ export function createSerialEditorController({
       notifyState();
     },
     selectProtocol(protocol) {
-      if (busyCount > 0 || !protocols.includes(protocol)) return;
+      if (busyCount > 0 || !modeRead || !protocols.includes(protocol)) return;
       if (protocol === selectedProtocol) return;
       if (dirtyConfig && !confirmDiscard()) {
         notifyState();
@@ -403,6 +450,7 @@ export function createSerialEditorController({
           if (reported.mode !== target) {
             confirmedMode = reported.mode;
             rawMode = reported.rawMode;
+            modeRead = true;
             dirtyConfig = false;
             dirtyTrigger = false;
             jobs.config = null;
@@ -442,6 +490,7 @@ export function createSerialEditorController({
         if (reported.mode !== confirmedMode) {
           confirmedMode = reported.mode;
           rawMode = reported.rawMode;
+          modeRead = true;
           dirtyTrigger = false;
           jobs.trigger = null;
           syncSelectedProtocol();
@@ -484,6 +533,11 @@ export function createSerialEditorController({
         );
         if (isCompleted(job)) {
           dirtyFlag();
+          if (kind === "display") {
+            listerDisplay = listerDisplayFromJob(job)
+              || normalizedListerDisplay(payload.display)
+              || listerDisplay;
+          }
           jobs[slot] = { job, applied: true };
           notifyState();
         }
@@ -681,7 +735,7 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     );
 
     this.refreshButton = this.makeReadButton("serial.decode.readSettings", () => {
-      queueMicrotask(() => void this.controller.refreshDecode({ preferCurrent: true }));
+      queueMicrotask(() => void this.controller.refreshDecode());
     });
 
     this.displayDescription = document.createElement("p");
@@ -705,6 +759,11 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     this.readbackHint.textContent = translate("serial.decode.readbackHint");
     this.configDescription = document.createElement("p");
     this.configDescription.className = "muted compact-note";
+    this.configUnreadPresentation = document.createElement("p");
+    this.configUnreadPresentation.className = "muted compact-note serial-editor-unread-config";
+    this.configUnreadPresentation.dataset.state = "unread";
+    this.configUnreadPresentation.dataset.i18nKey = "serial.decode.unreadConfiguration";
+    this.configUnreadPresentation.textContent = translate("serial.decode.unreadConfiguration");
     this.configFormContainer = document.createElement("div");
     this.configFormContainer.className = "command-form";
     this.applyDecodeButton = this.actionButton(
@@ -768,7 +827,12 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     this.configFormContainer.replaceChildren();
     this.configForm = commandId ? new CommandForm(this.configFormContainer, this.catalog) : null;
     this.syncedJobs.config = null;
-    if (!commandId || !this.configForm) return;
+    this.configDescription.textContent = "";
+    this.configDescription.hidden = true;
+    if (!commandId || !this.configForm) {
+      this.configFormContainer.append(this.configUnreadPresentation);
+      return;
+    }
     const definition = this.editorDefinition(commandId);
     if (!definition) return;
     this.configDescription.textContent = this.catalog.description?.(definition) || "";
@@ -813,9 +877,6 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
       protocolChoices: info.protocols,
       key: `${this.hooks.contextKey()}|${this.hooks.isAvailable()}`,
     });
-    if (info.supported) {
-      queueMicrotask(() => void this.controller.refreshDecode());
-    }
   }
 
   render(stateSnapshot) {
@@ -849,16 +910,18 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
       );
     }
     this.protocolSelect.value = stateSnapshot.selectedProtocol ?? "";
-    this.protocolSelect.disabled = disabled;
+    this.protocolSelect.disabled = disabled || !stateSnapshot.readbackReady;
 
     this.currentValue.textContent = stateSnapshot.currentLabel || "-";
 
     this.refreshButton.disabled = disabled;
 
     this.ensureDisplayForm();
-    this.displayForm?.setDisabled(disabled);
+    this.displayForm?.setDisabled(disabled || !stateSnapshot.readbackReady);
 
-    const showUnsupported = !unavailable && !stateSnapshot.supported;
+    const showUnsupported = !unavailable
+      && stateSnapshot.readbackReady
+      && !stateSnapshot.supported;
     if (showUnsupported) {
       const protocolName = stateSnapshot.currentLabel || "-";
       this.configNote.hidden = false;
@@ -882,9 +945,13 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     }
 
     this.ensureDecodeConfigForm(stateSnapshot.selectedProtocol);
-    this.configForm?.setDisabled(disabled);
+    this.configUnreadPresentation.hidden = unavailable
+      || stateSnapshot.readbackReady
+      || showUnsupported;
+    this.configForm?.setDisabled(disabled || !stateSnapshot.readbackReady);
 
     this.applyDecodeButton.disabled = disabled
+      || !stateSnapshot.readbackReady
       || (!stateSnapshot.selectedProtocol && !stateSnapshot.dirtyDisplay && !stateSnapshot.dirtyConfig);
 
     this.syncFormSlot(this.displayForm, "display", stateSnapshot.jobs);
@@ -956,7 +1023,11 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
     this.triggerForm = new CommandForm(this.triggerFormContainer, this.catalog);
     this.syncedJobs.trigger = null;
     const definition = commandId ? this.editorDefinition(commandId) : null;
-    if (!definition) return;
+    if (!definition) {
+      this.triggerDescription.textContent = "";
+      this.triggerDescription.hidden = true;
+      return;
+    }
     this.triggerDescription.textContent = this.catalog.description?.(definition) || "";
     this.triggerDescription.hidden = !this.triggerDescription.textContent;
     this.triggerForm.render(definition, {
@@ -980,9 +1051,6 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
       protocolChoices: info.protocols,
       key: `${this.hooks.contextKey()}|${this.hooks.isAvailable()}`,
     });
-    if (info.supported) {
-      queueMicrotask(() => void this.controller.refreshTrigger());
-    }
   }
 
   render(stateSnapshot) {
@@ -1005,7 +1073,9 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
     this.currentValue.textContent = stateSnapshot.currentLabel || "-";
     this.refreshButton.disabled = disabled;
 
-    const showUnsupported = !unavailable && !stateSnapshot.supported;
+    const showUnsupported = !unavailable
+      && stateSnapshot.readbackReady
+      && !stateSnapshot.supported;
     if (showUnsupported) {
       const protocolName = stateSnapshot.currentLabel || "-";
       this.triggerNote.hidden = false;
@@ -1016,14 +1086,20 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
       this.triggerForm = null;
       this.renderedTriggerCommand = undefined;
     } else {
-      this.triggerNote.hidden = true;
-      this.triggerSection.hidden = !stateSnapshot.supported;
-      this.ensureTriggerForm(stateSnapshot.supported ? stateSnapshot.triggerCommand : null);
-      this.triggerForm?.setDisabled(disabled);
+      this.triggerSection.hidden = unavailable;
+      const hasReadbackForm = stateSnapshot.readbackReady && stateSnapshot.supported;
+      this.triggerNote.hidden = hasReadbackForm;
+      this.triggerNote.textContent = unavailable
+        ? translate("serial.editor.unavailable")
+        : translate("serial.trigger.unreadConfiguration");
+      this.ensureTriggerForm(hasReadbackForm ? stateSnapshot.triggerCommand : null);
+      this.triggerForm?.setDisabled(disabled || !hasReadbackForm);
       this.syncFormSlot(this.triggerForm, "trigger", stateSnapshot.jobs);
     }
 
-    this.applyTriggerButton.disabled = disabled || !stateSnapshot.supported;
+    this.applyTriggerButton.disabled = disabled
+      || !stateSnapshot.readbackReady
+      || !stateSnapshot.supported;
   }
 }
 
@@ -1053,10 +1129,17 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     this.usageNote.dataset.i18nKey = "serial.lister.usage";
     this.usageNote.textContent = translate("serial.lister.usage");
     root.append(this.usageNote);
+    this.prerequisiteNote = document.createElement("p");
+    this.prerequisiteNote.className = "muted compact-note";
+    root.append(this.prerequisiteNote);
+    this.pcOutputNote = document.createElement("p");
+    this.pcOutputNote.className = "muted compact-note";
+    root.append(this.pcOutputNote);
+    this.hooks.renderPcOutputNote?.(this.pcOutputNote);
 
     const addRow = (container, button) => {
       const row = document.createElement("div");
-      row.className = "serial-editor-row";
+      row.className = "serial-editor-row serial-lister-row";
       row.append(container, button);
       root.append(row);
     };
@@ -1093,6 +1176,10 @@ export class SerialListerEditor extends SerialWorkspaceBase {
       ...(this.hooks.headerActions ? [] : [this.refreshButton]),
       root,
     );
+  }
+
+  refreshPcOutputNote() {
+    this.hooks.renderPcOutputNote?.(this.pcOutputNote);
   }
 
   rebuildListerForms() {
@@ -1148,9 +1235,6 @@ export class SerialListerEditor extends SerialWorkspaceBase {
       protocolChoices: info.protocols,
       key: `${this.hooks.contextKey()}|${this.hooks.isAvailable()}`,
     });
-    if (info.supported) {
-      queueMicrotask(() => void this.controller.refreshLister());
-    }
   }
 
   render(stateSnapshot) {
@@ -1169,13 +1253,58 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     this.refreshButton.textContent = translate("serial.lister.readSettings");
     this.refreshButton.disabled = disabled;
 
-    this.applyListerDisplayButton.disabled = disabled;
-    this.applyListerReferenceButton.disabled = disabled;
-    this.exportButton.disabled = disabled;
+    const hasListerReadback = stateSnapshot.listerDisplay !== null;
+    const target = stateSnapshot.listerDisplay;
+    const busForTarget = target?.startsWith("bus") ? Number(target.slice(3)) : null;
+    const availableBuses = availableBusOptions(stateSnapshot.maxBus);
+    const busStates = availableBuses.map((availableBus) => (
+      stateSnapshot.decodeDisplayByBus?.[availableBus] ?? "unknown"
+    ));
+    let prerequisiteEnabled = false;
+    let prerequisiteKey = "serial.lister.unreadPrerequisite";
+    let prerequisiteValues = {};
 
-    this.listerDisplayForm?.setDisabled(disabled);
-    this.listerReferenceForm?.setDisabled(disabled);
-    this.exportForm?.setDisabled(disabled);
+    if (target === "off") {
+      prerequisiteKey = "serial.lister.selectDisplay";
+    } else if (busForTarget !== null) {
+      const busState = stateSnapshot.decodeDisplayByBus?.[busForTarget] ?? "unknown";
+      prerequisiteEnabled = busState === true;
+      prerequisiteKey = busState === true
+        ? ""
+        : busState === false
+          ? "serial.lister.decodeDisabled"
+          : "serial.lister.unknownPrerequisite";
+      prerequisiteValues = { bus: busForTarget };
+    } else if (target === "all") {
+      prerequisiteEnabled = busStates.some((value) => value === true);
+      const allKnownOff = busStates.length > 0 && busStates.every((value) => value === false);
+      const partial = prerequisiteEnabled && busStates.some((value) => value !== true);
+      prerequisiteKey = prerequisiteEnabled
+        ? partial ? "serial.lister.partialPrerequisite" : ""
+        : allKnownOff ? "serial.lister.allDecodeDisabled" : "serial.lister.unknownPrerequisite";
+    }
+
+    const dirtyTarget = stateSnapshot.dirtyListerDisplay;
+    if (dirtyTarget) {
+      prerequisiteEnabled = false;
+      prerequisiteKey = "serial.lister.applyDisplayFirst";
+      prerequisiteValues = {};
+    }
+    const dependentDisabled = disabled
+      || !hasListerReadback
+      || !prerequisiteEnabled;
+    this.applyListerDisplayButton.disabled = disabled || !hasListerReadback;
+    this.applyListerReferenceButton.disabled = dependentDisabled;
+    this.exportButton.disabled = dependentDisabled;
+
+    this.prerequisiteNote.hidden = !prerequisiteKey || unavailable;
+    this.prerequisiteNote.textContent = prerequisiteKey
+      ? translate(prerequisiteKey, prerequisiteValues)
+      : "";
+
+    this.listerDisplayForm?.setDisabled(disabled || !hasListerReadback);
+    this.listerReferenceForm?.setDisabled(dependentDisabled);
+    this.exportForm?.setDisabled(dependentDisabled);
     this.syncFormSlot(this.listerDisplayForm, "listerDisplay", stateSnapshot.jobs);
     this.syncFormSlot(this.listerReferenceForm, "listerReference", stateSnapshot.jobs);
   }

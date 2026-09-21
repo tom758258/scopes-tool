@@ -326,6 +326,11 @@ async function initialize() {
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     modelInfo: serialEditorModelInfo,
+    renderPcOutputNote: (note) => renderPcOutputCommandNote(
+      note,
+      commands?.find((command) => command.id === "serial-lister-export"),
+      elements.pcOutput,
+    ),
   };
   serialController = createSerialEditorController({
     execute: (command, parameters, options) => executeCommand(command, parameters, options),
@@ -696,6 +701,7 @@ function renderPcOutputNote() {
     catalog?.selected(),
     elements.pcOutput,
   );
+  serialListerEditor?.refreshPcOutputNote();
 }
 
 function togglePanel(panel, content, button, labelKey) {

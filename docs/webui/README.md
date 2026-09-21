@@ -185,8 +185,8 @@ The Command workbench exposes:
 - Serial: three task workspaces — Serial Decode (bus, current and pending
   protocol, display, and UART/I2C/SPI/CAN configuration with one ordered
   Apply), Serial Trigger (current decode protocol plus its trigger criteria
-  with Apply and a mode re-check), and a protocol-independent Serial Lister
-  workspace (display, reference, and host-side export) — over the existing
+  with Apply and a mode re-check), and a Serial Lister
+  workspace (decoded-bus display, reference, and host-side export) — over the existing
   hidden Serial building-block commands
 - Segmented Memory: a dedicated state view for explicit Read current state, Enter, Exit,
   segment selection, and current Time Tag readback over `segmented-memory`,
@@ -367,13 +367,15 @@ unsupported-configuration note instead of issuing protocol-specific reads.
 Switching Bus asks for confirmation before discarding unapplied edits, and
 changing the pending Decode protocol asks before discarding the previous
 protocol's configuration draft; Bus and Protocol navigation does not query
-the instrument. The Serial Lister workspace is independent of protocol and
-Bus: its state is refreshed through the existing aggregate
-`serial-lister-query`, display and reference settings apply through their
-existing commands, and Export performs the existing host-side raw CSV
-retrieval with its registered job artifact. Its filename-only field writes
-under the PC output folder selected in Basic Controls and fails rather
-than overwriting an existing file with that name.
+the instrument. The Serial Lister workspace is independent of the active
+protocol, but its selected Lister target depends on the corresponding
+Serial Decode Display state: explicit Lister Read reads the existing
+`serial-lister-query` plus each available Bus's `serial-display` state, and
+does not enable or change any setting. Display and reference settings apply
+through their existing commands, and Export performs the existing host-side
+raw CSV retrieval with its registered job artifact. Its filename-only field
+writes under the shared PC output folder selected in Basic Controls and fails
+rather than overwriting an existing file with that name.
 
 Selecting a Cursor, Annotation, WGEN, or DEMO command opens the matching dedicated
 editor instead of a plain command form. The Command Browser remains the only
