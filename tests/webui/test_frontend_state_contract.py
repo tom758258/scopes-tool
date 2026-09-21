@@ -746,7 +746,10 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     assert "serialListerEditor?.rerender();" in app_source
     assert "renderPcOutputNote: (note)" in app_source
     assert "serial-lister-row" in editor_source
+    assert editor_source.count('className = "command-form";') >= 5
+    assert ".serial-lister-row { display: grid; grid-template-columns: minmax(0, 50%) max-content; }" in styles_source
     assert ".serial-lister-row > .command-form" in styles_source
+    assert ".serial-lister-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }" in styles_source
     assert 'translate(`${editorKind}.editor.title`)' in app_source
     for command_id in (
         "serial-mode",
@@ -1146,6 +1149,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           await mismatch.controller.refreshDecode();
           await settle();
           mismatch.controller.selectProtocol("uart");
+          mismatch.controller.setDirty("config", true);
           await mismatch.controller.applyDecode({}, { baud_rate: 115200 });
           await settle();
           const commands = commandsOf(mismatch);
@@ -1194,8 +1198,10 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
           assert.deepEqual(triggerDraft.confirmations, []);
           assert.equal(triggerDraft.controller.state.dirtyTrigger, true);
           assert.equal(triggerDraft.controller.state.formEpoch, epochBefore);
-          assert.equal(triggerDraft.controller.state.protocolPending, true);
-          assert.equal(triggerDraft.controller.state.selectedProtocol, "uart");
+          assert.equal(triggerDraft.controller.state.protocolPending, false);
+          assert.equal(triggerDraft.controller.state.selectedProtocol, null);
+          assert.equal(triggerDraft.controller.state.decodeModeReady, false);
+          assert.equal(triggerDraft.controller.state.triggerModeReady, true);
           assert.deepEqual(commandsOf(triggerDraft), [
             "serial-mode:query",
             "serial-trigger-can:query",
@@ -1514,7 +1520,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
             "serial-mode:query",
           ]);
           assert.equal(failedTriggerRecheck.controller.state.confirmedMode, "uart");
-          assert.equal(failedTriggerRecheck.controller.state.selectedProtocol, "uart");
+          assert.equal(failedTriggerRecheck.controller.state.selectedProtocol, null);
           assert.equal(failedTriggerRecheck.controller.state.dirtyTrigger, true);
 
           failedTriggerRecheck.setModeQueryFails(false);
@@ -1691,6 +1697,111 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_serial_readiness_partial_failures_and_pending_read_behavior() -> None:
+    serial_editor_path = STATIC_ROOT / "serial-editor.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const source = fs.readFileSync(process.argv[1], "utf8")
+          .replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export /gm, "")
+          + "\nglobalThis.serialApi = { createSerialEditorController };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const harness = ({ mode = "uart", failures = new Set(), maxBus = 1 } = {}) => {
+          const calls = [];
+          const execute = async (command, parameters, options = {}) => {
+            calls.push({ command, parameters, options });
+            if (failures.has(command)) {
+              return { job_id: `failed-${calls.length}`, status: "failed", error: "read failed" };
+            }
+            let result;
+            if (command === "serial-mode") {
+              result = { mode: { bus: parameters.bus, mode, raw_mode: mode.toUpperCase() } };
+            } else if (command === "serial-display") {
+              result = { display: { bus: parameters.bus, enabled: true } };
+            } else if (command === "serial-lister-query") {
+              result = { lister: { display: "bus1", reference: "trigger" } };
+            } else if (command.startsWith("serial-trigger-")) {
+              result = { trigger: { protocol: mode, bus: parameters.bus } };
+            } else {
+              result = { [command.replace("serial-", "")]: { bus: parameters.bus } };
+            }
+            return { job_id: `job-${calls.length}`, status: "completed", result: { result } };
+          };
+          const controller = serialApi.createSerialEditorController({
+            execute,
+            confirmDiscard: () => true,
+            available: () => true,
+          });
+          controller.reset({ maxBus, protocolChoices: ["uart", "i2c", "spi", "can"] });
+          return { controller, calls, setMode: (value) => { mode = value; } };
+        };
+
+        const decode = harness({ failures: new Set(["serial-display"]) });
+        assert.equal(decode.controller.state.decodeModeReady, false);
+        assert.equal(decode.controller.state.triggerModeReady, false);
+        await decode.controller.refreshDecode();
+        assert.equal(decode.controller.state.decodeModeReady, true);
+        assert.equal(decode.controller.state.decodeDisplayReady, false);
+        assert.equal(decode.controller.state.decodeConfigReady, true);
+        assert.equal(decode.controller.state.triggerModeReady, false);
+        assert.equal(decode.controller.state.triggerConfigReady, false);
+
+        const trigger = harness({ failures: new Set(["serial-trigger-uart"]) });
+        await trigger.controller.refreshTrigger();
+        assert.equal(trigger.controller.state.triggerModeReady, true);
+        assert.equal(trigger.controller.state.triggerConfigReady, false);
+        assert.equal(trigger.controller.state.decodeModeReady, false);
+        assert.equal(trigger.controller.state.decodeDisplayReady, false);
+        assert.equal(trigger.controller.state.decodeConfigReady, false);
+
+        const unsupported = harness({ mode: "lin" });
+        await unsupported.controller.refreshTrigger();
+        assert.deepEqual(unsupported.calls.map((entry) => entry.command), ["serial-mode"]);
+        assert.equal(unsupported.controller.state.triggerModeReady, true);
+        assert.equal(unsupported.controller.state.triggerConfigReady, false);
+        assert.equal(unsupported.controller.state.supported, false);
+
+        const lister = harness({ maxBus: 2 });
+        await lister.controller.refreshLister();
+        assert.equal(lister.calls[0].command, "serial-lister-query");
+        assert.equal(lister.calls[0].options.captureWorkspaceResult, undefined);
+        assert.equal(lister.calls[1].options.captureWorkspaceResult, false);
+        assert.equal(lister.calls[2].options.captureWorkspaceResult, false);
+        assert.equal(lister.controller.state.decodeModeReady, false);
+        assert.equal(lister.controller.state.triggerModeReady, false);
+
+        const cleanPending = harness({ mode: "uart" });
+        await cleanPending.controller.refreshDecode();
+        cleanPending.controller.selectProtocol("can");
+        await cleanPending.controller.refreshDecode();
+        assert.equal(cleanPending.controller.state.protocolPending, false);
+        assert.equal(cleanPending.controller.state.selectedProtocol, "uart");
+        assert.equal(cleanPending.controller.state.jobs.config.protocol, "uart");
+
+        const dirtyPending = harness({ mode: "uart" });
+        await dirtyPending.controller.refreshDecode();
+        dirtyPending.controller.selectProtocol("can");
+        dirtyPending.controller.setDirty("config", true);
+        await dirtyPending.controller.refreshDecode();
+        assert.equal(dirtyPending.controller.state.protocolPending, true);
+        assert.equal(dirtyPending.controller.state.selectedProtocol, "can");
+        assert.equal(dirtyPending.controller.state.dirtyConfig, true);
+        assert.equal(dirtyPending.controller.state.jobs.config.protocol, "uart");
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(serial_editor_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> None:
     serial_editor_path = STATIC_ROOT / "serial-editor.js"
     script = textwrap.dedent(
@@ -1713,7 +1824,15 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
           replaceChildren(...nodes) { this.children = [...nodes]; }
           append(...nodes) { this.children.push(...nodes); }
-          querySelectorAll() { return []; }
+          querySelectorAll(selector) {
+            const matches = [];
+            const visit = (node) => {
+              if (selector === "[data-field]" && node?.dataset?.field) matches.push(node);
+              for (const child of node?.children || []) visit(child);
+            };
+            for (const child of this.children) visit(child);
+            return matches;
+          }
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.Option = function Option(text, value) {
@@ -1723,14 +1842,26 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         globalThis.translate = (key) => key;
         globalThis.hasTranslation = () => true;
         globalThis.CommandForm = class CommandForm {
-          constructor() {
+          constructor(container) {
+            this.container = container;
             this.dirty = false;
             this.lastSyncArgs = null;
             this.clearedDirty = false;
           }
-          render() {}
+          render(definition) {
+            this.container.replaceChildren();
+            for (const field of definition.fields) {
+              const input = new FakeNode("input");
+              input.dataset.field = field.name;
+              this.container.append(input);
+            }
+          }
           values() { return {}; }
-          setDisabled() {}
+          setDisabled(disabled) {
+            for (const input of this.container.querySelectorAll("[data-field]")) {
+              input.disabled = disabled;
+            }
+          }
           clearDirty() { this.clearedDirty = true; this.dirty = false; }
           syncResult(job, preserveDirty) { this.lastSyncArgs = [job, preserveDirty]; }
           isDirty() { return this.dirty; }
@@ -1754,7 +1885,7 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           category: "Serial",
           modes: ["live"],
           presentation: { kind: "setting", action_field: "action", apply_value: "set", query_value: "query", query_fields: queryFields },
-          fields: [...settingFields],
+          fields: [...settingFields, { name: "value", type: "string" }],
         });
         const catalog = {
           commands: [
@@ -1779,13 +1910,22 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
 
         const submitted = [];
         let executionBusy = false;
+        let runtimeLocale = "en";
         let currentMode = "can";
         let listerDisplay = "bus1";
         const serialDisplays = { 1: true, 2: true };
         const failedSerialDisplays = new Set();
+        const failedCommands = new Set();
         const setCurrentMode = (mode) => { currentMode = mode; };
         const setListerDisplay = (display) => { listerDisplay = display; };
         const respond = (command, parameters) => {
+          if (failedCommands.has(command)) {
+            return {
+              job_id: `failed-${submitted.length}`,
+              status: "failed",
+              error: "temporary VISA failure",
+            };
+          }
           if (command === "serial-mode") {
             if (parameters.action === "set") currentMode = parameters.mode;
             return {
@@ -1854,6 +1994,11 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           isExecutionBusy: () => executionBusy,
           contextKey: () => "ctx",
           headerActions: new FakeNode(),
+          renderPcOutputNote: (note) => {
+            note.textContent = runtimeLocale === "zh-TW"
+              ? "PC 輸出資料夾：data  請至基本控制統一設定。"
+              : "PC output folder: data  Managed in Basic Controls.";
+          },
           modelInfo: () => ({ supported: true, maxBus: 2, protocols: ["uart", "i2c", "spi", "can"] }),
         };
         const controller = createSerialEditorController({
@@ -1873,6 +2018,9 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.equal(decodeEditor.protocolSelect.children[0].disabled, true);
         assert.equal(decodeEditor.protocolSelect.disabled, true);
         assert.equal(decodeEditor.configUnreadPresentation.hidden, false);
+        const decodePreviewFields = decodeEditor.configFormContainer.querySelectorAll("[data-field]");
+        assert.ok(decodePreviewFields.length > 0);
+        assert.equal(decodePreviewFields.every((field) => field.disabled), true);
         assert.equal(decodeEditor.displayForm.lastSyncArgs, null);
         assert.equal(decodeEditor.applyDecodeButton.disabled, true);
         assert.ok(decodeEditor.applyDecodeButton.className.startsWith("primary"));
@@ -1883,6 +2031,9 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         await settle();
         assert.equal(triggerEditor.triggerSection.hidden, false);
         assert.ok(triggerEditor.triggerForm);
+        const triggerPreviewFields = triggerEditor.triggerFormContainer.querySelectorAll("[data-field]");
+        assert.ok(triggerPreviewFields.length > 0);
+        assert.equal(triggerPreviewFields.every((field) => field.disabled), true);
         assert.equal(triggerEditor.triggerNote.hidden, false);
         assert.equal(triggerEditor.applyTriggerButton.disabled, true);
         assert.ok(triggerEditor.applyTriggerButton.className.startsWith("primary"));
@@ -1894,11 +2045,18 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.ok(listerEditor.listerDisplayForm);
         assert.ok(listerEditor.listerReferenceForm);
         assert.ok(listerEditor.exportForm);
+        assert.equal(listerEditor.listerDisplayFormContainer.className, "command-form");
+        assert.equal(listerEditor.listerReferenceFormContainer.className, "command-form");
+        assert.equal(listerEditor.exportFormContainer.className, "command-form");
         assert.equal(listerEditor.listerDisplayForm.lastSyncArgs, null);
         assert.equal(listerEditor.listerReferenceForm.lastSyncArgs, null);
         assert.equal(listerEditor.applyListerDisplayButton.disabled, true);
         assert.equal(listerEditor.applyListerReferenceButton.disabled, true, "unknown prerequisite reference");
         assert.equal(listerEditor.exportButton.disabled, true, "unknown prerequisite export");
+        assert.equal(listerEditor.pcOutputNote.textContent, "PC output folder: data  Managed in Basic Controls.");
+        runtimeLocale = "zh-TW";
+        listerEditor.rerender();
+        assert.equal(listerEditor.pcOutputNote.textContent, "PC 輸出資料夾：data  請至基本控制統一設定。");
         assert.deepEqual(submitted, []);
 
         decodeEditor.refreshButton.dispatch("click");
@@ -1910,6 +2068,13 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.ok(decodeEditor.configForm.lastSyncArgs);
         assert.equal(decodeEditor.configForm.lastSyncArgs[1], true);
         assert.equal(decodeEditor.applyDecodeButton.disabled, false);
+        assert.equal(triggerEditor.triggerNote.hidden, false);
+        assert.equal(triggerEditor.applyTriggerButton.disabled, true);
+        assert.equal(
+          triggerEditor.triggerFormContainer.querySelectorAll("[data-field]")
+            .every((field) => field.disabled),
+          true,
+        );
 
         triggerEditor.refreshButton.dispatch("click");
         await settle();
@@ -2093,15 +2258,16 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.equal(controller.state.protocolPending, true);
         decodeEditor.refreshButton.dispatch("click");
         await settle();
-        assert.equal(controller.state.protocolPending, true);
-        assert.equal(controller.state.selectedProtocol, "can");
-        assert.equal(decodeEditor.protocolSelect.value, "can");
-        assert.equal(decodeEditor.configForm.lastSyncArgs, null);
+        assert.equal(controller.state.protocolPending, false);
+        assert.equal(controller.state.selectedProtocol, "uart");
+        assert.equal(decodeEditor.protocolSelect.value, "uart");
+        assert.ok(decodeEditor.configForm.lastSyncArgs);
 
         decodeEditor.protocolSelect.value = "can";
         decodeEditor.protocolSelect.dispatch("change");
         decodeEditor.configForm.values = () => ({ baud_rate: 9600 });
         decodeEditor.configForm.dirty = true;
+        controller.setDirty("config", true);
         const draftBefore = decodeEditor.configForm.values();
         await controller.refreshDecode();
         await settle();
@@ -2122,6 +2288,44 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           "serial-display",
           "serial-uart",
         ]);
+
+        failedSerialDisplays.add(2);
+        await controller.refreshDecode();
+        await settle();
+        assert.equal(controller.state.decodeModeReady, true);
+        assert.equal(controller.state.decodeDisplayReady, false);
+        assert.equal(
+          decodeEditor.displayFormContainer.querySelectorAll("[data-field]")
+            .every((field) => field.disabled),
+          true,
+        );
+        failedSerialDisplays.delete(2);
+
+        failedCommands.add("serial-trigger-uart");
+        await controller.refreshTrigger();
+        await settle();
+        assert.equal(controller.state.triggerModeReady, true);
+        assert.equal(controller.state.triggerConfigReady, false);
+        assert.equal(triggerEditor.triggerNote.hidden, false);
+        assert.equal(triggerEditor.applyTriggerButton.disabled, true);
+        assert.equal(
+          triggerEditor.triggerFormContainer.querySelectorAll("[data-field]")
+            .every((field) => field.disabled),
+          true,
+        );
+        failedCommands.delete("serial-trigger-uart");
+
+        setCurrentMode("lin");
+        await controller.refreshTrigger();
+        await settle();
+        assert.equal(triggerEditor.triggerSection.hidden, false);
+        assert.equal(triggerEditor.triggerNote.hidden, false);
+        assert.equal(triggerEditor.applyTriggerButton.disabled, true);
+        assert.equal(
+          triggerEditor.triggerFormContainer.querySelectorAll("[data-field]")
+            .every((field) => field.disabled),
+          true,
+        );
         '''
     )
     completed = subprocess.run(
@@ -4131,7 +4335,8 @@ def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -
         const setExecutionStatus = (state) => states.push(state.status);
         const renderCurrentResult = () => presentations.push(resultPresentation.job?.job_id || null);
         const updateIdentity = () => {};
-        const captureWorkspaceResult = () => {};
+        const capturedWorkspaceResults = [];
+        const captureWorkspaceResult = (job) => capturedWorkspaceResults.push(job.job_id);
         const commandForm = { setDisabled() {}, clearDirty() {}, syncResult() {} };
         let resolveFirst;
         const runJob = (command, parameters, commandContext, onUpdate) => {
@@ -4164,6 +4369,7 @@ def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -
         await first;
         assert.equal(executing, false);
         assert.equal(currentJobId, null);
+        assert.deepEqual(capturedWorkspaceResults, ["job-1"]);
 
         deviceResource = { scanInProgress: true };
         assert.equal(await executeCommand("run", { source: 3 }, {}), null);
@@ -4174,9 +4380,12 @@ def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -
         assert.equal(submissions.length, 1);
         pendingResourceLiveSupport = null;
 
-        const second = await executeCommand("run", { source: 5 }, {});
+        const second = await executeCommand("run", { source: 5 }, {
+          captureWorkspaceResult: false,
+        });
         assert.equal(second.job_id, "job-2");
         assert.equal(submissions.length, 2);
+        assert.deepEqual(capturedWorkspaceResults, ["job-1"]);
         '''
     )
     completed = subprocess.run(

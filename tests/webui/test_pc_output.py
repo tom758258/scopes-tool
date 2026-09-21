@@ -606,6 +606,64 @@ def test_pc_output_helper_text_is_plain_localized_text() -> None:
         assert "`" not in helper_text
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_pc_output_command_note_follows_runtime_locale() -> None:
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const stored = new Map();
+        globalThis.localStorage = {
+          getItem: (key) => stored.get(key) ?? null,
+          setItem: (key, value) => stored.set(key, value),
+        };
+        globalThis.CustomEvent = class CustomEvent {
+          constructor(type, options = {}) { this.type = type; this.detail = options.detail; }
+        };
+        globalThis.document = {
+          documentElement: { lang: "" },
+          querySelectorAll: () => [],
+          querySelector: () => null,
+          dispatchEvent() {},
+        };
+
+        const source = [
+          fs.readFileSync(process.argv[1], "utf8"),
+          fs.readFileSync(process.argv[2], "utf8"),
+          fs.readFileSync(process.argv[3], "utf8"),
+          fs.readFileSync(process.argv[4], "utf8"),
+        ].join("\n")
+          .replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export /gm, "")
+          + "\nglobalThis.runtimeApi = { setLocale, renderPcOutputCommandNote };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const note = { hidden: true, textContent: "" };
+        const input = { value: "data" };
+        runtimeApi.setLocale("en");
+        runtimeApi.renderPcOutputCommandNote(note, { pc_output: true }, input);
+        assert.equal(note.textContent, "PC output folder: data  Managed in Basic Controls.");
+
+        runtimeApi.setLocale("zh-TW");
+        runtimeApi.renderPcOutputCommandNote(note, { pc_output: true }, input);
+        assert.equal(note.textContent, "PC 輸出資料夾：data  請至基本控制統一設定。");
+        ''')
+    completed = subprocess.run(
+        [
+            "node", "--input-type=module", "--eval", script,
+            str(STATIC_ROOT / "locale_en.js"),
+            str(STATIC_ROOT / "locale_zh_tw.js"),
+            str(STATIC_ROOT / "i18n.js"),
+            str(STATIC_ROOT / "pc-output.js"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def test_pc_output_catalog_and_locale_keys_are_centralized() -> None:
     catalog = TestClient(app).get("/api/commands").json()
     pc_output_commands = {entry["id"] for entry in catalog if entry["pc_output"]}

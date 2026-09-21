@@ -73,7 +73,11 @@ export function createSerialEditorController({
   let selectedProtocol = null;
   let confirmedMode = null;
   let rawMode = null;
-  let modeRead = false;
+  let decodeModeReady = false;
+  let decodeDisplayReady = false;
+  let decodeConfigReady = false;
+  let triggerModeReady = false;
+  let triggerConfigReady = false;
   let dirtyConfig = false;
   let dirtyDisplay = false;
   let dirtyTrigger = false;
@@ -101,7 +105,11 @@ export function createSerialEditorController({
     protocolPending,
     confirmedMode,
     rawMode,
-    readbackReady: modeRead,
+    decodeModeReady,
+    decodeDisplayReady,
+    decodeConfigReady,
+    triggerModeReady,
+    triggerConfigReady,
     currentLabel: displayModeLabel(confirmedMode, rawMode),
     configCommand: configCommandFor(confirmedMode),
     triggerCommand: triggerCommandFor(confirmedMode),
@@ -146,13 +154,14 @@ export function createSerialEditorController({
     }
   }
 
-  async function runQuery(command, parameters) {
-    const job = await execute(command, parameters, { intent: "readback" });
+  async function runQuery(command, parameters, options = {}) {
+    const job = await execute(command, parameters, { intent: "readback", ...options });
     return isCompleted(job) ? job : null;
   }
 
   async function readConfigForConfirmed() {
     jobs.config = null;
+    decodeConfigReady = false;
     const configCommand = configCommandFor(confirmedMode);
     if (!configCommand) {
       notifyState();
@@ -160,26 +169,43 @@ export function createSerialEditorController({
     }
     const configJob = await runQuery(configCommand, { action: "query", bus });
     jobs.config = configJob ? { job: configJob, applied: false, protocol: confirmedMode } : null;
+    decodeConfigReady = Boolean(configJob);
     notifyState();
   }
 
   async function readDecode() {
+    decodeModeReady = false;
+    decodeDisplayReady = false;
+    decodeConfigReady = false;
     const modeJob = await runQuery("serial-mode", { action: "query", bus });
     jobs.mode = modeJob ? { job: modeJob, applied: false } : null;
-    modeRead = Boolean(modeJob);
+    decodeModeReady = Boolean(modeJob);
     const reported = modeFromJob(modeJob);
-    confirmedMode = reported.mode;
-    rawMode = reported.rawMode;
-    syncSelectedProtocol();
+    if (modeJob) {
+      const modeChanged = confirmedMode !== null && confirmedMode !== reported.mode;
+      confirmedMode = reported.mode;
+      rawMode = reported.rawMode;
+      if (modeChanged) {
+        triggerModeReady = false;
+        triggerConfigReady = false;
+        jobs.trigger = null;
+      }
+      if (!protocolPending || !dirtyConfig) {
+        protocolPending = false;
+        syncSelectedProtocol();
+      }
+    }
     notifyState();
     const displayJob = await runQuery("serial-display", { action: "query", bus });
     jobs.display = displayJob ? { job: displayJob, applied: false } : null;
+    decodeDisplayReady = Boolean(displayJob);
     notifyState();
-    await readConfigForConfirmed();
+    if (modeJob) await readConfigForConfirmed();
   }
 
   async function readTriggerForConfirmed() {
     jobs.trigger = null;
+    triggerConfigReady = false;
     const triggerCommand = triggerCommandFor(confirmedMode);
     if (!triggerCommand) {
       notifyState();
@@ -187,19 +213,29 @@ export function createSerialEditorController({
     }
     const triggerJob = await runQuery(triggerCommand, { action: "query", bus });
     jobs.trigger = triggerJob ? { job: triggerJob, applied: false } : null;
+    triggerConfigReady = Boolean(triggerJob);
     notifyState();
   }
 
   async function readTrigger() {
+    triggerModeReady = false;
+    triggerConfigReady = false;
     const modeJob = await runQuery("serial-mode", { action: "query", bus });
     jobs.mode = modeJob ? { job: modeJob, applied: false } : null;
-    modeRead = Boolean(modeJob);
+    triggerModeReady = Boolean(modeJob);
     const reported = modeFromJob(modeJob);
-    confirmedMode = reported.mode;
-    rawMode = reported.rawMode;
-    syncSelectedProtocol();
+    if (modeJob) {
+      const modeChanged = confirmedMode !== null && confirmedMode !== reported.mode;
+      confirmedMode = reported.mode;
+      rawMode = reported.rawMode;
+      if (modeChanged) {
+        decodeModeReady = false;
+        decodeConfigReady = false;
+        jobs.config = null;
+      }
+    }
     notifyState();
-    await readTriggerForConfirmed();
+    if (modeJob) await readTriggerForConfirmed();
   }
 
   async function readListerState() {
@@ -217,7 +253,7 @@ export function createSerialEditorController({
       const displayJob = await runQuery("serial-display", {
         action: "query",
         bus: prerequisiteBus,
-      });
+      }, { captureWorkspaceResult: false });
       decodeDisplayByBus[prerequisiteBus] = displayJob
         ? (serialDisplayFromJob(displayJob) ?? "unknown")
         : "unknown";
@@ -285,7 +321,9 @@ export function createSerialEditorController({
     if (reported.mode !== target) return job;
     confirmedMode = target;
     rawMode = reported.rawMode;
-    modeRead = true;
+    decodeModeReady = true;
+    triggerModeReady = false;
+    triggerConfigReady = false;
     protocolPending = false;
     dirtyTrigger = false;
     jobs.mode = { job, applied: true };
@@ -321,7 +359,11 @@ export function createSerialEditorController({
       selectedProtocol = null;
       confirmedMode = null;
       rawMode = null;
-      modeRead = false;
+      decodeModeReady = false;
+      decodeDisplayReady = false;
+      decodeConfigReady = false;
+      triggerModeReady = false;
+      triggerConfigReady = false;
       dirtyConfig = false;
       dirtyDisplay = false;
       dirtyTrigger = false;
@@ -358,7 +400,11 @@ export function createSerialEditorController({
       bus = candidate;
       confirmedMode = null;
       rawMode = null;
-      modeRead = false;
+      decodeModeReady = false;
+      decodeDisplayReady = false;
+      decodeConfigReady = false;
+      triggerModeReady = false;
+      triggerConfigReady = false;
       selectedProtocol = null;
       protocolPending = false;
       dirtyConfig = false;
@@ -372,7 +418,7 @@ export function createSerialEditorController({
       notifyState();
     },
     selectProtocol(protocol) {
-      if (busyCount > 0 || !modeRead || !protocols.includes(protocol)) return;
+      if (busyCount > 0 || !decodeModeReady || !protocols.includes(protocol)) return;
       if (protocol === selectedProtocol) return;
       if (dirtyConfig && !confirmDiscard()) {
         notifyState();
@@ -439,6 +485,7 @@ export function createSerialEditorController({
           );
           if (!isCompleted(displayJob)) return displayJob;
           dirtyDisplay = false;
+          decodeDisplayReady = true;
           jobs.display = { job: displayJob, applied: true };
           notifyState();
         }
@@ -450,7 +497,10 @@ export function createSerialEditorController({
           if (reported.mode !== target) {
             confirmedMode = reported.mode;
             rawMode = reported.rawMode;
-            modeRead = true;
+            decodeModeReady = true;
+            decodeConfigReady = false;
+            triggerModeReady = false;
+            triggerConfigReady = false;
             dirtyConfig = false;
             dirtyTrigger = false;
             jobs.config = null;
@@ -467,6 +517,7 @@ export function createSerialEditorController({
           );
           if (!isCompleted(job)) return job;
           dirtyConfig = false;
+          decodeConfigReady = true;
           jobs.config = { job, applied: true, protocol: target };
           notifyState();
         }
@@ -490,7 +541,10 @@ export function createSerialEditorController({
         if (reported.mode !== confirmedMode) {
           confirmedMode = reported.mode;
           rawMode = reported.rawMode;
-          modeRead = true;
+          triggerModeReady = true;
+          triggerConfigReady = false;
+          decodeModeReady = false;
+          decodeConfigReady = false;
           dirtyTrigger = false;
           jobs.trigger = null;
           syncSelectedProtocol();
@@ -505,6 +559,7 @@ export function createSerialEditorController({
         );
         if (isCompleted(job)) {
           dirtyTrigger = false;
+          triggerConfigReady = true;
           jobs.trigger = { job, applied: true };
           notifyState();
         }
@@ -782,6 +837,7 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
         this.pendingProtocolNote,
         this.readbackHint,
         this.configDescription,
+        this.configUnreadPresentation,
         this.configFormContainer,
       ],
       this.hooks.headerActions ? null : this.applyDecodeButton,
@@ -829,10 +885,7 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
     this.syncedJobs.config = null;
     this.configDescription.textContent = "";
     this.configDescription.hidden = true;
-    if (!commandId || !this.configForm) {
-      this.configFormContainer.append(this.configUnreadPresentation);
-      return;
-    }
+    if (!commandId || !this.configForm) return;
     const definition = this.editorDefinition(commandId);
     if (!definition) return;
     this.configDescription.textContent = this.catalog.description?.(definition) || "";
@@ -910,17 +963,17 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
       );
     }
     this.protocolSelect.value = stateSnapshot.selectedProtocol ?? "";
-    this.protocolSelect.disabled = disabled || !stateSnapshot.readbackReady;
+    this.protocolSelect.disabled = disabled || !stateSnapshot.decodeModeReady;
 
     this.currentValue.textContent = stateSnapshot.currentLabel || "-";
 
     this.refreshButton.disabled = disabled;
 
     this.ensureDisplayForm();
-    this.displayForm?.setDisabled(disabled || !stateSnapshot.readbackReady);
+    this.displayForm?.setDisabled(disabled || !stateSnapshot.decodeDisplayReady);
 
     const showUnsupported = !unavailable
-      && stateSnapshot.readbackReady
+      && stateSnapshot.decodeModeReady
       && !stateSnapshot.supported;
     if (showUnsupported) {
       const protocolName = stateSnapshot.currentLabel || "-";
@@ -944,18 +997,26 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
       });
     }
 
-    this.ensureDecodeConfigForm(stateSnapshot.selectedProtocol);
+    const previewProtocol = stateSnapshot.selectedProtocol
+      || (stateSnapshot.protocols.includes(stateSnapshot.confirmedMode)
+        ? stateSnapshot.confirmedMode
+        : stateSnapshot.protocols[0]);
+    this.ensureDecodeConfigForm(previewProtocol);
     this.configUnreadPresentation.hidden = unavailable
-      || stateSnapshot.readbackReady
+      || stateSnapshot.decodeConfigReady
+      || stateSnapshot.protocolPending
       || showUnsupported;
-    this.configForm?.setDisabled(disabled || !stateSnapshot.readbackReady);
+    const configEditable = stateSnapshot.decodeModeReady
+      && (stateSnapshot.protocolPending || stateSnapshot.decodeConfigReady);
+    this.configForm?.setDisabled(disabled || !configEditable);
 
     this.applyDecodeButton.disabled = disabled
-      || !stateSnapshot.readbackReady
-      || (!stateSnapshot.selectedProtocol && !stateSnapshot.dirtyDisplay && !stateSnapshot.dirtyConfig);
+      || !stateSnapshot.decodeModeReady
+      || (!stateSnapshot.decodeDisplayReady
+        && !(stateSnapshot.selectedProtocol && configEditable));
 
     this.syncFormSlot(this.displayForm, "display", stateSnapshot.jobs);
-    if (!showUnsupported) {
+    if (!showUnsupported && previewProtocol === stateSnapshot.selectedProtocol) {
       this.syncDecodeConfigForm(stateSnapshot);
     }
   }
@@ -1074,31 +1135,42 @@ export class SerialTriggerEditor extends SerialWorkspaceBase {
     this.refreshButton.disabled = disabled;
 
     const showUnsupported = !unavailable
-      && stateSnapshot.readbackReady
+      && stateSnapshot.triggerModeReady
       && !stateSnapshot.supported;
+    this.triggerSection.hidden = unavailable;
     if (showUnsupported) {
       const protocolName = stateSnapshot.currentLabel || "-";
       this.triggerNote.hidden = false;
       this.triggerNote.textContent = hasTranslation("serial.editor.unsupported")
         ? translate("serial.editor.unsupported", { protocol: protocolName })
         : protocolName;
-      this.triggerSection.hidden = true;
-      this.triggerForm = null;
-      this.renderedTriggerCommand = undefined;
+      const previewProtocol = stateSnapshot.protocols.includes(stateSnapshot.confirmedMode)
+        ? stateSnapshot.confirmedMode
+        : (stateSnapshot.selectedProtocol || stateSnapshot.protocols[0]);
+      this.ensureTriggerForm(triggerCommandFor(previewProtocol));
+      this.triggerForm?.setDisabled(true);
     } else {
-      this.triggerSection.hidden = unavailable;
-      const hasReadbackForm = stateSnapshot.readbackReady && stateSnapshot.supported;
+      const hasReadbackForm = stateSnapshot.triggerModeReady
+        && stateSnapshot.triggerConfigReady
+        && stateSnapshot.supported;
       this.triggerNote.hidden = hasReadbackForm;
       this.triggerNote.textContent = unavailable
         ? translate("serial.editor.unavailable")
         : translate("serial.trigger.unreadConfiguration");
-      this.ensureTriggerForm(hasReadbackForm ? stateSnapshot.triggerCommand : null);
+      const previewProtocol = hasReadbackForm
+        ? stateSnapshot.confirmedMode
+        : (stateSnapshot.selectedProtocol
+          || (stateSnapshot.protocols.includes(stateSnapshot.confirmedMode)
+            ? stateSnapshot.confirmedMode
+            : stateSnapshot.protocols[0]));
+      this.ensureTriggerForm(triggerCommandFor(previewProtocol));
       this.triggerForm?.setDisabled(disabled || !hasReadbackForm);
-      this.syncFormSlot(this.triggerForm, "trigger", stateSnapshot.jobs);
+      if (hasReadbackForm) this.syncFormSlot(this.triggerForm, "trigger", stateSnapshot.jobs);
     }
 
     this.applyTriggerButton.disabled = disabled
-      || !stateSnapshot.readbackReady
+      || !stateSnapshot.triggerModeReady
+      || !stateSnapshot.triggerConfigReady
       || !stateSnapshot.supported;
   }
 }
@@ -1145,6 +1217,7 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     };
 
     this.listerDisplayFormContainer = document.createElement("div");
+    this.listerDisplayFormContainer.className = "command-form";
     this.applyListerDisplayButton = this.actionButton(
       translate("actions.apply"),
       () => void this.submitListerSetting("display"),
@@ -1153,6 +1226,7 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     addRow(this.listerDisplayFormContainer, this.applyListerDisplayButton);
 
     this.listerReferenceFormContainer = document.createElement("div");
+    this.listerReferenceFormContainer.className = "command-form";
     this.applyListerReferenceButton = this.actionButton(
       translate("actions.apply"),
       () => void this.submitListerSetting("reference"),
@@ -1161,6 +1235,7 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     addRow(this.listerReferenceFormContainer, this.applyListerReferenceButton);
 
     this.exportFormContainer = document.createElement("div");
+    this.exportFormContainer.className = "command-form";
     this.exportButton = this.actionButton(
       translate("serial.editor.export"),
       () => void this.submitExport(),
@@ -1247,6 +1322,7 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     }
 
     this.refreshI18n();
+    this.refreshPcOutputNote();
     this.applyListerDisplayButton.textContent = translate("actions.apply");
     this.applyListerReferenceButton.textContent = translate("actions.apply");
     this.exportButton.textContent = translate("serial.editor.export");

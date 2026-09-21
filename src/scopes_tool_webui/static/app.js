@@ -777,7 +777,9 @@ async function executeCommand(command, parameters, options = {}) {
     resultPresentation = { kind: "job", job, message: null };
     renderCurrentResult();
     updateIdentity(job, commandContext);
-    if (!definition.internal) captureWorkspaceResult(job, submittedWorkspaceContext);
+    if (!definition.internal && options.captureWorkspaceResult !== false) {
+      captureWorkspaceResult(job, submittedWorkspaceContext);
+    }
     if (job.status === "completed" && ownsCommandForm()) {
       if (options.intent === "apply") commandForm.clearDirty();
       commandForm.syncResult(job, options.intent !== "apply");
