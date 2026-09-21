@@ -980,6 +980,22 @@ const RESULT_FIELD_LABEL_CONTEXTS = {
     function: "demo.state.function",
     phase_degrees: "demo.state.phase",
   },
+  "serial-trigger-uart": {
+    protocol: "field.protocol",
+    trigger_mode: "field.trigger_mode",
+  },
+  "serial-trigger-i2c": {
+    protocol: "field.protocol",
+    trigger_mode: "field.trigger_mode",
+  },
+  "serial-trigger-spi": {
+    protocol: "field.protocol",
+    trigger_mode: "field.trigger_mode",
+  },
+  "serial-trigger-can": {
+    protocol: "field.protocol",
+    trigger_mode: "field.trigger_mode",
+  },
 };
 
 const WGEN_RESULT_COMMANDS = new Set([
@@ -1103,34 +1119,53 @@ const RESULT_ENUM_CONTEXTS = {
     mode: "serial-search-can-mode",
     id_mode: "serial-search-can-id-mode",
   },
+  "serial-mode": {
+    mode: "serial-protocol",
+  },
   "serial-uart": {
+    mode: "serial-protocol",
     parity: "serial-uart-parity",
     polarity: "serial-uart-polarity",
     bit_order: "serial-bit-order",
   },
   "serial-i2c": {
+    mode: "serial-protocol",
     address_size: "serial-i2c-address-size",
   },
   "serial-spi": {
+    mode: "serial-protocol",
     clock_slope: "serial-spi-clock-slope",
     bit_order: "serial-bit-order",
     framing: "serial-spi-framing",
   },
   "serial-can": {
+    mode: "serial-protocol",
     signal_definition: "serial-can-signal-definition",
   },
   "serial-trigger-uart": {
+    protocol: "serial-protocol",
+    mode: "serial-protocol",
+    trigger_mode: "serial-trigger-mode",
     type: "serial-trigger-uart-type",
     qualifier: "serial-trigger-qualifier",
   },
   "serial-trigger-i2c": {
+    protocol: "serial-protocol",
+    mode: "serial-protocol",
+    trigger_mode: "serial-trigger-mode",
     type: "serial-trigger-i2c-type",
     qualifier: "serial-trigger-qualifier",
   },
   "serial-trigger-spi": {
+    protocol: "serial-protocol",
+    mode: "serial-protocol",
+    trigger_mode: "serial-trigger-mode",
     type: "serial-trigger-spi-type",
   },
   "serial-trigger-can": {
+    protocol: "serial-protocol",
+    mode: "serial-protocol",
+    trigger_mode: "serial-trigger-mode",
     type: "serial-trigger-can-type",
     id_mode: "serial-trigger-can-id-mode",
   },
@@ -1177,12 +1212,14 @@ function formatWorkspaceValue(name, value, resultContext = null) {
     const key = keys.find((candidate) => hasTranslation(candidate));
     if (key) return translate(key);
   }
-  if (typeof value === "string" && !isLiteralWorkspaceField(name)) {
-    // Search-only exception: scoped Search enum labels win over the generic
-    // protocol-identifier passthrough (e.g. search_mode serial1). Other
-    // contexts keep the existing passthrough untouched.
+  if (typeof value === "string") {
+    // Scoped Search/Serial enum labels win over generic identifier passthrough
+    // for values such as serial1 and uart.
     const scopedEnum = RESULT_ENUM_CONTEXTS[resultContext]?.[name];
-    if (scopedEnum && SEARCH_RESULT_COMMANDS.has(resultContext)) {
+    if (
+      scopedEnum
+      && (SEARCH_RESULT_COMMANDS.has(resultContext) || SERIAL_RESULT_COMMANDS.has(resultContext))
+    ) {
       const scopedKey = `enum.${scopedEnum}.${value}`;
       if (hasTranslation(scopedKey)) return translate(scopedKey);
     }
