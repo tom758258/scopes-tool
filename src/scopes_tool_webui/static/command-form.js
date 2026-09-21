@@ -355,7 +355,8 @@ export class CommandForm {
         input.dataset.multiSource = "true";
       }
       if (actionChoices?.length) input.value = String(actionChoices[0]);
-    } else if (field.type === "integer" && this.catalog.optionsFor(field).length) {
+    } else if (["integer", "number"].includes(field.type)
+        && this.catalog.optionsFor(field).length) {
       input = document.createElement("select");
       if (field.default === undefined) {
         const required = field.required === true || Boolean(field.required_if);

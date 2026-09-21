@@ -747,9 +747,10 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     assert "renderPcOutputNote: (note)" in app_source
     assert "serial-lister-row" in editor_source
     assert editor_source.count('className = "command-form";') >= 5
-    assert ".serial-lister-row { display: grid; grid-template-columns: minmax(0, 50%) max-content; }" in styles_source
+    assert ".serial-lister-row { display: grid; gap: 8px; width: 50%; }" in styles_source
+    assert ".serial-lister-row > .serial-editor-action { justify-self: start; }" in styles_source
     assert ".serial-lister-row > .command-form" in styles_source
-    assert ".serial-lister-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }" in styles_source
+    assert ".serial-lister-row { width: 100%; align-items: stretch; }" in styles_source
     assert 'translate(`${editorKind}.editor.title`)' in app_source
     for command_id in (
         "serial-mode",
@@ -1819,15 +1820,24 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
             this.disabled = false;
             this.value = "";
             this.className = "";
+            this.options = [];
           }
           addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
           dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
-          replaceChildren(...nodes) { this.children = [...nodes]; }
-          append(...nodes) { this.children.push(...nodes); }
+          replaceChildren(...nodes) { this.children = []; this.options = []; this.append(...nodes); }
+          append(...nodes) {
+            this.children.push(...nodes);
+            if (this.tagName === "SELECT") {
+              this.options.push(...nodes.filter((node) => node.tagName === "OPTION"));
+            }
+          }
+          querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
           querySelectorAll(selector) {
             const matches = [];
+            const fieldMatch = selector.match(/^\[data-field="([^"]+)"\]$/);
             const visit = (node) => {
               if (selector === "[data-field]" && node?.dataset?.field) matches.push(node);
+              if (fieldMatch && node?.dataset?.field === fieldMatch[1]) matches.push(node);
               for (const child of node?.children || []) visit(child);
             };
             for (const child of this.children) visit(child);
@@ -1836,7 +1846,10 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         }
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.Option = function Option(text, value) {
-          return { textContent: text, value: String(value) };
+          const option = new FakeNode("option");
+          option.textContent = text;
+          option.value = String(value);
+          return option;
         };
         globalThis.window = { confirm: () => true };
         globalThis.translate = (key) => key;
@@ -1851,8 +1864,13 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           render(definition) {
             this.container.replaceChildren();
             for (const field of definition.fields) {
-              const input = new FakeNode("input");
+              const input = new FakeNode(field.type === "enum" ? "select" : "input");
               input.dataset.field = field.name;
+              for (const optionValue of field.options || []) {
+                const option = new Option(optionValue, optionValue);
+                option.disabled = (field.disabled_options || []).includes(optionValue);
+                input.append(option);
+              }
               this.container.append(input);
             }
           }
@@ -1880,12 +1898,15 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         };
 
         const settingFields = [{ name: "action", type: "enum", options: ["query", "set"] }];
-        const definitionFor = (id, queryFields = ["bus"]) => ({
+        const definitionFor = (id, queryFields = ["bus"], fields = [
+          ...settingFields,
+          { name: "value", type: "string" },
+        ]) => ({
           id,
           category: "Serial",
           modes: ["live"],
           presentation: { kind: "setting", action_field: "action", apply_value: "set", query_value: "query", query_fields: queryFields },
-          fields: [...settingFields, { name: "value", type: "string" }],
+          fields,
         });
         const catalog = {
           commands: [
@@ -1900,9 +1921,17 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
             definitionFor("serial-trigger-spi"),
             definitionFor("serial-trigger-can"),
             definitionFor("serial-lister-query", []),
-            definitionFor("serial-lister-display", []),
-            definitionFor("serial-lister-reference", []),
-            definitionFor("serial-lister-export", []),
+            definitionFor("serial-lister-display", [], [
+              ...settingFields,
+              { name: "display", type: "enum", options: ["off", "bus1", "bus2", "all"] },
+            ]),
+            definitionFor("serial-lister-reference", [], [
+              ...settingFields,
+              { name: "reference", type: "enum", options: ["trigger", "previous"] },
+            ]),
+            definitionFor("serial-lister-export", [], [
+              { name: "filename", type: "string" },
+            ]),
           ],
           fieldsFor: (definition) => definition.fields,
           optionsFor: (field) => field.options || [],
@@ -1913,7 +1942,7 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         let runtimeLocale = "en";
         let currentMode = "can";
         let listerDisplay = "bus1";
-        const serialDisplays = { 1: true, 2: true };
+        const serialDisplays = { 1: false, 2: false };
         const failedSerialDisplays = new Set();
         const failedCommands = new Set();
         const setCurrentMode = (mode) => { currentMode = mode; };
@@ -2048,11 +2077,38 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.equal(listerEditor.listerDisplayFormContainer.className, "command-form");
         assert.equal(listerEditor.listerReferenceFormContainer.className, "command-form");
         assert.equal(listerEditor.exportFormContainer.className, "command-form");
+        assert.deepEqual(listerEditor.listerDisplayRow.children, [
+          listerEditor.listerDisplayFormContainer,
+          listerEditor.applyListerDisplayButton,
+        ]);
+        assert.deepEqual(listerEditor.listerReferenceRow.children, [
+          listerEditor.listerReferenceFormContainer,
+          listerEditor.applyListerReferenceButton,
+        ]);
+        assert.deepEqual(listerEditor.exportRow.children, [
+          listerEditor.exportFormContainer,
+          listerEditor.pcOutputNote,
+          listerEditor.exportButton,
+        ]);
+        assert.equal(listerEditor.listerDisplayRow.className, listerEditor.exportRow.className);
+        assert.ok(listerEditor.pcOutputNote.className.includes("pc-output-note-box"));
         assert.equal(listerEditor.listerDisplayForm.lastSyncArgs, null);
         assert.equal(listerEditor.listerReferenceForm.lastSyncArgs, null);
         assert.equal(listerEditor.applyListerDisplayButton.disabled, true);
         assert.equal(listerEditor.applyListerReferenceButton.disabled, true, "unknown prerequisite reference");
         assert.equal(listerEditor.exportButton.disabled, true, "unknown prerequisite export");
+        assert.equal(
+          listerEditor.listerDisplayFormContainer.querySelector('[data-field="display"]').disabled,
+          true,
+        );
+        assert.equal(
+          listerEditor.listerReferenceFormContainer.querySelector('[data-field="reference"]').disabled,
+          true,
+        );
+        assert.equal(
+          listerEditor.exportFormContainer.querySelector('[data-field="filename"]').disabled,
+          true,
+        );
         assert.equal(listerEditor.pcOutputNote.textContent, "PC output folder: data  Managed in Basic Controls.");
         runtimeLocale = "zh-TW";
         listerEditor.rerender();
@@ -2096,13 +2152,49 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           "serial-display",
         ]);
         assert.equal(controller.state.listerDisplay, "bus1");
-        assert.equal(controller.state.decodeDisplayByBus[1], true);
-        assert.equal(controller.state.decodeDisplayByBus[2], true);
+        assert.equal(controller.state.decodeDisplayByBus[1], false);
+        assert.equal(controller.state.decodeDisplayByBus[2], false);
         assert.equal(listerEditor.listerDisplayForm.lastSyncArgs?.[1], true);
         assert.equal(listerEditor.listerReferenceForm.lastSyncArgs?.[1], true);
-        assert.equal(listerEditor.applyListerDisplayButton.disabled, false, "initial lister display apply");
-        assert.equal(listerEditor.applyListerReferenceButton.disabled, false, "restored prerequisite reference");
-        assert.equal(listerEditor.exportButton.disabled, false, "restored prerequisite export");
+        assert.equal(listerEditor.applyListerDisplayButton.disabled, true, "all decode displays off");
+        assert.equal(listerEditor.applyListerReferenceButton.disabled, true, "all decode displays off");
+        assert.equal(listerEditor.exportButton.disabled, true, "all decode displays off");
+        assert.equal(
+          listerEditor.listerDisplayFormContainer.querySelector('[data-field="display"]').disabled,
+          true,
+        );
+        assert.equal(
+          listerEditor.listerReferenceFormContainer.querySelector('[data-field="reference"]').disabled,
+          true,
+        );
+        assert.equal(
+          listerEditor.exportFormContainer.querySelector('[data-field="filename"]').disabled,
+          true,
+        );
+        assert.equal(listerEditor.prerequisiteNote.hidden, false);
+        assert.equal(listerEditor.prerequisiteNote.textContent, "serial.lister.allDecodeDisabled");
+
+        serialDisplays[1] = true;
+        listerEditor.refreshButton.dispatch("click");
+        await settle();
+        const displaySelect = listerEditor.listerDisplayFormContainer
+          .querySelector('[data-field="display"]');
+        const displayOptions = new Map(
+          displaySelect.options.map((option) => [option.value, option]),
+        );
+        assert.equal(displaySelect.disabled, false);
+        assert.equal(listerEditor.applyListerDisplayButton.disabled, false);
+        assert.equal(displayOptions.get("off").disabled, false);
+        assert.equal(displayOptions.get("bus1").disabled, false);
+        assert.equal(displayOptions.get("bus2").disabled, true);
+        assert.equal(displayOptions.get("all").disabled, false);
+        assert.equal(listerEditor.applyListerReferenceButton.disabled, false);
+        assert.equal(listerEditor.exportButton.disabled, false);
+
+        serialDisplays[2] = true;
+        listerEditor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(displayOptions.get("bus2").disabled, false, "two-bus model Bus 2");
 
         decodeEditor.protocolSelect.value = "uart";
         decodeEditor.protocolSelect.dispatch("change");
@@ -2159,13 +2251,14 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         listerEditor.listerDisplayForm.dirty = true;
         listerEditor.listerReferenceForm.dirty = true;
 
+        const busSwitchBase = submitted.length;
         decodeEditor.busSelect.value = "2";
         decodeEditor.busSelect.dispatch("change");
         await settle();
         assert.equal(controller.state.bus, 2);
         assert.equal(controller.state.selectedProtocol, null);
         assert.equal(decodeEditor.protocolSelect.value, "");
-        assert.equal(submitted.length, 21);
+        assert.equal(submitted.length, busSwitchBase);
 
         decodeEditor.refreshButton.dispatch("click");
         await settle();
@@ -2174,7 +2267,7 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.equal(listerEditor.listerDisplayForm.lastSyncArgs?.[1], true);
         assert.equal(listerEditor.listerReferenceForm.lastSyncArgs?.[1], true);
 
-        const laterSubmissions = submitted.slice(21);
+        const laterSubmissions = submitted.slice(busSwitchBase);
         assert.equal(laterSubmissions.length > 0, true);
         assert.equal(laterSubmissions.every((entry) =>
           entry.bus === 2 || entry.command === "serial-lister-query"), true);
@@ -2326,6 +2419,15 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
             .every((field) => field.disabled),
           true,
         );
+
+        controller.reset({ maxBus: 1, protocolChoices: ["uart", "i2c", "spi", "can"] });
+        listerEditor.render(controller.state);
+        const oneBusOptions = new Map(
+          listerEditor.listerDisplayFormContainer
+            .querySelector('[data-field="display"]')
+            .options.map((option) => [option.value, option]),
+        );
+        assert.equal(oneBusOptions.get("bus2").disabled, true, "one-bus model Bus 2");
         '''
     )
     completed = subprocess.run(

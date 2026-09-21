@@ -212,9 +212,50 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
     reference_slot = next(
         field for field in reference_save["fields"] if field["name"] == "slot"
     )
-    serial_uart = next(
+    serial_uart_entry = next(
         entry for entry in command_catalog() if entry["id"] == "serial-uart"
     )
+    serial_spi_entry = next(
+        entry for entry in command_catalog() if entry["id"] == "serial-spi"
+    )
+    serial_can_entry = next(
+        entry for entry in command_catalog() if entry["id"] == "serial-can"
+    )
+    serial_uart = {
+        "id": serial_uart_entry["id"],
+        "fields": serial_uart_entry["fields"],
+        "presentation": {
+            key: value
+            for key, value in serial_uart_entry["presentation"].items()
+            if key != "models"
+        },
+    }
+    serial_spi = {
+        "id": serial_spi_entry["id"],
+        "fields": serial_spi_entry["fields"],
+        "presentation": {
+            key: value
+            for key, value in serial_spi_entry["presentation"].items()
+            if key != "models"
+        },
+    }
+    serial_can_2000x = {
+        "id": serial_can_entry["id"],
+        "presentation": {
+            key: value
+            for key, value in serial_can_entry["presentation"].items()
+            if key != "models"
+        },
+        "fields": [
+            {
+                **field,
+                **serial_can_entry["presentation"]["models"]["keysight-dsox2004a"]
+                .get("fields", {})
+                .get(field["name"], {}),
+            }
+            for field in serial_can_entry["fields"]
+        ],
+    }
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -374,6 +415,8 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         const measureWindowFields = __MEASURE_WINDOW_FIELDS__;
         const referenceSlot = __REFERENCE_SLOT__;
         const serialUart = __SERIAL_UART__;
+        const serialSpi = __SERIAL_SPI__;
+        const serialCan2000x = __SERIAL_CAN_2000X__;
 
         let source = [
           fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/numeric-input.js"),"utf8"),
@@ -511,6 +554,45 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           const values = form.values();
           assert.equal(values.data_bits, 8);
           assert.equal(typeof values.data_bits, "number");
+        }
+
+        // A3. Non-UART Serial source and finite numeric fields use selects.
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const fields = serialSpi.fields
+            .filter((field) => ["action", "clock_source", "word_width"].includes(field.name))
+            .map((field) => field.name === "clock_source"
+              ? { ...field, disabled_options: ["channel3", "channel4"] }
+              : field);
+          form.render({ ...serialSpi, fields });
+          cont.querySelector('[data-field="action"]').value = "set";
+          form.refreshVisibility();
+          const clock = cont.querySelector('[data-field="clock_source"]');
+          const width = cont.querySelector('[data-field="word_width"]');
+          assert.equal(clock.tagName, "SELECT");
+          assert.equal(clock.options.find((option) => option.value === "channel3").disabled, true);
+          assert.equal(clock.options.find((option) => option.value === "external").disabled, false);
+          assert.equal(width.tagName, "SELECT");
+          width.value = "8";
+          assert.equal(form.values().word_width, 8);
+          assert.equal(typeof form.values().word_width, "number");
+        }
+
+        // A4. Model-projected finite number options also use numeric selects.
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const fields = serialCan2000x.fields
+            .filter((field) => ["action", "sample_point"].includes(field.name));
+          form.render({ ...serialCan2000x, fields });
+          cont.querySelector('[data-field="action"]').value = "set";
+          form.refreshVisibility();
+          const samplePoint = cont.querySelector('[data-field="sample_point"]');
+          assert.equal(samplePoint.tagName, "SELECT");
+          samplePoint.value = "62.5";
+          assert.equal(form.values().sample_point, 62.5);
+          assert.equal(typeof form.values().sample_point, "number");
         }
 
         // B. projected reference waveform options render as a SELECT
@@ -690,6 +772,10 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         "__REFERENCE_SLOT__", json.dumps(reference_slot)
     ).replace(
         "__SERIAL_UART__", json.dumps(serial_uart)
+    ).replace(
+        "__SERIAL_SPI__", json.dumps(serial_spi)
+    ).replace(
+        "__SERIAL_CAN_2000X__", json.dumps(serial_can_2000x)
     ).replace(
         "__DISPLAY_LABEL__", json.dumps(next(
             entry for entry in command_catalog() if entry["id"] == "display-label"
@@ -1576,35 +1662,40 @@ def test_channel_scale_range_workspace_latest_result() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-def test_serial_uart_source_and_data_bits_select_and_model_disabled_options() -> None:
-    """Regression: UART RX/TX Source must render as model-aware enum selects,
-    Data Bits as integer select, and model projection must disable unsupported
-    channel options without removing them from the dropdown."""
+def test_serial_source_and_finite_numeric_control_metadata() -> None:
     by_id = {entry["id"]: entry for entry in COMMANDS}
-    uart = by_id["serial-uart"]
-    rx = next(f for f in uart["fields"] if f["name"] == "rx_source")
-    tx = next(f for f in uart["fields"] if f["name"] == "tx_source")
-    bits = next(f for f in uart["fields"] if f["name"] == "data_bits")
+    source_fields = {
+        "serial-uart": ("rx_source", "tx_source"),
+        "serial-i2c": ("clock_source", "data_source"),
+        "serial-spi": ("clock_source", "mosi_source", "miso_source", "frame_source"),
+        "serial-can": ("source",),
+    }
+    source_options = ("channel1", "channel2", "channel3", "channel4", "external")
+    for command_id, names in source_fields.items():
+        fields = {field["name"]: field for field in by_id[command_id]["fields"]}
+        for name in names:
+            assert fields[name].get("type") == "enum", (command_id, name)
+            assert fields[name].get("options") == source_options, (command_id, name)
+            assert "option_label" not in fields[name], (command_id, name)
 
-    # Source fields use enum canonical values and generic enum translation.
-    assert rx.get("type") == "enum"
-    assert rx.get("options") == ("channel1", "channel2", "channel3", "channel4", "external")
-    assert "option_label" not in rx
-    assert tx.get("type") == "enum"
-    assert tx.get("options") == ("channel1", "channel2", "channel3", "channel4", "external")
-    assert "option_label" not in tx
-
-    # Data bits changed from plain integer to integer with fixed discrete options
-    assert bits.get("type") == "integer"
-    assert bits.get("options") == (5, 6, 7, 8, 9)
+    fixed_integer_options = {
+        ("serial-spi", "word_width"): tuple(range(4, 17)),
+        ("serial-trigger-spi", "width"): tuple(range(4, 65)),
+        ("serial-trigger-can", "data_length"): tuple(range(1, 9)),
+        ("serial-search-spi", "width"): tuple(range(1, 11)),
+        ("serial-search-can", "data_length"): tuple(range(1, 9)),
+    }
+    for (command_id, name), options in fixed_integer_options.items():
+        field = next(f for f in by_id[command_id]["fields"] if f["name"] == name)
+        assert field.get("type") == "integer", (command_id, name)
+        assert field.get("options") == options, (command_id, name)
 
     # Registered 4-channel model keeps full options without disabled options.
     catalog = {e["id"]: e for e in command_catalog()}
-    four_channel_pres = catalog["serial-uart"]["presentation"]["models"].get("keysight-dsox2004a")
-    rx4 = four_channel_pres["fields"].get("rx_source", {})
-    # Catalog projection converts tuples to lists.
-    disabled4 = rx4.get("disabled_options", [])
-    assert (disabled4 is None or len(disabled4) == 0)
+    for command_id, names in source_fields.items():
+        model_fields = catalog[command_id]["presentation"]["models"]["keysight-dsox2004a"].get("fields", {})
+        for name in names:
+            assert not model_fields.get(name, {}).get("disabled_options"), (command_id, name)
 
     # Fake 2-channel model must disable channel3 and channel4
     fake = ScopeCapabilities(
@@ -1620,7 +1711,7 @@ def test_serial_uart_source_and_data_bits_select_and_model_disabled_options() ->
         supports_segmented_memory=True,
         supports_serial_decode=True,
         serial_bus_count=1,
-        serial_modes=frozenset({"uart"}),
+        serial_modes=frozenset({"uart", "i2c", "spi", "can"}),
         math_function_count=1,
         supports_math_goft=False,
         reference_waveforms=2,
@@ -1636,10 +1727,35 @@ def test_serial_uart_source_and_data_bits_select_and_model_disabled_options() ->
     original = catalog_module.capabilities_for_model_id
     try:
         catalog_module.capabilities_for_model_id = lambda _mid: fake  # type: ignore[assignment]
-        pres2 = _model_command_presentation(by_id["serial-uart"], "fake-2ch")
-        rx2 = pres2["fields"]["rx_source"]
-        assert rx2.get("disabled_options") == ("channel3", "channel4")
-        tx2 = pres2["fields"]["tx_source"]
-        assert tx2.get("disabled_options") == ("channel3", "channel4")
+        for command_id, names in source_fields.items():
+            projected = _model_command_presentation(by_id[command_id], "fake-2ch")
+            for name in names:
+                assert projected["fields"][name].get("disabled_options") == (
+                    "channel3",
+                    "channel4",
+                ), (command_id, name)
     finally:
         catalog_module.capabilities_for_model_id = original  # type: ignore[assignment]
+
+    sample_2000x = catalog["serial-can"]["presentation"]["models"][
+        "keysight-dsox2004a"
+    ]["fields"]["sample_point"]
+    assert sample_2000x["options"] == [60, 62.5, 68, 70, 75, 80, 87.5]
+    sample_4000x = catalog["serial-can"]["presentation"]["models"][
+        "keysight-dsox4024a"
+    ].get("fields", {}).get("sample_point", {})
+    assert "options" not in sample_4000x
+    sample_base = next(
+        field for field in catalog["serial-can"]["fields"] if field["name"] == "sample_point"
+    )
+    assert sample_base["type"] == "number"
+    assert (sample_base["minimum"], sample_base["maximum"]) == (30, 90)
+
+    lister_2000x = catalog["serial-lister-display"]["presentation"]["models"][
+        "keysight-dsox2004a"
+    ]["fields"]["display"]
+    lister_4000x = catalog["serial-lister-display"]["presentation"]["models"][
+        "keysight-dsox4024a"
+    ]["fields"]["display"]
+    assert lister_2000x["disabled_options"] == ["bus2"]
+    assert lister_4000x["disabled_options"] == []

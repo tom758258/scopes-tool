@@ -150,6 +150,11 @@ def test_search_catalog_fields_carry_help_and_scoped_option_labels() -> None:
     by_name = {field["name"]: field for field in catalog["serial-search-can"]["fields"]}
     assert "id-data" in by_name["mode"]["options"]
     assert "standard" in by_name["id_mode"]["options"]
+    spi_fields = {
+        field["name"]: field for field in catalog["serial-search-spi"]["fields"]
+    }
+    assert spi_fields["width"]["options"] == list(range(1, 11))
+    assert by_name["data_length"]["options"] == list(range(1, 9))
 
 
 def test_search_serial_field_visibility_follows_search_criteria() -> None:

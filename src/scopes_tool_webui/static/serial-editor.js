@@ -1202,18 +1202,18 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     this.usageNote.textContent = translate("serial.lister.usage");
     root.append(this.usageNote);
     this.prerequisiteNote = document.createElement("p");
-    this.prerequisiteNote.className = "muted compact-note";
+    this.prerequisiteNote.className = "compact-note serial-lister-prerequisite";
     root.append(this.prerequisiteNote);
     this.pcOutputNote = document.createElement("p");
-    this.pcOutputNote.className = "muted compact-note";
-    root.append(this.pcOutputNote);
+    this.pcOutputNote.className = "compact-note pc-output-command-note pc-output-note-box";
     this.hooks.renderPcOutputNote?.(this.pcOutputNote);
 
-    const addRow = (container, button) => {
+    const addRow = (container, button, notes = []) => {
       const row = document.createElement("div");
       row.className = "serial-editor-row serial-lister-row";
-      row.append(container, button);
+      row.append(container, ...notes, button);
       root.append(row);
+      return row;
     };
 
     this.listerDisplayFormContainer = document.createElement("div");
@@ -1223,7 +1223,10 @@ export class SerialListerEditor extends SerialWorkspaceBase {
       () => void this.submitListerSetting("display"),
       true,
     );
-    addRow(this.listerDisplayFormContainer, this.applyListerDisplayButton);
+    this.listerDisplayRow = addRow(
+      this.listerDisplayFormContainer,
+      this.applyListerDisplayButton,
+    );
 
     this.listerReferenceFormContainer = document.createElement("div");
     this.listerReferenceFormContainer.className = "command-form";
@@ -1232,7 +1235,10 @@ export class SerialListerEditor extends SerialWorkspaceBase {
       () => void this.submitListerSetting("reference"),
       true,
     );
-    addRow(this.listerReferenceFormContainer, this.applyListerReferenceButton);
+    this.listerReferenceRow = addRow(
+      this.listerReferenceFormContainer,
+      this.applyListerReferenceButton,
+    );
 
     this.exportFormContainer = document.createElement("div");
     this.exportFormContainer.className = "command-form";
@@ -1241,7 +1247,11 @@ export class SerialListerEditor extends SerialWorkspaceBase {
       () => void this.submitExport(),
       true,
     );
-    addRow(this.exportFormContainer, this.exportButton);
+    this.exportRow = addRow(
+      this.exportFormContainer,
+      this.exportButton,
+      [this.pcOutputNote],
+    );
 
     this.listerDisplayForm = new CommandForm(this.listerDisplayFormContainer, this.catalog);
     this.listerReferenceForm = new CommandForm(this.listerReferenceFormContainer, this.catalog);
@@ -1312,6 +1322,26 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     });
   }
 
+  syncListerDisplayOptions(stateSnapshot) {
+    const select = this.listerDisplayFormContainer.querySelector?.('[data-field="display"]');
+    if (!select?.options) return;
+    const availableBuses = availableBusOptions(stateSnapshot.maxBus);
+    const hasUsableBus = availableBuses.some(
+      (availableBus) => stateSnapshot.decodeDisplayByBus?.[availableBus] === true,
+    );
+    for (const option of select.options) {
+      const busForOption = option.value?.startsWith("bus")
+        ? Number(option.value.slice(3))
+        : null;
+      if (busForOption !== null) {
+        option.disabled = !availableBuses.includes(busForOption)
+          || stateSnapshot.decodeDisplayByBus?.[busForOption] !== true;
+      } else if (option.value === "all") {
+        option.disabled = !hasUsableBus;
+      }
+    }
+  }
+
   render(stateSnapshot) {
     const unavailable = !this.hooks.isAvailable();
     const disabled = stateSnapshot.busy || this.hooks.isExecutionBusy?.() || unavailable;
@@ -1336,11 +1366,15 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     const busStates = availableBuses.map((availableBus) => (
       stateSnapshot.decodeDisplayByBus?.[availableBus] ?? "unknown"
     ));
+    const hasUsableBus = busStates.some((value) => value === true);
+    const allKnownOff = busStates.length > 0 && busStates.every((value) => value === false);
     let prerequisiteEnabled = false;
     let prerequisiteKey = "serial.lister.unreadPrerequisite";
     let prerequisiteValues = {};
 
-    if (target === "off") {
+    if (hasListerReadback && allKnownOff) {
+      prerequisiteKey = "serial.lister.allDecodeDisabled";
+    } else if (target === "off") {
       prerequisiteKey = "serial.lister.selectDisplay";
     } else if (busForTarget !== null) {
       const busState = stateSnapshot.decodeDisplayByBus?.[busForTarget] ?? "unknown";
@@ -1352,8 +1386,7 @@ export class SerialListerEditor extends SerialWorkspaceBase {
           : "serial.lister.unknownPrerequisite";
       prerequisiteValues = { bus: busForTarget };
     } else if (target === "all") {
-      prerequisiteEnabled = busStates.some((value) => value === true);
-      const allKnownOff = busStates.length > 0 && busStates.every((value) => value === false);
+      prerequisiteEnabled = hasUsableBus;
       const partial = prerequisiteEnabled && busStates.some((value) => value !== true);
       prerequisiteKey = prerequisiteEnabled
         ? partial ? "serial.lister.partialPrerequisite" : ""
@@ -1369,7 +1402,8 @@ export class SerialListerEditor extends SerialWorkspaceBase {
     const dependentDisabled = disabled
       || !hasListerReadback
       || !prerequisiteEnabled;
-    this.applyListerDisplayButton.disabled = disabled || !hasListerReadback;
+    const displayDisabled = disabled || !hasListerReadback || !hasUsableBus;
+    this.applyListerDisplayButton.disabled = displayDisabled;
     this.applyListerReferenceButton.disabled = dependentDisabled;
     this.exportButton.disabled = dependentDisabled;
 
@@ -1378,7 +1412,8 @@ export class SerialListerEditor extends SerialWorkspaceBase {
       ? translate(prerequisiteKey, prerequisiteValues)
       : "";
 
-    this.listerDisplayForm?.setDisabled(disabled || !hasListerReadback);
+    this.listerDisplayForm?.setDisabled(displayDisabled);
+    this.syncListerDisplayOptions(stateSnapshot);
     this.listerReferenceForm?.setDisabled(dependentDisabled);
     this.exportForm?.setDisabled(dependentDisabled);
     this.syncFormSlot(this.listerDisplayForm, "listerDisplay", stateSnapshot.jobs);

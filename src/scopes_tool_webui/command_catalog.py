@@ -104,6 +104,16 @@ _ADVANCED_FFT_FIELDS = frozenset(
         "detection_points",
     }
 )
+_SERIAL_SOURCE_OPTIONS = ("channel1", "channel2", "channel3", "channel4", "external")
+_SERIAL_SOURCE_FIELDS = {
+    "serial-uart": frozenset({"rx_source", "tx_source"}),
+    "serial-i2c": frozenset({"clock_source", "data_source"}),
+    "serial-spi": frozenset(
+        {"clock_source", "mosi_source", "miso_source", "frame_source"}
+    ),
+    "serial-can": frozenset({"source"}),
+}
+_CAN_SAMPLE_POINT_OPTIONS = (60, 62.5, 68, 70, 75, 80, 87.5)
 COMMANDS = (
     {
         "id": "live-data-snapshot",
@@ -1720,7 +1730,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
             _command_field("bus", "integer", minimum=1),
             _command_field("mode", "enum", options=SPI_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-search-spi.mode", option_label="serial-search-spi-mode"),
             _command_field("data", "string", visible_if=_set_action_visibility(), help_key="serial-search-spi.data"),
-            _command_field("width", "integer", minimum=1, maximum=10, visible_if=_set_action_visibility(), help_key="serial-search-spi.width"),
+            _command_field("width", "integer", options=tuple(range(1, 11)), minimum=1, maximum=10, visible_if=_set_action_visibility(), help_key="serial-search-spi.width"),
         ),
         editor="search",
     ),
@@ -1729,7 +1739,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
             _command_field("bus", "integer", minimum=1),
             _command_field("mode", "enum", options=CAN_SEARCH_MODES, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-search-can.mode", option_label="serial-search-can-mode"),
             _command_field("data", "string", visible_if=_set_action_visibility({"field": "mode", "equals": "data"}), help_key="serial-search-can.data"),
-            _command_field("data_length", "integer", minimum=1, maximum=8, visible_if=_set_action_visibility({"field": "mode", "equals": "data"}), help_key="serial-search-can.data_length"),
+            _command_field("data_length", "integer", options=tuple(range(1, 9)), minimum=1, maximum=8, visible_if=_set_action_visibility({"field": "mode", "equals": "data"}), help_key="serial-search-can.data_length"),
             _command_field("id", "string", visible_if=_set_action_visibility({"field": "mode", "in": ("data", "id-data", "id-either", "id-remote")}), help_key="serial-search-can.id"),
             _command_field("id_mode", "enum", options=CAN_SEARCH_ID_MODES, visible_if=_set_action_visibility({"field": "mode", "in": ("data", "id-data", "id-either", "id-remote")}), help_key="serial-search-can.id_mode", option_label="serial-search-can-id-mode"),
         ),
@@ -1767,8 +1777,8 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command(
         "serial-uart", "Serial", "UART configuration", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("rx_source", "enum", options=("channel1", "channel2", "channel3", "channel4", "external"), visible_if=_set_action_visibility(), help_key="serial-uart.rx_source"),
-            _command_field("tx_source", "enum", options=("channel1", "channel2", "channel3", "channel4", "external"), visible_if=_set_action_visibility(), help_key="serial-uart.tx_source"),
+            _command_field("rx_source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-uart.rx_source"),
+            _command_field("tx_source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-uart.tx_source"),
             _command_field("baud_rate", "integer", minimum=100, maximum=12_000_000, spinner=False, visible_if=_set_action_visibility(), help_key="serial-uart.baud_rate"),
             _command_field("data_bits", "integer", options=(5, 6, 7, 8, 9), minimum=5, maximum=9, visible_if=_set_action_visibility(), help_key="serial-uart.data_bits"),
             _command_field("parity", "enum", options=UART_PARITIES, option_label="serial-uart-parity", visible_if=_set_action_visibility(), help_key="serial-uart.parity"),
@@ -1782,8 +1792,8 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command(
         "serial-i2c", "Serial", "I2C configuration", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("clock_source", "string", visible_if=_set_action_visibility(), help_key="serial-i2c.clock_source"),
-            _command_field("data_source", "string", visible_if=_set_action_visibility(), help_key="serial-i2c.data_source"),
+            _command_field("clock_source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-i2c.clock_source"),
+            _command_field("data_source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-i2c.data_source"),
             _command_field("address_size", "enum", options=I2C_ADDRESS_SIZES, option_label="serial-i2c-address-size", visible_if=_set_action_visibility(), help_key="serial-i2c.address_size"),
         ),
         group="i2c", editor="serial", browser_hidden=True,
@@ -1791,13 +1801,13 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command(
         "serial-spi", "Serial", "SPI configuration", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("clock_source", "string", visible_if=_set_action_visibility(), help_key="serial-spi.clock_source"),
-            _command_field("mosi_source", "string", visible_if=_set_action_visibility(), help_key="serial-spi.mosi_source"),
-            _command_field("miso_source", "string", visible_if=_set_action_visibility(), help_key="serial-spi.miso_source"),
-            _command_field("frame_source", "string", visible_if=_set_action_visibility(), help_key="serial-spi.frame_source"),
+            _command_field("clock_source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-spi.clock_source"),
+            _command_field("mosi_source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-spi.mosi_source"),
+            _command_field("miso_source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-spi.miso_source"),
+            _command_field("frame_source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-spi.frame_source"),
             _command_field("clock_slope", "enum", options=SPI_CLOCK_SLOPES, option_label="serial-spi-clock-slope", visible_if=_set_action_visibility(), help_key="serial-spi.clock_slope"),
             _command_field("bit_order", "enum", options=SERIAL_BIT_ORDERS, option_label="serial-bit-order", visible_if=_set_action_visibility(), help_key="serial-spi.bit_order"),
-            _command_field("word_width", "integer", minimum=4, maximum=16, visible_if=_set_action_visibility(), help_key="serial-spi.word_width"),
+            _command_field("word_width", "integer", options=tuple(range(4, 17)), minimum=4, maximum=16, visible_if=_set_action_visibility(), help_key="serial-spi.word_width"),
             _command_field("framing", "enum", options=SPI_FRAMINGS, option_label="serial-spi-framing", visible_if=_set_action_visibility(), help_key="serial-spi.framing"),
             _command_field("clock_timeout", "number", minimum=1e-7, maximum=10, visible_if=_set_action_visibility(), help_key="serial-spi.clock_timeout"),
         ),
@@ -1806,7 +1816,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command(
         "serial-can", "Serial", "CAN configuration", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("source", "string", visible_if=_set_action_visibility(), help_key="serial-can.source"),
+            _command_field("source", "enum", options=_SERIAL_SOURCE_OPTIONS, visible_if=_set_action_visibility(), help_key="serial-can.source"),
             _command_field("baud_rate", "integer", minimum=10_000, maximum=5_000_000, spinner=False, visible_if=_set_action_visibility(), help_key="serial-can.baud_rate"),
             _command_field("signal_definition", "enum", options=CAN_SIGNAL_DEFINITIONS, option_label="serial-can-signal-definition", visible_if=_set_action_visibility(), help_key="serial-can.signal_definition"),
             _command_field("sample_point", "number", minimum=30, maximum=90, visible_if=_set_action_visibility(), help_key="serial-can.sample_point"),
@@ -1837,7 +1847,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
         "serial-trigger-spi", "Serial", "SPI serial trigger", (
             _command_field("bus", "integer", minimum=1),
             _command_field("type", "enum", options=SPI_TRIGGER_TYPES, option_label="serial-trigger-spi-type", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-spi.type"),
-            _command_field("width", "integer", minimum=4, maximum=64, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-spi.width"),
+            _command_field("width", "integer", options=tuple(range(4, 65)), minimum=4, maximum=64, visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-spi.width"),
             _command_field("data", "string", visible_if=_set_action_visibility(), required_if=_set_action_visibility(), help_key="serial-trigger-spi.data"),
         ),
         group="spi", editor="serial", browser_hidden=True,
@@ -1849,7 +1859,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
             _command_field("id", "string", visible_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), help_key="serial-trigger-can.id"),
             _command_field("id_mode", "enum", options=CAN_TRIGGER_ID_MODES, option_label="serial-trigger-can-id-mode", visible_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), required_if=_set_action_visibility({"field": "type", "in": ("data-frame-id", "any-frame-id", "remote-frame-id", "id-and-data")}), help_key="serial-trigger-can.id_mode"),
             _command_field("data", "string", visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), help_key="serial-trigger-can.data"),
-            _command_field("data_length", "integer", minimum=1, maximum=8, visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), help_key="serial-trigger-can.data_length"),
+            _command_field("data_length", "integer", options=tuple(range(1, 9)), minimum=1, maximum=8, visible_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), required_if=_set_action_visibility({"field": "type", "equals": "id-and-data"}), help_key="serial-trigger-can.data_length"),
         ),
         group="can", editor="serial", browser_hidden=True,
     ),
@@ -2398,9 +2408,17 @@ def _model_command_presentation(
             "annotation-clear",
         } and name in ("x", "y") and not capabilities.supports_annotation_position:
             override["disabled"] = True
-        if entry["id"] == "serial-uart" and name in ("rx_source", "tx_source"):
+        if name in _SERIAL_SOURCE_FIELDS.get(entry["id"], ()):
             max_channel = capabilities.analog_channels
             disabled_options = tuple(f"channel{i}" for i in range(max_channel + 1, 5))
+            override["disabled_options"] = disabled_options
+        if entry["id"] == "serial-can" and name == "sample_point":
+            if capabilities.series != "4000X":
+                override["options"] = _CAN_SAMPLE_POINT_OPTIONS
+        if entry["id"] == "serial-lister-display" and name == "display":
+            disabled_options = (
+                ("bus2",) if capabilities.serial_bus_count < 2 else ()
+            )
             override["disabled_options"] = disabled_options
         if entry["id"] == "channel-impedance" and name == "impedance":
             override["options"] = (
