@@ -114,6 +114,7 @@ def test_serial_decode_workspace_latest_result() -> None:
         });
 
         assert.ok(displayed().includes("9600"), "baud rate 9600 rendered");
+        assert.ok(displayed().includes("UART"), "mode translated to UART");
         assert.ok(displayed().includes("MSB First"), "bit_order translated to MSB First");
         assert.ok(displayed().includes("None"), "parity translated to None");
         assert.ok(displayed().includes("High"), "polarity translated to High");
@@ -131,12 +132,17 @@ def test_serial_decode_workspace_latest_result() -> None:
             protocol: "uart",
             bus: 1,
             mode: "uart",
+            trigger_mode: "serial1",
             type: "rx-data",
             data: 65,
             qualifier: "equal",
           },
         });
 
+        assert.ok(displayed().includes("Protocol"), "protocol field label rendered in EN");
+        assert.ok(displayed().includes("Trigger mode"), "trigger_mode field label rendered in EN");
+        assert.ok(displayed().includes("UART"), "protocol identifier translated to UART");
+        assert.ok(displayed().includes("Serial 1"), "trigger_mode translated to Serial 1");
         assert.ok(displayed().includes("RX Data"), "type translated to RX Data");
         assert.ok(displayed().includes("Equal"), "qualifier translated to Equal in EN");
         assert.ok(!displayed().includes('"rx-data"'), "raw token rx-data not displayed");
@@ -144,6 +150,10 @@ def test_serial_decode_workspace_latest_result() -> None:
         // Test Traditional Chinese qualifier translation
         activeTranslations = zhTranslations;
         sandbox.renderWorkspace();
+        assert.ok(displayed().includes("通訊協定"), "protocol field label translated in zh-TW");
+        assert.ok(displayed().includes("觸發模式"), "trigger_mode field label translated in zh-TW");
+        assert.ok(displayed().includes("UART"), "protocol identifier remains technical in zh-TW");
+        assert.ok(displayed().includes("串列 1"), "trigger_mode translated to 串列 1 in zh-TW");
         assert.ok(displayed().includes("相等"), "qualifier translated to 相等 in zh-TW");
         activeTranslations = enTranslations;
 
