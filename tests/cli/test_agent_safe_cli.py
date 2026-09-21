@@ -552,7 +552,7 @@ def test_capture_simulate_wait_trigger_json_reports_trigger_metadata(capsys, tmp
                 str(csv_path),
                 "--wait-trigger",
                 "--trigger-timeout-ms",
-                "1",
+                "1000",
                 "--trigger-poll-interval-ms",
                 "1",
             ]

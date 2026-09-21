@@ -71,6 +71,10 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert 'id="segmented-editor" class="segmented-editor" hidden' in html
     assert 'elements.segmentedEditor.hidden = editorKind !== "segmented";' in app
     assert (
+        '"segmented-memory": ["segmented-memory", "segmented-capture"]'
+        in app
+    )
+    assert (
         'if (segmentedEditor?.modeButton && editorKind !== "segmented") {'
         in app
     )

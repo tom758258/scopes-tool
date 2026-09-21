@@ -2331,7 +2331,7 @@ def test_worker_executes_capture_wait_trigger_in_simulator(tmp_path):
         {
             "channel": [1],
             "wait_trigger": True,
-            "trigger_timeout_ms": 1,
+            "trigger_timeout_ms": 1000,
             "trigger_poll_interval_ms": 1,
             "csv": str(csv_path),
             "meta": str(meta_path),
