@@ -1437,3 +1437,208 @@ def test_check_error_failure_distinction() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_segmented_capture_workspace_result_labels_are_localized() -> None:
+    english = LOCALE_EN_JS.read_text(encoding="utf-8")
+    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+    expected = {
+        "results.field.output_dir": ("Output directory", "輸出目錄"),
+        "results.field.manifest_path": ("Manifest path", "Manifest 路徑"),
+        "results.field.scpi_log_path": ("SCPI log path", "SCPI 記錄路徑"),
+        "results.field.vertical_unit": ("Vertical unit", "垂直單位"),
+        "results.field.requested_segments": ("Requested segments", "要求的分段數"),
+        "results.field.configured_segments": ("Configured segments", "設定的分段數"),
+        "results.field.acquired_segments": ("Acquired segments", "已擷取的分段數"),
+        "results.field.exported_segments": ("Exported segments", "已匯出的分段數"),
+        "results.field.initial_mode": ("Initial mode", "初始模式"),
+        "results.field.final_mode": ("Final mode", "最終模式"),
+        "results.field.polling": ("Polling", "輪詢"),
+        "results.field.command": ("Command", "指令"),
+        "results.field.runtime_behavior": ("Runtime behavior", "執行期間行為"),
+        "results.field.error": ("Error", "錯誤"),
+    }
+    for key, (en_value, zh_value) in expected.items():
+        assert f'"{key}": "{en_value}"' in english, key
+        assert f'"{key}": "{zh_value}"' in chinese, key
+    script = textwrap.dedent(
+        r"""
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
+          }
+          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
+          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        globalThis.testLocale = "en";
+
+        const enLabels = {
+          "command.segmented-capture": "Segmented capture",
+          "results.field.operation": "Operation",
+          "results.field.status": "Status",
+          "results.status.completed": "Completed",
+          "results.field.output_dir": "Output directory",
+          "results.field.manifest_path": "Manifest path",
+          "results.field.scpi_log_path": "SCPI log path",
+          "results.field.channel": "Channel",
+          "results.field.vertical_unit": "Vertical unit",
+          "results.field.requested_segments": "Requested segments",
+          "results.field.configured_segments": "Configured segments",
+          "results.field.acquired_segments": "Acquired segments",
+          "results.field.exported_segments": "Exported segments",
+          "field.points": "Points",
+          "field.format": "Format",
+          "results.field.initial_mode": "Initial mode",
+          "results.field.final_mode": "Final mode",
+          "results.field.polling": "Polling",
+          "results.field.command": "Command",
+          "results.field.timeout_ms": "Timeout ms",
+          "results.field.poll_interval_ms": "Poll interval ms",
+          "results.field.runtime_behavior": "Runtime behavior",
+          "enum.realtime": "Realtime",
+          "enum.segmented": "Segmented",
+        };
+        const zhLabels = {
+          "command.segmented-capture": "分段擷取",
+          "results.field.operation": "操作",
+          "results.field.status": "狀態",
+          "results.status.completed": "已完成",
+          "results.field.output_dir": "輸出目錄",
+          "results.field.manifest_path": "Manifest 路徑",
+          "results.field.scpi_log_path": "SCPI 記錄路徑",
+          "results.field.channel": "通道",
+          "results.field.vertical_unit": "垂直單位",
+          "results.field.requested_segments": "要求的分段數",
+          "results.field.configured_segments": "設定的分段數",
+          "results.field.acquired_segments": "已擷取的分段數",
+          "results.field.exported_segments": "已匯出的分段數",
+          "field.points": "點數",
+          "field.format": "格式",
+          "results.field.initial_mode": "初始模式",
+          "results.field.final_mode": "最終模式",
+          "results.field.polling": "輪詢",
+          "results.field.command": "指令",
+          "results.field.timeout_ms": "逾時時間（毫秒）",
+          "results.field.poll_interval_ms": "輪詢間隔（毫秒）",
+          "results.field.runtime_behavior": "執行期間行為",
+          "enum.realtime": "即時",
+          "enum.segmented": "分段",
+        };
+
+        const translate = (key, values = {}) => {
+          const dict = globalThis.testLocale === "zh-TW" ? zhLabels : enLabels;
+          const text = dict[key] || key;
+          return Object.entries(values).reduce(
+            (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
+            text,
+          );
+        };
+        const hasTranslation = (key) => {
+          const dict = globalThis.testLocale === "zh-TW" ? zhLabels : enLabels;
+          return key in dict;
+        };
+        const translateJobStatus = (status) => translate(`status.${status}`);
+        globalThis.testTranslate = translate;
+        globalThis.testHasTranslation = hasTranslation;
+        globalThis.testTranslateJobStatus = translateJobStatus;
+
+        const source = [
+          "const translate = globalThis.testTranslate;",
+          "const hasTranslation = globalThis.testHasTranslation;",
+          "const translateJobStatus = globalThis.testTranslateJobStatus;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n").replace(/^import[^\n]*\r?\n/gm, "").replace(/^export function /gm, "function ")
+          + "\nglobalThis.resultApi = { renderEmpty, renderError, renderIdentityWorkspaceResult, renderJob, renderWorkspaceResult };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const api = globalThis.resultApi;
+        const payload = {
+          operation: "segmented-capture",
+          status: "completed",
+          output_dir: "data/segmented_captures/2026-09-21T00-00-00",
+          manifest_path: "data/segmented_captures/2026-09-21T00-00-00/manifest.json",
+          scpi_log_path: "data/segmented_captures/2026-09-21T00-00-00/scpi.log",
+          channel: 1,
+          vertical_unit: "V",
+          requested_segments: 5,
+          configured_segments: 5,
+          acquired_segments: 5,
+          exported_segments: 5,
+          points: 1000,
+          format: "BYTE",
+          initial_mode: "realtime",
+          final_mode: "segmented",
+          polling: {
+            command: ":OPERegister:CONDition?",
+            timeout_ms: 30000,
+            poll_interval_ms: 100,
+            runtime_behavior: "require two consecutive RUN-clear and RUI-enabled samples",
+          },
+        };
+        const job = {
+          job_id: "segmented-capture-job", command: "segmented-capture", status: "completed",
+          result: { exit_code: 0, result: payload },
+        };
+        const fieldTexts = (container) => container.children.map(
+          (field) => field.children.map((node) => node.textContent),
+        );
+
+        const workspace = new FakeNode("div");
+        api.renderWorkspaceResult(workspace, job);
+        const labels = fieldTexts(workspace).map(([content, label]) => label);
+        for (const label of [
+          "Operation", "Status", "Output directory", "Manifest path", "SCPI log path",
+          "Channel", "Vertical unit", "Requested segments", "Configured segments",
+          "Acquired segments", "Exported segments", "Points", "Format",
+          "Initial mode", "Final mode", "Polling",
+        ]) {
+          assert.ok(labels.includes(label), `missing en label ${label}`);
+        }
+
+        globalThis.testLocale = "zh-TW";
+        const zhWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(zhWorkspace, job);
+        const zhFields = fieldTexts(zhWorkspace);
+        const zhLabelsRendered = zhFields.map(([content, label]) => label);
+        const zhContents = zhFields.map(([content, label]) => content);
+        for (const fallback of [
+          "Output dir", "Manifest path", "Scpi log path", "Vertical unit",
+          "Requested segments", "Configured segments", "Acquired segments",
+          "Exported segments", "Initial mode", "Final mode", "Polling",
+          "Runtime behavior", "Command",
+        ]) {
+          assert.ok(!zhLabelsRendered.includes(fallback), `zh-TW fallback label ${fallback}`);
+        }
+        for (const label of [
+          "操作", "狀態", "輸出目錄", "Manifest 路徑", "SCPI 記錄路徑",
+          "通道", "垂直單位", "要求的分段數", "設定的分段數",
+          "已擷取的分段數", "已匯出的分段數", "點數", "格式",
+          "初始模式", "最終模式", "輪詢",
+        ]) {
+          assert.ok(zhLabelsRendered.includes(label), `missing zh-TW label ${label}`);
+        }
+        assert.ok(zhContents.includes("data/segmented_captures/2026-09-21T00-00-00/manifest.json"), "manifest path verbatim");
+        assert.ok(zhContents.some((text) => text.includes(":OPERegister:CONDition?")), "nested polling command verbatim");
+        assert.ok(zhContents.some((text) => text.includes("require two consecutive RUN-clear")), "nested runtime behavior keeps technical wording");
+        assert.ok(zhContents.includes("V"), "vertical unit verbatim");
+        assert.ok(zhContents.includes("分段擷取"), "operation value localized");
+        assert.ok(zhContents.includes("即時"), "initial mode value localized");
+        assert.ok(zhContents.includes("分段"), "final mode value localized");
+        assert.ok(zhContents.includes("已完成"), "status value localized");
+        assert.ok(zhContents.includes("BYTE"), "format value keeps presentation");
+        """
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

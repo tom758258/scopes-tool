@@ -9,6 +9,11 @@ function modeLabel(mode) {
   return hasTranslation(key) ? translate(key) : String(mode);
 }
 
+function channelLabel(channel) {
+  const key = `enum.channel${channel}`;
+  return hasTranslation(key) ? translate(key) : `CH${channel}`;
+}
+
 export class SegmentedEditor {
   constructor(container, catalog, hooks) {
     this.container = container;
@@ -23,21 +28,14 @@ export class SegmentedEditor {
 
   buildDom() {
     this.refreshButton?.remove?.();
+    this.modeButton?.remove?.();
     this.container.replaceChildren();
 
     const head = document.createElement("div");
     head.className = "segmented-editor-head";
     const heading = document.createElement("strong");
     heading.textContent = translate("command.segmented-memory");
-    this.status = document.createElement("strong");
-    this.status.className = "state-indicator state-idle segmented-editor-status";
-    const dot = document.createElement("span");
-    dot.className = "state-dot";
-    dot.setAttribute("aria-hidden", "true");
-    this.statusText = document.createElement("span");
-    this.statusText.className = "state-text";
-    this.status.append(dot, this.statusText);
-    head.append(heading, this.status);
+    head.append(heading);
 
     this.refreshButton = document.createElement("button");
     this.refreshButton.type = "button";
@@ -51,6 +49,17 @@ export class SegmentedEditor {
       head.append(this.refreshButton);
     }
 
+    this.modeButton = document.createElement("button");
+    this.modeButton.type = "button";
+    this.modeButton.className = "primary";
+    this.modeButton.addEventListener("click", () => void this.toggleMode());
+    if (this.hooks.headerActions) {
+      this.modeButton.hidden = true;
+      this.hooks.headerActions.append(this.modeButton);
+    } else {
+      head.append(this.modeButton);
+    }
+
     this.readouts = document.createElement("dl");
     this.readouts.className = "segmented-editor-state";
     this.modeOutput = this.appendReadout("segmented.editor.mode");
@@ -61,6 +70,8 @@ export class SegmentedEditor {
     stateHelp.textContent = translate("segmented.editor.stateHelp");
     this.stateHelp = stateHelp;
 
+    const countRow = document.createElement("div");
+    countRow.className = "segmented-editor-actions";
     const countField = document.createElement("label");
     countField.className = "field segmented-editor-count";
     const countLabel = document.createElement("span");
@@ -74,6 +85,12 @@ export class SegmentedEditor {
     });
     countField.append(countLabel, this.countInput);
     this.appendFieldHelp(countField, this.fieldDefinition(this.segmentedMemoryDefinition(), "segments"));
+    this.applySegmentsButton = document.createElement("button");
+    this.applySegmentsButton.type = "button";
+    this.applySegmentsButton.className = "secondary";
+    this.applySegmentsButton.textContent = translate("segmented.editor.applySegments");
+    this.applySegmentsButton.addEventListener("click", () => void this.enter());
+    countRow.append(countField, this.applySegmentsButton);
 
     this.segmentBrowser = document.createElement("section");
     this.segmentBrowser.className = "segmented-editor-browser";
@@ -125,19 +142,6 @@ export class SegmentedEditor {
     );
     this.segmentBrowser.append(timeTag);
 
-    const actions = document.createElement("div");
-    actions.className = "segmented-editor-actions";
-    this.enterButton = document.createElement("button");
-    this.enterButton.type = "button";
-    this.enterButton.className = "primary";
-    this.enterButton.addEventListener("click", () => void this.enter());
-    this.exitButton = document.createElement("button");
-    this.exitButton.type = "button";
-    this.exitButton.className = "secondary";
-    this.exitButton.textContent = translate("segmented.editor.exit");
-    this.exitButton.addEventListener("click", () => void this.exit());
-    actions.append(this.enterButton, this.exitButton);
-
     this.captureSection = document.createElement("section");
     this.captureSection.className = "segmented-editor-browser";
     const captureHeading = document.createElement("strong");
@@ -149,11 +153,9 @@ export class SegmentedEditor {
     captureChannelField.className = "field";
     const captureChannelLabel = document.createElement("span");
     captureChannelLabel.textContent = translate("field.channel");
-    this.captureChannelInput = document.createElement("input");
-    this.captureChannelInput.type = "number";
-    this.captureChannelInput.step = "1";
-    this.captureChannelInput.required = true;
-    captureChannelField.append(captureChannelLabel, this.captureChannelInput);
+    this.captureChannelSelect = document.createElement("select");
+    this.captureChannelSelect.required = true;
+    captureChannelField.append(captureChannelLabel, this.captureChannelSelect);
     this.appendFieldHelp(
       captureChannelField,
       this.fieldDefinition(captureDefinition, "channel"),
@@ -212,7 +214,10 @@ export class SegmentedEditor {
       capturePointsField,
       captureFormatField,
     );
-    this.captureSection.append(this.captureForm, this.captureButton);
+    const captureActions = document.createElement("div");
+    captureActions.className = "segmented-editor-actions";
+    captureActions.append(this.captureButton);
+    this.captureSection.append(this.captureForm, captureActions);
 
     this.unavailableNote = document.createElement("p");
     this.unavailableNote.className = "muted compact-note";
@@ -222,10 +227,9 @@ export class SegmentedEditor {
       this.unavailableNote,
       this.readouts,
       stateHelp,
-      countField,
+      countRow,
       this.segmentBrowser,
       this.captureSection,
-      actions,
     );
     this.applyDefinition();
     this.applyCaptureDefinition(true);
@@ -279,6 +283,28 @@ export class SegmentedEditor {
     return Boolean(definition) && this.catalog.supported(definition);
   }
 
+  captureChannels() {
+    const definition = this.captureDefinition();
+    const fields = definition ? this.catalog.fieldsFor(definition) : [];
+    const channelField = fields.find((field) => field?.name === "channel") || {};
+    const rawOptions = this.catalog.optionsFor
+      ? this.catalog.optionsFor(channelField)
+      : channelField.options || [];
+    const projected = [...new Set(
+      [...(rawOptions || [])].map(Number).filter((value) => Number.isInteger(value) && value > 0),
+    )].sort((first, second) => first - second);
+    if (projected.length) return projected;
+    const minimum = Number(channelField.minimum);
+    const maximum = Number(channelField.maximum);
+    if (
+      Number.isInteger(minimum) && Number.isInteger(maximum)
+      && minimum > 0 && maximum >= minimum
+    ) {
+      return Array.from({ length: maximum - minimum + 1 }, (_, index) => minimum + index);
+    }
+    return [];
+  }
+
   applyCaptureDefinition(contextChanged = false) {
     const definition = this.captureDefinition();
     const fields = definition ? this.catalog.fieldsFor(definition) : [];
@@ -287,17 +313,19 @@ export class SegmentedEditor {
     const segmentsField = fieldByName("segments");
     const pointsField = fieldByName("points");
     const formatField = fieldByName("format");
-    if (channelField) {
-      if (channelField.minimum !== undefined) {
-        this.captureChannelInput.min = String(channelField.minimum);
-      }
-      if (channelField.maximum !== undefined) {
-        this.captureChannelInput.max = String(channelField.maximum);
-      }
-      if (contextChanged || !this.captureChannelInput.value) {
-        const initial = channelField.default ?? channelField.minimum ?? "";
-        this.captureChannelInput.value = initial === "" ? "" : String(initial);
-      }
+    const channels = this.captureChannels();
+    const previousChannel = this.captureChannelSelect.value;
+    this.captureChannelSelect.replaceChildren(...channels.map((channel) => {
+      const item = document.createElement("option");
+      item.value = String(channel);
+      item.textContent = channelLabel(channel);
+      return item;
+    }));
+    if (!contextChanged && channels.map(String).includes(previousChannel)) {
+      this.captureChannelSelect.value = previousChannel;
+    } else {
+      const initial = channelField?.default ?? channels[0] ?? "";
+      this.captureChannelSelect.value = initial === "" ? "" : String(initial);
     }
     if (segmentsField) {
       if (segmentsField.minimum !== undefined) {
@@ -346,7 +374,7 @@ export class SegmentedEditor {
   }
 
   applyDefinition() {
-    const definition = this.definition();
+    const definition = this.definition() || this.segmentedMemoryDefinition();
     const segmentField = definition
       ? this.catalog.fieldsFor(definition).find((field) => field.name === "segments")
       : null;
@@ -364,7 +392,7 @@ export class SegmentedEditor {
   rerender() {
     const countValue = this.countInput?.value || "";
     const segmentValue = this.segmentInput?.value || "";
-    const captureChannel = this.captureChannelInput?.value || "";
+    const captureChannel = this.captureChannelSelect?.value || "";
     const captureSegments = this.captureSegmentsInput?.value || "";
     const capturePoints = this.capturePointsSelect?.value || "";
     const captureFormat = this.captureFormatSelect?.value || "";
@@ -381,7 +409,7 @@ export class SegmentedEditor {
       }
       if (this.captureSupported()) {
         if (captureChannel !== "") {
-          this.captureChannelInput.value = captureChannel;
+          this.captureChannelSelect.value = captureChannel;
           restored = true;
         }
         if (captureSegments !== "") {
@@ -432,6 +460,15 @@ export class SegmentedEditor {
     }
   }
 
+  async toggleMode() {
+    if (!this.canExecute()) return;
+    if (this.state?.mode === "segmented") {
+      await this.exit();
+    } else if (this.state?.mode === "realtime") {
+      await this.enter();
+    }
+  }
+
   async enter() {
     if (!this.canExecute()) return;
     if (!this.countInput.checkValidity()) {
@@ -478,21 +515,21 @@ export class SegmentedEditor {
   canCapture() {
     return this.captureSupported()
       && this.canExecute()
-      && this.captureChannelInput?.value !== ""
+      && this.captureChannelSelect?.value !== ""
       && this.captureSegmentsInput?.value !== ""
       && this.capturePointsSelect?.value !== ""
       && this.captureFormatSelect?.value !== ""
-      && this.captureChannelInput?.checkValidity()
+      && this.captureChannelSelect?.checkValidity()
       && this.captureSegmentsInput?.checkValidity();
   }
 
   async capture() {
     if (!this.canCapture()) {
-      this.captureChannelInput?.reportValidity?.();
+      this.captureChannelSelect?.reportValidity?.();
       this.captureSegmentsInput?.reportValidity?.();
       return;
     }
-    const channel = Number(this.captureChannelInput.value);
+    const channel = Number(this.captureChannelSelect.value);
     const segments = Number(this.captureSegmentsInput.value);
     const points = Number(this.capturePointsSelect.value);
     const format = String(this.captureFormatSelect.value).toLowerCase();
@@ -574,11 +611,8 @@ export class SegmentedEditor {
 
   renderState() {
     const segmented = this.state?.mode === "segmented";
-    const known = this.state?.mode === "segmented" || this.state?.mode === "realtime";
-    this.status.className = `state-indicator ${segmented ? "state-ok" : "state-idle"} segmented-editor-status`;
-    this.statusText.textContent = known
-      ? translate(segmented ? "status.active" : "status.inactive")
-      : translate("segmented.editor.unknown");
+    const realtime = this.state?.mode === "realtime";
+    const known = segmented || realtime;
     this.modeOutput.output.textContent = known
       ? modeLabel(this.state.mode)
       : translate("segmented.editor.unknown");
@@ -601,16 +635,17 @@ export class SegmentedEditor {
       this.segmentTotal.textContent = "";
       this.timeTagOutput.textContent = "";
     }
-    this.enterButton.textContent = translate(
-      segmented ? "segmented.editor.applyEnter" : "segmented.editor.enter",
+    this.modeButton.textContent = translate(
+      segmented ? "segmented.editor.exit" : "segmented.editor.enter",
     );
-    this.exitButton.hidden = !segmented;
+    this.modeButton.className = segmented ? "secondary" : "primary";
     const unsupported = !this.definition() || !this.catalog.supported(this.definition());
+    this.modeButton.hidden = unsupported || !known;
+    this.applySegmentsButton.hidden = unsupported || !segmented;
     this.stateHelp.hidden = unsupported || !segmented;
     this.unavailableNote.hidden = !unsupported;
     this.readouts.hidden = unsupported;
     this.countInput.parentNode.hidden = unsupported;
-    this.enterButton.parentNode.hidden = unsupported;
     if (unsupported) this.segmentBrowser.hidden = true;
     this.captureSection.hidden = unsupported || !this.captureSupported();
   }
@@ -635,8 +670,8 @@ export class SegmentedEditor {
     const disabled = this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable();
     this.refreshButton.disabled = disabled;
     this.countInput.disabled = disabled;
-    this.enterButton.disabled = disabled;
-    this.exitButton.disabled = disabled;
+    this.modeButton.disabled = disabled;
+    this.applySegmentsButton.disabled = disabled;
     const browserAvailable = this.browserAvailable();
     const selected = this.state?.selected_segment;
     const acquired = this.state?.acquired_segments;
@@ -647,7 +682,7 @@ export class SegmentedEditor {
       || !browserAvailable
       || !this.segmentInput.checkValidity();
     const captureDisabled = disabled || !this.captureSupported();
-    this.captureChannelInput.disabled = captureDisabled;
+    this.captureChannelSelect.disabled = captureDisabled;
     this.captureSegmentsInput.disabled = captureDisabled;
     this.capturePointsSelect.disabled = captureDisabled;
     this.captureFormatSelect.disabled = captureDisabled;

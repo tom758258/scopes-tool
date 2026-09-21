@@ -394,11 +394,10 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .segmented-editor { display: grid; gap: 14px; padding-top: 12px; }
 .segmented-editor-head, .segmented-editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .segmented-editor-head { justify-content: space-between; }
-.segmented-editor-state { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 18px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); }
+.segmented-editor-state { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 18px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); width: fit-content; max-width: 100%; }
 .segmented-editor-state dt { color: var(--muted); font-size: 12px; }
 .segmented-editor-state dd { margin: 0; font-weight: 600; }
 .segmented-editor-count { max-width: 220px; }
-.segmented-editor-status { font-size: 12px; }
 .segmented-editor-browser { display: grid; gap: 8px; }
 .segmented-editor-browser-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .segmented-editor-browser-controls input { width: 90px; }

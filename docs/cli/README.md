@@ -696,6 +696,7 @@ samples with the RUN bit clear and the remote-interface-enabled bit set,
 separated by `--poll-interval-ms`; any non-ready sample resets the streak.
 The WAIT TRIG bit does not need to clear. A readiness timeout does not query
 the acquired count or attempt partial export.
+
 If any segmented-capture SCPI read times out, the workflow stops issuing SCPI on
 that session while preserving completed CSVs, the manifest, and `scpi.log`.
 It sends one `:SINGle`, selects each ready acquired segment, queries its time tag,

@@ -69,6 +69,22 @@ RESULT_FIELDS = (
     "data_digital",
     "tv_mode",
     "format",
+    # Segmented-capture workspace result fields that must have real
+    # translations rather than snake_case-derived fallbacks.
+    "output_dir",
+    "manifest_path",
+    "scpi_log_path",
+    "vertical_unit",
+    "requested_segments",
+    "configured_segments",
+    "acquired_segments",
+    "exported_segments",
+    "initial_mode",
+    "final_mode",
+    "polling",
+    "command",
+    "runtime_behavior",
+    "error",
 )
 
 

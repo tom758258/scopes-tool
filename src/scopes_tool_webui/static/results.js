@@ -1209,6 +1209,7 @@ function formatWorkspaceValue(name, value, resultContext = null) {
       ? [`results.status.${value}`, `status.${value}`, `enum.${value}`]
       : [scopedEnum ? `enum.${scopedEnum}.${value}` : null, `enum.${value}`].filter(Boolean);
     if (name === "action") keys.push(`actions.${value}`, `command.${value}`);
+    if (name === "operation") keys.push(`command.${value}`);
     const key = keys.find((candidate) => hasTranslation(candidate));
     if (key) return translate(key);
   }

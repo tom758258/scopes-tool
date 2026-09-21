@@ -61,6 +61,7 @@ def test_segmented_memory_uses_dedicated_editor_and_existing_command_contract() 
 
 def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     app = read_static("app.js")
+    editor_source = read_static("segmented-editor.js")
     html = read_static("index.html")
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
@@ -69,8 +70,17 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert 'segmented: () => segmentedEditor,' in app
     assert 'id="segmented-editor" class="segmented-editor" hidden' in html
     assert 'elements.segmentedEditor.hidden = editorKind !== "segmented";' in app
+    assert (
+        'if (segmentedEditor?.modeButton && editorKind !== "segmented") {'
+        in app
+    )
     assert '"segmented.editor.enter": "Enter Segmented"' in english
     assert '"segmented.editor.exit": "Exit Segmented"' in english
+    assert '"segmented.editor.applySegments": "Apply segment count"' in english
+    assert '"segmented.editor.applySegments": "套用分段數"' in chinese
+    assert "segmented.editor.applyEnter" not in english
+    assert "segmented.editor.applyEnter" not in chinese
+    assert "applyEnter" not in editor_source
     for key in (
         "help.segmented-memory.action",
         "help.segmented-memory.segments",
@@ -93,10 +103,29 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
         "segmented.editor.select",
         "segmented.editor.timeTag",
         "segmented.editor.enter",
+        "segmented.editor.applySegments",
         "segmented.editor.exit",
         "segmented.editor.unavailable",
     ):
         assert f'"{key}"' in chinese
+
+
+def test_segmented_editor_removes_standalone_status_indicator() -> None:
+    editor_source = read_static("segmented-editor.js")
+    styles = read_static("styles.css")
+
+    assert "state-indicator" not in editor_source
+    assert "segmented-editor-status" not in editor_source
+    assert ".segmented-editor-status" not in styles
+    assert "statusText" not in editor_source
+    assert "enterButton" not in editor_source
+    assert "exitButton" not in editor_source
+    assert "captureChannelInput" not in editor_source
+    assert "this.modeButton" in editor_source
+    assert "this.applySegmentsButton" in editor_source
+    state_rule = styles.split(".segmented-editor-state {", 1)[1].split("}", 1)[0]
+    assert "width: fit-content;" in state_rule
+    assert "max-width: 100%;" in state_rule
 
 
 EDITOR_HARNESS = r'''
@@ -178,6 +207,7 @@ EDITOR_HARNESS = r'''
         const catalog = {
           supported: () => supported,
           fieldsFor: (command) => command.fields,
+          optionsFor: (field) => field?.options || [],
         };
         const submitted = [];
         const responses = [];
@@ -208,6 +238,12 @@ def test_segmented_editor_refresh_renders_realtime_and_segmented_state() -> None
         assert.deepEqual(submitted, []);
         assert.equal(editor.countInput.min, "2");
         assert.equal(editor.countInput.max, "250");
+        assert.equal(editor.modeButton.hidden, true);
+        assert.equal(editor.applySegmentsButton.hidden, true);
+        assert.equal(editor.modeOutput.output.textContent, "segmented.editor.unknown");
+        assert.equal(editor.container.children[0].children.length, 1);
+        assert.equal("status" in editor, false);
+        assert.equal("statusText" in editor, false);
 
         responses.push({
           status: "completed",
@@ -222,11 +258,13 @@ def test_segmented_editor_refresh_renders_realtime_and_segmented_state() -> None
           parameters: { action: "query" },
           intent: "readback",
         }]);
-        assert.equal(editor.statusText.textContent, "status.inactive");
         assert.equal(editor.modeOutput.output.textContent, "Realtime");
         assert.equal(editor.configuredRow.output.hidden, true);
         assert.equal(editor.acquiredRow.output.hidden, true);
-        assert.equal(editor.exitButton.hidden, true);
+        assert.equal(editor.modeButton.hidden, false);
+        assert.equal(editor.modeButton.textContent, "segmented.editor.enter");
+        assert.equal(editor.modeButton.className, "primary");
+        assert.equal(editor.applySegmentsButton.hidden, true);
 
         editor.countInput.value = "80";
         editor.countInput.dispatch("input");
@@ -238,12 +276,14 @@ def test_segmented_editor_refresh_renders_realtime_and_segmented_state() -> None
         });
         editor.refreshButton.dispatch("click");
         await settle();
-        assert.equal(editor.statusText.textContent, "status.active");
         assert.equal(editor.modeOutput.output.textContent, "Segmented");
         assert.equal(editor.configuredRow.output.textContent, "100");
         assert.equal(editor.acquiredRow.output.textContent, "63");
         assert.equal(editor.configuredRow.output.hidden, false);
-        assert.equal(editor.exitButton.hidden, false);
+        assert.equal(editor.modeButton.hidden, false);
+        assert.equal(editor.modeButton.textContent, "segmented.editor.exit");
+        assert.equal(editor.modeButton.className, "secondary");
+        assert.equal(editor.applySegmentsButton.hidden, false);
         assert.equal(editor.countInput.value, "80");
         ''',
     )
@@ -472,7 +512,12 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         await settle();
 
         assert.equal(editor.captureSection.hidden, false);
-        assert.equal(editor.captureChannelInput.value, "1");
+        assert.equal(editor.captureChannelSelect.tagName, "SELECT");
+        assert.deepEqual(
+          editor.captureChannelSelect.children.map((option) => option.value),
+          ["1", "2", "3", "4"],
+        );
+        assert.equal(editor.captureChannelSelect.value, "1");
         assert.equal(editor.captureSegmentsInput.value, "2");
         assert.equal(editor.capturePointsSelect.value, "1000");
         assert.equal(editor.captureFormatSelect.value, "byte");
@@ -481,16 +526,35 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
           classes: editor.captureForm.className.split(" "),
           fieldCount: editor.captureForm.children.length,
           helpClasses: editor.captureForm.children.map((field) => field.children.at(-1).className),
-          buttonOutsideGrid: editor.captureButton.parentNode === editor.captureSection,
+          buttonOutsideGrid: editor.captureButton.parentNode !== editor.captureForm,
+          buttonInActionRow: editor.captureButton.parentNode.className === "segmented-editor-actions"
+            && editor.captureButton.parentNode.parentNode === editor.captureSection,
         }, {
           classes: ["command-form", "segmented-editor-capture-form"],
           fieldCount: 4,
           helpClasses: ["field-help", "field-help", "field-help", "field-help"],
           buttonOutsideGrid: true,
+          buttonInActionRow: true,
         });
 
+        captureDefinition.fields.find((field) => field.name === "channel").options = [1, 2];
+        editor.present();
+        await settle();
+        assert.deepEqual(
+          editor.captureChannelSelect.children.map((option) => option.value),
+          ["1", "2"],
+        );
+        assert.equal(editor.captureChannelSelect.value, "1");
+        delete captureDefinition.fields.find((field) => field.name === "channel").options;
+        editor.present();
+        await settle();
+        assert.deepEqual(
+          editor.captureChannelSelect.children.map((option) => option.value),
+          ["1", "2", "3", "4"],
+        );
+
         const countBeforeInput = submitted.length;
-        editor.captureChannelInput.value = "2";
+        editor.captureChannelSelect.value = "2";
         editor.captureSegmentsInput.value = "5";
         editor.capturePointsSelect.value = "5000";
         editor.captureFormatSelect.value = "word";
@@ -500,13 +564,23 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         responses.push({ status: "completed", result: { result: {} } });
         editor.captureButton.dispatch("click");
         await settle();
-        assert.deepEqual(submitted.at(-1), {
+        const submittedCapture = submitted.at(-1);
+        assert.deepEqual(submittedCapture, {
           command: "segmented-capture",
           parameters: { channel: 2, segments: 5, points: 5000, format: "word" },
           intent: "command",
         });
-        assert.equal("timeout_ms" in submitted.at(-1).parameters, false);
-        assert.equal("poll_interval_ms" in submitted.at(-1).parameters, false);
+        assert.equal(typeof submittedCapture.parameters.channel, "number");
+        assert.equal("timeout_ms" in submittedCapture.parameters, false);
+        assert.equal("poll_interval_ms" in submittedCapture.parameters, false);
+
+        const countBeforeOverflow = submitted.length;
+        editor.captureSegmentsInput.value = "9999";
+        editor.captureButton.dispatch("click");
+        await settle();
+        assert.equal(submitted.length, countBeforeOverflow);
+        assert.equal(editor.captureSegmentsInput.reported, true);
+        editor.captureSegmentsInput.value = "5";
 
         editor.setBusy(true);
         assert.equal(editor.captureButton.disabled, true);
@@ -517,7 +591,7 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         editor.schedulePresentation();
         editor.rerender();
         await settle();
-        assert.equal(editor.captureChannelInput.value, "2");
+        assert.equal(editor.captureChannelSelect.value, "2");
         assert.equal(editor.captureSegmentsInput.value, "5");
         assert.equal(editor.capturePointsSelect.value, "5000");
         assert.equal(editor.captureFormatSelect.value, "word");
@@ -525,7 +599,7 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
 
         editor.schedulePresentation();
         await settle();
-        assert.equal(editor.captureChannelInput.value, "2");
+        assert.equal(editor.captureChannelSelect.value, "2");
         assert.equal(editor.captureSegmentsInput.value, "5");
         assert.equal(editor.capturePointsSelect.value, "5000");
         assert.equal(editor.captureFormatSelect.value, "word");
@@ -537,9 +611,12 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         editor.schedulePresentation();
         editor.rerender();
         await settle();
-        assert.equal(editor.captureChannelInput.max, "2");
+        assert.deepEqual(
+          editor.captureChannelSelect.children.map((option) => option.value),
+          ["1", "2"],
+        );
         assert.equal(editor.captureSegmentsInput.max, "1000");
-        assert.equal(editor.captureChannelInput.value, "1");
+        assert.equal(editor.captureChannelSelect.value, "1");
         assert.equal(submitted.length, countBeforeContextRerender);
         ''',
     )
@@ -707,6 +784,38 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
         r'''
         editor.schedulePresentation();
         await settle();
+        assert.equal(editor.modeButton.hidden, true);
+        assert.equal(editor.applySegmentsButton.hidden, true);
+        assert.equal(editor.modeOutput.output.textContent, "segmented.editor.unknown");
+
+        editor.modeButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted, []);
+
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "realtime", configured_segments: null, acquired_segments: null,
+          } } },
+        });
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(editor.modeButton.hidden, false);
+        assert.equal(editor.modeButton.textContent, "segmented.editor.enter");
+        assert.equal(editor.modeButton.className, "primary");
+        assert.equal(editor.applySegmentsButton.hidden, true);
+        assert.equal(editor.modeOutput.output.textContent, "Realtime");
+
+        editor.countInput.value = "999";
+        editor.modeButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted, [{
+          command: "segmented-memory",
+          parameters: { action: "query" },
+          intent: "readback",
+        }]);
+        assert.equal(editor.countInput.reported, true);
+
         editor.countInput.value = "100";
         editor.countInput.dispatch("input");
         responses.push({
@@ -715,15 +824,36 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
             mode: "segmented", configured_segments: 100, acquired_segments: 0,
           } } },
         });
-        editor.enterButton.dispatch("click");
+        editor.modeButton.dispatch("click");
         await settle();
-        assert.deepEqual(submitted[0], {
+        assert.deepEqual(submitted[1], {
           command: "segmented-memory",
           parameters: { action: "enable", segments: 100 },
           intent: "apply",
         });
-        assert.equal(editor.statusText.textContent, "status.active");
+        assert.equal(editor.modeButton.hidden, false);
+        assert.equal(editor.modeButton.textContent, "segmented.editor.exit");
+        assert.equal(editor.modeButton.className, "secondary");
+        assert.equal(editor.applySegmentsButton.hidden, false);
+        assert.equal(editor.modeOutput.output.textContent, "Segmented");
         assert.equal(editor.countInput.value, "100");
+
+        editor.countInput.value = "50";
+        editor.countInput.dispatch("input");
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 50, acquired_segments: 0,
+          } } },
+        });
+        editor.applySegmentsButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted[2], {
+          command: "segmented-memory",
+          parameters: { action: "enable", segments: 50 },
+          intent: "apply",
+        });
+        assert.equal(editor.modeButton.textContent, "segmented.editor.exit");
 
         responses.push({
           status: "completed",
@@ -731,21 +861,24 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
             mode: "realtime", configured_segments: null, acquired_segments: null,
           } } },
         });
-        editor.exitButton.dispatch("click");
+        editor.modeButton.dispatch("click");
         await settle();
-        assert.deepEqual(submitted[1], {
+        assert.deepEqual(submitted[3], {
           command: "segmented-memory",
           parameters: { action: "disable" },
           intent: "apply",
         });
-        assert.equal(editor.statusText.textContent, "status.inactive");
-        assert.equal(editor.exitButton.hidden, true);
+        assert.equal(editor.modeButton.textContent, "segmented.editor.enter");
+        assert.equal(editor.modeButton.className, "primary");
+        assert.equal(editor.applySegmentsButton.hidden, true);
 
         supported = false;
         available = false;
         contextKey = "simulate||unsupported-model";
         editor.schedulePresentation();
         await settle();
+        assert.equal(editor.modeButton.hidden, true);
+        assert.equal(editor.applySegmentsButton.hidden, true);
         assert.equal(editor.unavailableNote.hidden, false);
         assert.equal(editor.readouts.hidden, true);
         assert.equal(editor.segmentBrowser.hidden, true);
@@ -753,10 +886,10 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
         assert.equal(editor.timeTagOutput.textContent, "");
         assert.equal(editor.refreshButton.disabled, true);
         editor.refreshButton.dispatch("click");
-        editor.enterButton.dispatch("click");
-        editor.exitButton.dispatch("click");
+        editor.modeButton.dispatch("click");
+        editor.applySegmentsButton.dispatch("click");
         await settle();
-        assert.equal(submitted.length, 2);
+        assert.equal(submitted.length, 4);
         ''',
     )
     completed = subprocess.run(

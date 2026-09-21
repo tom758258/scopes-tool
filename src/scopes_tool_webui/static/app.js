@@ -1251,6 +1251,9 @@ function syncWorkspaceHeaderActions(editorKind) {
     searchEditor.entry.button.hidden = editorKind !== "search";
   }
   if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = editorKind !== "segmented";
+  if (segmentedEditor?.modeButton && editorKind !== "segmented") {
+    segmentedEditor.modeButton.hidden = true;
+  }
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
   if (sequenceEditor?.executeButton) sequenceEditor.executeButton.hidden = editorKind !== "sequence";
   if (cursorEditor?.entry?.button) {
