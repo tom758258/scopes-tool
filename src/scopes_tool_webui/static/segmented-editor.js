@@ -59,6 +59,7 @@ export class SegmentedEditor {
     const stateHelp = document.createElement("small");
     stateHelp.className = "field-help";
     stateHelp.textContent = translate("segmented.editor.stateHelp");
+    this.stateHelp = stateHelp;
 
     const countField = document.createElement("label");
     countField.className = "field segmented-editor-count";
@@ -72,7 +73,7 @@ export class SegmentedEditor {
       this.dirty = true;
     });
     countField.append(countLabel, this.countInput);
-    this.appendFieldHelp(countField, this.fieldDefinition(this.definition(), "segments"));
+    this.appendFieldHelp(countField, this.fieldDefinition(this.segmentedMemoryDefinition(), "segments"));
 
     this.segmentBrowser = document.createElement("section");
     this.segmentBrowser.className = "segmented-editor-browser";
@@ -120,7 +121,7 @@ export class SegmentedEditor {
     this.segmentBrowser.append(browserLabel, browserControls);
     this.appendFieldHelp(
       this.segmentBrowser,
-      this.fieldDefinition(this.definition(), "index"),
+      this.fieldDefinition(this.segmentedMemoryDefinition(), "index"),
     );
     this.segmentBrowser.append(timeTag);
 
@@ -259,6 +260,12 @@ export class SegmentedEditor {
   definition() {
     const selected = this.hooks.selectedCommand?.();
     return selected?.editor === "segmented" ? selected : null;
+  }
+
+  segmentedMemoryDefinition() {
+    const commands = this.catalog?.commands;
+    if (!Array.isArray(commands)) return null;
+    return commands.find((command) => command.id === "segmented-memory") || null;
   }
 
   captureDefinition() {
@@ -599,6 +606,7 @@ export class SegmentedEditor {
     );
     this.exitButton.hidden = !segmented;
     const unsupported = !this.definition() || !this.catalog.supported(this.definition());
+    this.stateHelp.hidden = unsupported || !segmented;
     this.unavailableNote.hidden = !unsupported;
     this.readouts.hidden = unsupported;
     this.countInput.parentNode.hidden = unsupported;

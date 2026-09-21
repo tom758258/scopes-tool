@@ -552,6 +552,106 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
+@pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_segmented_editor_builds_field_help_before_command_selected() -> None:
+    script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        let selection = null;
+        catalog.commands = [definition];
+        const fresh = new globalThis.SegmentedEditor(new FakeNode(), catalog, {
+          ...hooks,
+          selectedCommand: () => selection,
+        });
+        await settle();
+
+        const countField = fresh.countInput.parentNode;
+        const countHelp = countField.children.find((node) => node.tagName === "SMALL");
+        assert.ok(countHelp);
+        assert.equal(countHelp.className, "field-help");
+        assert.equal(countHelp.textContent, "help.segmented-memory.segments");
+        const indexHelp = fresh.segmentBrowser.children.find((node) => node.tagName === "SMALL");
+        assert.ok(indexHelp);
+        assert.equal(indexHelp.className, "field-help");
+        assert.equal(indexHelp.textContent, "help.segmented-memory.index");
+        assert.ok(fresh.stateHelp);
+
+        selection = definition;
+        fresh.present();
+        await settle();
+        assert.equal(fresh.countInput.min, "2");
+        assert.equal(fresh.countInput.max, "250");
+        assert.ok(countField.children.includes(countHelp));
+        assert.equal(countHelp.textContent, "help.segmented-memory.segments");
+        assert.ok(fresh.segmentBrowser.children.includes(indexHelp));
+        assert.equal(indexHelp.textContent, "help.segmented-memory.index");
+        assert.equal(countField.hidden, false);
+        ''',
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_segmented_editor_state_help_visibility() -> None:
+    script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        editor.schedulePresentation();
+        await settle();
+        assert.ok(editor.stateHelp);
+        assert.equal(editor.stateHelp.hidden, true);
+
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "realtime", configured_segments: null, acquired_segments: null,
+          } } },
+        });
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(editor.stateHelp.hidden, true);
+
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+          } } },
+        });
+        editor.refreshButton.dispatch("click");
+        await settle();
+        assert.equal(editor.stateHelp.hidden, false);
+
+        const countBeforePresent = submitted.length;
+        supported = false;
+        available = false;
+        contextKey = "simulate||unsupported-model";
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.stateHelp.hidden, true);
+        assert.equal(submitted.length, countBeforePresent);
+        ''',
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def test_segmented_memory_select_validation_and_execution_use_core(tmp_path: Path) -> None:
     request = validate_job_request({
         "command": "segmented-memory",

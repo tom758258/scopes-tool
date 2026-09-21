@@ -680,16 +680,22 @@ Run a finite segmented capture and export each acquired segment to a host CSV:
 
 `segmented-capture` supports one analog channel, BYTE or WORD waveform
 transfer, finite timeout-bounded polling, and the existing waveform decoder.
-`--timeout-ms` is the overall acquisition deadline covering operation-condition
-readiness polling and the post-readiness acquired-count verification. Before
-stable readiness, the workflow polls only `:OPERegister:CONDition?`; each poll
-uses the remaining deadline as its temporary VISA timeout. Readiness requires
-two consecutive samples with the RUN bit clear and the remote-interface-enabled
-bit set, separated by `--poll-interval-ms`; any non-ready sample resets the
-streak. The WAIT TRIG bit does not need to clear. After stable readiness, the
-workflow queries `:WAVeform:SEGMented:COUNt?` once and starts export only when
-the returned count is at least the requested count. A readiness timeout does not
-query the acquired count or attempt partial export.
+`--timeout-ms` is the overall deadline for waiting until the requested
+segmented acquisition is ready for export, and `--poll-interval-ms` controls
+the interval used by the series-specific polling loop. Each poll uses the
+remaining deadline as its temporary VISA timeout.
+
+On 2000X and 3000X, after `:SINGle`, the workflow polls
+`:WAVeform:SEGMented:COUNt?` until the acquired count reaches the requested
+segment count.
+
+On 4000X, the workflow polls `:OPERegister:CONDition?` until two consecutive
+ready samples are observed, then queries `:WAVeform:SEGMented:COUNt?` to
+verify the acquired count before export. Readiness requires two consecutive
+samples with the RUN bit clear and the remote-interface-enabled bit set,
+separated by `--poll-interval-ms`; any non-ready sample resets the streak.
+The WAIT TRIG bit does not need to clear. A readiness timeout does not query
+the acquired count or attempt partial export.
 If any segmented-capture SCPI read times out, the workflow stops issuing SCPI on
 that session while preserving completed CSVs, the manifest, and `scpi.log`.
 It sends one `:SINGle`, selects each ready acquired segment, queries its time tag,
@@ -701,8 +707,8 @@ channel's `_v` or `_a` suffix. The directory also contains a shared
 preserving completed CSVs and records `partial` or `failed` status. The command
 does not force a trigger, disable segmented mode, restore state, merge CSVs, or
 perform instrument-side save/export. The Common v2 Worker also
-exposes the same readiness and read-timeout semantics through its strict
-`segmented-capture` command contract.
+exposes the same series-specific polling and read-timeout semantics through
+its strict `segmented-capture` command contract.
 
 Worker usage accepts only these exact argument objects:
 
