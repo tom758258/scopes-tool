@@ -663,7 +663,10 @@ export class SegmentedEditor {
     if (this.state?.mode !== "segmented") return false;
     const configuredRaw = this.state?.configured_segments;
     if (configuredRaw === null || configuredRaw === undefined) return false;
-    const value = Number(this.countInput.value);
+    const rawValue = this.countInput.value;
+    if (rawValue === "") return false;
+
+    const value = Number(rawValue);
     const configured = Number(configuredRaw);
     const validity = this.countInput.validity;
     const valid = validity ? validity.valid : this.countInput.checkValidity();

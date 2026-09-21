@@ -181,13 +181,16 @@ EDITOR_HARNESS = r'''
             return this.validity.valid;
           }
           get validity() {
+            const empty = this.value === "";
             const value = Number(this.value);
             return {
-              valid: !(this.required && this.value === "")
-                && Number.isFinite(value)
-                && (!this.min || value >= Number(this.min))
-                && (!this.max || value <= Number(this.max))
-                && (!this.step || Number.isInteger(value)),
+              valid: !(this.required && empty && !this.disabled)
+                && (empty || (
+                  Number.isFinite(value)
+                  && (!this.min || value >= Number(this.min))
+                  && (!this.max || value <= Number(this.max))
+                  && (!this.step || Number.isInteger(value))
+                )),
             };
           }
           reportValidity() { this.reported = true; }
@@ -883,6 +886,23 @@ def test_segmented_editor_enter_exit_and_capability_gating() -> None:
         assert.equal(editor.applySegmentsButton.className, "secondary");
         editor.setBusy(false);
         assert.equal(editor.countInput.disabled, false);
+        assert.equal(editor.applySegmentsButton.disabled, true);
+        assert.equal(editor.applySegmentsButton.className, "secondary");
+
+        editor.countInput.value = "";
+        editor.countInput.dispatch("input");
+        assert.equal(editor.countInput.validity.valid, false);
+        assert.equal(editor.applySegmentsButton.disabled, true);
+        assert.equal(editor.applySegmentsButton.className, "secondary");
+
+        editor.setBusy(true);
+        assert.equal(editor.countInput.disabled, true);
+        assert.equal(editor.countInput.validity.valid, true);
+        assert.equal(editor.applySegmentsButton.disabled, true);
+        assert.equal(editor.applySegmentsButton.className, "secondary");
+        editor.setBusy(false);
+        assert.equal(editor.countInput.disabled, false);
+        assert.equal(editor.countInput.validity.valid, false);
         assert.equal(editor.applySegmentsButton.disabled, true);
         assert.equal(editor.applySegmentsButton.className, "secondary");
 
