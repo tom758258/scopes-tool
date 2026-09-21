@@ -212,6 +212,9 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
     reference_slot = next(
         field for field in reference_save["fields"] if field["name"] == "slot"
     )
+    serial_uart = next(
+        entry for entry in command_catalog() if entry["id"] == "serial-uart"
+    )
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -353,6 +356,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           "help.measure-window.window":"選擇量測範圍","help.measure-window.window.main":"在主要視窗量測"
         };
         translations["enum.reference-waveform"] = "Reference waveform {{value}}";
+        translations["enum.external"] = "外部";
         globalThis.hasTranslation = k=> k in translations;
         globalThis.translate = (k, values = {})=> {
           let text = translations[k] || k;
@@ -369,6 +373,7 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         const measureFields = __MEASURE_FIELDS__;
         const measureWindowFields = __MEASURE_WINDOW_FIELDS__;
         const referenceSlot = __REFERENCE_SLOT__;
+        const serialUart = __SERIAL_UART__;
 
         let source = [
           fs.readFileSync(path.join(process.cwd(),"src/scopes_tool_webui/static/numeric-input.js"),"utf8"),
@@ -465,6 +470,47 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
           const vals = form.values();
           assert.deepEqual(vals, { channel: 2 });
           assert.equal(typeof vals.channel, "number");
+        }
+
+        // A2. UART source and data bits controls use generic enum/integer options
+        {
+          const cont = makeContainer();
+          const form = new CommandForm(cont, catalog);
+          const fields = serialUart.fields
+            .filter((field) => ["action", "rx_source", "data_bits"].includes(field.name))
+            .map((field) => field.name === "rx_source"
+              ? { ...field, disabled_options: ["channel3", "channel4"] }
+              : field);
+          const cmd = { ...serialUart, fields };
+          form.render(cmd);
+          const action = cont.querySelector('[data-field="action"]');
+          action.value = "set";
+          form.refreshVisibility();
+          const rx = cont.querySelector('[data-field="rx_source"]');
+          const bits = cont.querySelector('[data-field="data_bits"]');
+          assert.equal(rx.tagName, "SELECT");
+          const rxOptions = new Map(rx.options.map((option) => [option.value, option]));
+          assert.equal(rxOptions.get("channel1").textContent, translations["enum.channel1"]);
+          assert.equal(rxOptions.get("external").textContent, translations["enum.external"]);
+          assert.equal(rxOptions.get("channel1").disabled, false);
+          assert.equal(rxOptions.get("channel2").disabled, false);
+          assert.equal(rxOptions.get("channel3").disabled, true);
+          assert.equal(rxOptions.get("channel4").disabled, true);
+          assert.equal(rxOptions.get("external").disabled, false);
+
+          assert.equal(bits.tagName, "SELECT");
+          for (const value of ["5", "6", "7", "8", "9"]) {
+            assert.ok(bits.options.some((option) => option.value === value), value);
+          }
+          form.syncResult({
+            status: "completed",
+            result: { result: { uart: { rx_source: "channel2", data_bits: 8 } } },
+          }, false);
+          assert.equal(rx.value, "channel2");
+          assert.equal(bits.value, "8");
+          const values = form.values();
+          assert.equal(values.data_bits, 8);
+          assert.equal(typeof values.data_bits, "number");
         }
 
         // B. projected reference waveform options render as a SELECT
@@ -642,6 +688,8 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
         "__MEASURE_WINDOW_FIELDS__", json.dumps(measure_window_fields)
     ).replace(
         "__REFERENCE_SLOT__", json.dumps(reference_slot)
+    ).replace(
+        "__SERIAL_UART__", json.dumps(serial_uart)
     ).replace(
         "__DISPLAY_LABEL__", json.dumps(next(
             entry for entry in command_catalog() if entry["id"] == "display-label"
@@ -1538,24 +1586,23 @@ def test_serial_uart_source_and_data_bits_select_and_model_disabled_options() ->
     tx = next(f for f in uart["fields"] if f["name"] == "tx_source")
     bits = next(f for f in uart["fields"] if f["name"] == "data_bits")
 
-    # Source fields changed from string to enum with canonical values
+    # Source fields use enum canonical values and generic enum translation.
     assert rx.get("type") == "enum"
     assert rx.get("options") == ("channel1", "channel2", "channel3", "channel4", "external")
-    assert rx.get("option_label") == "channel"
+    assert "option_label" not in rx
     assert tx.get("type") == "enum"
     assert tx.get("options") == ("channel1", "channel2", "channel3", "channel4", "external")
-    assert tx.get("option_label") == "channel"
+    assert "option_label" not in tx
 
     # Data bits changed from plain integer to integer with fixed discrete options
     assert bits.get("type") == "integer"
     assert bits.get("options") == (5, 6, 7, 8, 9)
 
-    # Catalog projection (unknown model) keeps full options and no disabled options
+    # Registered 4-channel model keeps full options without disabled options.
     catalog = {e["id"]: e for e in command_catalog()}
-    unknown_pres = catalog["serial-uart"]["presentation"]["models"].get("keysight-dsox2004a")
-    # 4-channel model: no disabled options
-    rx4 = unknown_pres["fields"].get("rx_source", {})
-    # Catalog projection converts tuples to lists; 4-channel model has none disabled
+    four_channel_pres = catalog["serial-uart"]["presentation"]["models"].get("keysight-dsox2004a")
+    rx4 = four_channel_pres["fields"].get("rx_source", {})
+    # Catalog projection converts tuples to lists.
     disabled4 = rx4.get("disabled_options", [])
     assert (disabled4 is None or len(disabled4) == 0)
 

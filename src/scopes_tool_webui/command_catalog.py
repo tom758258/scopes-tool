@@ -1767,8 +1767,8 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     _action_command(
         "serial-uart", "Serial", "UART configuration", (
             _command_field("bus", "integer", minimum=1),
-            _command_field("rx_source", "enum", options=("channel1", "channel2", "channel3", "channel4", "external"), option_label="channel", visible_if=_set_action_visibility(), help_key="serial-uart.rx_source"),
-            _command_field("tx_source", "enum", options=("channel1", "channel2", "channel3", "channel4", "external"), option_label="channel", visible_if=_set_action_visibility(), help_key="serial-uart.tx_source"),
+            _command_field("rx_source", "enum", options=("channel1", "channel2", "channel3", "channel4", "external"), visible_if=_set_action_visibility(), help_key="serial-uart.rx_source"),
+            _command_field("tx_source", "enum", options=("channel1", "channel2", "channel3", "channel4", "external"), visible_if=_set_action_visibility(), help_key="serial-uart.tx_source"),
             _command_field("baud_rate", "integer", minimum=100, maximum=12_000_000, spinner=False, visible_if=_set_action_visibility(), help_key="serial-uart.baud_rate"),
             _command_field("data_bits", "integer", options=(5, 6, 7, 8, 9), minimum=5, maximum=9, visible_if=_set_action_visibility(), help_key="serial-uart.data_bits"),
             _command_field("parity", "enum", options=UART_PARITIES, option_label="serial-uart-parity", visible_if=_set_action_visibility(), help_key="serial-uart.parity"),
