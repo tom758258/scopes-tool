@@ -29,7 +29,12 @@ from .trigger import (
 )
 from .output_files import write_capture_csv_file
 from .scope import Oscilloscope
-from .workflow import drain_preexisting_system_errors, workflow_scpi_logging
+from .workflow import (
+    StopRequested,
+    drain_preexisting_system_errors,
+    interruptible_wait,
+    workflow_scpi_logging,
+)
 from .segmented import (
     SegmentedMemoryController,
     ensure_segmented_memory_supported,
@@ -89,6 +94,10 @@ class SegmentedCaptureRequest:
 
 class SegmentedCaptureTimeout(OscilloscopeError):
     """Raised internally when finite segmented acquisition does not complete."""
+
+
+class SegmentedCaptureCancelled(Exception):
+    """Raised internally when cooperative cancellation is requested."""
 
 
 def validate_segmented_capture_request(
@@ -448,6 +457,8 @@ def run_segmented_capture(
     scope: Oscilloscope,
     resource: str,
     request: SegmentedCaptureRequest,
+    *,
+    stop_requested: StopRequested | None = None,
 ) -> OperationResult:
     """Run finite segmented acquisition and stream one CSV per segment."""
 
@@ -497,8 +508,13 @@ def run_segmented_capture(
     acquired_segments = 0
     exported_segments = 0
     session_read_timed_out = False
+    cancelled = False
     human = [f"Resource: {resource}"]
     controller: SegmentedMemoryController | None = None
+
+    def cancellation_checkpoint() -> None:
+        if stop_requested is not None and stop_requested():
+            raise SegmentedCaptureCancelled()
 
     def guarded_read(read: Callable[[], object], message: str) -> object:
         nonlocal session_read_timed_out
@@ -517,6 +533,7 @@ def run_segmented_capture(
         ):
             try:
                 _write_manifest(manifest, manifest_path)
+                cancellation_checkpoint()
                 try:
                     idn = scope.query_idn()
                 except Exception as exc:
@@ -527,11 +544,13 @@ def run_segmented_capture(
                         ) from exc
                     raise
                 manifest["idn"] = idn_manifest_dict(idn)
+                cancellation_checkpoint()
                 capabilities = scope.capabilities
                 validate_segmented_capture_request(request, capabilities)
                 assert capabilities is not None
                 for _entry in drain_preexisting_system_errors(scope):
                     human.append(f"Pre-operation stale system error drained: {_entry.format()}")
+                cancellation_checkpoint()
                 controller = SegmentedMemoryController(scope.scpi, capabilities)
 
                 raw_initial_mode = guarded_read(
@@ -576,6 +595,7 @@ def run_segmented_capture(
                 if is_legacy_series:
                     try:
                         while True:
+                            cancellation_checkpoint()
                             remaining_seconds = deadline - time.monotonic()
                             if remaining_seconds <= 0:
                                 primary_error = SegmentedCaptureTimeout(
@@ -598,7 +618,11 @@ def run_segmented_capture(
                             if acquired_segments >= request.segments:
                                 stable_ready = True
                                 break
-                            time.sleep(request.poll_interval_ms / 1000.0)
+                            if not interruptible_wait(
+                                request.poll_interval_ms / 1000.0,
+                                stop_requested=stop_requested,
+                            ):
+                                raise SegmentedCaptureCancelled()
                     except Exception as exc:
                         polling_exception = exc
                         raise
@@ -611,6 +635,7 @@ def run_segmented_capture(
                 else:
                     try:
                         while ready_streak < 2:
+                            cancellation_checkpoint()
                             remaining_seconds = deadline - time.monotonic()
                             if remaining_seconds <= 0:
                                 primary_error = SegmentedCaptureTimeout(
@@ -635,7 +660,11 @@ def run_segmented_capture(
                             else:
                                 ready_streak = 0
                             if ready_streak < 2:
-                                time.sleep(request.poll_interval_ms / 1000.0)
+                                if not interruptible_wait(
+                                    request.poll_interval_ms / 1000.0,
+                                    stop_requested=stop_requested,
+                                ):
+                                    raise SegmentedCaptureCancelled()
 
                         if ready_streak == 2:
                             stable_ready = True
@@ -695,6 +724,7 @@ def run_segmented_capture(
                 ):
                     controller.set_waveform_all(False)
                 for index in range(1, export_count + 1):
+                    cancellation_checkpoint()
                     scope.select_segmented_memory(index)
                     raw_time_tag = guarded_read(
                         lambda: scope.scpi.query(segmented_time_tag_query()),
@@ -727,6 +757,7 @@ def run_segmented_capture(
                     manifest["exported_segments"] = exported_segments
                     _write_manifest(manifest, manifest_path)
 
+                cancellation_checkpoint()
                 final_mode, system_error = _best_effort_final_state(scope, guarded_read)
                 manifest["final_mode"] = final_mode
                 manifest["system_error"] = system_error
@@ -740,6 +771,9 @@ def run_segmented_capture(
                     primary_error = OscilloscopeError(
                         "segmented capture finished with an instrument system error."
                     )
+            except SegmentedCaptureCancelled:
+                cancelled = True
+                primary_error = None
             except Exception as exc:
                 if session_read_timed_out and isinstance(
                     exc, SegmentedCaptureTimeout
@@ -759,13 +793,15 @@ def run_segmented_capture(
                         manifest["final_mode"] = final_mode
                         manifest["system_error"] = system_error
 
-            if primary_error is None:
+            if cancelled:
+                status = "cancelled"
+            elif primary_error is None:
                 status = "completed"
             elif exported_segments:
                 status = "partial"
             else:
                 status = "failed"
-            error_text = None if primary_error is None else _error_text(primary_error)
+            error_text = None if cancelled or primary_error is None else _error_text(primary_error)
             manifest["status"] = status
             manifest["end_time"] = batch_iso_timestamp()
             manifest["acquired_segments"] = acquired_segments
@@ -832,10 +868,12 @@ def run_segmented_capture(
     }
     if system_error is not None:
         human.append(f"System error: {system_error['raw']}")
-    if primary_error is not None:
+    if cancelled:
+        human.append("Cancelled by stop request.")
+    elif primary_error is not None:
         human.append(f"Error: {_error_text(primary_error)}")
     return OperationResult(
-        0 if primary_error is None else 1,
+        3 if cancelled else (0 if primary_error is None else 1),
         result,
         files,
         system_error,
