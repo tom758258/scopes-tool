@@ -3243,7 +3243,79 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
+def test_scan_busy_change_refreshes_live_data_once_identity_ready() -> None:
+    app_source = read_static("app.js")
+    declarations = "\n".join(
+        extract_function_declaration(app_source, signature)
+        for signature in (
+            "function handleScanBusyChange(busy)",
+            "async function refreshLiveDataSnapshot()",
+            "function isExecutionBusy()",
+            "function liveDataContextKey()",
+            "function syncLiveDataContext()",
+        )
+    )
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+
+        let context = { mode: "live", resource: "RESOURCE-A", model_id: null };
+        let executing = false;
+        let pendingResourceLiveSupport = null;
+        let identityReady = false;
+        let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false };
+        const calls = [];
+        const currentModelId = () => "keysight-dsox4024a";
+        const deviceResource = {
+          scanInProgress: false,
+          hasCurrentIdentity: () => identityReady,
+        };
+        const commandAvailable = (command) => command === "live-data-snapshot";
+        const executeCommand = async (command) => {
+          calls.push({ command });
+          return { status: "completed", result: { result: { live_data: {} } } };
+        };
+        const renderLiveData = () => {};
+        const updateAvailability = () => {};
+        const translate = (key) => key;
+        '''
+    ) + declarations + textwrap.dedent(
+        r'''
+        const settle = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+
+        deviceResource.scanInProgress = true;
+        handleScanBusyChange(true);
+        await settle();
+        assert.deepEqual(calls, []);
+
+        deviceResource.scanInProgress = false;
+        identityReady = true;
+        handleScanBusyChange(false);
+        await settle();
+        assert.deepEqual(
+          calls.map(({ command }) => command),
+          ["live-data-snapshot"],
+        );
+
+        identityReady = false;
+        handleScanBusyChange(false);
+        await settle();
+        assert.deepEqual(
+          calls.map(({ command }) => command),
+          ["live-data-snapshot"],
+        );
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
     jobs_path = STATIC_ROOT / "jobs.js"
     script = textwrap.dedent(
         r'''

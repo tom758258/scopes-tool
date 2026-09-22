@@ -557,9 +557,7 @@ async function initialize() {
     renderCurrentResult();
   }, (selectedContext) => {
     return refreshSelectedResourceContext(selectedContext);
-  }, () => {
-    updateAvailability();
-  }, (modelContext) => {
+  }, handleScanBusyChange, (modelContext) => {
     if (modelContext?.mode === "simulate" && modelContext.model_id) {
       void refreshLiveDataSnapshot();
     }
@@ -828,6 +826,13 @@ function updateIdentity(job, commandContext) {
   renderLiveData();
   renderSystemInformation();
   if (typeof updateAvailability === "function") updateAvailability();
+}
+
+function handleScanBusyChange(busy) {
+  updateAvailability();
+  if (!busy && deviceResource?.hasCurrentIdentity?.(context)) {
+    void refreshLiveDataSnapshot();
+  }
 }
 
 async function refreshSelectedResourceContext(selectedContext) {
