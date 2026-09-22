@@ -581,10 +581,10 @@ The caller-supplied `output_dir` is the segmented-capture output directory:
 ```
 
 The Core workflow keeps its requirement for a new or empty output
-directory. The domain status `completed` maps to Worker `succeeded`; domain
-`partial` or `failed` maps to Worker `failed` while preserving existing files
-and the domain status in the job's in-memory result. Worker cancellation keeps the existing
-cooperative queued/running semantics. The worker accepts no firmware argument;
+directory. The domain status `completed` maps to Worker `succeeded`,
+`cancelled` maps to Worker `cancelled` with exit code 3, and `partial` or
+`failed` maps to Worker `failed`. Cancelled, partial, and failed runs preserve
+existing files and the domain status in the job's in-memory result. The worker accepts no firmware argument;
 Core uses the detected IDN firmware for waveform segmented command gating.
 
 System and status commands use only these canonical request shapes:
