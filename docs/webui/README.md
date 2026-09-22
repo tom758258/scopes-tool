@@ -546,8 +546,11 @@ completion. The rolling plot uses global sample index on X; each capture's
 
 Queued jobs can be cancelled immediately. Running jobs accept a cooperative
 cancellation request and remain running until Core execution and session
-cleanup finish; blocking VISA I/O is not forcibly interrupted. When the
-Launcher is closed, it first stops accepting jobs, requests cancellation, and
+cleanup finish; blocking VISA I/O is not forcibly interrupted. Segmented
+Capture keeps the Core terminal result authoritative: a stop request that
+arrives after every requested segment has been exported does not replace
+`completed`, and a completed partial/error result is not relabeled as
+cancelled. When the Launcher is closed, it first stops accepting jobs, requests cancellation, and
 waits for running jobs to finish and close their own sessions before stopping
 Uvicorn. This shutdown has a timeout; if jobs do not finish or a session close
 fails, the Launcher displays **Shutdown incomplete** and remains available so
