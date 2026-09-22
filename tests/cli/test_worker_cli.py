@@ -3194,6 +3194,14 @@ def test_worker_measure_until_uses_core_terminal_status_mapping(status, expected
     payload = {"result": {"status": status}}
 
     assert worker._core_workflow_result_status("measure-until", payload) == expected
+    assert worker._core_workflow_result_status("segmented-capture", payload) == expected
+
+
+@pytest.mark.parametrize("status", ["partial", "failed"])
+def test_worker_segmented_capture_maps_failure_terminal_status(status):
+    payload = {"result": {"status": status}}
+
+    assert worker._core_workflow_result_status("segmented-capture", payload) == status
 
 
 @pytest.mark.parametrize(

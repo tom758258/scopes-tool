@@ -146,22 +146,24 @@ Validation failures use HTTP `400`, `status: "error"`, the Common
 `POST /stop` does not enter the normal command queue. It sets cooperative stop,
 rejects new commands, cancels queued jobs, and emits `job_finished` for each
 cancelled job. Running jobs
-pass the existing cancellation state into Core workflows. `measure-log` checks
-between completed measurement queries and at completed-row boundaries;
-`measure-until` checks before each query and during relative interval waits;
-`capture-batch`, `capture-until`, and `capture-monitor` check between captures;
-`triggered-measure-loop` and `triggered-capture-series` check during trigger
-polling and interval waits. These workflows use interruptible interval waits.
-They stop before the next iteration and preserve completed artifacts. A
-blocking device read is not forcibly interrupted and may not stop immediately.
+pass the existing cancellation state into Core workflows. `segmented-capture`
+checks before acquisition start, during readiness polling, and between segment
+exports; `measure-log` checks between completed measurement queries and at
+completed-row boundaries; `measure-until` checks before each query and during
+relative interval waits; `capture-batch`, `capture-until`, and
+`capture-monitor` check between captures; `triggered-measure-loop` and
+`triggered-capture-series` check during trigger polling and interval waits.
+These workflows use cooperative cancellation and preserve completed artifacts.
+A blocking device read is not forcibly interrupted and may not stop immediately.
 Finite workflow termination precedence is `instrument_error > completed >
 cancelled`; a stop request observed after the count, duration, or measurement
 condition is complete does not replace the completed Core result. For
-`measure-log`, `measure-until`, `capture-batch`, `capture-until`,
-`capture-monitor`, `triggered-measure-loop`, and `triggered-capture-series`, the
-Worker maps Core `completed` to `succeeded`, Core
+`segmented-capture`, `measure-log`, `measure-until`, `capture-batch`,
+`capture-until`, `capture-monitor`, `triggered-measure-loop`, and
+`triggered-capture-series`, the Worker maps Core `completed` to `succeeded`, Core
 `cancelled` to `cancelled` with exit code 3, and Core `instrument_error` or
-`error` to `failed`. A late Worker stop flag does not replace these
+`error` to `failed`. Segmented Capture also maps Core `partial` and
+`failed` to Worker `failed`. A late Worker stop flag does not replace these
 higher-precedence Core results.
 
 The worker exposes no `/trigger`, `trigger_url`, or `soft-*` endpoints.
@@ -581,11 +583,16 @@ The caller-supplied `output_dir` is the segmented-capture output directory:
 ```
 
 The Core workflow keeps its requirement for a new or empty output
-directory. The domain status `completed` maps to Worker `succeeded`; domain
-`partial` or `failed` maps to Worker `failed` while preserving existing files
-and the domain status in the job's in-memory result. Worker cancellation keeps the existing
-cooperative queued/running semantics. The worker accepts no firmware argument;
-Core uses the detected IDN firmware for waveform segmented command gating.
+directory. The domain status `completed` maps to Worker `succeeded`,
+`cancelled` maps to Worker `cancelled` with exit code 3, and `partial` or
+`failed` maps to Worker `failed`. Cancelled, partial, and failed runs preserve
+existing files and the domain status in the job's in-memory result. Running
+cancellation is cooperative: Segmented Capture checks the worker stop callback
+before acquisition start, during readiness polling, and between segment exports,
+stops an active acquisition best-effort, preserves already written artifacts,
+and finishes with domain status `cancelled`.
+The worker accepts no firmware argument; Core uses the detected IDN firmware
+for waveform segmented command gating.
 
 System and status commands use only these canonical request shapes:
 

@@ -32,6 +32,20 @@ _RESULT_PROGRESS_COMMANDS = frozenset(
 )
 
 
+def _segmented_capture_terminal_status(execution: Mapping[str, Any]) -> str | None:
+    result = execution.get("result")
+    if not isinstance(result, Mapping):
+        return None
+    status = result.get("status")
+    if status == "completed":
+        return "completed"
+    if status == "cancelled":
+        return "cancelled"
+    if status in {"partial", "failed"}:
+        return "failed"
+    return None
+
+
 class JobManagerShuttingDown(RuntimeError):
     """Raised when a job is submitted after shutdown has started."""
 
@@ -283,11 +297,22 @@ class JobManager:
             with job.lock:
                 job.result = public_execution
                 job.artifacts = artifacts
-                if job.cancel_requested:
+                segmented_status = (
+                    _segmented_capture_terminal_status(execution)
+                    if job.command == "segmented-capture"
+                    else None
+                )
+                if segmented_status is not None:
+                    # The Core workflow owns finite-work termination precedence.
+                    # A stop requested after completion must not replace a
+                    # completed result, and a completed error result must not be
+                    # hidden by a late WebUI cancellation flag.
+                    job.status = segmented_status
+                elif job.cancel_requested:
                     job.status = "cancelled"
                 else:
                     job.status = "completed" if exit_code == 0 else "failed"
-                if exit_code != 0 and not job.cancel_requested:
+                if exit_code != 0 and job.status == "failed":
                     job.error = "Core command returned a non-zero exit code."
                 job.finished_at = _timestamp()
         except Exception as exc:

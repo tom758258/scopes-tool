@@ -1095,6 +1095,7 @@ def _execute_trigger_search_serial_segmented_workflow_command(
                 scope,
                 resource,
                 _segmented_capture_request(parameters, output_dir),
+                stop_requested=stop_requested,
             )
         )
     if command == "capture-batch":

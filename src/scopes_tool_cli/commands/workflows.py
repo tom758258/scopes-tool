@@ -910,14 +910,23 @@ def _cmd_smoke(args: argparse.Namespace) -> int:
         return operation_result.exit_code
 
 
-def _cmd_segmented_capture(args: argparse.Namespace) -> int:
+def _cmd_segmented_capture(
+    args: argparse.Namespace,
+    *,
+    stop_requested: StopRequested | None = None,
+) -> int:
     resource = runtime._require_resource(args)
     if resource is None:
         return 2
 
     request = preflight._segmented_capture_request(args)
     with runtime._open_scope(args, resource) as scope:
-        operation_result = run_segmented_capture(scope, resource, request)
+        operation_result = run_segmented_capture(
+            scope,
+            resource,
+            request,
+            stop_requested=stop_requested,
+        )
         if operation_result.idn is not None:
             runtime._json_record_scope(scope, operation_result.idn)
         _apply_operation_result(operation_result)

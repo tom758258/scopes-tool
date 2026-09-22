@@ -88,6 +88,7 @@ from . import preflight, runtime as cli_runtime
 WORKER_SCHEMA_VERSION = 2
 
 _CORE_WORKFLOW_COMMANDS = {
+    "segmented-capture",
     "measure-log",
     "measure-until",
     "capture-batch",

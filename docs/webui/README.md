@@ -194,8 +194,9 @@ The Command workbench exposes:
 - Segmented Capture: a dedicated capture view over `segmented-capture` with channel,
   points, format, and Start capture. It has no editable segment count: Live/Simulate
   reads the configured segment count from Segmented Memory when capture starts and
-  passes that same value to the capture command, while dry-run keeps a planning-only
-  segment input because there is no instrument state.
+  passes that same value to the capture command. That prerequisite read is execution-only
+  and does not replace the Segmented Memory workspace result or cached state. Dry-run
+  instead keeps a planning-only segment input because there is no instrument state.
 - Cursor: a dedicated Cursor editor for explicit Read cursor state
   (`cursor-query`), manual cursor configuration (`cursor-set`), turning
   cursors off (`cursor-off`), and current state readback
@@ -545,8 +546,11 @@ completion. The rolling plot uses global sample index on X; each capture's
 
 Queued jobs can be cancelled immediately. Running jobs accept a cooperative
 cancellation request and remain running until Core execution and session
-cleanup finish; blocking VISA I/O is not forcibly interrupted. When the
-Launcher is closed, it first stops accepting jobs, requests cancellation, and
+cleanup finish; blocking VISA I/O is not forcibly interrupted. Segmented
+Capture keeps the Core terminal result authoritative: a stop request that
+arrives after every requested segment has been exported does not replace
+`completed`, and a Core partial/error result is not relabeled as cancelled.
+When the Launcher is closed, it first stops accepting jobs, requests cancellation, and
 waits for running jobs to finish and close their own sessions before stopping
 Uvicorn. This shutdown has a timeout; if jobs do not finish or a session close
 fails, the Launcher displays **Shutdown incomplete** and remains available so

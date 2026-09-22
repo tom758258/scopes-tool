@@ -84,6 +84,71 @@ def submit(
     return wait_for_job(client, response.json()["job_id"])
 
 
+@pytest.mark.parametrize(
+    ("core_status", "exit_code", "expected_job_status"),
+    [
+        ("completed", 0, "completed"),
+        ("partial", 1, "failed"),
+    ],
+)
+def test_segmented_capture_core_terminal_status_precedes_late_webui_cancel(
+    monkeypatch,
+    tmp_path,
+    core_status,
+    exit_code,
+    expected_job_status,
+) -> None:
+    manager = JobManager()
+    result_ready = threading.Event()
+    release_result = threading.Event()
+
+    def fake_execute(command, **_kwargs):
+        assert command == "segmented-capture"
+        # Model the narrow window where Core has already decided its terminal
+        # result but the JobManager has not committed that result yet.
+        result_ready.set()
+        assert release_result.wait(timeout=2)
+        return {
+            "exit_code": exit_code,
+            "result": {"status": core_status},
+            "artifacts": [],
+        }
+
+    monkeypatch.setattr("scopes_tool_webui.jobs.execute_command", fake_execute)
+    job = manager.submit(
+        {
+            "command": "segmented-capture",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {
+                "channel": 1,
+                "segments": 2,
+                "points": 1000,
+                "format": "byte",
+            },
+            "pc_output_dir": str(tmp_path),
+        }
+    )
+    try:
+        assert result_ready.wait(timeout=2)
+        cancel_result = manager.cancel(job.job_id)
+        assert cancel_result is not None
+        assert cancel_result[0] == "running"
+        release_result.set()
+        assert job.future is not None
+        job.future.result(timeout=2)
+        terminal = manager.get(job.job_id)
+        assert terminal is not None
+        assert terminal.status == expected_job_status
+        if expected_job_status == "failed":
+            assert terminal.error == "Core command returned a non-zero exit code."
+        else:
+            assert terminal.error is None
+    finally:
+        release_result.set()
+        asyncio.run(manager.shutdown())
+
+
 def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> None:
     client = TestClient(app)
 
@@ -2839,6 +2904,7 @@ def _wait_for_manager_job(manager, job_id):
         ("measure-until", "run_measure_until", {"channel": 1, "item": "vpp", "operator": "gt", "threshold": 0.1, "timeout_seconds": 1, "interval_seconds": 0}),
         ("triggered-measure-loop", "run_triggered_measure_loop", {"count": 2, "trigger_timeout_seconds": 1, "channels": (1,), "items": ("vpp",), "pairs": (), "pair_items": (), "interval_seconds": 0}),
         ("triggered-capture-series", "run_triggered_capture_series", {"channels": (1,), "count": 2, "trigger_timeout_seconds": 1, "points": 1000, "format": "byte", "interval_seconds": 0}),
+        ("segmented-capture", "run_segmented_capture", {"channel": 1, "segments": 2, "points": 1000, "format": "byte", "timeout_ms": 30000, "poll_interval_ms": 100}),
     ),
 )
 def test_long_workflows_receive_existing_core_stop_callback(

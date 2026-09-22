@@ -419,6 +419,8 @@ def _core_workflow_result_status(
     if not isinstance(result, dict):
         return None
     status = result.get("status")
+    if command == "segmented-capture" and status in {"partial", "failed"}:
+        return str(status)
     if status in _CORE_WORKFLOW_TERMINAL_STATUSES:
         return str(status)
     return None

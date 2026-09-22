@@ -248,8 +248,8 @@ def test_demo_editor_selected_command_presentation(tmp_path: Path) -> None:
     assert "demoEditor?.rerender();" in app_source
     # DEMO uses the existing command-specific header path, so each selected
     # DEMO command shows its own label/description.
-    assert '["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search"].includes(editorKind)' in app_source
-    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)' in app_source
     assert "demoEditor?.entry?.button" in app_source
     assert '"demo-output": ["demo-query", "demo-output"]' in app_source
     assert '"demo-function": ["demo-query", "demo-function"]' in app_source

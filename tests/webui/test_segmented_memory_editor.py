@@ -72,8 +72,9 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert 'segmented: () => segmentedEditor,' in app
     assert 'id="segmented-editor" class="segmented-editor" hidden' in html
     assert 'elements.segmentedEditor.hidden = editorKind !== "segmented";' in app
-    assert '"segmented-memory": ["segmented-memory"]' in app
+    assert '"segmented-memory": ["segmented-memory"]' not in app
     assert '"segmented-memory", "segmented-capture"' not in app
+    assert app.count('"search", "segmented"].includes(editorKind)') == 2
     assert "segmentedMemorySelected" in app
     assert (
         "catalog?.selected()?.id === \"segmented-memory\""
@@ -102,14 +103,16 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
         "help.segmented-capture.timeout_ms",
         "help.segmented-capture.poll_interval_ms",
         "segmented.editor.stateHelp",
-        "segmented.capture.configuredSegments",
-        "segmented.capture.configuredUnknown",
         "segmented.capture.notReady",
         "segmented.capture.planningSegments",
     ):
         assert f'"{key}"' in english
         assert f'"{key}"' in chinese
     assert "target segment count above" not in english
+    assert "finite segmented capture below" not in english
+    assert "capture reapplies" not in english.lower()
+    assert "下方有限分段擷取" not in chinese
+    assert "共用的目標分段數" not in chinese
     for key in (
         "segmented.editor.title",
         "segmented.editor.targetSegments",
@@ -144,6 +147,8 @@ def test_segmented_editor_removes_standalone_status_indicator() -> None:
     assert "exitButton" not in editor_source
     assert "captureChannelInput" not in editor_source
     assert "captureSegmentsInput" not in editor_source
+    assert "captureConfiguredOutput" not in editor_source
+    assert "captureConfigured" not in editor_source
     assert "this.modeButton" in editor_source
     assert "this.applySegmentsButton" in editor_source
     state_rule = styles.split(".segmented-editor-state {", 1)[1].split("}", 1)[0]
@@ -247,6 +252,7 @@ EDITOR_HARNESS = r'''
         let selection = definition;
         const catalog = {
           activeMode: "simulate",
+          commands: [definition],
           supported: () => supported,
           fieldsFor: (command) => command.fields,
           optionsFor: (field) => field?.options || [],
@@ -255,7 +261,14 @@ EDITOR_HARNESS = r'''
         const responses = [];
         const hooks = {
           executeCommand: async (command, parameters, options) => {
-            submitted.push({ command, parameters, intent: options?.intent });
+            submitted.push({
+              command,
+              parameters,
+              intent: options?.intent,
+              ...(options?.captureWorkspaceResult === false
+                ? { captureWorkspaceResult: false }
+                : {}),
+            });
             return responses.shift();
           },
           headerActions: new FakeNode(),
@@ -563,8 +576,10 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         assert.equal(editor.countRow.hidden, true);
         assert.equal(editor.segmentBrowser.hidden, true);
         assert.equal(editor.planningRow.hidden, true);
-        assert.equal(editor.captureConfiguredOutput.textContent, "segmented.capture.configuredUnknown");
+        assert.equal("captureConfiguredOutput" in editor, false);
         assert.equal(editor.captureNote.hidden, true);
+        assert.equal(editor.countInput.max, "250");
+        assert.equal(editor.planningSegmentsInput.max, "5000");
         assert.equal(editor.captureChannelSelect.tagName, "SELECT");
         assert.deepEqual(
           editor.captureChannelSelect.children.map((option) => option.value),
@@ -613,7 +628,12 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         // Start first queries segmented-memory, then passes that same
         // configured count to the existing segmented-capture command.
         assert.deepEqual(submitted, [
-          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+          {
+            command: "segmented-memory",
+            parameters: { action: "query" },
+            intent: "readback",
+            captureWorkspaceResult: false,
+          },
           {
             command: "segmented-capture",
             parameters: { channel: 2, segments: 100, points: 5000, format: "word" },
@@ -625,9 +645,7 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         assert.equal(typeof submittedCapture.parameters.segments, "number");
         assert.equal("timeout_ms" in submittedCapture.parameters, false);
         assert.equal("poll_interval_ms" in submittedCapture.parameters, false);
-        assert.equal(editor.captureConfiguredOutput.textContent, "100");
-        // Minimal invalidation: the cached memory state is dropped instead of
-        // being fabricated from the capture result.
+        // Capture never adopts prerequisite/capture results as Memory state.
         assert.equal(editor.state, null);
         assert.equal(editor.captureNote.hidden, true);
 
@@ -642,21 +660,50 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         editor.captureButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted, [
-          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+          {
+            command: "segmented-memory",
+            parameters: { action: "query" },
+            intent: "readback",
+            captureWorkspaceResult: false,
+          },
         ]);
         assert.equal(editor.captureBlocked, true);
         assert.equal(editor.captureNote.hidden, false);
         assert.equal(editor.captureNote.textContent, "segmented.capture.notReady");
-        assert.equal(editor.captureConfiguredOutput.textContent, "segmented.capture.configuredUnknown");
+        assert.equal(editor.state, null);
 
-        // A failed memory query blocks capture the same way.
+        // Visiting Memory clears stale Capture guidance without performing I/O.
+        selection = definition;
+        editor.present();
+        await settle();
+        assert.equal(editor.captureBlocked, false);
+        assert.equal(editor.captureNote.hidden, true);
+
+        // A failed prerequisite query does not pretend Memory is misconfigured.
+        selection = captureDefinition;
+        editor.present();
+        editor.state = {
+          mode: "segmented",
+          configured_segments: 25,
+          acquired_segments: 25,
+          selected_segment: 1,
+          time_tag_s: 0,
+        };
         submitted.length = 0;
         responses.push({ status: "failed", error: "boom" });
         editor.captureButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted, [
-          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+          {
+            command: "segmented-memory",
+            parameters: { action: "query" },
+            intent: "readback",
+            captureWorkspaceResult: false,
+          },
         ]);
+        assert.equal(editor.state, null);
+        assert.equal(editor.captureBlocked, false);
+        assert.equal(editor.captureNote.hidden, true);
 
         editor.setBusy(true);
         assert.equal(editor.captureButton.disabled, true);
@@ -742,6 +789,7 @@ def test_segmented_capture_dry_run_uses_planning_input() -> None:
         assert.equal(editor.isDryRun(), true);
         assert.equal(editor.captureSection.hidden, false);
         assert.equal(editor.planningRow.hidden, false);
+        assert.equal("captureConfiguredOutput" in editor, false);
         assert.equal(editor.planningSegmentsInput.min, "2");
 
         editor.captureChannelSelect.value = "1";

@@ -77,10 +77,11 @@ These fields are adapter behavior, not Core schema. Core receives normalized
 requests and returns runtime data; the CLI decides how to render human text,
 JSON stdout, stderr logs, and exit codes.
 
-`measure-log`, `measure-until`, `capture-batch`, `capture-until`,
-`capture-monitor`, `triggered-measure-loop`, and `triggered-capture-series`
-execution is Core-owned. Their CLI adapters normalize arguments into the
-corresponding Core request, including `CaptureUntilRequest` and
+`segmented-capture`, `measure-log`, `measure-until`, `capture-batch`,
+`capture-until`, `capture-monitor`, `triggered-measure-loop`, and
+`triggered-capture-series` execution is Core-owned. Their CLI adapters
+normalize arguments into the corresponding Core request, including
+`CaptureUntilRequest` and
 `CaptureMonitorRequest`, open
 the selected run-mode session, invoke the Core operation, and render its
 `OperationResult`. Internal JSON dispatch accepts an optional cancellation

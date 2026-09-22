@@ -222,8 +222,8 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
     assert "wgenEditor?.rerender();" in app_source
     # WGEN uses the existing command-specific header path, so each selected
     # WGEN command shows its own label/description.
-    assert '["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search"].includes(editorKind)' in app_source
-    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)' in app_source
+    assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)' in app_source
     assert 'id="wgen-editor"' in index_source
     for key in (
         '"command.wgen-query": "Waveform generator state"',

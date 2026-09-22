@@ -776,6 +776,119 @@ def test_run_segmented_capture_keeps_csv_file_when_manifest_update_fails(
     assert result.result["vertical_unit"] == "A"
 
 
+def test_run_segmented_capture_cancels_before_single_when_stop_arrives_during_setup(
+    tmp_path,
+):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        resource_name="SIM::keysight-dsox4024a::INSTR",
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=lambda: ":ACQuire:SEGMented:COUNt 2" in backend.history,
+        )
+
+    assert result.exit_code == 130
+    assert result.result["status"] == "cancelled"
+    assert ":ACQuire:MODE SEGMented" in backend.history
+    assert ":ACQuire:SEGMented:COUNt 2" in backend.history
+    assert ":SINGle" not in backend.history
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "cancelled"
+    assert manifest["error"] is None
+
+
+def test_run_segmented_capture_completion_precedes_late_cancellation(tmp_path):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        resource_name="SIM::keysight-dsox4024a::INSTR",
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=lambda: backend.history.count(":WAVeform:DATA?") >= 2,
+        )
+
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["exported_segments"] == 2
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "completed"
+    assert manifest["exported_segments"] == 2
+
+
+def test_run_segmented_capture_cooperative_cancel_stops_active_acquisition(tmp_path):
+    backend = _AcquiredCountSequenceBackend(
+        [],
+        operation_conditions=[
+            OPERATION_CONDITION_RUN_MASK | OPERATION_CONDITION_RUI_ENAB_MASK,
+        ],
+    )
+    def stop_requested():
+        return ":SINGle" in backend.history
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=stop_requested,
+        )
+
+    assert result.exit_code == 130
+    assert result.result["status"] == "cancelled"
+    assert result.result["error"] is None
+    assert result.result["exported_segments"] == 0
+    assert ":SINGle" in backend.history
+    assert ":STOP" in backend.history
+    assert backend.history.index(":STOP") > backend.history.index(":SINGle")
+    assert not list(tmp_path.glob("segment_*.csv"))
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "cancelled"
+    assert manifest["error"] is None
+
+
+def test_run_segmented_capture_cancel_between_exports_preserves_completed_segment(tmp_path):
+    backend = _AcquiredCountSequenceBackend(
+        [2],
+        operation_conditions=[
+            OPERATION_CONDITION_RUI_ENAB_MASK,
+            OPERATION_CONDITION_RUI_ENAB_MASK,
+        ],
+    )
+
+    def stop_requested():
+        return (
+            ":ACQuire:SEGMented:INDex 1" in backend.history
+            and ":ACQuire:SEGMented:INDex 2" not in backend.history
+        )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=stop_requested,
+        )
+
+    assert result.exit_code == 130
+    assert result.result["status"] == "cancelled"
+    assert result.result["exported_segments"] == 1
+    assert (tmp_path / "segment_0001.csv").exists()
+    assert not (tmp_path / "segment_0002.csv").exists()
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "cancelled"
+    assert manifest["exported_segments"] == 1
+    assert [entry["index"] for entry in manifest["segments"]] == [1]
+
+
 def test_run_segmented_capture_malformed_count_returns_failed_manifest(tmp_path):
     backend = _AcquiredCountSequenceBackend(["not-a-count"])
     with Oscilloscope(backend) as scope:
