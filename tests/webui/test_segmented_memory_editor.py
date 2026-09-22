@@ -82,6 +82,14 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert '"segmented.editor.exit": "Exit Segmented"' in english
     assert '"segmented.editor.applySegments": "Apply segment count"' in english
     assert '"segmented.editor.applySegments": "套用分段數"' in chinese
+    assert '"segmented.editor.targetSegments": "Target segments"' in english
+    assert '"segmented.editor.targetSegments": "目標分段數"' in chinese
+    assert '"segmented.editor.captureTitle": "Start segmented capture"' in english
+    assert '"segmented.editor.captureTitle": "開始分段擷取"' in chinese
+    assert '"segmented.editor.capture": "Start capture"' in english
+    assert '"segmented.editor.capture": "開始擷取"' in chinese
+    assert "does not download previously acquired segments" in english
+    assert "不是下載先前已擷取的分段" in chinese
     assert "segmented.editor.applyEnter" not in english
     assert "segmented.editor.applyEnter" not in chinese
     assert "applyEnter" not in editor_source
@@ -98,6 +106,10 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
         assert f'"{key}"' in chinese
     for key in (
         "segmented.editor.title",
+        "segmented.editor.targetSegments",
+        "segmented.editor.captureTitle",
+        "segmented.editor.captureDescription",
+        "segmented.editor.capture",
         "segmented.editor.mode",
         "segmented.editor.configuredSegments",
         "segmented.editor.acquiredSegments",
@@ -125,6 +137,7 @@ def test_segmented_editor_removes_standalone_status_indicator() -> None:
     assert "enterButton" not in editor_source
     assert "exitButton" not in editor_source
     assert "captureChannelInput" not in editor_source
+    assert "captureSegmentsInput" not in editor_source
     assert "this.modeButton" in editor_source
     assert "this.applySegmentsButton" in editor_source
     state_rule = styles.split(".segmented-editor-state {", 1)[1].split("}", 1)[0]
@@ -539,7 +552,8 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
           ["1", "2", "3", "4"],
         );
         assert.equal(editor.captureChannelSelect.value, "1");
-        assert.equal(editor.captureSegmentsInput.value, "2");
+        assert.equal(editor.countInput.value, "2");
+        assert.equal(editor.countInput.parentNode.children[0].textContent, "segmented.editor.targetSegments");
         assert.equal(editor.capturePointsSelect.value, "1000");
         assert.equal(editor.captureFormatSelect.value, "byte");
         assert.equal(editor.segmentBrowser.hidden, true);
@@ -552,8 +566,8 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
             && editor.captureButton.parentNode.parentNode === editor.captureSection,
         }, {
           classes: ["command-form", "segmented-editor-capture-form"],
-          fieldCount: 4,
-          helpClasses: ["field-help", "field-help", "field-help", "field-help"],
+          fieldCount: 3,
+          helpClasses: ["field-help", "field-help", "field-help"],
           buttonOutsideGrid: true,
           buttonInActionRow: true,
         });
@@ -576,13 +590,22 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
 
         const countBeforeInput = submitted.length;
         editor.captureChannelSelect.value = "2";
-        editor.captureSegmentsInput.value = "5";
+        editor.countInput.value = "5";
+        editor.countInput.dispatch("input");
         editor.capturePointsSelect.value = "5000";
         editor.captureFormatSelect.value = "word";
         await settle();
         assert.equal(submitted.length, countBeforeInput);
 
-        responses.push({ status: "completed", result: { result: {} } });
+        responses.push({
+          status: "completed",
+          result: { result: {
+            operation: "segmented-capture",
+            final_mode: "segmented",
+            configured_segments: 5,
+            acquired_segments: 5,
+          } },
+        });
         editor.captureButton.dispatch("click");
         await settle();
         const submittedCapture = submitted.at(-1);
@@ -594,14 +617,21 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         assert.equal(typeof submittedCapture.parameters.channel, "number");
         assert.equal("timeout_ms" in submittedCapture.parameters, false);
         assert.equal("poll_interval_ms" in submittedCapture.parameters, false);
+        assert.equal(editor.modeOutput.output.textContent, "Segmented");
+        assert.equal(editor.configuredRow.output.textContent, "5");
+        assert.equal(editor.acquiredRow.output.textContent, "5");
+        assert.equal(editor.countInput.value, "5");
+        assert.equal(editor.segmentBrowser.hidden, true);
 
         const countBeforeOverflow = submitted.length;
-        editor.captureSegmentsInput.value = "9999";
+        editor.countInput.value = "999";
+        editor.countInput.dispatch("input");
         editor.captureButton.dispatch("click");
         await settle();
         assert.equal(submitted.length, countBeforeOverflow);
-        assert.equal(editor.captureSegmentsInput.reported, true);
-        editor.captureSegmentsInput.value = "5";
+        assert.equal(editor.countInput.reported, true);
+        editor.countInput.value = "5";
+        editor.countInput.dispatch("input");
 
         editor.setBusy(true);
         assert.equal(editor.captureButton.disabled, true);
@@ -613,7 +643,7 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         editor.rerender();
         await settle();
         assert.equal(editor.captureChannelSelect.value, "2");
-        assert.equal(editor.captureSegmentsInput.value, "5");
+        assert.equal(editor.countInput.value, "5");
         assert.equal(editor.capturePointsSelect.value, "5000");
         assert.equal(editor.captureFormatSelect.value, "word");
         assert.equal(submitted.length, countBeforeRerender);
@@ -621,12 +651,12 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         editor.schedulePresentation();
         await settle();
         assert.equal(editor.captureChannelSelect.value, "2");
-        assert.equal(editor.captureSegmentsInput.value, "5");
+        assert.equal(editor.countInput.value, "5");
         assert.equal(editor.capturePointsSelect.value, "5000");
         assert.equal(editor.captureFormatSelect.value, "word");
 
         captureDefinition.fields.find((field) => field.name === "channel").maximum = 2;
-        captureDefinition.fields.find((field) => field.name === "segments").maximum = 1000;
+        definition.fields.find((field) => field.name === "segments").maximum = 1000;
         contextKey = "simulate||keysight-dsox3024a";
         const countBeforeContextRerender = submitted.length;
         editor.schedulePresentation();
@@ -636,7 +666,8 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
           editor.captureChannelSelect.children.map((option) => option.value),
           ["1", "2"],
         );
-        assert.equal(editor.captureSegmentsInput.max, "1000");
+        assert.equal(editor.countInput.max, "1000");
+        assert.equal(editor.countInput.value, "2");
         assert.equal(editor.captureChannelSelect.value, "1");
         assert.equal(submitted.length, countBeforeContextRerender);
         ''',

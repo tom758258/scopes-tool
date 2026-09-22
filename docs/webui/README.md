@@ -189,8 +189,10 @@ The Command workbench exposes:
   workspace (decoded-bus display, reference, and host-side export) — over the existing
   hidden Serial building-block commands
 - Segmented Memory: a dedicated state view for explicit Read current state, Enter, Exit,
-  segment selection, and current Time Tag readback over `segmented-memory`,
-  plus `segmented-capture`
+  segment selection, and current Time Tag readback over `segmented-memory`, plus a
+  finite `segmented-capture` action. The workspace exposes one shared target segment
+  count: Enter/Apply uses it for Segmented mode, while capture reapplies it before
+  starting a new acquisition and retrieving host-side waveform data.
 - Cursor: a dedicated Cursor editor for explicit Read cursor state
   (`cursor-query`), manual cursor configuration (`cursor-set`), turning
   cursors off (`cursor-off`), and current state readback

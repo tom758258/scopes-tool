@@ -76,7 +76,7 @@ export class SegmentedEditor {
     const countField = document.createElement("label");
     countField.className = "field segmented-editor-count";
     const countLabel = document.createElement("span");
-    countLabel.textContent = translate("field.segments");
+    countLabel.textContent = translate("segmented.editor.targetSegments");
     this.countInput = document.createElement("input");
     this.countInput.type = "number";
     this.countInput.step = "1";
@@ -147,7 +147,7 @@ export class SegmentedEditor {
     this.captureSection = document.createElement("section");
     this.captureSection.className = "segmented-editor-browser";
     const captureHeading = document.createElement("strong");
-    captureHeading.textContent = translate("command.segmented-capture");
+    captureHeading.textContent = translate("segmented.editor.captureTitle");
     this.captureForm = document.createElement("div");
     this.captureForm.className = "command-form segmented-editor-capture-form";
     const captureDefinition = this.captureDefinition();
@@ -161,19 +161,6 @@ export class SegmentedEditor {
     this.appendFieldHelp(
       captureChannelField,
       this.fieldDefinition(captureDefinition, "channel"),
-    );
-    const captureSegmentsField = document.createElement("label");
-    captureSegmentsField.className = "field";
-    const captureSegmentsLabel = document.createElement("span");
-    captureSegmentsLabel.textContent = translate("field.segments");
-    this.captureSegmentsInput = document.createElement("input");
-    this.captureSegmentsInput.type = "number";
-    this.captureSegmentsInput.step = "1";
-    this.captureSegmentsInput.required = true;
-    captureSegmentsField.append(captureSegmentsLabel, this.captureSegmentsInput);
-    this.appendFieldHelp(
-      captureSegmentsField,
-      this.fieldDefinition(captureDefinition, "segments"),
     );
     const capturePointsField = document.createElement("label");
     capturePointsField.className = "field";
@@ -200,10 +187,10 @@ export class SegmentedEditor {
     this.captureButton = document.createElement("button");
     this.captureButton.type = "button";
     this.captureButton.className = "primary";
-    this.captureButton.textContent = translate("actions.capture");
+    this.captureButton.textContent = translate("segmented.editor.capture");
     this.captureButton.addEventListener("click", () => void this.capture());
     this.captureSection.append(captureHeading);
-    const captureDescription = this.catalog.description?.(this.captureDefinition());
+    const captureDescription = translate("segmented.editor.captureDescription");
     if (captureDescription) {
       const note = document.createElement("p");
       note.className = "muted compact-note";
@@ -212,7 +199,6 @@ export class SegmentedEditor {
     }
     this.captureForm.append(
       captureChannelField,
-      captureSegmentsField,
       capturePointsField,
       captureFormatField,
     );
@@ -312,7 +298,6 @@ export class SegmentedEditor {
     const fields = definition ? this.catalog.fieldsFor(definition) : [];
     const fieldByName = (name) => fields.find((field) => field.name === name);
     const channelField = fieldByName("channel");
-    const segmentsField = fieldByName("segments");
     const pointsField = fieldByName("points");
     const formatField = fieldByName("format");
     const channels = this.captureChannels();
@@ -328,18 +313,6 @@ export class SegmentedEditor {
     } else {
       const initial = channelField?.default ?? channels[0] ?? "";
       this.captureChannelSelect.value = initial === "" ? "" : String(initial);
-    }
-    if (segmentsField) {
-      if (segmentsField.minimum !== undefined) {
-        this.captureSegmentsInput.min = String(segmentsField.minimum);
-      }
-      if (segmentsField.maximum !== undefined) {
-        this.captureSegmentsInput.max = String(segmentsField.maximum);
-      }
-      if (contextChanged || !this.captureSegmentsInput.value) {
-        const initial = segmentsField.default ?? segmentsField.minimum ?? "";
-        this.captureSegmentsInput.value = initial === "" ? "" : String(initial);
-      }
     }
     if (pointsField) {
       const options = (pointsField.options || []).map(String);
@@ -395,7 +368,6 @@ export class SegmentedEditor {
     const countValue = this.countInput?.value || "";
     const segmentValue = this.segmentInput?.value || "";
     const captureChannel = this.captureChannelSelect?.value || "";
-    const captureSegments = this.captureSegmentsInput?.value || "";
     const capturePoints = this.capturePointsSelect?.value || "";
     const captureFormat = this.captureFormatSelect?.value || "";
     const contextKey = this.contextKey;
@@ -412,10 +384,6 @@ export class SegmentedEditor {
       if (this.captureSupported()) {
         if (captureChannel !== "") {
           this.captureChannelSelect.value = captureChannel;
-          restored = true;
-        }
-        if (captureSegments !== "") {
-          this.captureSegmentsInput.value = captureSegments;
           restored = true;
         }
         if (capturePoints !== "") {
@@ -518,21 +486,21 @@ export class SegmentedEditor {
     return this.captureSupported()
       && this.canExecute()
       && this.captureChannelSelect?.value !== ""
-      && this.captureSegmentsInput?.value !== ""
+      && this.countInput?.value !== ""
       && this.capturePointsSelect?.value !== ""
       && this.captureFormatSelect?.value !== ""
       && this.captureChannelSelect?.checkValidity()
-      && this.captureSegmentsInput?.checkValidity();
+      && this.countInput?.checkValidity();
   }
 
   async capture() {
     if (!this.canCapture()) {
       this.captureChannelSelect?.reportValidity?.();
-      this.captureSegmentsInput?.reportValidity?.();
+      this.countInput?.reportValidity?.();
       return;
     }
     const channel = Number(this.captureChannelSelect.value);
-    const segments = Number(this.captureSegmentsInput.value);
+    const segments = Number(this.countInput.value);
     const points = Number(this.capturePointsSelect.value);
     const format = String(this.captureFormatSelect.value).toLowerCase();
     if (!Number.isInteger(channel) || !Number.isInteger(segments) || !Number.isInteger(points)) {
@@ -540,11 +508,26 @@ export class SegmentedEditor {
     }
     this.setBusy(true);
     try {
-      await this.hooks.executeCommand(
+      const job = await this.hooks.executeCommand(
         "segmented-capture",
         { channel, segments, points, format },
         { intent: "command" },
       );
+      const result = job?.status === "completed" ? job?.result?.result : null;
+      if (result?.operation === "segmented-capture") {
+        this.state = {
+          mode: result.final_mode,
+          configured_segments: result.configured_segments,
+          acquired_segments: result.acquired_segments,
+          selected_segment: null,
+          time_tag_s: null,
+        };
+        this.dirty = false;
+        if (Number.isInteger(result.configured_segments)) {
+          this.countInput.value = String(result.configured_segments);
+        }
+        this.renderState();
+      }
     } finally {
       this.setBusy(false);
     }
@@ -704,7 +687,6 @@ export class SegmentedEditor {
       || !this.segmentInput.checkValidity();
     const captureDisabled = disabled || !this.captureSupported();
     this.captureChannelSelect.disabled = captureDisabled;
-    this.captureSegmentsInput.disabled = captureDisabled;
     this.capturePointsSelect.disabled = captureDisabled;
     this.captureFormatSelect.disabled = captureDisabled;
     this.captureButton.disabled = !this.canCapture();
