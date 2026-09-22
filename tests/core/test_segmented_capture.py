@@ -776,6 +776,41 @@ def test_run_segmented_capture_keeps_csv_file_when_manifest_update_fails(
     assert result.result["vertical_unit"] == "A"
 
 
+def test_run_segmented_capture_cooperative_cancel_stops_active_acquisition(tmp_path):
+    backend = _AcquiredCountSequenceBackend(
+        [],
+        operation_conditions=[
+            OPERATION_CONDITION_RUN_MASK | OPERATION_CONDITION_RUI_ENAB_MASK,
+        ],
+    )
+    stop_checks = 0
+
+    def stop_requested():
+        nonlocal stop_checks
+        stop_checks += 1
+        return stop_checks >= 4
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=stop_requested,
+        )
+
+    assert result.exit_code == 130
+    assert result.result["status"] == "cancelled"
+    assert result.result["error"] is None
+    assert result.result["exported_segments"] == 0
+    assert ":SINGle" in backend.history
+    assert ":STOP" in backend.history
+    assert backend.history.index(":STOP") > backend.history.index(":SINGle")
+    assert not list(tmp_path.glob("segment_*.csv"))
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "cancelled"
+    assert manifest["error"] is None
+
+
 def test_run_segmented_capture_malformed_count_returns_failed_manifest(tmp_path):
     backend = _AcquiredCountSequenceBackend(["not-a-count"])
     with Oscilloscope(backend) as scope:
