@@ -616,6 +616,7 @@ def run_segmented_capture(
                 scope.scpi.write(segmented_mode_command("segmented"))
                 scope.scpi.write(segmented_count_command(request.segments))
                 manifest["configured_segments"] = request.segments
+                raise_if_cancelled()
                 scope.single()
                 acquisition_started = True
 
@@ -783,7 +784,9 @@ def run_segmented_capture(
                     manifest["exported_segments"] = exported_segments
                     _write_manifest(manifest, manifest_path)
 
-                raise_if_cancelled()
+                # Once every requested segment has been exported, completion
+                # takes precedence over a late cancellation request. Final state
+                # and system-error verification still run before success.
                 final_mode, system_error = _best_effort_final_state(scope, guarded_read)
                 manifest["final_mode"] = final_mode
                 manifest["system_error"] = system_error
