@@ -74,7 +74,7 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert 'elements.segmentedEditor.hidden = editorKind !== "segmented";' in app
     assert '"segmented-memory": ["segmented-memory"]' not in app
     assert '"segmented-memory", "segmented-capture"' not in app
-    assert '"search", "segmented"].includes(editorKind)' in app
+    assert app.count('"search", "segmented"].includes(editorKind)') == 2
     assert "segmentedMemorySelected" in app
     assert (
         "catalog?.selected()?.id === \"segmented-memory\""
