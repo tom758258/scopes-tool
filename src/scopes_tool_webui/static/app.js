@@ -960,7 +960,7 @@ function renderWorkspace() {
     "serial-decode": ["serial-mode", "serial-display", "serial-uart", "serial-i2c", "serial-spi", "serial-can"],
     "serial-trigger": ["serial-mode", "serial-trigger-uart", "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"],
     "serial-lister": ["serial-lister-query", "serial-lister-display", "serial-lister-reference", "serial-lister-export"],
-    "segmented-memory": ["segmented-memory", "segmented-capture"],
+    "segmented-memory": ["segmented-memory"],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
@@ -1251,8 +1251,9 @@ function syncWorkspaceHeaderActions(editorKind) {
   if (searchEditor?.entry?.button) {
     searchEditor.entry.button.hidden = editorKind !== "search";
   }
-  if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = editorKind !== "segmented";
-  if (segmentedEditor?.modeButton && editorKind !== "segmented") {
+  const segmentedMemorySelected = editorKind === "segmented" && catalog?.selected()?.id === "segmented-memory";
+  if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = !segmentedMemorySelected;
+  if (segmentedEditor?.modeButton && !segmentedMemorySelected) {
     segmentedEditor.modeButton.hidden = true;
   }
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";

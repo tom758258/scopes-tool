@@ -23,6 +23,8 @@ export class SegmentedEditor {
     this.contextKey = null;
     this.dirty = false;
     this.state = null;
+    this.captureConfigured = null;
+    this.captureBlocked = false;
     this.buildDom();
   }
 
@@ -35,6 +37,7 @@ export class SegmentedEditor {
     head.className = "segmented-editor-head";
     const heading = document.createElement("strong");
     heading.textContent = translate("command.segmented-memory");
+    this.heading = heading;
     head.append(heading);
 
     this.refreshButton = document.createElement("button");
@@ -197,6 +200,35 @@ export class SegmentedEditor {
       note.textContent = captureDescription;
       this.captureSection.append(note);
     }
+    const captureConfiguredList = document.createElement("dl");
+    captureConfiguredList.className = "segmented-editor-browser-readout";
+    const captureConfiguredLabel = document.createElement("dt");
+    captureConfiguredLabel.textContent = translate("segmented.capture.configuredSegments");
+    this.captureConfiguredOutput = document.createElement("dd");
+    captureConfiguredList.append(captureConfiguredLabel, this.captureConfiguredOutput);
+    this.captureSection.append(captureConfiguredList);
+    this.captureNote = document.createElement("p");
+    this.captureNote.className = "muted compact-note";
+    this.captureNote.hidden = true;
+    this.captureSection.append(this.captureNote);
+    const planningRow = document.createElement("div");
+    planningRow.className = "segmented-editor-actions segmented-editor-count-row";
+    this.planningRow = planningRow;
+    const planningField = document.createElement("label");
+    planningField.className = "field segmented-editor-count";
+    const planningLabel = document.createElement("span");
+    planningLabel.textContent = translate("segmented.capture.planningSegments");
+    this.planningSegmentsInput = document.createElement("input");
+    this.planningSegmentsInput.type = "number";
+    this.planningSegmentsInput.step = "1";
+    this.planningSegmentsInput.required = true;
+    planningField.append(planningLabel, this.planningSegmentsInput);
+    planningRow.append(planningField);
+    this.appendFieldHelp(
+      planningRow,
+      this.fieldDefinition(this.captureDefinition(), "segments"),
+    );
+    this.captureSection.append(planningRow);
     this.captureForm.append(
       captureChannelField,
       capturePointsField,
@@ -269,6 +301,16 @@ export class SegmentedEditor {
   captureSupported() {
     const definition = this.captureDefinition();
     return Boolean(definition) && this.catalog.supported(definition);
+  }
+
+  selectedView() {
+    const selected = this.hooks.selectedCommand?.();
+    if (selected?.editor !== "segmented") return null;
+    return selected.id === "segmented-capture" ? "capture" : "memory";
+  }
+
+  isDryRun() {
+    return this.catalog?.activeMode === "dry-run";
   }
 
   captureChannels() {
@@ -358,6 +400,9 @@ export class SegmentedEditor {
     if (!this.countInput.value && segmentField?.minimum !== undefined) {
       this.countInput.value = String(segmentField.minimum);
     }
+    const captureSegmentsField = this.fieldDefinition(this.captureDefinition(), "segments");
+    this.planningSegmentsInput.min = String(captureSegmentsField?.minimum ?? "");
+    this.planningSegmentsInput.max = String(captureSegmentsField?.maximum ?? "");
   }
 
   schedulePresentation() {
@@ -370,9 +415,11 @@ export class SegmentedEditor {
     const captureChannel = this.captureChannelSelect?.value || "";
     const capturePoints = this.capturePointsSelect?.value || "";
     const captureFormat = this.captureFormatSelect?.value || "";
+    const planningValue = this.planningSegmentsInput?.value || "";
     const contextKey = this.contextKey;
     this.buildDom();
     if (countValue !== "") this.countInput.value = countValue;
+    if (planningValue !== "") this.planningSegmentsInput.value = planningValue;
     this.present();
     queueMicrotask(() => {
       if (contextKey !== this.contextKey) return;
@@ -407,6 +454,9 @@ export class SegmentedEditor {
       this.state = null;
       this.dirty = false;
       this.countInput.value = "";
+      this.captureConfigured = null;
+      this.captureBlocked = false;
+      this.planningSegmentsInput.value = "";
     }
     this.applyDefinition();
     this.applyCaptureDefinition(contextChanged);
@@ -415,7 +465,7 @@ export class SegmentedEditor {
   }
 
   async refresh() {
-    if (!this.canExecute()) return;
+    if (this.selectedView() !== "memory" || !this.canExecute()) return;
     const submittedContextKey = this.contextKey;
     this.setBusy(true);
     try {
@@ -431,7 +481,7 @@ export class SegmentedEditor {
   }
 
   async toggleMode() {
-    if (!this.canExecute()) return;
+    if (this.selectedView() !== "memory" || !this.canExecute()) return;
     if (this.state?.mode === "segmented") {
       await this.exit();
     } else if (this.state?.mode === "realtime") {
@@ -440,7 +490,7 @@ export class SegmentedEditor {
   }
 
   async enter() {
-    if (!this.canExecute()) return;
+    if (this.selectedView() !== "memory" || !this.canExecute()) return;
     if (!this.countInput.checkValidity()) {
       this.countInput.reportValidity();
       return;
@@ -467,7 +517,7 @@ export class SegmentedEditor {
   }
 
   async exit() {
-    if (!this.canExecute()) return;
+    if (this.selectedView() !== "memory" || !this.canExecute()) return;
     const submittedContextKey = this.contextKey;
     this.setBusy(true);
     try {
@@ -483,51 +533,96 @@ export class SegmentedEditor {
   }
 
   canCapture() {
-    return this.captureSupported()
-      && this.canExecute()
-      && this.captureChannelSelect?.value !== ""
-      && this.countInput?.value !== ""
+    if (this.selectedView() !== "capture") return false;
+    if (!this.captureSupported() || !this.canExecute()) return false;
+    if (this.isDryRun()) {
+      return this.captureChannelSelect?.value !== ""
+        && this.capturePointsSelect?.value !== ""
+        && this.captureFormatSelect?.value !== ""
+        && this.planningSegmentsInput?.value !== ""
+        && this.captureChannelSelect?.checkValidity()
+        && this.planningSegmentsInput?.checkValidity();
+    }
+    return this.captureChannelSelect?.value !== ""
       && this.capturePointsSelect?.value !== ""
       && this.captureFormatSelect?.value !== ""
-      && this.captureChannelSelect?.checkValidity()
-      && this.countInput?.checkValidity();
+      && this.captureChannelSelect?.checkValidity();
+  }
+
+  planningSegments() {
+    const segments = Number(this.planningSegmentsInput.value);
+    return Number.isInteger(segments) ? segments : null;
   }
 
   async capture() {
+    if (this.selectedView() !== "capture" || !this.canExecute()) return;
     if (!this.canCapture()) {
       this.captureChannelSelect?.reportValidity?.();
-      this.countInput?.reportValidity?.();
+      if (this.isDryRun()) this.planningSegmentsInput?.reportValidity?.();
       return;
     }
     const channel = Number(this.captureChannelSelect.value);
-    const segments = Number(this.countInput.value);
     const points = Number(this.capturePointsSelect.value);
     const format = String(this.captureFormatSelect.value).toLowerCase();
-    if (!Number.isInteger(channel) || !Number.isInteger(segments) || !Number.isInteger(points)) {
+    if (!Number.isInteger(channel) || !Number.isInteger(points)) {
+      return;
+    }
+    if (this.isDryRun()) {
+      // Dry-run has no instrument state: never query segmented-memory here.
+      // The planning-only segment count feeds the existing dry-run capture
+      // contract directly.
+      const segments = this.planningSegments();
+      if (segments === null) {
+        this.planningSegmentsInput?.reportValidity?.();
+        return;
+      }
+      this.setBusy(true);
+      try {
+        await this.hooks.executeCommand(
+          "segmented-capture",
+          { channel, segments, points, format },
+          { intent: "command" },
+        );
+      } finally {
+        this.setBusy(false);
+      }
       return;
     }
     this.setBusy(true);
     try {
-      const job = await this.hooks.executeCommand(
+      // The Start-time segmented-memory query is the single execution source:
+      // update the readonly display first, then pass the same configured
+      // count to the existing segmented-capture command. Never guess a value.
+      const submittedContextKey = this.contextKey;
+      const queryJob = await this.hooks.executeCommand(
+        "segmented-memory",
+        { action: "query" },
+        { intent: "readback" },
+      );
+      if (submittedContextKey !== this.hooks.contextKey()) return;
+      const memoryState = queryJob?.status === "completed" ? segmentedState(queryJob) : null;
+      const configured = memoryState?.configured_segments;
+      if (memoryState?.mode !== "segmented" || !Number.isInteger(configured)) {
+        this.captureConfigured = null;
+        this.captureBlocked = true;
+        this.renderState();
+        return;
+      }
+      this.state = memoryState;
+      this.captureConfigured = configured;
+      this.captureBlocked = false;
+      this.captureNote.hidden = true;
+      this.renderState();
+      await this.hooks.executeCommand(
         "segmented-capture",
-        { channel, segments, points, format },
+        { channel, segments: configured, points, format },
         { intent: "command" },
       );
-      const result = job?.status === "completed" ? job?.result?.result : null;
-      if (result?.operation === "segmented-capture") {
-        this.state = {
-          mode: result.final_mode,
-          configured_segments: result.configured_segments,
-          acquired_segments: result.acquired_segments,
-          selected_segment: null,
-          time_tag_s: null,
-        };
-        this.dirty = false;
-        if (Number.isInteger(result.configured_segments)) {
-          this.countInput.value = String(result.configured_segments);
-        }
-        this.renderState();
-      }
+      // Minimal invalidation: drop the cached memory state after capture so a
+      // possibly stale acquired count is never shown; the next explicit Read
+      // refreshes it. Never fabricate memory state from the capture result.
+      this.state = null;
+      this.renderState();
     } finally {
       this.setBusy(false);
     }
@@ -551,7 +646,7 @@ export class SegmentedEditor {
   }
 
   async selectIndex() {
-    if (!this.browserAvailable() || !this.canExecute()) return;
+    if (this.selectedView() !== "memory" || !this.browserAvailable() || !this.canExecute()) return;
     if (!this.segmentInput.checkValidity()) {
       this.segmentInput.reportValidity();
       return;
@@ -567,7 +662,7 @@ export class SegmentedEditor {
   }
 
   async selectSegment(index) {
-    if (!this.browserAvailable() || !this.canExecute()) return;
+    if (this.selectedView() !== "memory" || !this.browserAvailable() || !this.canExecute()) return;
     const submittedContextKey = this.contextKey;
     this.setBusy(true);
     try {
@@ -595,9 +690,13 @@ export class SegmentedEditor {
   }
 
   renderState() {
+    const view = this.selectedView();
     const segmented = this.state?.mode === "segmented";
     const realtime = this.state?.mode === "realtime";
     const known = segmented || realtime;
+    this.heading.textContent = translate(
+      view === "capture" ? "command.segmented-capture" : "command.segmented-memory",
+    );
     this.modeOutput.output.textContent = known
       ? modeLabel(this.state.mode)
       : translate("segmented.editor.unknown");
@@ -625,14 +724,27 @@ export class SegmentedEditor {
     );
     this.modeButton.className = segmented ? "secondary" : "primary";
     const unsupported = !this.definition() || !this.catalog.supported(this.definition());
-    this.modeButton.hidden = unsupported || !known;
-    this.applySegmentsButton.hidden = unsupported || !segmented;
-    this.stateHelp.hidden = unsupported || !segmented;
+    const memoryView = view === "memory" && !unsupported;
+    const captureView = view === "capture" && !unsupported && this.captureSupported();
+    this.modeButton.hidden = !memoryView || !known;
+    this.applySegmentsButton.hidden = !memoryView || !segmented;
+    this.stateHelp.hidden = !memoryView || !segmented;
     this.unavailableNote.hidden = !unsupported;
-    this.readouts.hidden = unsupported;
-    this.countRow.hidden = unsupported;
-    if (unsupported) this.segmentBrowser.hidden = true;
-    this.captureSection.hidden = unsupported || !this.captureSupported();
+    this.readouts.hidden = !memoryView;
+    this.countRow.hidden = !memoryView;
+    this.segmentBrowser.hidden = !memoryView || !browserAvailable;
+    this.captureSection.hidden = !captureView;
+    const dryRun = this.isDryRun();
+    this.planningRow.hidden = !captureView || !dryRun;
+    this.captureConfiguredOutput.textContent = Number.isInteger(this.captureConfigured)
+      ? String(this.captureConfigured)
+      : translate("segmented.capture.configuredUnknown");
+    if (this.captureBlocked) {
+      this.captureNote.textContent = translate("segmented.capture.notReady");
+      this.captureNote.hidden = view !== "capture";
+    } else {
+      this.captureNote.hidden = true;
+    }
   }
 
   browserAvailable() {
@@ -689,6 +801,7 @@ export class SegmentedEditor {
     this.captureChannelSelect.disabled = captureDisabled;
     this.capturePointsSelect.disabled = captureDisabled;
     this.captureFormatSelect.disabled = captureDisabled;
+    this.planningSegmentsInput.disabled = captureDisabled;
     this.captureButton.disabled = !this.canCapture();
   }
 }

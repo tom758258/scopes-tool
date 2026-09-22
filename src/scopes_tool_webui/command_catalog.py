@@ -1895,6 +1895,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
     },
     {
         "id": "segmented-capture", "category": "Segmented Memory", "label": "Segmented capture", "modes": ("live", "simulate", "dry-run"),
+        "editor": "segmented",
         "fields": (_command_field("channel", "integer", minimum=1, maximum=4, default=1, help_key="capture.channel"), _command_field("segments", "integer", minimum=2, required=True, help_key="segmented-capture.segments"), _command_field("points", "integer", options=(1000, 5000, 10000), default=1000, help_key="capture.points"), _command_field("format", "enum", options=("byte", "word"), default="byte", help_key="capture.format"), _command_field("timeout_ms", "integer", minimum=1, default=30000, help_key="segmented-capture.timeout_ms"), _command_field("poll_interval_ms", "integer", minimum=1, default=100, help_key="segmented-capture.poll_interval_ms")),
     },
     {

@@ -31,6 +31,8 @@ def test_segmented_memory_uses_dedicated_editor_and_existing_command_contract() 
     )
 
     assert definition["editor"] == "segmented"
+    assert capture_definition["editor"] == "segmented"
+    assert capture_definition.get("browser_hidden") is not True
     assert [field["name"] for field in definition["fields"]] == [
         "action",
         "segments",
@@ -70,12 +72,11 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert 'segmented: () => segmentedEditor,' in app
     assert 'id="segmented-editor" class="segmented-editor" hidden' in html
     assert 'elements.segmentedEditor.hidden = editorKind !== "segmented";' in app
+    assert '"segmented-memory": ["segmented-memory"]' in app
+    assert '"segmented-memory", "segmented-capture"' not in app
+    assert "segmentedMemorySelected" in app
     assert (
-        '"segmented-memory": ["segmented-memory", "segmented-capture"]'
-        in app
-    )
-    assert (
-        'if (segmentedEditor?.modeButton && editorKind !== "segmented") {'
+        "catalog?.selected()?.id === \"segmented-memory\""
         in app
     )
     assert '"segmented.editor.enter": "Enter Segmented"' in english
@@ -101,9 +102,14 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
         "help.segmented-capture.timeout_ms",
         "help.segmented-capture.poll_interval_ms",
         "segmented.editor.stateHelp",
+        "segmented.capture.configuredSegments",
+        "segmented.capture.configuredUnknown",
+        "segmented.capture.notReady",
+        "segmented.capture.planningSegments",
     ):
         assert f'"{key}"' in english
         assert f'"{key}"' in chinese
+    assert "target segment count above" not in english
     for key in (
         "segmented.editor.title",
         "segmented.editor.targetSegments",
@@ -238,7 +244,9 @@ EDITOR_HARNESS = r'''
         let supported = true;
         let available = true;
         let contextKey = "simulate||keysight-dsox2004a";
+        let selection = definition;
         const catalog = {
+          activeMode: "simulate",
           supported: () => supported,
           fieldsFor: (command) => command.fields,
           optionsFor: (field) => field?.options || [],
@@ -254,7 +262,7 @@ EDITOR_HARNESS = r'''
           isExecutionBusy: () => false,
           isAvailable: () => available,
           contextKey: () => contextKey,
-          selectedCommand: () => definition,
+          selectedCommand: () => selection,
         };
         const editor = new globalThis.SegmentedEditor(new FakeNode(), catalog, hooks);
 '''
@@ -533,6 +541,7 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         r'''
         const captureDefinition = {
           id: "segmented-capture",
+          editor: "segmented",
           fields: [
             { name: "channel", type: "integer", minimum: 1, maximum: 4, default: 1, help_key: "capture.channel" },
             { name: "segments", type: "integer", minimum: 2, maximum: 5000, help_key: "segmented-capture.segments" },
@@ -541,57 +550,44 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
           ],
         };
         catalog.commands = [definition, captureDefinition];
+        selection = captureDefinition;
         editor.buildDom();
         editor.present();
         await settle();
 
+        // The capture workspace owns only retrieval inputs: no editable
+        // segment count in Live/Simulate.
+        assert.equal(editor.selectedView(), "capture");
         assert.equal(editor.captureSection.hidden, false);
+        assert.equal(editor.readouts.hidden, true);
+        assert.equal(editor.countRow.hidden, true);
+        assert.equal(editor.segmentBrowser.hidden, true);
+        assert.equal(editor.planningRow.hidden, true);
+        assert.equal(editor.captureConfiguredOutput.textContent, "segmented.capture.configuredUnknown");
+        assert.equal(editor.captureNote.hidden, true);
         assert.equal(editor.captureChannelSelect.tagName, "SELECT");
         assert.deepEqual(
           editor.captureChannelSelect.children.map((option) => option.value),
           ["1", "2", "3", "4"],
         );
         assert.equal(editor.captureChannelSelect.value, "1");
-        assert.equal(editor.countInput.value, "2");
-        assert.equal(editor.countInput.parentNode.children[0].textContent, "segmented.editor.targetSegments");
         assert.equal(editor.capturePointsSelect.value, "1000");
         assert.equal(editor.captureFormatSelect.value, "byte");
-        assert.equal(editor.segmentBrowser.hidden, true);
         assert.deepEqual({
-          classes: editor.captureForm.className.split(" "),
           fieldCount: editor.captureForm.children.length,
           helpClasses: editor.captureForm.children.map((field) => field.children.at(-1).className),
           buttonOutsideGrid: editor.captureButton.parentNode !== editor.captureForm,
           buttonInActionRow: editor.captureButton.parentNode.className === "segmented-editor-actions"
             && editor.captureButton.parentNode.parentNode === editor.captureSection,
         }, {
-          classes: ["command-form", "segmented-editor-capture-form"],
           fieldCount: 3,
           helpClasses: ["field-help", "field-help", "field-help"],
           buttonOutsideGrid: true,
           buttonInActionRow: true,
         });
 
-        captureDefinition.fields.find((field) => field.name === "channel").options = [1, 2];
-        editor.present();
-        await settle();
-        assert.deepEqual(
-          editor.captureChannelSelect.children.map((option) => option.value),
-          ["1", "2"],
-        );
-        assert.equal(editor.captureChannelSelect.value, "1");
-        delete captureDefinition.fields.find((field) => field.name === "channel").options;
-        editor.present();
-        await settle();
-        assert.deepEqual(
-          editor.captureChannelSelect.children.map((option) => option.value),
-          ["1", "2", "3", "4"],
-        );
-
         const countBeforeInput = submitted.length;
         editor.captureChannelSelect.value = "2";
-        editor.countInput.value = "5";
-        editor.countInput.dispatch("input");
         editor.capturePointsSelect.value = "5000";
         editor.captureFormatSelect.value = "word";
         await settle();
@@ -599,77 +595,181 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
 
         responses.push({
           status: "completed",
+          result: { result: { segmented: {
+            mode: "segmented", configured_segments: 100, acquired_segments: 63,
+          } } },
+        });
+        responses.push({
+          status: "completed",
           result: { result: {
             operation: "segmented-capture",
             final_mode: "segmented",
-            configured_segments: 5,
-            acquired_segments: 5,
+            configured_segments: 100,
+            acquired_segments: 100,
           } },
         });
         editor.captureButton.dispatch("click");
         await settle();
+        // Start first queries segmented-memory, then passes that same
+        // configured count to the existing segmented-capture command.
+        assert.deepEqual(submitted, [
+          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+          {
+            command: "segmented-capture",
+            parameters: { channel: 2, segments: 100, points: 5000, format: "word" },
+            intent: "command",
+          },
+        ]);
         const submittedCapture = submitted.at(-1);
-        assert.deepEqual(submittedCapture, {
-          command: "segmented-capture",
-          parameters: { channel: 2, segments: 5, points: 5000, format: "word" },
-          intent: "command",
-        });
         assert.equal(typeof submittedCapture.parameters.channel, "number");
+        assert.equal(typeof submittedCapture.parameters.segments, "number");
         assert.equal("timeout_ms" in submittedCapture.parameters, false);
         assert.equal("poll_interval_ms" in submittedCapture.parameters, false);
-        assert.equal(editor.modeOutput.output.textContent, "Segmented");
-        assert.equal(editor.configuredRow.output.textContent, "5");
-        assert.equal(editor.acquiredRow.output.textContent, "5");
-        assert.equal(editor.countInput.value, "5");
-        assert.equal(editor.segmentBrowser.hidden, true);
+        assert.equal(editor.captureConfiguredOutput.textContent, "100");
+        // Minimal invalidation: the cached memory state is dropped instead of
+        // being fabricated from the capture result.
+        assert.equal(editor.state, null);
+        assert.equal(editor.captureNote.hidden, true);
 
-        const countBeforeOverflow = submitted.length;
-        editor.countInput.value = "999";
-        editor.countInput.dispatch("input");
+        // Not in Segmented mode: block capture with guidance.
+        submitted.length = 0;
+        responses.push({
+          status: "completed",
+          result: { result: { segmented: {
+            mode: "realtime", configured_segments: null, acquired_segments: null,
+          } } },
+        });
         editor.captureButton.dispatch("click");
         await settle();
-        assert.equal(submitted.length, countBeforeOverflow);
-        assert.equal(editor.countInput.reported, true);
-        editor.countInput.value = "5";
-        editor.countInput.dispatch("input");
+        assert.deepEqual(submitted, [
+          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+        ]);
+        assert.equal(editor.captureBlocked, true);
+        assert.equal(editor.captureNote.hidden, false);
+        assert.equal(editor.captureNote.textContent, "segmented.capture.notReady");
+        assert.equal(editor.captureConfiguredOutput.textContent, "segmented.capture.configuredUnknown");
+
+        // A failed memory query blocks capture the same way.
+        submitted.length = 0;
+        responses.push({ status: "failed", error: "boom" });
+        editor.captureButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submitted, [
+          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+        ]);
 
         editor.setBusy(true);
         assert.equal(editor.captureButton.disabled, true);
         editor.setBusy(false);
         assert.equal(editor.captureButton.disabled, false);
 
+        // Rerender preserves retrieval inputs without re-submitting.
         const countBeforeRerender = submitted.length;
-        editor.schedulePresentation();
         editor.rerender();
         await settle();
         assert.equal(editor.captureChannelSelect.value, "2");
-        assert.equal(editor.countInput.value, "5");
         assert.equal(editor.capturePointsSelect.value, "5000");
         assert.equal(editor.captureFormatSelect.value, "word");
         assert.equal(submitted.length, countBeforeRerender);
+        ''',
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
+
+@pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_segmented_memory_workspace_hides_capture_controls() -> None:
+    script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        // selection defaults to the segmented-memory definition.
         editor.schedulePresentation();
         await settle();
-        assert.equal(editor.captureChannelSelect.value, "2");
-        assert.equal(editor.countInput.value, "5");
-        assert.equal(editor.capturePointsSelect.value, "5000");
-        assert.equal(editor.captureFormatSelect.value, "word");
 
-        captureDefinition.fields.find((field) => field.name === "channel").maximum = 2;
-        definition.fields.find((field) => field.name === "segments").maximum = 1000;
-        contextKey = "simulate||keysight-dsox3024a";
-        const countBeforeContextRerender = submitted.length;
-        editor.schedulePresentation();
-        editor.rerender();
+        assert.equal(editor.selectedView(), "memory");
+        assert.equal(editor.captureSection.hidden, true);
+        assert.equal(editor.readouts.hidden, false);
+        assert.equal(editor.countRow.hidden, false);
+
+        // Capture actions are unreachable from the memory workspace.
+        const countBefore = submitted.length;
+        editor.captureButton.dispatch("click");
         await settle();
-        assert.deepEqual(
-          editor.captureChannelSelect.children.map((option) => option.value),
-          ["1", "2"],
-        );
-        assert.equal(editor.countInput.max, "1000");
-        assert.equal(editor.countInput.value, "2");
-        assert.equal(editor.captureChannelSelect.value, "1");
-        assert.equal(submitted.length, countBeforeContextRerender);
+        assert.equal(submitted.length, countBefore);
+        ''',
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="Node.js is required for frontend behavior checks",
+)
+def test_segmented_capture_dry_run_uses_planning_input() -> None:
+    script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const captureDefinition = {
+          id: "segmented-capture",
+          editor: "segmented",
+          fields: [
+            { name: "channel", type: "integer", minimum: 1, maximum: 4, default: 1, help_key: "capture.channel" },
+            { name: "segments", type: "integer", minimum: 2, maximum: 5000, help_key: "segmented-capture.segments" },
+            { name: "points", type: "integer", options: [1000, 5000, 10000], default: 1000, help_key: "capture.points" },
+            { name: "format", type: "enum", options: ["byte", "word"], default: "byte", help_key: "capture.format" },
+          ],
+        };
+        catalog.commands = [definition, captureDefinition];
+        catalog.activeMode = "dry-run";
+        selection = captureDefinition;
+        editor.buildDom();
+        editor.present();
+        await settle();
+
+        assert.equal(editor.selectedView(), "capture");
+        assert.equal(editor.isDryRun(), true);
+        assert.equal(editor.captureSection.hidden, false);
+        assert.equal(editor.planningRow.hidden, false);
+        assert.equal(editor.planningSegmentsInput.min, "2");
+
+        editor.captureChannelSelect.value = "1";
+        editor.capturePointsSelect.value = "1000";
+        editor.captureFormatSelect.value = "byte";
+        editor.planningSegmentsInput.value = "50";
+        responses.push({
+          status: "completed",
+          result: { result: { operation: "segmented-capture" } },
+        });
+        editor.captureButton.dispatch("click");
+        await settle();
+        // Dry-run never queries segmented-memory: there is no instrument
+        // state, so the planning-only count feeds the capture contract.
+        assert.deepEqual(submitted, [
+          {
+            command: "segmented-capture",
+            parameters: { channel: 1, segments: 50, points: 1000, format: "byte" },
+            intent: "command",
+          },
+        ]);
+
+        // Back in simulate the planning input is hidden again.
+        catalog.activeMode = "simulate";
+        editor.present();
+        await settle();
+        assert.equal(editor.isDryRun(), false);
+        assert.equal(editor.planningRow.hidden, true);
         ''',
     )
     completed = subprocess.run(
@@ -688,7 +788,7 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
 def test_segmented_editor_builds_field_help_before_command_selected() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
-        let selection = null;
+        selection = null;
         catalog.commands = [definition];
         const fresh = new globalThis.SegmentedEditor(new FakeNode(), catalog, {
           ...hooks,
