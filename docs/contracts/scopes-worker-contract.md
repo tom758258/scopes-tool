@@ -581,12 +581,14 @@ The caller-supplied `output_dir` is the segmented-capture output directory:
 ```
 
 The Core workflow keeps its requirement for a new or empty output
-directory. The domain status `completed` maps to Worker `succeeded`; domain
-`partial` or `failed` maps to Worker `failed` while preserving existing files
-and the domain status in the job's in-memory result. Running cancellation is
-cooperative: Segmented Capture checks the worker stop callback during readiness
-polling and between segment exports, stops an active acquisition, preserves
-already written artifacts, and finishes with domain status `cancelled`.
+directory. The domain status `completed` maps to Worker `succeeded`,
+`cancelled` maps to Worker `cancelled` with exit code 3, and `partial` or
+`failed` maps to Worker `failed`. Cancelled, partial, and failed runs preserve
+existing files and the domain status in the job's in-memory result. Running
+cancellation is cooperative: Segmented Capture checks the worker stop callback
+before acquisition start, during readiness polling, and between segment exports,
+stops an active acquisition best-effort, preserves already written artifacts,
+and finishes with domain status `cancelled`.
 The worker accepts no firmware argument; Core uses the detected IDN firmware
 for waveform segmented command gating.
 
