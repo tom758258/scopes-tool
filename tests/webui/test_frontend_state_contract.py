@@ -3316,6 +3316,10 @@ def test_scan_busy_change_refreshes_live_data_once_identity_ready() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
     jobs_path = STATIC_ROOT / "jobs.js"
     script = textwrap.dedent(
         r'''
