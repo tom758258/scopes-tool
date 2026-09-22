@@ -960,7 +960,6 @@ function renderWorkspace() {
     "serial-decode": ["serial-mode", "serial-display", "serial-uart", "serial-i2c", "serial-spi", "serial-can"],
     "serial-trigger": ["serial-mode", "serial-trigger-uart", "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"],
     "serial-lister": ["serial-lister-query", "serial-lister-display", "serial-lister-reference", "serial-lister-export"],
-    "segmented-memory": ["segmented-memory"],
   }[selected?.id];
   elements.identityWorkspace.hidden = !selected || (selected.presentation_only === true && !compositeCommands);
   if (systemInformationSelected) {
@@ -1094,7 +1093,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
@@ -1103,7 +1102,7 @@ function syncCommandSelection(draft = null) {
   elements.selectedCommand.title = selectedTitle;
   const selectedDescription = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search"].includes(editorKind)
+      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)
