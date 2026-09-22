@@ -194,8 +194,9 @@ The Command workbench exposes:
 - Segmented Capture: a dedicated capture view over `segmented-capture` with channel,
   points, format, and Start capture. It has no editable segment count: Live/Simulate
   reads the configured segment count from Segmented Memory when capture starts and
-  passes that same value to the capture command, while dry-run keeps a planning-only
-  segment input because there is no instrument state.
+  passes that same value to the capture command. That prerequisite read is execution-only
+  and does not replace the Segmented Memory workspace result or cached state. Dry-run
+  instead keeps a planning-only segment input because there is no instrument state.
 - Cursor: a dedicated Cursor editor for explicit Read cursor state
   (`cursor-query`), manual cursor configuration (`cursor-set`), turning
   cursors off (`cursor-off`), and current state readback
