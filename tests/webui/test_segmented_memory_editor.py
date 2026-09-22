@@ -72,8 +72,9 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert 'segmented: () => segmentedEditor,' in app
     assert 'id="segmented-editor" class="segmented-editor" hidden' in html
     assert 'elements.segmentedEditor.hidden = editorKind !== "segmented";' in app
-    assert '"segmented-memory": ["segmented-memory"]' in app
+    assert '"segmented-memory": ["segmented-memory"]' not in app
     assert '"segmented-memory", "segmented-capture"' not in app
+    assert '"search", "segmented"].includes(editorKind)' in app
     assert "segmentedMemorySelected" in app
     assert (
         "catalog?.selected()?.id === \"segmented-memory\""
@@ -102,14 +103,17 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
         "help.segmented-capture.timeout_ms",
         "help.segmented-capture.poll_interval_ms",
         "segmented.editor.stateHelp",
-        "segmented.capture.configuredSegments",
-        "segmented.capture.configuredUnknown",
         "segmented.capture.notReady",
         "segmented.capture.planningSegments",
     ):
         assert f'"{key}"' in english
         assert f'"{key}"' in chinese
     assert "target segment count above" not in english
+    assert "capture below" not in english
+    assert "下方有限分段擷取" not in chinese
+    assert "segmented.capture.configuredSegments" not in english
+    assert "segmented.capture.configuredUnknown" not in english
+    assert "captureConfigured" not in editor_source
     for key in (
         "segmented.editor.title",
         "segmented.editor.targetSegments",
@@ -255,7 +259,12 @@ EDITOR_HARNESS = r'''
         const responses = [];
         const hooks = {
           executeCommand: async (command, parameters, options) => {
-            submitted.push({ command, parameters, intent: options?.intent });
+            submitted.push({
+              command,
+              parameters,
+              intent: options?.intent,
+              captureWorkspaceResult: options?.captureWorkspaceResult,
+            });
             return responses.shift();
           },
           headerActions: new FakeNode(),
@@ -563,8 +572,11 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         assert.equal(editor.countRow.hidden, true);
         assert.equal(editor.segmentBrowser.hidden, true);
         assert.equal(editor.planningRow.hidden, true);
-        assert.equal(editor.captureConfiguredOutput.textContent, "segmented.capture.configuredUnknown");
+        assert.equal("captureConfiguredOutput" in editor, false);
         assert.equal(editor.captureNote.hidden, true);
+        // The hidden Memory count control always derives from segmented-memory,
+        // not the selected capture command's larger planning maximum.
+        assert.equal(editor.countInput.max, "250");
         assert.equal(editor.captureChannelSelect.tagName, "SELECT");
         assert.deepEqual(
           editor.captureChannelSelect.children.map((option) => option.value),
@@ -613,11 +625,17 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         // Start first queries segmented-memory, then passes that same
         // configured count to the existing segmented-capture command.
         assert.deepEqual(submitted, [
-          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+          {
+            command: "segmented-memory",
+            parameters: { action: "query" },
+            intent: "readback",
+            captureWorkspaceResult: false,
+          },
           {
             command: "segmented-capture",
             parameters: { channel: 2, segments: 100, points: 5000, format: "word" },
             intent: "command",
+            captureWorkspaceResult: undefined,
           },
         ]);
         const submittedCapture = submitted.at(-1);
@@ -625,7 +643,6 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         assert.equal(typeof submittedCapture.parameters.segments, "number");
         assert.equal("timeout_ms" in submittedCapture.parameters, false);
         assert.equal("poll_interval_ms" in submittedCapture.parameters, false);
-        assert.equal(editor.captureConfiguredOutput.textContent, "100");
         // Minimal invalidation: the cached memory state is dropped instead of
         // being fabricated from the capture result.
         assert.equal(editor.state, null);
@@ -642,21 +659,44 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
         editor.captureButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted, [
-          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+          {
+            command: "segmented-memory",
+            parameters: { action: "query" },
+            intent: "readback",
+            captureWorkspaceResult: false,
+          },
         ]);
         assert.equal(editor.captureBlocked, true);
         assert.equal(editor.captureNote.hidden, false);
         assert.equal(editor.captureNote.textContent, "segmented.capture.notReady");
-        assert.equal(editor.captureConfiguredOutput.textContent, "segmented.capture.configuredUnknown");
 
-        // A failed memory query blocks capture the same way.
+        // A failed/cancelled prerequisite query does not misreport a Memory
+        // configuration error; the job result owns the actual failure.
+
         submitted.length = 0;
         responses.push({ status: "failed", error: "boom" });
         editor.captureButton.dispatch("click");
         await settle();
         assert.deepEqual(submitted, [
-          { command: "segmented-memory", parameters: { action: "query" }, intent: "readback" },
+          {
+            command: "segmented-memory",
+            parameters: { action: "query" },
+            intent: "readback",
+            captureWorkspaceResult: false,
+          },
         ]);
+        assert.equal(editor.captureBlocked, false);
+        assert.equal(editor.captureNote.hidden, true);
+        assert.equal(editor.state, null);
+
+        // Leaving and returning to Capture clears prior prerequisite guidance.
+        editor.captureBlocked = true;
+        selection = definition;
+        editor.present();
+        selection = captureDefinition;
+        editor.present();
+        assert.equal(editor.captureBlocked, false);
+        assert.equal(editor.captureNote.hidden, true);
 
         editor.setBusy(true);
         assert.equal(editor.captureButton.disabled, true);
@@ -743,6 +783,7 @@ def test_segmented_capture_dry_run_uses_planning_input() -> None:
         assert.equal(editor.captureSection.hidden, false);
         assert.equal(editor.planningRow.hidden, false);
         assert.equal(editor.planningSegmentsInput.min, "2");
+        assert.equal("captureConfiguredOutput" in editor, false);
 
         editor.captureChannelSelect.value = "1";
         editor.capturePointsSelect.value = "1000";
