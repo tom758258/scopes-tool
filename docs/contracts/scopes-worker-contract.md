@@ -157,9 +157,9 @@ blocking device read is not forcibly interrupted and may not stop immediately.
 Finite workflow termination precedence is `instrument_error > completed >
 cancelled`; a stop request observed after the count, duration, or measurement
 condition is complete does not replace the completed Core result. For
-`measure-log`, `measure-until`, `capture-batch`, `capture-until`,
-`capture-monitor`, `triggered-measure-loop`, and `triggered-capture-series`, the
-Worker maps Core `completed` to `succeeded`, Core
+`segmented-capture`, `measure-log`, `measure-until`, `capture-batch`,
+`capture-until`, `capture-monitor`, `triggered-measure-loop`, and
+`triggered-capture-series`, the Worker maps Core `completed` to `succeeded`, Core
 `cancelled` to `cancelled` with exit code 3, and Core `instrument_error` or
 `error` to `failed`. A late Worker stop flag does not replace these
 higher-precedence Core results.
