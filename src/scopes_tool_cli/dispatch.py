@@ -264,7 +264,10 @@ def _dispatch_command(
         return acquisition._cmd_segmented_memory(args)
 
     if args.command == "segmented-capture":
-        return workflows._cmd_segmented_capture(args)
+        return workflows._cmd_segmented_capture(
+            args,
+            stop_requested=stop_requested,
+        )
 
     if args.command == "acquisition-points":
         return acquisition._cmd_acquisition_points(args)
