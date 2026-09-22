@@ -757,7 +757,9 @@ def run_segmented_capture(
                     manifest["exported_segments"] = exported_segments
                     _write_manifest(manifest, manifest_path)
 
-                cancellation_checkpoint()
+                // Once every requested segment is exported, completion takes
+                // precedence over a late cancellation request. Final state and
+                // system-error verification still run before reporting success.
                 final_mode, system_error = _best_effort_final_state(scope, guarded_read)
                 manifest["final_mode"] = final_mode
                 manifest["system_error"] = system_error
