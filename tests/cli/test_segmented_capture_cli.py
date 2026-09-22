@@ -1,8 +1,44 @@
 import json
+from contextlib import nullcontext
+from types import SimpleNamespace
 
 import pytest
 
 from scopes_tool_cli import cli
+from scopes_tool_cli.commands import workflows
+from scopes_tool_core.operations import OperationResult
+
+
+def test_segmented_capture_command_forwards_stop_requested(monkeypatch) -> None:
+    stop_requested = lambda: True
+    request = object()
+    scope = object()
+    received = {}
+
+    monkeypatch.setattr(workflows.runtime, "_require_resource", lambda _args: "SIM::TEST::INSTR")
+    monkeypatch.setattr(workflows.preflight, "_segmented_capture_request", lambda _args: request)
+    monkeypatch.setattr(
+        workflows.runtime,
+        "_open_scope",
+        lambda _args, _resource: nullcontext(scope),
+    )
+
+    def fake_run(actual_scope, resource, actual_request, *, stop_requested=None):
+        received["scope"] = actual_scope
+        received["resource"] = resource
+        received["request"] = actual_request
+        received["stop_requested"] = stop_requested
+        return OperationResult(130, {"status": "cancelled"})
+
+    monkeypatch.setattr(workflows, "run_segmented_capture", fake_run)
+    args = SimpleNamespace()
+    assert workflows._cmd_segmented_capture(args, stop_requested=stop_requested) == 130
+    assert received == {
+        "scope": scope,
+        "resource": "SIM::TEST::INSTR",
+        "request": request,
+        "stop_requested": stop_requested,
+    }
 
 
 def test_segmented_capture_simulate_json_writes_artifacts_and_order(tmp_path, capsys):
