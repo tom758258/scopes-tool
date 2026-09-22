@@ -152,8 +152,8 @@ def test_segmented_editor_removes_standalone_status_indicator() -> None:
     assert "this.modeButton" in editor_source
     assert "this.applySegmentsButton" in editor_source
     state_rule = styles.split(".segmented-editor-state {", 1)[1].split("}", 1)[0]
-    assert "width: fit-content;" in state_rule
-    assert "max-width: 100%;" in state_rule
+    assert "width: 100%;" in state_rule
+    assert "width: fit-content;" not in state_rule
     count_row_rule = styles.split(
         ".segmented-editor-actions.segmented-editor-count-row {", 1
     )[1].split("}", 1)[0]

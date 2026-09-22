@@ -195,7 +195,6 @@ export class SearchEditor {
       return;
     }
     if (definition.id === "search-count") {
-      this.buildCountView();
       return;
     }
     if (this.isSerialCommand(definition)) {
@@ -275,23 +274,10 @@ export class SearchEditor {
       void this.submit(entry);
     });
     const fields = this.catalog.fieldsFor?.(command) ?? command.fields ?? [];
-    const editable = fields.filter(
-      (field) => field?.name !== command.presentation?.action_field,
-    );
-    if (!isSerial && editable.length === 1) {
-      section.className += " search-editor-single";
-    }
     section.hidden = fields.length === 0;
     formContainer.hidden = fields.length === 0;
     this.entry = entry;
     return entry;
-  }
-
-  buildCountView() {
-    const output = document.createElement("output");
-    output.className = "readonly-value";
-    this.bodyHost.append(output);
-    this.readouts.count = output;
   }
 
   buildUnavailableNote(messageKey) {
@@ -323,7 +309,7 @@ export class SearchEditor {
     const label = document.createElement("span");
     label.textContent = translate(labelKey);
     const output = document.createElement("output");
-    output.className = "search-editor-status-value";
+    output.className = "readonly-value search-editor-status-value";
     wrapper.append(label, output);
     this.readouts[name] = output;
     return wrapper;
@@ -385,11 +371,8 @@ export class SearchEditor {
 
   async readCount() {
     const command = this.commandById("search-count");
-    if (!command || !this.catalog.supported(command) || !this.readouts.count) return;
-    const job = await this.hooks.executeCommand("search-count", {}, {});
-    if (job?.status !== "completed") return;
-    const count = resultValue(job.result, "count");
-    this.readouts.count.textContent = count === undefined ? "-" : String(count);
+    if (!command || !this.catalog.supported(command)) return;
+    await this.hooks.executeCommand("search-count", {}, {});
   }
 
   async readActiveView() {
