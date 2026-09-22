@@ -2839,6 +2839,7 @@ def _wait_for_manager_job(manager, job_id):
         ("measure-until", "run_measure_until", {"channel": 1, "item": "vpp", "operator": "gt", "threshold": 0.1, "timeout_seconds": 1, "interval_seconds": 0}),
         ("triggered-measure-loop", "run_triggered_measure_loop", {"count": 2, "trigger_timeout_seconds": 1, "channels": (1,), "items": ("vpp",), "pairs": (), "pair_items": (), "interval_seconds": 0}),
         ("triggered-capture-series", "run_triggered_capture_series", {"channels": (1,), "count": 2, "trigger_timeout_seconds": 1, "points": 1000, "format": "byte", "interval_seconds": 0}),
+        ("segmented-capture", "run_segmented_capture", {"channel": 1, "segments": 2, "points": 1000, "format": "byte", "timeout_ms": 30000, "poll_interval_ms": 100}),
     ),
 )
 def test_long_workflows_receive_existing_core_stop_callback(
