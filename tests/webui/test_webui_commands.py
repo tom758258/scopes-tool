@@ -2834,6 +2834,7 @@ def _wait_for_manager_job(manager, job_id):
 @pytest.mark.parametrize(
     ("command", "runner_name", "parameters"),
     (
+        ("segmented-capture", "run_segmented_capture", {"channel": 1, "segments": 2, "points": 1000, "format": "byte", "timeout_ms": 30000, "poll_interval_ms": 100}),
         ("capture-batch", "run_capture_batch", {"channels": (1,), "points": 1000, "format": "byte", "count": 2, "interval_seconds": 0}),
         ("measure-log", "run_measure_log", {"channels": (1,), "items": ("vpp",), "pairs": (), "pair_items": (), "interval_seconds": 0, "count": 2}),
         ("measure-until", "run_measure_until", {"channel": 1, "item": "vpp", "operator": "gt", "threshold": 0.1, "timeout_seconds": 1, "interval_seconds": 0}),
