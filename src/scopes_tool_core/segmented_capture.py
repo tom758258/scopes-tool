@@ -805,11 +805,14 @@ def run_segmented_capture(
                     except Exception:
                         pass
                 if controller is not None and target_started and not session_read_timed_out:
-                    final_mode, system_error = _best_effort_final_state(
-                        scope, guarded_read
-                    )
-                    manifest["final_mode"] = final_mode
-                    manifest["system_error"] = system_error
+                    try:
+                        final_mode, system_error = _best_effort_final_state(
+                            scope, guarded_read
+                        )
+                        manifest["final_mode"] = final_mode
+                        manifest["system_error"] = system_error
+                    except Exception:
+                        pass
             except Exception as exc:
                 if session_read_timed_out and isinstance(
                     exc, SegmentedCaptureTimeout
