@@ -4,9 +4,24 @@ from types import SimpleNamespace
 
 import pytest
 
-from scopes_tool_cli import cli
+from scopes_tool_cli import cli, dispatch
 from scopes_tool_cli.commands import workflows
 from scopes_tool_core.operations import OperationResult
+
+
+def test_segmented_capture_dispatch_forwards_stop_requested(monkeypatch) -> None:
+    stop_requested = lambda: True
+    received = {}
+
+    def fake_command(args, *, stop_requested=None):
+        received["args"] = args
+        received["stop_requested"] = stop_requested
+        return 130
+
+    monkeypatch.setattr(dispatch.workflows, "_cmd_segmented_capture", fake_command)
+    args = SimpleNamespace(command="segmented-capture")
+    assert dispatch._dispatch_command(args, stop_requested=stop_requested) == 130
+    assert received == {"args": args, "stop_requested": stop_requested}
 
 
 def test_segmented_capture_command_forwards_stop_requested(monkeypatch) -> None:
