@@ -1823,7 +1823,7 @@ export const zhTW = {
   "segmented.editor.description": "讀取並控制儀器的分段記憶體擷取狀態。",
   "segmented.editor.targetSegments": "目標分段數",
   "segmented.editor.captureTitle": "開始分段擷取",
-  "segmented.editor.captureDescription": "開始一次新的有限分段擷取，使用 Segmented Memory 的已設定分段數，不是下載先前已擷取的分段；擷取完成後再將所選通道的波形資料讀回電腦。",
+  "segmented.editor.captureDescription": "開始一次新的有限分段擷取，並將所選通道的波形資料讀回電腦。Live 與 Simulate 使用目前分段記憶體的分段數；dry-run 使用僅供規劃的分段數。這不是下載先前已擷取的分段。",
   "segmented.capture.notReady": "Segmented Memory 未處於分段模式或無有效分段數，請先到 Segmented memory 讀取並設定。",
   "segmented.capture.planningSegments": "分段數（dry-run 規劃輸入）",
   "segmented.editor.capture": "開始擷取",
