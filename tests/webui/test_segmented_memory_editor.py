@@ -76,10 +76,17 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert '"segmented-memory", "segmented-capture"' not in app
     assert app.count('"search", "segmented"].includes(editorKind)') == 2
     assert "segmentedMemorySelected" in app
+    assert "segmentedCaptureSelected" in app
     assert (
         "catalog?.selected()?.id === \"segmented-memory\""
         in app
     )
+    assert (
+        "catalog?.selected()?.id === \"segmented-capture\""
+        in app
+    )
+    assert "segmentedEditor.captureButton.hidden = !segmentedCaptureSelected" in app
+    assert "this.hooks.headerActions.append(this.captureButton)" in editor_source
     assert '"segmented.editor.enter": "Enter Segmented"' in english
     assert '"segmented.editor.exit": "Exit Segmented"' in english
     assert '"segmented.editor.applySegments": "Apply segment count"' in english
@@ -151,6 +158,12 @@ def test_segmented_editor_removes_standalone_status_indicator() -> None:
     assert "captureConfigured" not in editor_source
     assert "this.modeButton" in editor_source
     assert "this.applySegmentsButton" in editor_source
+    overview_rule = styles.split(".segmented-editor-overview {", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns:" not in overview_rule
+    state_section_rule = styles.split(".segmented-editor-state-section {", 1)[1].split("}", 1)[0]
+    assert "width: 50%;" in state_section_rule
+    divider_rule = styles.split(".segmented-editor-divider {", 1)[1].split("}", 1)[0]
+    assert "border-top: 1px solid var(--line);" in divider_rule
     state_rule = styles.split(".segmented-editor-state {", 1)[1].split("}", 1)[0]
     assert "width: 100%;" in state_rule
     assert "width: fit-content;" not in state_rule
@@ -158,10 +171,16 @@ def test_segmented_editor_removes_standalone_status_indicator() -> None:
         ".segmented-editor-actions.segmented-editor-count-row {", 1
     )[1].split("}", 1)[0]
     assert "align-items: end;" in count_row_rule
+    overview_count_rule = styles.split(
+        ".segmented-editor-overview .segmented-editor-count-row {", 1
+    )[1].split("}", 1)[0]
+    assert "width: 50%;" in overview_count_rule
     count_help_rule = styles.split(
         ".segmented-editor-count-row > .field-help {", 1
     )[1].split("}", 1)[0]
     assert "flex-basis: 100%;" in count_help_rule
+    assert "this.stateSection.append(this.readouts, stateHelp)" in editor_source
+    assert "this.overview.append(this.stateSection, this.memoryDivider, countRow)" in editor_source
 
 
 EDITOR_HARNESS = r'''
@@ -592,13 +611,16 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
           fieldCount: editor.captureForm.children.length,
           helpClasses: editor.captureForm.children.map((field) => field.children.at(-1).className),
           buttonOutsideGrid: editor.captureButton.parentNode !== editor.captureForm,
-          buttonInActionRow: editor.captureButton.parentNode.className === "segmented-editor-actions"
-            && editor.captureButton.parentNode.parentNode === editor.captureSection,
+          buttonInHeader: editor.captureButton.parentNode === hooks.headerActions,
+          localActionRows: editor.captureSection.children.filter(
+            (node) => node.className === "segmented-editor-actions",
+          ).length,
         }, {
           fieldCount: 3,
           helpClasses: ["field-help", "field-help", "field-help"],
           buttonOutsideGrid: true,
-          buttonInActionRow: true,
+          buttonInHeader: true,
+          localActionRows: 0,
         });
 
         const countBeforeInput = submitted.length;
