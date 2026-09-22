@@ -275,6 +275,57 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(
     ]
 
 
+def test_run_segmented_capture_cooperatively_cancels_during_acquisition(tmp_path):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        resource_name="SIM::keysight-dsox4024a::INSTR",
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=lambda: ":SINGle" in backend.history,
+        )
+
+    assert result.exit_code == 3
+    assert result.result["status"] == "cancelled"
+    assert result.result["exported_segments"] == 0
+    assert ":SINGle" in backend.history
+    assert ":WAVeform:DATA?" not in backend.history
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "cancelled"
+    assert manifest["exported_segments"] == 0
+    assert manifest["error"] is None
+
+
+def test_run_segmented_capture_cancellation_preserves_completed_segment_files(tmp_path):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        resource_name="SIM::keysight-dsox4024a::INSTR",
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=lambda: backend.history.count(":WAVeform:DATA?") >= 1,
+        )
+
+    assert result.exit_code == 3
+    assert result.result["status"] == "cancelled"
+    assert result.result["exported_segments"] == 1
+    assert (tmp_path / "segment_0001.csv").exists()
+    assert not (tmp_path / "segment_0002.csv").exists()
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "cancelled"
+    assert manifest["exported_segments"] == 1
+    assert [entry["index"] for entry in manifest["segments"]] == [1]
+    assert manifest["error"] is None
+
+
 def test_run_segmented_capture_unit_query_timeout_stops_before_capture(tmp_path):
     backend = SimulatorBackend(
         query_failures={
