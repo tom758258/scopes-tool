@@ -1823,7 +1823,7 @@ export const en = {
   "segmented.editor.description": "Read and control the instrument's Segmented Memory acquisition state.",
   "segmented.editor.targetSegments": "Target segments",
   "segmented.editor.captureTitle": "Start segmented capture",
-  "segmented.editor.captureDescription": "Starts a new finite segmented acquisition using the configured segment count from Segmented Memory; this does not download previously acquired segments. After acquisition completes, waveform data from the selected channel is retrieved to the PC.",
+  "segmented.editor.captureDescription": "Starts a new finite segmented acquisition and retrieves waveform data from the selected channel. Live and Simulate use the current Segmented Memory count; dry-run uses the planning-only segment input. This does not download previously acquired segments.",
   "segmented.capture.notReady": "Segmented Memory is not in Segmented mode or has no valid segment count. Read and configure it in Segmented memory first.",
   "segmented.capture.planningSegments": "Segments (dry-run planning input)",
   "segmented.editor.capture": "Start capture",
