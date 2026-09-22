@@ -259,12 +259,11 @@ EDITOR_HARNESS = r'''
         const responses = [];
         const hooks = {
           executeCommand: async (command, parameters, options) => {
-            submitted.push({
-              command,
-              parameters,
-              intent: options?.intent,
-              captureWorkspaceResult: options?.captureWorkspaceResult,
-            });
+            const submission = { command, parameters, intent: options?.intent };
+            if (options?.captureWorkspaceResult !== undefined) {
+              submission.captureWorkspaceResult = options.captureWorkspaceResult;
+            }
+            submitted.push(submission);
             return responses.shift();
           },
           headerActions: new FakeNode(),
@@ -635,7 +634,6 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
             command: "segmented-capture",
             parameters: { channel: 2, segments: 100, points: 5000, format: "word" },
             intent: "command",
-            captureWorkspaceResult: undefined,
           },
         ]);
         const submittedCapture = submitted.at(-1);
