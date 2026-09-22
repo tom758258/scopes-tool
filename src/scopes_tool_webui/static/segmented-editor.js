@@ -23,7 +23,6 @@ export class SegmentedEditor {
     this.contextKey = null;
     this.dirty = false;
     this.state = null;
-    this.captureConfigured = null;
     this.captureBlocked = false;
     this.buildDom();
   }
@@ -200,13 +199,6 @@ export class SegmentedEditor {
       note.textContent = captureDescription;
       this.captureSection.append(note);
     }
-    const captureConfiguredList = document.createElement("dl");
-    captureConfiguredList.className = "segmented-editor-browser-readout";
-    const captureConfiguredLabel = document.createElement("dt");
-    captureConfiguredLabel.textContent = translate("segmented.capture.configuredSegments");
-    this.captureConfiguredOutput = document.createElement("dd");
-    captureConfiguredList.append(captureConfiguredLabel, this.captureConfiguredOutput);
-    this.captureSection.append(captureConfiguredList);
     this.captureNote = document.createElement("p");
     this.captureNote.className = "muted compact-note";
     this.captureNote.hidden = true;
@@ -306,7 +298,9 @@ export class SegmentedEditor {
   selectedView() {
     const selected = this.hooks.selectedCommand?.();
     if (selected?.editor !== "segmented") return null;
-    return selected.id === "segmented-capture" ? "capture" : "memory";
+    if (selected.id === "segmented-memory") return "memory";
+    if (selected.id === "segmented-capture") return "capture";
+    return null;
   }
 
   isDryRun() {
@@ -391,7 +385,7 @@ export class SegmentedEditor {
   }
 
   applyDefinition() {
-    const definition = this.definition() || this.segmentedMemoryDefinition();
+    const definition = this.segmentedMemoryDefinition();
     const segmentField = definition
       ? this.catalog.fieldsFor(definition).find((field) => field.name === "segments")
       : null;
@@ -454,10 +448,10 @@ export class SegmentedEditor {
       this.state = null;
       this.dirty = false;
       this.countInput.value = "";
-      this.captureConfigured = null;
       this.captureBlocked = false;
       this.planningSegmentsInput.value = "";
     }
+    if (this.selectedView() !== "capture") this.captureBlocked = false;
     this.applyDefinition();
     this.applyCaptureDefinition(contextChanged);
     this.renderState();
@@ -590,39 +584,32 @@ export class SegmentedEditor {
     }
     this.setBusy(true);
     try {
-      // The Start-time segmented-memory query is the single execution source:
-      // update the readonly display first, then pass the same configured
-      // count to the existing segmented-capture command. Never guess a value.
+      // Starting a capture invalidates the Memory workspace cache immediately.
+      // The explicit prerequisite query is only the execution source for this
+      // capture; it must not repopulate Memory state or its workspace result.
+      this.state = null;
+      this.captureBlocked = false;
+      this.renderState();
       const submittedContextKey = this.contextKey;
       const queryJob = await this.hooks.executeCommand(
         "segmented-memory",
         { action: "query" },
-        { intent: "readback" },
+        { intent: "readback", captureWorkspaceResult: false },
       );
       if (submittedContextKey !== this.hooks.contextKey()) return;
-      const memoryState = queryJob?.status === "completed" ? segmentedState(queryJob) : null;
+      if (queryJob?.status !== "completed") return;
+      const memoryState = segmentedState(queryJob);
       const configured = memoryState?.configured_segments;
       if (memoryState?.mode !== "segmented" || !Number.isInteger(configured)) {
-        this.captureConfigured = null;
         this.captureBlocked = true;
         this.renderState();
         return;
       }
-      this.state = memoryState;
-      this.captureConfigured = configured;
-      this.captureBlocked = false;
-      this.captureNote.hidden = true;
-      this.renderState();
       await this.hooks.executeCommand(
         "segmented-capture",
         { channel, segments: configured, points, format },
         { intent: "command" },
       );
-      // Minimal invalidation: drop the cached memory state after capture so a
-      // possibly stale acquired count is never shown; the next explicit Read
-      // refreshes it. Never fabricate memory state from the capture result.
-      this.state = null;
-      this.renderState();
     } finally {
       this.setBusy(false);
     }
@@ -736,9 +723,6 @@ export class SegmentedEditor {
     this.captureSection.hidden = !captureView;
     const dryRun = this.isDryRun();
     this.planningRow.hidden = !captureView || !dryRun;
-    this.captureConfiguredOutput.textContent = Number.isInteger(this.captureConfigured)
-      ? String(this.captureConfigured)
-      : translate("segmented.capture.configuredUnknown");
     if (this.captureBlocked) {
       this.captureNote.textContent = translate("segmented.capture.notReady");
       this.captureNote.hidden = view !== "capture";
