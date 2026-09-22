@@ -665,7 +665,9 @@ Already persisted rows or captures remain in the result and artifacts; an
 uncommitted partial measurement row is omitted. Finite termination precedence
 is `instrument_error > completed > cancelled`: cancellation is reported only
 while work remains, and a stop request observed after count, duration, or
-measurement-condition completion does not replace `completed`.
+measurement-condition completion does not replace `completed`. For
+`segmented-capture`, an established `partial` or `failed` result likewise
+is not relabeled as cancelled by a later stop request.
 `KeyboardInterrupt` remains distinct as `status: "interrupted"`,
 `error: "KeyboardInterrupt"`, and exit code `130`.
 A Worker maps cooperative cancellation to its existing terminal

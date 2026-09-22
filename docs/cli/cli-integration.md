@@ -79,8 +79,9 @@ JSON stdout, stderr logs, and exit codes.
 
 `segmented-capture`, `measure-log`, `measure-until`, `capture-batch`,
 `capture-until`, `capture-monitor`, `triggered-measure-loop`, and
-`triggered-capture-series` execution is Core-owned. Their CLI adapters normalize arguments into the
-corresponding Core request, including `CaptureUntilRequest` and
+`triggered-capture-series` execution is Core-owned. Their CLI adapters
+normalize arguments into the corresponding Core request, including
+`CaptureUntilRequest` and
 `CaptureMonitorRequest`, open
 the selected run-mode session, invoke the Core operation, and render its
 `OperationResult`. Internal JSON dispatch accepts an optional cancellation

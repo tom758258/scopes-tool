@@ -153,10 +153,8 @@ completed-row boundaries; `measure-until` checks before each query and during
 relative interval waits; `capture-batch`, `capture-until`, and
 `capture-monitor` check between captures; `triggered-measure-loop` and
 `triggered-capture-series` check during trigger polling and interval waits.
-These workflows use cooperative cancellation; blocking device reads are not
-forcibly interrupted.
-They stop before the next iteration and preserve completed artifacts. A
-blocking device read is not forcibly interrupted and may not stop immediately.
+These workflows use cooperative cancellation and preserve completed artifacts.
+A blocking device read is not forcibly interrupted and may not stop immediately.
 Finite workflow termination precedence is `instrument_error > completed >
 cancelled`; a stop request observed after the count, duration, or measurement
 condition is complete does not replace the completed Core result. For
@@ -164,7 +162,8 @@ condition is complete does not replace the completed Core result. For
 `capture-until`, `capture-monitor`, `triggered-measure-loop`, and
 `triggered-capture-series`, the Worker maps Core `completed` to `succeeded`, Core
 `cancelled` to `cancelled` with exit code 3, and Core `instrument_error` or
-`error` to `failed`. A late Worker stop flag does not replace these
+`error` to `failed`. Segmented Capture also maps Core `partial` and
+`failed` to Worker `failed`. A late Worker stop flag does not replace these
 higher-precedence Core results.
 
 The worker exposes no `/trigger`, `trigger_url`, or `soft-*` endpoints.
