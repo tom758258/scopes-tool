@@ -326,6 +326,28 @@ def test_run_segmented_capture_cancellation_preserves_completed_segment_files(tm
     assert manifest["error"] is None
 
 
+def test_run_segmented_capture_completion_precedes_late_cancellation(tmp_path):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        resource_name="SIM::keysight-dsox4024a::INSTR",
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=lambda: backend.history.count(":WAVeform:DATA?") >= 2,
+        )
+
+    assert result.exit_code == 0
+    assert result.result["status"] == "completed"
+    assert result.result["exported_segments"] == 2
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "completed"
+    assert manifest["exported_segments"] == 2
+
+
 def test_run_segmented_capture_unit_query_timeout_stops_before_capture(tmp_path):
     backend = SimulatorBackend(
         query_failures={
