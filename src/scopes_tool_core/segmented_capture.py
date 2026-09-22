@@ -581,9 +581,11 @@ def run_segmented_capture(
                 )
                 manifest["vertical_unit"] = vertical_unit
                 _write_manifest(manifest, manifest_path)
+                cancellation_checkpoint()
                 scope.scpi.write(segmented_mode_command("segmented"))
                 scope.scpi.write(segmented_count_command(request.segments))
                 manifest["configured_segments"] = request.segments
+                cancellation_checkpoint()
                 scope.single()
 
                 deadline = time.monotonic() + request.timeout_ms / 1000.0
