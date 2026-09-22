@@ -831,12 +831,8 @@ def test_run_segmented_capture_cooperative_cancel_stops_active_acquisition(tmp_p
             OPERATION_CONDITION_RUN_MASK | OPERATION_CONDITION_RUI_ENAB_MASK,
         ],
     )
-    stop_checks = 0
-
     def stop_requested():
-        nonlocal stop_checks
-        stop_checks += 1
-        return stop_checks >= 4
+        return ":SINGle" in backend.history
 
     with Oscilloscope(backend) as scope:
         result = run_segmented_capture(
