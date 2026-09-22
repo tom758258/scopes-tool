@@ -252,6 +252,7 @@ EDITOR_HARNESS = r'''
         let selection = definition;
         const catalog = {
           activeMode: "simulate",
+          commands: [definition],
           supported: () => supported,
           fieldsFor: (command) => command.fields,
           optionsFor: (field) => field?.options || [],
