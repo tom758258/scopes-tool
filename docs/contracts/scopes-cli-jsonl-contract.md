@@ -656,9 +656,10 @@ Measurement and artifact-producing flows:
   `average_count`, `check_only`, `stopped_on_error`, `initial_acquisition`,
   `restore`, `termination_reason`, `steps`, `final_acquisition`, and `files`.
 
-For `measure-log`, `measure-until`, `capture-batch`, `capture-until`,
-`capture-monitor`, `triggered-measure-loop`, `triggered-capture-series`, and
-`sequence`, cooperative cancellation uses
+For `segmented-capture`, `measure-log`, `measure-until`,
+`capture-batch`, `capture-until`, `capture-monitor`,
+`triggered-measure-loop`, `triggered-capture-series`, and `sequence`,
+cooperative cancellation uses
 `status: "cancelled"`, `error: null`, and one-shot Core/CLI exit code `130`.
 Already persisted rows or captures remain in the result and artifacts; an
 uncommitted partial measurement row is omitted. Finite termination precedence
