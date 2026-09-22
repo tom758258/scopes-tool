@@ -501,13 +501,14 @@ def test_search_basic_view_renders_only_the_selected_command() -> None:
           "search-mode:readback",
         ]);
 
-        // search-count is query-only: a bare readout, no form, no Apply.
+        // search-count is query-only: no editor-local value, form, or Apply.
+        // The standard workspace result owns the successful count display.
         env.selectedId = "search-count";
         editor.schedulePresentation();
         await settle();
         assert.equal(editor.entry, null);
-        assert.ok(editor.readouts.count);
-        assert.equal(editor.bodyHost.children.length, 1);
+        assert.equal(editor.readouts.count, undefined);
+        assert.equal(editor.bodyHost.children.length, 0);
         assert.deepEqual(submitted.map((entry) => `${entry.command}:${entry.intent ?? ""}`), [
           "search-mode:readback",
         ]);
@@ -518,15 +519,13 @@ def test_search_basic_view_renders_only_the_selected_command() -> None:
           "search-mode:readback",
           "search-count:",
         ]);
-        assert.equal(editor.readouts.count.textContent, "-");
 
-        // Count becomes visible once the read result carries it.
         hooks.executeCommand = async (command, parameters, options) =>
           recordJob(command, parameters, options,
             command === "search-count" ? { count: 7 } : {});
         editor.refreshButton.dispatch("click");
         await settle();
-        assert.equal(editor.readouts.count.textContent, "7");
+        assert.equal(editor.readouts.count, undefined);
         '''
     )
     completed = subprocess.run(
@@ -585,7 +584,7 @@ def test_search_basic_apply_writes_once_without_reconciliation() -> None:
 
         const stateEntry = editor.entry;
         assert.ok(stateEntry.button.className.split(" ").includes("primary"));
-        assert.ok(editor.bodyHost.children[0].className.split(" ").includes("search-editor-single"));
+        assert.ok(!editor.bodyHost.children[0].className.split(" ").includes("search-editor-single"));
         stateEntry.form.valuesResult = { action: "set", enabled: true };
         stateEntry.button.dispatch("click");
         await settle();
@@ -771,7 +770,7 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
         for (const name of ["state", "mode"]) {
           const classes = editor.readouts[name].className.split(" ");
           assert.ok(classes.includes("search-editor-status-value"));
-          assert.ok(!classes.includes("readonly-value"));
+          assert.ok(classes.includes("readonly-value"));
         }
         assert.ok(!editor.bodyHost.children.some((node) =>
           node.tagName === "SECTION" && node.className.split(" ").includes("search-editor-single")));

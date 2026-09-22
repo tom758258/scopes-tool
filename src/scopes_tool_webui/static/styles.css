@@ -343,8 +343,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .multi-choice-option input[type="checkbox"]:disabled { opacity: .55; }
 .serial-editor { display: grid; gap: 14px; padding-top: 12px; }
 .serial-editor-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 12px; }
+#serial-trigger-editor > .serial-editor-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 .serial-editor-field select { min-width: 120px; }
-.serial-editor-current-value { display: inline-flex; align-items: center; min-width: 90px; }
+.serial-editor-current-value { display: inline-flex; align-items: center; min-width: 90px; min-height: var(--control-h); padding: 6px 9px; border-color: var(--line-strong); }
 .serial-editor-action { align-self: end; min-height: var(--control-h); }
 .serial-lister-row { display: grid; gap: 8px; width: 50%; }
 .serial-lister-row > .command-form { min-width: 0; grid-template-columns: minmax(0, 1fr); }
@@ -386,20 +387,22 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .search-editor-section:first-child { margin-top: 0; }
 .search-editor-section .command-form { padding-top: 0; }
 .search-editor-action { justify-self: start; min-height: var(--control-h); }
-.search-editor-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 12px; }
+.search-editor-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px 12px; }
 .search-editor-row select { min-width: 110px; }
-.search-editor-status-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; max-width: 420px; }
-.search-editor-status-value { color: var(--ink); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-.search-editor-single .command-form { grid-template-columns: 1fr; max-width: 520px; }
+.search-editor-status-value { display: flex; align-items: center; width: 100%; min-width: 0; min-height: var(--control-h); padding: 6px 9px; border-color: var(--line-strong); color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
 .segmented-editor { display: grid; gap: 14px; padding-top: 12px; }
 .segmented-editor-head, .segmented-editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .segmented-editor-head { justify-content: space-between; }
-.segmented-editor-state { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 18px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-soft); width: fit-content; max-width: 100%; }
+.segmented-editor-overview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px 12px; }
+.segmented-editor-state { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 18px; width: 100%; margin: 0; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-soft); }
 .segmented-editor-state dt { color: var(--muted); font-size: 12px; }
 .segmented-editor-state dd { margin: 0; font-weight: 600; }
 .segmented-editor-count { max-width: 220px; }
 .segmented-editor-actions.segmented-editor-count-row { align-items: end; }
 .segmented-editor-count-row > .field-help { flex-basis: 100%; }
+.segmented-editor-overview .segmented-editor-count-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+.segmented-editor-overview .segmented-editor-count { max-width: none; }
+.segmented-editor-overview .segmented-editor-count-row > .field-help { grid-column: 1 / -1; }
 .segmented-editor-browser { display: grid; gap: 8px; }
 .segmented-editor-browser-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .segmented-editor-browser-controls input { width: 90px; }
@@ -590,6 +593,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .device-resource-actions { margin-top: -3px; }
   .live-resource-field { grid-template-columns: 1fr; }
   .command-form { grid-template-columns: 1fr; }
+  .search-editor-row,
+  #serial-trigger-editor > .serial-editor-row,
+  .segmented-editor-overview { grid-template-columns: 1fr; }
   .serial-lister-row { width: 100%; align-items: stretch; }
   .serial-lister-row > .serial-editor-action { width: 100%; }
   .cursor-set-form { grid-template-areas: none; }

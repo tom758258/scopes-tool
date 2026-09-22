@@ -96,6 +96,10 @@ export class SegmentedEditor {
     countRow.append(countField, this.applySegmentsButton);
     this.appendFieldHelp(countRow, this.fieldDefinition(this.segmentedMemoryDefinition(), "segments"));
 
+    this.overview = document.createElement("div");
+    this.overview.className = "segmented-editor-overview";
+    this.overview.append(this.readouts, countRow);
+
     this.segmentBrowser = document.createElement("section");
     this.segmentBrowser.className = "segmented-editor-browser";
     const browserLabel = document.createElement("strong");
@@ -237,9 +241,8 @@ export class SegmentedEditor {
     this.container.append(
       head,
       this.unavailableNote,
-      this.readouts,
+      this.overview,
       stateHelp,
-      countRow,
       this.segmentBrowser,
       this.captureSection,
     );
@@ -717,6 +720,7 @@ export class SegmentedEditor {
     this.applySegmentsButton.hidden = !memoryView || !segmented;
     this.stateHelp.hidden = !memoryView || !segmented;
     this.unavailableNote.hidden = !unsupported;
+    this.overview.hidden = !memoryView;
     this.readouts.hidden = !memoryView;
     this.countRow.hidden = !memoryView;
     this.segmentBrowser.hidden = !memoryView || !browserAvailable;
