@@ -502,7 +502,7 @@ Control and setup:
   `vertical_unit`, and polling metadata. The top-level `files` list contains the
   manifest, SCPI log,
   and successfully written per-segment CSV files. Samples are not embedded in
-  JSON; partial or failed runs preserve already written CSV artifacts.
+  JSON; cancelled, partial, or failed runs preserve already written CSV artifacts.
 - `autoscale`: `operation`, `commands`, `source_channels`, optional
   `fallback`.
 - `setup-save` and `setup-recall`: `operation`, `command`, `slot`, `file`.
