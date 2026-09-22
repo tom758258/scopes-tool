@@ -32,7 +32,6 @@ from .scope import Oscilloscope
 from .workflow import (
     StopRequested,
     drain_preexisting_system_errors,
-    interruptible_wait,
     workflow_scpi_logging,
 )
 from .segmented import (
@@ -551,6 +550,15 @@ def run_segmented_capture(
         if stop_requested is not None and stop_requested():
             raise SegmentedCaptureCancelled()
 
+    def wait_poll_interval() -> None:
+        remaining = request.poll_interval_ms / 1000.0
+        while remaining > 0:
+            raise_if_cancelled()
+            sleep_seconds = min(0.1, remaining)
+            time.sleep(sleep_seconds)
+            remaining -= sleep_seconds
+        raise_if_cancelled()
+
     try:
         with workflow_scpi_logging(
             scpi_log_path,
@@ -643,11 +651,7 @@ def run_segmented_capture(
                             if acquired_segments >= request.segments:
                                 stable_ready = True
                                 break
-                            if not interruptible_wait(
-                                request.poll_interval_ms / 1000.0,
-                                stop_requested=stop_requested,
-                            ):
-                                raise SegmentedCaptureCancelled()
+                            wait_poll_interval()
                     except Exception as exc:
                         polling_exception = exc
                         raise
@@ -684,11 +688,8 @@ def run_segmented_capture(
                                 ready_streak += 1
                             else:
                                 ready_streak = 0
-                            if ready_streak < 2 and not interruptible_wait(
-                                request.poll_interval_ms / 1000.0,
-                                stop_requested=stop_requested,
-                            ):
-                                raise SegmentedCaptureCancelled()
+                            if ready_streak < 2:
+                                wait_poll_interval()
 
                         if ready_streak == 2:
                             raise_if_cancelled()
