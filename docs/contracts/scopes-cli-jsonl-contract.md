@@ -495,14 +495,14 @@ Control and setup:
   null, and zero acquired segments leaves selected segment and time tag null.
   Configuration does not start acquisition, capture data, or export artifacts.
 - `segmented-capture`: results include `operation: "segmented-capture"`,
-  `status` (`completed`, `partial`, `failed`, or dry-run `planned`),
+  `status` (`completed`, `cancelled`, `partial`, `failed`, or dry-run `planned`),
   `output_dir`, `manifest_path`, `scpi_log_path`, `channel`,
   `requested_segments`, `configured_segments`, `acquired_segments`,
   `exported_segments`, `points`, `format`, `initial_mode`, `final_mode`,
   `vertical_unit`, and polling metadata. The top-level `files` list contains the
   manifest, SCPI log,
   and successfully written per-segment CSV files. Samples are not embedded in
-  JSON; partial or failed runs preserve already written CSV artifacts.
+  JSON; cancelled, partial, or failed runs preserve already written CSV artifacts.
 - `autoscale`: `operation`, `commands`, `source_channels`, optional
   `fallback`.
 - `setup-save` and `setup-recall`: `operation`, `command`, `slot`, `file`.
