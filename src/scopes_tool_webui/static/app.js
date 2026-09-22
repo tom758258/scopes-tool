@@ -61,6 +61,7 @@ const elements = {
   liveTriggerLevel: document.querySelector("#live-trigger-level"),
   liveTriggerSlope: document.querySelector("#live-trigger-slope"),
   liveTriggerSweep: document.querySelector("#live-trigger-sweep"),
+  liveAcquisitionMode: document.querySelector("#live-acquisition-mode"),
   mode: [...document.querySelectorAll("input[name=mode]")],
   model: document.querySelector("#model-select"),
   modelField: document.querySelector("#planning-model-field"),
@@ -558,6 +559,10 @@ async function initialize() {
     return refreshSelectedResourceContext(selectedContext);
   }, () => {
     updateAvailability();
+  }, (modelContext) => {
+    if (modelContext?.mode === "simulate" && modelContext.model_id) {
+      void refreshLiveDataSnapshot();
+    }
   });
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   bindPcOutputControls();
@@ -897,6 +902,11 @@ async function finishResourceLiveSupportEvaluation(jobId) {
   pendingResourceLiveSupport = null;
   updateAvailability();
   await refreshRequestedResourceLiveSupport(completed);
+  if (!completed.requestedContext
+      && sameExecutionContext(context, completed.context)
+      && deviceResource?.hasCurrentIdentity?.(context)) {
+    await refreshLiveDataSnapshot();
+  }
   return true;
 }
 
@@ -1518,6 +1528,7 @@ function renderLiveData() {
       triggerLevel: elements.liveTriggerLevel,
       triggerSlope: elements.liveTriggerSlope,
       triggerSweep: elements.liveTriggerSweep,
+      acquisitionMode: elements.liveAcquisitionMode,
     },
     liveDataSnapshot.value,
     translate,

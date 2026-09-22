@@ -55,6 +55,9 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     assert '"live_data.type.glitch": "脈波寬度"' in chinese
     assert '"live_data.type.runt": "最窄脈波"' in chinese
     assert '"live_data.source.line": "線路"' in chinese
+    assert '"live_data.mode.segmented": "分段記憶"' in chinese
+    assert '"live_data.mode.realtime": "即時"' in chinese
+    assert '"live_data.mode.unknown": "未知"' in chinese
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -86,20 +89,23 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         const elements = {
           status: node(), channels: node(), timebaseScale: node(), timebasePosition: node(),
           triggerType: node(), triggerSource: node(), triggerLevel: node(), triggerSlope: node(),
-          triggerSweep: node(),
+          triggerSweep: node(), acquisitionMode: node(),
         };
         const translate = (key) => ({
           "live_data.type.glitch": "\u8108\u6ce2\u5bec\u5ea6",
           "live_data.source.line": "\u7dda\u8def",
+          "live_data.mode.segmented": "\u5206\u6bb5\u8a18\u61b6",
         })[key] || key;
         renderInstrumentSummary(elements, {
           channels: [],
           timebase: {},
           trigger: { type: "glitch", source: "line" },
+          acquisition: { mode: "segmented" },
         }, translate);
         assert.equal(elements.triggerType.textContent, "\u8108\u6ce2\u5bec\u5ea6");
         assert.notEqual(elements.triggerType.textContent, "Glitch");
         assert.equal(elements.triggerSource.textContent, "\u7dda\u8def");
+        assert.equal(elements.acquisitionMode.textContent, "\u5206\u6bb5\u8a18\u61b6");
         '''
     )
     completed = subprocess.run(
@@ -3635,6 +3641,23 @@ def test_shared_header_read_labels_use_dedicated_keys() -> None:
     ):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
+
+
+def test_live_data_auto_refresh_wiring() -> None:
+    app_source = read_static("app.js")
+    device_source = read_static("device-resource.js")
+
+    assert 'elements.liveDataRefresh.addEventListener("click", refreshLiveDataSnapshot);' in app_source
+    assert "await refreshLiveDataSnapshot();" in app_source
+    assert "void refreshLiveDataSnapshot();" in app_source
+    assert """  if (!completed.requestedContext
+      && sameExecutionContext(context, completed.context)
+      && deviceResource?.hasCurrentIdentity?.(context)) {
+    await refreshLiveDataSnapshot();
+  }""" in app_source
+    assert "onModelChange = () => {}," in device_source
+    assert "this.onModelChange(this.context());" in device_source
+    assert "modelContext?.mode === \"simulate\"" in app_source
 
 
 def test_system_information_is_a_read_only_workspace_view() -> None:

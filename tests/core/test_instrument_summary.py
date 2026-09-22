@@ -4,6 +4,7 @@ import pytest
 
 from scopes_tool_core import query_instrument_summary
 from scopes_tool_core.scope import Oscilloscope
+from scopes_tool_core.segmented import parse_acquisition_mode
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
 
@@ -41,6 +42,49 @@ def test_instrument_summary_reads_capability_channels_timebase_and_edge_trigger(
         "slope": "positive",
         "sweep": "normal",
     }
+
+
+@pytest.mark.parametrize(
+    ("segmented_mode", "expected"),
+    [
+        ("RTIM", "realtime"),
+        ("SEGM", "segmented"),
+        ("ETIM", "equivalent_time"),
+        ("GARBAGE", "unknown"),
+    ],
+)
+def test_instrument_summary_normalizes_acquisition_mode(segmented_mode, expected):
+    scope = Oscilloscope(SimulatorBackend(segmented_mode=segmented_mode))
+    scope.query_idn()
+
+    summary = query_instrument_summary(scope)
+
+    assert summary["acquisition"] == {"mode": expected}
+
+
+def test_instrument_summary_survives_acquisition_mode_failure(monkeypatch):
+    backend = SimulatorBackend()
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    original_query = SimulatorBackend.query
+
+    def fail_mode_query(self, command):
+        if command.strip().upper() == ":ACQUIRE:MODE?":
+            raise RuntimeError("simulated mode read failure")
+        return original_query(self, command)
+
+    monkeypatch.setattr(SimulatorBackend, "query", fail_mode_query)
+
+    summary = query_instrument_summary(scope)
+
+    assert summary["acquisition"] == {"mode": "unknown"}
+    assert len(summary["channels"]) == 4
+    assert set(summary["timebase"]) == {"scale", "position"}
+
+
+def test_parse_acquisition_mode_tolerates_casing_and_whitespace():
+    assert parse_acquisition_mode("  segm\n") == "segmented"
+    assert parse_acquisition_mode(None) == "unknown"
 
 
 @pytest.mark.parametrize(

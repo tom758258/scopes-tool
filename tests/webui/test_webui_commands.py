@@ -1196,6 +1196,7 @@ def test_live_data_snapshot_is_hidden_and_runs_through_simulated_jobs() -> None:
     assert job["status"] == "completed"
     summary = job["result"]["result"]["live_data"]
     assert len(summary["channels"]) == 4
+    assert summary["acquisition"] == {"mode": "realtime"}
     assert {"display", "units", "scale", "offset"} <= summary["channels"][0].keys()
     assert summary["timebase"] == {"scale": 0.001, "position": 0.0}
     assert summary["trigger"] == {

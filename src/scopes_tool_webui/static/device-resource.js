@@ -43,6 +43,7 @@ export class DeviceResource {
     onScanError = () => {},
     onSelectedResourceChange = () => {},
     onBusyChange = () => {},
+    onModelChange = () => {},
   ) {
     this.elements = elements;
     this.onContextChange = onContextChange;
@@ -51,6 +52,7 @@ export class DeviceResource {
     this.onScanError = onScanError;
     this.onSelectedResourceChange = onSelectedResourceChange;
     this.onBusyChange = onBusyChange;
+    this.onModelChange = onModelChange;
     this.resourceCount = null;
     this.statusKey = "device.ready";
     this.statusError = null;
@@ -73,7 +75,10 @@ export class DeviceResource {
     });
     elements.deviceCollapse.addEventListener("click", () => this.toggleBody());
     elements.mode.forEach((input) => input.addEventListener("change", () => this.changed()));
-    elements.model.addEventListener("change", () => this.changed());
+    elements.model.addEventListener("change", () => {
+      this.changed();
+      this.onModelChange(this.context());
+    });
     elements.resource.addEventListener("input", () => this.changed());
     elements.resource.addEventListener("change", () => {
       this.changed(true);

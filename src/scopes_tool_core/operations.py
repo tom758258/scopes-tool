@@ -67,6 +67,10 @@ from .planning import (
     resolve_sweep_channels,
 )
 from .scope import Oscilloscope
+from .segmented import (
+    parse_acquisition_mode,
+    segmented_mode_query,
+)
 from .trigger import (
     TriggerWaitConfig,
     parse_trigger_mode,
@@ -1669,7 +1673,17 @@ def query_instrument_summary(scope: Oscilloscope) -> dict[str, object]:
             "position": scope.query_timebase_position(),
         },
         "trigger": trigger,
+        "acquisition": {"mode": query_acquisition_mode_best_effort(scope)},
     }
+
+
+def query_acquisition_mode_best_effort(scope: Oscilloscope) -> str:
+    """Read the acquisition mode without failing the surrounding summary."""
+
+    try:
+        return parse_acquisition_mode(scope.scpi.query(segmented_mode_query()))
+    except Exception:
+        return "unknown"
 
 
 def query_acquisition_readouts(scope: Oscilloscope) -> dict[str, float | int | None]:

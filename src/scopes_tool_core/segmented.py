@@ -82,6 +82,7 @@ def segmented_count_command(count: int) -> str:
 
 _REALTIME_READBACKS = {"RTIM", "RTIME", "REALTIME"}
 _SEGMENTED_READBACKS = {"SEGM", "SEGMENTED"}
+_EQUIVALENT_TIME_READBACKS = {"ETIM", "ETIME", "EQUIVALENT_TIME"}
 _INTEGER_TOKEN = re.compile(r"^[+-]?\d+$")
 _FIRMWARE_PREFIX = re.compile(r"^\s*(\d+)\.(\d+)")
 
@@ -119,6 +120,23 @@ def parse_segmented_mode(raw: str) -> str:
     if value in _SEGMENTED_READBACKS:
         return "segmented"
     raise _response_error("mode", raw)
+
+
+def parse_acquisition_mode(raw: object) -> str:
+    """Normalize an acquisition mode readback for display purposes.
+
+    Unlike parse_segmented_mode, this never raises: unrecognized values
+    become "unknown" so status surfaces stay usable.
+    """
+
+    value = str(raw or "").strip().upper()
+    if value in _REALTIME_READBACKS:
+        return "realtime"
+    if value in _SEGMENTED_READBACKS:
+        return "segmented"
+    if value in _EQUIVALENT_TIME_READBACKS:
+        return "equivalent_time"
+    return "unknown"
 
 
 def parse_segmented_count(raw: str, *, acquired: bool) -> int:

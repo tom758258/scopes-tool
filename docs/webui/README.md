@@ -493,9 +493,11 @@ deterministic simulator; Live opens the explicit resource through Core.
 ## Live Data
 
 Live Data keeps the existing WebUI, command, and Live status indicators and
-adds a small read-only summary of analog channels, horizontal settings, and
-the common trigger state. **Read live data** is an explicit foreground action that
-uses the same Core-backed job admission as other commands. Live requires a
+adds a small read-only summary of analog channels, horizontal settings,
+acquisition mode, and the common trigger state. **Read live data** is an explicit foreground action that
+uses the same Core-backed job admission as other commands. Selecting a live
+resource after identification, or selecting a simulator model, automatically
+reads live data once; the manual button remains available for retries. Live requires a
 selected resource with confirmed identity, Simulate uses the Core simulator,
 and Dry-run reports the summary as unavailable.
 
