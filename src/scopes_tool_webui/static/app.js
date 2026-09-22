@@ -1251,10 +1251,12 @@ function syncWorkspaceHeaderActions(editorKind) {
     searchEditor.entry.button.hidden = editorKind !== "search";
   }
   const segmentedMemorySelected = editorKind === "segmented" && catalog?.selected()?.id === "segmented-memory";
+  const segmentedCaptureSelected = editorKind === "segmented" && catalog?.selected()?.id === "segmented-capture";
   if (segmentedEditor?.refreshButton) segmentedEditor.refreshButton.hidden = !segmentedMemorySelected;
   if (segmentedEditor?.modeButton && !segmentedMemorySelected) {
     segmentedEditor.modeButton.hidden = true;
   }
+  if (segmentedEditor?.captureButton) segmentedEditor.captureButton.hidden = !segmentedCaptureSelected;
   if (workflowEditor?.runButton) workflowEditor.runButton.hidden = editorKind !== "workflow";
   if (sequenceEditor?.executeButton) sequenceEditor.executeButton.hidden = editorKind !== "sequence";
   if (cursorEditor?.entry?.button) {

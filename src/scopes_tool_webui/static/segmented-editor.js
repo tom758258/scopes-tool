@@ -30,6 +30,7 @@ export class SegmentedEditor {
   buildDom() {
     this.refreshButton?.remove?.();
     this.modeButton?.remove?.();
+    this.captureButton?.remove?.();
     this.container.replaceChildren();
 
     const head = document.createElement("div");
@@ -71,6 +72,9 @@ export class SegmentedEditor {
     stateHelp.className = "field-help";
     stateHelp.textContent = translate("segmented.editor.stateHelp");
     this.stateHelp = stateHelp;
+    this.stateSection = document.createElement("div");
+    this.stateSection.className = "segmented-editor-state-section";
+    this.stateSection.append(this.readouts, stateHelp);
 
     const countRow = document.createElement("div");
     countRow.className = "segmented-editor-actions segmented-editor-count-row";
@@ -98,7 +102,9 @@ export class SegmentedEditor {
 
     this.overview = document.createElement("div");
     this.overview.className = "segmented-editor-overview";
-    this.overview.append(this.readouts, countRow);
+    this.memoryDivider = document.createElement("div");
+    this.memoryDivider.className = "segmented-editor-divider";
+    this.overview.append(this.stateSection, this.memoryDivider, countRow);
 
     this.segmentBrowser = document.createElement("section");
     this.segmentBrowser.className = "segmented-editor-browser";
@@ -195,6 +201,10 @@ export class SegmentedEditor {
     this.captureButton.className = "primary";
     this.captureButton.textContent = translate("segmented.editor.capture");
     this.captureButton.addEventListener("click", () => void this.capture());
+    if (this.hooks.headerActions) {
+      this.captureButton.hidden = true;
+      this.hooks.headerActions.append(this.captureButton);
+    }
     this.captureSection.append(captureHeading);
     const captureDescription = translate("segmented.editor.captureDescription");
     if (captureDescription) {
@@ -230,10 +240,13 @@ export class SegmentedEditor {
       capturePointsField,
       captureFormatField,
     );
-    const captureActions = document.createElement("div");
-    captureActions.className = "segmented-editor-actions";
-    captureActions.append(this.captureButton);
-    this.captureSection.append(this.captureForm, captureActions);
+    this.captureSection.append(this.captureForm);
+    if (!this.hooks.headerActions) {
+      const captureActions = document.createElement("div");
+      captureActions.className = "segmented-editor-actions";
+      captureActions.append(this.captureButton);
+      this.captureSection.append(captureActions);
+    }
 
     this.unavailableNote = document.createElement("p");
     this.unavailableNote.className = "muted compact-note";
@@ -242,7 +255,6 @@ export class SegmentedEditor {
       head,
       this.unavailableNote,
       this.overview,
-      stateHelp,
       this.segmentBrowser,
       this.captureSection,
     );

@@ -84,6 +84,15 @@ def test_search_event_apply_validation_is_unchanged() -> None:
     assert event_field["minimum"] == 1
 
 
+def test_serial_search_status_group_has_divider_before_bus() -> None:
+    styles = read_static("styles.css")
+    rule = styles.split(".search-editor-status-row {", 1)[1].split("}", 1)[0]
+
+    assert "border-bottom: 1px solid var(--line);" in rule
+    assert "padding-bottom: 10px;" in rule
+    assert "margin-bottom: 10px;" in rule
+
+
 def test_search_catalog_fields_carry_help_and_scoped_option_labels() -> None:
     catalog = {entry["id"]: entry for entry in command_catalog()}
 
