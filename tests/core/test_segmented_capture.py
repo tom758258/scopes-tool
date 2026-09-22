@@ -275,6 +275,30 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(
     ]
 
 
+def test_run_segmented_capture_cancels_before_state_change_when_stop_arrives_during_setup(
+    tmp_path,
+):
+    backend = SimulatorBackend(
+        physical_model_id="keysight-dsox4024a",
+        resource_name="SIM::keysight-dsox4024a::INSTR",
+    )
+
+    with Oscilloscope(backend) as scope:
+        result = run_segmented_capture(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            SegmentedCaptureRequest(1, 2, poll_interval_ms=1, output_dir=tmp_path),
+            stop_requested=lambda: ":CHANnel1:UNITs?" in backend.history,
+        )
+
+    assert result.exit_code == 3
+    assert result.result["status"] == "cancelled"
+    assert ":CHANnel1:UNITs?" in backend.history
+    assert ":ACQuire:MODE SEGMented" not in backend.history
+    assert ":ACQuire:SEGMented:COUNt 2" not in backend.history
+    assert ":SINGle" not in backend.history
+
+
 def test_run_segmented_capture_cooperatively_cancels_during_acquisition(tmp_path):
     backend = SimulatorBackend(
         physical_model_id="keysight-dsox4024a",
