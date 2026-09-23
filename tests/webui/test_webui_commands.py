@@ -922,11 +922,11 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     assert '"command.measure": "單項量測"' in chinese
     assert '"command.front-panel-measurements": "Front Panel Measurements"' in english
     assert '"command.front-panel-measurements": "前面板量測"' in chinese
-    assert '"command.measure-results": "Front-panel measurement results"' in english
+    assert '"command.measure-results": "Front-Panel Measurement Results"' in english
     assert '"command.measure-results": "前面板量測結果"' in chinese
     assert '"measurement.frontPanel.add": "Add measurement"' in english
     assert '"measurement.frontPanel.add": "新增量測"' in chinese
-    assert '"command.measure-show": "Measurement marker display"' in english
+    assert '"command.measure-show": "Measurement Marker Display"' in english
     assert '"command.measure-show": "量測標記顯示"' in chinese
     assert '"measurement.frontPanel.show": "Show measurement markers"' in english
     assert '"measurement.frontPanel.show": "顯示量測標記"' in chinese
