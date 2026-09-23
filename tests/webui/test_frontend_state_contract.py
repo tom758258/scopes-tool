@@ -101,6 +101,9 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
           "live_data.type.glitch": "\u8108\u6ce2\u5bec\u5ea6",
           "live_data.source.line": "\u7dda\u8def",
           "live_data.mode.segmented": "\u5206\u6bb5\u8a18\u61b6",
+          "enum.channel1": "\u901a\u9053 1",
+          "enum.channel2": "\u901a\u9053 2",
+          "enum.channel4": "\u901a\u9053 4",
         })[key] || key;
         renderInstrumentSummary(elements, {
           channels: [],
@@ -154,6 +157,16 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         assert.equal(channelCards.length, 2);
         assert.equal(channelCards[0].dataset.channel, "2");
         assert.equal(channelCards[1].dataset.channel, "4");
+        assert.equal(channelCards[0].children[0].children[0].textContent, "\u901a\u9053 2");
+        assert.equal(channelCards[1].children[0].children[0].textContent, "\u901a\u9053 4");
+
+        renderInstrumentSummary(elements, {
+          channels: [],
+          timebase: {},
+          trigger: { source: "analog-channel", source_channel: 1 },
+          acquisition: { mode: "realtime" },
+        }, translate);
+        assert.equal(elements.triggerSource.textContent, "\u901a\u9053 1");
         '''
     )
     completed = subprocess.run(
