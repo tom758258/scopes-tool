@@ -142,7 +142,7 @@ def test_result_history_has_powers_like_viewport_and_item_presentation() -> None
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_result_history_runtime_behaviour() -> None:
+def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
     assert '"enum.vpp": "Vp-p"' in english
@@ -670,8 +670,13 @@ def test_result_history_runtime_behaviour() -> None:
         assert(dryRunText.includes(":MEASure:PERiod? CHANnel1"));
         '''
     )
+    script_path = tmp_path / "result-history-runtime.mjs"
+    script_path.write_text(
+        script.replace("process.argv[1]", "process.argv[2]"),
+        encoding="utf-8",
+    )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        ["node", str(script_path), str(RESULTS_JS)],
         capture_output=True,
         text=True,
         check=False,
