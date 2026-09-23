@@ -1856,7 +1856,7 @@ def test_segmented_capture_workspace_result_labels_are_localized() -> None:
         globalThis.testLocale = "en";
 
         const enLabels = {
-          "command.segmented-capture": "Segmented capture",
+          "command.segmented-capture": "Segmented Capture",
           "results.field.operation": "Operation",
           "results.field.status": "Status",
           "results.status.completed": "Completed",
