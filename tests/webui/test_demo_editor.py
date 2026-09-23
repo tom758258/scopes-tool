@@ -256,8 +256,8 @@ def test_demo_editor_selected_command_presentation(tmp_path: Path) -> None:
     assert '"demo-phase": ["demo-query", "demo-phase"]' in app_source
     assert 'id="demo-editor"' in index_source
     for key in (
-        '"command.demo-query": "Demo Signals state"',
-        '"command.demo-output": "Demo output"',
+        '"command.demo-query": "Demo Signals State"',
+        '"command.demo-output": "Demo Output"',
         '"description.demo-query":',
         '"demo.editor.title": "Demo Signals"',
         '"demo.editor.description":',
