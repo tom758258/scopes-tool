@@ -275,13 +275,13 @@ def test_workflow_result_progress_rendering() -> None:
         globalThis.document = { createElement: (tag) => new FakeNode(tag) };
         globalThis.testLocale = "en";
         const en = {
-          "command.measure-log": "Measurement log",
-          "command.measure-until": "Measure until",
-          "command.triggered-measure-loop": "Triggered measurement loop",
-          "command.capture-batch": "Capture batch",
-          "command.capture-until": "Capture until",
-          "command.triggered-capture-series": "Triggered capture series",
-          "command.capture-monitor": "Capture monitor",
+          "command.measure-log": "Measurement Log",
+          "command.measure-until": "Measure Until",
+          "command.triggered-measure-loop": "Triggered Measurement Loop",
+          "command.capture-batch": "Periodic Capture",
+          "command.capture-until": "Capture Until",
+          "command.triggered-capture-series": "Triggered Capture Series",
+          "command.capture-monitor": "Capture Monitor",
           "command.sequence": "Sequence",
           "status.queued": "Queued",
           "status.running": "Running",
