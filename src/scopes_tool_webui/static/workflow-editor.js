@@ -61,6 +61,22 @@ export class WorkflowEditor {
       : translate(`field.${name}`);
   }
 
+  fieldHelp(field) {
+    if (!field || typeof field !== "object") return "";
+    const helpKey = field.help_key ? `help.${field.help_key}` : `help.${field.name}`;
+    return hasTranslation(helpKey) ? translate(helpKey) : (field.help || "");
+  }
+
+  appendFieldHelp(container, field) {
+    const text = this.fieldHelp(field);
+    if (!text) return;
+    const help = document.createElement("small");
+    help.className = "field-help";
+    help.textContent = text;
+    help.dataset.workflowHelp = field.name || "";
+    container.append(help);
+  }
+
   currentKey() {
     const selected = this.selectedDefinition();
     return `${this.hooks.contextKey()}|${selected?.id || ""}`;
@@ -121,11 +137,13 @@ export class WorkflowEditor {
 
     const channelField = fieldByName(fields, "channels");
     const channels = (channelField.options || []).map(String);
+    const pairItemsField = fieldByName(fields, "pair_items");
     this.pairItemsSection = this.buildChoiceSection(
       "workflow.editor.pairMeasurements",
       "pair_items",
-      fieldByName(fields, "pair_items").options || [],
+      pairItemsField.options || [],
       draft.pair_items,
+      pairItemsField,
     );
     this.container.append(
       this.buildChoiceSection(
@@ -133,16 +151,18 @@ export class WorkflowEditor {
         "channels",
         channels,
         draft.channels,
+        channelField,
       ),
       this.buildChoiceSection(
         "workflow.editor.measurements",
         "items",
         fieldByName(fields, "items").options || [],
         draft.items,
+        fieldByName(fields, "items"),
       ),
       ...(definition.id === "measure-log"
-        ? [this.pairItemsSection, this.buildPairsSection(channels, draft.pairs)]
-        : [this.buildPairsSection(channels, draft.pairs), this.pairItemsSection]),
+        ? [this.pairItemsSection, this.buildPairsSection(channels, draft.pairs, fieldByName(fields, "pairs"))]
+        : [this.buildPairsSection(channels, draft.pairs, fieldByName(fields, "pairs")), this.pairItemsSection]),
       this.buildLimitsSection(definition, fields, draft),
     );
     this.updatePairItemsVisibility();
@@ -234,7 +254,7 @@ export class WorkflowEditor {
     return section;
   }
 
-  buildChoiceSection(titleKey, name, options, selected) {
+  buildChoiceSection(titleKey, name, options, selected, field = null) {
     const section = this.buildSection(titleKey);
     const choices = document.createElement("div");
     choices.className = "workflow-editor-choices";
@@ -264,10 +284,11 @@ export class WorkflowEditor {
       });
     }
     section.append(choices);
+    this.appendFieldHelp(section, field);
     return section;
   }
 
-  buildPairsSection(channels, pairs) {
+  buildPairsSection(channels, pairs, field = null) {
     const section = this.buildSection("workflow.editor.pairs");
     this.pairsHost = document.createElement("div");
     this.pairsHost.className = "workflow-editor-pairs";
@@ -288,6 +309,7 @@ export class WorkflowEditor {
       this.applyBusyState();
     });
     section.append(this.addPairButton);
+    this.appendFieldHelp(section, field);
     return section;
   }
 
@@ -327,7 +349,7 @@ export class WorkflowEditor {
     }
   }
 
-  buildChannelSelect(name, channels, selected) {
+  buildChannelSelect(name, channels, selected, field = null) {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     const label = document.createElement("span");
@@ -339,6 +361,7 @@ export class WorkflowEditor {
     }
     input.value = String(selected || "");
     wrapper.append(label, input);
+    this.appendFieldHelp(wrapper, field);
     return { wrapper, input };
   }
 
@@ -346,7 +369,7 @@ export class WorkflowEditor {
     const channelField = fieldByName(fields, "channels");
     const channels = (channelField.options || []).map(String);
     const channelSection = this.buildChoiceSection(
-      "workflow.editor.channels", "channels", channels, draft.channels,
+      "workflow.editor.channels", "channels", channels, draft.channels, channelField,
     );
     this.container.append(channelSection);
     for (const input of this.controls.channels) {
@@ -394,6 +417,7 @@ export class WorkflowEditor {
       input.checked = draft.save_results !== false;
       input.addEventListener("change", () => this.captureDraft());
       saveWrapper.append(label, input);
+      this.appendFieldHelp(saveWrapper, fieldByName(fields, "save_results"));
       this.controls.save_results = input;
       grid.append(saveWrapper);
     }
@@ -435,6 +459,7 @@ export class WorkflowEditor {
     input.required = field.required === true;
     input.addEventListener("change", () => this.captureDraft());
     wrapper.append(label, input);
+    this.appendFieldHelp(wrapper, field);
     return { wrapper, input };
   }
 
@@ -474,6 +499,7 @@ export class WorkflowEditor {
       input.dataset.workflowField = "stop_on_error";
       input.addEventListener("change", () => this.captureDraft());
       wrapper.append(label, input);
+      this.appendFieldHelp(wrapper, fieldByName(fields, "stop_on_error"));
       this.controls.stop_on_error = input;
       limits.append(wrapper);
     }
@@ -487,6 +513,7 @@ export class WorkflowEditor {
     saveInput.dataset.workflowField = "save_results";
     saveInput.addEventListener("change", () => this.captureDraft());
     saveWrapper.append(saveLabel, saveInput);
+    this.appendFieldHelp(saveWrapper, fieldByName(fields, "save_results"));
     this.controls.save_results = saveInput;
     limits.append(saveWrapper);
     section.append(limits);
@@ -505,6 +532,7 @@ export class WorkflowEditor {
     input.dataset.workflowField = field.name;
     input.addEventListener("input", () => this.captureDraft());
     wrapper.append(label, input);
+    this.appendFieldHelp(wrapper, field);
     return { wrapper, input };
   }
 
@@ -763,7 +791,7 @@ export class WorkflowEditor {
   renderMeasureUntilWorkflow(definition, fields, draft) {
     const channelField = fieldByName(fields, "channel");
     const channels = (channelField.options || []).map(String);
-    const channelControl = this.buildChannelSelect("channel", channels, draft.channel);
+    const channelControl = this.buildChannelSelect("channel", channels, draft.channel, channelField);
     this.controls.channel = channelControl.input;
     const channelSection = this.buildSection("workflow.editor.channels");
     channelSection.append(channelControl.wrapper);
@@ -809,6 +837,7 @@ export class WorkflowEditor {
     saveInput.checked = draft.save_results !== false;
     saveInput.addEventListener("change", () => this.captureDraft());
     saveWrapper.append(saveLabel, saveInput);
+    this.appendFieldHelp(saveWrapper, fieldByName(fields, "save_results"));
     this.controls.save_results = saveInput;
     limitsGrid.append(saveWrapper);
     limitsSection.append(limitsGrid);
