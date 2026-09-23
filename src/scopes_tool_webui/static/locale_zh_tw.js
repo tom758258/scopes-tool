@@ -2034,7 +2034,7 @@ export const zhTW = {
   "results.summary.workflowFailed": "工作流程執行失敗；可展開結果詳細資料查看診斷資訊。",
   "results.summary.workflowInstrumentError": "工作流程執行期間，儀器回報錯誤。",
   "results.summary.captureBatchFailed": "批次擷取在完成 {{completed}} / {{total}} 次後失敗。",
-  "results.summary.captureUntilConditionTimedOut": "{{seconds}} 秒內未達成波形條件；已收集 {{completed}} / {{total}} 次符合條件的擷取。",
+  "results.summary.captureUntilConditionTimedOut": "{{seconds}} 秒內未收集到足夠的符合條件波形；已收集 {{completed}} / {{total}} 次。",
   "results.summary.captureUntilFailed": "條件擷取在收集 {{completed}} / {{total}} 次符合條件的波形後失敗。",
   "results.summary.captureMonitorFailed": "擷取監看在完成 {{completed}} / {{total}} 次後失敗。",
   "results.summary.measureLogFailedKnown": "量測記錄在完成 {{completed}} / {{total}} 筆後失敗。",
