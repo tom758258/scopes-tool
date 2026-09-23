@@ -176,7 +176,7 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
             summary: "Summary", channels: "Channels", actualPoints: "Actual points", format: "Format", files: "Files",
             captureCompleted: "Waveform capture completed", capturePoints: "{{actual}} points (requested {{requested}})", capturePointsPerChannel: "{{actual}} (requested {{requested}} per channel)", outputFileCount: "{{count}} output files", waveformReadTimedOut: "Waveform data read timed out. The instrument may not have usable waveform data, or it did not respond in time. Confirm the selected channel is enabled and an acquisition has completed, then try again.",
             validCount: "Valid count", invalidCount: "Invalid count", errorCount: "Error count", valid: "Valid", invalid: "Invalid", error: "Error",
-            noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value", measurementTimedOut: "{{channel}} {{measurement}} measurement timed out.", measurementFailed: "{{channel}} {{measurement}} measurement failed.", measurementFailedWithReason: "{{channel}} {{measurement}} measurement failed: {{message}}", sweepInvalid: "Measurement sweep contains invalid results: {{valid}} valid, {{invalid}} invalid.", triggerWaitTimedOut: "Trigger wait timed out.", captureTriggerTimedOut: "Trigger wait timed out; waveform was not captured.", triggerWaitFailed: "Trigger wait failed.", reportedInstrumentError: "The instrument reported an error.", planned: "Planned", instrumentError: "Instrument error", integrate: "Integrate", fftPhase: "FFT phase", fftZoom: "Zoom",
+            noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value", measurementTimedOut: "{{channel}} {{measurement}} measurement timed out.", measurementFailed: "{{channel}} {{measurement}} measurement failed.", measurementFailedWithReason: "{{channel}} {{measurement}} measurement failed: {{message}}", sweepInvalid: "Measurement sweep contains invalid results: {{valid}} valid, {{invalid}} invalid.", triggerWaitTimedOut: "Trigger wait timed out.", captureTriggerTimedOut: "Trigger wait timed out; waveform was not captured.", triggerWaitFailed: "Trigger wait failed.", reportedInstrumentError: "The instrument reported an error.", workflowInstrumentError: "The instrument reported an error while the workflow was running.", planned: "Planned", instrumentError: "Instrument error", integrate: "Integrate", fftPhase: "FFT phase", fftZoom: "Zoom",
           },
           "zh-TW": {
             identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d", cancelled: "\u5df2\u53d6\u6d88",
@@ -187,7 +187,7 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
             summary: "\u6458\u8981", channels: "\u901a\u9053", actualPoints: "\u5be6\u969b\u9ede\u6578", format: "\u683c\u5f0f", files: "\u6a94\u6848",
             captureCompleted: "\u6ce2\u5f62\u64f7\u53d6\u5b8c\u6210", capturePoints: "{{actual}} \u9ede\uff08\u8981\u6c42 {{requested}} \u9ede\uff09", capturePointsPerChannel: "{{actual}}\uff08\u6bcf\u901a\u9053\u8981\u6c42 {{requested}} \u9ede\uff09", outputFileCount: "{{count}} \u500b\u8f38\u51fa\u6a94\u6848", waveformReadTimedOut: "\u8b80\u53d6\u6ce2\u5f62\u8cc7\u6599\u903e\u6642\u3002\u5100\u5668\u76ee\u524d\u53ef\u80fd\u6c92\u6709\u53ef\u7528\u7684\u6ce2\u5f62\u8cc7\u6599\uff0c\u6216\u672a\u5728\u6642\u9593\u5167\u56de\u61c9\uff1b\u8acb\u78ba\u8a8d\u6240\u9078\u901a\u9053\u5df2\u958b\u555f\u4e14\u5df2\u5b8c\u6210\u6709\u6548\u64f7\u53d6\u5f8c\u518d\u8a66\u4e00\u6b21\u3002",
             validCount: "Valid count", invalidCount: "Invalid count", errorCount: "Error count", valid: "Valid", invalid: "Invalid", error: "Error",
-            noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c", measurementTimedOut: "{{channel}} {{measurement}} \u91cf\u6e2c\u67e5\u8a62\u903e\u6642\u3002", measurementFailed: "{{channel}} {{measurement}} \u91cf\u6e2c\u5931\u6557\u3002", measurementFailedWithReason: "{{channel}} {{measurement}} \u91cf\u6e2c\u5931\u6557\uff1a{{message}}", sweepInvalid: "\u91cf\u6e2c\u6383\u63cf\u5305\u542b\u7121\u6548\u7d50\u679c\uff1a{{valid}} \u7b46\u6709\u6548\uff0c{{invalid}} \u7b46\u7121\u6548\u3002", triggerWaitTimedOut: "\u7b49\u5f85\u89f8\u767c\u903e\u6642\u3002", captureTriggerTimedOut: "\u7b49\u5f85\u89f8\u767c\u903e\u6642\uff0c\u672a\u64f7\u53d6\u6ce2\u5f62\u3002", triggerWaitFailed: "\u7b49\u5f85\u89f8\u767c\u5931\u6557\u3002", reportedInstrumentError: "\u5100\u5668\u56de\u5831\u932f\u8aa4\u3002", planned: "\u5df2\u898f\u5283", instrumentError: "\u5100\u5668\u932f\u8aa4", integrate: "\u7a4d\u5206", fftPhase: "FFT \u76f8\u4f4d", fftZoom: "\u7e2e\u653e\u8996\u7a97",
+            noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c", measurementTimedOut: "{{channel}} {{measurement}} \u91cf\u6e2c\u67e5\u8a62\u903e\u6642\u3002", measurementFailed: "{{channel}} {{measurement}} \u91cf\u6e2c\u5931\u6557\u3002", measurementFailedWithReason: "{{channel}} {{measurement}} \u91cf\u6e2c\u5931\u6557\uff1a{{message}}", sweepInvalid: "\u91cf\u6e2c\u6383\u63cf\u5305\u542b\u7121\u6548\u7d50\u679c\uff1a{{valid}} \u7b46\u6709\u6548\uff0c{{invalid}} \u7b46\u7121\u6548\u3002", triggerWaitTimedOut: "\u7b49\u5f85\u89f8\u767c\u903e\u6642\u3002", captureTriggerTimedOut: "\u7b49\u5f85\u89f8\u767c\u903e\u6642\uff0c\u672a\u64f7\u53d6\u6ce2\u5f62\u3002", triggerWaitFailed: "\u7b49\u5f85\u89f8\u767c\u5931\u6557\u3002", reportedInstrumentError: "\u5100\u5668\u56de\u5831\u932f\u8aa4\u3002", workflowInstrumentError: "\u5de5\u4f5c\u6d41\u7a0b\u57f7\u884c\u671f\u9593\uff0c\u5100\u5668\u56de\u5831\u932f\u8aa4\u3002", planned: "\u5df2\u898f\u5283", instrumentError: "\u5100\u5668\u932f\u8aa4", integrate: "\u7a4d\u5206", fftPhase: "FFT \u76f8\u4f4d", fftZoom: "\u7e2e\u653e\u8996\u7a97",
           },
         };
         const translate = (key, values = {}) => {
@@ -255,6 +255,7 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
                                              : key === "results.summary.captureTriggerTimedOut" ? locale.captureTriggerTimedOut
                                                : key === "results.summary.triggerWaitFailed" ? locale.triggerWaitFailed
                                                  : key === "results.summary.instrumentError" ? locale.reportedInstrumentError
+                                                   : key === "results.summary.workflowInstrumentError" ? locale.workflowInstrumentError
                                                               : key;
           return Object.entries(values).reduce(
             (value, [name, replacement]) => value.replaceAll(`{{${name}}}`, String(replacement)),
@@ -523,7 +524,7 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
           error: "Core command returned a non-zero exit code.",
           result: { exit_code: 1, result: { status: "instrument_error" }, system_error: { code: -113, is_error: true, message: "Undefined header" } },
         }), detail);
-        assert.equal(rowTexts()[0][2], "Undefined header");
+        assert.equal(rowTexts()[0][2], "The instrument reported an error while the workflow was running.");
 
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("root-error-precedence", "capture", "failed", {
@@ -1517,6 +1518,167 @@ def test_system_semantic_workspace_results() -> None:
         ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
         capture_output=True,
         text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_failure_summaries_are_localized_and_semantic() -> None:
+    script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
+        r"""
+        const genericJobError = "Core command returned a non-zero exit code.";
+        const cases = [
+          {
+            command: "capture-batch",
+            result: {
+              status: "error", requested_count: 3, completed_count: 1,
+              error: "could not write capture batch manifest C:/internal/path/manifest.json",
+            },
+            en: "Periodic capture failed after 1 / 3 captures.",
+            zh: "批次擷取在完成 1 / 3 次後失敗。",
+          },
+          {
+            command: "capture-until",
+            result: {
+              status: "error", requested_count: 1, completed_count: 0, capture_count: 8,
+              timeout_seconds: 5, termination_reason: "condition_timeout",
+              error: {
+                type: "condition_timeout",
+                message: "waveform condition did not collect all requested matches within 5 seconds",
+              },
+            },
+            en: "Not enough waveform-condition matches were collected within 5 s; 0 / 1 matching captures were collected.",
+            zh: "5 秒內未收集到足夠的符合條件波形；已收集 0 / 1 次。",
+          },
+          {
+            command: "capture-monitor",
+            result: {
+              status: "error", requested_count: 5, completed_count: 2,
+              error: { type: "OscilloscopeError", message: "capture monitor channel time axes are not aligned" },
+            },
+            en: "Capture monitor failed after 2 / 5 captures.",
+            zh: "擷取監看在完成 2 / 5 次後失敗。",
+          },
+          {
+            command: "measure-log",
+            result: {
+              status: "error", requested_count: 4, completed_rows: 2,
+              error: "could not write measurement log output C:/internal/path/measurements.csv",
+            },
+            en: "Measurement logging failed after 2 / 4 rows.",
+            zh: "量測記錄在完成 2 / 4 筆後失敗。",
+          },
+          {
+            command: "measure-until",
+            result: {
+              status: "error", completed_count: 3, timeout_seconds: 5,
+              termination_reason: "condition_timeout",
+              error: { type: "condition_timeout", message: "measurement condition was not met within 5 seconds" },
+            },
+            en: "Measurement condition was not met within 5 s after 3 measurements.",
+            zh: "5 秒內未達成量測條件；已完成 3 次量測。",
+          },
+          {
+            command: "triggered-measure-loop",
+            result: {
+              status: "error", requested_count: 4, completed_count: 1,
+              error: {
+                type: "trigger_timeout", cycle_index: 2, outcome: "timeout",
+                message: "trigger wait timed out in cycle 2",
+              },
+            },
+            en: "Trigger wait timed out on cycle 2; 1 / 4 cycles were completed.",
+            zh: "第 2 輪等待觸發逾時；已完成 1 / 4 輪。",
+          },
+          {
+            command: "triggered-capture-series",
+            result: {
+              status: "error", requested_count: 3, completed_count: 0,
+              error: {
+                type: "trigger_timeout", cycle_index: 1, outcome: "timeout",
+                message: "trigger wait timed out in cycle 1",
+              },
+            },
+            en: "Trigger wait timed out on capture 1; 0 / 3 captures were completed.",
+            zh: "第 1 次擷取等待觸發逾時；已完成 0 / 3 次擷取。",
+          },
+          {
+            command: "sequence",
+            result: {
+              status: "error", total_step_executions: 6, completed_step_executions: 4,
+              failed_step: {
+                loop_index: 2, step_index: 2, action: "wait-trigger",
+                error: { type: "step_error", message: "trigger wait ended with outcome timeout" },
+              },
+              error: "trigger wait ended with outcome timeout",
+            },
+            en: "Sequence stopped at loop 2, step 2 (Wait for trigger).",
+            zh: "序列在第 2 輪、第 2 步（等待觸發）停止。",
+          },
+        ];
+
+        for (const locale of ["en", "zh-TW"]) {
+          globalThis.testLocale = locale;
+          for (const item of cases) {
+            const job = {
+              job_id: `workflow-failure-${locale}-${item.command}`,
+              command: item.command,
+              status: "failed",
+              error: genericJobError,
+              result: { exit_code: 1, result: item.result, artifacts: [] },
+            };
+            const summary = historyLine(job).summary;
+            assert.equal(summary, locale === "en" ? item.en : item.zh, `${locale} ${item.command}`);
+            assert.equal(summary.includes(genericJobError), false);
+            const rawMessage = typeof item.result.error === "string"
+              ? item.result.error
+              : item.result.error?.message;
+            if (rawMessage) assert.equal(summary.includes(rawMessage), false);
+          }
+
+          const unstructured = {
+            job_id: `workflow-unstructured-${locale}`,
+            command: "sequence",
+            status: "failed",
+            error: "OscilloscopeError: internal execution detail",
+            result: null,
+          };
+          assert.equal(
+            historyLine(unstructured).summary,
+            actualLocales[locale]["results.summary.workflowFailed"],
+          );
+
+          const instrumentFailure = {
+            job_id: `workflow-instrument-${locale}`,
+            command: "capture-monitor",
+            status: "failed",
+            error: genericJobError,
+            result: {
+              exit_code: 1,
+              result: {
+                status: "instrument_error", requested_count: 5, completed_count: 2,
+                error: { type: "instrument_error", message: '-113,"Undefined header"' },
+              },
+              system_error: { code: -113, is_error: true, message: "Undefined header" },
+              artifacts: [],
+            },
+          };
+          assert.equal(
+            historyLine(instrumentFailure).summary,
+            actualLocales[locale]["results.summary.workflowInstrumentError"],
+          );
+        }
+        """
+    )
+    completed = subprocess.run(
+        [
+            "node", "--input-type=module", "--eval", script,
+            str(RESULTS_JS), str(LOCALE_EN_JS), str(LOCALE_ZH_TW_JS),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
