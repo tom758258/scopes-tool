@@ -1759,6 +1759,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
                 "mode", "enum", options=SERIAL_MODES,
                 visible_if=_set_action_visibility(),
                 required_if=_set_action_visibility(),
+                option_label="serial-protocol",
             ),
         ),
         group="bus", editor="serial", browser_hidden=True,
