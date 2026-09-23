@@ -1185,9 +1185,10 @@ export const zhTW = {
   "help.workflow.measure-until.item": "選擇要反覆量測並拿來判斷條件是否成立的量測值。",
   "help.workflow.measure-until.threshold": "設定判斷所選量測是否符合條件時使用的數值門檻。",
   "help.workflow.triggered-measure-loop.count": "設定要執行幾個「等待觸發後量測」的週期。",
-  "help.workflow.trigger.timeout_seconds": "設定每個觸發週期或每次觸發擷取等待觸發的最長時間。",
+  "help.workflow.trigger.timeout_seconds": "設定每次等待觸發的最長時間；觸發迴圈與觸發擷取序列會對每一輪／每次擷取分別套用此限制。"
   "help.workflow.triggered-measure-loop.interval_seconds": "每個觸發量測週期完成後等待這段秒數，再開始下一個週期。",
   "help.workflow.triggered-capture-series.count": "設定要完成幾個「等待觸發後擷取」的週期。",
+  "help.workflow.triggered-capture-series.channels": "選擇每次成功觸發後要擷取的類比通道；至少選擇一個通道。",
   "help.workflow.sequence.document": "此命令要執行的序列文件；請在「序列」工作區中編輯。",
   "help.workflow.sequence.wait.seconds": "在繼續執行下一個序列步驟前等待這段秒數。",
   "help.workflow.sequence.measure.item": "選擇此序列步驟要執行的量測；部分量測項目會顯示額外的必要參數。",
