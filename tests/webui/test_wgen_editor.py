@@ -226,8 +226,8 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
     assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)' in app_source
     assert 'id="wgen-editor"' in index_source
     for key in (
-        '"command.wgen-query": "Waveform Generator State"',
-        '"command.wgen-load": "Generator Load"',
+        '"command.wgen-query": "Waveform generator state"',
+        '"command.wgen-load": "Generator load"',
         '"description.wgen-query":',
         '"wgen.editor.title": "Waveform generator"',
         '"wgen.editor.description":',
