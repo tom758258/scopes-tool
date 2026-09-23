@@ -922,11 +922,11 @@ def test_measure_catalog_declares_item_specific_fields_and_guidance() -> None:
     assert '"command.measure": "單項量測"' in chinese
     assert '"command.front-panel-measurements": "Front Panel Measurements"' in english
     assert '"command.front-panel-measurements": "前面板量測"' in chinese
-    assert '"command.measure-results": "Front-Panel Measurement Results"' in english
+    assert '"command.measure-results": "Front-panel measurement results"' in english
     assert '"command.measure-results": "前面板量測結果"' in chinese
     assert '"measurement.frontPanel.add": "Add measurement"' in english
     assert '"measurement.frontPanel.add": "新增量測"' in chinese
-    assert '"command.measure-show": "Measurement Marker Display"' in english
+    assert '"command.measure-show": "Measurement marker display"' in english
     assert '"command.measure-show": "量測標記顯示"' in chinese
     assert '"measurement.frontPanel.show": "Show measurement markers"' in english
     assert '"measurement.frontPanel.show": "顯示量測標記"' in chinese
@@ -1740,13 +1740,13 @@ def test_fft_math_slot_scoped_presentation_and_canonical_readback() -> None:
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
     assert '"command.fft": "MATH - FFT"' in english
     assert '"command.fft": "MATH - FFT"' in chinese
-    assert '"field.math-function.slot": "MATH Slot"' in english
+    assert '"field.math-function.slot": "Math slot"' in english
     assert '"field.math-function.slot": "MATH 槽位"' in chinese
-    assert '"enum.math-function": "MATH {{value}}"' in english
-    assert '"enum.math-function": "MATH {{value}}"' in chinese
+    assert '"enum.math-function": "Math {{value}}"' in english
+    assert '"enum.math-function": "Math {{value}}"' in chinese
     assert '"field.fft.display": "Show MATH waveform"' in english
     assert '"field.fft.display": "顯示 MATH 波形"' in chinese
-    assert '"description.fft": "Configure FFT on the selected MATH slot.' in english
+    assert '"description.fft": "Configure FFT on the selected Math slot.' in english
     assert '"description.fft": "設定所選 MATH 槽位的 FFT。' in chinese
     assert "depend on the selected oscilloscope model" in english
     assert "依所選示波器機型而定" in chinese
