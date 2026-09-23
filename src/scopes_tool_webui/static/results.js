@@ -454,23 +454,28 @@ function workflowResultSummary(job) {
   }
 }
 
+function channelDisplayLabel(channel) {
+  const value = String(channel ?? "").trim();
+  const match = /^(?:CH|channel)?\s*(\d+)$/i.exec(value);
+  if (!match) return value;
+  const key = `enum.channel${match[1]}`;
+  return hasTranslation(key) ? translate(key) : `CH${match[1]}`;
+}
+
 function workflowChannelsSummary(result) {
   const channels = Array.isArray(result?.channels)
     ? result.channels
     : result?.channel !== null && result?.channel !== undefined
       ? [result.channel]
       : [];
-  return channels.map((channel) => {
-    const value = String(channel);
-    return /^CH/i.test(value) ? value : `CH${value}`;
-  }).join(", ");
+  return channels.map(channelDisplayLabel).join(", ");
 }
 
 function workflowMeasurementLabel(name) {
   const pair = /^ch(\d+)_ch(\d+)_(.+)$/.exec(String(name));
-  if (pair) return `CH${pair[1]}/CH${pair[2]} ${measurementItemLabel(pair[3])}`;
+  if (pair) return `${channelDisplayLabel(pair[1])}/${channelDisplayLabel(pair[2])} ${measurementItemLabel(pair[3])}`;
   const single = /^ch(\d+)_(.+)$/.exec(String(name));
-  if (single) return `CH${single[1]} ${measurementItemLabel(single[2])}`;
+  if (single) return `${channelDisplayLabel(single[1])} ${measurementItemLabel(single[2])}`;
   return String(name).replaceAll("_", " ");
 }
 
@@ -786,8 +791,8 @@ function measureSweepErrorSummary(result) {
   if (failed) {
     const message = structuredErrorMessage(failed.error);
     const channel = failed.reference_channel === null || failed.reference_channel === undefined
-      ? `CH${failed.channel}`
-      : `CH${failed.channel}/CH${failed.reference_channel}`;
+      ? channelDisplayLabel(failed.channel)
+      : `${channelDisplayLabel(failed.channel)}/${channelDisplayLabel(failed.reference_channel)}`;
     const values = { channel, measurement: measurementItemLabel(failed.item) };
     if (isTimeoutMessage(message) || isTimeoutMessage(failed.reason)) {
       return translate("results.summary.measurementTimedOut", values);
@@ -1247,10 +1252,10 @@ function renderMeasureSweepWorkspaceResult(container, result) {
       : translate(record?.valid ? "results.status.valid" : "results.status.invalid");
     const values = [
       measurementItemLabel(record?.item),
-      record?.channel === null || record?.channel === undefined ? "—" : `CH${record.channel}`,
+      record?.channel === null || record?.channel === undefined ? "—" : channelDisplayLabel(record.channel),
       record?.reference_channel === null || record?.reference_channel === undefined
         ? "—"
-        : `CH${record.reference_channel}`,
+        : channelDisplayLabel(record.reference_channel),
       record?.value === null || record?.value === undefined ? "—" : String(record.value),
       record?.unit === null || record?.unit === undefined || record.unit === ""
         ? "—"
