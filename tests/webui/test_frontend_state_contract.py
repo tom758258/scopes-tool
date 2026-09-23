@@ -722,7 +722,7 @@ def test_live_context_and_controls_use_detected_identity() -> None:
     assert "deviceResource?.hasCurrentIdentity(context)" in availability
     assert 'id="detected-model"' in html
     assert 'data-command="identify"' not in html
-    assert '"command.identify": "Read Device Information"' in english
+    assert '"command.identify": "Read device information"' in english
     assert '"description.identify": "Read instrument identification information"' in english
     assert '"command.identify": "讀取裝置資訊"' in chinese
     assert '"description.identify": "讀取儀器識別資訊"' in chinese
