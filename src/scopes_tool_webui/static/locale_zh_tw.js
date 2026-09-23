@@ -512,6 +512,8 @@ export const zhTW = {
   "enum.math3": "Math 3",
   "enum.peak-to-peak": "峰對峰值",
   "enum.abs-max": "最大絕對值",
+  "enum.reset": "重設",
+  "enum.decibel": "分貝",
   "enum.rectangular": "矩形",
   "enum.hanning": "漢寧",
   "enum.flattop": "平頂",
