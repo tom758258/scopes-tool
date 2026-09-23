@@ -1185,7 +1185,7 @@ export const zhTW = {
   "help.workflow.measure-until.item": "選擇要反覆量測並拿來判斷條件是否成立的量測值。",
   "help.workflow.measure-until.threshold": "設定判斷所選量測是否符合條件時使用的數值門檻。",
   "help.workflow.triggered-measure-loop.count": "設定要執行幾個「等待觸發後量測」的週期。",
-  "help.workflow.trigger.timeout_seconds": "設定每次等待觸發的最長時間；觸發迴圈與觸發擷取序列會對每一輪／每次擷取分別套用此限制。"
+  "help.workflow.trigger.timeout_seconds": "設定每次等待觸發的最長時間；觸發迴圈與觸發擷取序列會對每一輪／每次擷取分別套用此限制。",
   "help.workflow.triggered-measure-loop.interval_seconds": "每個觸發量測週期完成後等待這段秒數，再開始下一個週期。",
   "help.workflow.triggered-capture-series.count": "設定要完成幾個「等待觸發後擷取」的週期。",
   "help.workflow.triggered-capture-series.channels": "選擇每次成功觸發後要擷取的類比通道；至少選擇一個通道。",
@@ -1195,7 +1195,7 @@ export const zhTW = {
   "help.workflow.sequence.measure.source_channel": "需要來源／參考通道的量測可使用此來源通道欄位；「通道」與「來源通道」不可同時填寫。",
   "help.workflow.sequence.capture.allow_time_axis_tolerance": "驗證多通道擷取時，允許各通道之間存在小幅時間軸差異。",
   "help.workflow.sequence.screenshot.background": "選擇儲存螢幕截圖時使用的背景。",
-  "help.workflow.sequence.cleanup.profile": "選擇此序列步驟要套用的預設清理設定檔。"
+  "help.workflow.sequence.cleanup.profile": "選擇此序列步驟要套用的預設清理設定檔。",
   "help.acquisition.average_count": "2–65536；數值越大，降噪效果越強，但波形更新越慢。",
   "help.acquisition.type.normal": "一般用途的標準擷取模式；多數波形可先使用此模式。",
   "help.acquisition.type.average": "將多次擷取結果平均以降低隨機雜訊；選擇後可設定平均次數。",
