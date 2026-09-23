@@ -1109,7 +1109,7 @@ function syncCommandSelection(draft = null) {
   syncWorkspaceHeaderActions(editorKind);
   const selectedTitle = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)
+      ? (["annotation", "cursor", "measurement", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind) || editorKind === "workflow")
         ? catalog.commandLabel(selected)
         : translate(`${editorKind}.editor.title`)
       : catalog.commandLabel(selected)
@@ -1118,7 +1118,7 @@ function syncCommandSelection(draft = null) {
   elements.selectedCommand.title = selectedTitle;
   const selectedDescription = selected
     ? editorOwned
-      ? ["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)
+      ? (["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind) || editorKind === "workflow")
         ? catalog.description(selected)
         : translate(`${editorKind}.editor.description`)
       : catalog.description(selected)

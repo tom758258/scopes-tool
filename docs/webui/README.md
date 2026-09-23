@@ -263,7 +263,9 @@ available under Display.
 
 Selecting `measure-log`, `triggered-measure-loop`, `capture-batch`,
 `measure-until`, `capture-until`, `capture-monitor`, or
-`triggered-capture-series` opens the dedicated Workflow editor. `measure-log`
+`triggered-capture-series` opens a command-named workflow workspace backed by the
+shared Workflow editor. Each workspace keeps the selected command's own name
+and description. `measure-log`
 and `triggered-measure-loop` provide model-projected channel and measurement
 choices, channel-pair rows, shared pair measurements, and the command's existing
 run limits.
@@ -461,8 +463,8 @@ capabilities. Live uses the detected physical model; Simulate and Dry-run use
 the selected planning model. The command workspace shows the latest successful
 result for that exact command and execution context, while Result History and
 raw Result Detail retain the full job and diagnostic views. Successful System
-command results use operator-readable semantic summaries in the Workspace;
-full structured and raw payloads remain available in Result Detail.
+and Workflow command results use operator-readable semantic summaries in the
+Workspace; full structured and raw payloads remain available in Result Detail.
 
 Timebase scale, position, and reference use the same
 read-edit-Apply-verification pattern. Reference accepts Left, Center, or Right.
@@ -513,10 +515,13 @@ data.
 Command submission returns a job ID. The browser polls job status through the
 WebUI API. Jobs report `queued`, `running`, `completed`, `failed`, or
 `cancelled` and expose structured Core results, errors, and diagnostic lines.
-Measurement workflows present a compact status/count summary and their final
-measurement in Result. Their complete sample history is not copied into the
-terminal job result; when saving is enabled, existing workflow files retain
-their persistence role.
+Workflow commands present compact, command-specific summaries in Result.
+Measurement workflows also show their final measurement when available, while
+capture workflows show only the small counters needed to understand completion
+or retention. Per-capture metadata, cycle/step detail, artifact paths, and raw
+diagnostics remain in Result Detail and the existing workflow files. Complete
+sample history is not copied into the terminal job result; when saving is
+enabled, existing workflow files retain their persistence role.
 
 Diagnostics uses the existing Doctor and Smoke Core operations. Doctor does
 not change scope configuration. It checks for an existing instrument error

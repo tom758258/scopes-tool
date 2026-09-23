@@ -329,6 +329,21 @@ function jobSummary(job) {
   return successfulJobSummary(job);
 }
 
+const WORKFLOW_RESULT_COMMANDS = new Set([
+  "capture-batch",
+  "capture-until",
+  "capture-monitor",
+  "measure-log",
+  "measure-until",
+  "triggered-measure-loop",
+  "triggered-capture-series",
+  "sequence",
+]);
+
+function isWorkflowResultCommand(command) {
+  return WORKFLOW_RESULT_COMMANDS.has(command);
+}
+
 function isWorkflowProgressCommand(command) {
   return (
     command === "measure-log" ||
@@ -378,6 +393,132 @@ function workflowProgressSummary(job) {
     unit,
     elapsed,
   });
+}
+
+function workflowResultSummary(job) {
+  const result = jobResultPayload(job) || {};
+  if (result?.status === "planned") return translate("results.status.planned");
+  switch (job.command) {
+    case "capture-batch":
+      return translate("results.summary.captureBatchCompleted", {
+        completed: result.completed_count ?? 0,
+        total: result.requested_count ?? 0,
+      });
+    case "capture-until":
+      return translate("results.summary.captureUntilCompleted", {
+        completed: result.completed_count ?? 0,
+        total: result.requested_count ?? 0,
+        captures: result.capture_count ?? result.completed_count ?? 0,
+      });
+    case "capture-monitor":
+      return translate("results.summary.captureMonitorCompleted", {
+        completed: result.completed_count ?? 0,
+        total: result.requested_count ?? 0,
+      });
+    case "measure-log": {
+      const completed = result.completed_rows ?? 0;
+      return result.requested_count === null || result.requested_count === undefined
+        ? translate("results.summary.measureLogCompleted", { completed })
+        : translate("results.summary.measureLogCompletedKnown", {
+          completed,
+          total: result.requested_count,
+        });
+    }
+    case "measure-until":
+      return result.matched === true || result.termination_reason === "condition_met"
+        ? translate("results.summary.measureUntilConditionMet", {
+          completed: result.completed_count ?? 0,
+        })
+        : translate("results.summary.measureUntilCompleted", {
+          completed: result.completed_count ?? 0,
+        });
+    case "triggered-measure-loop":
+      return translate("results.summary.triggeredMeasureLoopCompleted", {
+        completed: result.completed_count ?? 0,
+        total: result.requested_count ?? 0,
+      });
+    case "triggered-capture-series":
+      return translate("results.summary.triggeredCaptureSeriesCompleted", {
+        completed: result.completed_count ?? 0,
+        total: result.requested_count ?? 0,
+      });
+    case "sequence":
+      return translate("results.summary.sequenceCompleted", {
+        completed: result.completed_step_executions ?? 0,
+        total: result.total_step_executions ?? 0,
+        loops: result.loop_count ?? 0,
+        steps: result.step_count ?? 0,
+      });
+    default:
+      return translate("results.summary.completed");
+  }
+}
+
+function workflowChannelsSummary(result) {
+  const channels = Array.isArray(result?.channels)
+    ? result.channels
+    : result?.channel !== null && result?.channel !== undefined
+      ? [result.channel]
+      : [];
+  return channels.map((channel) => {
+    const value = String(channel);
+    return /^CH/i.test(value) ? value : `CH${value}`;
+  }).join(", ");
+}
+
+function workflowMeasurementLabel(name) {
+  const pair = /^ch(\d+)_ch(\d+)_(.+)$/.exec(String(name));
+  if (pair) return `CH${pair[1]}/CH${pair[2]} ${measurementItemLabel(pair[3])}`;
+  const single = /^ch(\d+)_(.+)$/.exec(String(name));
+  if (single) return `CH${single[1]} ${measurementItemLabel(single[2])}`;
+  return String(name).replaceAll("_", " ");
+}
+
+function workflowLastMeasurementSummary(result) {
+  const last = result?.last_measurement;
+  if (!last || typeof last !== "object") return "";
+  if (last.values && typeof last.values === "object" && !Array.isArray(last.values)) {
+    return Object.entries(last.values)
+      .map(([name, value]) => `${workflowMeasurementLabel(name)}: ${value}`)
+      .join("; ");
+  }
+  if (last.value !== null && last.value !== undefined) {
+    const label = result?.item ? measurementItemLabel(result.item) : resultFieldLabel("value");
+    return `${label}: ${last.value}`;
+  }
+  return "";
+}
+
+function renderWorkflowWorkspaceResult(container, job) {
+  if (!isWorkflowResultCommand(job?.command)) return false;
+  const result = jobResultPayload(job);
+  const fields = [[
+    "summary",
+    job?.status === "completed" ? workflowResultSummary(job) : jobSummary(job),
+  ]];
+  if (result && typeof result === "object") {
+    const channels = workflowChannelsSummary(result);
+    if (channels) fields.push(["channels", channels]);
+    const lastMeasurement = workflowLastMeasurementSummary(result);
+    if (lastMeasurement) fields.push(["last_measurement", lastMeasurement]);
+    const hasRetention = [
+      result.total_observed_points,
+      result.retained_points,
+      result.dropped_points,
+    ].some((value) => value !== null && value !== undefined);
+    if (job.command === "capture-monitor" && result.status !== "planned" && hasRetention) {
+      fields.push([
+        "retention",
+        translate("results.workflow.retention", {
+          observed: result.total_observed_points ?? 0,
+          retained: result.retained_points ?? 0,
+          dropped: result.dropped_points ?? 0,
+        }),
+      ]);
+    }
+  }
+  appendWorkspaceFields(container, fields);
+  return true;
 }
 
 function doctorPendingErrorsSummary(job) {
@@ -503,14 +644,7 @@ function successfulJobSummary(job) {
   if (job.command === "system-opc") return operationCompleteSummary(result);
   if (job.command === "system-clear-status") return translate("system.clearStatus.done");
   if (job.command === "check-error") return checkErrorNoErrorSummary();
-  if (job.command === "sequence") {
-    return translate("results.summary.sequenceCompleted", {
-      completed: result?.completed_step_executions ?? 0,
-      total: result?.total_step_executions ?? 0,
-      loops: result?.loop_count ?? 0,
-      steps: result?.step_count ?? 0,
-    });
-  }
+  if (isWorkflowResultCommand(job.command)) return workflowResultSummary(job);
 
   return scalarResultSummary(result) || translate("results.summary.completed");
 }
@@ -591,6 +725,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
   }
   if (renderSystemWorkspaceResult(container, job)) return;
   const result = jobResultPayload(job);
+  if (renderWorkflowWorkspaceResult(container, job)) return;
   if (job.command === "channel-summary" && Array.isArray(result?.channels)) {
     renderChannelSummaryWorkspaceResult(container, result.channels);
     return;

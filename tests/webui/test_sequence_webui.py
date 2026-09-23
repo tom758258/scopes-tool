@@ -642,7 +642,9 @@ def test_sequence_no_save_workspace_result_hides_files() -> None:
         };
         renderWorkspaceResult(container2, job2, {});
         const text2 = JSON.stringify(container2.children.map((c) => c.children?.map((x) => x.textContent) || c.textContent));
-        assert.equal(text2.includes("Files"), true);
+        assert.equal(text2.includes("Files"), false);
+        assert.equal(text2.includes("manifest.json"), false);
+        assert.equal(text2.includes("scpi.log"), false);
         '''
     )
     completed = subprocess.run(

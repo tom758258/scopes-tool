@@ -68,6 +68,32 @@ def test_app_routes_workflow_editor_without_generic_header_actions() -> None:
     assert 'executeCommand(\n        definition.id,' in editor
     assert '{ intent: "command" }' in editor
     assert "formRevision" not in editor
+    assert '"search", "segmented"].includes(editorKind)' in app
+    assert app.count('editorKind === "workflow"') >= 3
+
+
+def test_workflow_field_labels_are_command_scoped_and_localized() -> None:
+    editor = read_static("workflow-editor.js")
+    english = read_static("locale_en.js")
+    chinese = read_static("locale_zh_tw.js")
+
+    assert "fieldLabel(name)" in editor
+    assert 'workflow.monitor.statusSummary' in editor
+    assert 'workflow.monitor.metricSummary' in editor
+    for token in ("observed=", "retained=", "dropped=", "max=", "min=", "p2p=", "abs-max="):
+        assert token not in editor
+
+    expected = {
+        "workflow.capture-batch.field.count": ("Capture count", "擷取次數"),
+        "workflow.capture-until.field.count": ("Target match count", "目標符合次數"),
+        "workflow.capture-monitor.field.count": ("Capture count", "監看擷取次數"),
+        "workflow.measure-log.field.count": ("Row count", "記錄筆數"),
+        "workflow.triggered-measure-loop.field.count": ("Trigger cycle count", "觸發週期數"),
+        "workflow.triggered-capture-series.field.count": ("Triggered capture count", "觸發擷取次數"),
+    }
+    for key, (en_value, zh_value) in expected.items():
+        assert f'"{key}": "{en_value}"' in english
+        assert f'"{key}": "{zh_value}"' in chinese
 
 
 WORKFLOW_EDITOR_HARNESS = r'''
