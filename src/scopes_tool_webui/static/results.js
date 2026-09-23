@@ -589,6 +589,10 @@ function jobErrorSummary(job) {
   const result = jobResultPayload(job);
   const waveformReadTimeout = waveformReadTimeoutSummary(job, result);
   if (waveformReadTimeout) return waveformReadTimeout;
+
+  const workflowSummary = workflowErrorSummary(job, result);
+  if (workflowSummary) return workflowSummary;
+
   if (typeof result?.error === "string") return result.error;
   if (typeof result?.error?.message === "string") return result.error.message;
 
@@ -603,6 +607,121 @@ function jobErrorSummary(job) {
     return translate("results.summary.instrumentError");
   }
   return job.error || translate("results.summary.failed");
+}
+
+function workflowErrorSummary(job, result) {
+  const command = job?.command;
+  if (!isWorkflowResultCommand(command)) return null;
+  if (!result || typeof result !== "object") {
+    return translate("results.summary.workflowFailed");
+  }
+
+  const error = result.error;
+  const errorType = error && typeof error === "object" ? error.type : null;
+  const completed = result.completed_count ?? result.completed_rows ?? 0;
+  const total = result.requested_count;
+  const instrumentError =
+    result.status === "instrument_error"
+    || errorType === "instrument_error"
+    || job?.result?.system_error?.is_error === true;
+
+  switch (command) {
+    case "capture-batch":
+      if (instrumentError) return translate("results.summary.workflowInstrumentError");
+      return translate("results.summary.captureBatchFailed", {
+        completed,
+        total: total ?? 0,
+      });
+    case "capture-until":
+      if (
+        result.termination_reason === "condition_timeout"
+        || errorType === "condition_timeout"
+      ) {
+        return translate("results.summary.captureUntilConditionTimedOut", {
+          seconds: workflowNumberText(result.timeout_seconds),
+          completed,
+          total: total ?? 0,
+        });
+      }
+      if (instrumentError) return translate("results.summary.workflowInstrumentError");
+      return translate("results.summary.captureUntilFailed", {
+        completed,
+        total: total ?? 0,
+      });
+    case "capture-monitor":
+      if (instrumentError) return translate("results.summary.workflowInstrumentError");
+      return translate("results.summary.captureMonitorFailed", {
+        completed,
+        total: total ?? 0,
+      });
+    case "measure-log":
+      if (instrumentError) return translate("results.summary.workflowInstrumentError");
+      return total === null || total === undefined
+        ? translate("results.summary.measureLogFailed", { completed })
+        : translate("results.summary.measureLogFailedKnown", { completed, total });
+    case "measure-until":
+      if (
+        result.termination_reason === "condition_timeout"
+        || errorType === "condition_timeout"
+      ) {
+        return translate("results.summary.measureUntilConditionTimedOut", {
+          seconds: workflowNumberText(result.timeout_seconds),
+          completed,
+        });
+      }
+      if (instrumentError) return translate("results.summary.workflowInstrumentError");
+      return translate("results.summary.measureUntilFailed", { completed });
+    case "triggered-measure-loop":
+      if (errorType === "trigger_timeout") {
+        return translate("results.summary.triggeredMeasureLoopTimedOut", {
+          cycle: error?.cycle_index ?? completed + 1,
+          completed,
+          total: total ?? 0,
+        });
+      }
+      if (instrumentError) return translate("results.summary.workflowInstrumentError");
+      return translate("results.summary.triggeredMeasureLoopFailed", {
+        completed,
+        total: total ?? 0,
+      });
+    case "triggered-capture-series":
+      if (errorType === "trigger_timeout") {
+        return translate("results.summary.triggeredCaptureSeriesTimedOut", {
+          cycle: error?.cycle_index ?? completed + 1,
+          completed,
+          total: total ?? 0,
+        });
+      }
+      if (instrumentError) return translate("results.summary.workflowInstrumentError");
+      return translate("results.summary.triggeredCaptureSeriesFailed", {
+        completed,
+        total: total ?? 0,
+      });
+    case "sequence": {
+      const failedStep = result.failed_step;
+      if (failedStep && typeof failedStep === "object") {
+        const action = String(failedStep.action || "");
+        const actionKey = `sequence.action.${action}`;
+        return translate("results.summary.sequenceStepFailed", {
+          loop: failedStep.loop_index ?? "—",
+          step: failedStep.step_index ?? "—",
+          action: hasTranslation(actionKey) ? translate(actionKey) : action || "—",
+        });
+      }
+      if (instrumentError) return translate("results.summary.workflowInstrumentError");
+      return translate("results.summary.sequenceFailed", {
+        completed: result.completed_step_executions ?? 0,
+        total: result.total_step_executions ?? 0,
+      });
+    }
+    default:
+      return translate("results.summary.workflowFailed");
+  }
+}
+
+function workflowNumberText(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? String(number) : "—";
 }
 
 function commandErrorSummary(command, result) {
