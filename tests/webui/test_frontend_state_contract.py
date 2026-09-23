@@ -5152,6 +5152,42 @@ def test_boolean_field_help_spans_full_row() -> None:
     assert "grid-column: 1 / -1;" in boolean_help
 
 
+def test_workflow_and_sequence_fields_use_compact_top_aligned_controls() -> None:
+    styles = read_static("styles.css")
+
+    workflow_fields = extract_css_rule(styles, ".workflow-editor .field,")
+    assert "align-content: start;" in workflow_fields
+    assert "min-width: 0;" in workflow_fields
+
+    workflow_boolean = extract_css_rule(styles, ".workflow-editor .field-boolean,")
+    assert "grid-template-columns: auto minmax(0, 1fr);" in workflow_boolean
+    assert "align-content: start;" in workflow_boolean
+
+    workflow_checkbox = extract_css_rule(
+        styles, '.workflow-editor .field-boolean input[type="checkbox"],'
+    )
+    assert "width: 16px;" in workflow_checkbox
+    assert "height: 16px;" in workflow_checkbox
+
+    workflow_help = extract_css_rule(styles, ".workflow-editor .field-boolean .field-help,")
+    assert "grid-column: 1 / -1;" in workflow_help
+
+    stop_rule = extract_css_rule(styles, ".workflow-editor-stop {")
+    assert "align-self: start;" in stop_rule
+
+
+def test_segmented_count_row_keeps_locale_independent_action_width() -> None:
+    styles = read_static("styles.css")
+    count_row = extract_css_rule(
+        styles, ".segmented-editor-overview .segmented-editor-count-row {"
+    )
+    assert "grid-template-columns: minmax(0, 1fr) 132px;" in count_row
+
+    english = read_static("locale_en.js")
+    assert '"segmented.editor.read": "Read State"' in english
+    assert '"segmented.editor.applySegments": "Apply Count"' in english
+
+
 def test_field_help_and_readonly_value_wrap_long_text() -> None:
     styles = read_static("styles.css")
     field_help = extract_css_rule(styles, ".field-help {")
