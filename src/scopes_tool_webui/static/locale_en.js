@@ -2034,7 +2034,7 @@ export const en = {
   "results.summary.workflowFailed": "Workflow failed. Expand result details for diagnostic information.",
   "results.summary.workflowInstrumentError": "The instrument reported an error while the workflow was running.",
   "results.summary.captureBatchFailed": "Periodic capture failed after {{completed}} / {{total}} captures.",
-  "results.summary.captureUntilConditionTimedOut": "Waveform condition was not met within {{seconds}} s; {{completed}} / {{total}} matching captures were collected.",
+  "results.summary.captureUntilConditionTimedOut": "Not enough waveform-condition matches were collected within {{seconds}} s; {{completed}} / {{total}} matching captures were collected.",
   "results.summary.captureUntilFailed": "Capture-until workflow failed after {{completed}} / {{total}} matching captures.",
   "results.summary.captureMonitorFailed": "Capture monitor failed after {{completed}} / {{total}} captures.",
   "results.summary.measureLogFailedKnown": "Measurement logging failed after {{completed}} / {{total}} rows.",
