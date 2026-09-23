@@ -185,7 +185,7 @@ WORKFLOW_EDITOR_HARNESS = r'''
       .replace(/^import[^\n]*\r?\n/gm, "")
       .replace(/^export function /gm, "function ")
       .replace(/^export /gm, "")
-      + "\nglobalThis.workflowApi = { WorkflowEditor };";
+      + "\nglobalThis.workflowApi = { WorkflowEditor, channelLabel, translatedChoice };";
     await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
     const settle = async () => {
@@ -249,6 +249,34 @@ def run_editor_behavior(script: str) -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_choice_labels_follow_active_locale() -> None:
+    run_editor_behavior(
+        r'''
+        const dictionaries = {
+          zh: {
+            "enum.channel1": "通道 1",
+            "enum.max": "最大值",
+          },
+          en: {
+            "enum.channel1": "Channel 1",
+            "enum.max": "Maximum",
+          },
+        };
+        let locale = "zh";
+        globalThis.hasTranslation = (key) => key in dictionaries[locale];
+        globalThis.translate = (key) => dictionaries[locale][key] || key;
+
+        assert.equal(globalThis.workflowApi.channelLabel(1), "通道 1");
+        assert.equal(globalThis.workflowApi.translatedChoice("max"), "最大值");
+
+        locale = "en";
+        assert.equal(globalThis.workflowApi.channelLabel(1), "Channel 1");
+        assert.equal(globalThis.workflowApi.translatedChoice("max"), "Maximum");
+        ''',
+    )
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
