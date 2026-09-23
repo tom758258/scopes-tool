@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from scopes_tool_webui.commands import command_catalog
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
@@ -205,3 +207,77 @@ def test_capture_result_and_prerequisite_labels_are_localized() -> None:
 
     assert "usable waveform data" in english
     assert "可用的波形資料" in chinese
+
+
+def test_catalog_token_options_have_localized_labels() -> None:
+    """Lower-case internal enum tokens must never leak into a user-facing selector."""
+    english = locale_keys("locale_en.js")
+    chinese = locale_keys("locale_zh_tw.js")
+    missing: list[str] = []
+
+    def check_fields(scope: str, fields: object) -> None:
+        if not isinstance(fields, (list, tuple)):
+            return
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            option_label = field.get("option_label")
+            for option in field.get("options") or ():
+                if not isinstance(option, str) or not re.fullmatch(r"[a-z][a-z0-9_-]*", option):
+                    continue
+                candidates = [f"enum.{option}"]
+                if option_label:
+                    candidates = [
+                        f"enum.{option_label}.{option}",
+                        f"enum.{option_label}",
+                        *candidates,
+                    ]
+                if not any(key in english for key in candidates):
+                    missing.append(f"EN {scope}.{field.get('name')}: {option}")
+                if not any(key in chinese for key in candidates):
+                    missing.append(f"zh-TW {scope}.{field.get('name')}: {option}")
+
+    for command in command_catalog():
+        check_fields(command["id"], command.get("fields"))
+        sequence = command.get("sequence")
+        if isinstance(sequence, dict):
+            for action, fields in (sequence.get("parameters") or {}).items():
+                check_fields(f"{command['id']}.{action}", fields)
+
+    assert not missing, "Unlocalized lower-case option tokens: " + ", ".join(missing)
+
+
+def test_navigation_labels_use_english_title_case() -> None:
+    source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    stop_words = {"and", "or", "for", "to", "of", "in", "the", "a", "an", "from", "with", "per"}
+    failures: list[str] = []
+
+    for match in re.finditer(
+        r'"((?:command|group)\.[^"]+)"\s*:\s*"([^"]+)"',
+        source,
+    ):
+        key, value = match.groups()
+        words = value.split()
+        for index, token in enumerate(words):
+            if index > 0 and token.lower() in stop_words:
+                continue
+            for part in token.strip("()[]{}.,:/").split("-"):
+                if not part or not part[0].isalpha() or part.isupper():
+                    continue
+                if part[0].islower():
+                    failures.append(f"{key}={value!r}")
+                    break
+
+    assert not failures, "Navigation labels are not title-cased: " + ", ".join(sorted(set(failures)))
+
+
+def test_math_ui_uses_uppercase_math_terminology() -> None:
+    for locale_name in ("locale_en.js", "locale_zh_tw.js"):
+        source = (STATIC_ROOT / locale_name).read_text(encoding="utf-8")
+        offending = [
+            line.strip()
+            for line in source.splitlines()
+            if re.search(r"\bMath\b", line)
+            and '"system.option.ADVMATH"' not in line
+        ]
+        assert not offending, f"{locale_name} still contains mixed-case Math: {offending}"
