@@ -2003,6 +2003,8 @@ export const zhTW = {
   "sequence.editor.collapseAll": "全部收合",
   "sequence.editor.execute": "執行",
   "sequence.editor.loopCount": "重複次數",
+  "sequence.editor.loopCountHelp": "設定整個序列要重複執行幾次；仍會受到總步驟執行次數上限限制。",
+  "sequence.editor.actionHelp": "選擇此步驟要執行的動作；切換動作時會重設該步驟的參數。",
   "sequence.editor.stepUsage": "步驟 {{count}} / {{maximum}}",
   "sequence.editor.artifactUsage": "擷取 / 螢幕截圖 {{count}} / {{maximum}}",
   "sequence.editor.allChannels": "所有通道",
