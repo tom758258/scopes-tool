@@ -1523,6 +1523,167 @@ def test_system_semantic_workspace_results() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_failure_summaries_are_localized_and_semantic() -> None:
+    script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
+        r"""
+        const genericJobError = "Core command returned a non-zero exit code.";
+        const cases = [
+          {
+            command: "capture-batch",
+            result: {
+              status: "error", requested_count: 3, completed_count: 1,
+              error: "could not write capture batch manifest C:/internal/path/manifest.json",
+            },
+            en: "Periodic capture failed after 1 / 3 captures.",
+            zh: "批次擷取在完成 1 / 3 次後失敗。",
+          },
+          {
+            command: "capture-until",
+            result: {
+              status: "error", requested_count: 1, completed_count: 0, capture_count: 8,
+              timeout_seconds: 5, termination_reason: "condition_timeout",
+              error: {
+                type: "condition_timeout",
+                message: "waveform condition did not collect all requested matches within 5 seconds",
+              },
+            },
+            en: "Not enough waveform-condition matches were collected within 5 s; 0 / 1 matching captures were collected.",
+            zh: "5 秒內未收集到足夠的符合條件波形；已收集 0 / 1 次。",
+          },
+          {
+            command: "capture-monitor",
+            result: {
+              status: "error", requested_count: 5, completed_count: 2,
+              error: { type: "OscilloscopeError", message: "capture monitor channel time axes are not aligned" },
+            },
+            en: "Capture monitor failed after 2 / 5 captures.",
+            zh: "擷取監看在完成 2 / 5 次後失敗。",
+          },
+          {
+            command: "measure-log",
+            result: {
+              status: "error", requested_count: 4, completed_rows: 2,
+              error: "could not write measurement log output C:/internal/path/measurements.csv",
+            },
+            en: "Measurement logging failed after 2 / 4 rows.",
+            zh: "量測記錄在完成 2 / 4 筆後失敗。",
+          },
+          {
+            command: "measure-until",
+            result: {
+              status: "error", completed_count: 3, timeout_seconds: 5,
+              termination_reason: "condition_timeout",
+              error: { type: "condition_timeout", message: "measurement condition was not met within 5 seconds" },
+            },
+            en: "Measurement condition was not met within 5 s after 3 measurements.",
+            zh: "5 秒內未達成量測條件；已完成 3 次量測。",
+          },
+          {
+            command: "triggered-measure-loop",
+            result: {
+              status: "error", requested_count: 4, completed_count: 1,
+              error: {
+                type: "trigger_timeout", cycle_index: 2, outcome: "timeout",
+                message: "trigger wait timed out in cycle 2",
+              },
+            },
+            en: "Trigger wait timed out on cycle 2; 1 / 4 cycles were completed.",
+            zh: "第 2 輪等待觸發逾時；已完成 1 / 4 輪。",
+          },
+          {
+            command: "triggered-capture-series",
+            result: {
+              status: "error", requested_count: 3, completed_count: 0,
+              error: {
+                type: "trigger_timeout", cycle_index: 1, outcome: "timeout",
+                message: "trigger wait timed out in cycle 1",
+              },
+            },
+            en: "Trigger wait timed out on capture 1; 0 / 3 captures were completed.",
+            zh: "第 1 次擷取等待觸發逾時；已完成 0 / 3 次擷取。",
+          },
+          {
+            command: "sequence",
+            result: {
+              status: "error", total_step_executions: 6, completed_step_executions: 4,
+              failed_step: {
+                loop_index: 2, step_index: 2, action: "wait-trigger",
+                error: { type: "step_error", message: "trigger wait ended with outcome timeout" },
+              },
+              error: "trigger wait ended with outcome timeout",
+            },
+            en: "Sequence stopped at loop 2, step 2 (Wait for trigger).",
+            zh: "序列在第 2 輪、第 2 步（等待觸發）停止。",
+          },
+        ];
+
+        for (const locale of ["en", "zh-TW"]) {
+          globalThis.testLocale = locale;
+          for (const item of cases) {
+            const job = {
+              job_id: `workflow-failure-${locale}-${item.command}`,
+              command: item.command,
+              status: "failed",
+              error: genericJobError,
+              result: { exit_code: 1, result: item.result, artifacts: [] },
+            };
+            const summary = historyLine(job).summary;
+            assert.equal(summary, locale === "en" ? item.en : item.zh, `${locale} ${item.command}`);
+            assert.equal(summary.includes(genericJobError), false);
+            const rawMessage = typeof item.result.error === "string"
+              ? item.result.error
+              : item.result.error?.message;
+            if (rawMessage) assert.equal(summary.includes(rawMessage), false);
+          }
+
+          const unstructured = {
+            job_id: `workflow-unstructured-${locale}`,
+            command: "sequence",
+            status: "failed",
+            error: "OscilloscopeError: internal execution detail",
+            result: null,
+          };
+          assert.equal(
+            historyLine(unstructured).summary,
+            actualLocales[locale]["results.summary.workflowFailed"],
+          );
+
+          const instrumentFailure = {
+            job_id: `workflow-instrument-${locale}`,
+            command: "capture-monitor",
+            status: "failed",
+            error: genericJobError,
+            result: {
+              exit_code: 1,
+              result: {
+                status: "instrument_error", requested_count: 5, completed_count: 2,
+                error: { type: "instrument_error", message: '-113,"Undefined header"' },
+              },
+              system_error: { code: -113, is_error: true, message: "Undefined header" },
+              artifacts: [],
+            },
+          };
+          assert.equal(
+            historyLine(instrumentFailure).summary,
+            actualLocales[locale]["results.summary.workflowInstrumentError"],
+          );
+        }
+        """
+    )
+    completed = subprocess.run(
+        [
+            "node", "--input-type=module", "--eval", script,
+            str(RESULTS_JS), str(LOCALE_EN_JS), str(LOCALE_ZH_TW_JS),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_doctor_pending_errors_guidance() -> None:
     script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
         r'''
