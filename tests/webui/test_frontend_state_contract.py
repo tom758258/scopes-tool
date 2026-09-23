@@ -2057,8 +2057,22 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           return option;
         };
         globalThis.window = { confirm: () => true };
-        globalThis.translate = (key) => key;
-        globalThis.hasTranslation = () => true;
+        globalThis.testLocale = "en";
+        globalThis.translate = (key) => {
+          if (key === "form.selectValue") {
+            return globalThis.testLocale === "zh-TW" ? "請選擇值" : "Select a value";
+          }
+          const protocol = /^enum\.serial-protocol\.(.+)$/.exec(key);
+          if (protocol) {
+            return {
+              uart: "UART", i2c: "I2C", spi: "SPI", can: "CAN",
+              flexray: "FlexRay", manchester: "Manchester",
+            }[protocol[1]] || protocol[1].toUpperCase();
+          }
+          return key;
+        };
+        globalThis.hasTranslation = (key) =>
+          key === "form.selectValue" || /^enum\.serial-protocol\./.test(key);
         globalThis.CommandForm = class CommandForm {
           constructor(container) {
             this.container = container;
@@ -2251,6 +2265,13 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.deepEqual(submitted, []);
         assert.equal(decodeEditor.protocolSelect.children[0].value, "");
         assert.equal(decodeEditor.protocolSelect.children[0].disabled, true);
+        assert.equal(decodeEditor.protocolSelect.children[0].textContent, "Select a value");
+        globalThis.testLocale = "zh-TW";
+        decodeEditor.rerender();
+        assert.equal(decodeEditor.protocolSelect.children[0].textContent, "請選擇值");
+        globalThis.testLocale = "en";
+        decodeEditor.rerender();
+        assert.equal(decodeEditor.protocolSelect.children[0].textContent, "Select a value");
         assert.equal(decodeEditor.protocolSelect.disabled, true);
         assert.equal(decodeEditor.configUnreadPresentation.hidden, false);
         const decodePreviewFields = decodeEditor.configFormContainer.querySelectorAll("[data-field]");
