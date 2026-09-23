@@ -417,7 +417,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .segmented-editor-count { max-width: 220px; }
 .segmented-editor-actions.segmented-editor-count-row { align-items: end; }
 .segmented-editor-count-row > .field-help { flex-basis: 100%; }
-.segmented-editor-overview .segmented-editor-count-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; width: 50%; }
+.segmented-editor-overview .segmented-editor-count-row { display: grid; grid-template-columns: minmax(0, 1fr) 132px; align-items: end; width: 50%; }
+.segmented-editor-overview .segmented-editor-count-row > button { width: 100%; }
 .segmented-editor-overview .segmented-editor-count { max-width: none; }
 .segmented-editor-overview .segmented-editor-count-row > .field-help { grid-column: 1 / -1; }
 .segmented-editor-browser { display: grid; gap: 8px; }
@@ -438,7 +439,17 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .workflow-editor-pair .field { min-width: 0; }
 .workflow-editor-pair-remove { min-height: var(--control-h); }
 .workflow-editor-limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.workflow-editor-stop { align-self: end; }
+.workflow-editor .field,
+.sequence-editor .field { min-width: 0; align-content: start; }
+.workflow-editor .field-boolean,
+.sequence-editor .field-boolean { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; align-content: start; column-gap: 8px; min-height: var(--control-h); }
+.workflow-editor .field-boolean input[type="checkbox"],
+.sequence-editor .field-boolean input[type="checkbox"] { order: -1; width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; padding: 0; border: 0; box-shadow: none; accent-color: var(--accent); }
+.workflow-editor .field-boolean input[type="checkbox"]:focus,
+.sequence-editor .field-boolean input[type="checkbox"]:focus { outline: 2px solid rgb(11 102 195 / 35%); outline-offset: 2px; box-shadow: none; }
+.workflow-editor .field-boolean .field-help,
+.sequence-editor .field-boolean .field-help { grid-column: 1 / -1; }
+.workflow-editor-stop { align-self: start; }
 .sequence-editor { display: grid; gap: 14px; padding-top: 12px; }
 .sequence-editor-toolbar, .sequence-editor-overview, .sequence-step-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .sequence-editor-overview { justify-content: space-between; }

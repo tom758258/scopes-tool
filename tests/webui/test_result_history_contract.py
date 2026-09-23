@@ -182,7 +182,7 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
             identify: "\u8b80\u53d6\u88dd\u7f6e\u8cc7\u8a0a", run: "\u57f7\u884c", screenshot: "\u64f7\u53d6\u756b\u9762", capture: "\u64f7\u53d6\u6ce2\u5f62", listResources: "\u5217\u51fa\u8cc7\u6e90", completed: "\u5b8c\u6210", failed: "\u5931\u6557", queued: "\u6392\u968a\u4e2d", running: "\u57f7\u884c\u4e2d", cancelled: "\u5df2\u53d6\u6d88",
             queuedSummary: "\u7b49\u5f85\u57f7\u884c", runningSummary: "\u6b63\u5728\u57f7\u884c\u6307\u4ee4", completedSummary: "\u6307\u4ee4\u5df2\u6210\u529f\u5b8c\u6210", screenshotCaptured: "\u756b\u9762\u5df2\u64f7\u53d6", resourceNone: "\u627e\u4e0d\u5230\u8cc7\u6e90", resourceMany: "\u627e\u5230 4 \u500b\u8cc7\u6e90",
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
-            period: "Period", phase: "Phase", vpp: "Vp-p", channel1: "Channel 1", channel2: "Channel 2",
+            period: "Period", phase: "Phase", vpp: "Vp-p", channel1: "\u901a\u9053 1", channel2: "\u901a\u9053 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", value: "Value", unit: "Unit", status: "Status", result: "Result", plannedScpi: "Planned SCPI",
             summary: "\u6458\u8981", channels: "\u901a\u9053", actualPoints: "\u5be6\u969b\u9ede\u6578", format: "\u683c\u5f0f", files: "\u6a94\u6848",
             captureCompleted: "\u6ce2\u5f62\u64f7\u53d6\u5b8c\u6210", capturePoints: "{{actual}} \u9ede\uff08\u8981\u6c42 {{requested}} \u9ede\uff09", capturePointsPerChannel: "{{actual}}\uff08\u6bcf\u901a\u9053\u8981\u6c42 {{requested}} \u9ede\uff09", outputFileCount: "{{count}} \u500b\u8f38\u51fa\u6a94\u6848", waveformReadTimedOut: "\u8b80\u53d6\u6ce2\u5f62\u8cc7\u6599\u903e\u6642\u3002\u5100\u5668\u76ee\u524d\u53ef\u80fd\u6c92\u6709\u53ef\u7528\u7684\u6ce2\u5f62\u8cc7\u6599\uff0c\u6216\u672a\u5728\u6642\u9593\u5167\u56de\u61c9\uff1b\u8acb\u78ba\u8a8d\u6240\u9078\u901a\u9053\u5df2\u958b\u555f\u4e14\u5df2\u5b8c\u6210\u6709\u6548\u64f7\u53d6\u5f8c\u518d\u8a66\u4e00\u6b21\u3002",
@@ -469,7 +469,7 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
             summary: { valid_count: 0, invalid_count: 0, error_count: 1 },
           } },
         }), detail);
-        assert.equal(rowTexts()[0][2], "CH1 Vp-p measurement timed out.");
+        assert.equal(rowTexts()[0][2], "Channel 1 Vp-p measurement timed out.");
         assert.doesNotMatch(rowTexts()[0][2], /VISA|SCPI|VI_ERROR_TMO/);
 
         api.renderEmpty(summary, detail);
@@ -655,9 +655,9 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
           (row) => row.children.map((cell) => cell.textContent),
         );
         assert.deepEqual(rows, [
-          ["Vp-p", "CH1", "—", "3.2", "V", "Valid"],
-          ["Phase", "CH1", "CH2", "—", "deg", "Invalid"],
-          ["Phase", "CH2", "CH1", "—", "deg", "Error"],
+          ["Vp-p", "Channel 1", "—", "3.2", "V", "Valid"],
+          ["Phase", "Channel 1", "Channel 2", "—", "deg", "Invalid"],
+          ["Phase", "Channel 2", "Channel 1", "—", "deg", "Error"],
         ]);
         const simpleTableText = JSON.stringify(rows);
         assert.equal(simpleTableText.includes(":MEASure:"), false);
@@ -896,7 +896,7 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           field.children.map((node) => node.textContent)
         );
         assert(workflowText.some((text) => text.includes("Condition met after 2 measurements")));
-        assert(workflowText.includes("CH1"));
+        assert(workflowText.includes("Channel 1"));
         assert(workflowText.some((text) => text.includes("vpp: 4")));
         assert.equal(workflowText.some((text) => text.includes("Index: 2")), false);
 
@@ -915,7 +915,7 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           field.children.map((node) => node.textContent)
         );
         assert(zhWorkflowText.some((text) => text.includes("\u689d\u4ef6\u6210\u7acb")));
-        assert(zhWorkflowText.includes("CH1"));
+        assert(zhWorkflowText.includes("\u901a\u9053 1"));
         assert.equal(zhWorkflowText.some((text) => text.includes("\u7d22\u5f15")), false);
 
         const acquisitionWorkspace = new FakeNode("div");
@@ -1032,7 +1032,7 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         );
         assert.deepEqual(captureVisible, [
           "Waveform capture completed", "Summary",
-          "CH1", "Channels",
+          "Channel 1", "Channels",
           "992 points (requested 1000)", "Actual points",
           "BYTE", "Format",
           "2 output files", "Files",
@@ -1055,7 +1055,7 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         );
         assert.deepEqual(zhCaptureVisible, [
           "\u6ce2\u5f62\u64f7\u53d6\u5b8c\u6210", "\u6458\u8981",
-          "CH1", "\u901a\u9053",
+          "\u901a\u9053 1", "\u901a\u9053",
           "992 \u9ede\uff08\u8981\u6c42 1000 \u9ede\uff09", "\u5be6\u969b\u9ede\u6578",
           "BYTE", "\u683c\u5f0f",
           "2 \u500b\u8f38\u51fa\u6a94\u6848", "\u6a94\u6848",

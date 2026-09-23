@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from scopes_tool_webui.commands import command_catalog
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
@@ -205,3 +207,129 @@ def test_capture_result_and_prerequisite_labels_are_localized() -> None:
 
     assert "usable waveform data" in english
     assert "可用的波形資料" in chinese
+
+
+def test_catalog_navigation_entries_are_localized() -> None:
+    english = locale_keys("locale_en.js")
+    chinese = locale_keys("locale_zh_tw.js")
+    missing: list[str] = []
+
+    for command in command_catalog():
+        command_key = f"command.{command['id']}"
+        if command_key not in english:
+            missing.append(f"EN {command_key}")
+        if command_key not in chinese:
+            missing.append(f"zh-TW {command_key}")
+
+        category_key = f"category.{command['category']}"
+        if category_key not in english:
+            missing.append(f"EN {category_key}")
+        if category_key not in chinese:
+            missing.append(f"zh-TW {category_key}")
+
+        group = command.get("group")
+        if group:
+            group_key = f"group.{group}"
+            if group_key not in english:
+                missing.append(f"EN {group_key}")
+            if group_key not in chinese:
+                missing.append(f"zh-TW {group_key}")
+
+    assert not missing, "Unlocalized navigation entries: " + ", ".join(sorted(set(missing)))
+
+
+def test_catalog_token_options_have_localized_labels() -> None:
+    """Lower-case internal enum tokens must never leak into a user-facing selector."""
+    english = locale_keys("locale_en.js")
+    chinese = locale_keys("locale_zh_tw.js")
+    missing: list[str] = []
+
+    def check_options(scope: str, field: dict, options: object) -> None:
+        option_label = field.get("option_label")
+        for option in options or ():
+            if not isinstance(option, str) or not re.fullmatch(r"[a-z][a-z0-9_-]*", option):
+                continue
+            candidates = [f"enum.{option}"]
+            if option_label:
+                candidates = [
+                    f"enum.{option_label}.{option}",
+                    f"enum.{option_label}",
+                    *candidates,
+                ]
+            if not any(key in english for key in candidates):
+                missing.append(f"EN {scope}.{field.get('name')}: {option}")
+            if not any(key in chinese for key in candidates):
+                missing.append(f"zh-TW {scope}.{field.get('name')}: {option}")
+
+    def check_fields(scope: str, fields: object) -> None:
+        if not isinstance(fields, (list, tuple)):
+            return
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            check_options(scope, field, field.get("options"))
+            for mode, options in (field.get("mode_options") or {}).items():
+                check_options(f"{scope}[{mode}]", field, options)
+
+    for command in command_catalog():
+        check_fields(command["id"], command.get("fields"))
+
+        fields_by_name = {
+            field["name"]: field
+            for field in command.get("fields") or ()
+            if isinstance(field, dict) and field.get("name")
+        }
+        presentation = command.get("presentation") or {}
+        action_field = presentation.get("action_field")
+        if action_field and presentation.get("action_choices"):
+            field = fields_by_name.get(action_field, {"name": action_field})
+            check_options(command["id"], field, presentation["action_choices"])
+
+        for model_id, model in (presentation.get("models") or {}).items():
+            for field_name, override in (model.get("fields") or {}).items():
+                if not isinstance(override, dict) or "options" not in override:
+                    continue
+                field = dict(fields_by_name.get(field_name, {"name": field_name}))
+                field.update({key: value for key, value in override.items() if key == "option_label"})
+                check_options(f"{command['id']}[{model_id}]", field, override.get("options"))
+
+        sequence = command.get("sequence")
+        if isinstance(sequence, dict):
+            for action, fields in (sequence.get("parameters") or {}).items():
+                check_fields(f"{command['id']}.{action}", fields)
+
+    assert not missing, "Unlocalized lower-case option tokens: " + ", ".join(missing)
+
+def test_reported_workflow_and_math_tokens_have_user_facing_labels() -> None:
+    english_source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese_source = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+
+    for token in (
+        "peak-to-peak",
+        "abs-max",
+        "decibel",
+        "rectangular",
+        "hanning",
+        "flattop",
+        "bharris",
+        "bartlett",
+        "composite",
+        "math1",
+        "math2",
+        "math3",
+    ):
+        en_value = _locale_value(english_source, f"enum.{token}")
+        zh_value = _locale_value(chinese_source, f"enum.{token}")
+        assert en_value != token, token
+        assert zh_value != token, token
+        assert not en_value[0].islower(), f"enum.{token}={en_value!r}"
+
+
+def test_english_enum_labels_do_not_start_with_lowercase_text() -> None:
+    source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    failures = [
+        f"{key}={value!r}"
+        for key, value in re.findall(r'"(enum\.[^"]+)"\s*:\s*"([^"]+)"', source)
+        if value and value[0].isascii() and value[0].islower()
+    ]
+    assert not failures, "English enum labels start lower-case: " + ", ".join(failures)

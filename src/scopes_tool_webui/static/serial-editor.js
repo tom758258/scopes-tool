@@ -950,20 +950,21 @@ export class SerialDecodeEditor extends SerialWorkspaceBase {
 
     this.syncBusSelect(this.busSelect, stateSnapshot, disabled);
 
-    if (this.renderedProtocols?.join("|") !== stateSnapshot.protocols.join("|")) {
-      this.renderedProtocols = [...stateSnapshot.protocols];
-      this.renderOptions(
-        this.protocolSelect,
-        [
-          { value: "", label: translate("form.selectValue"), disabled: true },
-          ...stateSnapshot.protocols.map((protocol) => ({
+    this.renderedProtocols = [...stateSnapshot.protocols];
+    this.renderOptions(
+      this.protocolSelect,
+      [
+        { value: "", label: translate("form.selectValue"), disabled: true },
+        ...stateSnapshot.protocols.map((protocol) => {
+          const key = `enum.serial-protocol.${protocol}`;
+          return {
             value: protocol,
-            label: protocol.toUpperCase(),
-          })),
-        ],
-        stateSnapshot.selectedProtocol ?? "",
-      );
-    }
+            label: hasTranslation(key) ? translate(key) : protocol.toUpperCase(),
+          };
+        }),
+      ],
+      stateSnapshot.selectedProtocol ?? "",
+    );
     this.protocolSelect.value = stateSnapshot.selectedProtocol ?? "";
     this.protocolSelect.disabled = disabled || !stateSnapshot.decodeModeReady;
 

@@ -101,6 +101,9 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
           "live_data.type.glitch": "\u8108\u6ce2\u5bec\u5ea6",
           "live_data.source.line": "\u7dda\u8def",
           "live_data.mode.segmented": "\u5206\u6bb5\u8a18\u61b6",
+          "enum.channel1": "\u901a\u9053 1",
+          "enum.channel2": "\u901a\u9053 2",
+          "enum.channel4": "\u901a\u9053 4",
         })[key] || key;
         renderInstrumentSummary(elements, {
           channels: [],
@@ -154,6 +157,16 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         assert.equal(channelCards.length, 2);
         assert.equal(channelCards[0].dataset.channel, "2");
         assert.equal(channelCards[1].dataset.channel, "4");
+        assert.equal(channelCards[0].children[0].children[0].textContent, "\u901a\u9053 2");
+        assert.equal(channelCards[1].children[0].children[0].textContent, "\u901a\u9053 4");
+
+        renderInstrumentSummary(elements, {
+          channels: [],
+          timebase: {},
+          trigger: { source: "analog-channel", source_channel: 1 },
+          acquisition: { mode: "realtime" },
+        }, translate);
+        assert.equal(elements.triggerSource.textContent, "\u901a\u9053 1");
         '''
     )
     completed = subprocess.run(
@@ -2057,8 +2070,22 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
           return option;
         };
         globalThis.window = { confirm: () => true };
-        globalThis.translate = (key) => key;
-        globalThis.hasTranslation = () => true;
+        globalThis.testLocale = "en";
+        globalThis.translate = (key) => {
+          if (key === "form.selectValue") {
+            return globalThis.testLocale === "zh-TW" ? "請選擇值" : "Select a value";
+          }
+          const protocol = /^enum\.serial-protocol\.(.+)$/.exec(key);
+          if (protocol) {
+            return {
+              uart: "UART", i2c: "I2C", spi: "SPI", can: "CAN",
+              flexray: "FlexRay", manchester: "Manchester",
+            }[protocol[1]] || protocol[1].toUpperCase();
+          }
+          return key;
+        };
+        globalThis.hasTranslation = (key) =>
+          key === "form.selectValue" || /^enum\.serial-protocol\./.test(key);
         globalThis.CommandForm = class CommandForm {
           constructor(container) {
             this.container = container;
@@ -2251,6 +2278,13 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
         assert.deepEqual(submitted, []);
         assert.equal(decodeEditor.protocolSelect.children[0].value, "");
         assert.equal(decodeEditor.protocolSelect.children[0].disabled, true);
+        assert.equal(decodeEditor.protocolSelect.children[0].textContent, "Select a value");
+        globalThis.testLocale = "zh-TW";
+        decodeEditor.rerender();
+        assert.equal(decodeEditor.protocolSelect.children[0].textContent, "請選擇值");
+        globalThis.testLocale = "en";
+        decodeEditor.rerender();
+        assert.equal(decodeEditor.protocolSelect.children[0].textContent, "Select a value");
         assert.equal(decodeEditor.protocolSelect.disabled, true);
         assert.equal(decodeEditor.configUnreadPresentation.hidden, false);
         const decodePreviewFields = decodeEditor.configFormContainer.querySelectorAll("[data-field]");
@@ -5150,6 +5184,42 @@ def test_boolean_field_help_spans_full_row() -> None:
     boolean_help = extract_css_rule(styles, ".command-form .field-boolean .field-help")
 
     assert "grid-column: 1 / -1;" in boolean_help
+
+
+def test_workflow_and_sequence_fields_use_compact_top_aligned_controls() -> None:
+    styles = read_static("styles.css")
+
+    workflow_fields = extract_css_rule(styles, ".workflow-editor .field,")
+    assert "align-content: start;" in workflow_fields
+    assert "min-width: 0;" in workflow_fields
+
+    workflow_boolean = extract_css_rule(styles, ".workflow-editor .field-boolean,")
+    assert "grid-template-columns: auto minmax(0, 1fr);" in workflow_boolean
+    assert "align-content: start;" in workflow_boolean
+
+    workflow_checkbox = extract_css_rule(
+        styles, '.workflow-editor .field-boolean input[type="checkbox"],'
+    )
+    assert "width: 16px;" in workflow_checkbox
+    assert "height: 16px;" in workflow_checkbox
+
+    workflow_help = extract_css_rule(styles, ".workflow-editor .field-boolean .field-help,")
+    assert "grid-column: 1 / -1;" in workflow_help
+
+    stop_rule = extract_css_rule(styles, ".workflow-editor-stop {")
+    assert "align-self: start;" in stop_rule
+
+
+def test_segmented_count_row_keeps_locale_independent_action_width() -> None:
+    styles = read_static("styles.css")
+    count_row = extract_css_rule(
+        styles, ".segmented-editor-overview .segmented-editor-count-row {"
+    )
+    assert "grid-template-columns: minmax(0, 1fr) 132px;" in count_row
+
+    english = read_static("locale_en.js")
+    assert '"segmented.editor.read": "Read State"' in english
+    assert '"segmented.editor.applySegments": "Apply Count"' in english
 
 
 def test_field_help_and_readonly_value_wrap_long_text() -> None:

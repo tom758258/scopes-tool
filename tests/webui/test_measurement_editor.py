@@ -262,6 +262,8 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         assert.equal(sweepUi.sweepAddPairButton.disabled, false);
         sweepUi.sweepAddPairButton.handler();
         assert.equal(sweepUi.sweepPairRows.length, 1);
+        assert.equal(sweepUi.sweepPairRows[0].source.children[0].textContent, "enum.channel1");
+        assert.equal(sweepUi.sweepPairRows[0].reference.children[0].textContent, "enum.channel1");
         sweepUi.sweepControls.pair_items[0].checked = false;
         sweepUi.sweepControls.pair_items[0].handler();
         assert.equal(sweepUi.sweepPairRows.length, 1);

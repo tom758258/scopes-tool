@@ -11,7 +11,11 @@ function fieldByName(fields, name) {
 }
 
 function channelLabel(value) {
-  return `CH${String(value)}`;
+  const raw = String(value ?? "").trim();
+  const match = /^(?:CH|channel)?\s*(\d+)$/i.exec(raw);
+  if (!match) return raw;
+  const key = `enum.channel${match[1]}`;
+  return hasTranslation(key) ? translate(key) : `CH${match[1]}`;
 }
 
 function defaultChoices(field) {
@@ -862,7 +866,7 @@ export class WorkflowEditor {
       const summary = this.monitorSummary || {};
       const metrics = Object.entries(summary.metrics || {}).map(
         ([channel, values]) => translate("workflow.monitor.metricSummary", {
-          channel,
+          channel: channelLabel(channel),
           maximum: values.maximum ?? "—",
           minimum: values.minimum ?? "—",
           peakToPeak: values.peak_to_peak ?? "—",

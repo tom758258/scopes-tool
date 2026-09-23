@@ -73,7 +73,7 @@ function channelCard(channel, translate) {
   const header = document.createElement("div");
   header.className = "live-channel-head";
   const heading = document.createElement("strong");
-  heading.textContent = `CH${channel.channel}`;
+  heading.textContent = localizedChannelLabel(channel.channel, translate);
   const display = document.createElement("span");
   display.className = `badge ${channel.display === true ? "badge-completed" : channel.display === false ? "badge-idle" : "badge-queued"}`;
   display.textContent = channel.display === true
@@ -106,6 +106,12 @@ function unavailableMessage() {
   return message;
 }
 
+function localizedChannelLabel(value, translate) {
+  const key = `enum.channel${String(value)}`;
+  const translated = translate(key);
+  return translated === key ? `CH${String(value)}` : translated;
+}
+
 function channelUnit(value) {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "volt") return "V";
@@ -116,7 +122,7 @@ function channelUnit(value) {
 function triggerSource(trigger, translate) {
   if (!trigger?.source) return "—";
   if (trigger.source === "analog-channel" && trigger.source_channel) {
-    return `CH${trigger.source_channel}`;
+    return localizedChannelLabel(trigger.source_channel, translate);
   }
   const key = `live_data.source.${trigger.source}`;
   const translated = translate(key);
