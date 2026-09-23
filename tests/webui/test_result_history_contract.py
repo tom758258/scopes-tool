@@ -2044,7 +2044,7 @@ def test_math_response_parse_failure_summary_is_localized_and_keeps_raw_diagnost
         const translate = (key, values = {}) => {
           let text = messages[globalThis.testLocale]?.[key] || key;
           for (const [name, value] of Object.entries(values)) {
-            text = text.replaceAll(\`{{\${name}}}\`, String(value));
+            text = text.replaceAll(`{{${name}}}`, String(value));
           }
           return text;
         };
@@ -2056,14 +2056,14 @@ def test_math_response_parse_failure_summary_is_localized_and_keeps_raw_diagnost
           "const hasTranslation = globalThis.hasTranslation;",
           "const translateJobStatus = globalThis.translateJobStatus;",
           fs.readFileSync(process.argv[1], "utf8"),
-        ].join("\\n")
-          .replace(/^import[^\\n]*\\r?\\n/gm, "")
+        ].join("\n")
+          .replace(/^import[^\n]*\r?\n/gm, "")
           .replace(/^export function /gm, "function ")
-          + "\\nglobalThis.mathErrorApi = { jobErrorSummary };";
+          + "\nglobalThis.mathErrorApi = { jobErrorSummary };";
         globalThis.translate = translate;
         globalThis.hasTranslation = hasTranslation;
         globalThis.translateJobStatus = translateJobStatus;
-        await import(\`data:text/javascript;charset=utf-8,\${encodeURIComponent(source)}\`);
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
         const raw = "ChannelResponseError: Could not parse Math operation response: 'FFT'";
         const job = { command: "math-operator", status: "failed", error: raw };
