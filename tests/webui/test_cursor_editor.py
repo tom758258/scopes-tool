@@ -274,7 +274,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         '"description.cursor-query":',
         '"command.cursor-set": "Set Cursors"',
         '"description.cursor-set":',
-        '"command.cursor-off": "Turn off Cursors"',
+        '"command.cursor-off": "Turn Off Cursors"',
         '"description.cursor-off":',
         '"cursor.editor.title": "Cursor editor"',
         '"cursor.editor.description":',
