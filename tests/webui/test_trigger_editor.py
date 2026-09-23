@@ -117,7 +117,7 @@ def test_trigger_mode_command_carries_core_sourced_options() -> None:
 
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
-    assert '"command.trigger-mode": "Trigger Type"' in english
+    assert '"command.trigger-mode": "Trigger type"' in english
     assert '"command.trigger-mode": "觸發類型"' in chinese
     assert '"description.trigger-mode"' in english
     assert '"description.trigger-mode"' in chinese
