@@ -149,19 +149,36 @@ SEQUENCE_EDITOR_HARNESS = r'''
     "enum.negative": "\u8ca0\u5411",
     "enum.minimal": "\u6700\u5c0f\u6e05\u7406",
     "enum.safe": "\u5b89\u5168\u6e05\u7406",
+    "enum.channel1": "\u901a\u9053 1",
+    "enum.channel2": "\u901a\u9053 2",
+    "enum.channel3": "\u901a\u9053 3",
+    "enum.channel4": "\u901a\u9053 4",
   };
   globalThis.translate = (key, values = {}) => Object.entries(values).reduce(
     (text, [name, value]) => text.replaceAll(`{{${name}}}`, String(value)), translations[key] || key,
   );
+  globalThis.hasTranslation = (key) => key in translations;
   globalThis.document = {
-    createElement: (tag) => ({
-      tagName: tag,
-      children: [],
-      dataset: {},
-      append: function(...children) { this.children.push(...children); },
-      addEventListener: function() {},
-      setAttribute: function(name, value) { this[name] = String(value); },
-    }),
+    createElement: (tag) => {
+      const node = {
+        tagName: tag,
+        children: [],
+        dataset: {},
+        className: "",
+        append: function(...children) { this.children.push(...children); },
+        addEventListener: function() {},
+        setAttribute: function(name, value) { this[name] = String(value); },
+      };
+      node.classList = {
+        add: (...names) => {
+          const values = new Set(node.className.split(" ").filter(Boolean));
+          names.forEach((name) => values.add(name));
+          node.className = [...values].join(" ");
+        },
+        contains: (name) => node.className.split(" ").includes(name),
+      };
+      return node;
+    },
   };
   globalThis.Option = function(text, value) { this.text = text; this.value = value; };
   globalThis.queueMicrotask ||= (callback) => Promise.resolve().then(callback);
@@ -296,7 +313,7 @@ def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -
         assert.equal(helped.children.at(-1).textContent, "Slope helper");
 
         const summary = editor.stepSummary(step);
-        assert(summary.includes("\u4f86\u6e90\u901a\u9053: CH1"));
+        assert(summary.includes("\u4f86\u6e90\u901a\u9053: \u901a\u9053 1"));
         assert(summary.includes("\u659c\u7387: \u6b63\u5411"));
         assert.equal(summary.includes("source_channel="), false);
         assert.equal(summary.includes("slope=positive"), false);
@@ -360,6 +377,7 @@ SEQUENCE_EDITOR_VALIDATION_MESSAGE_HARNESS = r'''
   globalThis.translate = (key, values = {}) => Object.entries(values).reduce(
     (text, [name, value]) => text.replaceAll(`{{${name}}}`, String(value)), key,
   );
+  globalThis.hasTranslation = () => false;
   globalThis.queueMicrotask ||= (callback) => Promise.resolve().then(callback);
   globalThis.applyNumericFieldConstraints = () => {};
   globalThis.document = {
