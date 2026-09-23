@@ -287,6 +287,14 @@ def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -
         assert.equal(select.children[0].text, "\u6b63\u5411");
         assert.equal(select.children[0].value, "positive");
 
+        const helped = editor.renderParameter(
+          step,
+          0,
+          { ...slopeField, help: "Slope helper" },
+        );
+        assert.equal(helped.children.at(-1).className, "field-help");
+        assert.equal(helped.children.at(-1).textContent, "Slope helper");
+
         const summary = editor.stepSummary(step);
         assert(summary.includes("\u4f86\u6e90\u901a\u9053: CH1"));
         assert(summary.includes("\u659c\u7387: \u6b63\u5411"));
