@@ -720,6 +720,7 @@ function workflowErrorSummary(job, result) {
 }
 
 function workflowNumberText(value) {
+  if (value === null || value === undefined || value === "") return "—";
   const number = Number(value);
   return Number.isFinite(number) ? String(number) : "—";
 }
