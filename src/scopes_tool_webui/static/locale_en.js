@@ -2003,6 +2003,8 @@ export const en = {
   "sequence.editor.collapseAll": "Collapse all",
   "sequence.editor.execute": "Execute",
   "sequence.editor.loopCount": "Loop count",
+  "sequence.editor.loopCountHelp": "Run the full sequence this many times; the overall step-execution limit still applies.",
+  "sequence.editor.actionHelp": "Choose what this step does. Changing the action resets that step's parameters.",
   "sequence.editor.stepUsage": "Steps {{count}} / {{maximum}}",
   "sequence.editor.artifactUsage": "Capture / Screenshot {{count}} / {{maximum}}",
   "sequence.editor.allChannels": "All channels",
