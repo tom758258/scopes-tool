@@ -5174,10 +5174,22 @@ def test_numeric_inputs_share_spinner_presentation_rules() -> None:
     assert 'from "/static/numeric-input.js";' in workflow_editor
     assert 'input.step = "any";' in helper
     assert 'input.classList.add("no-number-spinner");' in helper
+    assert 'input[type="number"]::-webkit-inner-spin-button' in styles
+    assert 'input[type="number"]::-webkit-outer-spin-button' in styles
     assert "input.no-number-spinner::-webkit-inner-spin-button" in styles
     assert "input.no-number-spinner::-webkit-outer-spin-button" in styles
     assert "-moz-appearance: textfield;" in styles
 
+
+
+def test_acquisition_and_statistics_use_intentional_single_column_option_layouts() -> None:
+    styles = read_static("styles.css")
+
+    assert ".acquisition-single-wait-form { grid-template-columns: minmax(0, 1fr); }" in styles
+    assert ".acquisition-single-wait-form .command-form-advanced-fields { grid-template-columns: minmax(0, 1fr); }" in styles
+    assert ".measurement-statistics-primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }" in styles
+    assert ".measurement-statistics-options { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }" in styles
+    assert ".measurement-statistics-primary { grid-template-columns: 1fr; }" in styles
 
 def test_boolean_field_help_spans_full_row() -> None:
     styles = read_static("styles.css")

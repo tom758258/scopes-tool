@@ -639,13 +639,20 @@ export class MeasurementEditor {
     this.controls.statisticsRsd = this.statisticsCheckbox(
       "measurement.statistics.relativeStddev",
     );
-    form.append(
+    const primaryFields = document.createElement("div");
+    primaryFields.className = "measurement-statistics-primary";
+    primaryFields.append(
       this.controls.statisticsMode.wrapper,
-      this.controls.statisticsDisplay.wrapper,
       this.controls.statisticsMaxCountMode.wrapper,
       maxCountField,
+    );
+    const optionFields = document.createElement("div");
+    optionFields.className = "measurement-statistics-options";
+    optionFields.append(
+      this.controls.statisticsDisplay.wrapper,
       this.controls.statisticsRsd.wrapper,
     );
+    form.append(primaryFields, optionFields);
     this.controls.statisticsMaxCountMode.input.addEventListener(
       "change", () => this.updateStatisticsMaxCountState(),
     );

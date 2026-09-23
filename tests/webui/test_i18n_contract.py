@@ -325,6 +325,19 @@ def test_reported_workflow_and_math_tokens_have_user_facing_labels() -> None:
         assert not en_value[0].islower(), f"enum.{token}={en_value!r}"
 
 
+
+def test_math_user_facing_copy_uses_consistent_math_casing() -> None:
+    failures: list[str] = []
+    value_pattern = re.compile(r'"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"')
+    for filename in ("locale_en.js", "locale_zh_tw.js"):
+        source = (STATIC_ROOT / filename).read_text(encoding="utf-8")
+        for key, value in value_pattern.findall(source):
+            if key == "system.option.ADVMATH":
+                continue
+            if re.search(r"\b(?:Math|math)\b", value):
+                failures.append(f"{filename}:{key}={value!r}")
+    assert not failures, "Inconsistent MATH casing: " + ", ".join(failures)
+
 def test_english_enum_labels_do_not_start_with_lowercase_text() -> None:
     source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     failures = [

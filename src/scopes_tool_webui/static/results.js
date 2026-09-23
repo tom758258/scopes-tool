@@ -588,6 +588,37 @@ function doctorPendingErrorsSummary(job) {
   });
 }
 
+function stripDiagnosticQuotes(value) {
+  const text = String(value ?? "").trim();
+  if (text.length >= 2) {
+    const first = text[0];
+    const last = text[text.length - 1];
+    if ((first === "'" && last === "'") || (first === '"' && last === '"')) {
+      return text.slice(1, -1);
+    }
+  }
+  return text;
+}
+
+function mathResponseParseErrorSummary(job, result) {
+  const command = String(job?.command || "");
+  if (command !== "fft" && !command.startsWith("math-")) return null;
+  const messages = [
+    structuredErrorMessage(result?.error),
+    structuredErrorMessage(job?.error),
+  ];
+  for (const message of messages) {
+    if (typeof message !== "string") continue;
+    const match = message.match(/Could not parse (?:Math|FFT)\b[^:\r\n]* response:\s*(.+)$/i);
+    if (!match) continue;
+    return translate("results.summary.mathResponseParseFailed", {
+      command: commandLabel(command),
+      value: stripDiagnosticQuotes(match[1]),
+    });
+  }
+  return null;
+}
+
 function jobErrorSummary(job) {
   const pendingErrors = doctorPendingErrorsSummary(job);
   if (pendingErrors) return pendingErrors;
@@ -597,6 +628,9 @@ function jobErrorSummary(job) {
 
   const workflowSummary = workflowErrorSummary(job, result);
   if (workflowSummary) return workflowSummary;
+
+  const mathResponseError = mathResponseParseErrorSummary(job, result);
+  if (mathResponseError) return mathResponseError;
 
   if (typeof result?.error === "string") return result.error;
   if (typeof result?.error?.message === "string") return result.error.message;
