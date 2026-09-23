@@ -397,7 +397,7 @@ export class MeasurementEditor {
     const label = document.createElement("span");
     label.textContent = translate(`field.${name}`);
     const input = document.createElement("select");
-    for (const channel of channels) input.append(new Option(`CH${channel}`, channel));
+    for (const channel of channels) input.append(new Option(channelLabel(channel), channel));
     input.value = String(selected || "");
     wrapper.append(label, input);
     return { wrapper, input };
