@@ -244,37 +244,61 @@ def test_catalog_token_options_have_localized_labels() -> None:
     chinese = locale_keys("locale_zh_tw.js")
     missing: list[str] = []
 
+    def check_options(scope: str, field: dict, options: object) -> None:
+        option_label = field.get("option_label")
+        for option in options or ():
+            if not isinstance(option, str) or not re.fullmatch(r"[a-z][a-z0-9_-]*", option):
+                continue
+            candidates = [f"enum.{option}"]
+            if option_label:
+                candidates = [
+                    f"enum.{option_label}.{option}",
+                    f"enum.{option_label}",
+                    *candidates,
+                ]
+            if not any(key in english for key in candidates):
+                missing.append(f"EN {scope}.{field.get('name')}: {option}")
+            if not any(key in chinese for key in candidates):
+                missing.append(f"zh-TW {scope}.{field.get('name')}: {option}")
+
     def check_fields(scope: str, fields: object) -> None:
         if not isinstance(fields, (list, tuple)):
             return
         for field in fields:
             if not isinstance(field, dict):
                 continue
-            option_label = field.get("option_label")
-            for option in field.get("options") or ():
-                if not isinstance(option, str) or not re.fullmatch(r"[a-z][a-z0-9_-]*", option):
-                    continue
-                candidates = [f"enum.{option}"]
-                if option_label:
-                    candidates = [
-                        f"enum.{option_label}.{option}",
-                        f"enum.{option_label}",
-                        *candidates,
-                    ]
-                if not any(key in english for key in candidates):
-                    missing.append(f"EN {scope}.{field.get('name')}: {option}")
-                if not any(key in chinese for key in candidates):
-                    missing.append(f"zh-TW {scope}.{field.get('name')}: {option}")
+            check_options(scope, field, field.get("options"))
+            for mode, options in (field.get("mode_options") or {}).items():
+                check_options(f"{scope}[{mode}]", field, options)
 
     for command in command_catalog():
         check_fields(command["id"], command.get("fields"))
+
+        fields_by_name = {
+            field["name"]: field
+            for field in command.get("fields") or ()
+            if isinstance(field, dict) and field.get("name")
+        }
+        presentation = command.get("presentation") or {}
+        action_field = presentation.get("action_field")
+        if action_field and presentation.get("action_choices"):
+            field = fields_by_name.get(action_field, {"name": action_field})
+            check_options(command["id"], field, presentation["action_choices"])
+
+        for model_id, model in (presentation.get("models") or {}).items():
+            for field_name, override in (model.get("fields") or {}).items():
+                if not isinstance(override, dict) or "options" not in override:
+                    continue
+                field = dict(fields_by_name.get(field_name, {"name": field_name}))
+                field.update({key: value for key, value in override.items() if key == "option_label"})
+                check_options(f"{command['id']}[{model_id}]", field, override.get("options"))
+
         sequence = command.get("sequence")
         if isinstance(sequence, dict):
             for action, fields in (sequence.get("parameters") or {}).items():
                 check_fields(f"{command['id']}.{action}", fields)
 
     assert not missing, "Unlocalized lower-case option tokens: " + ", ".join(missing)
-
 
 def test_reported_workflow_and_math_tokens_have_user_facing_labels() -> None:
     english_source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
