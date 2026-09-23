@@ -1,4 +1,4 @@
-import { translate } from "/static/i18n.js";
+import { hasTranslation, translate } from "/static/i18n.js";
 import { applyNumericFieldConstraints } from "/static/numeric-input.js";
 
 const ARTIFACT_ACTIONS = new Set(["capture", "screenshot"]);
@@ -32,9 +32,15 @@ function sequenceParameterLabel(name) {
   return translate(`sequence.parameter.${name}`);
 }
 
+function channelLabel(value) {
+  const raw = String(value);
+  const key = `enum.channel${raw}`;
+  return hasTranslation(key) ? translate(key) : `CH${raw}`;
+}
+
 function sequenceValueLabel(name, value) {
   if (["channel", "source_channel", "reference_channel"].includes(name)) {
-    return `CH${value}`;
+    return channelLabel(value);
   }
   if (typeof value === "boolean") return translate(`enum.${value}`);
   const key = `enum.${value}`;
@@ -421,10 +427,11 @@ export class SequenceEditor {
       });
     } else if (field.type === "multi-enum") {
       input = document.createElement("div");
-      input.className = "sequence-multi-enum";
+      input.className = "multi-choice sequence-multi-enum";
       const selected = new Set((step.parameters[field.name] || []).map(String));
       for (const option of field.options || []) {
         const choice = document.createElement("label");
+        choice.className = "multi-choice-option";
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = String(option);
@@ -447,11 +454,12 @@ export class SequenceEditor {
         const text = document.createElement("span");
         text.textContent = option === "all"
           ? translate("sequence.editor.allChannels")
-          : `CH${option}`;
+          : channelLabel(option);
         choice.append(checkbox, text);
         input.append(choice);
       }
     } else if (field.type === "boolean") {
+      wrapper.classList.add("field-boolean");
       input = document.createElement("input");
       input.type = "checkbox";
       input.checked = Boolean(step.parameters[field.name]);
