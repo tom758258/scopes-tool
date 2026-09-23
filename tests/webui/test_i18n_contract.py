@@ -209,6 +209,35 @@ def test_capture_result_and_prerequisite_labels_are_localized() -> None:
     assert "可用的波形資料" in chinese
 
 
+def test_catalog_navigation_entries_are_localized() -> None:
+    english = locale_keys("locale_en.js")
+    chinese = locale_keys("locale_zh_tw.js")
+    missing: list[str] = []
+
+    for command in command_catalog():
+        command_key = f"command.{command['id']}"
+        if command_key not in english:
+            missing.append(f"EN {command_key}")
+        if command_key not in chinese:
+            missing.append(f"zh-TW {command_key}")
+
+        category_key = f"category.{command['category']}"
+        if category_key not in english:
+            missing.append(f"EN {category_key}")
+        if category_key not in chinese:
+            missing.append(f"zh-TW {category_key}")
+
+        group = command.get("group")
+        if group:
+            group_key = f"group.{group}"
+            if group_key not in english:
+                missing.append(f"EN {group_key}")
+            if group_key not in chinese:
+                missing.append(f"zh-TW {group_key}")
+
+    assert not missing, "Unlocalized navigation entries: " + ", ".join(sorted(set(missing)))
+
+
 def test_catalog_token_options_have_localized_labels() -> None:
     """Lower-case internal enum tokens must never leak into a user-facing selector."""
     english = locale_keys("locale_en.js")
