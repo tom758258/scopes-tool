@@ -142,7 +142,7 @@ def test_result_history_has_powers_like_viewport_and_item_presentation() -> None
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_result_history_runtime_behaviour() -> None:
+def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
     assert '"enum.vpp": "Vp-p"' in english
@@ -173,6 +173,8 @@ def test_result_history_runtime_behaviour() -> None:
             serial: "serial {{serial}}", firmware: "firmware {{firmware}}", empty: "No command has been run yet.",
             period: "Period", phase: "Phase", vpp: "Vp-p", channel1: "Channel 1", channel2: "Channel 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", value: "Value", unit: "Unit", status: "Status", result: "Result", plannedScpi: "Planned SCPI",
+            summary: "Summary", channels: "Channels", actualPoints: "Actual points", format: "Format", files: "Files",
+            captureCompleted: "Waveform capture completed", capturePoints: "{{actual}} points (requested {{requested}})", capturePointsPerChannel: "{{actual}} (requested {{requested}} per channel)", outputFileCount: "{{count}} output files", waveformReadTimedOut: "Waveform data read timed out. The instrument may not have usable waveform data, or it did not respond in time. Confirm the selected channel is enabled and an acquisition has completed, then try again.",
             validCount: "Valid count", invalidCount: "Invalid count", errorCount: "Error count", valid: "Valid", invalid: "Invalid", error: "Error",
             noValidStatus: "No valid measurement", noValidSummary: "No valid measurement value", measurementTimedOut: "{{channel}} {{measurement}} measurement timed out.", measurementFailed: "{{channel}} {{measurement}} measurement failed.", measurementFailedWithReason: "{{channel}} {{measurement}} measurement failed: {{message}}", sweepInvalid: "Measurement sweep contains invalid results: {{valid}} valid, {{invalid}} invalid.", triggerWaitTimedOut: "Trigger wait timed out.", captureTriggerTimedOut: "Trigger wait timed out; waveform was not captured.", triggerWaitFailed: "Trigger wait failed.", reportedInstrumentError: "The instrument reported an error.", planned: "Planned", instrumentError: "Instrument error", integrate: "Integrate", fftPhase: "FFT phase", fftZoom: "Zoom",
           },
@@ -182,6 +184,8 @@ def test_result_history_runtime_behaviour() -> None:
             serial: "\u5e8f\u865f {{serial}}", firmware: "\u97cc\u9ad4 {{firmware}}", empty: "\u5c1a\u672a\u57f7\u884c\u6307\u4ee4\u3002",
             period: "Period", phase: "Phase", vpp: "Vp-p", channel1: "Channel 1", channel2: "Channel 2",
             measurement: "Measurement", channel: "Channel", referenceChannel: "Reference channel", value: "Value", unit: "Unit", status: "Status", result: "Result", plannedScpi: "Planned SCPI",
+            summary: "\u6458\u8981", channels: "\u901a\u9053", actualPoints: "\u5be6\u969b\u9ede\u6578", format: "\u683c\u5f0f", files: "\u6a94\u6848",
+            captureCompleted: "\u6ce2\u5f62\u64f7\u53d6\u5b8c\u6210", capturePoints: "{{actual}} \u9ede\uff08\u8981\u6c42 {{requested}} \u9ede\uff09", capturePointsPerChannel: "{{actual}}\uff08\u6bcf\u901a\u9053\u8981\u6c42 {{requested}} \u9ede\uff09", outputFileCount: "{{count}} \u500b\u8f38\u51fa\u6a94\u6848", waveformReadTimedOut: "\u8b80\u53d6\u6ce2\u5f62\u8cc7\u6599\u903e\u6642\u3002\u5100\u5668\u76ee\u524d\u53ef\u80fd\u6c92\u6709\u53ef\u7528\u7684\u6ce2\u5f62\u8cc7\u6599\uff0c\u6216\u672a\u5728\u6642\u9593\u5167\u56de\u61c9\uff1b\u8acb\u78ba\u8a8d\u6240\u9078\u901a\u9053\u5df2\u958b\u555f\u4e14\u5df2\u5b8c\u6210\u6709\u6548\u64f7\u53d6\u5f8c\u518d\u8a66\u4e00\u6b21\u3002",
             validCount: "Valid count", invalidCount: "Invalid count", errorCount: "Error count", valid: "Valid", invalid: "Invalid", error: "Error",
             noValidStatus: "\u7121\u6548\u91cf\u6e2c\u503c", noValidSummary: "\u7121\u6548\u91cf\u6e2c\u503c", measurementTimedOut: "{{channel}} {{measurement}} \u91cf\u6e2c\u67e5\u8a62\u903e\u6642\u3002", measurementFailed: "{{channel}} {{measurement}} \u91cf\u6e2c\u5931\u6557\u3002", measurementFailedWithReason: "{{channel}} {{measurement}} \u91cf\u6e2c\u5931\u6557\uff1a{{message}}", sweepInvalid: "\u91cf\u6e2c\u6383\u63cf\u5305\u542b\u7121\u6548\u7d50\u679c\uff1a{{valid}} \u7b46\u6709\u6548\uff0c{{invalid}} \u7b46\u7121\u6548\u3002", triggerWaitTimedOut: "\u7b49\u5f85\u89f8\u767c\u903e\u6642\u3002", captureTriggerTimedOut: "\u7b49\u5f85\u89f8\u767c\u903e\u6642\uff0c\u672a\u64f7\u53d6\u6ce2\u5f62\u3002", triggerWaitFailed: "\u7b49\u5f85\u89f8\u767c\u5931\u6557\u3002", reportedInstrumentError: "\u5100\u5668\u56de\u5831\u932f\u8aa4\u3002", planned: "\u5df2\u898f\u5283", instrumentError: "\u5100\u5668\u932f\u8aa4", integrate: "\u7a4d\u5206", fftPhase: "FFT \u76f8\u4f4d", fftZoom: "\u7e2e\u653e\u8996\u7a97",
           },
@@ -204,6 +208,11 @@ def test_result_history_runtime_behaviour() -> None:
                               : key === "results.summary.running" ? locale.runningSummary
                                 : key === "results.summary.completed" ? locale.completedSummary
                                   : key === "results.summary.screenshotCaptured" ? locale.screenshotCaptured
+                                    : key === "results.summary.captureCompleted" ? locale.captureCompleted
+                                      : key === "results.summary.capturePoints" ? locale.capturePoints
+                                        : key === "results.summary.capturePointsPerChannel" ? locale.capturePointsPerChannel
+                                          : key === "results.summary.outputFileCount" ? locale.outputFileCount
+                                            : key === "results.summary.waveformReadTimedOut" ? locale.waveformReadTimedOut
                                     : key === "results.summary.resource_none" ? locale.resourceNone
                                       : key === "results.summary.resource_many" ? locale.resourceMany
                                         : key === "results.summary.serial" ? locale.serial
@@ -218,6 +227,11 @@ def test_result_history_runtime_behaviour() -> None:
                                                    : key === "enum.fft-operation.fft-phase" ? locale.fftPhase
                                                      : key === "enum.fft-gate.zoom" ? locale.fftZoom
                                                    : key === "results.field.measurement" ? locale.measurement
+                                                     : key === "results.field.summary" ? locale.summary
+                                                       : key === "results.field.channels" ? locale.channels
+                                                         : key === "results.field.actual_points" ? locale.actualPoints
+                                                           : key === "results.field.format" ? locale.format
+                                                             : key === "results.field.files" ? locale.files
                                                      : key === "results.field.channel" ? locale.channel
                                                         : key === "results.field.reference_channel" ? locale.referenceChannel
                                                           : key === "results.field.value" ? locale.value
@@ -252,7 +266,7 @@ def test_result_history_runtime_behaviour() -> None:
           "enum.period", "enum.phase", "enum.vpp", "enum.channel1", "enum.channel2",
           "enum.math-transform.integrate", "enum.fft-operation.fft-phase", "enum.fft-gate.zoom",
           "results.status.planned", "results.status.instrument_error", "status.completed",
-          "results.field.measurement", "results.field.channel", "results.field.reference_channel", "results.field.value", "results.field.unit", "results.field.status", "results.field.valid_count", "results.field.invalid_count", "results.field.error_count", "results.field.result", "results.field.planned_scpi",
+          "results.field.measurement", "results.field.summary", "results.field.channels", "results.field.actual_points", "results.field.format", "results.field.files", "results.field.channel", "results.field.reference_channel", "results.field.value", "results.field.unit", "results.field.status", "results.field.valid_count", "results.field.invalid_count", "results.field.error_count", "results.field.result", "results.field.planned_scpi",
           "results.status.noValidMeasurement", "results.status.valid", "results.status.invalid", "results.status.error", "results.summary.noValidMeasurement",
         ].includes(key);
         const translateJobStatus = (status) => translate(`status.${status}`);
@@ -362,7 +376,7 @@ def test_result_history_runtime_behaviour() -> None:
           ],
         });
         api.renderJob(summary, captureJob, detail);
-        assert.equal(rowTexts()[0][2], "Command completed successfully");
+        assert.equal(rowTexts()[0][2], "Waveform capture completed");
 
         api.renderJob(summary, makeJob("run-job", "run", "completed", { result: { result: { action: "run" } } }), detail);
         assert.equal(rowTexts()[0][2], "Command completed successfully");
@@ -488,6 +502,22 @@ def test_result_history_runtime_behaviour() -> None:
         }), detail);
         assert.equal(rowTexts()[0][2], "configured query failure");
 
+        const rawWaveformTimeout = "VisaBackendError: VISA query failed for ':WAVeform:PREamble?': VI_ERROR_TMO (-1073807339): Timeout expired before operation completed.";
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("capture-waveform-timeout", "capture", "failed", {
+          error: rawWaveformTimeout,
+        }), detail);
+        assert.equal(rowTexts()[0][2], "Waveform data read timed out. The instrument may not have usable waveform data, or it did not respond in time. Confirm the selected channel is enabled and an acquisition has completed, then try again.");
+        assert.doesNotMatch(rowTexts()[0][2], /VISA|SCPI|VI_ERROR_TMO/);
+        assert.equal(detail.children[0].textContent, rawWaveformTimeout);
+
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("batch-waveform-timeout", "capture-batch", "failed", {
+          error: `_OperationError: ${rawWaveformTimeout}`,
+        }), detail);
+        assert.equal(rowTexts()[0][2], "Waveform data read timed out. The instrument may not have usable waveform data, or it did not respond in time. Confirm the selected channel is enabled and an acquisition has completed, then try again.");
+        assert.doesNotMatch(rowTexts()[0][2], /VISA|SCPI|VI_ERROR_TMO/);
+
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("outer-system-error", "capture-batch", "failed", {
           error: "Core command returned a non-zero exit code.",
@@ -503,6 +533,13 @@ def test_result_history_runtime_behaviour() -> None:
         assert.equal(rowTexts()[0][2], "Root capture failure");
 
         globalThis.testLocale = "zh-TW";
+        api.renderEmpty(summary, detail);
+        api.renderJob(summary, makeJob("capture-waveform-timeout-zh", "capture", "failed", {
+          error: rawWaveformTimeout,
+        }), detail);
+        assert.equal(rowTexts()[0][2], "\u8b80\u53d6\u6ce2\u5f62\u8cc7\u6599\u903e\u6642\u3002\u5100\u5668\u76ee\u524d\u53ef\u80fd\u6c92\u6709\u53ef\u7528\u7684\u6ce2\u5f62\u8cc7\u6599\uff0c\u6216\u672a\u5728\u6642\u9593\u5167\u56de\u61c9\uff1b\u8acb\u78ba\u8a8d\u6240\u9078\u901a\u9053\u5df2\u958b\u555f\u4e14\u5df2\u5b8c\u6210\u6709\u6548\u64f7\u53d6\u5f8c\u518d\u8a66\u4e00\u6b21\u3002");
+        assert.doesNotMatch(rowTexts()[0][2], /VISA|SCPI|VI_ERROR_TMO/);
+
         api.renderEmpty(summary, detail);
         api.renderJob(summary, makeJob("single-wait-timeout-zh", "single-wait", "failed", {
           error: "Core command returned a non-zero exit code.",
@@ -633,8 +670,13 @@ def test_result_history_runtime_behaviour() -> None:
         assert(dryRunText.includes(":MEASure:PERiod? CHANnel1"));
         '''
     )
+    script_path = tmp_path / "result-history-runtime.mjs"
+    script_path.write_text(
+        script.replace("process.argv[1]", "process.argv[2]"),
+        encoding="utf-8",
+    )
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        ["node", str(script_path), str(RESULTS_JS)],
         capture_output=True,
         text=True,
         check=False,
@@ -697,6 +739,13 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "results.summary.sequenceCompleted": "{{completed}} / {{total}} step executions completed; {{loops}} loop(s), {{steps}} step(s)",
           "results.workflow.retention": "{{observed}} points observed per channel · {{retained}} retained · {{dropped}} dropped",
           "results.field.channels": "Channels",
+          "results.field.actual_points": "Actual points",
+          "results.field.format": "Format",
+          "results.field.files": "Files",
+          "results.summary.captureCompleted": "Waveform capture completed",
+          "results.summary.capturePoints": "{{actual}} points (requested {{requested}})",
+          "results.summary.capturePointsPerChannel": "{{actual}} (requested {{requested}} per channel)",
+          "results.summary.outputFileCount": "{{count}} output files",
           "results.field.retention": "Retention",
           "results.field.index": "Index",
           "results.field.matched": "Matched",
@@ -718,6 +767,14 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "results.field.acquisition": "\u64f7\u53d6",
           "results.field.completed_count": "\u5b8c\u6210\u6578\u91cf",
           "results.field.summary": "\u6458\u8981",
+          "results.field.channels": "\u901a\u9053",
+          "results.field.actual_points": "\u5be6\u969b\u9ede\u6578",
+          "results.field.format": "\u683c\u5f0f",
+          "results.field.files": "\u6a94\u6848",
+          "results.summary.captureCompleted": "\u6ce2\u5f62\u64f7\u53d6\u5b8c\u6210",
+          "results.summary.capturePoints": "{{actual}} \u9ede\uff08\u8981\u6c42 {{requested}} \u9ede\uff09",
+          "results.summary.capturePointsPerChannel": "{{actual}}\uff08\u6bcf\u901a\u9053\u8981\u6c42 {{requested}} \u9ede\uff09",
+          "results.summary.outputFileCount": "{{count}} \u500b\u8f38\u51fa\u6a94\u6848",
           "results.field.last_measurement": "\u6700\u5f8c\u91cf\u6e2c",
           "results.summary.measureUntilConditionMet": "\u689d\u4ef6\u6210\u7acb\uff0c\u5171\u91cf\u6e2c {{completed}} \u6b21",
           "results.summary.measureUntilCompleted": "\u5df2\u5b8c\u6210 {{completed}} \u6b21\u91cf\u6e2c",
@@ -950,6 +1007,60 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           assert(visible.length <= 6, command + " result should stay compact");
         }
 
+        globalThis.testLocale = "en";
+        const captureWorkspace = new FakeNode("div");
+        const capturePayload = {
+          channels: [1],
+          requested_points: 1000,
+          actual_points: 992,
+          format: "BYTE",
+          files: [
+            { kind: "csv", path: "2026-09-23-17-00-11.csv" },
+            { kind: "metadata", path: "2026-09-23-17-00-11_meta.json" },
+          ],
+          captures: [{
+            channel: 1, requested_points: 1000, actual_points: 992, format: "BYTE",
+            preamble: { format_code: 0, x_increment: 0.000002016 },
+            byte_order: null, unsigned: null,
+          }],
+        };
+        const captureWorkspaceJob = makeJob("capture", capturePayload);
+        api.renderWorkspaceResult(captureWorkspace, captureWorkspaceJob);
+        const captureVisible = captureWorkspace.children.flatMap((field) =>
+          field.children.map((node) => node.textContent)
+        );
+        assert.deepEqual(captureVisible, [
+          "Waveform capture completed", "Summary",
+          "CH1", "Channels",
+          "992 points (requested 1000)", "Actual points",
+          "BYTE", "Format",
+          "2 output files", "Files",
+        ]);
+        assert.equal(captureVisible.some((text) => text.includes("Preamble")), false);
+        assert.equal(captureVisible.some((text) => text.includes("x_increment")), false);
+        assert.equal(captureVisible.some((text) => text.includes("2026-09-23")), false);
+
+        const rawCaptureDetail = new FakeNode("div");
+        const rawCaptureSummary = new FakeNode("div");
+        api.renderJob(rawCaptureSummary, captureWorkspaceJob, rawCaptureDetail);
+        assert(rawCaptureDetail.children[0].textContent.includes("2026-09-23-17-00-11.csv"));
+        assert(rawCaptureDetail.children[0].textContent.includes("x_increment"));
+
+        globalThis.testLocale = "zh-TW";
+        const zhCaptureWorkspace = new FakeNode("div");
+        api.renderWorkspaceResult(zhCaptureWorkspace, captureWorkspaceJob);
+        const zhCaptureVisible = zhCaptureWorkspace.children.flatMap((field) =>
+          field.children.map((node) => node.textContent)
+        );
+        assert.deepEqual(zhCaptureVisible, [
+          "\u6ce2\u5f62\u64f7\u53d6\u5b8c\u6210", "\u6458\u8981",
+          "CH1", "\u901a\u9053",
+          "992 \u9ede\uff08\u8981\u6c42 1000 \u9ede\uff09", "\u5be6\u969b\u9ede\u6578",
+          "BYTE", "\u683c\u5f0f",
+          "2 \u500b\u8f38\u51fa\u6a94\u6848", "\u6a94\u6848",
+        ]);
+
+        globalThis.testLocale = "en";
         const durationOnlyLog = new FakeNode("div");
         api.renderWorkspaceResult(durationOnlyLog, makeJob("measure-log", {
           status: "completed", channels: [1], requested_count: null, completed_rows: 5,

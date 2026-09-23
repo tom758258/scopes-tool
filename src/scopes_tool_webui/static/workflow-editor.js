@@ -352,6 +352,12 @@ export class WorkflowEditor {
     for (const input of this.controls.channels) {
       input.addEventListener("change", () => this.refreshConditionChannel());
     }
+    if (definition.id !== "triggered-capture-series") {
+      const prerequisite = document.createElement("p");
+      prerequisite.className = "compact-note workflow-waveform-prerequisite";
+      prerequisite.textContent = translate("capture.existingWaveformRequired");
+      this.container.append(prerequisite);
+    }
 
     const settings = this.buildSection("workflow.editor.captureSettings");
     const grid = document.createElement("div");

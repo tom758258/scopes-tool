@@ -348,6 +348,12 @@ export class SequenceEditor {
     actionSelect.addEventListener("change", () => this.changeAction(index, actionSelect.value));
     actionWrapper.append(actionLabel, actionSelect);
     body.append(actionWrapper);
+    if (step.action === "capture") {
+      const prerequisite = document.createElement("p");
+      prerequisite.className = "compact-note sequence-waveform-prerequisite";
+      prerequisite.textContent = translate("capture.existingWaveformRequired");
+      body.append(prerequisite);
+    }
     this.ensureVisibleDefaults(step);
     for (const field of this.metadata().parameters?.[step.action] || []) {
       if (predicatesMatch(field.visible_if, step.parameters)) {

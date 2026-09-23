@@ -143,6 +143,7 @@ SEQUENCE_EDITOR_HARNESS = r'''
     "sequence.parameter.source_channel": "\u4f86\u6e90\u901a\u9053",
     "sequence.parameter.slope": "\u659c\u7387",
     "sequence.editor.invalidParameter": "\u6b65\u9a5f {{index}} \u7684 {{name}} \u503c\u7121\u6548\u3002",
+    "capture.existingWaveformRequired": "existing waveform required",
     "enum.vpp": "VPP",
     "enum.positive": "\u6b63\u5411",
     "enum.negative": "\u8ca0\u5411",
@@ -159,6 +160,7 @@ SEQUENCE_EDITOR_HARNESS = r'''
       dataset: {},
       append: function(...children) { this.children.push(...children); },
       addEventListener: function() {},
+      setAttribute: function(name, value) { this[name] = String(value); },
     }),
   };
   globalThis.Option = function(text, value) { this.text = text; this.value = value; };
@@ -654,3 +656,26 @@ def test_sequence_no_save_workspace_result_hides_files() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_sequence_capture_step_shows_existing_waveform_guidance_only_for_capture() -> None:
+    run_editor_behavior(
+        r'''
+        state.steps = [{ action: "capture", parameters: { channels: [1] }, expanded: true }];
+        const captureCard = editor.renderStep(state.steps[0], 0);
+        const captureBody = captureCard.children[1];
+        const captureNotes = captureBody.children.filter(
+          (node) => node.className === "compact-note sequence-waveform-prerequisite",
+        );
+        assert.equal(captureNotes.length, 1);
+        assert.equal(captureNotes[0].textContent, "existing waveform required");
+
+        state.steps = [{ action: "single", parameters: {}, expanded: true }];
+        const singleCard = editor.renderStep(state.steps[0], 0);
+        const singleBody = singleCard.children[1];
+        assert.equal(singleBody.children.some(
+          (node) => node.className === "compact-note sequence-waveform-prerequisite",
+        ), false);
+        ''',
+    )
