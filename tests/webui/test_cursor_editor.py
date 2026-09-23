@@ -270,11 +270,11 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     assert '["annotation", "cursor", "measurement", "reference", "reference-display", "save-export", "wgen", "demo", "trigger", "search", "segmented"].includes(editorKind)' in app_source
     assert 'id="cursor-editor"' in index_source
     for key in (
-        '"command.cursor-query": "Cursor state"',
+        '"command.cursor-query": "Cursor State"',
         '"description.cursor-query":',
-        '"command.cursor-set": "Set cursors"',
+        '"command.cursor-set": "Set Cursors"',
         '"description.cursor-set":',
-        '"command.cursor-off": "Turn off cursors"',
+        '"command.cursor-off": "Turn off Cursors"',
         '"description.cursor-off":',
         '"cursor.editor.title": "Cursor editor"',
         '"cursor.editor.description":',
