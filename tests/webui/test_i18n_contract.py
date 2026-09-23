@@ -276,6 +276,16 @@ def test_catalog_token_options_have_localized_labels() -> None:
     assert not missing, "Unlocalized lower-case option tokens: " + ", ".join(missing)
 
 
+def test_english_enum_labels_do_not_start_with_lowercase_text() -> None:
+    source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    failures = [
+        f"{key}={value!r}"
+        for key, value in re.findall(r'"(enum\.[^"]+)"\s*:\s*"([^"]+)"', source)
+        if value and value[0].isascii() and value[0].islower()
+    ]
+    assert not failures, "English enum labels start lower-case: " + ", ".join(failures)
+
+
 def test_navigation_labels_use_english_title_case() -> None:
     source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     stop_words = {"and", "or", "for", "to", "of", "in", "the", "a", "an", "from", "with", "per"}
