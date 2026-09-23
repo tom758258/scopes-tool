@@ -373,15 +373,15 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     assert '"annotation-clear": ["annotation-query", "annotation-clear"]' in app_source
     assert 'id="annotation-editor"' in index_source
     for key in (
-        '"command.annotation-query": "Annotation state"',
+        '"command.annotation-query": "Annotation State"',
         '"description.annotation-query":',
-        '"command.annotation-set": "Set annotation"',
+        '"command.annotation-set": "Set Annotation"',
         '"description.annotation-set":',
-        '"command.annotation-on": "Turn on annotation"',
+        '"command.annotation-on": "Turn on Annotation"',
         '"description.annotation-on":',
-        '"command.annotation-off": "Turn off annotation"',
+        '"command.annotation-off": "Turn off Annotation"',
         '"description.annotation-off":',
-        '"command.annotation-clear": "Clear annotation text"',
+        '"command.annotation-clear": "Clear Annotation Text"',
         '"description.annotation-clear":',
         '"annotation.editor.read": "Read annotation settings"',
         '"annotation.set.empty": "Set at least one of text, color, background, X position, or Y position.",',
