@@ -299,6 +299,22 @@ def test_workflow_number_fields_share_numeric_constraints() -> None:
         assert.equal(timeout.min, "0");
         assert.equal(timeout.dataset.exclusiveMinimum, "0");
         assert.equal(timeout.classList.contains("no-number-spinner"), true);
+
+        const helpedNumber = editor.buildNumberField({
+          name: "count", type: "integer", minimum: 1, help: "Count helper",
+        }, "1").wrapper;
+        assert.equal(helpedNumber.children.at(-1).className, "field-help");
+        assert.equal(helpedNumber.children.at(-1).textContent, "Count helper");
+
+        const helpedChoices = editor.buildChoiceSection(
+          "workflow.editor.channels",
+          "channels",
+          ["1", "2"],
+          ["1"],
+          { name: "channels", help: "Channel helper" },
+        );
+        assert.equal(helpedChoices.children.at(-1).className, "field-help");
+        assert.equal(helpedChoices.children.at(-1).textContent, "Channel helper");
         '''
     )
 

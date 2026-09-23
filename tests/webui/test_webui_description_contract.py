@@ -61,6 +61,42 @@ def test_generic_boolean_fields_have_help_key() -> None:
     assert not missing_zh, f"boolean help_key missing in zh-TW locale: {missing_zh}"
 
 
+def test_workflow_fields_have_help_key_and_localized_text() -> None:
+    catalog = command_catalog()
+    help_keys: set[str] = set()
+    missing: list[str] = []
+
+    for entry in catalog:
+        if entry.get("category") != "Workflow":
+            continue
+        for field in entry.get("fields", []):
+            help_key = field.get("help_key")
+            if not help_key or not str(help_key).strip():
+                missing.append(f"{entry['id']}.{field['name']}")
+            else:
+                help_keys.add(str(help_key))
+        if entry.get("id") == "sequence":
+            parameters = entry.get("sequence", {}).get("parameters", {})
+            for action, fields in parameters.items():
+                for field in fields:
+                    help_key = field.get("help_key")
+                    if not help_key or not str(help_key).strip():
+                        missing.append(f"sequence.{action}.{field['name']}")
+                    else:
+                        help_keys.add(str(help_key))
+
+    assert not missing, f"Workflow fields missing help_key: {missing}"
+
+    en_text = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    zh_text = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+    en_help = _locale_help_keys(en_text)
+    zh_help = _locale_help_keys(zh_text)
+    missing_en = sorted(help_keys - en_help)
+    missing_zh = sorted(help_keys - zh_help)
+    assert not missing_en, f"Workflow help_key missing in EN locale: {missing_en}"
+    assert not missing_zh, f"Workflow help_key missing in zh-TW locale: {missing_zh}"
+
+
 def test_channel_target_fields_have_help_key() -> None:
     catalog = command_catalog()
     missing: list[str] = []
