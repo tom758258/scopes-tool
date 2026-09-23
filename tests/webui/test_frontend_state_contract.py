@@ -66,7 +66,10 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         import assert from "node:assert/strict";
         import fs from "node:fs";
         globalThis.document = {
-          createElement: (tag) => ({ tagName: tag, className: "", textContent: "" }),
+          createElement: (tag) => ({
+            tagName: tag, className: "", textContent: "", dataset: {}, children: [],
+            append: function(...kids) { this.children.push(...kids); },
+          }),
         };
         const source = fs.readFileSync(process.argv[1], "utf8")
           .replaceAll("export function ", "function ")
@@ -137,6 +140,20 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         );
         assert.equal(liveStateText("live_data.ready", null, statusTranslate), "Ready");
         assert.equal(liveStateText("live_data.ready", "not-a-timestamp", statusTranslate), "Ready");
+
+        renderInstrumentSummary(elements, {
+          channels: [
+            { channel: 2, display: true, scale: 1, offset: 0, units: "volt" },
+            { channel: 4, display: false, scale: 1, offset: 0, units: "volt" },
+          ],
+          timebase: {},
+          trigger: {},
+          acquisition: { mode: "realtime" },
+        }, translate);
+        const channelCards = elements.channels.children;
+        assert.equal(channelCards.length, 2);
+        assert.equal(channelCards[0].dataset.channel, "2");
+        assert.equal(channelCards[1].dataset.channel, "4");
         '''
     )
     completed = subprocess.run(
@@ -724,7 +741,7 @@ def test_basic_controls_expose_force_trigger_shared_command_shortcut() -> None:
     assert '"command.force-trigger": "強制觸發"' in chinese
 
 
-def test_single_wait_uses_shared_shortcut_and_closed_advanced_disclosure() -> None:
+def test_single_wait_remains_advanced_only() -> None:
     html = read_static("index.html")
     form = read_static("command-form.js")
     basic_controls = read_static("basic-controls.js")
@@ -732,9 +749,24 @@ def test_single_wait_uses_shared_shortcut_and_closed_advanced_disclosure() -> No
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
 
-    assert html.count('data-command="single-wait"') == 1
-    assert 'data-i18n="basic.singleWait"' in html
-    assert "execute(button.dataset.command, {})" in basic_controls
+    assert html.count('data-command="single-wait"') == 0
+    assert 'data-i18n="basic.singleWait"' not in html
+    assert '"basic.singleWait"' not in english
+    assert '"basic.singleWait"' not in chinese
+    assert html.count('data-command="run"') == 1
+    assert html.count('data-command="stop-acquisition"') == 1
+    assert html.count('data-command="single"') == 1
+    assert html.count('data-command="force-trigger"') == 1
+    assert html.count('data-command="screenshot"') == 2
+    assert 'data-background="black"' in html
+    assert 'data-background="white"' in html
+    assert '"command.single-wait"' in english
+    assert '"command.single-wait"' in chinese
+    assert '"description.single-wait"' in english
+    assert '"description.single-wait"' in chinese
+    assert '"acquisition-control": ["run", "single", "single-wait", "stop-acquisition", "force-trigger"]' in app_source
+    assert 'button.dataset.command === "screenshot" && button.dataset.background' in basic_controls
+    assert "execute(button.dataset.command, parameters)" in basic_controls
     assert "bindBasicControls(elements.basic, executeCommand, basicAvailable)" in app_source
     assert 'document.createElement("details")' in form
     assert "fields.filter((field) => field.advanced)" in form
@@ -742,6 +774,63 @@ def test_single_wait_uses_shared_shortcut_and_closed_advanced_disclosure() -> No
     assert "disclosure.open" not in form
     assert '"form.advanced": "Advanced"' in english
     assert '"form.advanced": "進階"' in chinese
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_basic_controls_dispatch_screenshot_background() -> None:
+    basic_controls_path = STATIC_ROOT / "basic-controls.js"
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        const source = fs.readFileSync(process.argv[1], "utf8")
+          .replaceAll("export function ", "function ")
+          + "\nglobalThis.basicApi = { bindBasicControls };";
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+        const { bindBasicControls } = globalThis.basicApi;
+
+        const makeButton = (command, background) => ({
+          dataset: background === undefined ? { command } : { command, background },
+          disabled: false,
+        });
+        const runButton = makeButton("run");
+        const blackButton = makeButton("screenshot", "black");
+        const whiteButton = makeButton("screenshot", "white");
+        const buttons = [runButton, blackButton, whiteButton];
+        const listeners = {};
+        const container = {
+          addEventListener: (type, fn) => { listeners[type] = fn; },
+          querySelectorAll: (selector) => selector === "button[data-command]" ? buttons : [],
+        };
+        const calls = [];
+        let denied = new Set();
+        const update = bindBasicControls(
+          container,
+          (command, parameters) => { calls.push([command, parameters]); },
+          (command) => !denied.has(command),
+        );
+        const click = (button) => listeners.click({ target: { closest: () => button } });
+        click(runButton);
+        assert.deepStrictEqual(calls[0], ["run", {}]);
+        click(blackButton);
+        assert.deepStrictEqual(calls[1], ["screenshot", { background: "black" }]);
+        click(whiteButton);
+        assert.deepStrictEqual(calls[2], ["screenshot", { background: "white" }]);
+
+        denied = new Set(["screenshot"]);
+        update();
+        assert.equal(runButton.disabled, false);
+        assert.equal(blackButton.disabled, true);
+        assert.equal(whiteButton.disabled, true);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(basic_controls_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 def test_identify_uses_the_shared_workspace_result_area() -> None:

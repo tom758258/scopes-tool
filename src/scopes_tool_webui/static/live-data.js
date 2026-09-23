@@ -68,6 +68,7 @@ export function liveStateText(statusKey, updatedAt, translate) {
 function channelCard(channel, translate) {
   const card = document.createElement("article");
   card.className = "live-channel-card";
+  card.dataset.channel = String(channel.channel);
 
   const header = document.createElement("div");
   header.className = "live-channel-head";

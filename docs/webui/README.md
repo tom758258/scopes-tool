@@ -67,10 +67,9 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 
 ## Basic Controls and Commands
 
-Basic Controls provides Run, Stop, Single, Single + Wait, Force Trigger, and
-Screenshot. These are shortcuts that submit the same command jobs used by the
-Command workbench. The Single + Wait shortcut uses the command defaults: 5.0 s
-timeout, 100 ms polling, and force-on-timeout disabled.
+Basic Controls provides Acquisition (Run, Stop, Single), Trigger (Force Trigger),
+and Screenshot (black-background and white-background shortcuts). These are shortcuts that submit the same command jobs used by the
+Command workbench.
 It also owns the WebUI's single **PC output folder** setting. A blank input uses
 the default `data` root. **Select Folder** opens the Windows folder picker and
 leaves the current value unchanged when cancelled. **Open Folder** creates the
@@ -494,7 +493,8 @@ deterministic simulator; Live opens the explicit resource through Core.
 
 Live Data keeps the existing WebUI, command, and Live status indicators and
 adds a small read-only summary of analog channels, horizontal settings,
-acquisition mode, and the common trigger state. **Read live data** is an explicit foreground action that
+acquisition mode, and the common trigger state, presented as channel cards with
+channel identity colors plus Horizontal, Trigger, and Acquisition cards. **Read live data** is an explicit foreground action that
 uses the same Core-backed job admission as other commands. Selecting a live
 resource after identification, or selecting a simulator model, automatically
 reads live data once; the manual button remains available for retries. Live requires a

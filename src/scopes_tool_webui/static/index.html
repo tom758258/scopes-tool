@@ -108,14 +108,14 @@
             <div id="live-data-channels" class="live-channel-grid"><p class="muted live-data-unavailable">—</p></div>
           </section>
           <div class="live-summary-columns">
-            <section class="live-summary-section" aria-labelledby="live-horizontal-heading">
+            <section class="live-summary-section live-summary-card" aria-labelledby="live-horizontal-heading">
               <h2 id="live-horizontal-heading" data-i18n="live_data.horizontal">Horizontal</h2>
               <dl class="live-summary-fields">
                 <dt data-i18n="live_data.scale">Scale</dt><dd id="live-timebase-scale">—</dd>
                 <dt data-i18n="live_data.position">Position</dt><dd id="live-timebase-position">—</dd>
               </dl>
             </section>
-            <section class="live-summary-section" aria-labelledby="live-trigger-heading">
+            <section class="live-summary-section live-summary-card" aria-labelledby="live-trigger-heading">
               <h2 id="live-trigger-heading" data-i18n="live_data.trigger">Trigger</h2>
               <dl class="live-summary-fields">
                 <dt data-i18n="live_data.type">Type</dt><dd id="live-trigger-type">—</dd>
@@ -125,7 +125,7 @@
                 <dt data-i18n="live_data.sweep">Sweep</dt><dd id="live-trigger-sweep">—</dd>
               </dl>
             </section>
-            <section class="live-summary-section" aria-labelledby="live-acquisition-heading">
+            <section class="live-summary-section live-summary-card" aria-labelledby="live-acquisition-heading">
               <h2 id="live-acquisition-heading" data-i18n="live_data.acquisition">Acquisition</h2>
               <dl class="live-summary-fields">
                 <dt data-i18n="live_data.mode">Mode</dt><dd id="live-acquisition-mode">—</dd>
@@ -142,12 +142,27 @@
           <button id="advanced-command-toggle" class="secondary advanced-command-button" type="button" aria-controls="advanced-commands" aria-expanded="false">Show more commands</button>
         </div>
         <div id="basic-controls" class="basic-controls">
-          <button data-command="run" class="command-pill-button" type="button" data-i18n="basic.run">Run</button>
-          <button data-command="stop-acquisition" class="command-pill-button" type="button" data-i18n="basic.stop">Stop</button>
-          <button data-command="single" class="command-pill-button" type="button" data-i18n="basic.single">Single</button>
-          <button data-command="single-wait" class="command-pill-button" type="button" data-i18n="basic.singleWait">Single + Wait</button>
-          <button data-command="force-trigger" class="command-pill-button" type="button" data-i18n="basic.forceTrigger">Force Trigger</button>
-          <button data-command="screenshot" class="command-pill-button" type="button" data-i18n="basic.screenshot">Screenshot</button>
+          <section class="basic-control-card" aria-labelledby="basic-acquisition-heading">
+            <h2 id="basic-acquisition-heading" data-i18n="basic.acquisition">Acquisition</h2>
+            <div class="basic-control-buttons">
+              <button data-command="run" class="command-pill-button" type="button" data-i18n="basic.run">Run</button>
+              <button data-command="stop-acquisition" class="command-pill-button" type="button" data-i18n="basic.stop">Stop</button>
+              <button data-command="single" class="command-pill-button" type="button" data-i18n="basic.single">Single</button>
+            </div>
+          </section>
+          <section class="basic-control-card" aria-labelledby="basic-trigger-heading">
+            <h2 id="basic-trigger-heading" data-i18n="basic.trigger">Trigger</h2>
+            <div class="basic-control-buttons">
+              <button data-command="force-trigger" class="command-pill-button" type="button" data-i18n="basic.forceTrigger">Force Trigger</button>
+            </div>
+          </section>
+          <section class="basic-control-card" aria-labelledby="basic-screenshot-heading">
+            <h2 id="basic-screenshot-heading" data-i18n="basic.screenshot">Screenshot</h2>
+            <div class="basic-control-buttons">
+              <button data-command="screenshot" data-background="black" class="command-pill-button" type="button" data-i18n="basic.screenshotBlack">Screenshot (Black Background)</button>
+              <button data-command="screenshot" data-background="white" class="command-pill-button" type="button" data-i18n="basic.screenshotWhite">Screenshot (White Background)</button>
+            </div>
+          </section>
         </div>
         <div class="pc-output-setting">
           <label class="field" for="pc-output-dir">
