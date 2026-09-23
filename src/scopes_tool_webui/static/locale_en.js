@@ -511,6 +511,8 @@ export const en = {
   "enum.math3": "Math 3",
   "enum.peak-to-peak": "Peak-to-peak",
   "enum.abs-max": "Absolute maximum",
+  "enum.reset": "Reset",
+  "enum.decibel": "Decibel",
   "enum.rectangular": "Rectangular",
   "enum.hanning": "Hanning",
   "enum.flattop": "Flat top",
