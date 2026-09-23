@@ -328,6 +328,22 @@ def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -
         assert.equal(cleanupSelect.children[0].text, "\u6700\u5c0f\u6e05\u7406");
         assert.equal(cleanupSelect.children[0].value, "minimal");
 
+        const captureStep = {
+          action: "capture",
+          parameters: { channels: [1], allow_time_axis_tolerance: false },
+          expanded: true,
+        };
+        const channelsField = metadata.parameters.capture[0];
+        const channelsRendered = editor.renderParameter(captureStep, 0, channelsField);
+        const channelChoices = channelsRendered.children[1];
+        assert(channelChoices.className.includes("multi-choice"));
+        assert.equal(channelChoices.children[1].className, "multi-choice-option");
+        assert.equal(channelChoices.children[1].children[1].textContent, "\u901a\u9053 1");
+
+        const booleanField = metadata.parameters.capture[1];
+        const booleanRendered = editor.renderParameter(captureStep, 0, booleanField);
+        assert(booleanRendered.classList.contains("field-boolean"));
+
         state.steps = [cleanupStep];
         await editor.submit();
         assert.equal(submissions.length, 1);
