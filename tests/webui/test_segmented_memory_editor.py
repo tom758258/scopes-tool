@@ -89,7 +89,7 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     assert "this.hooks.headerActions.append(this.captureButton)" in editor_source
     assert '"segmented.editor.enter": "Enter Segmented"' in english
     assert '"segmented.editor.exit": "Exit Segmented"' in english
-    assert '"segmented.editor.applySegments": "Apply segment count"' in english
+    assert '"segmented.editor.applySegments": "Apply Count"' in english
     assert '"segmented.editor.applySegments": "套用分段數"' in chinese
     assert '"segmented.editor.targetSegments": "Target segments"' in english
     assert '"segmented.editor.targetSegments": "目標分段數"' in chinese
