@@ -82,6 +82,7 @@ export const zhTW = {
   "live_data.reading": "正在讀取即時資料…",
   "live_data.readFailed": "無法讀取即時資料。",
   "live_data.read": "讀取即時資料",
+  "live_data.segmentedHint": "若不再使用分段記憶，請手動切回即時模式。",
   "live_data.type.edge": "邊緣",
   "live_data.type.glitch": "脈波寬度",
   "live_data.type.runt": "最窄脈波",

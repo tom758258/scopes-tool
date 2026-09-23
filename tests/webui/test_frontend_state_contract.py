@@ -89,7 +89,7 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         const elements = {
           status: node(), channels: node(), timebaseScale: node(), timebasePosition: node(),
           triggerType: node(), triggerSource: node(), triggerLevel: node(), triggerSlope: node(),
-          triggerSweep: node(), acquisitionMode: node(),
+          triggerSweep: node(), acquisitionMode: node(), acquisitionSegmentedHint: node(),
         };
         const translate = (key) => ({
           "live_data.type.glitch": "\u8108\u6ce2\u5bec\u5ea6",
@@ -106,6 +106,14 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         assert.notEqual(elements.triggerType.textContent, "Glitch");
         assert.equal(elements.triggerSource.textContent, "\u7dda\u8def");
         assert.equal(elements.acquisitionMode.textContent, "\u5206\u6bb5\u8a18\u61b6");
+        assert.equal(elements.acquisitionSegmentedHint.hidden, false);
+        renderInstrumentSummary(elements, {
+          channels: [],
+          timebase: {},
+          trigger: { type: "glitch", source: "line" },
+          acquisition: { mode: "realtime" },
+        }, translate);
+        assert.equal(elements.acquisitionSegmentedHint.hidden, true);
         '''
     )
     completed = subprocess.run(

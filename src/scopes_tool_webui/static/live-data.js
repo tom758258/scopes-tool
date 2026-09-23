@@ -51,6 +51,7 @@ export function renderInstrumentSummary(elements, snapshot, translate, status = 
   elements.triggerSlope.textContent = enumLabel("slope", snapshot?.trigger?.slope, translate);
   elements.triggerSweep.textContent = enumLabel("sweep", snapshot?.trigger?.sweep, translate);
   elements.acquisitionMode.textContent = enumLabel("mode", snapshot?.acquisition?.mode, translate);
+  elements.acquisitionSegmentedHint.hidden = snapshot?.acquisition?.mode !== "segmented";
 }
 
 function channelCard(channel, translate) {
