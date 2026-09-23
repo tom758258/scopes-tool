@@ -13,7 +13,7 @@ import {
 } from "/static/execution-context.js";
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
-import { renderInstrumentSummary } from "/static/live-data.js";
+import { liveStateText, renderInstrumentSummary } from "/static/live-data.js";
 import { AcquisitionEditor } from "/static/acquisition-editor.js";
 import { AnnotationEditor } from "/static/annotation-editor.js";
 import { CursorEditor } from "/static/cursor-editor.js";
@@ -190,7 +190,7 @@ let liveCommandState = { key: "device.ready" };
 let pendingResourceLiveSupport = null;
 let updateBasicAvailability = () => {};
 let pcOutputSelectionStatus = null;
-let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false };
+let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false, updatedAt: null };
 let previousEditorKind = null;
 
 const INTERNAL_COMMANDS = {
@@ -1453,7 +1453,7 @@ function liveDataContextKey() {
 function syncLiveDataContext() {
   const contextKey = liveDataContextKey();
   if (liveDataSnapshot.contextKey === contextKey) return;
-  liveDataSnapshot = { contextKey, value: null, error: null, loading: false };
+  liveDataSnapshot = { contextKey, value: null, error: null, loading: false, updatedAt: null };
 }
 
 async function refreshLiveDataSnapshot() {
@@ -1473,6 +1473,7 @@ async function refreshLiveDataSnapshot() {
       value: snapshot,
       error: null,
       loading: false,
+      updatedAt: job.finished_at,
     };
   } else {
     liveDataSnapshot = {
@@ -1517,7 +1518,7 @@ function renderLiveData() {
         : "live_data.noResource";
   setStateIndicator(
     elements.liveState,
-    translate(liveKey),
+    liveStateText(liveKey, liveDataSnapshot.updatedAt, translate),
     context.mode === "live" && (!context.resource || !deviceResource?.hasCurrentIdentity())
       ? "state-warning"
       : "state-ok",

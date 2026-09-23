@@ -54,6 +54,17 @@ export function renderInstrumentSummary(elements, snapshot, translate, status = 
   elements.acquisitionSegmentedHint.hidden = snapshot?.acquisition?.mode !== "segmented";
 }
 
+export function liveStateText(statusKey, updatedAt, translate) {
+  const status = translate(statusKey);
+  if (!updatedAt) return status;
+  const timestamp = new Date(updatedAt);
+  if (Number.isNaN(timestamp.getTime())) return status;
+  return translate("live_data.statusWithLastUpdate", {
+    status,
+    time: timestamp.toLocaleTimeString(),
+  });
+}
+
 function channelCard(channel, translate) {
   const card = document.createElement("article");
   card.className = "live-channel-card";

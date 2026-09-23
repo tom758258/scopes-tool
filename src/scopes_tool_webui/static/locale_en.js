@@ -81,6 +81,7 @@ export const en = {
   "live_data.reading": "Reading Live Data...",
   "live_data.readFailed": "Could not read Live Data.",
   "live_data.read": "Read live data",
+  "live_data.statusWithLastUpdate": "{{status}} - last update {{time}}",
   "live_data.segmentedHint": "If segmented memory is no longer needed, switch back to realtime mode manually.",
   "live_data.type.edge": "Edge",
   "live_data.type.glitch": "Glitch",

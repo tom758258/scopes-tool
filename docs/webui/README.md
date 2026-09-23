@@ -503,7 +503,9 @@ and Dry-run reports the summary as unavailable.
 
 The summary is cleared when its mode, resource, detected model, or planning
 model changes. A failed Read live data action leaves the previous successful summary visible
-for the same context. Live Data does not poll automatically or stream waveform
+for the same context. Live State shows the completion time of the latest successful Live Data snapshot
+in the browser's local time. Failed refreshes retain the previous successful
+time, while context changes clear it with the summary. Live Data does not poll automatically or stream waveform
 data.
 
 ## Jobs, results, and artifacts

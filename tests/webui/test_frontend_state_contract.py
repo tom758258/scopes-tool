@@ -51,6 +51,7 @@ def extract_css_rule(source: str, selector: str) -> str:
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     live_data_path = STATIC_ROOT / "live-data.js"
+    english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     assert '"live_data.type.glitch": "脈波寬度"' in chinese
     assert '"live_data.type.runt": "最窄脈波"' in chinese
@@ -58,6 +59,8 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     assert '"live_data.mode.segmented": "分段記憶"' in chinese
     assert '"live_data.mode.realtime": "即時"' in chinese
     assert '"live_data.mode.unknown": "未知"' in chinese
+    assert '"live_data.statusWithLastUpdate": "{{status}} - last update {{time}}"' in english
+    assert '"live_data.statusWithLastUpdate": "{{status}} - 上次更新 {{time}}"' in chinese
     script = textwrap.dedent(
         r'''
         import assert from "node:assert/strict";
@@ -67,9 +70,9 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
         };
         const source = fs.readFileSync(process.argv[1], "utf8")
           .replaceAll("export function ", "function ")
-          + "\nglobalThis.liveDataApi = { formatEngineering, renderInstrumentSummary };";
+          + "\nglobalThis.liveDataApi = { formatEngineering, renderInstrumentSummary, liveStateText };";
         await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
-        const { formatEngineering, renderInstrumentSummary } = globalThis.liveDataApi;
+        const { formatEngineering, renderInstrumentSummary, liveStateText } = globalThis.liveDataApi;
 
         assert.equal(formatEngineering(0.5, "V", { perDivision: true }), "500 mV/div");
         assert.equal(formatEngineering(2, "A", { perDivision: true }), "2.00 A/div");
@@ -114,10 +117,106 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
           acquisition: { mode: "realtime" },
         }, translate);
         assert.equal(elements.acquisitionSegmentedHint.hidden, true);
+
+        const statusTranslate = (key, values = {}) => {
+          const messages = {
+            "live_data.ready": "Ready",
+            "live_data.statusWithLastUpdate": "{{status}} - last update {{time}}",
+          };
+          let text = messages[key] || key;
+          Object.entries(values).forEach(([name, value]) => {
+            text = text.replaceAll(`{{${name}}}`, String(value));
+          });
+          return text;
+        };
+        const updatedAt = "2026-09-23T03:04:05+00:00";
+        const expectedTime = new Date(updatedAt).toLocaleTimeString();
+        assert.equal(
+          liveStateText("live_data.ready", updatedAt, statusTranslate),
+          `Ready - last update ${expectedTime}`,
+        );
+        assert.equal(liveStateText("live_data.ready", null, statusTranslate), "Ready");
+        assert.equal(liveStateText("live_data.ready", "not-a-timestamp", statusTranslate), "Ready");
         '''
     )
     completed = subprocess.run(
         ["node", "--input-type=module", "--eval", script, str(live_data_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_live_data_snapshot_updated_at_lifecycle() -> None:
+    app_source = read_static("app.js")
+    sync_context = extract_function_declaration(app_source, "function syncLiveDataContext()")
+    refresh_snapshot = extract_function_declaration(app_source, "async function refreshLiveDataSnapshot()")
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+
+        let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false, updatedAt: null };
+        let currentKey = "live|resource|model";
+        function liveDataContextKey() { return currentKey; }
+        const isExecutionBusy = () => false;
+        const commandAvailable = () => true;
+        const renderLiveData = () => {};
+        const updateAvailability = () => {};
+        const translate = (key) => key;
+        let nextJob = null;
+        let releasePending = null;
+        async function executeCommand() {
+          if (releasePending) await releasePending.promise;
+          return nextJob;
+        }
+        '''
+    ) + sync_context + "\n" + refresh_snapshot + textwrap.dedent(
+        r'''
+        const snapshot1 = { acquisition: { mode: "realtime" } };
+        const snapshot2 = { acquisition: { mode: "segmented" } };
+        const completedJob = (tag, snapshot) => ({ status: "completed", finished_at: tag, result: { live_data: snapshot } });
+
+        currentKey = "A";
+        nextJob = completedJob("T1", snapshot1);
+        await refreshLiveDataSnapshot();
+        assert.deepStrictEqual(liveDataSnapshot.value, snapshot1);
+        assert.equal(liveDataSnapshot.updatedAt, "T1");
+
+        nextJob = completedJob("T2", snapshot2);
+        await refreshLiveDataSnapshot();
+        assert.deepStrictEqual(liveDataSnapshot.value, snapshot2);
+        assert.equal(liveDataSnapshot.updatedAt, "T2");
+
+        nextJob = { status: "failed", finished_at: "T3", error: "boom" };
+        await refreshLiveDataSnapshot();
+        assert.deepStrictEqual(liveDataSnapshot.value, snapshot2);
+        assert.equal(liveDataSnapshot.updatedAt, "T2");
+        assert.equal(liveDataSnapshot.error, "boom");
+
+        currentKey = "B";
+        syncLiveDataContext();
+        assert.equal(liveDataSnapshot.value, null);
+        assert.equal(liveDataSnapshot.updatedAt, null);
+
+        currentKey = "A";
+        syncLiveDataContext();
+        let resolveStale = null;
+        releasePending = { promise: new Promise((resolve) => { resolveStale = resolve; }) };
+        const pendingRefresh = refreshLiveDataSnapshot();
+        currentKey = "B";
+        syncLiveDataContext();
+        nextJob = completedJob("TA", snapshot1);
+        resolveStale();
+        await pendingRefresh;
+        assert.equal(liveDataSnapshot.contextKey, "B");
+        assert.equal(liveDataSnapshot.value, null);
+        assert.equal(liveDataSnapshot.updatedAt, null);
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
         capture_output=True,
         text=True,
         check=False,
