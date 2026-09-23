@@ -77,6 +77,34 @@ export class SequenceEditor {
     return this.selectedDefinition()?.sequence || {};
   }
 
+  appendTranslatedHelp(container, key) {
+    const text = translate(key);
+    if (!text || text === key) return;
+    const help = document.createElement("small");
+    help.className = "field-help";
+    help.textContent = text;
+    container.append(help);
+  }
+
+  fieldHelp(field) {
+    if (!field || typeof field !== "object") return "";
+    if (field.help_key) {
+      const key = `help.${field.help_key}`;
+      const translated = translate(key);
+      if (translated && translated !== key) return translated;
+    }
+    return field.help || "";
+  }
+
+  appendFieldHelp(container, field) {
+    const text = this.fieldHelp(field);
+    if (!text) return;
+    const help = document.createElement("small");
+    help.className = "field-help";
+    help.textContent = text;
+    container.append(help);
+  }
+
   initialState() {
     return {
       loopCount: "1",
@@ -264,6 +292,7 @@ export class SequenceEditor {
       this.handleDocumentChange();
     });
     loopLabel.append(loopText, this.loopInput);
+    this.appendTranslatedHelp(loopLabel, "sequence.editor.loopCountHelp");
     this.stepUsage = document.createElement("strong");
     this.stepUsage.textContent = translate("sequence.editor.stepUsage", {
       count: state.steps.length, maximum: limits.step_count,
@@ -292,6 +321,7 @@ export class SequenceEditor {
       this.clearDocumentMessage();
     });
     saveWrapper.append(saveLabel, this.saveInput);
+    this.appendTranslatedHelp(saveWrapper, "help.workflow.save_results");
 
     this.stepsHost = document.createElement("div");
     this.stepsHost.className = "sequence-editor-steps";
@@ -347,6 +377,7 @@ export class SequenceEditor {
     actionSelect.value = step.action;
     actionSelect.addEventListener("change", () => this.changeAction(index, actionSelect.value));
     actionWrapper.append(actionLabel, actionSelect);
+    this.appendTranslatedHelp(actionWrapper, "sequence.editor.actionHelp");
     body.append(actionWrapper);
     if (step.action === "capture") {
       const prerequisite = document.createElement("p");
@@ -444,6 +475,7 @@ export class SequenceEditor {
     }
     input.dataset.sequenceParameter = `${index + 1}:${field.name}`;
     wrapper.append(label, input);
+    this.appendFieldHelp(wrapper, field);
     return wrapper;
   }
 
