@@ -276,6 +276,14 @@ selection, points, format, one metric/operator/threshold, `1..255` matches, one
 whole-workflow timeout, and a relative interval. A match saves the exact
 multi-channel acquisition that was evaluated; it does not capture again.
 
+The standalone waveform `capture` command and the non-triggered waveform
+workflows `capture-batch`, `capture-until`, and `capture-monitor` read waveform
+data that is already available on the oscilloscope. Their WebUI controls remind
+the operator to enable the selected channels and complete a valid acquisition
+before reading waveform data. `triggered-capture-series` and
+`segmented-capture` do not use this prerequisite note because those operations
+start and wait for their own acquisition before waveform transfer.
+
 Capture Monitor provides channels, points, format, finite capture count,
 relative interval, retention points, and **Save results to files**. Before a
 run, the editor explains that the retained waveform is bounded per channel,
@@ -297,7 +305,10 @@ enabled, using `field.save_results`); when disabled no host-side run
 directory, manifest, or `scpi.log` is created and the result shows no `Files`,
 `Output dir`, `Manifest`, or `SCPI log` paths. This disabled mode is not
 supported when the document contains `capture` or `screenshot` steps. The editor
-does not execute steps itself and does not provide arbitrary SCPI.
+does not execute steps itself and does not provide arbitrary SCPI. A Sequence
+`capture` step shows the same existing-waveform prerequisite note as the
+standalone and non-triggered workflow capture surfaces because it delegates to
+the same Core capture operation.
 
 Documents use `1..255` steps and `loop_count` `1..255`, with at most 65,025
 total step executions. A document may contain at most 10 combined capture and
@@ -518,8 +529,13 @@ WebUI API. Jobs report `queued`, `running`, `completed`, `failed`, or
 Workflow commands present compact, command-specific summaries in Result.
 Measurement workflows also show their final measurement when available, while
 capture workflows show only the small counters needed to understand completion
-or retention. Per-capture metadata, cycle/step detail, artifact paths, and raw
-diagnostics remain in Result Detail and the existing workflow files. Complete
+or retention. Standalone waveform capture likewise shows only the selected
+channels, actual versus requested points, transfer format, and output-file
+count. Waveform preamble values, byte-order flags, per-capture metadata,
+cycle/step detail, artifact paths, and raw diagnostics remain in Result Detail
+and the existing workflow files. Waveform-transfer timeouts are summarized in
+user-facing language in Result while the original VISA/SCPI diagnostic remains
+available in Result Detail. Complete
 sample history is not copied into the terminal job result; when saving is
 enabled, existing workflow files retain their persistence role.
 

@@ -373,3 +373,71 @@ def test_waveform_editor_filters_condition_channel_and_bounds_plot_chunks():
         ));
         ''',
     )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_existing_waveform_guidance_is_scoped_to_non_triggered_capture_workflows():
+    run_editor_behavior(
+        r'''
+        const common = [
+          { name: "channels", type: "multi-enum", options: [1, 2], default: [1], required: true },
+          { name: "points", type: "integer", options: [1000], default: 1000 },
+          { name: "format", type: "enum", options: ["byte"], default: "byte" },
+        ];
+        definitions.push({
+          id: "capture-batch", editor: "workflow",
+          fields: common.concat([
+            { name: "count", type: "integer", minimum: 1, default: 1 },
+            { name: "interval_seconds", type: "number", minimum: 0, default: 0 },
+          ]),
+        });
+        definitions.push({
+          id: "capture-until", editor: "workflow",
+          fields: common.concat([
+            { name: "condition_channel", type: "enum", options: [1, 2], default: 1, required: true },
+            { name: "metric", type: "enum", options: ["max"], default: "max" },
+            { name: "operator", type: "enum", options: ["gt"], default: "gt" },
+            { name: "threshold", type: "number", required: true },
+            { name: "count", type: "integer", minimum: 1, maximum: 255, default: 1 },
+            { name: "timeout_seconds", type: "number", exclusive_minimum: 0, required: true },
+            { name: "interval_seconds", type: "number", minimum: 0, default: 0 },
+          ]),
+        });
+        definitions.push({
+          id: "capture-monitor", editor: "workflow",
+          fields: common.concat([
+            { name: "count", type: "integer", minimum: 1, required: true },
+            { name: "interval_seconds", type: "number", minimum: 0, default: 0 },
+            { name: "retention_points", type: "integer", minimum: 1000, default: 2000 },
+            { name: "save_results", type: "boolean", default: true },
+          ]),
+        });
+        definitions.push({
+          id: "triggered-capture-series", editor: "workflow",
+          fields: common.concat([
+            { name: "count", type: "integer", minimum: 1, required: true },
+            { name: "trigger_timeout_seconds", type: "number", exclusive_minimum: 0, required: true },
+            { name: "interval_seconds", type: "number", minimum: 0, default: 0 },
+          ]),
+        });
+
+        const editor = buildEditor();
+        for (const command of ["capture-batch", "capture-until", "capture-monitor"]) {
+          env.selectedId = command;
+          editor.schedulePresentation();
+          await settle();
+          const notes = editor.container.children.filter(
+            (node) => node.className === "compact-note workflow-waveform-prerequisite",
+          );
+          assert.equal(notes.length, 1, command);
+          assert.equal(notes[0].textContent, "capture.existingWaveformRequired");
+        }
+
+        env.selectedId = "triggered-capture-series";
+        editor.schedulePresentation();
+        await settle();
+        assert.equal(editor.container.children.some(
+          (node) => node.className === "compact-note workflow-waveform-prerequisite",
+        ), false);
+        ''',
+    )

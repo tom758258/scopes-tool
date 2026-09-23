@@ -181,3 +181,27 @@ def test_trigger_result_enum_labels_localized() -> None:
         zh_key = f'"enum.{value}":'
         assert en_key in english, f"missing enum.{value} in en"
         assert zh_key in chinese, f"missing enum.{value} in zh"
+
+
+def test_capture_result_and_prerequisite_labels_are_localized() -> None:
+    english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+
+    for key in (
+        "results.summary.captureCompleted",
+        "results.summary.capturePoints",
+        "results.summary.outputFileCount",
+        "results.summary.waveformReadTimedOut",
+        "results.field.requested_points",
+        "results.field.actual_points",
+        "results.field.captures",
+        "results.field.preamble",
+        "results.field.byte_order",
+        "results.field.unsigned",
+        "capture.existingWaveformRequired",
+    ):
+        assert f'"{key}"' in english
+        assert f'"{key}"' in chinese
+
+    assert "usable waveform data" in english
+    assert "可用的波形資料" in chinese

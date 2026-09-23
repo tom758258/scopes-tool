@@ -489,6 +489,57 @@ function workflowLastMeasurementSummary(result) {
   return "";
 }
 
+function capturePointsSummary(result) {
+  const requested = result?.requested_points;
+  const actual = result?.actual_points;
+  if (typeof actual === "number") {
+    return requested === null || requested === undefined
+      ? String(actual)
+      : translate("results.summary.capturePoints", { actual, requested });
+  }
+  if (actual && typeof actual === "object" && !Array.isArray(actual)) {
+    const perChannel = Object.entries(actual)
+      .map(([channel, points]) => `${channel}: ${points}`)
+      .join(", ");
+    return requested === null || requested === undefined
+      ? perChannel
+      : translate("results.summary.capturePointsPerChannel", {
+        actual: perChannel,
+        requested,
+      });
+  }
+  return "";
+}
+
+function renderCaptureWorkspaceResult(container, job) {
+  if (job?.command !== "capture") return false;
+  const result = jobResultPayload(job);
+  if (
+    !result
+    || typeof result !== "object"
+    || result.requested_points === null
+    || result.requested_points === undefined
+    || result.actual_points === null
+    || result.actual_points === undefined
+  ) {
+    return false;
+  }
+  const fields = [["summary", translate("results.summary.captureCompleted")]];
+  const channels = workflowChannelsSummary(result);
+  if (channels) fields.push(["channels", channels]);
+  const points = capturePointsSummary(result);
+  if (points) fields.push(["actual_points", points]);
+  if (result.format) fields.push(["format", result.format]);
+  if (Array.isArray(result.files)) {
+    fields.push([
+      "files",
+      translate("results.summary.outputFileCount", { count: result.files.length }),
+    ]);
+  }
+  appendWorkspaceFields(container, fields);
+  return true;
+}
+
 function renderWorkflowWorkspaceResult(container, job) {
   if (!isWorkflowResultCommand(job?.command)) return false;
   const result = jobResultPayload(job);
@@ -536,6 +587,8 @@ function jobErrorSummary(job) {
   const pendingErrors = doctorPendingErrorsSummary(job);
   if (pendingErrors) return pendingErrors;
   const result = jobResultPayload(job);
+  const waveformReadTimeout = waveformReadTimeoutSummary(job, result);
+  if (waveformReadTimeout) return waveformReadTimeout;
   if (typeof result?.error === "string") return result.error;
   if (typeof result?.error?.message === "string") return result.error.message;
 
@@ -579,6 +632,32 @@ function conciseStructuredError(message) {
 function isTimeoutMessage(message) {
   return typeof message === "string"
     && /timed?\s*out|timeout|VI_ERROR_TMO/i.test(message);
+}
+
+const EXISTING_WAVEFORM_READ_COMMANDS = new Set([
+  "capture",
+  "capture-batch",
+  "capture-until",
+  "capture-monitor",
+  "sequence",
+]);
+
+function waveformReadTimeoutSummary(job, result) {
+  if (job?.status !== "failed" || !EXISTING_WAVEFORM_READ_COMMANDS.has(job?.command)) {
+    return null;
+  }
+  const diagnostic = [
+    typeof job?.error === "string" ? job.error : "",
+    structuredErrorMessage(result?.error) || "",
+    result && typeof result === "object" ? JSON.stringify(result) : "",
+  ].join("\n");
+  if (
+    !isTimeoutMessage(diagnostic)
+    || !/:WAVeform:(?:PREamble|DATA)\?/i.test(diagnostic)
+  ) {
+    return null;
+  }
+  return translate("results.summary.waveformReadTimedOut");
 }
 
 function measureSweepErrorSummary(result) {
@@ -637,6 +716,7 @@ function successfulJobSummary(job) {
   if (job.command === "identify") return identifySummary(result);
   if (job.command === "list-resources") return resourceSummary(result);
   if (job.command === "screenshot") return translate("results.summary.screenshotCaptured");
+  if (job.command === "capture") return translate("results.summary.captureCompleted");
   if (job.command === "system-options") return formatSystemOptionsSummary(result);
   if (job.command === "system-status-byte") return formatSystemStatusByteSummary(result);
   if (job.command === "system-operation-status") return formatSystemOperationStatusSummary(result);
@@ -725,6 +805,7 @@ export function renderWorkspaceResult(container, job, context = {}) {
   }
   if (renderSystemWorkspaceResult(container, job)) return;
   const result = jobResultPayload(job);
+  if (renderCaptureWorkspaceResult(container, job)) return;
   if (renderWorkflowWorkspaceResult(container, job)) return;
   if (job.command === "channel-summary" && Array.isArray(result?.channels)) {
     renderChannelSummaryWorkspaceResult(container, result.channels);
