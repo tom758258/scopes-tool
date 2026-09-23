@@ -276,6 +276,31 @@ def test_catalog_token_options_have_localized_labels() -> None:
     assert not missing, "Unlocalized lower-case option tokens: " + ", ".join(missing)
 
 
+def test_reported_workflow_and_math_tokens_have_user_facing_labels() -> None:
+    english_source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
+    chinese_source = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
+
+    for token in (
+        "peak-to-peak",
+        "abs-max",
+        "decibel",
+        "rectangular",
+        "hanning",
+        "flattop",
+        "bharris",
+        "bartlett",
+        "composite",
+        "math1",
+        "math2",
+        "math3",
+    ):
+        en_value = _locale_value(english_source, f"enum.{token}")
+        zh_value = _locale_value(chinese_source, f"enum.{token}")
+        assert en_value != token, token
+        assert zh_value != token, token
+        assert not en_value[0].islower(), f"enum.{token}={en_value!r}"
+
+
 def test_english_enum_labels_do_not_start_with_lowercase_text() -> None:
     source = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     failures = [
