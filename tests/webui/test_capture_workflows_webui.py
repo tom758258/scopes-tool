@@ -309,10 +309,11 @@ def test_monitor_frontend_shows_min_p2p_absmax():
             metrics: { CH1: { maximum: 1.82, minimum: -0.31, peak_to_peak: 2.13, abs_max: 1.82, unit: "V" } }
           }, updates: []
         }});
-        assert.ok(editor.monitorStatus.textContent.includes("max="));
-        assert.ok(editor.monitorStatus.textContent.includes("min="));
-        assert.ok(editor.monitorStatus.textContent.includes("p2p="));
-        assert.ok(editor.monitorStatus.textContent.includes("abs-max="));
+        assert.ok(editor.monitorStatus.textContent.includes("workflow.monitor.statusSummary"));
+        assert.equal(editor.monitorStatus.textContent.includes("max="), false);
+        assert.equal(editor.monitorStatus.textContent.includes("min="), false);
+        assert.equal(editor.monitorStatus.textContent.includes("p2p="), false);
+        assert.equal(editor.monitorStatus.textContent.includes("abs-max="), false);
         ''',
     )
 

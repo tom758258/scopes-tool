@@ -53,6 +53,14 @@ export class WorkflowEditor {
     return selected?.editor === "workflow" ? selected : null;
   }
 
+  fieldLabel(name) {
+    const command = this.selectedDefinition()?.id;
+    const scopedKey = command ? `workflow.${command}.field.${name}` : "";
+    return scopedKey && hasTranslation(scopedKey)
+      ? translate(scopedKey)
+      : translate(`field.${name}`);
+  }
+
   currentKey() {
     const selected = this.selectedDefinition();
     return `${this.hooks.contextKey()}|${selected?.id || ""}`;
@@ -323,7 +331,7 @@ export class WorkflowEditor {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     const label = document.createElement("span");
-    label.textContent = translate(`field.${name}`);
+    label.textContent = this.fieldLabel(name);
     const input = document.createElement("select");
     input.dataset.workflowField = name;
     for (const channel of channels) {
@@ -374,7 +382,7 @@ export class WorkflowEditor {
       const saveWrapper = document.createElement("label");
       saveWrapper.className = "field field-boolean workflow-editor-save";
       const label = document.createElement("span");
-      label.textContent = translate("field.save_results");
+      label.textContent = this.fieldLabel("save_results");
       const input = document.createElement("input");
       input.type = "checkbox";
       input.checked = draft.save_results !== false;
@@ -409,7 +417,7 @@ export class WorkflowEditor {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     const label = document.createElement("span");
-    label.textContent = translate(`field.${field.name}`);
+    label.textContent = this.fieldLabel(field.name);
     const input = document.createElement("select");
     for (const option of field.options || []) {
       const text = field.name === "condition_channel"
@@ -453,7 +461,7 @@ export class WorkflowEditor {
       const wrapper = document.createElement("label");
       wrapper.className = "field field-boolean workflow-editor-stop";
       const label = document.createElement("span");
-      label.textContent = translate("field.stop_on_error");
+      label.textContent = this.fieldLabel("stop_on_error");
       const input = document.createElement("input");
       input.type = "checkbox";
       input.checked = Boolean(draft.stop_on_error);
@@ -466,7 +474,7 @@ export class WorkflowEditor {
     const saveWrapper = document.createElement("label");
     saveWrapper.className = "field field-boolean workflow-editor-save";
     const saveLabel = document.createElement("span");
-    saveLabel.textContent = translate("field.save_results");
+    saveLabel.textContent = this.fieldLabel("save_results");
     const saveInput = document.createElement("input");
     saveInput.type = "checkbox";
     saveInput.checked = draft.save_results !== false;
@@ -483,7 +491,7 @@ export class WorkflowEditor {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     const label = document.createElement("span");
-    label.textContent = translate(`field.${field.name}`);
+    label.textContent = this.fieldLabel(field.name);
     const input = document.createElement("input");
     applyNumericFieldConstraints(input, field);
     input.required = field.required === true;
@@ -789,7 +797,7 @@ export class WorkflowEditor {
     const saveWrapper = document.createElement("label");
     saveWrapper.className = "field field-boolean workflow-editor-save";
     const saveLabel = document.createElement("span");
-    saveLabel.textContent = translate("field.save_results");
+    saveLabel.textContent = this.fieldLabel("save_results");
     const saveInput = document.createElement("input");
     saveInput.type = "checkbox";
     saveInput.checked = draft.save_results !== false;
@@ -818,10 +826,24 @@ export class WorkflowEditor {
     if (this.monitorStatus) {
       const summary = this.monitorSummary || {};
       const metrics = Object.entries(summary.metrics || {}).map(
-        ([channel, values]) => `${channel} max=${values.maximum} ${values.unit} min=${values.minimum} ${values.unit} p2p=${values.peak_to_peak} ${values.unit} abs-max=${values.abs_max} ${values.unit}`,
+        ([channel, values]) => translate("workflow.monitor.metricSummary", {
+          channel,
+          maximum: values.maximum ?? "—",
+          minimum: values.minimum ?? "—",
+          peakToPeak: values.peak_to_peak ?? "—",
+          absMax: values.abs_max ?? "—",
+          unit: values.unit || "",
+        }),
       ).join(" | ");
       this.monitorStatus.textContent = summary.completed_count
-        ? `${summary.completed_count}/${summary.requested_count} observed=${summary.total_observed_points} retained=${summary.retained_points} dropped=${summary.dropped_points} ${metrics}`.trim()
+        ? translate("workflow.monitor.statusSummary", {
+          completed: summary.completed_count,
+          requested: summary.requested_count ?? 0,
+          observed: summary.total_observed_points ?? 0,
+          retained: summary.retained_points ?? 0,
+          dropped: summary.dropped_points ?? 0,
+          metrics: metrics ? ` · ${metrics}` : "",
+        })
         : translate("workflow.monitor.waiting");
     }
     const context = this.monitorCanvas?.getContext?.("2d");

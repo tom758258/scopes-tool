@@ -683,7 +683,21 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "enum.condition_met": "Condition met",
           "results.field.acquisition": "Acquisition",
           "results.field.completed_count": "Completed count",
+          "results.field.summary": "Summary",
           "results.field.last_measurement": "Last measurement",
+          "results.summary.measureUntilConditionMet": "Condition met after {{completed}} measurements",
+          "results.summary.measureUntilCompleted": "{{completed}} measurements completed",
+          "results.summary.captureBatchCompleted": "{{completed}} / {{total}} captures completed",
+          "results.summary.captureUntilCompleted": "{{completed}} / {{total}} matching captures saved after {{captures}} acquisitions",
+          "results.summary.captureMonitorCompleted": "{{completed}} / {{total}} captures monitored",
+          "results.summary.measureLogCompletedKnown": "{{completed}} / {{total}} measurement rows recorded",
+          "results.summary.measureLogCompleted": "{{completed}} measurement rows recorded",
+          "results.summary.triggeredMeasureLoopCompleted": "{{completed}} / {{total}} triggered measurement cycles completed",
+          "results.summary.triggeredCaptureSeriesCompleted": "{{completed}} / {{total}} triggered captures completed",
+          "results.summary.sequenceCompleted": "{{completed}} / {{total}} step executions completed; {{loops}} loop(s), {{steps}} step(s)",
+          "results.workflow.retention": "{{observed}} points observed per channel · {{retained}} retained · {{dropped}} dropped",
+          "results.field.channels": "Channels",
+          "results.field.retention": "Retention",
           "results.field.index": "Index",
           "results.field.matched": "Matched",
           "results.field.scale": "Scale",
@@ -703,7 +717,10 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
           "enum.condition_met": "\u689d\u4ef6\u6210\u7acb",
           "results.field.acquisition": "\u64f7\u53d6",
           "results.field.completed_count": "\u5b8c\u6210\u6578\u91cf",
+          "results.field.summary": "\u6458\u8981",
           "results.field.last_measurement": "\u6700\u5f8c\u91cf\u6e2c",
+          "results.summary.measureUntilConditionMet": "\u689d\u4ef6\u6210\u7acb\uff0c\u5171\u91cf\u6e2c {{completed}} \u6b21",
+          "results.summary.measureUntilCompleted": "\u5df2\u5b8c\u6210 {{completed}} \u6b21\u91cf\u6e2c",
           "results.field.index": "\u7d22\u5f15",
           "results.field.matched": "\u7b26\u5408",
           "command.channel-summary": "通道設定摘要",
@@ -806,38 +823,42 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         assert(unknownDd.some((t) => t === "2"), "scale without unit uses plain value");
         assert(unknownDd.some((t) => t === "10"), "range without unit uses plain value");
 
-        // E: compact workflow result exposes its summary and final measurement
+        // E: workflow results expose semantic summaries without nested payload dumps
         const workflowWorkspace = new FakeNode("div");
         api.renderWorkspaceResult(workflowWorkspace, makeJob("measure-until", {
           status: "completed",
-          action: "query",
-          enabled: true,
+          channel: 1,
+          item: "vpp",
           completed_count: 2,
+          matched: true,
+          termination_reason: "condition_met",
           last_measurement: { index: 2, value: "4", matched: true },
         }));
         const workflowText = workflowWorkspace.children.flatMap((field) =>
           field.children.map((node) => node.textContent)
         );
-        assert(workflowText.includes("2"), "completed count");
-        assert(workflowText.some((text) => text.includes("Index: 2")), "last measurement");
-        assert(workflowText.includes("Query"), "canonical enum is localized in English");
-        assert(workflowText.includes("Enabled"), "enabled boolean keeps enabled semantics");
-        assert(workflowText.some((text) => text.includes("Matched: Yes")), "generic boolean uses neutral semantics");
+        assert(workflowText.some((text) => text.includes("Condition met after 2 measurements")));
+        assert(workflowText.includes("CH1"));
+        assert(workflowText.some((text) => text.includes("vpp: 4")));
+        assert.equal(workflowText.some((text) => text.includes("Index: 2")), false);
 
         globalThis.testLocale = "zh-TW";
         const zhWorkflowWorkspace = new FakeNode("div");
         api.renderWorkspaceResult(zhWorkflowWorkspace, makeJob("measure-until", {
-          action: "query",
-          enabled: false,
+          status: "completed",
+          channel: 1,
+          item: "vpp",
           completed_count: 2,
+          matched: true,
+          termination_reason: "condition_met",
           last_measurement: { index: 2, value: "4", matched: true },
         }));
         const zhWorkflowText = zhWorkflowWorkspace.children.flatMap((field) =>
           field.children.map((node) => node.textContent)
         );
-        assert(zhWorkflowText.includes("\u67e5\u8a62"), "canonical enum is localized in zh-TW");
-        assert(zhWorkflowText.includes(zhLabels["status.disabled"]), "enabled boolean keeps zh-TW disabled semantics");
-        assert(zhWorkflowText.some((text) => text.includes("\u7b26\u5408: \u662f")), "generic boolean uses zh-TW yes/no");
+        assert(zhWorkflowText.some((text) => text.includes("\u689d\u4ef6\u6210\u7acb")));
+        assert(zhWorkflowText.includes("CH1"));
+        assert.equal(zhWorkflowText.some((text) => text.includes("\u7d22\u5f15")), false);
 
         const acquisitionWorkspace = new FakeNode("div");
         api.renderWorkspaceResult(acquisitionWorkspace, makeJob("acquisition", {
@@ -858,14 +879,97 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
         const terminatedWorkflow = new FakeNode("div");
         api.renderWorkspaceResult(terminatedWorkflow, makeJob("measure-until", {
           status: "completed",
+          channel: 1,
+          item: "vpp",
+          completed_count: 3,
+          matched: true,
           termination_reason: "condition_met",
         }));
         const terminatedText = terminatedWorkflow.children.flatMap((field) =>
           field.children.map((node) => node.textContent)
         );
-        assert(terminatedText.includes("\u5df2\u5b8c\u6210"));
-        assert(terminatedText.includes("\u689d\u4ef6\u6210\u7acb"));
+        assert(terminatedText.some((text) => text.includes("\u689d\u4ef6\u6210\u7acb")));
+        assert.equal(terminatedText.some((text) => text.includes("condition_met")), false);
         globalThis.testLocale = "en";
+
+        // F: every Workflow command keeps the workspace result compact
+        const workflowCases = [
+          ["capture-batch", {
+            status: "completed", channels: [2], requested_count: 3, completed_count: 3,
+            captures: [{ index: 1, csv: "waveform_0001.csv", metadata: "waveform_0001_meta.json",
+              actual_points: { CH2: 985 }, system_error: { code: 0, message: "No error" } }],
+            manifest_path: "data/manifest.json", scpi_log_path: "data/scpi.log",
+          }, "3 / 3 captures completed"],
+          ["capture-until", {
+            status: "completed", channels: [1, 2], requested_count: 2, completed_count: 2,
+            capture_count: 7, termination_reason: "condition_met",
+          }, "2 / 2 matching captures saved after 7 acquisitions"],
+          ["capture-monitor", {
+            status: "completed", channels: [1], requested_count: 100, completed_count: 100,
+            total_observed_points: 100000, retained_points: 25000, dropped_points: 75000,
+            metrics: { CH1: { maximum: 1.0 } }, manifest_path: "data/monitor/manifest.json",
+          }, "100 / 100 captures monitored"],
+          ["measure-log", {
+            status: "completed", channels: [1, 2], requested_count: 4, completed_rows: 4,
+            last_measurement: { index: 4, values: { ch1_vpp: "2.5", ch2_frequency: "1000" } },
+            csv_path: "data/measure.csv",
+          }, "4 / 4 measurement rows recorded"],
+          ["measure-until", {
+            status: "completed", channel: 1, item: "vpp", completed_count: 2, matched: true,
+            termination_reason: "condition_met", last_measurement: { index: 2, value: "4", matched: true },
+          }, "Condition met after 2 measurements"],
+          ["triggered-measure-loop", {
+            status: "completed", channels: [1], requested_count: 3, completed_count: 3,
+            last_measurement: { index: 3, values: { ch1_vpp: "2.1" } },
+          }, "3 / 3 triggered measurement cycles completed"],
+          ["triggered-capture-series", {
+            status: "completed", channels: [1], requested_count: 2, completed_count: 2,
+            cycles: [{ index: 1, csv: "capture_1.csv" }], manifest_path: "data/series/manifest.json",
+          }, "2 / 2 triggered captures completed"],
+          ["sequence", {
+            status: "completed", loop_count: 2, step_count: 3, total_step_executions: 6,
+            completed_step_executions: 6, files: [{ kind: "manifest", path: "manifest.json" }],
+            steps: [{ step_index: 1, last_result: { value: 1 } }],
+            manifest_path: "data/sequence/manifest.json", scpi_log_path: "data/sequence/scpi.log",
+          }, "6 / 6 step executions completed; 2 loop(s), 3 step(s)"],
+        ];
+        for (const [command, payload, expectedSummary] of workflowCases) {
+          const compact = new FakeNode("div");
+          api.renderWorkspaceResult(compact, makeJob(command, payload));
+          const visible = compact.children.flatMap((field) =>
+            field.children.map((node) => node.textContent)
+          );
+          assert(visible.includes(expectedSummary), command + " semantic summary");
+          const joined = visible.join(" | ");
+          for (const forbidden of [
+            "waveform_0001.csv", "waveform_0001_meta.json", "Actual points", "No error",
+            "manifest.json", "scpi.log", "capture_1.csv", "last_result",
+          ]) {
+            assert.equal(joined.includes(forbidden), false, command + " leaked " + forbidden);
+          }
+          assert(visible.length <= 6, command + " result should stay compact");
+        }
+
+        const durationOnlyLog = new FakeNode("div");
+        api.renderWorkspaceResult(durationOnlyLog, makeJob("measure-log", {
+          status: "completed", channels: [1], requested_count: null, completed_rows: 5,
+        }));
+        const durationOnlyText = durationOnlyLog.children.flatMap((field) =>
+          field.children.map((node) => node.textContent)
+        );
+        assert(durationOnlyText.includes("5 measurement rows recorded"));
+        assert.equal(durationOnlyText.join(" ").includes("null"), false);
+
+        const rawWorkflowDetail = new FakeNode("div");
+        const rawWorkflowSummary = new FakeNode("div");
+        api.renderJob(
+          rawWorkflowSummary,
+          makeJob("capture-batch", workflowCases[0][1]),
+          rawWorkflowDetail,
+        );
+        assert(rawWorkflowDetail.children[0].textContent.includes("waveform_0001.csv"));
+        assert(rawWorkflowDetail.children[0].textContent.includes("waveform_0001_meta.json"));
+        assert(rawWorkflowDetail.children[0].textContent.includes("No error"));
 
         // A. command-scoped dispatch: non-channel-summary command must not use card renderer
         // even when result contains a channels array
