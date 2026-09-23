@@ -11,7 +11,9 @@ function fieldByName(fields, name) {
 }
 
 function channelLabel(value) {
-  return `CH${String(value)}`;
+  const raw = String(value);
+  const key = `enum.channel${raw}`;
+  return hasTranslation(key) ? translate(key) : `CH${raw}`;
 }
 
 function defaultChoices(field) {
