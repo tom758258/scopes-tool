@@ -1917,8 +1917,23 @@ def test_advanced_math_validation_reuses_core_series_rules() -> None:
 def test_execute_advanced_math_set_and_query_paths_call_core() -> None:
     calls: list[tuple] = []
 
+    class OperationState:
+        def __init__(self, family: str, operation: str) -> None:
+            self.family = family
+            self.operation = operation
+            self.operation_raw = operation
+
     class FakeScope:
+        active_family = "transform"
+        active_operation = "linear"
+
+        def query_math_operation(self, function):  # type: ignore[no-untyped-def]
+            calls.append(("operation-query", function, self.active_family))
+            return OperationState(self.active_family, self.active_operation)
+
         def configure_math_transform(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.active_family = "transform"
+            self.active_operation = args[1]
             calls.append(("transform-set", args, kwargs))
 
         def query_math_transform(self, function):  # type: ignore[no-untyped-def]
@@ -1926,6 +1941,8 @@ def test_execute_advanced_math_set_and_query_paths_call_core() -> None:
             return {"function": function, "operation": "linear", "gain": 2.0}
 
         def configure_math_filter(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.active_family = "filter"
+            self.active_operation = args[1]
             calls.append(("filter-set", args, kwargs))
 
         def query_math_filter(self, function):  # type: ignore[no-untyped-def]
@@ -1933,6 +1950,8 @@ def test_execute_advanced_math_set_and_query_paths_call_core() -> None:
             return {"function": function, "operation": "average", "average_count": 64}
 
         def configure_math_visualization(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.active_family = "visualization"
+            self.active_operation = args[1]
             calls.append(("visualization-set", args, kwargs))
 
         def query_math_visualization(self, function):  # type: ignore[no-untyped-def]
@@ -1966,16 +1985,19 @@ def test_execute_advanced_math_set_and_query_paths_call_core() -> None:
             "input_offset": None, "gain": 2.0, "linear_offset": -1.0,
         }),
         ("transform-query", 2),
+        ("operation-query", 2, "transform"),
         ("transform-query", 2),
         ("filter-set", (2, "average", "math1"), {
             "cutoff_hz": None, "average_count": 64, "smooth_points": None,
         }),
         ("filter-query", 2),
+        ("operation-query", 2, "filter"),
         ("filter-query", 2),
         ("visualization-set", (2, "trend"), {
             "source": None, "source2": None, "measurement": None, "measurement_slot": 3,
         }),
         ("visualization-query", 2),
+        ("operation-query", 2, "visualization"),
         ("visualization-query", 2),
     ]
     assert transform["result"]["math_transform"]["gain"] == 2.0
@@ -2709,7 +2731,7 @@ def test_queued_and_running_job_cancellation_requests_are_accepted(monkeypatch) 
     monkeypatch.setattr("scopes_tool_webui.jobs.execute_command", blocking_execute)
     request = {
         "command": "identify",
-        "mode": "simulate",
+        "mode": "dry-run",
         "resource": None,
         "model_id": MODEL_ID,
         "parameters": {},
@@ -2753,7 +2775,7 @@ def test_shutdown_rejects_new_jobs_and_waits_for_running_jobs(monkeypatch) -> No
     monkeypatch.setattr("scopes_tool_webui.jobs.execute_command", blocking_execute)
     request = {
         "command": "identify",
-        "mode": "simulate",
+        "mode": "dry-run",
         "resource": None,
         "model_id": MODEL_ID,
         "parameters": {},

@@ -32,7 +32,7 @@ jobs:
       - name: Check text and whitespace
         run: |
           python scripts/check_text_hygiene.py
-          git diff --check HEAD^ HEAD
+          git diff --check origin/main...HEAD
 
       - name: Compile Python
         run: ./.venv/bin/python -m compileall -q src tests
@@ -51,6 +51,11 @@ jobs:
           ./.venv/bin/python -m pytest -q
           tests/core/test_simulator_session_state.py
           tests/webui/test_simulator_persistence.py
+          tests/webui/test_i18n_contract.py::test_math_user_facing_copy_uses_consistent_math_casing
+          tests/webui/test_live_identity_contract.py
+          tests/webui/test_webui_commands.py::test_execute_advanced_math_set_and_query_paths_call_core
+          tests/webui/test_webui_commands.py::test_queued_and_running_job_cancellation_requests_are_accepted
+          tests/webui/test_webui_commands.py::test_shutdown_rejects_new_jobs_and_waits_for_running_jobs
           --basetemp .tmp_tests/preflight-focused
 
       - name: Run full hardware-free suite

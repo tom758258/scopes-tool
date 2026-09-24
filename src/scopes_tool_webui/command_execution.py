@@ -131,7 +131,11 @@ def execute_command(
             raise WebUIRequestError("dry-run execution requires a planning model")
         return _execute_dry_run(command, parameters, model_id, artifact_dir)
 
-    scope = open_scope_for_run(config, simulator_state=simulator_state)
+    scope = (
+        open_scope_for_run(config, simulator_state=simulator_state)
+        if mode == "simulate"
+        else open_scope_for_run(config)
+    )
     try:
         normalized = dict(parameters)
         if mode == "live":
