@@ -18,6 +18,8 @@ from scopes_tool_core.simulator_backend import (
         ("DIFF", "transform", "differentiate"),
         ("LOWPass", "filter", "low-pass"),
         ("MAGNify", "visualization", "magnify"),
+        ("BTIM", "other", "bus-timing"),
+        ("BSTate", "other", "bus-state"),
     ],
 )
 def test_parse_math_function_operation_classifies_shared_operation_domain(
@@ -54,6 +56,11 @@ def test_scope_queries_math_operation_family_without_assuming_an_editor():
     filtered = scope.query_math_operation(1)
     assert filtered.family == "filter"
     assert filtered.operation == "low-pass"
+
+    backend.write(":FUNCtion1:OPERation BTIMing")
+    bus_timing = scope.query_math_operation(1)
+    assert bus_timing.family == "other"
+    assert bus_timing.operation == "bus-timing"
 
 
 def test_simulator_instrument_state_round_trips_without_session_state():

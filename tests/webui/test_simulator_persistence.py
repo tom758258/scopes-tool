@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+import scopes_tool_webui.command_execution as command_execution
 from scopes_tool_webui.commands import validate_job_request
 from scopes_tool_webui.jobs import JobManager
 
@@ -120,6 +121,29 @@ def test_simulate_math_state_persists_across_jobs_and_cross_family_reads_are_inf
         assert fft_read.result["result"]["fft"]["active"] is False
         assert fft_read.result["result"]["fft"]["active_family"] == "filter"
         assert fft_read.result["result"]["fft"]["active_operation"] == "low-pass"
+
+        second_slot = _run(
+            manager,
+            tmp_path,
+            "math-visualization",
+            {
+                "action": "set",
+                "function": 2,
+                "operation": "magnify",
+                "source": "channel1",
+            },
+        )
+        assert second_slot.status == "completed"
+        assert second_slot.result["result"]["math_visualization"]["function"] == 2
+
+        first_slot = _run(
+            manager,
+            tmp_path,
+            "math-filter",
+            {"action": "query", "function": 1},
+        )
+        assert first_slot.status == "completed"
+        assert first_slot.result["result"]["math_filter"]["operation"] == "low-pass"
     finally:
         asyncio.run(manager.shutdown())
 
@@ -151,6 +175,44 @@ def test_simulate_persists_general_state_and_isolates_planning_models(tmp_path):
             model_id=MODEL_4034,
         )
         assert other_model.result["result"]["volts_per_division"] != pytest.approx(2.0)
+
+        back_to_first_model = _run(
+            manager,
+            tmp_path,
+            "channel-scale",
+            {"action": "query", "channel": 1},
+        )
+        assert back_to_first_model.result["result"]["volts_per_division"] == pytest.approx(2.0)
+
+        timebase_set = _run(
+            manager,
+            tmp_path,
+            "timebase-scale",
+            {"action": "set", "seconds_per_division": 0.002},
+        )
+        assert timebase_set.status == "completed"
+        timebase_read = _run(
+            manager,
+            tmp_path,
+            "timebase-scale",
+            {"action": "query"},
+        )
+        assert timebase_read.result["result"]["timebase"]["seconds_per_division"] == pytest.approx(0.002)
+
+        wgen_set = _run(
+            manager,
+            tmp_path,
+            "wgen-frequency",
+            {"action": "set", "frequency_hz": 2500.0},
+        )
+        assert wgen_set.status == "completed"
+        wgen_read = _run(
+            manager,
+            tmp_path,
+            "wgen-frequency",
+            {"action": "query"},
+        )
+        assert wgen_read.result["result"]["frequency"]["frequency_hz"] == pytest.approx(2500.0)
 
         enabled = _run(
             manager,
@@ -210,3 +272,37 @@ def test_simulate_jobs_for_one_model_are_serialized(monkeypatch, tmp_path):
         assert calls == ["identify", "identify"]
     finally:
         asyncio.run(manager.shutdown())
+
+
+def test_known_unmodeled_math_operation_is_informational_not_parse_failure():
+    class OperationState:
+        family = "other"
+        operation = "bus-timing"
+        operation_raw = "BTIM"
+
+    class FakeScope:
+        def query_math_operation(self, function):
+            assert function == 1
+            return OperationState()
+
+        def query_math_visualization(self, _function):
+            raise AssertionError("typed visualization query must not run for another family")
+
+    result = command_execution._execute_math_visualization(
+        FakeScope(),
+        {"action": "query", "function": 1},
+    )
+
+    assert result == {
+        "exit_code": 0,
+        "result": {
+            "math_visualization": {
+                "function": 1,
+                "active": False,
+                "active_family": "other",
+                "active_operation": "bus-timing",
+                "operation_raw": "BTIM",
+            }
+        },
+        "artifacts": [],
+    }

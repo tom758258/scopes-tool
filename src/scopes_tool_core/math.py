@@ -177,6 +177,13 @@ _MATH_VISUALIZATION_READBACKS = {
     "MINHOLD": "min-hold",
 }
 
+_MATH_OTHER_OPERATION_READBACKS = {
+    "BTIM": "bus-timing",
+    "BTIMING": "bus-timing",
+    "BST": "bus-state",
+    "BSTATE": "bus-state",
+}
+
 _MATH_TREND_MEASUREMENT_TOKENS = {
     "vavg": "VAVerage",
     "ac_rms": "ACRMs",
@@ -1031,6 +1038,7 @@ def parse_math_function_operation(raw: str) -> tuple[str, str]:
         ("transform", _MATH_TRANSFORM_READBACKS),
         ("filter", _MATH_FILTER_READBACKS),
         ("visualization", _MATH_VISUALIZATION_READBACKS),
+        ("other", _MATH_OTHER_OPERATION_READBACKS),
     ):
         operation = readbacks.get(normalized)
         if operation is not None:

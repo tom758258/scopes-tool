@@ -879,6 +879,9 @@ const MATH_FAMILY_RESULT_KEYS = {
 };
 
 function mathFamilyLabel(family) {
+  if (family === "other" && hasTranslation("results.mathFamily.other")) {
+    return translate("results.mathFamily.other");
+  }
   const commandId = family === "fft" ? "fft" : `math-${family}`;
   const key = `command.${commandId}`;
   return hasTranslation(key) ? translate(key) : String(family);

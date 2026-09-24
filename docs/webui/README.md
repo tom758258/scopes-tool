@@ -74,7 +74,10 @@ Math/FFT readback first identifies the active operation family for a Math
 function slot. Reading a different editor (for example Math Visualization while
 the slot is currently FFT) reports the active family and operation as an
 informational completed result instead of treating that valid instrument
-operation as a malformed response. Unknown operation readbacks remain errors.
+operation as a malformed response. Known instrument operations that do not
+have a WebUI editor, such as bus timing or bus state, are reported as another
+active MATH operation rather than as malformed data. Unknown operation readbacks
+remain errors.
 
 ## Basic Controls and Commands
 
