@@ -1,5 +1,6 @@
 import { hasTranslation, translate } from "/static/i18n.js";
 import { applyNumericFieldConstraints } from "/static/numeric-input.js";
+import { MonitorChart } from "/static/monitor-chart.js";
 
 function translatedChoice(value) {
   const key = `enum.${String(value)}`;
@@ -100,6 +101,8 @@ export class WorkflowEditor {
   present() {
     const definition = this.selectedDefinition();
     if (!definition) {
+      this.monitorChart?.dispose();
+      this.monitorChart = null;
       this.captureDraft();
       this.renderedKey = null;
       this.controls = {};
@@ -120,6 +123,8 @@ export class WorkflowEditor {
   }
 
   renderDefinition(definition, key) {
+    this.monitorChart?.dispose();
+    this.monitorChart = null;
     const fields = this.catalog.fieldsFor(definition);
     const draft = this.sanitizeDraft(
       this.drafts.get(key) || this.defaultDraft(fields, definition),
@@ -438,11 +443,21 @@ export class WorkflowEditor {
       this.monitorStatus.className = "workflow-monitor-status";
       this.monitorCanvas = document.createElement("canvas");
       this.monitorCanvas.className = "workflow-monitor-plot";
-      this.monitorCanvas.width = 800;
-      this.monitorCanvas.height = 260;
       this.monitorCanvas.setAttribute("aria-label", translate("workflow.monitor.plot"));
-      this.container.append(warning, this.monitorStatus, this.monitorCanvas);
+      const plot = document.createElement("div");
+      plot.className = "workflow-monitor-chart";
+      const crosshair = document.createElement("div");
+      crosshair.className = "workflow-monitor-crosshair";
+      crosshair.hidden = true;
+      const tooltip = document.createElement("div");
+      tooltip.className = "workflow-monitor-tooltip";
+      tooltip.hidden = true;
+      plot.append(this.monitorCanvas, crosshair, tooltip);
+      this.container.append(warning, this.monitorStatus, plot);
       this.monitorChunks ||= [];
+      this.monitorChart = new MonitorChart(
+        this.monitorCanvas, crosshair, tooltip, () => this.monitorChunks, translate,
+      );
       this.renderMonitorRuntime();
     }
   }
@@ -885,44 +900,7 @@ export class WorkflowEditor {
         })
         : translate("workflow.monitor.waiting");
     }
-    const context = this.monitorCanvas?.getContext?.("2d");
-    if (!context || !this.monitorChunks?.length) return;
-    const width = this.monitorCanvas.width;
-    const height = this.monitorCanvas.height;
-    context.clearRect(0, 0, width, height);
-    const series = {};
-    for (const chunk of this.monitorChunks) {
-      for (const [channel, data] of Object.entries(chunk.channels || {})) {
-        const target = (series[channel] ||= []);
-        for (let index = 0; index < data.values.length; index += 1) {
-          target.push([chunk.global_start_index + index, data.values[index]]);
-        }
-      }
-    }
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (const values of Object.values(series)) {
-      for (const [x, y] of values) {
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-      }
-    }
-    if (!Number.isFinite(minX)) return;
-    const colors = ["#1769aa", "#c44d00", "#2e7d32", "#7b1fa2"];
-    Object.values(series).forEach((values, channelIndex) => {
-      context.beginPath();
-      context.strokeStyle = colors[channelIndex % colors.length];
-      values.forEach(([x, y], index) => {
-        const px = 8 + ((x - minX) / Math.max(1, maxX - minX)) * (width - 16);
-        const py = height - 8 - ((y - minY) / Math.max(1e-12, maxY - minY)) * (height - 16);
-        if (index === 0) context.moveTo(px, py); else context.lineTo(px, py);
-      });
-      context.stroke();
-    });
+    this.monitorChart?.requestDraw();
   }
 
   async submit() {

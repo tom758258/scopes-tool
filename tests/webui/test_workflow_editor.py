@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
 EDITOR_SOURCE = STATIC_ROOT / "workflow-editor.js"
 NUMERIC_INPUT_SOURCE = STATIC_ROOT / "numeric-input.js"
+MONITOR_CHART_SOURCE = STATIC_ROOT / "monitor-chart.js"
 
 
 def read_static(name: str) -> str:
@@ -180,6 +181,7 @@ WORKFLOW_EDITOR_HARNESS = r'''
 
     const source = [
       fs.readFileSync(process.argv[2], "utf8"),
+      fs.readFileSync(process.argv[3], "utf8"),
       fs.readFileSync(process.argv[1], "utf8"),
     ].join("\n")
       .replace(/^import[^\n]*\r?\n/gm, "")
@@ -243,6 +245,7 @@ def run_editor_behavior(script: str) -> None:
             textwrap.dedent(WORKFLOW_EDITOR_HARNESS) + textwrap.dedent(script),
             str(EDITOR_SOURCE),
             str(NUMERIC_INPUT_SOURCE),
+            str(MONITOR_CHART_SOURCE),
         ],
         capture_output=True,
         text=True,

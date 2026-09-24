@@ -566,8 +566,11 @@ history or resend the full retained window on every poll. A bounded reset is
 used only when a polling client has fallen behind the retained update window.
 Transient waveform arrays are WebUI-runtime data only: they are not copied into
 the final job result, CLI JSON, or Common Worker result and need not survive job
-completion. The rolling plot uses global sample index on X; each capture's
-`time_s` remains local and gaps may exist between repeated acquisitions.
+completion. The rolling plot uses global sample index on X and pixel-aware
+min/max display decimation for large retained windows. Hover resolves exact
+retained raw sample values. Each capture's `time_s` remains local; repeated
+acquisitions stay separate rather than forming one continuous time-domain
+acquisition, and gaps may exist between them.
 
 Queued jobs can be cancelled immediately. Running jobs accept a cooperative
 cancellation request and remain running until Core execution and session
