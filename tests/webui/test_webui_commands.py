@@ -185,9 +185,21 @@ def test_commands_expose_acquisition_channel_measurement_and_status_subset() -> 
     assert single_wait["category"] == "Acquisition"
     assert single_wait["modes"] == ["live", "simulate"]
     assert single_wait_fields["trigger_timeout_seconds"]["default"] == 5.0
+    assert (
+        single_wait_fields["trigger_timeout_seconds"]["help_key"]
+        == "single-wait.trigger_timeout_seconds"
+    )
     assert single_wait_fields["force_trigger_on_timeout"]["default"] is False
+    assert (
+        single_wait_fields["force_trigger_on_timeout"]["help_key"]
+        == "single-wait.force_trigger_on_timeout"
+    )
     assert single_wait_fields["trigger_poll_interval_ms"]["default"] == 100
-    assert single_wait_fields["trigger_poll_interval_ms"]["advanced"] is True
+    assert (
+        single_wait_fields["trigger_poll_interval_ms"]["help_key"]
+        == "single-wait.trigger_poll_interval_ms"
+    )
+    assert "advanced" not in single_wait_fields["trigger_poll_interval_ms"]
     action = next(field for field in acquisition["fields"] if field["name"] == "action")
     assert action["mode_options"]["dry-run"] == ["query"]
     acquisition_type = next(field for field in acquisition["fields"] if field["name"] == "type")

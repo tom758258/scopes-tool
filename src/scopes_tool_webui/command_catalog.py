@@ -200,6 +200,7 @@ COMMANDS = (
                 "exclusive_minimum": 0,
                 "default": 5.0,
                 "required": True,
+                "help_key": "single-wait.trigger_timeout_seconds",
             },
             {
                 "name": "force_trigger_on_timeout",
@@ -213,7 +214,7 @@ COMMANDS = (
                 "minimum": 1,
                 "default": 100,
                 "required": True,
-                "advanced": True,
+                "help_key": "single-wait.trigger_poll_interval_ms",
             },
         ),
     },

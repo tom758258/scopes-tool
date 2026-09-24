@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refines WebUI acquisition, measurement, serial-search, segmented-memory,
+  workflow, and sequence guidance and form layout for clearer advanced actions,
+  full-row boolean policies, and responsive half-width fields.
 - Makes WebUI Simulate stateful across command jobs per planning model while
   keeping each simulated SCPI session isolated, and makes FFT/Math editor
   readback report a different active Math operation family as valid state

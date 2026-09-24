@@ -241,12 +241,14 @@ export class MeasurementEditor {
         "channels",
         fieldByName(fields, "channels").options || [],
         draft.channels,
+        "help.workflow.measurement.channels",
       ),
       this.buildSweepChoiceSection(
         "workflow.editor.measurements",
         "items",
         fieldByName(fields, "items").options || [],
         draft.items,
+        "help.workflow.measurement.items",
       ),
       this.sweepPairItemsSection,
       this.buildSweepPairsSection(
@@ -300,11 +302,11 @@ export class MeasurementEditor {
 
   buildSweepChoiceSection(titleKey, name, options, selected, noteKey = null) {
     const section = this.buildSweepSection(titleKey);
+    let note = null;
     if (noteKey) {
-      const note = document.createElement("p");
+      note = document.createElement("p");
       note.className = "compact-note measurement-editor-note";
       note.textContent = translate(noteKey);
-      section.append(note);
     }
     const choices = document.createElement("div");
     choices.className = "workflow-editor-choices";
@@ -332,6 +334,7 @@ export class MeasurementEditor {
       });
     }
     section.append(choices);
+    if (note) section.append(note);
     return section;
   }
 

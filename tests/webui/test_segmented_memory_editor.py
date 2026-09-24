@@ -917,7 +917,8 @@ def test_segmented_editor_state_help_visibility() -> None:
         editor.schedulePresentation();
         await settle();
         assert.ok(editor.stateHelp);
-        assert.equal(editor.stateHelp.hidden, true);
+        assert.equal(editor.stateHelp.hidden, false);
+        assert.equal(editor.stateHelp.textContent, "segmented.editor.stateUnreadHelp");
 
         responses.push({
           status: "completed",
@@ -927,7 +928,8 @@ def test_segmented_editor_state_help_visibility() -> None:
         });
         editor.refreshButton.dispatch("click");
         await settle();
-        assert.equal(editor.stateHelp.hidden, true);
+        assert.equal(editor.stateHelp.hidden, false);
+        assert.equal(editor.stateHelp.textContent, "segmented.editor.stateRealtimeHelp");
 
         responses.push({
           status: "completed",
@@ -938,6 +940,7 @@ def test_segmented_editor_state_help_visibility() -> None:
         editor.refreshButton.dispatch("click");
         await settle();
         assert.equal(editor.stateHelp.hidden, false);
+        assert.equal(editor.stateHelp.textContent, "segmented.editor.stateHelp");
 
         const countBeforePresent = submitted.length;
         supported = false;

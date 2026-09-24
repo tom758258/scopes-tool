@@ -213,8 +213,8 @@ export class SearchEditor {
     const statusRow = document.createElement("div");
     statusRow.className = "search-editor-row search-editor-status-row";
     statusRow.append(
-      this.labeledOutput("command.search-state", "state"),
-      this.labeledOutput("command.search-mode", "mode"),
+      this.labeledOutput("command.search-state", "state", "search.editor.stateHelp"),
+      this.labeledOutput("command.search-mode", "mode", "search.editor.modeHelp"),
     );
     this.bodyHost.append(statusRow);
 
@@ -303,7 +303,7 @@ export class SearchEditor {
     return wrapper;
   }
 
-  labeledOutput(labelKey, name) {
+  labeledOutput(labelKey, name, helpKey = null) {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     const label = document.createElement("span");
@@ -311,6 +311,12 @@ export class SearchEditor {
     const output = document.createElement("output");
     output.className = "readonly-value search-editor-status-value";
     wrapper.append(label, output);
+    if (helpKey) {
+      const help = document.createElement("small");
+      help.className = "field-help";
+      help.textContent = translate(helpKey);
+      wrapper.append(help);
+    }
     this.readouts[name] = output;
     return wrapper;
   }
