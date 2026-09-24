@@ -18,6 +18,7 @@ from .math import (
     MathCompositeSourceState,
     MathDisplayState,
     MathFilterState,
+    MathOperationState,
     MathOperatorState,
     MathTransformState,
     MathVisualizationState,
@@ -1667,6 +1668,11 @@ class Oscilloscope:
 
     def query_math_vertical(self, function: int) -> MathVerticalState:
         return self._math_controller().query_vertical(function)
+
+    def query_math_operation(self, function: int) -> MathOperationState:
+        """Query the active operation family for one Math function slot."""
+
+        return self._math_controller().query_operation(function)
 
     def configure_math_operator(
         self,

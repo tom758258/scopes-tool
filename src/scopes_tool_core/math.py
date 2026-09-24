@@ -214,6 +214,14 @@ _MATH_TREND_MEASUREMENT_READBACKS = {
 }
 
 @dataclass(frozen=True)
+class MathOperationState:
+    function: int
+    family: str
+    operation: str
+    operation_raw: str
+
+
+@dataclass(frozen=True)
 class MathDisplayState:
     function: int
     enabled: bool
@@ -284,6 +292,17 @@ class MathController:
     def __init__(self, scpi: SCPIClient, capabilities: ScopeCapabilities) -> None:
         self.scpi = scpi
         self.capabilities = capabilities
+
+    def query_operation(self, function: int) -> MathOperationState:
+        prefix = math_function_scpi_prefix(function, self.capabilities)
+        operation_raw = self.scpi.query(f"{prefix}:OPERation?").strip()
+        family, operation = parse_math_function_operation(operation_raw)
+        return MathOperationState(
+            function=function,
+            family=family,
+            operation=operation,
+            operation_raw=operation_raw,
+        )
 
     def set_display(self, function: int, enabled: bool) -> None:
         self.scpi.write(
@@ -994,6 +1013,32 @@ def math_clear_command(
             "Math clear is not supported by this capability profile."
         )
     return f"{prefix}:CLEar"
+
+def parse_math_function_operation(raw: str) -> tuple[str, str]:
+    """Parse the shared Math operation query without assuming one operation family."""
+
+    raw_value = raw.strip()
+    normalized = raw_value.upper()
+    fft_operation = {
+        "FFT": "fft",
+        "FFTP": "fft-phase",
+        "FFTPHASE": "fft-phase",
+    }.get(normalized)
+    if fft_operation is not None:
+        return "fft", fft_operation
+    for family, readbacks in (
+        ("operator", _MATH_OPERATION_READBACKS),
+        ("transform", _MATH_TRANSFORM_READBACKS),
+        ("filter", _MATH_FILTER_READBACKS),
+        ("visualization", _MATH_VISUALIZATION_READBACKS),
+    ):
+        operation = readbacks.get(normalized)
+        if operation is not None:
+            return family, operation
+    raise ChannelResponseError(
+        f"Could not parse Math operation response: {raw_value!r}"
+    )
+
 
 def normalize_math_operation(value: str) -> str:
     if not isinstance(value, str):

@@ -12,6 +12,8 @@ import time
 from typing import Any, Mapping
 import uuid
 
+from scopes_tool_core.simulator_backend import SimulatorInstrumentState
+
 from .command_catalog import PC_OUTPUT_COMMAND_IDS
 from .commands import ScopeSessionCloseError, execute_command
 
@@ -131,12 +133,14 @@ class Job:
 
 
 class JobManager:
-    """Own WebUI jobs and serialize live instrument sessions."""
+    """Own WebUI jobs and serialize live or stateful simulated instruments."""
 
     def __init__(self) -> None:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.RLock()
         self._hardware_lock = threading.Lock()
+        self._simulator_states: dict[str, SimulatorInstrumentState] = {}
+        self._simulator_locks: dict[str, threading.Lock] = {}
         self._pc_output_lock = threading.Lock()
         self._executor = ThreadPoolExecutor(
             max_workers=4,
@@ -252,18 +256,30 @@ class JobManager:
                 if job.mode != "dry-run" and job.command in PC_OUTPUT_COMMAND_IDS
                 else _NullLock()
             )
-            hardware_lock = (
+            session_lock = (
                 self._hardware_lock
                 if job.mode == "live" and job.command != "list-resources"
+                else self._simulator_lock_for(job.model_id)
+                if job.mode == "simulate" and job.model_id is not None
                 else _NullLock()
             )
             with output_lock:
-                with hardware_lock:
+                with session_lock:
                     with job.lock:
                         if job.cancel_requested:
                             job.status = "cancelled"
                             job.finished_at = _timestamp()
                             return
+                    simulator_state = (
+                        self._simulator_state_for(job.model_id)
+                        if job.mode == "simulate" and job.model_id is not None
+                        else None
+                    )
+                    simulator_state_reporter = (
+                        (lambda state: self._store_simulator_state(job.model_id, state))
+                        if job.mode == "simulate" and job.model_id is not None
+                        else None
+                    )
                     execution = execute_command(
                         job.command,
                         mode=job.mode,
@@ -282,6 +298,8 @@ class JobManager:
                             if job.command in _RESULT_PROGRESS_COMMANDS
                             else None
                         ),
+                        simulator_state=simulator_state,
+                        simulator_state_reporter=simulator_state_reporter,
                     )
                 artifacts = self._register_artifacts(job, execution.get("artifacts", []))
             exit_code = execution.get("exit_code", 1)
@@ -321,6 +339,25 @@ class JobManager:
                 job.error = f"{type(exc).__name__}: {exc}"
                 job.cleanup_failed = isinstance(exc, ScopeSessionCloseError)
                 job.finished_at = _timestamp()
+
+    def _simulator_lock_for(self, model_id: str) -> threading.Lock:
+        with self._lock:
+            return self._simulator_locks.setdefault(model_id, threading.Lock())
+
+    def _simulator_state_for(self, model_id: str) -> SimulatorInstrumentState | None:
+        with self._lock:
+            return self._simulator_states.get(model_id)
+
+    def _store_simulator_state(
+        self, model_id: str, state: SimulatorInstrumentState
+    ) -> None:
+        if state.physical_model_id != model_id:
+            raise RuntimeError(
+                "Simulator state model does not match the WebUI planning model: "
+                f"{state.physical_model_id!r} != {model_id!r}."
+            )
+        with self._lock:
+            self._simulator_states[model_id] = state
 
     def _register_artifacts(
         self,
