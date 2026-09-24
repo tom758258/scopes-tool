@@ -870,6 +870,45 @@ function triggerWaitErrorSummary(trigger, capture) {
   return null;
 }
 
+const MATH_FAMILY_RESULT_KEYS = {
+  "fft": ["fft", "fft"],
+  "math-operator": ["math_operator", "operator"],
+  "math-transform": ["math_transform", "transform"],
+  "math-filter": ["math_filter", "filter"],
+  "math-visualization": ["math_visualization", "visualization"],
+};
+
+function mathFamilyLabel(family) {
+  if (family === "other" && hasTranslation("results.mathFamily.other")) {
+    return translate("results.mathFamily.other");
+  }
+  const commandId = family === "fft" ? "fft" : `math-${family}`;
+  const key = `command.${commandId}`;
+  return hasTranslation(key) ? translate(key) : String(family);
+}
+
+function mathOperationLabel(family, operation) {
+  const optionLabel = family === "fft" ? "fft-operation" : `math-${family}`;
+  const scoped = `enum.${optionLabel}.${operation}`;
+  if (hasTranslation(scoped)) return translate(scoped);
+  const generic = `enum.${operation}`;
+  return hasTranslation(generic) ? translate(generic) : String(operation);
+}
+
+function mathFamilyInactiveSummary(job, result) {
+  const mapping = MATH_FAMILY_RESULT_KEYS[job.command];
+  if (!mapping) return "";
+  const [resultKey, requestedFamily] = mapping;
+  const state = result?.[resultKey];
+  if (!state || state.active !== false) return "";
+  return translate("results.summary.mathFamilyInactive", {
+    function: state.function,
+    operation: mathOperationLabel(state.active_family, state.active_operation),
+    family: mathFamilyLabel(state.active_family),
+    requested: mathFamilyLabel(requestedFamily),
+  });
+}
+
 function successfulJobSummary(job) {
   const result = jobResultPayload(job);
   if (job.command === "identify") return identifySummary(result);
@@ -884,6 +923,8 @@ function successfulJobSummary(job) {
   if (job.command === "system-clear-status") return translate("system.clearStatus.done");
   if (job.command === "check-error") return checkErrorNoErrorSummary();
   if (isWorkflowResultCommand(job.command)) return workflowResultSummary(job);
+  const mathInactive = mathFamilyInactiveSummary(job, result);
+  if (mathInactive) return mathInactive;
 
   return scalarResultSummary(result) || translate("results.summary.completed");
 }

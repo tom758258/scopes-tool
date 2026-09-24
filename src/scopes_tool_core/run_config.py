@@ -11,7 +11,7 @@ from .drivers import scope_for_physical_model
 from .errors import OscilloscopeError
 from .identity import physical_model_for_id
 from .scope import Oscilloscope
-from .simulator_backend import SimulatorBackend
+from .simulator_backend import SimulatorBackend, SimulatorInstrumentState
 from .simulator_config import simulator_backend_kwargs, validate_simulator_args
 
 RunMode = Literal["dry_run", "simulate", "live"]
@@ -120,7 +120,12 @@ def require_resource(
     return resource
 
 
-def make_simulator_backend(options: RunModeOptions, resource: str) -> SimulatorBackend:
+def make_simulator_backend(
+    options: RunModeOptions,
+    resource: str,
+    *,
+    instrument_state: SimulatorInstrumentState | None = None,
+) -> SimulatorBackend:
     """Create a simulator backend from resolved run options."""
 
     if options.planning_physical_model_id is None:
@@ -132,10 +137,17 @@ def make_simulator_backend(options: RunModeOptions, resource: str) -> SimulatorB
         resource,
         capabilities_for_model_id(options.planning_physical_model_id),
     )
-    return SimulatorBackend(**kwargs)
+    backend = SimulatorBackend(**kwargs)
+    if instrument_state is not None:
+        backend.restore_instrument_state(instrument_state)
+    return backend
 
 
-def open_scope_for_run(config: ResolvedRunConfig) -> Oscilloscope:
+def open_scope_for_run(
+    config: ResolvedRunConfig,
+    *,
+    simulator_state: SimulatorInstrumentState | None = None,
+) -> Oscilloscope:
     """Open a scope for a resolved simulated or live run."""
 
     if config.mode == "dry_run":
@@ -143,7 +155,13 @@ def open_scope_for_run(config: ResolvedRunConfig) -> Oscilloscope:
     if config.resource is None:
         raise OscilloscopeError("--resource is required unless SCOPES_TOOL_RESOURCE is set")
     if config.mode == "simulate":
-        return Oscilloscope(make_simulator_backend(config.options, config.resource))
+        return Oscilloscope(
+            make_simulator_backend(
+                config.options,
+                config.resource,
+                instrument_state=simulator_state,
+            )
+        )
     opened_scope = Oscilloscope.open(
         config.resource,
         visa_library=config.visa_library,

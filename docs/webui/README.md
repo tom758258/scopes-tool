@@ -59,11 +59,25 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
   validation.
 - Simulate and Dry-run use an explicitly registered Core model profile. The
   default planning model is `keysight-dsox4024a`.
+- WebUI Simulate keeps a separate virtual-instrument state snapshot for each
+  planning physical model for the lifetime of the WebUI server. Each job still
+  opens a fresh simulated SCPI session, so session history, timeout, and close
+  state are not reused. Restarting the WebUI resets these snapshots. CLI and
+  Worker simulate execution remains one-shot and is unchanged.
 - Core/CLI raw `list-resources` remains available as host VISA resource
   discovery. WebUI Scan Device is a separate Live-mode-only action that
   requests `live_only` discovery with bounded `*IDN?` probes.
 - Simulate and Dry-run do not use WebUI Scan Device. Resource discovery does
   not require a selected Live resource or instrument lock.
+
+Math/FFT readback first identifies the active operation family for a Math
+function slot. Reading a different editor (for example Math Visualization while
+the slot is currently FFT) reports the active family and operation as an
+informational completed result instead of treating that valid instrument
+operation as a malformed response. Known instrument operations that do not
+have a WebUI editor, such as bus timing or bus state, are reported as another
+active MATH operation rather than as malformed data. Unknown operation readbacks
+remain errors.
 
 ## Basic Controls and Commands
 

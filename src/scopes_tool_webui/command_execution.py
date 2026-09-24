@@ -60,6 +60,7 @@ from scopes_tool_core.measure_logger import (
 )
 from scopes_tool_core.measure_until import MEASURE_UNTIL_DEFAULT_BASE_DIR
 from scopes_tool_core.operations import _OperationError
+from scopes_tool_core.simulator_backend import SimulatorInstrumentState
 from scopes_tool_core.capture_until import CAPTURE_UNTIL_DEFAULT_BASE_DIR
 from scopes_tool_core.capture_monitor import CAPTURE_MONITOR_DEFAULT_BASE_DIR
 from scopes_tool_core.output_files import (
@@ -105,6 +106,8 @@ def execute_command(
     stop_requested: Callable[[], bool] | None = None,
     sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
     progress_reporter: Callable[[Any], None] | None = None,
+    simulator_state: SimulatorInstrumentState | None = None,
+    simulator_state_reporter: Callable[[SimulatorInstrumentState], None] | None = None,
 ) -> dict[str, Any]:
     """Execute one validated request through the public Core APIs."""
 
@@ -128,13 +131,17 @@ def execute_command(
             raise WebUIRequestError("dry-run execution requires a planning model")
         return _execute_dry_run(command, parameters, model_id, artifact_dir)
 
-    scope = open_scope_for_run(config)
+    scope = (
+        open_scope_for_run(config, simulator_state=simulator_state)
+        if mode == "simulate"
+        else open_scope_for_run(config)
+    )
     try:
         normalized = dict(parameters)
         if mode == "live":
             idn = scope.idn or scope.query_idn()
             _validate_parameters(command, normalized, mode, idn.model_id)
-        return _execute_scope_command(
+        execution = _execute_scope_command(
             scope,
             command,
             resource or config.resource or "",
@@ -144,6 +151,9 @@ def execute_command(
             sample_reporter=sample_reporter,
             progress_reporter=progress_reporter,
         )
+        if mode == "simulate" and simulator_state_reporter is not None:
+            simulator_state_reporter(scope.backend.export_instrument_state())
+        return execution
     finally:
         try:
             scope.close()
@@ -1299,6 +1309,12 @@ def _execute_fft(scope: Any, parameters: Mapping[str, Any]) -> dict[str, Any]:
             detection_type=parameters.get("detection_type"),
             detection_points=parameters.get("detection_points"),
         )
+    else:
+        mismatch = _math_family_mismatch_result(
+            scope, function, expected_family="fft", result_name="fft"
+        )
+        if mismatch is not None:
+            return mismatch
     return _state_scope_result("fft", scope.query_fft(function))
 
 
@@ -1330,6 +1346,12 @@ def _execute_math_operator(scope: Any, parameters: Mapping[str, Any]) -> dict[st
             parameters["source1"],
             parameters["source2"],
         )
+    else:
+        mismatch = _math_family_mismatch_result(
+            scope, function, expected_family="operator", result_name="math_operator"
+        )
+        if mismatch is not None:
+            return mismatch
     return _state_scope_result("math_operator", scope.query_math_operator(function))
 
 
@@ -1344,6 +1366,12 @@ def _execute_math_transform(scope: Any, parameters: Mapping[str, Any]) -> dict[s
             gain=parameters.get("gain"),
             linear_offset=parameters.get("linear_offset"),
         )
+    else:
+        mismatch = _math_family_mismatch_result(
+            scope, function, expected_family="transform", result_name="math_transform"
+        )
+        if mismatch is not None:
+            return mismatch
     return _state_scope_result("math_transform", scope.query_math_transform(function))
 
 
@@ -1358,6 +1386,12 @@ def _execute_math_filter(scope: Any, parameters: Mapping[str, Any]) -> dict[str,
             average_count=parameters.get("average_count"),
             smooth_points=parameters.get("smooth_points"),
         )
+    else:
+        mismatch = _math_family_mismatch_result(
+            scope, function, expected_family="filter", result_name="math_filter"
+        )
+        if mismatch is not None:
+            return mismatch
     return _state_scope_result("math_filter", scope.query_math_filter(function))
 
 
@@ -1372,8 +1406,39 @@ def _execute_math_visualization(scope: Any, parameters: Mapping[str, Any]) -> di
             measurement=parameters.get("measurement"),
             measurement_slot=parameters.get("measurement_slot"),
         )
+    else:
+        mismatch = _math_family_mismatch_result(
+            scope,
+            function,
+            expected_family="visualization",
+            result_name="math_visualization",
+        )
+        if mismatch is not None:
+            return mismatch
     return _state_scope_result(
         "math_visualization", scope.query_math_visualization(function)
+    )
+
+
+def _math_family_mismatch_result(
+    scope: Any,
+    function: int,
+    *,
+    expected_family: str,
+    result_name: str,
+) -> dict[str, Any] | None:
+    state = scope.query_math_operation(function)
+    if state.family == expected_family:
+        return None
+    return _state_scope_result(
+        result_name,
+        {
+            "function": function,
+            "active": False,
+            "active_family": state.family,
+            "active_operation": state.operation,
+            "operation_raw": state.operation_raw,
+        },
     )
 
 

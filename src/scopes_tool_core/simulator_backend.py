@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import binascii
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import dataclass, field, fields
 import math
 import re
 import struct
@@ -49,6 +50,36 @@ from .wgen import (
 
 class SimulatorBackendError(OscilloscopeError):
     """Raised when the simulator receives unsupported SCPI."""
+
+
+@dataclass(frozen=True)
+class SimulatorInstrumentState:
+    """Persistent instrument state shared across simulated SCPI sessions."""
+
+    physical_model_id: str
+    values: dict[str, Any]
+
+
+_SIMULATOR_SESSION_FIELDS = frozenset(
+    {
+        "physical_model_id",
+        "resource_name",
+        "strict_unknown_commands",
+        "query_overrides",
+        "binary_overrides",
+        "binary_byte_overrides",
+        "write_failures",
+        "query_failures",
+        "binary_failures",
+        "history",
+        "backend",
+        "timeout",
+        "closed",
+        "invalid_measurement_channels",
+        "signals",
+        "firmware",
+    }
+)
 
 
 _SUPPORTED_WAVEFORM_POINTS = (1000, 5000, 10000)
@@ -492,6 +523,43 @@ class SimulatorBackend:
             self._validate_channel(channel): _coerce_simulated_signal(signal)
             for channel, signal in self.signals.items()
         }
+
+    def export_instrument_state(self) -> SimulatorInstrumentState:
+        """Snapshot state that belongs to the simulated instrument, not its session."""
+
+        self._ensure_open()
+        values = {
+            entry.name: deepcopy(getattr(self, entry.name))
+            for entry in fields(self)
+            if entry.name not in _SIMULATOR_SESSION_FIELDS
+        }
+        return SimulatorInstrumentState(
+            physical_model_id=self.physical_model_id,
+            values=values,
+        )
+
+    def restore_instrument_state(self, state: SimulatorInstrumentState) -> None:
+        """Restore a compatible instrument snapshot into a fresh simulated session."""
+
+        self._ensure_open()
+        if state.physical_model_id != self.physical_model_id:
+            raise SimulatorBackendError(
+                "Simulator instrument state model does not match the session model: "
+                f"{state.physical_model_id!r} != {self.physical_model_id!r}."
+            )
+        persistent_fields = {
+            entry.name
+            for entry in fields(self)
+            if entry.name not in _SIMULATOR_SESSION_FIELDS
+        }
+        unknown = set(state.values) - persistent_fields
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise SimulatorBackendError(
+                f"Simulator instrument state contains unknown fields: {names}."
+            )
+        for name, value in state.values.items():
+            setattr(self, name, deepcopy(value))
 
     def write(self, command: str) -> None:
         """Record and apply a simple SCPI write."""

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Makes WebUI Simulate stateful across command jobs per planning model while
+  keeping each simulated SCPI session isolated, and makes FFT/Math editor
+  readback report a different active Math operation family as valid state
+  instead of a parse failure.
 - Adds the localhost-only WebUI with a Core-backed command workbench, Basic
   Controls, Live/Simulate/Dry-run execution where Dry-run plans supported
   operations without opening an instrument, result and artifact retrieval,
