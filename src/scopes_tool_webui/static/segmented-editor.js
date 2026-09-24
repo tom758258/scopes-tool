@@ -730,7 +730,14 @@ export class SegmentedEditor {
     const captureView = view === "capture" && !unsupported && this.captureSupported();
     this.modeButton.hidden = !memoryView || !known;
     this.applySegmentsButton.hidden = !memoryView || !segmented;
-    this.stateHelp.hidden = !memoryView || !segmented;
+    this.stateHelp.textContent = translate(
+      !known
+        ? "segmented.editor.stateUnreadHelp"
+        : segmented
+          ? "segmented.editor.stateHelp"
+          : "segmented.editor.stateRealtimeHelp",
+    );
+    this.stateHelp.hidden = !memoryView;
     this.unavailableNote.hidden = !unsupported;
     this.overview.hidden = !memoryView;
     this.readouts.hidden = !memoryView;

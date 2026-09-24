@@ -418,7 +418,7 @@ export class WorkflowEditor {
     }
     if (definition.id === "capture-monitor") {
       const saveWrapper = document.createElement("label");
-      saveWrapper.className = "field field-boolean workflow-editor-save";
+      saveWrapper.className = "field field-boolean workflow-editor-save workflow-editor-full-row";
       const label = document.createElement("span");
       label.textContent = this.fieldLabel("save_results");
       const input = document.createElement("input");
@@ -549,7 +549,7 @@ export class WorkflowEditor {
     }
     if (definition.id === "measure-log") {
       const wrapper = document.createElement("label");
-      wrapper.className = "field field-boolean workflow-editor-stop";
+      wrapper.className = "field field-boolean workflow-editor-stop workflow-editor-full-row";
       const label = document.createElement("span");
       label.textContent = this.fieldLabel("stop_on_error");
       const input = document.createElement("input");
@@ -563,7 +563,7 @@ export class WorkflowEditor {
       limits.append(wrapper);
     }
     const saveWrapper = document.createElement("label");
-    saveWrapper.className = "field field-boolean workflow-editor-save";
+    saveWrapper.className = "field field-boolean workflow-editor-save workflow-editor-full-row";
     const saveLabel = document.createElement("span");
     saveLabel.textContent = this.fieldLabel("save_results");
     const saveInput = document.createElement("input");
@@ -851,6 +851,7 @@ export class WorkflowEditor {
     const channelField = fieldByName(fields, "channel");
     const channels = (channelField.options || []).map(String);
     const channelControl = this.buildChannelSelect("channel", channels, draft.channel, channelField);
+    channelControl.wrapper.className += " workflow-editor-half-field";
     this.controls.channel = channelControl.input;
     const channelSection = this.buildSection("workflow.editor.channels");
     channelSection.append(channelControl.wrapper);
@@ -858,6 +859,7 @@ export class WorkflowEditor {
 
     const itemField = fieldByName(fields, "item");
     const itemControl = this.buildEnumField(itemField, draft.item);
+    itemControl.wrapper.className += " workflow-editor-half-field";
     this.controls.item = itemControl.input;
     const measurementSection = this.buildSection("workflow.editor.measurements");
     measurementSection.append(itemControl.wrapper);
@@ -888,7 +890,7 @@ export class WorkflowEditor {
     limitsGrid.append(timeoutControl.wrapper, intervalControl.wrapper);
 
     const saveWrapper = document.createElement("label");
-    saveWrapper.className = "field field-boolean workflow-editor-save";
+    saveWrapper.className = "field field-boolean workflow-editor-save workflow-editor-full-row";
     const saveLabel = document.createElement("span");
     saveLabel.textContent = this.fieldLabel("save_results");
     const saveInput = document.createElement("input");

@@ -280,6 +280,9 @@ export class SequenceEditor {
       this.loadButton, this.saveButton, this.addButton,
       this.expandButton, this.collapseButton, this.fileInput,
     );
+    const toolbarHelp = document.createElement("small");
+    toolbarHelp.className = "field-help sequence-editor-toolbar-help";
+    toolbarHelp.textContent = translate("sequence.editor.toolbarHelp");
 
     const overview = document.createElement("div");
     overview.className = "sequence-editor-overview";
@@ -332,7 +335,9 @@ export class SequenceEditor {
     this.stepsHost = document.createElement("div");
     this.stepsHost.className = "sequence-editor-steps";
     state.steps.forEach((step, index) => this.stepsHost.append(this.renderStep(step, index)));
-    this.container.append(toolbar, overview, saveWrapper, this.message, this.stepsHost);
+    this.container.append(
+      toolbar, toolbarHelp, overview, saveWrapper, this.message, this.stepsHost,
+    );
     this.updateValidity();
   }
 

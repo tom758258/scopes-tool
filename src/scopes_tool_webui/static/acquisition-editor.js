@@ -1,4 +1,5 @@
 import { CommandForm } from "/static/command-form.js";
+import { translate } from "/static/i18n.js";
 
 const INSTANT_CONTROL_COMMANDS = ["run", "single", "stop-acquisition", "force-trigger"];
 
@@ -64,7 +65,7 @@ export class AcquisitionEditor {
     this.singleWaitButton = null;
     this.container.replaceChildren(
       this.buildControlSection(definition),
-      this.buildSingleWaitSection(),
+      this.buildAdvancedSection(),
     );
   }
 
@@ -95,8 +96,23 @@ export class AcquisitionEditor {
       buttons.append(button);
       this.controlButtons.push({ id: commandId, button });
     }
-    section.append(buttons);
+    const help = document.createElement("small");
+    help.className = "field-help acquisition-editor-control-help";
+    help.textContent = translate("acquisition.editor.controlHelp");
+    section.append(buttons, help);
     return section;
+  }
+
+  buildAdvancedSection() {
+    const disclosure = document.createElement("details");
+    disclosure.className = "command-form-advanced acquisition-editor-advanced";
+    const summary = document.createElement("summary");
+    summary.textContent = translate("form.advanced");
+    const content = document.createElement("div");
+    content.className = "acquisition-editor-advanced-content";
+    content.append(this.buildSingleWaitSection());
+    disclosure.append(summary, content);
+    return disclosure;
   }
 
   buildSingleWaitSection() {

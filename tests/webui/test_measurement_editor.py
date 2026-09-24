@@ -269,7 +269,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           ["1", "2", "3", "4"],
         );
         assert.equal(
-          sweepUi.sweepPairItemsSection.children[1].textContent,
+          sweepUi.sweepPairItemsSection.children[2].textContent,
           "workflow.editor.pairMeasurementsHelper",
         );
         assert.equal(sweepUi.sweepAddPairButton.disabled, true);

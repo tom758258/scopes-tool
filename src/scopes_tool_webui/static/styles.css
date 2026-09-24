@@ -383,6 +383,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .acquisition-single-wait-form { grid-template-columns: minmax(0, 1fr); }
 .acquisition-single-wait-form .field-boolean { align-content: start; }
 .acquisition-single-wait-form .command-form-advanced-fields { grid-template-columns: minmax(0, 1fr); }
+.acquisition-editor-advanced { width: 100%; }
+.acquisition-editor-advanced-content { padding-top: 10px; }
+.acquisition-editor-control-help { display: block; margin-top: 8px; }
 .trigger-editor-action { justify-self: start; min-height: var(--control-h); }
 .reference-editor-control { display: grid; gap: 8px; }
 .reference-editor-control + .reference-editor-control { padding-top: 10px; margin-top: 4px; border-top: 1px dashed var(--line); }
@@ -442,6 +445,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .workflow-editor-pair .field { min-width: 0; }
 .workflow-editor-pair-remove { min-height: var(--control-h); }
 .workflow-editor-limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.workflow-editor-full-row { grid-column: 1 / -1; }
+.workflow-editor-half-field { width: calc(50% - 5px); }
 .workflow-editor .field,
 .sequence-editor .field { min-width: 0; align-content: start; }
 .workflow-editor .field-boolean,
@@ -456,7 +461,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .sequence-editor { display: grid; gap: 14px; padding-top: 12px; }
 .sequence-editor-toolbar, .sequence-editor-overview, .sequence-step-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .sequence-editor-overview { justify-content: space-between; }
-.sequence-editor-loop { max-width: 160px; }
+.sequence-editor-loop { width: calc(50% - 4px); max-width: none; }
 .sequence-editor-steps { display: grid; gap: 10px; }
 .diagnostics-editor { display: grid; gap: 12px; padding-top: 12px; }
 .diagnostics-editor-field { display: grid; gap: 6px; max-width: 260px; }
@@ -663,6 +668,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .channel-scale-range-value { max-width: none; }
   .channel-scale-range-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-editor-limits { grid-template-columns: 1fr; }
+  .workflow-editor-half-field,
+  .sequence-editor-loop { width: 100%; max-width: none; }
   .workflow-editor-pair { grid-template-columns: 1fr; }
   .measurement-statistics-primary, .measurement-statistics-options { grid-template-columns: 1fr; }
   .workspace-result-content { grid-template-columns: 1fr; }
