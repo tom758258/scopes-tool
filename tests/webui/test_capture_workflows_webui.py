@@ -131,6 +131,49 @@ def test_monitor_transient_job_updates_are_bounded_and_incremental(tmp_path):
     assert "time_s" not in payload["monitor_runtime"]["summary"]
 
 
+def test_monitor_replay_waits_for_core_eviction_with_short_actual_captures(tmp_path):
+    manager = JobManager()
+    job = Job(
+        job_id="short-captures",
+        command="capture-monitor",
+        mode="simulate",
+        resource=None,
+        model_id=MODEL_ID,
+        pc_output_dir=str(tmp_path),
+        parameters={"points": 10, "retention_points": 20},
+        pc_output_root=tmp_path,
+    )
+    try:
+        for index in range(1, 4):
+            manager._append_monitor_update(
+                job,
+                {
+                    "capture_index": index,
+                    "global_start_index": (index - 1) * 6,
+                    "time_s": [float(point) for point in range(6)],
+                    "channels": {"CH1": {"unit": "V", "values": [float(index)] * 6}},
+                    "dropped_capture_count": 0,
+                },
+            )
+        assert [item["capture_index"] for item in job.to_payload()["monitor_runtime"]["updates"]] == [1, 2, 3]
+
+        manager._append_monitor_update(
+            job,
+            {
+                "capture_index": 4,
+                "global_start_index": 18,
+                "time_s": [float(point) for point in range(6)],
+                "channels": {"CH1": {"unit": "V", "values": [4.0] * 6}},
+                "dropped_capture_count": 1,
+            },
+        )
+        replay = job.to_payload()["monitor_runtime"]
+        assert replay["reset"] is True
+        assert [item["capture_index"] for item in replay["updates"]] == [2, 3, 4]
+    finally:
+        manager._executor.shutdown(wait=True)
+
+
 def test_terminal_monitor_payload_releases_transient_waveforms(tmp_path):
     manager = JobManager()
     job = Job(
@@ -284,9 +327,18 @@ def test_monitor_status_shows_full_metrics(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
-def test_monitor_frontend_shows_min_p2p_absmax():
+def test_monitor_frontend_renders_runtime_summary_and_observed_statistics():
     run_editor_behavior(
         r'''
+        const labels = {
+          "workflow.monitor.capture": "Capture",
+          "workflow.monitor.observed": "Observed",
+          "workflow.monitor.retainedWindow": "Retained window",
+          "workflow.monitor.dropped": "Dropped",
+          "workflow.monitor.points": "points",
+          "workflow.monitor.statisticsAllObserved": "Channel statistics (all observed samples)",
+        };
+        globalThis.translate = (key) => labels[key] || key;
         definitions.push({
           id: "capture-monitor", editor: "workflow", fields: [
             { name: "channels", type: "multi-enum", options: [1], default: [1], required: true },
@@ -304,16 +356,24 @@ def test_monitor_frontend_shows_min_p2p_absmax():
         await settle();
         editor.handleJobUpdate({ command: "capture-monitor", monitor_runtime: {
           reset: true, summary: {
-            completed_count: 1, requested_count: 2,
-            total_observed_points: 1000, retained_points: 1000, dropped_points: 0,
+            completed_count: 145, requested_count: 250,
+            total_observed_points: 145000, retained_points: 1000,
+            retention_points: 2000, dropped_points: 144000,
             metrics: { CH1: { maximum: 1.82, minimum: -0.31, peak_to_peak: 2.13, abs_max: 1.82, unit: "V" } }
           }, updates: []
         }});
-        assert.ok(editor.monitorStatus.textContent.includes("workflow.monitor.statusSummary"));
-        assert.equal(editor.monitorStatus.textContent.includes("max="), false);
-        assert.equal(editor.monitorStatus.textContent.includes("min="), false);
-        assert.equal(editor.monitorStatus.textContent.includes("p2p="), false);
-        assert.equal(editor.monitorStatus.textContent.includes("abs-max="), false);
+        const runtime = editor.container.children.find((node) => node.className === "workflow-monitor-runtime");
+        const summary = runtime.children[0];
+        assert.deepEqual(summary.children.map((stat) => stat.children[0].textContent),
+          ["Capture", "Observed", "Retained window", "Dropped"]);
+        assert.deepEqual(summary.children.map((stat) => stat.children[1].textContent),
+          ["145 / 250", "145,000 points", "1,000 / 2,000 points", "144,000 points"]);
+        const metrics = runtime.children[1];
+        assert.equal(metrics.children[0].textContent, "Channel statistics (all observed samples)");
+        const table = metrics.children[1].children[0];
+        assert.equal(table.tagName, "TABLE");
+        assert.deepEqual(table.children[1].children[0].children.map((cell) => cell.textContent),
+          ["CH1", "-0.31 V", "1.82 V", "2.13 V", "1.82 V"]);
         ''',
     )
 

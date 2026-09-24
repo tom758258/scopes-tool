@@ -79,8 +79,9 @@ def test_workflow_field_labels_are_command_scoped_and_localized() -> None:
     chinese = read_static("locale_zh_tw.js")
 
     assert "fieldLabel(name)" in editor
-    assert 'workflow.monitor.statusSummary' in editor
-    assert 'workflow.monitor.metricSummary' in editor
+    assert 'workflow.monitor.statisticsAllObserved' in editor
+    assert '"workflow.monitor.retainedWindow": "Retained window"' in english
+    assert '"workflow.monitor.retainedWindow": "保留視窗"' in chinese
     for token in ("observed=", "retained=", "dropped=", "max=", "min=", "p2p=", "abs-max="):
         assert token not in editor
 

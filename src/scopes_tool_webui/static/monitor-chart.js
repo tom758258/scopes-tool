@@ -122,8 +122,14 @@ export class MonitorChart {
     this.tooltip = tooltip;
     this.getChunks = getChunks;
     this.translate = translate;
-    this.onMove = (event) => this.showHover(event);
-    this.onLeave = () => this.hideHover();
+    this.onMove = (event) => {
+      this.pointerX = event.clientX;
+      this.showHover(this.pointerX);
+    };
+    this.onLeave = () => {
+      this.pointerX = undefined;
+      this.hideHover();
+    };
     canvas.addEventListener("mousemove", this.onMove);
     canvas.addEventListener("mouseleave", this.onLeave);
     if (typeof ResizeObserver !== "undefined") {
@@ -186,14 +192,15 @@ export class MonitorChart {
         context.stroke();
       }
     }
-    this.hideHover();
+    if (this.pointerX === undefined) this.hideHover();
+    else this.showHover(this.pointerX);
   }
 
-  showHover(event) {
+  showHover(clientX) {
     const projection = this.projection;
-    if (!projection) return;
+    if (!projection) return this.hideHover();
     const rect = this.canvas.getBoundingClientRect();
-    const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left - INSET) / Math.max(1, rect.width - INSET * 2)));
+    const fraction = Math.max(0, Math.min(1, (clientX - rect.left - INSET) / Math.max(1, rect.width - INSET * 2)));
     const index = Math.round(projection.minX + fraction * (projection.maxX - projection.minX));
     const sample = lookupMonitorSample(this.getChunks(), index);
     if (!sample) return this.hideHover();

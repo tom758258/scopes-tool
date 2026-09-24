@@ -439,8 +439,48 @@ export class WorkflowEditor {
       const warning = document.createElement("p");
       warning.className = "compact-note workflow-monitor-warning";
       warning.textContent = translate("workflow.monitor.retentionWarning");
-      this.monitorStatus = document.createElement("pre");
-      this.monitorStatus.className = "workflow-monitor-status";
+      const runtime = document.createElement("div");
+      runtime.className = "workflow-monitor-runtime";
+      const summary = document.createElement("div");
+      summary.className = "workflow-monitor-summary";
+      this.monitorValues = {};
+      for (const [name, key] of [
+        ["capture", "capture"], ["observed", "observed"],
+        ["retained", "retainedWindow"], ["dropped", "dropped"],
+      ]) {
+        const stat = document.createElement("div");
+        stat.className = "workflow-monitor-stat";
+        const label = document.createElement("span");
+        label.className = "workflow-monitor-stat-label";
+        label.textContent = translate(`workflow.monitor.${key}`);
+        const value = document.createElement("strong");
+        value.className = "workflow-monitor-stat-value";
+        this.monitorValues[name] = value;
+        stat.append(label, value);
+        summary.append(stat);
+      }
+      const metrics = document.createElement("div");
+      metrics.className = "workflow-monitor-metrics";
+      const heading = document.createElement("h4");
+      heading.textContent = translate("workflow.monitor.statisticsAllObserved");
+      const tableWrap = document.createElement("div");
+      tableWrap.className = "workflow-monitor-table-wrap";
+      const table = document.createElement("table");
+      table.className = "workflow-monitor-table";
+      const header = document.createElement("tr");
+      for (const key of ["channel", "minimum", "maximum", "peakToPeak", "absMax"]) {
+        const cell = document.createElement("th");
+        cell.setAttribute("scope", "col");
+        cell.textContent = translate(`workflow.monitor.${key}`);
+        header.append(cell);
+      }
+      const thead = document.createElement("thead");
+      thead.append(header);
+      this.monitorMetricsBody = document.createElement("tbody");
+      table.append(thead, this.monitorMetricsBody);
+      tableWrap.append(table);
+      metrics.append(heading, tableWrap);
+      runtime.append(summary, metrics);
       this.monitorCanvas = document.createElement("canvas");
       this.monitorCanvas.className = "workflow-monitor-plot";
       this.monitorCanvas.setAttribute("aria-label", translate("workflow.monitor.plot"));
@@ -453,7 +493,7 @@ export class WorkflowEditor {
       tooltip.className = "workflow-monitor-tooltip";
       tooltip.hidden = true;
       plot.append(this.monitorCanvas, crosshair, tooltip);
-      this.container.append(warning, this.monitorStatus, plot);
+      this.container.append(warning, runtime, plot);
       this.monitorChunks ||= [];
       this.monitorChart = new MonitorChart(
         this.monitorCanvas, crosshair, tooltip, () => this.monitorChunks, translate,
@@ -877,28 +917,33 @@ export class WorkflowEditor {
   }
 
   renderMonitorRuntime() {
-    if (this.monitorStatus) {
+    if (this.monitorValues) {
       const summary = this.monitorSummary || {};
-      const metrics = Object.entries(summary.metrics || {}).map(
-        ([channel, values]) => translate("workflow.monitor.metricSummary", {
-          channel: channelLabel(channel),
-          maximum: values.maximum ?? "—",
-          minimum: values.minimum ?? "—",
-          peakToPeak: values.peak_to_peak ?? "—",
-          absMax: values.abs_max ?? "—",
-          unit: values.unit || "",
-        }),
-      ).join(" | ");
-      this.monitorStatus.textContent = summary.completed_count
-        ? translate("workflow.monitor.statusSummary", {
-          completed: summary.completed_count,
-          requested: summary.requested_count ?? 0,
-          observed: summary.total_observed_points ?? 0,
-          retained: summary.retained_points ?? 0,
-          dropped: summary.dropped_points ?? 0,
-          metrics: metrics ? ` · ${metrics}` : "",
-        })
-        : translate("workflow.monitor.waiting");
+      const count = (value) => Number.isFinite(value) ? value.toLocaleString() : "—";
+      const points = (value) => `${count(value)} ${translate("workflow.monitor.points")}`;
+      const measurement = (value, unit) => Number.isFinite(value)
+        ? `${Number(value.toPrecision(6))}${unit ? ` ${unit}` : ""}` : "—";
+      this.monitorValues.capture.textContent = summary.completed_count == null
+        ? translate("workflow.monitor.waiting")
+        : `${count(summary.completed_count)} / ${count(summary.requested_count)}`;
+      this.monitorValues.observed.textContent = points(summary.total_observed_points);
+      this.monitorValues.retained.textContent =
+        `${count(summary.retained_points)} / ${points(summary.retention_points)}`;
+      this.monitorValues.dropped.textContent = points(summary.dropped_points);
+      this.monitorMetricsBody.replaceChildren();
+      for (const [channel, values] of Object.entries(summary.metrics || {})) {
+        const row = document.createElement("tr");
+        const name = document.createElement("th");
+        name.setAttribute("scope", "row");
+        name.textContent = channel;
+        row.append(name);
+        for (const value of [values.minimum, values.maximum, values.peak_to_peak, values.abs_max]) {
+          const cell = document.createElement("td");
+          cell.textContent = measurement(value, values.unit);
+          row.append(cell);
+        }
+        this.monitorMetricsBody.append(row);
+      }
     }
     this.monitorChart?.requestDraw();
   }

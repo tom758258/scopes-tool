@@ -468,7 +468,18 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .sequence-step-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 10px; }
 .sequence-multi-enum { display: flex; flex-wrap: wrap; gap: 10px; }
 .workflow-monitor-warning { margin-top: 0.75rem; }
-.workflow-monitor-status { white-space: pre-wrap; margin: 0.75rem 0; }
+.workflow-monitor-runtime { display: grid; gap: 14px; margin: 0.75rem 0; }
+.workflow-monitor-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.workflow-monitor-stat { display: grid; gap: 3px; }
+.workflow-monitor-stat-label { color: var(--muted); font-size: 12px; }
+.workflow-monitor-stat-value { font-size: 15px; font-variant-numeric: tabular-nums; }
+.workflow-monitor-metrics h4 { margin: 0 0 6px; }
+.workflow-monitor-table-wrap { overflow-x: auto; }
+.workflow-monitor-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.workflow-monitor-table th, .workflow-monitor-table td { padding: 7px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.workflow-monitor-table thead th { color: var(--muted); font-size: 11px; }
+.workflow-monitor-table th:first-child { text-align: left; }
+.workflow-monitor-table th:not(:first-child), .workflow-monitor-table td { text-align: right; font-variant-numeric: tabular-nums; }
 .workflow-monitor-chart { position: relative; width: 100%; }
 .workflow-monitor-plot { display: block; width: 100%; height: 260px; border: 1px solid var(--line); background: var(--panel); box-sizing: border-box; }
 .workflow-monitor-crosshair { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--muted); pointer-events: none; }

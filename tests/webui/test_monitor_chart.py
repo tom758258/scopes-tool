@@ -68,3 +68,56 @@ def test_monitor_projection_and_exact_retained_lookup() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_stationary_hover_resolves_current_raw_sample_after_redraw() -> None:
+    script = r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const source = fs.readFileSync(process.argv[1], "utf8");
+        const { MonitorChart } = await import(
+          `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`
+        );
+        const listeners = {};
+        const context = {
+          setTransform() {}, clearRect() {}, beginPath() {},
+          moveTo() {}, lineTo() {}, stroke() {},
+        };
+        const canvas = {
+          width: 0, height: 0,
+          addEventListener(name, handler) { listeners[name] = handler; },
+          removeEventListener(name) { delete listeners[name]; },
+          getContext() { return context; },
+          getBoundingClientRect() { return { left: 0, width: 100, height: 100 }; },
+        };
+        const crosshair = { hidden: true, style: {} };
+        const tooltip = { hidden: true, style: {}, offsetWidth: 30, textContent: "" };
+        let chunks = [{ capture_index: 1, global_start_index: 0, time_s: [0, 1],
+          channels: { CH1: { values: [1, 2], unit: "V" } } }];
+        const chart = new MonitorChart(canvas, crosshair, tooltip, () => chunks,
+          (key, args) => `${key}: ${args.value}`);
+        chart.draw();
+        listeners.mousemove({ clientX: 92 });
+        assert.equal(crosshair.hidden, false);
+        assert.equal(tooltip.hidden, false);
+        assert.ok(tooltip.textContent.includes("CH1: 2 V"));
+
+        chunks = [{ capture_index: 2, global_start_index: 0, time_s: [0, 1],
+          channels: { CH1: { values: [3, 4], unit: "V" } } }];
+        chart.draw();
+        assert.equal(crosshair.hidden, false);
+        assert.equal(tooltip.hidden, false);
+        assert.ok(tooltip.textContent.includes("CH1: 4 V"));
+        assert.ok(tooltip.textContent.includes("workflow.monitor.hoverCapture: 2"));
+        assert.equal(tooltip.textContent.includes("CH1: 2 V"), false);
+        chart.dispose();
+    '''
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", textwrap.dedent(script), str(CHART_SOURCE)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

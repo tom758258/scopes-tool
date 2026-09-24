@@ -378,12 +378,6 @@ class JobManager:
             dropped = update.get("dropped_capture_count", 0)
             if isinstance(dropped, int) and dropped > 0:
                 del job.monitor_updates[: min(dropped, len(job.monitor_updates))]
-            points = job.parameters.get("points", 1000)
-            retention = job.parameters.get("retention_points", 250000)
-            if isinstance(points, int) and points > 0 and isinstance(retention, int):
-                maximum_chunks = max(1, retention // points)
-                if len(job.monitor_updates) > maximum_chunks:
-                    del job.monitor_updates[:-maximum_chunks]
             job.monitor_summary = {
                 key: value
                 for key, value in update.items()
