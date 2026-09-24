@@ -487,11 +487,13 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .measurement-front-panel-results > strong { display: block; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .measurement-front-panel-content { overflow-x: auto; padding: 10px; }
 .measurement-statistics-section { margin-top: 12px; }
+.measurement-statistics-section > .field-help { margin: 4px 0 10px; }
 .measurement-statistics-form { display: grid; gap: 10px; }
-.measurement-statistics-primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.measurement-statistics-options { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.measurement-statistics-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.measurement-statistics-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .measurement-statistics-checkbox { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
 .measurement-statistics-checkbox input { width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; }
+.measurement-statistics-checkbox .field-help { grid-column: 1 / -1; }
 .measurement-front-panel-content > .muted,
 .measurement-front-panel-error { margin: 0; }
 .measurement-front-panel-error { color: var(--danger); font-size: 12px; }
@@ -648,7 +650,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .channel-scale-range-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-editor-limits { grid-template-columns: 1fr; }
   .workflow-editor-pair { grid-template-columns: 1fr; }
-  .measurement-statistics-primary { grid-template-columns: 1fr; }
+  .measurement-statistics-primary, .measurement-statistics-options { grid-template-columns: 1fr; }
   .workspace-result-content { grid-template-columns: 1fr; }
   .panel-title { flex-wrap: wrap; }
   .command-title-group { flex: 1 1 100%; }

@@ -613,18 +613,20 @@ export class MeasurementEditor {
     section.className = "measurement-editor-section measurement-statistics-section";
     const heading = document.createElement("strong");
     heading.textContent = translate("measurement.statistics.title");
+    const description = document.createElement("p");
+    description.className = "field-help";
+    description.textContent = translate("measurement.statistics.description");
     const form = document.createElement("div");
     form.className = "measurement-statistics-form";
 
-    this.controls.statisticsMode = this.statisticsFixedValue(
-      "measurement.statistics.mode", choiceLabel("all"),
-    );
     this.controls.statisticsDisplay = this.statisticsCheckbox(
       "measurement.statistics.display",
+      "measurement.statistics.displayHelp",
     );
     this.controls.statisticsMaxCountMode = this.statisticsSelect(
       "measurement.statistics.maximumCount",
       ["infinite", "numeric"],
+      "measurement.statistics.maximumCountHelp",
     );
     this.controls.statisticsMaxCount = document.createElement("input");
     this.controls.statisticsMaxCount.type = "number";
@@ -635,14 +637,17 @@ export class MeasurementEditor {
     maxCountField.className = "field";
     const maxCountLabel = document.createElement("span");
     maxCountLabel.textContent = translate("measurement.statistics.numericCount");
-    maxCountField.append(maxCountLabel, this.controls.statisticsMaxCount);
+    const maxCountHelp = document.createElement("small");
+    maxCountHelp.className = "field-help";
+    maxCountHelp.textContent = translate("measurement.statistics.numericCountHelp");
+    maxCountField.append(maxCountLabel, this.controls.statisticsMaxCount, maxCountHelp);
     this.controls.statisticsRsd = this.statisticsCheckbox(
       "measurement.statistics.relativeStddev",
+      "measurement.statistics.relativeStddevHelp",
     );
     const primaryFields = document.createElement("div");
     primaryFields.className = "measurement-statistics-primary";
     primaryFields.append(
-      this.controls.statisticsMode.wrapper,
       this.controls.statisticsMaxCountMode.wrapper,
       maxCountField,
     );
@@ -675,41 +680,36 @@ export class MeasurementEditor {
     this.statisticsContent = document.createElement("div");
     this.statisticsContent.className = "measurement-front-panel-content";
     this.statisticsContent.setAttribute("aria-live", "polite");
-    section.append(heading, form, actions, this.statisticsContent);
+    section.append(heading, description, form, actions, this.statisticsContent);
     this.updateStatisticsMaxCountState();
     return section;
   }
 
-  statisticsSelect(labelKey, options) {
+  statisticsSelect(labelKey, options, helpKey) {
     const wrapper = document.createElement("label");
     wrapper.className = "field";
     const label = document.createElement("span");
     label.textContent = translate(labelKey);
     const input = document.createElement("select");
     for (const value of options) input.append(new Option(choiceLabel(value), value));
-    wrapper.append(label, input);
+    const help = document.createElement("small");
+    help.className = "field-help";
+    help.textContent = translate(helpKey);
+    wrapper.append(label, input, help);
     return { wrapper, input };
   }
 
-  statisticsFixedValue(labelKey, text) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "field";
-    const label = document.createElement("span");
-    label.textContent = translate(labelKey);
-    const value = document.createElement("strong");
-    value.textContent = text;
-    wrapper.append(label, value);
-    return { wrapper, value };
-  }
-
-  statisticsCheckbox(labelKey) {
+  statisticsCheckbox(labelKey, helpKey) {
     const wrapper = document.createElement("label");
     wrapper.className = "field measurement-statistics-checkbox";
     const input = document.createElement("input");
     input.type = "checkbox";
     const label = document.createElement("span");
     label.textContent = translate(labelKey);
-    wrapper.append(input, label);
+    const help = document.createElement("small");
+    help.className = "field-help";
+    help.textContent = translate(helpKey);
+    wrapper.append(input, label, help);
     return { wrapper, input };
   }
 

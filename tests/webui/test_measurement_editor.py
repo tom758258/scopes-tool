@@ -104,6 +104,22 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     assert '"measurement.frontPanel.markersAlwaysOn"' in editor_source
     assert '"measurement.statistics.title"' in editor_source
     assert '"measurement.statistics.increment"' not in editor_source
+    for locale in (english, chinese):
+        for key in (
+            "measurement.statistics.description",
+            "measurement.statistics.maximumCountHelp",
+            "measurement.statistics.numericCountHelp",
+            "measurement.statistics.displayHelp",
+            "measurement.statistics.relativeStddevHelp",
+        ):
+            assert f'"{key}":' in locale
+        assert '"measurement.statistics.mode":' not in locale
+    assert "Results Mode" not in next(
+        line for line in english.splitlines() if '"measurement.statistics.allRequired"' in line
+    )
+    assert "結果模式" not in next(
+        line for line in chinese.splitlines() if '"measurement.statistics.allRequired"' in line
+    )
     assert '"measurement.frontPanel.readFailedEmpty"' in editor_source
     assert '"measurement.frontPanel.readFailedCleared"' in editor_source
     assert '"danger"' in editor_source
@@ -692,13 +708,13 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           (node) => node.className.includes("measurement-statistics-section"),
         );
         assert(statisticsSection3000x);
-        const statisticsForm3000x = statisticsSection3000x.children[1];
+        assert.equal(statisticsSection3000x.children[1].textContent, "measurement.statistics.description");
+        const statisticsForm3000x = statisticsSection3000x.children[2];
         assert.equal(statisticsForm3000x.className, "measurement-statistics-form");
         assert.equal(statisticsForm3000x.children[0].className, "measurement-statistics-primary");
         assert.deepEqual(
           statisticsForm3000x.children[0].children.map((node) => node.children[0].textContent),
           [
-            "measurement.statistics.mode",
             "measurement.statistics.maximumCount",
             "measurement.statistics.numericCount",
           ],
@@ -708,6 +724,22 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           statisticsForm3000x.children[1].children.map((node) => node.children[1].textContent),
           ["measurement.statistics.display", "measurement.statistics.relativeStddev"],
         );
+        assert.deepEqual(
+          [...statisticsForm3000x.children[0].children, ...statisticsForm3000x.children[1].children]
+            .map((node) => [node.children.at(-1).className, node.children.at(-1).textContent]),
+          [
+            ["field-help", "measurement.statistics.maximumCountHelp"],
+            ["field-help", "measurement.statistics.numericCountHelp"],
+            ["field-help", "measurement.statistics.displayHelp"],
+            ["field-help", "measurement.statistics.relativeStddevHelp"],
+          ],
+        );
+        assert.deepEqual(
+          statisticsForm3000x.children[1].children.map((node) => node.children[0].type),
+          ["checkbox", "checkbox"],
+        );
+        assert.equal(model3000x.controls.statisticsMaxCount.min, "2");
+        assert.equal(model3000x.controls.statisticsMaxCount.max, "2000");
         assert.equal(model3000x.controls.statisticsMaxCount.disabled, true);
         model3000x.controls.statisticsMaxCountMode.input.value = "numeric";
         model3000x.updateStatisticsMaxCountState();
@@ -715,9 +747,12 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         model3000x.controls.statisticsMaxCountMode.input.value = "infinite";
         model3000x.updateStatisticsMaxCountState();
         assert.equal(model3000x.controls.statisticsMaxCount.disabled, true);
-        assert.equal(model3000x.controls.statisticsMode.value.textContent, "all");
-        assert.equal(model3000x.controls.statisticsMode.input, undefined);
+        assert.equal(model3000x.controls.statisticsMode, undefined);
         assert.equal(model3000x.controls.statisticsIncrement, undefined);
+        assert.deepEqual(
+          statisticsSection3000x.children[3].children.map((node) => node.textContent),
+          ["actions.apply", "measurement.statistics.read", "measurement.statistics.reset"],
+        );
         assert.equal(model3000x.controls.statisticsApply.disabled, true);
         const statisticsCalls = [];
         await model3000x.applyStatistics();
@@ -736,6 +771,7 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           };
         };
         await model3000x.refreshStatistics();
+        assert.deepEqual(statisticsCalls.at(-1), ["measurement-statistics", { action: "query" }]);
         assert.equal(model3000x.statisticsState.kind, "mode-required");
         assert.equal(model3000x.controls.statisticsApply.disabled, false);
         assert.equal(
@@ -744,6 +780,8 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
         );
         await model3000x.applyStatistics();
         assert.equal(statisticsCalls.at(-1)[1].mode, "all");
+        await model3000x.runStatisticsAction("reset");
+        assert.deepEqual(statisticsCalls.at(-1), ["measurement-statistics", { action: "reset" }]);
         model3000x.statisticsState = {
           kind: "results",
           payload: {

@@ -5182,14 +5182,14 @@ def test_numeric_inputs_share_spinner_presentation_rules() -> None:
 
 
 
-def test_acquisition_and_statistics_use_intentional_single_column_option_layouts() -> None:
+def test_acquisition_and_statistics_option_layouts() -> None:
     styles = read_static("styles.css")
 
     assert ".acquisition-single-wait-form { grid-template-columns: minmax(0, 1fr); }" in styles
     assert ".acquisition-single-wait-form .command-form-advanced-fields { grid-template-columns: minmax(0, 1fr); }" in styles
-    assert ".measurement-statistics-primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }" in styles
-    assert ".measurement-statistics-options { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }" in styles
-    assert ".measurement-statistics-primary { grid-template-columns: 1fr; }" in styles
+    assert ".measurement-statistics-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }" in styles
+    assert ".measurement-statistics-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }" in styles
+    assert ".measurement-statistics-primary, .measurement-statistics-options { grid-template-columns: 1fr; }" in styles
 
 def test_boolean_field_help_spans_full_row() -> None:
     styles = read_static("styles.css")
