@@ -688,9 +688,33 @@ def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
           results3000x.children[1].children[0].textContent,
           "measurement.frontPanel.unread",
         );
-        assert(model3000x.container.children.some(
+        const statisticsSection3000x = model3000x.container.children.find(
           (node) => node.className.includes("measurement-statistics-section"),
-        ));
+        );
+        assert(statisticsSection3000x);
+        const statisticsForm3000x = statisticsSection3000x.children[1];
+        assert.equal(statisticsForm3000x.className, "measurement-statistics-form");
+        assert.equal(statisticsForm3000x.children[0].className, "measurement-statistics-primary");
+        assert.deepEqual(
+          statisticsForm3000x.children[0].children.map((node) => node.children[0].textContent),
+          [
+            "measurement.statistics.mode",
+            "measurement.statistics.maximumCount",
+            "measurement.statistics.numericCount",
+          ],
+        );
+        assert.equal(statisticsForm3000x.children[1].className, "measurement-statistics-options");
+        assert.deepEqual(
+          statisticsForm3000x.children[1].children.map((node) => node.children[1].textContent),
+          ["measurement.statistics.display", "measurement.statistics.relativeStddev"],
+        );
+        assert.equal(model3000x.controls.statisticsMaxCount.disabled, true);
+        model3000x.controls.statisticsMaxCountMode.input.value = "numeric";
+        model3000x.updateStatisticsMaxCountState();
+        assert.equal(model3000x.controls.statisticsMaxCount.disabled, false);
+        model3000x.controls.statisticsMaxCountMode.input.value = "infinite";
+        model3000x.updateStatisticsMaxCountState();
+        assert.equal(model3000x.controls.statisticsMaxCount.disabled, true);
         assert.equal(model3000x.controls.statisticsMode.value.textContent, "all");
         assert.equal(model3000x.controls.statisticsMode.input, undefined);
         assert.equal(model3000x.controls.statisticsIncrement, undefined);

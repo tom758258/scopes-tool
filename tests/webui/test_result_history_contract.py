@@ -2019,3 +2019,76 @@ def test_segmented_capture_workspace_result_labels_are_localized() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_math_response_parse_failure_summary_is_localized_and_keeps_raw_diagnostic() -> None:
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        globalThis.testLocale = "en";
+        const messages = {
+          en: {
+            "command.math-operator": "MATH Operator",
+            "results.summary.mathResponseParseFailed": "Could not parse the instrument response for {{command}}: {{value}}.",
+            "results.summary.failed": "Command failed",
+          },
+          "zh-TW": {
+            "command.math-operator": "MATH 運算子",
+            "results.summary.mathResponseParseFailed": "無法解析「{{command}}」的儀器回應：{{value}}。",
+            "results.summary.failed": "指令失敗",
+          },
+        };
+        const translate = (key, values = {}) => {
+          let text = messages[globalThis.testLocale]?.[key] || key;
+          for (const [name, value] of Object.entries(values)) {
+            text = text.replaceAll(`{{${name}}}`, String(value));
+          }
+          return text;
+        };
+        const hasTranslation = (key) => key in (messages[globalThis.testLocale] || {});
+        const translateJobStatus = (status) => status;
+
+        const source = [
+          "const translate = globalThis.translate;",
+          "const hasTranslation = globalThis.hasTranslation;",
+          "const translateJobStatus = globalThis.translateJobStatus;",
+          fs.readFileSync(process.argv[1], "utf8"),
+        ].join("\n")
+          .replace(/^import[^\n]*\r?\n/gm, "")
+          .replace(/^export function /gm, "function ")
+          + "\nglobalThis.mathErrorApi = { jobErrorSummary };";
+        globalThis.translate = translate;
+        globalThis.hasTranslation = hasTranslation;
+        globalThis.translateJobStatus = translateJobStatus;
+        await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
+
+        const raw = "ChannelResponseError: Could not parse Math operation response: 'FFT'";
+        const job = { command: "math-operator", status: "failed", error: raw };
+        assert.equal(
+          globalThis.mathErrorApi.jobErrorSummary(job),
+          "Could not parse the instrument response for MATH Operator: FFT.",
+        );
+        globalThis.testLocale = "zh-TW";
+        assert.equal(
+          globalThis.mathErrorApi.jobErrorSummary(job),
+          "無法解析「MATH 運算子」的儀器回應：FFT。",
+        );
+        assert.equal(job.error, raw);
+
+        globalThis.testLocale = "en";
+        assert.equal(
+          globalThis.mathErrorApi.jobErrorSummary({ command: "capture", status: "failed", error: raw }),
+          raw,
+        );
+        '''
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(RESULTS_JS)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout

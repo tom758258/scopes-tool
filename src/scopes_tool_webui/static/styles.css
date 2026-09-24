@@ -380,6 +380,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .trigger-editor-section:first-child { margin-top: 0; }
 .trigger-editor-section .command-form { padding-top: 0; }
 .acquisition-editor .command-form .field-boolean { align-content: end; }
+.acquisition-single-wait-form { grid-template-columns: minmax(0, 1fr); }
+.acquisition-single-wait-form .field-boolean { align-content: start; }
+.acquisition-single-wait-form .command-form-advanced-fields { grid-template-columns: minmax(0, 1fr); }
 .trigger-editor-action { justify-self: start; min-height: var(--control-h); }
 .reference-editor-control { display: grid; gap: 8px; }
 .reference-editor-control + .reference-editor-control { padding-top: 10px; margin-top: 4px; border-top: 1px dashed var(--line); }
@@ -484,7 +487,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .measurement-front-panel-results > strong { display: block; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .measurement-front-panel-content { overflow-x: auto; padding: 10px; }
 .measurement-statistics-section { margin-top: 12px; }
-.measurement-statistics-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.measurement-statistics-form { display: grid; gap: 10px; }
+.measurement-statistics-primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.measurement-statistics-options { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .measurement-statistics-checkbox { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
 .measurement-statistics-checkbox input { width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; }
 .measurement-front-panel-content > .muted,
@@ -643,6 +648,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .channel-scale-range-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-editor-limits { grid-template-columns: 1fr; }
   .workflow-editor-pair { grid-template-columns: 1fr; }
+  .measurement-statistics-primary { grid-template-columns: 1fr; }
   .workspace-result-content { grid-template-columns: 1fr; }
   .panel-title { flex-wrap: wrap; }
   .command-title-group { flex: 1 1 100%; }
@@ -660,12 +666,15 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
   .mode-options { flex-wrap: wrap; }
 }
 
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button,
 input.no-number-spinner::-webkit-inner-spin-button,
 input.no-number-spinner::-webkit-outer-spin-button {
   appearance: none;
   margin: 0;
 }
 
+input[type="number"],
 input.no-number-spinner {
   -moz-appearance: textfield;
 }
