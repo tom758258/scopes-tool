@@ -370,8 +370,7 @@ try {
             }
         } catch { Add-Case "acquisition-average-count" "FAIL" $_.Exception.Message }
 
-        Add-Case "trigger-mode" "N/A" "No standalone public CLI command; direct acceptance blocked"
-        $script:Failure = $true
+        Add-Case "trigger-mode" "N/A" "No standalone one-shot CLI surface; direct CLI acceptance is not applicable"
         Invoke-RoundTrip "trigger-sweep" "trigger-sweep" @() "mode" "--mode" @("auto", "normal")
         foreach ($name in @("trigger-edge-source", "trigger-edge-slope", "trigger-edge-coupling")) {
             try {

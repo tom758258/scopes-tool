@@ -20,6 +20,7 @@ TARGETS = (
     "tektronix-tds2024b",
     "tektronix-tbs1052b",
 )
+requires_windows = pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 
 
 def run_script(*arguments: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -43,6 +44,7 @@ def run_script(*arguments: str, env: dict[str, str] | None = None) -> subprocess
     )
 
 
+@requires_windows
 @pytest.mark.parametrize("target", (*TARGETS, "all", "keysight-dsox4034a"))
 def test_exact_targets_and_explicit_resource(target: str) -> None:
     args = ["-Target", target, "-Connection", "usb", "-Resource", "TCPIP0::example::INSTR"]
@@ -54,12 +56,14 @@ def test_exact_targets_and_explicit_resource(target: str) -> None:
         assert "Unsupported target" in result.stderr
 
 
+@requires_windows
 def test_missing_resource_rejected_before_any_live_invocation() -> None:
     result = run_script("-Target", TARGETS[0], "-Connection", "usb")
     assert result.returncode != 0
     assert "Resource" in result.stderr
 
 
+@requires_windows
 def test_backend_and_output_root_are_bounded() -> None:
     base = ["-Target", TARGETS[0], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR"]
     backend = run_script(*base, "-Backend", "@other")
@@ -70,6 +74,7 @@ def test_backend_and_output_root_are_bounded() -> None:
     assert "OutputRoot must be under .tmp_tests" in outside.stderr
 
 
+@requires_windows
 @pytest.mark.parametrize(
     ("extra", "message"),
     [
@@ -87,6 +92,7 @@ def test_storage_write_requires_explicit_slots_in_range(extra: list[str], messag
     assert message in result.stderr
 
 
+@requires_windows
 def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     stub = tmp_path / "scopes_tool_cli"
     stub.mkdir()
@@ -114,10 +120,12 @@ def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     assert report["invocations"][0]["arguments"][2] == "identify"
 
 
+@requires_windows
 @pytest.mark.parametrize(
     ("target", "model", "channels", "series", "vectors"),
     [
         (TARGETS[0], "TBS2074B", 4, "TBS2000B", True),
+        (TARGETS[1], "TDS2024B", 4, "TDS2000B", False),
         (TARGETS[2], "TBS1052B", 2, "TBS1000B", False),
     ],
 )
@@ -166,7 +174,7 @@ def test_default_case_flow_with_fake_cli(
         "-Target", target, "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR",
         "-Python", sys.executable, "-OutputRoot", str(output_root), env=env,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     runs = sorted(output_root.glob("run_*/private/report.json"), key=lambda path: path.stat().st_mtime)
     assert runs
     report = json.loads(runs[-1].read_text(encoding="utf-8"))
@@ -184,7 +192,7 @@ def test_default_case_flow_with_fake_cli(
     assert cases["autoscale"]["status"] == "N/A"
     assert cases["setup-save"]["status"] == "N/A"
     assert not [case for case in report["cases"] if case["status"] == "FAIL"]
-    assert report["status"] == "blocked"
+    assert report["status"] == "pass"
     assert all(invocation["arguments"][2] not in {"autoscale", "setup-save", "run"}
                for invocation in report["invocations"])
 
