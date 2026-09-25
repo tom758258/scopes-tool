@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scopes_tool_core.capabilities import capabilities_for_model_id
+from scopes_tool_core.capabilities import capabilities_for_model_id, operation_supported
 from scopes_tool_webui.commands import COMMANDS, command_catalog
 
 
@@ -256,10 +256,12 @@ def test_serial_search_projection_follows_core_capabilities() -> None:
         models = catalog[command_id]["presentation"]["models"]
         for model_id, presentation in models.items():
             capabilities = capabilities_for_model_id(model_id)
-            assert presentation["supported"] is True
-            assert presentation["fields"]["bus"] == {
-                "maximum": capabilities.serial_bus_count,
-            }
+            expected_supported = operation_supported(capabilities, command_id)
+            assert presentation["supported"] is expected_supported
+            if expected_supported:
+                assert presentation["fields"]["bus"] == {
+                    "maximum": capabilities.serial_bus_count,
+                }
 
     event_models = catalog["search-event"]["presentation"]["models"]
     for model_id, presentation in event_models.items():

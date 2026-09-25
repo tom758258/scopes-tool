@@ -2389,6 +2389,32 @@ def _model_command_presentation(
             override["options"] = capabilities.average_counts
             override["minimum"] = min(capabilities.average_counts)
             override["maximum"] = max(capabilities.average_counts)
+        if entry["id"] == "autoscale" and not capabilities.autoscale_supports_optional_controls:
+            override["hidden"] = True
+        if entry["id"] in {"setup-save", "setup-recall"}:
+            if name == "target" and not capabilities.supports_setup_file_target:
+                override["options"] = ("slot",)
+            elif name == "slot" and capabilities.setup_slots is not None:
+                override["options"] = capabilities.setup_slots
+                override["minimum"] = min(capabilities.setup_slots)
+                override["maximum"] = max(capabilities.setup_slots)
+            elif name == "file" and not capabilities.supports_setup_file_target:
+                override["hidden"] = True
+        if entry["id"] == "trigger-mode" and name == "mode" and capabilities.trigger_modes is not None:
+            override["options"] = capabilities.trigger_modes
+        if entry["id"] == "trigger-sweep" and name == "mode" and capabilities.trigger_sweep_modes is not None:
+            override["options"] = capabilities.trigger_sweep_modes
+        if entry["id"] == "trigger-edge-source" and name == "source" and capabilities.trigger_edge_sources is not None:
+            override["options"] = capabilities.trigger_edge_sources
+        if entry["id"] in {"trigger-edge", "trigger-edge-slope"} and name == "slope" and capabilities.trigger_edge_slopes is not None:
+            override["options"] = capabilities.trigger_edge_slopes
+        if entry["id"] == "trigger-edge-coupling" and name == "coupling" and capabilities.trigger_edge_couplings is not None:
+            override["options"] = capabilities.trigger_edge_couplings
+        if entry["id"] == "trigger-holdoff" and name == "seconds":
+            if capabilities.trigger_holdoff_min_seconds is not None:
+                override["minimum"] = capabilities.trigger_holdoff_min_seconds
+            if capabilities.trigger_holdoff_max_seconds is not None:
+                override["maximum"] = capabilities.trigger_holdoff_max_seconds
         if field.get("type") == "integer" and name == "function":
             override["maximum"] = capabilities.math_function_count
             if entry["category"] == "FFT / MATH":

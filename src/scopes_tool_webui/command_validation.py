@@ -647,12 +647,18 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         parameters["source_channel"] = validate_analog_channel(_integer(parameters["source_channel"], "source_channel"), capabilities)
         parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
         parameters["slope"] = normalize_edge_slope(parameters["slope"])
+        if capabilities.trigger_edge_slopes is not None and parameters["slope"] not in capabilities.trigger_edge_slopes:
+            raise WebUIRequestError("trigger edge slope is unsupported for this model")
     elif command == "trigger-edge-source":
+        if capabilities.trigger_edge_sources is not None and parameters["source"] not in capabilities.trigger_edge_sources:
+            raise WebUIRequestError("trigger edge source is unsupported for this model")
         if parameters["source"] == "analog-channel":
             _require_parameter(parameters, "source_channel", command)
             parameters["source_channel"] = validate_analog_channel(_integer(parameters["source_channel"], "source_channel"), capabilities)
     elif command == "trigger-edge-slope":
         parameters["slope"] = normalize_edge_slope(parameters["slope"])
+        if capabilities.trigger_edge_slopes is not None and parameters["slope"] not in capabilities.trigger_edge_slopes:
+            raise WebUIRequestError("trigger edge slope is unsupported for this model")
     elif command == "trigger-edge-level":
         parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
     elif command == "external-trigger-range":
@@ -665,6 +671,8 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         parameters["units"] = validate_external_trigger_units(parameters["units"])
     elif command == "trigger-edge-coupling":
         parameters["coupling"] = normalize_trigger_edge_coupling(parameters["coupling"])
+        if capabilities.trigger_edge_couplings is not None and parameters["coupling"] not in capabilities.trigger_edge_couplings:
+            raise WebUIRequestError("trigger edge coupling is unsupported for this model")
     elif command == "trigger-edge-reject":
         parameters["reject"] = normalize_trigger_edge_reject(parameters["reject"])
     elif command == "trigger-pulse-width":
@@ -724,6 +732,8 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         parameters["polarity"] = normalize_tv_polarity(parameters["polarity"])
         parameters["line"] = validate_tv_line(parameters["standard"], parameters["mode"], parameters.get("line"))
     elif command == "trigger-mode":
+        if capabilities.trigger_modes is not None and parameters["mode"] not in capabilities.trigger_modes:
+            raise WebUIRequestError("trigger mode is unsupported for this model")
         trigger_mode_command(parameters["mode"])
     elif command == "trigger-pattern":
         parameters["pattern"] = validate_pattern_trigger_pattern(parameters["pattern"], capabilities)
@@ -731,10 +741,18 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         parameters["pattern"] = validate_or_trigger_pattern(parameters["pattern"], capabilities)
     elif command == "trigger-sweep":
         parameters["mode"] = normalize_trigger_sweep(parameters["mode"])
+        if capabilities.trigger_sweep_modes is not None and parameters["mode"] not in capabilities.trigger_sweep_modes:
+            raise WebUIRequestError("trigger sweep is unsupported for this model")
     elif command in {"trigger-noise-reject", "trigger-hf-reject"}:
         _require_boolean(parameters["enabled"], "enabled")
     elif command == "trigger-holdoff":
         parameters["seconds"] = _finite_number(parameters["seconds"], "seconds")
+        minimum = capabilities.trigger_holdoff_min_seconds
+        maximum = capabilities.trigger_holdoff_max_seconds
+        if minimum is not None and parameters["seconds"] < minimum:
+            raise WebUIRequestError(f"trigger holdoff must be at least {minimum} seconds for this model")
+        if maximum is not None and parameters["seconds"] > maximum:
+            raise WebUIRequestError(f"trigger holdoff must be at most {maximum} seconds for this model")
 
 
 def _validate_serial_parameters(command: str, parameters: dict[str, Any], capabilities: Any) -> None:
@@ -1862,6 +1880,13 @@ def _validate_parameters(
         if parameters["background"] not in {"black", "white"}:
             raise WebUIRequestError("background must be black or white")
     elif command == "autoscale":
+        if not capabilities.autoscale_supports_optional_controls:
+            supplied = [
+                name for name in ("channels", "acquire_mode", "channels_mode")
+                if name in parameters and parameters[name] not in (None, "", [], ())
+            ]
+            if supplied:
+                raise WebUIRequestError("autoscale optional controls are unsupported for this model")
         parameters["channels"] = _autoscale_channels(
             parameters.get("channels"), capabilities
         )
@@ -1879,8 +1904,12 @@ def _validate_parameters(
         target = parameters.get("target")
         if target == "slot":
             parameters["slot"] = _integer(parameters.get("slot"), "slot")
+            if capabilities.setup_slots is not None and parameters["slot"] not in capabilities.setup_slots:
+                raise WebUIRequestError("setup slot is unsupported for this model")
             parameters.pop("file", None)
         elif target == "file":
+            if not capabilities.supports_setup_file_target:
+                raise WebUIRequestError("setup file target is unsupported for this model")
             file_spec = parameters.get("file")
             if not isinstance(file_spec, str) or not file_spec.strip():
                 raise WebUIRequestError(f"{command} file target requires a file path")

@@ -10,9 +10,14 @@ from typing import Mapping, Sequence
 from .acquisition import AcquisitionConfig
 from .acquisition import normalize_acquisition_type
 from .capabilities import ScopeCapabilities, operation_supported
-from .channel import validate_analog_channel, validate_channel_scale, validate_channel_offset
+from .channel import (
+    validate_analog_channel,
+    validate_channel_label,
+    validate_channel_offset,
+    validate_channel_scale,
+)
 from .errors import OscilloscopeError, ParameterValidationError
-from .save_export import SavePwdState
+from .save_export import SavePwdState, validate_save_quoted_string
 from .scope import Oscilloscope
 from .status import OperationCompleteState, StatusRegisterState
 from .trigger import (
@@ -77,6 +82,8 @@ class _PlanningBackend:
             return '"/"'
         if command.endswith(":LABel?"):
             return '""'
+        if command == "DISPlay:STYle?":
+            return "VECtors"
         return "1"
 
     def set_timeout(self, timeout_ms: int | None) -> None:
@@ -221,6 +228,13 @@ class TektronixOscilloscope(Oscilloscope):
             method = f"{'query' if getattr(args, query_field) else 'set'}_channel_{suffix}"
             values = (args.channel,) if getattr(args, query_field) else (args.channel, getattr(args, value_field))
             getattr(self, method)(*values)
+        elif command == "display-vectors":
+            if args.query:
+                self.query_display_vectors()
+            elif args.on:
+                self.set_display_vectors_on()
+            else:
+                raise ParameterValidationError("display-vectors requires --query or --on")
         elif command == "reference-save":
             self.save_reference_waveform(args.slot, args.source_channel)
         elif command == "reference-display":
@@ -491,8 +505,9 @@ class TektronixOscilloscope(Oscilloscope):
     def set_channel_label(self, channel: int, text: str) -> None:
         self._b2_only("channel-label")
         channel = self._channel(channel)
-        if len(text) > 30 or '"' in text or any(ord(char) < 32 for char in text):
-            raise ParameterValidationError("Tek channel label must contain at most 30 printable characters without quotes")
+        if self.capabilities is None:
+            raise OscilloscopeError("Tek capabilities unavailable")
+        text = validate_channel_label(text, self.capabilities)
         self.scpi.write(f'CH{channel}:LABel "{text}"')
 
     def query_channel_label(self, channel: int) -> str:
@@ -510,6 +525,20 @@ class TektronixOscilloscope(Oscilloscope):
     def query_channel_probe_skew(self, channel: int) -> float:
         self._b2_only("channel-probe-skew")
         return self._float(f"CH{self._channel(channel)}:DESKew?")
+
+    def set_display_vectors_on(self) -> None:
+        self._b1_only("display-vectors")
+        self.scpi.write("DISPlay:STYle VECtors")
+
+    def query_display_vectors(self) -> tuple[bool, str]:
+        self._b1_only("display-vectors")
+        value, raw = self._query("DISPlay:STYle?")
+        normalized = value.upper()
+        if normalized in {"VEC", "VECTOR", "VECTORS"}:
+            return True, raw.strip()
+        if normalized in {"DOT", "DOTS"}:
+            return False, raw.strip()
+        raise OscilloscopeError(f"Invalid Tek display style response: {value!r}")
 
     def _reference(self, slot: int) -> str:
         if slot not in {1, 2} or isinstance(slot, bool):
@@ -530,8 +559,7 @@ class TektronixOscilloscope(Oscilloscope):
         return _boolean(raw, command), raw
 
     def configure_save_pwd(self, path: str) -> None:
-        if not path or '"' in path or any(ord(char) < 32 for char in path):
-            raise ParameterValidationError("Invalid Tek save directory")
+        path = validate_save_quoted_string(path, label="Save path")
         self.scpi.write(f'FILESystem:CWD "{path}"')
 
     def query_save_pwd(self) -> SavePwdState:
@@ -659,7 +687,7 @@ _SUPPORTED_METHODS = {
     "set_channel_bandwidth_limit", "query_channel_bandwidth_limit",
     "set_channel_invert", "query_channel_invert", "set_channel_label",
     "query_channel_label", "set_channel_probe_skew", "query_channel_probe_skew",
-    "save_reference_waveform",
+    "set_display_vectors_on", "query_display_vectors", "save_reference_waveform",
     "configure_reference_display", "query_reference_display", "configure_save_pwd",
     "query_save_pwd", "save_setup", "recall_setup", "configure_trigger_mode",
     "query_trigger_mode", "configure_trigger_sweep", "query_trigger_sweep",

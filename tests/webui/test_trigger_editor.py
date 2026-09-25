@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from scopes_tool_core.capabilities import capabilities_for_model_id
+from scopes_tool_core.capabilities import capabilities_for_model_id, operation_supported
 from scopes_tool_core.trigger import TRIGGER_MODES, TriggerModeState
 from scopes_tool_webui import command_execution as command_execution_module
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
@@ -251,8 +251,12 @@ def test_trigger_channel_fields_follow_the_existing_model_projection() -> None:
     for command_id, field_names in expected_fields.items():
         models = catalog[command_id]["presentation"]["models"]
         for model_id, presentation in models.items():
-            expected = capabilities_for_model_id(model_id).analog_channels
-            assert presentation["supported"] is True
+            capabilities = capabilities_for_model_id(model_id)
+            expected_supported = operation_supported(capabilities, command_id)
+            assert presentation["supported"] is expected_supported
+            if not expected_supported:
+                continue
+            expected = capabilities.analog_channels
             for name in field_names:
                 assert presentation["fields"][name]["maximum"] == expected
                 assert presentation["fields"][name]["options"] == list(range(1, expected + 1))

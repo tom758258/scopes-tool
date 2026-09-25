@@ -3,6 +3,7 @@
 import pytest
 
 from scopes_tool_cli import cli, runtime
+from scopes_tool_core.acquisition import validate_acquisition_count
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.idn import parse_idn
@@ -10,6 +11,18 @@ from scopes_tool_core.status import SystemErrorEntry
 
 
 class _AcquisitionDummyScope:
+    @classmethod
+    def plan_cli_operation(cls, args, capabilities):
+        del cls, args, capabilities
+        return None
+
+    def post_command_status(self, operation=None):
+        del operation
+        return self.query_system_error()
+
+    def validate_acquisition_count(self, count):
+        return validate_acquisition_count(count)
+
     def __init__(self, model="DSOX4024A"):
         self.capabilities = None
         self.calls = []
