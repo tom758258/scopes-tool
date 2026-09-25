@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .acquisition import normalize_acquisition_type, validate_acquisition_count
-from .capabilities import ScopeCapabilities
+from .capabilities import ScopeCapabilities, operation_supported
 from .channel import validate_analog_channel, validate_channel_offset, validate_channel_scale
 from .errors import OscilloscopeError
 from .simulator_backend import SimulatedSignal
@@ -205,6 +205,8 @@ def parse_config(config: Mapping[str, Any], capabilities: ScopeCapabilities) -> 
     kwargs: dict[str, Any] = {}
 
     if "signals" in config:
+        if not any(operation_supported(capabilities, operation) for operation in ("capture", "measure")):
+            raise OscilloscopeError("scenario signals are unsupported for this model")
         kwargs["signals"] = _parse_signals(config["signals"], capabilities)
     if "channels" in config:
         channel_display, channel_scale, channel_offset = _parse_channels(
@@ -214,11 +216,11 @@ def parse_config(config: Mapping[str, Any], capabilities: ScopeCapabilities) -> 
         kwargs["channel_scale"] = channel_scale
         kwargs["channel_offset"] = channel_offset
     if "timebase" in config:
-        kwargs.update(_parse_timebase(config["timebase"]))
+        kwargs.update(_parse_timebase(config["timebase"], capabilities))
     if "trigger" in config:
         kwargs.update(_parse_trigger(config["trigger"], capabilities))
     if "acquisition" in config:
-        kwargs.update(_parse_acquisition(config["acquisition"]))
+        kwargs.update(_parse_acquisition(config["acquisition"], capabilities))
     if "errors" in config:
         _apply_errors(kwargs, config["errors"], capabilities)
     return kwargs
@@ -270,13 +272,15 @@ def _parse_channels(raw: Any, capabilities: ScopeCapabilities) -> tuple[dict[int
                 _finite_float(value["scale_v_per_div"], f"CH{channel} scale_v_per_div")
             )
         if "offset_v" in value:
+            if not operation_supported(capabilities, "channel-offset"):
+                raise OscilloscopeError("scenario channel offset is unsupported for this model")
             offsets[channel] = validate_channel_offset(
                 _finite_float(value["offset_v"], f"CH{channel} offset_v")
             )
     return displays, scales, offsets
 
 
-def _parse_timebase(raw: Any) -> dict[str, Any]:
+def _parse_timebase(raw: Any, capabilities: ScopeCapabilities) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise OscilloscopeError("scenario timebase must be an object")
     _reject_unknown(raw, _TIMEBASE_KEYS, "scenario timebase")
@@ -286,6 +290,8 @@ def _parse_timebase(raw: Any) -> dict[str, Any]:
             _finite_float(raw["scale_s_per_div"], "timebase scale_s_per_div")
         )
     if "position_s" in raw:
+        if not operation_supported(capabilities, "timebase-position"):
+            raise OscilloscopeError("scenario timebase position is unsupported for this model")
         values["timebase_position"] = validate_timebase_position(
             _finite_float(raw["position_s"], "timebase position_s")
         )
@@ -309,7 +315,7 @@ def _parse_trigger(raw: Any, capabilities: ScopeCapabilities) -> dict[str, Any]:
     return values
 
 
-def _parse_acquisition(raw: Any) -> dict[str, Any]:
+def _parse_acquisition(raw: Any, capabilities: ScopeCapabilities) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise OscilloscopeError("scenario acquisition must be an object")
     _reject_unknown(raw, _ACQUISITION_KEYS, "scenario acquisition")
@@ -317,11 +323,16 @@ def _parse_acquisition(raw: Any) -> dict[str, Any]:
     acq_type = raw.get("type")
     if acq_type is not None:
         values["acquisition_type"] = normalize_acquisition_type(str(acq_type))
+        canonical = {"NORMal": "normal", "PEAK": "peak", "AVERage": "average", "HRESolution": "high_resolution"}[values["acquisition_type"]]
+        if capabilities.acquisition_modes is not None and canonical not in capabilities.acquisition_modes:
+            raise OscilloscopeError("scenario acquisition type is unsupported for this model")
     if "count" in raw:
         count = raw["count"]
         if not isinstance(count, int) or isinstance(count, bool):
             raise OscilloscopeError("scenario acquisition count must be an integer")
         values["acquisition_count"] = validate_acquisition_count(count)
+        if capabilities.average_counts is not None and count not in capabilities.average_counts:
+            raise OscilloscopeError("scenario acquisition count is unsupported for this model")
     return values
 
 
@@ -329,6 +340,10 @@ def _apply_errors(kwargs: dict[str, Any], raw: Any, capabilities: ScopeCapabilit
     if not isinstance(raw, dict):
         raise OscilloscopeError("scenario errors must be an object")
     _reject_unknown(raw, _ERROR_KEYS, "scenario errors")
+    if capabilities.supported_operations is not None:
+        for key in ("system_errors", "binary_transfer_failure", "invalid_measurement_channels"):
+            if raw.get(key):
+                raise OscilloscopeError(f"scenario errors {key} is unsupported for this model")
     system_errors = [_format_system_error(entry) for entry in raw.get("system_errors", [])]
     if system_errors:
         kwargs["system_errors"] = system_errors

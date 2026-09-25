@@ -12,6 +12,8 @@ from scopes_tool_core.run_config import (
 )
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
+from scopes_tool_core.tektronix import TektronixOscilloscope
+from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
 
 
 def test_resolve_run_mode_rejects_simulate_and_dry_run():
@@ -102,23 +104,31 @@ def test_dry_run_open_scope_is_blocked():
         open_scope_for_run(config)
 
 
-def test_simulate_open_scope_uses_simulator():
+@pytest.mark.parametrize("model_id, backend_type, scope_type", [
+    ("keysight-dsox4024a", SimulatorBackend, Oscilloscope),
+    ("tektronix-tbs2074b", TektronixSimulatorBackend, TektronixOscilloscope),
+    ("tektronix-tds2024b", TektronixSimulatorBackend, TektronixOscilloscope),
+    ("tektronix-tbs1052b", TektronixSimulatorBackend, TektronixOscilloscope),
+])
+def test_simulate_open_scope_uses_model_driver_and_dialect(model_id, backend_type, scope_type):
     options = RunModeOptions(
         simulate=True,
-        planning_physical_model_id="keysight-dsox4024a",
+        planning_physical_model_id=model_id,
     )
     config = ResolvedRunConfig(
         mode="simulate",
-        planning_physical_model_id="keysight-dsox4024a",
+        planning_physical_model_id=model_id,
         expected_physical_model_id=None,
         capabilities=None,
-        resource="SIM::keysight-dsox4024a::INSTR",
+        resource=f"SIM::{model_id}::INSTR",
         options=options,
     )
 
     with open_scope_for_run(config) as scope:
-        assert isinstance(scope.backend, SimulatorBackend)
-        assert scope.backend.physical_model_id == "keysight-dsox4024a"
+        assert type(scope.backend) is backend_type
+        assert type(scope) is scope_type
+        assert scope.backend.physical_model_id == model_id
+        assert scope.query_idn().model_id == model_id
 
 
 def test_live_detected_identity_sets_actual_capabilities(monkeypatch):

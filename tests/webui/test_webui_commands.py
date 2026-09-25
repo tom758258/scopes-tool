@@ -1240,6 +1240,15 @@ def test_live_data_snapshot_is_hidden_and_runs_through_simulated_jobs() -> None:
     assert rejected.status_code == 400
 
 
+def test_tek_presentation_only_support_inherits_underlying_operations() -> None:
+    commands = {entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()}
+    model = "tektronix-tbs2074b"
+    for command in ("acquisition-control", "channel-scale-range", "reference-waveform"):
+        assert commands[command]["presentation"]["models"][model]["supported"] is True
+    for command in ("front-panel-measurements", "system-information", "serial-decode"):
+        assert commands[command]["presentation"]["models"][model]["supported"] is False
+
+
 def test_command_catalog_projects_setting_and_model_presentation() -> None:
     commands = {
         entry["id"]: entry

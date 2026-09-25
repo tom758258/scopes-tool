@@ -999,7 +999,7 @@ def test_simulate_json_backend_error_keeps_single_json_object(monkeypatch, capsy
             ":MEASure:VPP? CHANnel1": OscilloscopeError("configured measurement failure")
         }
     )
-    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert cli.main(["measure", "--simulate", "--json", "--channel", "1", "--item", "vpp"]) == 1
 
@@ -1012,7 +1012,7 @@ def test_simulate_json_backend_error_keeps_single_json_object(monkeypatch, capsy
 
 def test_check_error_simulate_json_can_report_injected_error_queue(monkeypatch, capsys):
     backend = SimulatorBackend(system_errors=['-113,"Undefined header"'])
-    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert cli.main(["check-error", "--simulate", "--json", "--all", "--max-reads", "3"]) == 1
 
@@ -2063,7 +2063,7 @@ def test_math_transform_simulate_configure_query_round_trip(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: simulator_backend())
     common = [
         "--simulate",
         "--json",
@@ -2151,7 +2151,7 @@ def test_math_composite_source_simulate_configure_query_round_trip(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: simulator_backend())
     common = [
         "--simulate",
         "--json",
@@ -2255,7 +2255,7 @@ def test_math_filter_common_simulate_configure_query_round_trip(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: simulator_backend())
     common = [
         "--simulate",
         "--json",
@@ -2308,7 +2308,7 @@ def test_math_filter_advanced_and_clear_simulate(monkeypatch, capsys):
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: simulator_backend())
     common = [
         "--simulate",
         "--json",
@@ -2400,7 +2400,7 @@ def test_math_visualization_common_and_trend_simulate_round_trips(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: simulator_backend())
     common = [
         "--simulate",
         "--json",
@@ -2470,7 +2470,7 @@ def test_math_visualization_4000x_advanced_and_trend_slot_simulate(
         backend.closed = False
         return backend
 
-    monkeypatch.setattr(runtime, "SimulatorBackend", simulator_backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: simulator_backend())
     common = [
         "--simulate",
         "--json",
@@ -2559,7 +2559,7 @@ def test_math_visualization_capability_rejection_fails_before_open(
 
 def test_measure_simulate_json_reports_invalid_sentinel(monkeypatch, capsys):
     backend = SimulatorBackend(invalid_measurement_channels={1})
-    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert cli.main(["measure", "--simulate", "--json", "--channel", "1", "--item", "vpp"]) == 1
 

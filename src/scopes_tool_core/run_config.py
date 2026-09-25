@@ -13,6 +13,7 @@ from .identity import physical_model_for_id
 from .scope import Oscilloscope
 from .simulator_backend import SimulatorBackend, SimulatorInstrumentState
 from .simulator_config import simulator_backend_kwargs, validate_simulator_args
+from .tektronix_simulator import TektronixSimulatorBackend
 
 RunMode = Literal["dry_run", "simulate", "live"]
 
@@ -142,7 +143,9 @@ def make_simulator_backend(
         resource,
         capabilities,
     )
-    backend = SimulatorBackend(**kwargs)
+    physical_model = physical_model_for_id(options.planning_physical_model_id)
+    backend_type = TektronixSimulatorBackend if physical_model.vendor_id == "tektronix" else SimulatorBackend
+    backend = backend_type(**kwargs)
     if instrument_state is not None:
         backend.restore_instrument_state(instrument_state)
     return backend
@@ -160,13 +163,11 @@ def open_scope_for_run(
     if config.resource is None:
         raise OscilloscopeError("--resource is required unless SCOPES_TOOL_RESOURCE is set")
     if config.mode == "simulate":
-        return Oscilloscope(
-            make_simulator_backend(
-                config.options,
-                config.resource,
-                instrument_state=simulator_state,
-            )
+        backend = make_simulator_backend(
+            config.options, config.resource, instrument_state=simulator_state
         )
+        physical_model = physical_model_for_id(config.options.planning_physical_model_id)
+        return scope_for_physical_model(physical_model, backend)
     opened_scope = Oscilloscope.open(
         config.resource,
         visa_library=config.visa_library,

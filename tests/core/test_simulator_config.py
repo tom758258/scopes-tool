@@ -125,3 +125,24 @@ def test_simulator_backend_kwargs_rejects_bad_cli_system_error():
             "SIM::keysight-dsox4024a::INSTR",
             CAPABILITIES,
         )
+
+
+def test_tek_simulator_config_respects_model_and_rejects_keysight_faults():
+    capabilities = capabilities_for_model_id("tektronix-tbs1052b")
+    assert parse_config({"acquisition": {"type": "average", "count": 16}}, capabilities)["acquisition_count"] == 16
+    for config in (
+        {"channels": {"CH3": {"display": True}}},
+        {"acquisition": {"type": "high_resolution"}},
+        {"acquisition": {"count": 8}},
+        {"errors": {"system_errors": [{"code": -113, "message": "error"}]}},
+        {"errors": {"binary_transfer_failure": True}},
+        {"errors": {"invalid_measurement_channels": ["CH1"]}},
+    ):
+        with pytest.raises(OscilloscopeError):
+            parse_config(config, capabilities)
+    with pytest.raises(OscilloscopeError, match="signals are unsupported"):
+        simulator_backend_kwargs(
+            _args(planning_physical_model_id="tektronix-tbs1052b", simulate_preset="noisy-sine"),
+            "SIM::tektronix-tbs1052b::INSTR",
+            capabilities,
+        )

@@ -15,12 +15,11 @@ from scopes_tool_core.drivers import scope_for_physical_model
 from scopes_tool_core.capabilities import operation_supported
 from scopes_tool_core.errors import OscilloscopeError, UnsupportedModelError
 from scopes_tool_core.identity import identify_requires_registered_model, physical_model_for_id
-from scopes_tool_core.run_config import RunModeOptions, resolve_resource, resolve_run_mode
+from scopes_tool_core.run_config import RunModeOptions, make_simulator_backend, resolve_resource, resolve_run_mode
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.search import SEARCH_MODES
 from scopes_tool_core.serial import SERIAL_MODES
 from scopes_tool_core.simulator_backend import SimulatorBackend
-from scopes_tool_core.simulator_config import simulator_backend_kwargs
 
 WORKER_IDN_TIMEOUT_MS = 2000
 _DRIVER_OPTIONAL_LIVE_COMMANDS = {"identify"}
@@ -97,7 +96,7 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope:
     if mode == "simulate":
         backend = _make_simulator_backend(args, resource)
         _LAST_BACKEND = backend
-        return Oscilloscope(backend)
+        return scope_for_physical_model(physical_model_for_id(args.model), backend)
     opened_scope = Oscilloscope.open(
         resource,
         visa_library=args.visa_library,
@@ -175,12 +174,7 @@ def _validate_worker_live_identity(
     return selected_scope
 
 def _make_simulator_backend(args: argparse.Namespace, resource: str) -> SimulatorBackend:
-    kwargs = simulator_backend_kwargs(
-        _run_mode_options(args),
-        resource,
-        capabilities_for_model_id(args.model),
-    )
-    return SimulatorBackend(**kwargs)
+    return make_simulator_backend(_run_mode_options(args), resource)
 
 def _run_mode_options(args: argparse.Namespace) -> RunModeOptions:
     planning_model_id = (

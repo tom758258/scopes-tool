@@ -9,8 +9,8 @@ export async function getHealth() {
   return getJson(HEALTH_PATH);
 }
 
-export async function getCommands() {
-  return getJson(COMMANDS_PATH);
+export async function getCommands(includeHidden = false) {
+  return getJson(includeHidden ? `${COMMANDS_PATH}?include_hidden=true` : COMMANDS_PATH);
 }
 
 export async function submitJob(payload) {

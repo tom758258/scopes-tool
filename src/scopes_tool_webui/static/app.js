@@ -193,13 +193,6 @@ let pcOutputSelectionStatus = null;
 let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false, updatedAt: null };
 let previousEditorKind = null;
 
-const INTERNAL_COMMANDS = {
-  "live-data-snapshot": { id: "live-data-snapshot", modes: ["live", "simulate"], internal: true },
-  "system-information-snapshot": { id: "system-information-snapshot", modes: ["live", "simulate"], internal: true },
-  doctor: { id: "doctor", modes: ["live", "simulate"], internal: true },
-  smoke: { id: "smoke", modes: ["live", "simulate"], internal: true },
-};
-
 const EDITOR_RENDERERS = {
   acquisition: () => acquisitionEditor,
   reference: () => referenceEditor,
@@ -242,7 +235,7 @@ async function initialize() {
   bindPresentationControls();
   await updateHealth();
   const [loadedCommands, loadedModels] = await Promise.all([
-    getCommands(),
+    getCommands(true),
     fetch("/api/models").then((response) => response.json()),
   ]);
   commands = loadedCommands;
@@ -741,7 +734,7 @@ function renderCollapseLabels() {
 
 async function executeCommand(command, parameters, options = {}) {
   if (isExecutionBusy()) return null;
-  const definition = commands.find((item) => item.id === command) || INTERNAL_COMMANDS[command];
+  const definition = commands.find((item) => item.id === command);
   if (!definition || definition.presentation_only || !definition.modes.includes(context.mode)) {
     elements.deviceStatus.textContent = translate("status.noCommands");
     return;
@@ -1142,9 +1135,9 @@ function invalidateGenericFormOwnership() {
 
 function commandAvailable(command) {
   if (!catalog) return false;
-  const definition = commands.find((item) => item.id === command) || INTERNAL_COMMANDS[command];
+  const definition = commands.find((item) => item.id === command);
   if (!definition || !definition.modes.includes(context.mode)) return false;
-  if (!definition.internal && typeof catalog.supported === "function" && !catalog.supported(definition)) return false;
+  if (typeof catalog.supported === "function" && !catalog.supported(definition)) return false;
   if (context.mode !== "live" || command === "list-resources") return true;
   if (!context.resource) return false;
   if (command === "identify") return true;

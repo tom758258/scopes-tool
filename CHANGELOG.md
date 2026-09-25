@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enables hardware-free simulation for the three registered Tektronix models
+  across Core, CLI, Worker, and WebUI using their supported command dialect.
 - Refines WebUI acquisition, measurement, serial-search, segmented-memory,
   workflow, and sequence guidance and form layout for clearer advanced actions,
   full-row boolean policies, and responsive half-width fields.

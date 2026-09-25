@@ -8,6 +8,8 @@ from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError,
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.identity import physical_model_for_id, resolve_physical_model_identity
 from scopes_tool_core.tektronix import TektronixOscilloscope
+from scopes_tool_core.run_config import ResolvedRunConfig, RunModeOptions, open_scope_for_run
+from scopes_tool_core.simulator_backend import SimulatorBackendError
 
 
 MODELS = (
@@ -15,6 +17,34 @@ MODELS = (
     ("tektronix-tds2024b", "TDS2024B", 4),
     ("tektronix-tbs1052b", "TBS1052B", 2),
 )
+
+
+def simulated_scope(model_id):
+    options = RunModeOptions(simulate=True, planning_physical_model_id=model_id)
+    scope = open_scope_for_run(ResolvedRunConfig(
+        mode="simulate", planning_physical_model_id=model_id,
+        expected_physical_model_id=None, capabilities=None,
+        resource=f"SIM::{model_id}::INSTR", options=options,
+    ))
+    scope.query_idn()
+    return scope
+
+
+def test_tek_simulator_representative_roundtrips():
+    with simulated_scope("tektronix-tbs2074b") as scope:
+        scope.set_channel_label(1, "Input")
+        assert scope.query_channel_label(1) == "Input"
+        scope.configure_trigger_edge_level(source_channel=1, level_volts=0.25)
+        assert scope.query_trigger_edge_level(source_channel=1).level_volts == pytest.approx(0.25)
+    with simulated_scope("tektronix-tds2024b") as scope:
+        scope.set_timebase_position(0.002)
+        assert scope.query_timebase_position() == pytest.approx(0.002)
+    with simulated_scope("tektronix-tbs1052b") as scope:
+        scope.set_channel_scale(2, 0.5)
+        assert scope.query_channel_scale(2) == pytest.approx(0.5)
+        with pytest.raises((ParameterValidationError, SimulatorBackendError)):
+            scope.set_channel_scale(3, 1.0)
+        assert 3 not in scope.backend.channel_scale
 
 
 def make_scope(model_id="tektronix-tbs2074b", responses=None):

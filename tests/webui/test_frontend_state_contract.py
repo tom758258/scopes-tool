@@ -21,6 +21,18 @@ def read_static(name: str) -> str:
     return (STATIC_ROOT / name).read_text(encoding="utf-8")
 
 
+def test_hidden_commands_use_model_projection_before_refresh() -> None:
+    catalog = {entry["id"]: entry for entry in command_catalog(include_hidden=True)}
+    model = "tektronix-tbs2074b"
+    assert catalog["live-data-snapshot"]["presentation"]["models"][model]["supported"] is False
+    for command in ("system-information-snapshot", "doctor", "smoke"):
+        assert catalog[command]["presentation"]["models"][model]["supported"] is False
+    app_source = read_static("app.js")
+    assert "getCommands(true)" in app_source
+    assert "catalog.supported(definition)" in extract_function_declaration(app_source, "function commandAvailable(command)")
+    assert '!commandAvailable("live-data-snapshot")' in extract_function_declaration(app_source, "async function refreshLiveDataSnapshot()")
+
+
 def extract_function(source: str, signature: str) -> str:
     start = source.index(signature)
     body_start = source.index("{", start)

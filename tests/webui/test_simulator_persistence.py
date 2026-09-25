@@ -13,6 +13,8 @@ from scopes_tool_webui.jobs import JobManager
 
 MODEL_4024 = "keysight-dsox4024a"
 MODEL_4034 = "keysight-dsox4034a"
+MODEL_TEK = "tektronix-tbs2074b"
+MODEL_TEK_OTHER = "tektronix-tds2024b"
 
 
 def _wait(manager: JobManager, job_id: str):
@@ -231,6 +233,27 @@ def test_simulate_persists_general_state_and_isolates_planning_models(tmp_path):
         state = segmented.result["result"]["segmented"]
         assert state["mode"] == "segmented"
         assert state["configured_segments"] == 4
+    finally:
+        asyncio.run(manager.shutdown())
+
+
+def test_tek_simulate_state_persists_and_isolates_planning_models(tmp_path):
+    manager = JobManager()
+    try:
+        applied = _run(manager, tmp_path, "channel-scale", {
+            "action": "set", "channel": 1, "volts_per_division": 2.0,
+        }, model_id=MODEL_TEK)
+        assert applied.status == "completed", applied.error
+        same = _run(manager, tmp_path, "channel-scale", {
+            "action": "query", "channel": 1,
+        }, model_id=MODEL_TEK)
+        assert same.status == "completed", same.error
+        assert same.result["result"]["volts_per_division"] == pytest.approx(2.0)
+        other = _run(manager, tmp_path, "channel-scale", {
+            "action": "query", "channel": 1,
+        }, model_id=MODEL_TEK_OTHER)
+        assert other.status == "completed", other.error
+        assert other.result["result"]["volts_per_division"] != pytest.approx(2.0)
     finally:
         asyncio.run(manager.shutdown())
 

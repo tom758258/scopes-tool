@@ -51,8 +51,9 @@ recognized. There is no current Scopes live Bluetooth support scope.
 Core resolves live `*IDN?` manufacturer and model fields to a canonical
 physical model ID, then follows the registered capability profile ID. Dry-run
 `--model` values are canonical physical model IDs. Simulation is available for
-the registered Keysight models. The simulator's manufacturer/model IDN fields
-and capabilities are derived from that same registry entry.
+the registered Keysight and Tektronix models. The simulator's
+manufacturer/model IDN fields and capabilities are derived from that same
+registry entry.
 
 | Profile ID | Series | Registered models | Analog channels |
 | --- | --- | ---: | --- |
@@ -79,8 +80,11 @@ The Tektronix profiles admit only their listed existing operations. The shared
 run, acquisition, channel, reference, setup, status, and Edge trigger controls
 follow the [Tektronix support matrix](tektronix-support-matrix.md). Capture,
 measurements, screenshots, and `check-error` are unavailable on these profiles.
-Tektronix dry-run produces Tektronix commands; the stateful simulator does not
-support these models.
+Tektronix dry-run and the stateful simulator use the Tektronix command dialect
+for the listed operations. The simulator does not add support for capture,
+measurements, screenshots, or `check-error`. Signal presets, system-error queue
+injection, waveform transfer failures, and invalid-measurement injection are
+unavailable for these profiles.
 
 The following Keysight InfiniiVision capability details apply to the Keysight
 profiles:

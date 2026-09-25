@@ -2503,6 +2503,15 @@ def test_worker_executes_trigger_and_acquisition_queries_in_simulator(
     assert job.result["scpi"]["sent"] == ["*IDN?", scpi_command, ":SYSTem:ERRor?"]
 
 
+def test_worker_tek_simulate_uses_core_dialect():
+    runtime = _runtime(model="tektronix-tbs2074b")
+    job, result = _execute_worker_job(runtime, "run", {})
+    assert result["state"] == "succeeded"
+    assert job.result["scpi"]["sent"] == [
+        "ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON", "*ESR?",
+    ]
+
+
 @pytest.mark.parametrize(
     ("arguments", "expected_sent", "expected_result"),
     (

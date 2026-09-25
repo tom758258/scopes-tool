@@ -2156,11 +2156,11 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def command_catalog() -> list[dict[str, Any]]:
+def command_catalog(*, include_hidden: bool = False) -> list[dict[str, Any]]:
     catalog = [
         _jsonable(_command_catalog_entry(entry))
         for entry in COMMANDS
-        if not entry.get("hidden")
+        if include_hidden or not entry.get("hidden")
     ]
     catalog.extend(
         _jsonable(_command_catalog_entry(entry))
@@ -2569,7 +2569,25 @@ def _model_command_presentation(
     return {"supported": supported, "fields": fields}
 
 
+_PRESENTATION_OPERATIONS = {
+    "acquisition-control": ("run", "single", "single-wait", "stop-acquisition", "force-trigger"),
+    "channel-scale-range": ("channel-scale", "channel-range"),
+    "reference-waveform": ("reference-query", "reference-save", "reference-clear"),
+    "reference-labels": ("reference-query", "reference-label", "display-label"),
+    "front-panel-measurements": ("measure", "measure-results"),
+    "system-information": ("system-information-snapshot",),
+    "diagnostics": ("doctor", "smoke"),
+    "external-trigger-range-level": ("external-trigger-range", "trigger-edge-external-level"),
+    "serial-decode": ("serial-mode", "serial-display", "serial-uart", "serial-i2c", "serial-spi", "serial-can"),
+    "serial-trigger": ("serial-mode", "serial-trigger-uart", "serial-trigger-i2c", "serial-trigger-spi", "serial-trigger-can"),
+    "serial-lister": ("serial-lister-query", "serial-lister-display", "serial-lister-reference", "serial-lister-export"),
+}
+
+
 def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: Any) -> bool:
+    underlying = _PRESENTATION_OPERATIONS.get(entry["id"])
+    if entry.get("presentation_only") and underlying is not None:
+        return any(operation_supported(capabilities, operation) for operation in underlying)
     if not operation_supported(capabilities, entry["id"]):
         return False
     command_id = entry["id"]

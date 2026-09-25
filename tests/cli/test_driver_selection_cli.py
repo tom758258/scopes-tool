@@ -131,11 +131,18 @@ def test_one_shot_identify_rejects_unknown_tek_model(monkeypatch, capsys):
     assert "Unsupported physical oscilloscope model" in capsys.readouterr().err
 
 
-def test_tek_simulator_rejected_before_open(monkeypatch, capsys):
+def test_tek_simulator_uses_tek_driver_and_status_path(monkeypatch, capsys):
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda *args, **kwargs: pytest.fail("opened")))
+    assert cli.main(["run", "--simulate", "--model", "tektronix-tbs2074b", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert runtime._backend_history() == ["ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON", "*ESR?"]
+    assert payload["result"]["post_command_status"]["value"] == 0
 
-    assert cli.main(["run", "--simulate", "--model", "tektronix-tbs2074b"]) == 1
-    assert "Simulator is unavailable" in capsys.readouterr().err
+
+def test_tek_simulator_unsupported_command_fails_without_business_scpi(capsys):
+    assert cli.main(["capture", "--channel", "1", "--simulate", "--model", "tektronix-tbs2074b"]) == 1
+    assert runtime._backend_history() == ["*IDN?"]
+    assert "unsupported" in capsys.readouterr().err.lower()
 
 
 def test_tek_live_run_uses_esr_without_system_error_queue(monkeypatch, capsys):

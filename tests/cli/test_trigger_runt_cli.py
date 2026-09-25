@@ -167,7 +167,7 @@ def test_trigger_runt_query_simulate_json_skips_levels_for_non_analog_source(
     monkeypatch, capsys
 ):
     backend = SimulatorBackend(runt_source_channel=None, runt_source_raw="DIGital7")
-    monkeypatch.setattr(runtime, "SimulatorBackend", lambda **kwargs: backend)
+    monkeypatch.setattr(runtime, "_make_simulator_backend", lambda args, resource: backend)
 
     assert cli.main(["trigger-runt", "--query", "--simulate", "--json"]) == 0
 

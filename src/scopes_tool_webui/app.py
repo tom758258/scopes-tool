@@ -69,8 +69,8 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/api/commands")
-async def commands() -> list[dict[str, Any]]:
-    return command_catalog()
+async def commands(include_hidden: bool = False) -> list[dict[str, Any]]:
+    return command_catalog(include_hidden=include_hidden)
 
 
 @app.get("/api/models")

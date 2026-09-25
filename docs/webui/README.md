@@ -523,8 +523,9 @@ adds a small read-only summary of analog channels, horizontal settings,
 acquisition mode, and the common trigger state, presented as channel cards with
 channel identity colors plus Horizontal, Trigger, and Acquisition cards. **Read live data** is an explicit foreground action that
 uses the same Core-backed job admission as other commands. Selecting a live
-resource after identification, or selecting a simulator model, automatically
-reads live data once; the manual button remains available for retries. Live requires a
+resource after identification, or selecting a simulator model that supports the
+snapshot, automatically reads live data once; the manual button remains available
+for retries on supported models. Live requires a
 selected resource with confirmed identity, Simulate uses the Core simulator,
 and Dry-run reports the summary as unavailable.
 
