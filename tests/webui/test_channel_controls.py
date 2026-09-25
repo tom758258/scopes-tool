@@ -1556,6 +1556,31 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         assert.ok(fallbackEditor.actions.children.includes(fallbackEditor.readButton));
         assert.ok(fallbackEditor.actions.children.includes(fallbackEditor.applyButton));
 
+        // A partial capability projection keeps numeric Scale usable without Units or Range.
+        hooks.isCommandAvailable = (id) => id === "channel-scale";
+        hooks.executeCommand = successfulExecuteCommand;
+        currentContext = "simulate||tektronix-tbs2074b";
+        editor.present();
+        assert.equal(editor.modeButtons.range.disabled, true);
+        assert.equal(editor.readButton.disabled, false);
+        const beforePartialRead = calls.length;
+        const scaleJob = await editor.readScale();
+        assert.equal(scaleJob.status, "completed");
+        assert.deepEqual(calls.slice(beforePartialRead).map(([id]) => id), ["channel-scale"]);
+        assert.equal(editor.scaleInput.value, "0.2");
+        assert.equal(editor.divUnits, null);
+        assert.ok(editor.scalePresetButtons.every((button) => button.disabled));
+        editor.scaleInput.value = "0.5";
+        const applied = await editor.applyScale();
+        assert.equal(applied.status, "completed");
+        assert.equal(calls.at(-1)[0], "channel-scale");
+        editor.setMode("range");
+        assert.equal(editor.mode, "scale");
+        const beforeRange = calls.length;
+        await editor.readRange();
+        await editor.applyRange();
+        assert.equal(calls.length, beforeRange);
+
         console.log(JSON.stringify({ ok: true }));
         '''
     ).replace("__CATALOG__", catalog_json)

@@ -2507,6 +2507,9 @@ def test_worker_tek_simulate_uses_core_dialect():
     runtime = _runtime(model="tektronix-tbs2074b")
     job, result = _execute_worker_job(runtime, "run", {})
     assert result["state"] == "succeeded"
+    assert job.result["backend"] == "Tektronix simulator"
+    assert job.result["result"]["commands"] == ["ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON"]
+    assert job.result["result"]["command"] == "ACQuire:STATE ON"
     assert job.result["scpi"]["sent"] == [
         "ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON", "*ESR?",
     ]

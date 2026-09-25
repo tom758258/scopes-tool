@@ -708,7 +708,7 @@ def _json_envelope(args: argparse.Namespace, *, ok: bool, mode: str) -> dict[str
         "command": args.command,
         "mode": mode,
         "resource": resource,
-        "backend": "Keysight simulator" if mode == "simulate" else None,
+        "backend": None,
         "idn": idn,
         "capabilities": capabilities,
         "scpi": {"planned": [], "sent": []},

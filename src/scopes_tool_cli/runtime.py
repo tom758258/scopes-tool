@@ -96,7 +96,11 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope:
     if mode == "simulate":
         backend = _make_simulator_backend(args, resource)
         _LAST_BACKEND = backend
-        return scope_for_physical_model(physical_model_for_id(args.model), backend)
+        scope = scope_for_physical_model(physical_model_for_id(args.model), backend)
+        scope.capabilities = capabilities_for_model_id(args.model)
+        if _JSON_RECORD is not None:
+            _JSON_RECORD["backend"] = backend.backend
+        return scope
     opened_scope = Oscilloscope.open(
         resource,
         visa_library=args.visa_library,

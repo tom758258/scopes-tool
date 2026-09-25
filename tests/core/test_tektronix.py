@@ -1,5 +1,7 @@
 """Hardware-free coverage for the registered Tektronix command dialect."""
 
+import json
+
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model_id, operation_supported
@@ -45,6 +47,19 @@ def test_tek_simulator_representative_roundtrips():
         with pytest.raises((ParameterValidationError, SimulatorBackendError)):
             scope.set_channel_scale(3, 1.0)
         assert 3 not in scope.backend.channel_scale
+
+
+def test_tbs2074b_scenario_trigger_level_readback(tmp_path):
+    scenario = tmp_path / "trigger.json"
+    scenario.write_text(json.dumps({"trigger": {"source_channel": "CH1", "level_v": 0.5}}), encoding="utf-8")
+    model_id = "tektronix-tbs2074b"
+    options = RunModeOptions(simulate=True, planning_physical_model_id=model_id, simulate_scenario=str(scenario))
+    with open_scope_for_run(ResolvedRunConfig(
+        mode="simulate", planning_physical_model_id=model_id,
+        expected_physical_model_id=None, capabilities=None,
+        resource=f"SIM::{model_id}::INSTR", options=options,
+    )) as scope:
+        assert scope.query_trigger_edge_level(source_channel=1).level_volts == pytest.approx(0.5)
 
 
 def make_scope(model_id="tektronix-tbs2074b", responses=None):

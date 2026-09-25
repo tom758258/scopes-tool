@@ -167,7 +167,9 @@ def open_scope_for_run(
             config.options, config.resource, instrument_state=simulator_state
         )
         physical_model = physical_model_for_id(config.options.planning_physical_model_id)
-        return scope_for_physical_model(physical_model, backend)
+        scope = scope_for_physical_model(physical_model, backend)
+        scope.capabilities = capabilities_for_model_id(physical_model.model_id)
+        return scope
     opened_scope = Oscilloscope.open(
         config.resource,
         visa_library=config.visa_library,

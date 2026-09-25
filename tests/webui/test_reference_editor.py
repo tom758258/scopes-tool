@@ -330,6 +330,33 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_reference_editor_allows_save_and_display_without_query() -> None:
+    script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        env.available = true;
+        hooks.isCommandAvailable = (id) => ["reference-save", "reference-display"].includes(id);
+        editor.schedulePresentation();
+        await settle();
+        assert.deepEqual(editor.entries.map((entry) => entry.id), ["reference-save"]);
+        assert.equal(editor.refreshButton.disabled, true);
+        assert.equal(editor.refreshButton.hidden, true);
+        await editor.refresh();
+        assert.deepEqual(submitted, []);
+        const job = await editor.saveAndDisplay(editor.entries[0]);
+        assert.equal(job.status, "completed");
+        assert.deepEqual(submitted.map((item) => item.command), ["reference-save", "reference-display"]);
+        assert.notEqual(editor.readStatus.textContent, "reference.editor.readFailed");
+        await editor.submit({ id: "reference-clear", kind: "command" });
+        assert.equal(submitted.length, 2);
+        ''')
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(EDITOR_SOURCE)],
+        capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_reference_editor_does_not_submit_invalid_form_and_clear_needs_no_form() -> None:
     script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
         r'''

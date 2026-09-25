@@ -31,6 +31,11 @@ export class ReferenceEditor {
     return this.catalog.commands.find((command) => command.id === id) || null;
   }
 
+  commandAvailable(id) {
+    const command = this.definition(id);
+    return Boolean(command && (this.hooks.isCommandAvailable?.(id) ?? this.catalog.supported(command)));
+  }
+
   selectedDefinition() {
     const selected = this.hooks.selectedCommand?.();
     return selected?.editor === "reference" ? selected : null;
@@ -151,7 +156,7 @@ export class ReferenceEditor {
 
   buildActionEntry(id, isSaveWorkflow) {
     const command = this.actionDefinition(id);
-    if (!command || !this.catalog.supported(command)) return null;
+    if (!command || !this.commandAvailable(id) || (isSaveWorkflow && !this.commandAvailable("reference-display"))) return null;
 
     let form = null;
     let formHost = null;
@@ -185,6 +190,7 @@ export class ReferenceEditor {
   }
 
   async readCurrentState() {
+    if (!this.commandAvailable("reference-query")) return null;
     const slot = this.selectedSlot();
     if (slot === null || slot === undefined) return null;
     const requestedKey = `${this.currentKey()}|${slot}`;
@@ -203,7 +209,7 @@ export class ReferenceEditor {
   }
 
   async refresh() {
-    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable() || !this.commandAvailable("reference-query")) return null;
     this.setBusy(true);
     try {
       return await this.readCurrentState();
@@ -213,7 +219,7 @@ export class ReferenceEditor {
   }
 
   async submit(entry) {
-    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable() || !this.commandAvailable(entry.id)) return null;
     const slot = this.selectedSlot();
     const values = entry.form ? entry.form.values() : {};
     if (slot === null || slot === undefined || values === null) return null;
@@ -226,7 +232,7 @@ export class ReferenceEditor {
       );
       if (job?.status === "completed") {
         entry.form?.clearDirty();
-        await this.readCurrentState();
+        if (this.commandAvailable("reference-query")) await this.readCurrentState();
       }
       return job;
     } finally {
@@ -235,7 +241,8 @@ export class ReferenceEditor {
   }
 
   async saveAndDisplay(entry) {
-    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable()) return null;
+    if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable() ||
+        !this.commandAvailable("reference-save") || !this.commandAvailable("reference-display")) return null;
     const slot = this.selectedSlot();
     const values = entry.form?.values();
     if (slot === null || slot === undefined || values === null) return null;
@@ -255,7 +262,7 @@ export class ReferenceEditor {
         { intent: "apply" },
       );
       if (displayJob?.status !== "completed") return displayJob;
-      await this.readCurrentState();
+      if (this.commandAvailable("reference-query")) await this.readCurrentState();
       return displayJob;
     } finally {
       this.setBusy(false);
@@ -269,10 +276,12 @@ export class ReferenceEditor {
 
   applyBusyState() {
     const disabled = this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable();
-    this.refreshButton.disabled = disabled;
+    this.refreshButton.disabled = disabled || !this.commandAvailable("reference-query");
+    this.refreshButton.hidden = !this.selectedDefinition() || !this.commandAvailable("reference-query");
     this.slotForm?.setDisabled(disabled);
     for (const entry of this.entries) {
-      entry.button.disabled = disabled;
+      entry.button.disabled = disabled || !this.commandAvailable(entry.id) ||
+        (entry.id === "reference-save" && !this.commandAvailable("reference-display"));
       entry.form?.setDisabled(disabled);
     }
   }

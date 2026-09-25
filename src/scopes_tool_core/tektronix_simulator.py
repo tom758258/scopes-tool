@@ -23,6 +23,8 @@ class TektronixSimulatorBackend(SimulatorBackend):
             self.acquisition_count = self._capabilities.average_counts[0]
         self.trigger_holdoff = self._capabilities.trigger_holdoff_min_seconds or 0.0
         self.trigger_slope = "FALL" if self.trigger_slope.upper().startswith("NEG") else "RISE"
+        if self._capabilities.series == "TBS2000B":
+            self.trigger_levels.setdefault(self.trigger_source, self.trigger_level)
 
     def _record(self, command: str, *, query: bool) -> None:
         self._ensure_open()

@@ -136,6 +136,9 @@ def test_tek_simulator_uses_tek_driver_and_status_path(monkeypatch, capsys):
     assert cli.main(["run", "--simulate", "--model", "tektronix-tbs2074b", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert runtime._backend_history() == ["ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON", "*ESR?"]
+    assert payload["backend"] == "Tektronix simulator"
+    assert payload["result"]["commands"] == ["ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON"]
+    assert payload["result"]["command"] == "ACQuire:STATE ON"
     assert payload["result"]["post_command_status"]["value"] == 0
 
 

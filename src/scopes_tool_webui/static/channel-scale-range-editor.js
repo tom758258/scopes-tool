@@ -61,6 +61,11 @@ export class ChannelScaleRangeEditor {
     return this.catalog.commands.find((command) => command.id === "channel-scale-range") || null;
   }
 
+  commandAvailable(id) {
+    const command = this.catalog.commands.find((candidate) => candidate.id === id);
+    return Boolean(command && (this.hooks.isCommandAvailable?.(id) ?? this.catalog.supported?.(command) ?? true));
+  }
+
   selectedDefinition() {
     const selected = this.hooks.selectedCommand?.();
     return selected?.editor === "channel-scale-range" ? selected : null;
@@ -264,7 +269,7 @@ export class ChannelScaleRangeEditor {
   }
 
   setMode(mode) {
-    if (mode === this.mode) return;
+    if (mode === this.mode || !this.commandAvailable(mode === "scale" ? "channel-scale" : "channel-range")) return;
     this.mode = mode;
     this.renderMode();
     this.applyBusyState();
@@ -284,6 +289,7 @@ export class ChannelScaleRangeEditor {
     const read = mode === "scale" ? this.scaleRead : this.rangeRead;
     return read !== null
       && read.channel === this.selectedChannel()
+      && this.commandAvailable("channel-units")
       && this.divUnits !== null
       && this.unitsChannel === this.selectedChannel();
   }
@@ -397,7 +403,7 @@ export class ChannelScaleRangeEditor {
 
   async readScale() {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable?.()) return null;
-    if (!this.selectedDefinition()) return null;
+    if (!this.selectedDefinition() || !this.commandAvailable("channel-scale")) return null;
 
     const contextKey = this.hooks.contextKey();
     const channel = this.selectedChannel();
@@ -426,6 +432,15 @@ export class ChannelScaleRangeEditor {
       const val = job?.result?.result?.volts_per_division ?? job?.result?.volts_per_division;
       if (typeof val !== "number" || !Number.isFinite(val)) {
         this.clearModeRead("scale");
+        return job;
+      }
+
+      if (!this.commandAvailable("channel-units")) {
+        this.scaleInput.value = String(val);
+        this.scaleRead = { channel, value: val };
+        this.divUnits = null;
+        this.unitsChannel = null;
+        this.syncPresetLabels();
         return job;
       }
 
@@ -460,7 +475,7 @@ export class ChannelScaleRangeEditor {
 
   async applyScale() {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable?.()) return null;
-    if (!this.selectedDefinition()) return null;
+    if (!this.selectedDefinition() || !this.commandAvailable("channel-scale")) return null;
 
     const value = Number(this.scaleInput.value);
     if (!Number.isFinite(value) || value <= 0) return null;
@@ -500,7 +515,7 @@ export class ChannelScaleRangeEditor {
 
   async readRange() {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable?.()) return null;
-    if (!this.selectedDefinition()) return null;
+    if (!this.selectedDefinition() || !this.commandAvailable("channel-range")) return null;
 
     const contextKey = this.hooks.contextKey();
     const channel = this.selectedChannel();
@@ -529,6 +544,15 @@ export class ChannelScaleRangeEditor {
       const val = job?.result?.result?.volts ?? job?.result?.volts;
       if (typeof val !== "number" || !Number.isFinite(val)) {
         this.clearModeRead("range");
+        return job;
+      }
+
+      if (!this.commandAvailable("channel-units")) {
+        this.rangeInput.value = String(val);
+        this.rangeRead = { channel, value: val };
+        this.divUnits = null;
+        this.unitsChannel = null;
+        this.syncPresetLabels();
         return job;
       }
 
@@ -563,7 +587,7 @@ export class ChannelScaleRangeEditor {
 
   async applyRange() {
     if (this.busy || this.hooks.isExecutionBusy?.() || !this.hooks.isAvailable?.()) return null;
-    if (!this.selectedDefinition()) return null;
+    if (!this.selectedDefinition() || !this.commandAvailable("channel-range")) return null;
 
     const value = Number(this.rangeInput.value);
     if (!Number.isFinite(value) || value <= 0) return null;
@@ -608,10 +632,12 @@ export class ChannelScaleRangeEditor {
       !this.hooks.isAvailable?.() ||
       !this.channels.length;
     this.channelSelect.disabled = disabled;
-    this.scaleInput.disabled = disabled;
-    this.rangeInput.disabled = disabled;
-    this.readButton.disabled = disabled;
-    this.applyButton.disabled = disabled;
+    this.modeButtons.scale.disabled = disabled || !this.commandAvailable("channel-scale");
+    this.modeButtons.range.disabled = disabled || !this.commandAvailable("channel-range");
+    this.scaleInput.disabled = disabled || !this.commandAvailable("channel-scale");
+    this.rangeInput.disabled = disabled || !this.commandAvailable("channel-range");
+    this.readButton.disabled = disabled || !this.commandAvailable(this.mode === "scale" ? "channel-scale" : "channel-range");
+    this.applyButton.disabled = this.readButton.disabled;
     for (const button of this.scalePresetButtons) button.disabled = disabled || !this.modeReady("scale");
     for (const button of this.rangePresetButtons) button.disabled = disabled || !this.modeReady("range");
   }
