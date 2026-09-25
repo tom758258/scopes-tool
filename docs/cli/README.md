@@ -2731,12 +2731,12 @@ preserve their previous contents.
 Results are stored under `.tmp_tests/live_tektronix_check/` in a timestamped
 private directory. The presence of the runner is not hardware validation.
 A PASS case from a run against the specified real resource provides direct
-hardware evidence for that case. N/A cases remain unverified; complete
-acceptance requires an overall PASS result.
-The current CLI has no standalone trigger-type readback, so the runner marks
-the `trigger-mode` case N/A and the complete acceptance result BLOCKED. It
-queries Edge source, slope, coupling, and combined settings but does not write
-them back without that precondition.
+hardware evidence for that case. N/A cases remain unverified; an overall PASS
+means all applicable runner cases passed, not that every Core/WebUI operation
+has direct one-shot CLI evidence. The current one-shot CLI has no standalone
+trigger-type readback, so the runner marks the `trigger-mode` case N/A without
+failing or blocking the run. It queries Edge source, slope, coupling, and
+combined settings but does not write them back without that precondition.
 
 ### Live CLI Validation
 
