@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.dvm import DVM_MODES
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.fft import (
@@ -619,8 +620,14 @@ def test_setup_save_recall_catalog_and_slot_presentation() -> None:
         assert fields["file"]["type"] == "string"
         assert fields["file"]["visible_if"] == [{"field": "target", "equals": "file"}]
         assert fields["file"]["required_if"] == [{"field": "target", "equals": "file"}]
-        for model in entry["presentation"]["models"].values():
-            assert "slot" not in model["fields"]
+        for model_id, model in entry["presentation"]["models"].items():
+            capabilities = capabilities_for_model_id(model_id)
+            if capabilities.setup_slots is None:
+                assert "slot" not in model["fields"]
+                continue
+            assert model["fields"]["target"]["options"] == ["slot"]
+            assert model["fields"]["slot"]["options"] == list(capabilities.setup_slots)
+            assert model["fields"]["file"]["hidden"] is True
 
     setup_recall = commands["setup-recall"]
     assert setup_recall["category"] == "Save / Export"

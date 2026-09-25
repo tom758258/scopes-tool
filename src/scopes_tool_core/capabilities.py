@@ -58,6 +58,16 @@ class ScopeCapabilities:
     supports_simulator: bool = True
     acquisition_modes: tuple[str, ...] | None = None
     average_counts: tuple[int, ...] | None = None
+    trigger_modes: tuple[str, ...] | None = None
+    trigger_sweep_modes: tuple[str, ...] | None = None
+    trigger_edge_sources: tuple[str, ...] | None = None
+    trigger_edge_slopes: tuple[str, ...] | None = None
+    trigger_edge_couplings: tuple[str, ...] | None = None
+    trigger_holdoff_min_seconds: float | None = None
+    trigger_holdoff_max_seconds: float | None = None
+    autoscale_supports_optional_controls: bool = True
+    setup_slots: tuple[int, ...] | None = None
+    supports_setup_file_target: bool = True
 
 
 _TEK_COMMON_OPERATIONS = frozenset({
@@ -104,6 +114,16 @@ _CAPABILITY_PROFILES = {
         supports_simulator=False,
         acquisition_modes=("normal", "peak", "average", "high_resolution"),
         average_counts=(2, 4, 8, 16, 32, 64, 128, 256, 512),
+        trigger_modes=("edge",),
+        trigger_sweep_modes=("auto", "normal"),
+        trigger_edge_sources=("analog-channel",),
+        trigger_edge_slopes=("positive", "negative"),
+        trigger_edge_couplings=("dc", "lf-reject"),
+        trigger_holdoff_min_seconds=40e-9,
+        trigger_holdoff_max_seconds=8.0,
+        autoscale_supports_optional_controls=False,
+        setup_slots=tuple(range(1, 10)),
+        supports_setup_file_target=False,
         supports_channel_label=True, channel_label_max_length=30,
         supported_operations=_TEK_COMMON_OPERATIONS | {
             "channel-offset", "channel-label", "channel-probe-skew",
@@ -120,8 +140,18 @@ _CAPABILITY_PROFILES = {
         supports_simulator=False,
         acquisition_modes=("normal", "peak", "average"),
         average_counts=(4, 16, 64, 128),
+        trigger_modes=("edge",),
+        trigger_sweep_modes=("auto", "normal"),
+        trigger_edge_sources=("analog-channel",),
+        trigger_edge_slopes=("positive", "negative"),
+        trigger_edge_couplings=("ac", "dc", "lf-reject"),
+        trigger_holdoff_min_seconds=500e-9,
+        trigger_holdoff_max_seconds=10.0,
+        autoscale_supports_optional_controls=False,
+        setup_slots=tuple(range(1, 10)),
+        supports_setup_file_target=False,
         supported_operations=_TEK_COMMON_OPERATIONS | {
-            "timebase-position",
+            "timebase-position", "display-vectors",
         },
     ),
     "tektronix-tbs1052b": ScopeCapabilities(
@@ -134,8 +164,18 @@ _CAPABILITY_PROFILES = {
         supports_simulator=False,
         acquisition_modes=("normal", "peak", "average"),
         average_counts=(4, 16, 64, 128),
+        trigger_modes=("edge",),
+        trigger_sweep_modes=("auto", "normal"),
+        trigger_edge_sources=("analog-channel",),
+        trigger_edge_slopes=("positive", "negative"),
+        trigger_edge_couplings=("ac", "dc", "lf-reject"),
+        trigger_holdoff_min_seconds=500e-9,
+        trigger_holdoff_max_seconds=10.0,
+        autoscale_supports_optional_controls=False,
+        setup_slots=tuple(range(1, 10)),
+        supports_setup_file_target=False,
         supported_operations=_TEK_COMMON_OPERATIONS | {
-            "timebase-position",
+            "timebase-position", "display-vectors",
         },
     ),
     "keysight-infiniivision-2000x": ScopeCapabilities(

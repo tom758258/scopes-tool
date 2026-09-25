@@ -45,8 +45,11 @@ def test_capability_subset_and_unsupported_leaks(model_id, _, __):
     capabilities = capabilities_for_model_id(model_id)
     for operation in ("run", "channel-scale", "setup-save", "trigger-edge", "list-resources"):
         assert operation_supported(capabilities, operation)
-    for operation in ("measure", "capture", "screenshot", "check-error", "single-wait", "trigger-pulse-width", "display-vectors"):
+    for operation in ("measure", "capture", "screenshot", "check-error", "single-wait", "trigger-pulse-width"):
         assert not operation_supported(capabilities, operation)
+    assert operation_supported(capabilities, "display-vectors") is (
+        model_id in {"tektronix-tds2024b", "tektronix-tbs1052b"}
+    )
 
 
 @pytest.mark.parametrize("model_id,_,__", MODELS)
@@ -152,6 +155,28 @@ def test_common_timebase_channel_trigger_and_directory_commands(model_id, _, __)
 
 
 @pytest.mark.parametrize("model_id", ["tektronix-tds2024b", "tektronix-tbs1052b"])
+def test_legacy_display_vectors_query_and_on(model_id):
+    scope, backend = make_scope(
+        model_id,
+        {"DISPlay:STYle?": ":DISPLAY:STYLE DOTS"},
+    )
+    enabled, raw = scope.query_display_vectors()
+    assert enabled is False
+    assert raw == ":DISPLAY:STYLE DOTS"
+    scope.set_display_vectors_on()
+    assert backend.history[1:] == ["DISPlay:STYle?", "DISPlay:STYle VECtors"]
+
+
+def test_b2_display_vectors_rejects_before_scpi():
+    scope, backend = make_scope()
+    with pytest.raises(ParameterValidationError):
+        scope.query_display_vectors()
+    with pytest.raises(ParameterValidationError):
+        scope.set_display_vectors_on()
+    assert backend.history == ["*IDN?"]
+
+
+@pytest.mark.parametrize("model_id", ["tektronix-tds2024b", "tektronix-tbs1052b"])
 def test_legacy_timebase_probe_reference_and_holdoff(model_id):
     scope, backend = make_scope(model_id)
     scope.set_timebase_position(0.25)
@@ -174,9 +199,11 @@ def test_b2_only_channel_limits_reject_before_scpi():
     history = list(backend.history)
     for action in (
         lambda: scope.set_channel_label(1, "x" * 31),
+        lambda: scope.set_channel_label(1, "é"),
         lambda: scope.set_channel_probe_skew(1, 101e-9),
         lambda: scope.set_channel_coupling(1, "gnd"),
         lambda: scope.configure_trigger_mode("pulse-width"),
+        lambda: scope.configure_save_pwd("C:/bad;path"),
     ):
         with pytest.raises(ParameterValidationError):
             action()
@@ -246,6 +273,7 @@ def test_explicit_status_does_not_read_hidden_esr():
     ("tektronix-tbs2074b", "TRIGger:A:HOLDOff:TIMe?", ":TRIGGER:A:HOLDOFF:TIME 0.1", "query_trigger_holdoff", (), 0.1),
     ("tektronix-tbs2074b", "SELect:REF1?", ":SELECT:REF1 1", "query_reference_display", (1,), True),
     ("tektronix-tbs2074b", "FILESystem:CWD?", ':FILESYSTEM:CWD "C:/"', "query_save_pwd", (), "C:/"),
+    ("tektronix-tds2024b", "DISPlay:STYle?", ":DISPLAY:STYLE VECTORS", "query_display_vectors", (), True),
     ("tektronix-tbs2074b", "*STB?", "*STB 4", "query_status_byte", (), 4),
 ])
 def test_header_on_query_normalization(model_id, command, response, method, args, expected):
@@ -268,6 +296,8 @@ def test_header_on_query_normalization(model_id, command, response, method, args
         result = result[0]
     elif method == "query_save_pwd":
         result = result.path
+    elif method == "query_display_vectors":
+        result = result[0]
     elif method == "query_status_byte":
         result = result.value
     assert result == expected

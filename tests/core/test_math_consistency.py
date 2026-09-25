@@ -23,7 +23,7 @@ from scopes_tool_core.advanced import (
     parse_math_trend_measurement_slot,
     validate_math_smooth_points,
 )
-from scopes_tool_core.capabilities import capabilities_for_model_id
+from scopes_tool_core.capabilities import capabilities_for_model_id, operation_supported
 from scopes_tool_core.errors import ChannelResponseError, ParameterValidationError
 from scopes_tool_core.identity import (
     PHYSICAL_MODEL_REGISTRY,
@@ -64,6 +64,14 @@ _PROFILE_MATRIX = {
 }
 _REGISTERED_PHYSICAL_MODEL_IDS = tuple(
     model.model_id for model in PHYSICAL_MODEL_REGISTRY
+)
+_MATH_SIMULATOR_MODEL_IDS = tuple(
+    model_id
+    for model_id in _REGISTERED_PHYSICAL_MODEL_IDS
+    if (
+        capabilities_for_model_id(model_id).supports_simulator
+        and capabilities_for_model_id(model_id).math_function_count > 0
+    )
 )
 _EXPECTED_MATH_WORKER_COMMANDS = frozenset(
     {
@@ -118,11 +126,20 @@ def test_math_profile_operation_and_dialect_consistency_gate():
 
     for model_id in _REGISTERED_PHYSICAL_MODEL_IDS:
         physical_model = physical_model_for_id(model_id)
-        expected = _PROFILE_MATRIX[physical_model.series]
         capabilities = capabilities_for_model_id(model_id)
         assert physical_model.model_id == model_id
-        assert physical_model.capability_profile_id == expected["profile"]
         assert capabilities.series == physical_model.series
+        if physical_model.series not in _PROFILE_MATRIX:
+            assert capabilities.math_function_count == 0
+            assert capabilities.supports_math_goft is False
+            assert capabilities.supports_math_cascade is False
+            assert capabilities.supports_advanced_fft is False
+            for operation in _EXPECTED_MATH_WORKER_COMMANDS:
+                assert not operation_supported(capabilities, operation)
+            continue
+
+        expected = _PROFILE_MATRIX[physical_model.series]
+        assert physical_model.capability_profile_id == expected["profile"]
         assert capabilities.math_function_count == expected["count"]
         assert capabilities.supports_math_goft is expected["goft"]
         assert capabilities.supports_math_cascade is expected["cascade"]
@@ -251,7 +268,7 @@ def test_math_cli_worker_schema_absence_consistency_gate():
     assert "bus-state" not in enabled_names
 
 
-@pytest.mark.parametrize("model", _REGISTERED_PHYSICAL_MODEL_IDS)
+@pytest.mark.parametrize("model", _MATH_SIMULATOR_MODEL_IDS)
 def test_math_enabled_operations_have_simulator_round_trip(model):
     backend = SimulatorBackend(physical_model_id=model)
     scope = Oscilloscope(backend)

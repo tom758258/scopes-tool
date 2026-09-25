@@ -693,6 +693,8 @@ def _cmd_display_common(args: argparse.Namespace) -> int:
             return 1
 
         target, result = _display_common_plan(args)
+        target = runtime._driver_business_commands(scope, args, [target])[0]
+        result["command"] = target
         if args.command == "display-clear":
             print("Planned change: clear display")
             scope.clear_display()

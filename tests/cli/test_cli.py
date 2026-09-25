@@ -7,6 +7,7 @@ import pytest
 
 from scopes_tool_cli import cli, runtime
 from scopes_tool_cli.commands import workflows
+from scopes_tool_core.acquisition import validate_acquisition_count
 import scopes_tool_core.output_files as core_output_files
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.errors import OscilloscopeError, VisaBackendError
@@ -30,12 +31,30 @@ from scopes_tool_core.waveform import (
 )
 
 
+class _DriverContractDummy:
+    """Minimal current driver contract for duck-typed CLI test scopes."""
+
+    capabilities = None
+
+    @classmethod
+    def plan_cli_operation(cls, args, capabilities):
+        del cls, args, capabilities
+        return None
+
+    def post_command_status(self, operation=None):
+        del operation
+        return self.query_system_error()
+
+    def validate_acquisition_count(self, count):
+        return validate_acquisition_count(count)
+
+
 class _ChannelParameterDummyBackend:
     backend = "backend"
     timeout = 2000
 
 
-class _ChannelParameterDummyScope:
+class _ChannelParameterDummyScope(_DriverContractDummy):
     backend = _ChannelParameterDummyBackend()
 
     def __init__(self, model="DSOX4024A"):
@@ -137,7 +156,7 @@ class _MeasurementDummyBackend:
     timeout = None
 
 
-class _MeasurementDummyScope:
+class _MeasurementDummyScope(_DriverContractDummy):
     backend = _MeasurementDummyBackend()
 
     def __init__(
@@ -311,7 +330,7 @@ def test_list_resources_live_only_prints_only_idn_responsive_resources(monkeypat
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self, resource):
@@ -384,7 +403,7 @@ def test_list_resources_live_only_continues_after_stale_asrl(monkeypatch, capsys
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __enter__(self):
@@ -437,7 +456,7 @@ def test_list_resources_live_only_json_reports_asrl_verification_failures(
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __enter__(self):
@@ -502,7 +521,7 @@ def test_list_resources_serial_termination_options_are_asrl_only(monkeypatch, ca
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __enter__(self):
@@ -588,7 +607,7 @@ def test_verify_cli_queries_scope(monkeypatch, capsys):
         backend = "Test VISA backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
         capabilities = capabilities_for_model("DSOX4024A")
 
@@ -621,7 +640,7 @@ def test_verify_cli_uses_environment_resource(monkeypatch, capsys):
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
         capabilities = None
 
@@ -693,7 +712,7 @@ def test_check_error_cli_reads_one_entry(monkeypatch, capsys):
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __enter__(self):
@@ -717,7 +736,7 @@ def test_check_error_cli_drain_returns_failure_when_errors_found(monkeypatch, ca
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __enter__(self):
@@ -747,7 +766,7 @@ def test_control_cli_sends_command_then_error_post_check(monkeypatch, capsys):
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -790,7 +809,7 @@ def test_control_cli_returns_failure_when_post_check_reports_error(monkeypatch, 
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __enter__(self):
@@ -817,7 +836,7 @@ def test_channel_display_cli_turns_channel_on_then_checks_error(monkeypatch, cap
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -885,7 +904,7 @@ def test_channel_display_cli_queries_display_then_checks_error(monkeypatch, caps
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -940,7 +959,7 @@ def test_channel_display_cli_rejects_channel_above_detected_capabilities(monkeyp
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -988,7 +1007,7 @@ def test_channel_scale_cli_sets_scale_then_checks_error(monkeypatch, capsys):
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1043,7 +1062,7 @@ def test_channel_scale_cli_queries_scale_then_checks_error(monkeypatch, capsys):
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1098,7 +1117,7 @@ def test_channel_offset_cli_sets_offset_then_checks_error(monkeypatch, capsys):
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1153,7 +1172,7 @@ def test_channel_offset_cli_queries_offset_then_checks_error(monkeypatch, capsys
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1208,7 +1227,7 @@ def test_channel_scale_cli_rejects_channel_above_detected_capabilities(monkeypat
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1628,7 +1647,7 @@ def test_timebase_scale_cli_sets_scale_then_checks_error(monkeypatch, capsys):
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1681,7 +1700,7 @@ def test_timebase_scale_cli_queries_scale_then_checks_error(monkeypatch, capsys)
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1734,7 +1753,7 @@ def test_timebase_position_cli_sets_position_then_checks_error(monkeypatch, caps
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1787,7 +1806,7 @@ def test_timebase_position_cli_queries_position_then_checks_error(monkeypatch, c
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1840,7 +1859,7 @@ def test_trigger_edge_cli_configures_edge_trigger_then_checks_error(monkeypatch,
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1909,7 +1928,7 @@ def test_trigger_edge_cli_queries_edge_trigger_then_checks_error(monkeypatch, ca
         level_volts = 0.25
         slope = "positive"
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1956,7 +1975,7 @@ def test_trigger_edge_cli_rejects_missing_configuration_args(monkeypatch, capsys
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -1989,7 +2008,7 @@ def test_capture_cli_writes_csv_and_metadata_then_checks_error(monkeypatch, caps
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2077,7 +2096,7 @@ def test_capture_cli_supports_word_format(monkeypatch, capsys, tmp_path):
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2173,7 +2192,7 @@ def test_capture_cli_writes_multi_channel_csv_and_metadata(monkeypatch, capsys, 
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2248,7 +2267,7 @@ def test_capture_cli_allows_opt_in_time_axis_tolerance(monkeypatch, capsys, tmp_
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2334,7 +2353,7 @@ def test_capture_cli_channel_all_expands_to_detected_model_channels(
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2402,7 +2421,7 @@ def test_capture_cli_channel_all_is_case_insensitive_and_supports_word(
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2467,7 +2486,7 @@ def test_capture_cli_multi_channel_word_uses_plural_api(monkeypatch, capsys, tmp
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2546,7 +2565,7 @@ def test_capture_cli_reports_multi_channel_metadata_permission_error_without_tra
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2624,7 +2643,7 @@ def test_capture_cli_rejects_duplicate_multi_channel_before_capture(monkeypatch,
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2678,7 +2697,7 @@ def test_capture_cli_rejects_channel_all_combined_with_explicit_channel(
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2737,7 +2756,7 @@ def test_capture_cli_rejects_invalid_multi_channel_before_capture(monkeypatch, c
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2789,7 +2808,7 @@ def test_capture_cli_uses_timestamped_default_csv_when_omitted(monkeypatch, caps
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2859,7 +2878,7 @@ def test_capture_cli_reports_csv_permission_error_without_traceback(monkeypatch,
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2947,7 +2966,7 @@ def test_capture_cli_rejects_channel_above_detected_capabilities(monkeypatch, ca
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -2993,7 +3012,7 @@ def test_screenshot_cli_writes_png_then_checks_error(monkeypatch, capsys, tmp_pa
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -3063,7 +3082,7 @@ def test_screenshot_cli_uses_timestamped_default_output_when_omitted(monkeypatch
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -3112,7 +3131,7 @@ def test_screenshot_cli_supports_white_background(monkeypatch, capsys, tmp_path)
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -3180,7 +3199,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -3389,7 +3408,7 @@ def test_measure_results_cli_json_includes_statistics_items(monkeypatch, capsys)
         "+2.48000000000000E+00,+0.0E+00,386"
     )
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = _MeasurementDummyBackend()
 
         def __init__(self):
@@ -3848,7 +3867,7 @@ def test_measure_cli_queries_vpp_then_checks_error(monkeypatch, capsys):
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -3916,7 +3935,7 @@ def test_measure_cli_queries_vrms_then_checks_error(monkeypatch, capsys):
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -3982,7 +4001,7 @@ def test_measure_cli_accepts_risetime_alias_then_checks_error(monkeypatch, capsy
         backend = "backend"
         timeout = 2000
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -4053,7 +4072,7 @@ def test_measure_cli_accepts_freq_alias(monkeypatch, capsys):
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -4121,7 +4140,7 @@ def test_measure_cli_reports_invalid_sentinel_without_losing_raw(monkeypatch, ca
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):
@@ -4194,7 +4213,7 @@ def test_measure_cli_rejects_channel_above_detected_capabilities(monkeypatch, ca
         backend = "backend"
         timeout = None
 
-    class DummyScope:
+    class DummyScope(_DriverContractDummy):
         backend = DummyBackend()
 
         def __init__(self):

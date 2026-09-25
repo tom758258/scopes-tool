@@ -230,6 +230,30 @@ def test_tek_live_metadata_matches_sent_business_commands(monkeypatch, capsys, c
     assert payload["result"].get("commands", [payload["result"].get("command")]) == expected
 
 
+def test_tek_legacy_display_vectors_metadata_matches_sent_command(monkeypatch, capsys):
+    backend = FakeBackend(responses={
+        "*IDN?": "TEKTRONIX,TDS2024B,SN1,1.0",
+        "DISPlay:STYle?": ":DISPLAY:STYLE VECTORS",
+        "*ESR?": "0",
+    })
+    monkeypatch.setattr(
+        runtime.Oscilloscope,
+        "open",
+        staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
+    )
+
+    assert cli.main([
+        "display-vectors", "--on",
+        "--resource", "USB0::FAKE::INSTR", "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert backend.history == [
+        "*IDN?", "DISPlay:STYle VECtors", "*ESR?"
+    ]
+    assert payload["result"]["command"] == "DISPlay:STYle VECtors"
+
+
 def test_live_resource_discovery_reports_unknown_tek_as_unsupported(monkeypatch, capsys):
     backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS9999B,SN1,1.0"})
     monkeypatch.setattr(

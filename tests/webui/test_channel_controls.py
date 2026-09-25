@@ -199,7 +199,7 @@ def test_channel_label_composes_shared_visibility_without_replacing_display_comm
     subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
     reason="Node.js is required for frontend behavior checks",
 )
-def test_generic_command_form_integer_options_render_as_select_and_serialize_integer() -> None:
+def test_generic_command_form_integer_options_render_as_select_and_serialize_integer(tmp_path: Path) -> None:
     measure_fields = next(
         entry["fields"] for entry in command_catalog() if entry["id"] == "measure"
     )
@@ -781,8 +781,11 @@ def test_generic_command_form_integer_options_render_as_select_and_serialize_int
             entry for entry in command_catalog() if entry["id"] == "display-label"
         ))
     )
+    harness_path = tmp_path / "generic-command-form-harness.mjs"
+    harness_path.write_text(script, encoding="utf-8")
     completed = subprocess.run(
-        ["node", "--input-type=module", "--eval", script],
+        ["node", str(harness_path)],
+        cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         encoding="utf-8",
