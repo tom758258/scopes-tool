@@ -2705,6 +2705,39 @@ specified. Pass `-Backend "@py"` to run the same validation with pyvisa-py:
 System VISA and pyvisa-py are separate backend selections for each live
 validation run.
 
+### Tektronix Live Acceptance
+
+Use the dedicated runner with one exact registered Tektronix target and an
+operator-selected VISA resource. It accepts `tektronix-tbs2074b`,
+`tektronix-tds2024b`, or `tektronix-tbs1052b` and `usb` or `tcpip` as the
+connection type. The resource must match that type. System VISA is the default;
+select pyvisa-py explicitly when needed:
+
+```powershell
+.\scripts\live-tektronix-check.ps1 -Target tektronix-tbs2074b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+.\scripts\live-tektronix-check.ps1 -Target tektronix-tds2024b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -Backend "@py"
+```
+
+The runner first checks the detected physical identity against the target and
+stops before state-changing cases on a mismatch. Its default cases query
+supported status and settings and write back current values where the public
+CLI provides a safe path. It skips acquisition actions, autoscale, and storage
+writes by default. `-IncludeAcquisitionActions` leaves acquisition stopped;
+`-IncludeAutoscale` changes front-panel settings without restoring them.
+`-IncludeStorageWrites` requires explicit `-SetupSlot` (1-9) and
+`-ReferenceSlot` (1-2); those slots may be overwritten. The runner does not
+preserve their previous contents.
+
+Results are stored under `.tmp_tests/live_tektronix_check/` in a timestamped
+private directory. The presence of the runner is not hardware validation.
+A PASS case from a run against the specified real resource provides direct
+hardware evidence for that case. N/A cases remain unverified; complete
+acceptance requires an overall PASS result.
+The current CLI has no standalone trigger-type readback, so the runner marks
+the `trigger-mode` case N/A and the complete acceptance result BLOCKED. It
+queries Edge source, slope, coupling, and combined settings but does not write
+them back without that precondition.
+
 ### Live CLI Validation
 
 Run the maintained manual baseline for registered Keysight InfiniiVision
