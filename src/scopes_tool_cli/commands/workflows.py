@@ -275,13 +275,16 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
             result.update(operation.to_json(), state_changing=True)
             print(f"Instrument-side waveform saved as: {args.filename}")
 
+        if args.command == "save-pwd":
+            target = runtime._driver_business_commands(scope, args, [target])[0]
+            result["command"] = target
         runtime._json_update_result(**result)
         print(f"Command: {target}")
         if waits_for_completion:
             print(f"Operation complete query: {system_opc_query()}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -804,9 +807,9 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             print(f"Palette: {state.palette} (raw: {state.raw_palette})")
             print(f"Layout: {state.layout} (raw: {state.raw_layout})")
             print(f"Format: {state.format} (raw: {state.raw_format})")
-            entry = scope.query_system_error()
+            entry = scope.post_command_status()
             runtime._json_record_system_error(entry)
-            print(f"System error: {entry.format()}")
+            print(runtime._post_status_text(entry))
             return 1 if entry.is_error else 0
 
         options = preflight._screenshot_options(args)
@@ -876,9 +879,9 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             print(f"PNG: {written_image}")
         else:
             print(f"BMP: {written_image}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -939,7 +942,7 @@ def _query_system_error_with_temporary_timeout(scope: Oscilloscope, timeout_ms: 
     original_timeout = scope.scpi.timeout
     scope.scpi.set_timeout(timeout_ms)
     try:
-        return scope.query_system_error()
+        return scope.post_command_status()
     finally:
         scope.scpi.set_timeout(original_timeout)
 
@@ -970,9 +973,15 @@ def _cmd_simple_advanced(args: argparse.Namespace, command_name: str) -> int:
             scope.recall_setup(slot=args.slot, file_spec=args.setup_file)
             commands = [setup_recall_command(slot=args.slot, file_spec=args.setup_file)]
             runtime._json_update_result(operation="recall", command=commands[0], slot=args.slot, file=args.setup_file)
+        commands = runtime._driver_business_commands(scope, args, commands)
+        if command_name == "autoscale":
+            runtime._json_update_result(commands=commands)
+        else:
+            runtime._json_update_result(command=commands[0])
         for command in commands:
             print(f"Command: {command}")
-        if command_name == "autoscale" and not getattr(args, "simulate", False):
+        if (command_name == "autoscale" and not getattr(args, "simulate", False)
+                and scope.uses_autoscale_error_recovery()):
             print(
                 "System error timeout ms: "
                 f"{AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS} (temporary)"
@@ -996,9 +1005,9 @@ def _cmd_simple_advanced(args: argparse.Namespace, command_name: str) -> int:
                     scope, AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS
                 )
         else:
-            entry = scope.query_system_error()
+            entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 

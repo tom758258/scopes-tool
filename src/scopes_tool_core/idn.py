@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import re
 from typing import TYPE_CHECKING
 
-from .errors import IDNParseError
+from .errors import IDNParseError, UnsupportedModelError
 
 if TYPE_CHECKING:
     from .identity import PhysicalModelInfo
@@ -27,9 +27,15 @@ class IDN:
 
     @property
     def series(self) -> str | None:
-        """Return the detected InfiniiVision series, if recognized."""
+        """Return the registered series, if this model is recognized."""
 
-        return detect_series(self.model)
+        detected = detect_series(self.model)
+        if detected is not None:
+            return detected
+        try:
+            return self.physical_model.series
+        except UnsupportedModelError:
+            return None
 
     @property
     def physical_model(self) -> PhysicalModelInfo:

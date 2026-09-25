@@ -528,9 +528,9 @@ def _cmd_serial(args: argparse.Namespace) -> int:
                 print(f"Command: {command}")
         else:
             print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         if (
             args.command in {"serial-uart-set", "serial-i2c-set", "serial-spi-set", "serial-can-set"}
             and entry.code == -221
@@ -629,7 +629,7 @@ def _cmd_serial_lister(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
             print(f"Lister CSV: {written_path} ({len(payload)} bytes)")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0

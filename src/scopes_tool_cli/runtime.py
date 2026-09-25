@@ -12,8 +12,9 @@ from scopes_tool_core.capabilities import (
     capabilities_for_model_id,
 )
 from scopes_tool_core.drivers import scope_for_physical_model
+from scopes_tool_core.capabilities import operation_supported
 from scopes_tool_core.errors import OscilloscopeError, UnsupportedModelError
-from scopes_tool_core.identity import physical_model_for_id
+from scopes_tool_core.identity import identify_requires_registered_model, physical_model_for_id
 from scopes_tool_core.run_config import RunModeOptions, resolve_resource, resolve_run_mode
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.search import SEARCH_MODES
@@ -107,8 +108,7 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope:
         if getattr(args, "_worker_live_validation", False):
             scope = _validate_worker_live_identity(args, scope)
         elif isinstance(scope, Oscilloscope):
-            if args.command != "segmented-capture":
-                scope = _select_one_shot_live_driver(args, scope)
+            scope = _select_one_shot_live_driver(args, scope)
         if _JSON_RECORD is not None:
             _JSON_RECORD["backend"] = getattr(scope.backend, "backend", None)
         return scope
@@ -131,7 +131,9 @@ def _select_one_shot_live_driver(
             existing_scope=scope,
         )
     except UnsupportedModelError:
-        if args.command not in _DRIVER_OPTIONAL_LIVE_COMMANDS:
+        if args.command not in _DRIVER_OPTIONAL_LIVE_COMMANDS or (
+            scope.idn is not None and identify_requires_registered_model(scope.idn.vendor)
+        ):
             raise
         selected_scope = scope
         idn = scope.idn
@@ -140,6 +142,10 @@ def _select_one_shot_live_driver(
         selected_scope.idn = idn
         selected_scope.capabilities = scope.capabilities
         selected_scope._preloaded_idn = idn
+        if selected_scope.capabilities is not None and not operation_supported(
+            selected_scope.capabilities, args.command
+        ):
+            raise OscilloscopeError(f"{args.command} is unsupported for {idn.model}")
     return selected_scope
 
 def _validate_worker_live_identity(
@@ -162,6 +168,10 @@ def _validate_worker_live_identity(
             "identity_mismatch: "
             f"expected_model={expected.model_id}; actual_idn={idn.raw}"
         )
+    if selected_scope.capabilities is not None and not operation_supported(
+        selected_scope.capabilities, args.command
+    ):
+        raise OscilloscopeError(f"{args.command} is unsupported for {idn.model}")
     return selected_scope
 
 def _make_simulator_backend(args: argparse.Namespace, resource: str) -> SimulatorBackend:
@@ -290,9 +300,26 @@ def _json_set_files(files: list[dict[str, object]]) -> None:
         _JSON_RECORD["files"] = files
 
 def _json_record_system_error(entry) -> None:
+    if getattr(entry, "is_system_error_queue", True) is False:
+        _json_update_result(post_command_status=entry.to_json())
+        return
     data = _system_error_json(entry)
     if _JSON_RECORD is not None:
         _JSON_RECORD["system_error"] = data
+
+
+def _post_status_text(entry) -> str:
+    return f"{getattr(entry, 'status_label', 'System error')}: {entry.format()}"
+
+
+def _driver_business_commands(scope: Oscilloscope, args: argparse.Namespace, fallback: list[str]) -> list[str]:
+    if scope.capabilities is None:
+        return fallback
+    plan = type(scope).plan_cli_operation(args, scope.capabilities)
+    if plan is None:
+        return fallback
+    planned, _, result = plan
+    return list(result.get("commands", planned))
 
 def _system_error_json(entry) -> dict[str, object]:
     return {

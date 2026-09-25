@@ -5,12 +5,14 @@ from __future__ import annotations
 from .errors import UnsupportedModelError
 from .identity import PhysicalModelInfo
 from .scope import Oscilloscope
+from .tektronix import TektronixOscilloscope
 from .scpi import SCPIBackend
 
 DriverImplementation = type[Oscilloscope]
 
 DRIVER_REGISTRY: dict[str, DriverImplementation] = {
     "keysight-infiniivision": Oscilloscope,
+    "tektronix": TektronixOscilloscope,
 }
 
 

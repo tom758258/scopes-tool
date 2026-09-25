@@ -16,6 +16,7 @@ class VendorInfo:
     display_name: str
     canonical_manufacturer: str
     manufacturer_aliases: tuple[str, ...] = ()
+    require_registered_model_for_identify: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,9 +44,42 @@ VENDOR_REGISTRY = (
             "AGILENT",
         ),
     ),
+    VendorInfo(
+        vendor_id="tektronix",
+        display_name="Tektronix",
+        canonical_manufacturer="TEKTRONIX",
+        require_registered_model_for_identify=True,
+    ),
 )
 
 PHYSICAL_MODEL_REGISTRY = (
+    PhysicalModelInfo(
+        model_id="tektronix-tbs2074b",
+        vendor_id="tektronix",
+        canonical_model="TBS2074B",
+        display_name="Tektronix TBS2074B",
+        series="TBS2000B",
+        capability_profile_id="tektronix-tbs2074b",
+        driver_id="tektronix",
+    ),
+    PhysicalModelInfo(
+        model_id="tektronix-tds2024b",
+        vendor_id="tektronix",
+        canonical_model="TDS2024B",
+        display_name="Tektronix TDS2024B",
+        series="TDS2000B",
+        capability_profile_id="tektronix-tds2024b",
+        driver_id="tektronix",
+    ),
+    PhysicalModelInfo(
+        model_id="tektronix-tbs1052b",
+        vendor_id="tektronix",
+        canonical_model="TBS1052B",
+        display_name="Tektronix TBS1052B",
+        series="TBS1000B",
+        capability_profile_id="tektronix-tbs1052b",
+        driver_id="tektronix",
+    ),
     PhysicalModelInfo(
         model_id="keysight-dsox2004a",
         vendor_id="keysight",
@@ -175,6 +209,13 @@ _PHYSICAL_MODEL_BY_VENDOR_AND_MODEL = _build_model_index(
 )
 _PHYSICAL_MODEL_BY_ID = _build_model_id_index(PHYSICAL_MODEL_REGISTRY)
 _PHYSICAL_MODELS_BY_MODEL_NAME = _build_model_name_index(PHYSICAL_MODEL_REGISTRY)
+
+
+def identify_requires_registered_model(manufacturer: str) -> bool:
+    """Return whether identify must reject an unregistered model for this vendor."""
+
+    vendor = _VENDOR_BY_MANUFACTURER.get(_normalize_manufacturer_key(manufacturer))
+    return vendor is not None and vendor.require_registered_model_for_identify
 
 
 def resolve_physical_model_identity(

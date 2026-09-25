@@ -16,11 +16,11 @@ from scopes_tool_core.identity import (
 from scopes_tool_core.scope import Oscilloscope
 
 
-def test_registered_models_select_keysight_infiniivision_driver():
-    assert set(DRIVER_REGISTRY) == {"keysight-infiniivision"}
+def test_registered_models_select_registered_drivers():
+    assert set(DRIVER_REGISTRY) == {"keysight-infiniivision", "tektronix"}
     assert {
         model.driver_id for model in PHYSICAL_MODEL_REGISTRY
-    } == {"keysight-infiniivision"}
+    } == {"keysight-infiniivision", "tektronix"}
 
     physical_model = physical_model_for_id("keysight-dsox4024a")
 

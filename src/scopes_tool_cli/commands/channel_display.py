@@ -207,6 +207,7 @@ def _cmd_channel_display(args: argparse.Namespace) -> int:
             command = channel_display_query(channel)
             print(f"Planned query: CH{channel} display state")
             enabled = scope.query_channel_display(channel)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="query", command=command, display=enabled)
             print(f"Command: {command}")
             print(f"Display: {'ON' if enabled else 'OFF'}")
@@ -215,12 +216,13 @@ def _cmd_channel_display(args: argparse.Namespace) -> int:
             command = channel_display_command(channel, enabled)
             print(f"Planned change: CH{channel} display {'ON' if enabled else 'OFF'}")
             scope.set_channel_display(channel, enabled)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="set", command=command, display=enabled)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_channel_summary(args: argparse.Namespace) -> int:
@@ -291,6 +293,7 @@ def _cmd_channel_label(args: argparse.Namespace) -> int:
             command = channel_label_query(channel)
             print(f"Planned query: CH{channel} label")
             text = scope.query_channel_label(channel)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="query", command=command, text=text)
             print(f"Command: {command}")
             print(f"Label: {text}")
@@ -299,12 +302,13 @@ def _cmd_channel_label(args: argparse.Namespace) -> int:
             command = channel_label_command(channel, text, scope.capabilities)
             print(f"Planned change: CH{channel} label")
             scope.set_channel_label(channel, text)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="set", command=command, text=text)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_channel_scale(args: argparse.Namespace) -> int:
@@ -329,6 +333,7 @@ def _cmd_channel_scale(args: argparse.Namespace) -> int:
             command = channel_scale_query(channel)
             print(f"Planned query: CH{channel} scale")
             scale = scope.query_channel_scale(channel)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="query", command=command, volts_per_division=scale)
             print(f"Command: {command}")
             print(f"Scale V/div: {scale:.12g}")
@@ -337,12 +342,13 @@ def _cmd_channel_scale(args: argparse.Namespace) -> int:
             command = channel_scale_command(channel, scale)
             print(f"Planned change: CH{channel} scale {scale:.12g} V/div")
             scope.set_channel_scale(channel, scale)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="set", command=command, volts_per_division=scale)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_channel_offset(args: argparse.Namespace) -> int:
@@ -367,6 +373,7 @@ def _cmd_channel_offset(args: argparse.Namespace) -> int:
             command = channel_offset_query(channel)
             print(f"Planned query: CH{channel} offset")
             offset = scope.query_channel_offset(channel)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="query", command=command, volts=offset)
             print(f"Command: {command}")
             print(f"Offset V: {offset:.12g}")
@@ -375,12 +382,13 @@ def _cmd_channel_offset(args: argparse.Namespace) -> int:
             command = channel_offset_command(channel, offset)
             print(f"Planned change: CH{channel} offset {offset:.12g} V")
             scope.set_channel_offset(channel, offset)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="set", command=command, volts=offset)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_channel_coupling(args: argparse.Namespace) -> int:
@@ -405,6 +413,7 @@ def _cmd_channel_coupling(args: argparse.Namespace) -> int:
             command = channel_coupling_query(channel)
             print(f"Planned query: CH{channel} coupling")
             coupling = scope.query_channel_coupling(channel)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="query", command=command, coupling=coupling)
             print(f"Command: {command}")
             print(f"Coupling: {coupling.upper()}")
@@ -413,12 +422,13 @@ def _cmd_channel_coupling(args: argparse.Namespace) -> int:
             command = channel_coupling_command(channel, coupling)
             print(f"Planned change: CH{channel} coupling {coupling.upper()}")
             scope.set_channel_coupling(channel, coupling)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="set", command=command, coupling=coupling)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_channel_probe(args: argparse.Namespace) -> int:
@@ -443,6 +453,7 @@ def _cmd_channel_probe(args: argparse.Namespace) -> int:
             command = channel_probe_ratio_query(channel)
             print(f"Planned query: CH{channel} probe ratio")
             ratio = scope.query_channel_probe_ratio(channel)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="query", command=command, probe_ratio=ratio)
             print(f"Command: {command}")
             print(f"Probe ratio: {ratio:.12g}")
@@ -451,12 +462,13 @@ def _cmd_channel_probe(args: argparse.Namespace) -> int:
             command = channel_probe_ratio_command(channel, ratio)
             print(f"Planned change: CH{channel} probe ratio {ratio:.12g}")
             scope.set_channel_probe_ratio(channel, ratio)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="set", command=command, probe_ratio=ratio)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_channel_bandwidth_limit(args: argparse.Namespace) -> int:
@@ -481,6 +493,7 @@ def _cmd_channel_bandwidth_limit(args: argparse.Namespace) -> int:
             command = channel_bandwidth_limit_query(channel)
             print(f"Planned query: CH{channel} bandwidth limit")
             enabled = scope.query_channel_bandwidth_limit(channel)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="query", command=command, bandwidth_limit=enabled)
             print(f"Command: {command}")
             print(f"Bandwidth limit: {'ON' if enabled else 'OFF'}")
@@ -490,12 +503,13 @@ def _cmd_channel_bandwidth_limit(args: argparse.Namespace) -> int:
             state = "ON" if enabled else "OFF"
             print(f"Planned change: CH{channel} bandwidth limit {state}")
             scope.set_channel_bandwidth_limit(channel, enabled)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(channel=channel, operation="set", command=command, bandwidth_limit=enabled)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
@@ -539,6 +553,7 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_invert_query(channel)
                 print(f"Planned query: CH{channel} invert")
                 enabled = scope.query_channel_invert(channel)
+                scpi = runtime._driver_business_commands(scope, args, [scpi])[0]
                 runtime._json_update_result(channel=channel, operation="query", command=scpi, invert=enabled)
                 print(f"Command: {scpi}")
                 print(f"Invert: {'ON' if enabled else 'OFF'}")
@@ -547,6 +562,7 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_invert_command(channel, enabled)
                 print(f"Planned change: CH{channel} invert {'ON' if enabled else 'OFF'}")
                 scope.set_channel_invert(channel, enabled)
+                scpi = runtime._driver_business_commands(scope, args, [scpi])[0]
                 runtime._json_update_result(channel=channel, operation="set", command=scpi, invert=enabled)
                 print(f"Command: {scpi}")
         elif command == "channel-range":
@@ -599,6 +615,7 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_probe_skew_query(channel)
                 print(f"Planned query: CH{channel} probe skew")
                 skew = scope.query_channel_probe_skew(channel)
+                scpi = runtime._driver_business_commands(scope, args, [scpi])[0]
                 runtime._json_update_result(channel=channel, operation="query", command=scpi, probe_skew_seconds=skew)
                 print(f"Command: {scpi}")
                 print(f"Probe skew s: {skew:.12g}")
@@ -607,14 +624,15 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_probe_skew_command(channel, skew)
                 print(f"Planned change: CH{channel} probe skew {skew:.12g} s")
                 scope.set_channel_probe_skew(channel, skew)
+                scpi = runtime._driver_business_commands(scope, args, [scpi])[0]
                 runtime._json_update_result(channel=channel, operation="set", command=scpi, probe_skew_seconds=skew)
                 print(f"Command: {scpi}")
         else:
             raise ParameterValidationError(f"unsupported channel command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _format_channel_impedance(impedance: str) -> str:
@@ -652,9 +670,9 @@ def _cmd_display_label(args: argparse.Namespace) -> int:
             runtime._json_update_result(operation="set", command=command, display_label=enabled)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_display_common(args: argparse.Namespace) -> int:
@@ -735,9 +753,9 @@ def _cmd_display_common(args: argparse.Namespace) -> int:
                 runtime._json_update_result(**result)
                 print(f"Command: {target}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _format_display_persistence(mode: str | None, seconds: float | None) -> str:
@@ -805,9 +823,9 @@ def _cmd_annotation(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_timebase_scale(args: argparse.Namespace) -> int:
@@ -831,6 +849,7 @@ def _cmd_timebase_scale(args: argparse.Namespace) -> int:
             command = timebase_scale_query()
             print("Planned query: timebase scale")
             scale = scope.query_timebase_scale()
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(operation="query", command=command, seconds_per_division=scale)
             print(f"Command: {command}")
             print(f"Timebase scale s/div: {scale:.12g}")
@@ -839,12 +858,13 @@ def _cmd_timebase_scale(args: argparse.Namespace) -> int:
             command = timebase_scale_command(scale)
             print(f"Planned change: timebase scale {scale:.12g} s/div")
             scope.set_timebase_scale(scale)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(operation="set", command=command, seconds_per_division=scale)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 def _cmd_timebase_position(args: argparse.Namespace) -> int:
@@ -868,6 +888,7 @@ def _cmd_timebase_position(args: argparse.Namespace) -> int:
             command = timebase_position_query()
             print("Planned query: timebase position")
             position = scope.query_timebase_position()
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(operation="query", command=command, position_seconds=position)
             print(f"Command: {command}")
             print(f"Timebase position s: {position:.12g}")
@@ -876,12 +897,13 @@ def _cmd_timebase_position(args: argparse.Namespace) -> int:
             command = timebase_position_command(position)
             print(f"Planned change: timebase position {position:.12g} s")
             scope.set_timebase_position(position)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(operation="set", command=command, position_seconds=position)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -917,7 +939,7 @@ def _cmd_timebase_reference(args: argparse.Namespace) -> int:
             runtime._json_update_result(operation="set", command=command, reference=reference)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0

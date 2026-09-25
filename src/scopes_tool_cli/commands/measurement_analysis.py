@@ -338,9 +338,9 @@ def _cmd_measurement_control(args: argparse.Namespace) -> int:
         runtime._json_update_result(**result)
         for command in commands:
             print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -381,12 +381,15 @@ def _cmd_reference_waveform(args: argparse.Namespace) -> int:
                 label=state.label,
                 raw_label=state.raw_label,
             )
+        commands = runtime._driver_business_commands(scope, args, commands)
+        if "command" in result:
+            result["command"] = commands[0]
         runtime._json_update_result(**result)
         for command in commands:
             print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -494,9 +497,9 @@ def _cmd_dvm(args: argparse.Namespace) -> int:
             print(f"DVM current value: {state.value}")
             print(f"DVM unit: {state.unit}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -579,9 +582,9 @@ def _cmd_demo(args: argparse.Namespace) -> int:
                 print(f"DEMO phase degrees: {degrees}")
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -720,9 +723,9 @@ def _cmd_wgen(args: argparse.Namespace) -> int:
                 print(f"WGEN load: {args.load}")
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -821,9 +824,9 @@ def _cmd_measure_stats(args: argparse.Namespace) -> int:
                 f"stddev={_format_optional_number(record.stddev)}, "
                 f"count={record.count}"
             )
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -936,9 +939,9 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             runtime._json_update_result(**result)
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         diagnostic = _cursor_range_diagnostic(args, entry)
         if diagnostic is not None:
             runtime._json_update_result(diagnostic=diagnostic)
@@ -1054,9 +1057,9 @@ def _cmd_fft(args: argparse.Namespace) -> int:
             )
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1095,9 +1098,9 @@ def _cmd_math_display(args: argparse.Namespace) -> int:
                 command=command,
             )
             print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1152,9 +1155,9 @@ def _cmd_math_vertical(args: argparse.Namespace) -> int:
             )
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1212,9 +1215,9 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
             )
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1268,9 +1271,9 @@ def _cmd_math_composite_source(args: argparse.Namespace) -> int:
             )
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1340,9 +1343,9 @@ def _cmd_math_transform(args: argparse.Namespace) -> int:
             )
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1412,9 +1415,9 @@ def _cmd_math_filter(args: argparse.Namespace) -> int:
             )
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1482,9 +1485,9 @@ def _cmd_math_visualization(args: argparse.Namespace) -> int:
             )
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1509,9 +1512,9 @@ def _cmd_math_clear(args: argparse.Namespace) -> int:
             command=command,
         )
         print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 

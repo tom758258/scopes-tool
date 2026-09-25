@@ -14,6 +14,7 @@ from scopes_tool_core import (
     SEQUENCE_MAX_TOTAL_STEP_EXECUTIONS,
     capabilities_for_model_id,
 )
+from scopes_tool_core.capabilities import operation_supported
 from scopes_tool_core.cleanup import CLEANUP_PROFILES
 from scopes_tool_core.identity import PHYSICAL_MODEL_REGISTRY
 from scopes_tool_core.dvm import DVM_MODES
@@ -2382,6 +2383,12 @@ def _model_command_presentation(
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
         if field.get("type") == "multi-enum" and name == "channels":
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
+        if entry["id"] == "acquisition" and name == "type" and capabilities.acquisition_modes is not None:
+            override["options"] = capabilities.acquisition_modes
+        if entry["id"] == "acquisition" and name == "count" and capabilities.average_counts is not None:
+            override["options"] = capabilities.average_counts
+            override["minimum"] = min(capabilities.average_counts)
+            override["maximum"] = max(capabilities.average_counts)
         if field.get("type") == "integer" and name == "function":
             override["maximum"] = capabilities.math_function_count
             if entry["category"] == "FFT / MATH":
@@ -2508,7 +2515,8 @@ def _model_command_presentation(
             override["options"] = tuple(
                 value for value in DEMO_FUNCTIONS if value in capabilities.demo_functions
             )
-        if entry["id"] == "wgen-frequency" and name == "frequency_hz":
+        if (entry["id"] == "wgen-frequency" and name == "frequency_hz"
+                and capabilities.supports_wgen):
             # Presentation-only range hint projected from Core-owned limits.
             # Deliberately not named minimum/maximum so backend and frontend
             # constraint enforcement stay untouched.
@@ -2536,6 +2544,8 @@ def _model_command_presentation(
 
 
 def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: Any) -> bool:
+    if not operation_supported(capabilities, entry["id"]):
+        return False
     command_id = entry["id"]
     category = entry["category"]
     if command_id == "measure-results":

@@ -75,6 +75,8 @@ def resolve_run_mode(options: RunModeOptions) -> RunMode:
             )
         physical_model_for_id(options.planning_physical_model_id)
         capabilities = capabilities_for_model_id(options.planning_physical_model_id)
+        if not capabilities.supports_simulator:
+            raise OscilloscopeError("Simulator is unavailable for this physical model")
         validate_simulator_args(options, capabilities)
         return "simulate"
     if options.dry_run:
@@ -132,10 +134,13 @@ def make_simulator_backend(
         raise OscilloscopeError(
             "simulate mode requires a planning physical model ID"
         )
+    capabilities = capabilities_for_model_id(options.planning_physical_model_id)
+    if not capabilities.supports_simulator:
+        raise OscilloscopeError("Simulator is unavailable for this physical model")
     kwargs = simulator_backend_kwargs(
         options,
         resource,
-        capabilities_for_model_id(options.planning_physical_model_id),
+        capabilities,
     )
     backend = SimulatorBackend(**kwargs)
     if instrument_state is not None:

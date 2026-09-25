@@ -54,6 +54,30 @@ class ScopeCapabilities:
     segmented_max_segments: int = 0
     supports_segmented_waveform_all: bool = False
     external_trigger_range_probe_1x_values: tuple[float, ...] = ()
+    supported_operations: frozenset[str] | None = None
+    supports_simulator: bool = True
+    acquisition_modes: tuple[str, ...] | None = None
+    average_counts: tuple[int, ...] | None = None
+
+
+_TEK_COMMON_OPERATIONS = frozenset({
+    "identify", "list-resources", "run", "stop-acquisition", "single",
+    "force-trigger", "acquisition", "autoscale", "timebase-scale",
+    "channel-display", "channel-scale", "channel-coupling", "channel-probe",
+    "channel-bandwidth-limit", "channel-invert", "reference-save",
+    "reference-display", "save-pwd", "setup-save", "setup-recall",
+    "system-status-byte", "system-clear-status", "system-opc",
+    "system-standard-event", "trigger-edge", "trigger-edge-source",
+    "trigger-edge-slope", "trigger-edge-coupling", "trigger-mode",
+    "trigger-sweep", "trigger-holdoff",
+})
+
+
+def operation_supported(capabilities: ScopeCapabilities, operation: str) -> bool:
+    """Return whether a public operation is admitted by this model profile."""
+
+    allowed = capabilities.supported_operations
+    return allowed is None or operation in allowed
 
 
 _DEMO_COMMON_FUNCTIONS = frozenset(
@@ -70,6 +94,50 @@ _DEMO_3000X_EXTENSIONS = frozenset(
 
 
 _CAPABILITY_PROFILES = {
+    "tektronix-tbs2074b": ScopeCapabilities(
+        series="TBS2000B", analog_channels=4,
+        default_waveform_points=1000, safe_max_waveform_points=1000,
+        supports_word_format=False, supports_raw_points_mode=False,
+        supports_measurements=False, supports_delay_measurement=False,
+        supports_screenshot=False, supports_segmented_memory=False,
+        supports_serial_decode=False, reference_waveforms=2,
+        supports_simulator=False,
+        acquisition_modes=("normal", "peak", "average", "high_resolution"),
+        average_counts=(2, 4, 8, 16, 32, 64, 128, 256, 512),
+        supports_channel_label=True, channel_label_max_length=30,
+        supported_operations=_TEK_COMMON_OPERATIONS | {
+            "channel-offset", "channel-label", "channel-probe-skew",
+            "trigger-edge-level",
+        },
+    ),
+    "tektronix-tds2024b": ScopeCapabilities(
+        series="TDS2000B", analog_channels=4,
+        default_waveform_points=1000, safe_max_waveform_points=1000,
+        supports_word_format=False, supports_raw_points_mode=False,
+        supports_measurements=False, supports_delay_measurement=False,
+        supports_screenshot=False, supports_segmented_memory=False,
+        supports_serial_decode=False, reference_waveforms=2,
+        supports_simulator=False,
+        acquisition_modes=("normal", "peak", "average"),
+        average_counts=(4, 16, 64, 128),
+        supported_operations=_TEK_COMMON_OPERATIONS | {
+            "timebase-position",
+        },
+    ),
+    "tektronix-tbs1052b": ScopeCapabilities(
+        series="TBS1000B", analog_channels=2,
+        default_waveform_points=1000, safe_max_waveform_points=1000,
+        supports_word_format=False, supports_raw_points_mode=False,
+        supports_measurements=False, supports_delay_measurement=False,
+        supports_screenshot=False, supports_segmented_memory=False,
+        supports_serial_decode=False, reference_waveforms=2,
+        supports_simulator=False,
+        acquisition_modes=("normal", "peak", "average"),
+        average_counts=(4, 16, 64, 128),
+        supported_operations=_TEK_COMMON_OPERATIONS | {
+            "timebase-position",
+        },
+    ),
     "keysight-infiniivision-2000x": ScopeCapabilities(
         series="2000X",
         analog_channels=4,

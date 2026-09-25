@@ -15,7 +15,6 @@ from scopes_tool_core.acquisition import (
     record_length_query,
     sample_rate_maximum_query,
     sample_rate_query,
-    validate_acquisition_count,
 )
 from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 
@@ -70,7 +69,7 @@ def _cmd_sample_rate(args: argparse.Namespace) -> int:
         else:
             result["sample_rate_hz"] = sample_rate_hz
         runtime._json_update_result(**result)
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
@@ -116,7 +115,7 @@ def _cmd_segmented_memory(args: argparse.Namespace) -> int:
                 configured_segments=None,
             )
             print("Disabled segmented memory")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
@@ -152,7 +151,7 @@ def _cmd_acquisition_points(args: argparse.Namespace) -> int:
             unit="points",
             scpi_command=acquisition_points_query(),
         )
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
@@ -193,7 +192,7 @@ def _cmd_record_length(args: argparse.Namespace) -> int:
             unit="points",
             scpi_command=record_length_query(),
         )
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
         print("System error: " + entry.format())
         return 1 if entry.is_error else 0
@@ -227,27 +226,32 @@ def _cmd_acquisition(args: argparse.Namespace) -> int:
         if args.acq_query:
             print("Planned query: acquisition type and average count")
             config = scope.query_acquisition_config()
-            runtime._json_update_result(operation="query", type=config.type, count=config.count, commands=[acquisition_type_query(), acquisition_count_query()])
+            commands = runtime._driver_business_commands(scope, args, [acquisition_type_query(), acquisition_count_query()])
+            runtime._json_update_result(operation="query", type=config.type, count=config.count, commands=commands)
             print(f"Acquisition type: {config.type}")
             print(f"Average count: {config.count}")
-            print(f"Command: {acquisition_type_query()}")
-            print(f"Command: {acquisition_count_query()}")
+            for command in commands:
+                print(f"Command: {command}")
         elif args.acq_type is not None:
             normalized_type = normalize_acquisition_type(args.acq_type)
+            validated_count = scope.validate_acquisition_count(args.acq_count) if args.acq_count is not None else None
+            fallback = [acquisition_type_command(normalized_type)]
+            if validated_count is not None:
+                fallback.append(acquisition_count_command(validated_count))
+            commands = runtime._driver_business_commands(scope, args, fallback)
             print(f"Planned change: acquisition type {args.acq_type}")
-            print(f"Command: {acquisition_type_command(normalized_type)}")
+            print(f"Command: {commands[0]}")
             scope.set_acquisition_type(args.acq_type)
-            runtime._json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=None, commands=[acquisition_type_command(normalized_type)])
-            if args.acq_count is not None:
-                validated_count = validate_acquisition_count(args.acq_count)
+            runtime._json_update_result(operation="set", type=args.acq_type, scpi_type=commands[0].split(" ", 1)[1], count=None, commands=commands[:1])
+            if validated_count is not None:
                 print(f"Planned change: acquisition average count {validated_count}")
-                print(f"Command: {acquisition_count_command(validated_count)}")
+                print(f"Command: {commands[1]}")
                 scope.set_acquisition_count(validated_count)
-                runtime._json_update_result(operation="set", type=args.acq_type, scpi_type=normalized_type, count=validated_count, commands=[acquisition_type_command(normalized_type), acquisition_count_command(validated_count)])
+                runtime._json_update_result(operation="set", type=args.acq_type, scpi_type=commands[0].split(" ", 1)[1], count=validated_count, commands=commands)
         else:
             raise OscilloscopeError("acquisition command requires --query or --type")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0

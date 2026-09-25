@@ -27,6 +27,9 @@ class FakeLiveScope:
     def close(self) -> None:
         self.closed = True
 
+    def post_webui_operation_status(self, operation: str) -> None:
+        pass
+
 
 def live_impedance_request(browser_model: str) -> dict:
     return commands.validate_job_request(

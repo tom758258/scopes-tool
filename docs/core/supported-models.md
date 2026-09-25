@@ -10,9 +10,8 @@ remain authoritative for unavailable hardware or options.
 
 ## Canonical Physical Model Identity
 
-Scopes Tool exposes a vendor-neutral product API while the supported hardware
-family is Keysight InfiniiVision. The canonical
-physical model registry contains:
+Scopes Tool exposes a vendor-neutral product API for the registered Keysight
+InfiniiVision and Tektronix models. The canonical physical model registry contains:
 
 | Canonical physical model ID | Manufacturer | Model | Series | Capability profile ID | Driver ID |
 | --- | --- | --- | --- | --- | --- |
@@ -20,20 +19,23 @@ physical model registry contains:
 | `keysight-dsox3024a` | Keysight Technologies | DSOX3024A | 3000X | `keysight-infiniivision-3000x` | `keysight-infiniivision` |
 | `keysight-dsox4024a` | Keysight Technologies | DSOX4024A | 4000X | `keysight-infiniivision-4000x` | `keysight-infiniivision` |
 | `keysight-dsox4034a` | Keysight Technologies | DSOX4034A | 4000X | `keysight-infiniivision-4000x` | `keysight-infiniivision` |
+| `tektronix-tbs2074b` | Tektronix | TBS2074B | TBS2000B | `tektronix-tbs2074b` | `tektronix` |
+| `tektronix-tds2024b` | Tektronix | TDS2024B | TDS2000B | `tektronix-tds2024b` | `tektronix` |
+| `tektronix-tbs1052b` | Tektronix | TBS1052B | TBS1000B | `tektronix-tbs1052b` | `tektronix` |
 
 Canonical registration identifies a physical model. Each registered model
 explicitly selects its runtime capability profile.
 
 Every registered physical model is protected by a hardware-free consistency
-gate covering vendor identity, capability lookup, driver selection, and
-deterministic simulator identity resolution.
+gate covering vendor identity, capability lookup, and driver selection.
+Simulator identity resolution applies to simulator-enabled models.
 
 Core has an explicit driver-selection boundary keyed by each physical model's
-registered driver ID. The only currently registered runtime driver is
-`keysight-infiniivision`. Live selection follows the canonical physical model
-resolved from the detected `*IDN?` identity; planning and expected identities
-cannot override it. Unknown vendors, physical models, or missing or
-unregistered driver IDs fail closed.
+registered driver ID. The registered runtime drivers are
+`keysight-infiniivision` and `tektronix`. Live selection follows the canonical
+physical model resolved from the detected `*IDN?` identity; planning and
+expected identities cannot override it. Unknown vendors, physical models,
+or missing or unregistered driver IDs fail closed.
 
 ## VISA Backend Boundary
 
@@ -48,15 +50,18 @@ recognized. There is no current Scopes live Bluetooth support scope.
 
 Core resolves live `*IDN?` manufacturer and model fields to a canonical
 physical model ID, then follows the registered capability profile ID. Dry-run
-and simulator `--model` values are canonical physical model IDs. Simulator
-manufacturer/model IDN fields and capabilities are derived from that same
-registry entry.
+`--model` values are canonical physical model IDs. Simulation is available for
+the registered Keysight models. The simulator's manufacturer/model IDN fields
+and capabilities are derived from that same registry entry.
 
 | Profile ID | Series | Registered models | Analog channels |
 | --- | --- | ---: | --- |
 | `keysight-infiniivision-2000x` | 2000X | DSOX2004A | 4 |
 | `keysight-infiniivision-3000x` | 3000X | DSOX3024A | 4 |
 | `keysight-infiniivision-4000x` | 4000X | DSOX4024A, DSOX4034A | 4 |
+| `tektronix-tbs2074b` | TBS2000B | TBS2074B | 4 |
+| `tektronix-tds2024b` | TDS2000B | TDS2024B | 4 |
+| `tektronix-tbs1052b` | TBS1000B | TBS1052B | 2 |
 
 A model string that merely resembles a DSO-X or MSO-X series model is not
 sufficient for capability selection. Unregistered names such as `DSOX4054A`
@@ -70,7 +75,15 @@ when it does not match the detected identity.
 
 ## Capability Summary
 
-All supported series profiles currently expose:
+The Tektronix profiles admit only their listed existing operations. The shared
+run, acquisition, channel, reference, setup, status, and Edge trigger controls
+follow the [Tektronix support matrix](tektronix-support-matrix.md). Capture,
+measurements, screenshots, and `check-error` are unavailable on these profiles.
+Tektronix dry-run produces Tektronix commands; the stateful simulator does not
+support these models.
+
+The following Keysight InfiniiVision capability details apply to the Keysight
+profiles:
 
 ### Instrument-Side Math Matrix
 

@@ -142,9 +142,9 @@ def _cmd_serial_search(args: argparse.Namespace) -> int:
             for command in scpi_cmds:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -225,18 +225,22 @@ def _cmd_trigger_edge(args: argparse.Namespace) -> int:
                 )
             print("Planned query: edge trigger source, level, and slope")
             state = scope.query_trigger_edge()
+            commands = runtime._driver_business_commands(
+                scope, args,
+                [edge_trigger_source_query(), edge_trigger_level_query(), edge_trigger_slope_query()],
+            )
             runtime._json_update_result(
                 operation="query",
-                commands=[edge_trigger_source_query(), edge_trigger_level_query(), edge_trigger_slope_query()],
+                commands=commands,
                 source_channel=state.source_channel,
                 level_volts=state.level_volts,
                 slope=state.slope,
             )
-            print(f"Command: {edge_trigger_source_query()}")
+            print(f"Command: {commands[0]}")
             print(f"Source: CH{state.source_channel}")
-            print(f"Command: {edge_trigger_level_query()}")
+            print(f"Command: {commands[1]}")
             print(f"Level V: {state.level_volts:.12g}")
-            print(f"Command: {edge_trigger_slope_query()}")
+            print(f"Command: {commands[2]}")
             print(f"Slope: {state.slope}")
         else:
             if args.source_channel is None or args.level is None or args.slope is None:
@@ -251,21 +255,23 @@ def _cmd_trigger_edge(args: argparse.Namespace) -> int:
                 f"slope {args.slope}"
             )
             scope.configure_trigger_edge(channel, level, slope)
+            commands = runtime._driver_business_commands(
+                scope, args,
+                [trigger_mode_edge_command(), edge_trigger_source_command(channel), edge_trigger_level_command(level), edge_trigger_slope_command(slope)],
+            )
             runtime._json_update_result(
                 operation="set",
-                commands=[trigger_mode_edge_command(), edge_trigger_source_command(channel), edge_trigger_level_command(level), edge_trigger_slope_command(slope)],
+                commands=commands,
                 source_channel=channel,
                 level_volts=level,
                 slope=slope,
             )
-            print(f"Command: {trigger_mode_edge_command()}")
-            print(f"Command: {edge_trigger_source_command(channel)}")
-            print(f"Command: {edge_trigger_level_command(level)}")
-            print(f"Command: {edge_trigger_slope_command(slope)}")
+            for command in commands:
+                print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -291,6 +297,7 @@ def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
             command = trigger_edge_source_query()
             print("Planned query: Edge Trigger source")
             state = scope.query_trigger_edge_source()
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"Source: {state.source or state.raw_source}")
@@ -315,6 +322,7 @@ def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
                 source=source,
                 source_channel=source_channel,
             )
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(
                 operation="set",
                 command=command,
@@ -323,9 +331,9 @@ def _cmd_trigger_edge_source(args: argparse.Namespace) -> int:
             )
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -348,6 +356,7 @@ def _cmd_trigger_edge_slope(args: argparse.Namespace) -> int:
             command = edge_trigger_slope_query()
             print("Planned query: Edge Trigger slope")
             state = scope.query_trigger_edge_slope()
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"Slope: {state.slope or state.raw_slope}")
@@ -356,12 +365,13 @@ def _cmd_trigger_edge_slope(args: argparse.Namespace) -> int:
             command = edge_trigger_slope_command(normalize_edge_slope(slope))
             print(f"Planned change: Edge Trigger slope {slope}")
             scope.configure_trigger_edge_slope(slope=slope)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(operation="set", command=command, slope=slope)
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -388,6 +398,7 @@ def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
             command = edge_trigger_level_channel_query(channel)
             print(f"Planned query: Edge Trigger level for CH{channel}")
             state = scope.query_trigger_edge_level(source_channel=channel)
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"Command: {command}")
             print(f"Level: {state.level_volts} V")
@@ -399,6 +410,7 @@ def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
                 source_channel=channel,
                 level_volts=level_volts,
             )
+            command = runtime._driver_business_commands(scope, args, [command])[0]
             runtime._json_update_result(
                 operation="set",
                 command=command,
@@ -407,9 +419,9 @@ def _cmd_trigger_edge_level(args: argparse.Namespace) -> int:
             )
             print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -448,9 +460,9 @@ def _cmd_external_trigger_range(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
             print(f"External trigger range V: {range_volts}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -489,9 +501,9 @@ def _cmd_trigger_edge_external_level(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
             print(f"External Edge level V: {level_volts}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -555,9 +567,9 @@ def _cmd_external_trigger_input(args: argparse.Namespace) -> int:
             print(f"External trigger units: {state.units}")
             print(f"External trigger bandwidth limit enabled: {state.bandwidth_limit_enabled}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -645,9 +657,9 @@ def _cmd_search(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
             print(f"Search count: {state.count}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -674,6 +686,7 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_sweep_query()
                 print("Planned query: trigger sweep mode")
                 state = scope.query_trigger_sweep()
+                command = runtime._driver_business_commands(scope, args, [command])[0]
                 runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"Mode: {state.mode}")
@@ -681,6 +694,7 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_sweep_command(args.mode)
                 print(f"Planned change: trigger sweep {args.mode}")
                 scope.configure_trigger_sweep(args.mode)
+                command = runtime._driver_business_commands(scope, args, [command])[0]
                 runtime._json_update_result(
                     operation="configure",
                     command=command,
@@ -732,6 +746,7 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_edge_coupling_query()
                 print("Planned query: Edge Trigger coupling")
                 state = scope.query_trigger_edge_coupling()
+                command = runtime._driver_business_commands(scope, args, [command])[0]
                 runtime._json_update_result(operation="query", command=command, **state.to_json())
                 print(f"Command: {command}")
                 print(f"Coupling: {state.coupling}")
@@ -739,6 +754,7 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 command = trigger_edge_coupling_command(args.coupling)
                 print(f"Planned change: Edge Trigger coupling {args.coupling}")
                 scope.configure_trigger_edge_coupling(args.coupling)
+                command = runtime._driver_business_commands(scope, args, [command])[0]
                 runtime._json_update_result(
                     operation="set",
                     command=command,
@@ -765,9 +781,9 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
                 )
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -851,9 +867,9 @@ def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -941,9 +957,9 @@ def _cmd_trigger_runt(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1030,9 +1046,9 @@ def _cmd_trigger_transition(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1120,9 +1136,9 @@ def _cmd_trigger_delay(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1210,9 +1226,9 @@ def _cmd_trigger_setup_hold(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1288,9 +1304,9 @@ def _cmd_trigger_edge_burst(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1359,9 +1375,9 @@ def _cmd_trigger_tv(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1417,9 +1433,9 @@ def _cmd_trigger_pattern(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1468,9 +1484,9 @@ def _cmd_trigger_or(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -1487,8 +1503,9 @@ def _cmd_trigger_holdoff(args: argparse.Namespace) -> int:
         print(f"Model: {idn.model}")
         if args.holdoff_query:
             seconds = scope.query_trigger_holdoff()
-            runtime._json_update_result(operation="query", command=trigger_holdoff_query(), seconds=seconds)
-            print(f"Command: {trigger_holdoff_query()}")
+            command = runtime._driver_business_commands(scope, args, [trigger_holdoff_query()])[0]
+            runtime._json_update_result(operation="query", command=command, seconds=seconds)
+            print(f"Command: {command}")
             print(f"Holdoff seconds: {seconds:.12g}")
         else:
             seconds = validate_trigger_holdoff(args.holdoff_seconds)
@@ -1496,11 +1513,11 @@ def _cmd_trigger_holdoff(args: argparse.Namespace) -> int:
             commands = trigger_holdoff_commands(
                 seconds, series=scope.capabilities.series
             )
+            commands = runtime._driver_business_commands(scope, args, commands)
             runtime._json_update_result(operation="set", command=commands[-1], commands=commands, seconds=seconds)
             for command in commands:
                 print(f"Command: {command}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
-

@@ -116,7 +116,10 @@ from scopes_tool_core.planning import (
 from scopes_tool_core.capabilities import (
     ScopeCapabilities,
     capabilities_for_model_id,
+    operation_supported,
 )
+from scopes_tool_core.drivers import driver_for_physical_model
+from scopes_tool_core.identity import identify_requires_registered_model, physical_model_for_id
 from scopes_tool_core.channel import (
     channel_bandwidth_limit_command,
     channel_bandwidth_limit_query,
@@ -177,6 +180,7 @@ from scopes_tool_core.dvm import (
 from scopes_tool_core.errors import (
     OscilloscopeError,
     ParameterValidationError,
+    UnsupportedModelError,
 )
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.measurements import (
@@ -718,7 +722,11 @@ def _json_envelope(args: argparse.Namespace, *, ok: bool, mode: str) -> dict[str
 def _dry_run_payload(args: argparse.Namespace) -> dict[str, object]:
     payload = _json_envelope(args, ok=True, mode="dry_run")
     capabilities = capabilities_for_model_id(args.model)
-    planned, files, result = _dry_run_plan(args, capabilities)
+    if not operation_supported(capabilities, args.command):
+        raise ParameterValidationError(f"{args.command} is unsupported for {args.model}")
+    driver = driver_for_physical_model(physical_model_for_id(args.model))
+    driver_plan = driver.plan_cli_operation(args, capabilities)
+    planned, files, result = driver_plan if driver_plan is not None else _dry_run_plan(args, capabilities)
     payload["scpi"]["planned"] = planned
     payload["files"] = files
     payload["result"] = result
@@ -2895,6 +2903,18 @@ def _print_live_resources(
             except OscilloscopeError:
                 continue
 
+        if identify_requires_registered_model(idn.vendor):
+            try:
+                _ = idn.physical_model
+            except UnsupportedModelError:
+                verification_failures.append({
+                    "resource": resource,
+                    "live": False,
+                    "raw_idn": idn.raw,
+                    "detail": "Unsupported physical oscilloscope model",
+                })
+                continue
+
         live_count += 1
         live_resources.append({"resource": resource, "idn": runtime._idn_object_json(idn)})
         print(f"  {resource}")
@@ -3392,7 +3412,7 @@ def _run_sweep_measurement(
 ) -> dict[str, object]:
     try:
         result = scope.query_measurement(channel, item)
-        system_error = scope.query_system_error()
+        system_error = scope.post_command_status()
         runtime._json_record_system_error(system_error)
         return {
             "command": command,
@@ -3420,7 +3440,7 @@ def _run_sweep_pair_measurement(
 ) -> dict[str, object]:
     try:
         result = scope.query_pair_measurement(source_channel, reference_channel, item)
-        system_error = scope.query_system_error()
+        system_error = scope.post_command_status()
         runtime._json_record_system_error(system_error)
         return {
             "command": command,
@@ -3441,7 +3461,7 @@ def _run_sweep_pair_measurement(
 
 def _query_system_error_best_effort(scope: Oscilloscope):
     try:
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
         return entry
     except OscilloscopeError:

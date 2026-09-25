@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from scopes_tool_core import capabilities_for_model_id, normalize_sequence_document
+from scopes_tool_core.capabilities import operation_supported
 from scopes_tool_core.acquisition import (
     normalize_acquisition_type,
     validate_acquisition_count,
@@ -921,6 +922,10 @@ def _validate_parameters(
     mode: str,
     model_id: str | None,
 ) -> None:
+    if model_id is not None and not operation_supported(
+        capabilities_for_model_id(model_id), command
+    ):
+        raise WebUIRequestError(f"{command} is unsupported for {model_id}")
     if command == "sequence":
         try:
             parameters["document"] = normalize_sequence_document(
@@ -962,6 +967,8 @@ def _validate_parameters(
                 parameters["type"] = _normalize_acquisition_type(parameters["type"])
             except Exception as exc:
                 raise WebUIRequestError(str(exc)) from exc
+            if capabilities.acquisition_modes is not None and parameters["type"] not in capabilities.acquisition_modes:
+                raise WebUIRequestError("acquisition type is unsupported for this model")
         if "count" in parameters:
             try:
                 parameters["count"] = validate_acquisition_count(
@@ -969,6 +976,8 @@ def _validate_parameters(
                 )
             except Exception as exc:
                 raise WebUIRequestError(str(exc)) from exc
+            if capabilities.average_counts is not None and parameters["count"] not in capabilities.average_counts:
+                raise WebUIRequestError("average count is unsupported for this model")
         if mode == "dry-run" and action != "query":
             raise WebUIRequestError("dry-run acquisition supports query only")
     elif command == "timebase-scale":

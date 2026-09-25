@@ -68,7 +68,7 @@ def _cmd_check_error(args: argparse.Namespace) -> int:
         entry = scope.query_system_error()
         runtime._json_update_result(drain=False, max_reads=1, entries=[runtime._system_error_json(entry)])
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -83,11 +83,17 @@ def _cmd_control(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         runtime._print_session_header(scope, resource)
         getattr(scope, method_name)()
-        runtime._json_update_result(action=method_name, command=command)
-        print(f"Command: {command}")
-        entry = scope.query_system_error()
+        commands = runtime._driver_business_commands(scope, args, [command])
+        runtime._json_update_result(
+            action=method_name,
+            command=commands[-1],
+            **({"commands": commands} if len(commands) > 1 else {}),
+        )
+        for item in commands:
+            print(f"Command: {item}")
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -154,11 +160,13 @@ def _cmd_system_status(args: argparse.Namespace) -> int:
             state = scope.query_system_options()
             runtime._json_update_result(operation="query", command=command, **state.to_json())
             print(f"System options: {', '.join(state.options)}")
+        command = runtime._driver_business_commands(scope, args, [command])[0]
+        runtime._json_update_result(command=command)
         print(f"Command: {command}")
 
-        entry = scope.query_system_error()
+        entry = scope.post_command_status(args.command)
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -181,15 +189,16 @@ def _cmd_force_trigger(args: argparse.Namespace) -> int:
 
         print("Planned change: force one trigger event")
         scope.force_trigger()
+        commands = runtime._driver_business_commands(scope, args, [force_trigger_command()])
         runtime._json_update_result(
             operation="force-trigger",
             forced=True,
-            scpi_command=force_trigger_command(),
+            scpi_command=commands[0],
         )
-        print("Command: " + force_trigger_command())
-        entry = scope.query_system_error()
+        print("Command: " + commands[0])
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print("System error: " + entry.format())
+        print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
 
 
@@ -216,9 +225,9 @@ def _cmd_single_wait(
         result = scope.single_wait(config, stop_requested=stop_requested)
         runtime._json_update_result(operation="single-wait", **result.to_json(config))
         print(f"Trigger wait outcome: {result.outcome}")
-        entry = scope.query_system_error()
+        entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
-        print(f"System error: {entry.format()}")
+        print(runtime._post_status_text(entry))
         return 0 if not entry.is_error and result.outcome in {"natural", "forced"} else 1
 
 

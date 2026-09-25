@@ -151,6 +151,8 @@ def execute_command(
             sample_reporter=sample_reporter,
             progress_reporter=progress_reporter,
         )
+        if mode == "live":
+            scope.post_webui_operation_status(command)
         if mode == "simulate" and simulator_state_reporter is not None:
             simulator_state_reporter(scope.backend.export_instrument_state())
         return execution
@@ -168,6 +170,18 @@ def _execute_dry_run(
     artifact_dir: Path,
 ) -> dict[str, Any]:
     capabilities = capabilities_for_model_id(model_id)
+    if command == "acquisition":
+        from scopes_tool_core.drivers import driver_for_physical_model
+        from scopes_tool_core.identity import physical_model_for_id
+
+        driver = driver_for_physical_model(physical_model_for_id(model_id))
+        driver_plan = driver.plan_webui_acquisition(parameters, capabilities)
+        if driver_plan is not None:
+            return {
+                "exit_code": 0,
+                "result": {"status": "planned", "model_id": model_id, "planned_scpi": driver_plan},
+                "artifacts": [],
+            }
     if command == "sequence":
         save_results = parameters.get("save_results", True)
         plan = plan_sequence(
@@ -1210,6 +1224,8 @@ def _execute_trigger_search_serial_segmented_workflow_command(
 def _execute_acquisition(scope: Any, parameters: Mapping[str, Any]) -> dict[str, Any]:
     action = parameters["action"]
     if action == "set":
+        if "count" in parameters:
+            scope.validate_acquisition_count(parameters["count"])
         if "type" in parameters:
             scope.set_acquisition_type(parameters["type"])
         if "count" in parameters:

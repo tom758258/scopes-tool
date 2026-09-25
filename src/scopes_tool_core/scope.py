@@ -222,6 +222,40 @@ class Oscilloscope:
 
         return parse_system_error(self.scpi.query(":SYSTem:ERRor?"))
 
+    def post_command_status(self, operation: str | None = None) -> SystemErrorEntry:
+        """Check the result of an ordinary command using this driver's status path."""
+
+        return self.query_system_error()
+
+    def post_webui_operation_status(self, operation: str) -> object | None:
+        """Check a completed WebUI operation when required by this driver."""
+
+        return None
+
+    def uses_autoscale_error_recovery(self) -> bool:
+        """Whether autoscale uses the existing undefined-header retry."""
+
+        return True
+
+    def validate_acquisition_count(self, count: int) -> int:
+        """Validate a requested averaging count before changing acquisition mode."""
+
+        from .acquisition import validate_acquisition_count
+
+        return validate_acquisition_count(count)
+
+    @classmethod
+    def plan_cli_operation(cls, args: object, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]] | None:
+        """Return a driver-owned CLI plan when one is needed."""
+
+        return None
+
+    @classmethod
+    def plan_webui_acquisition(cls, parameters: object, capabilities: ScopeCapabilities) -> list[str] | None:
+        """Return a driver-owned WebUI acquisition plan when needed."""
+
+        return None
+
     def drain_system_errors(self, max_reads: int = 30) -> tuple[SystemErrorEntry, ...]:
         """Read system errors until the queue reports no error or `max_reads` is hit."""
 
