@@ -179,7 +179,7 @@ def test_webui_invalid_acquisition_values_do_not_change_mode(monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize("model_id", ["tektronix-tbs2074b", "tektronix-tds2024b", "tektronix-tbs1052b"])
-def test_phase2_webui_install_does_not_enable_direct_results_or_png(model_id, tmp_path):
+def test_webui_install_does_not_enable_direct_results_or_png(model_id, tmp_path):
     catalog = {entry["id"]: entry for entry in command_catalog()}
     for command in ("measure-install", "measure-clear"):
         assert catalog[command]["presentation"]["models"][model_id]["supported"]

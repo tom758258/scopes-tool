@@ -777,6 +777,14 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
     resource = runtime._require_resource(args)
     if resource is None:
         return 2
+    if (
+        runtime._resolve_cli_mode(args) == "live"
+        and preflight._screenshot_options(args).format == "bmp"
+        and not resource.strip().upper().startswith("USB")
+    ):
+        raise OscilloscopeError(
+            "TDS2024B explicit BMP screenshot capture requires a USBTMC resource."
+        )
 
     runtime._configure_scpi_logging(args)
 

@@ -38,6 +38,7 @@ from .trigger import (
     EdgeTriggerState, EdgeTriggerSourceState, EdgeTriggerSlopeState,
     EdgeTriggerLevelState, EdgeTriggerCouplingState, TriggerModeState,
     TriggerSweepState, RuntTriggerState, TvTriggerState,
+    parse_tv_line_readback,
     runt_trigger_configure_commands, tv_trigger_configure_commands,
 )
 
@@ -648,11 +649,13 @@ class TektronixOscilloscope(Oscilloscope):
     def query_trigger_edge_source(self) -> EdgeTriggerSourceState:
         value, raw = self._query(f"{self._trigger_root}:EDGE:SOUrce?")
         match = re.fullmatch(r"CH([1-4])", value.upper())
-        if match is None:
-            choices = {"LINE": "line"} if self._b2 else {"ACL": "line", "ACLINE": "line", "EXT": "external"}
-            return EdgeTriggerSourceState(_choice(value, choices, "edge source response"), None, raw)
-        channel = self._channel(int(match.group(1)))
-        return EdgeTriggerSourceState("analog-channel", channel, raw)
+        if match is not None:
+            channel = int(match.group(1))
+            if channel <= self.capabilities.analog_channels:
+                return EdgeTriggerSourceState("analog-channel", channel, raw)
+            return EdgeTriggerSourceState(None, None, raw)
+        choices = {"LINE": "line"} if self._b2 else {"ACL": "line", "ACLINE": "line", "EXT": "external"}
+        return EdgeTriggerSourceState(choices.get(value.upper()), None, raw)
 
     def configure_trigger_edge_slope(self, *, slope: str) -> None:
         token = _choice(slope, {"positive": "RISe", "negative": "FALL"}, "edge slope")
@@ -1036,19 +1039,31 @@ class TektronixOscilloscope(Oscilloscope):
         self._b2_only("trigger-runt")
         mode = self.query_trigger_mode()
         source, source_raw = self._query("TRIGger:A:RUNT:SOUrce?")
-        if source.upper() not in {"CH1", "CH2"}:
-            raise OscilloscopeError("Unsupported Tek runt source")
-        channel = int(source[-1])
+        match = re.fullmatch(r"CH([12])", source.upper())
+        channel = int(match.group(1)) if match is not None else None
         commands = {"polarity": "TRIGger:A:RUNT:POLarity?", "qualifier": "TRIGger:A:RUNT:WHEn?",
-                    "time": "TRIGger:A:RUNT:WIDth?", "low_level": f"TRIGger:A:LOWerthreshold:CH{channel}?",
-                    "high_level": f"TRIGger:A:UPPerthreshold:CH{channel}?"}
+                    "time": "TRIGger:A:RUNT:WIDth?"}
         values = {key: self._query(command) for key, command in commands.items()}
         raw = {"mode": mode.raw_mode, "source": source_raw, **{key: value[1] for key, value in values.items()}}
-        polarity = _choice(values["polarity"][0], {"POS": "positive", "POSITIVE": "positive", "NEG": "negative", "NEGATIVE": "negative"}, "runt polarity response")
-        qualifier = _choice(values["qualifier"][0], {"OCCURS": "none", "LESS": "less-than", "LESSTHAN": "less-than", "MORE": "greater-than", "MORETHAN": "greater-than"}, "runt qualifier response")
-        return RuntTriggerState(mode.mode, source, "channel", channel, polarity, qualifier,
-            _number(raw["time"], commands["time"]), _number(raw["low_level"], commands["low_level"]),
-            _number(raw["high_level"], commands["high_level"]), raw)
+        low_level = None
+        high_level = None
+        if channel is not None:
+            for key, command in {
+                "low_level": f"TRIGger:A:LOWerthreshold:CH{channel}?",
+                "high_level": f"TRIGger:A:UPPerthreshold:CH{channel}?",
+            }.items():
+                value, raw_value = self._query(command)
+                raw[key] = raw_value
+                parsed = _number(value, command)
+                if key == "low_level":
+                    low_level = parsed
+                else:
+                    high_level = parsed
+        polarity = {"POS": "positive", "POSITIVE": "positive", "NEG": "negative", "NEGATIVE": "negative"}.get(values["polarity"][0].upper())
+        qualifier = {"OCCURS": "none", "LESS": "less-than", "LESSTHAN": "less-than", "MORE": "greater-than", "MORETHAN": "greater-than"}.get(values["qualifier"][0].upper())
+        return RuntTriggerState(mode.mode, source, "channel" if channel is not None else None,
+            channel, polarity, qualifier, _number(values["time"][0], commands["time"]),
+            low_level, high_level, raw)
 
     def configure_tv_trigger(self, *, source_channel: int, standard: str, mode: str,
                              polarity: str, line: int | None = None) -> TvTriggerState:
@@ -1070,16 +1085,22 @@ class TektronixOscilloscope(Oscilloscope):
         root = "TRIGger:MAIn:VIDeo"
         source, source_raw = self._query(f"{root}:SOUrce?")
         match = re.fullmatch(r"CH([1-4])", source.upper())
-        if match is None:
-            raise OscilloscopeError("Unsupported Tek TV source")
-        channel = self._channel(int(match[1]))
+        channel = int(match[1]) if match is not None else None
+        if channel is not None and channel > self.capabilities.analog_channels:
+            channel = None
         standard, standard_raw = self._query(f"{root}:STANdard?")
         sync, sync_raw = self._query(f"{root}:SYNC?")
         polarity, polarity_raw = self._query(f"{root}:POLarity?")
+        line_raw = ""
+        line = None
+        if sync.upper() in {"LINEN", "LINENUM"}:
+            line_value, line_raw = self._query(f"{root}:LINE?")
+            line = parse_tv_line_readback(line_value)
         return TvTriggerState(mode.mode, source_raw, channel, standard_raw,
-            _choice(standard, {"NTSC": "ntsc", "PAL": "pal"}, "TV standard response"), sync_raw,
-            _choice(sync, {"ODD": "field1", "EVEN": "field2", "FIELD": "all-fields", "LINE": "all-lines"}, "TV sync response"),
-            "", None, polarity_raw, _choice(polarity, {"INV": "positive", "INVERT": "positive", "NORM": "negative", "NORMAL": "negative"}, "TV polarity response"))
+            {"NTSC": "ntsc", "PAL": "pal"}.get(standard.upper()), sync_raw,
+            {"ODD": "field1", "EVEN": "field2", "FIELD": "all-fields", "LINE": "all-lines"}.get(sync.upper()),
+            line_raw, line, polarity_raw,
+            {"INV": "positive", "INVERT": "positive", "NORM": "negative", "NORMAL": "negative"}.get(polarity.upper()))
 
     def _query_acquisition_readout(self, operation: str, *, maximum: bool = False) -> tuple[float | int, str, str]:
         if not operation_supported(self.capabilities, operation):

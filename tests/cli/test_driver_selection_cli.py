@@ -284,7 +284,7 @@ def test_live_resource_discovery_reports_unknown_tek_as_unsupported(monkeypatch,
 
 
 @pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
-def test_phase2_cli_tds_explicit_bmp_only(mode, tmp_path, capsys):
+def test_cli_tds_explicit_bmp_only(mode, tmp_path, capsys):
     output = tmp_path / "screen.bmp"
     common = [mode, "--model", "tektronix-tds2024b", "--json"]
     assert cli.main(["screenshot", "--format", "bmp", "--output", str(output), *common]) == 0
@@ -302,8 +302,22 @@ def test_phase2_cli_tds_explicit_bmp_only(mode, tmp_path, capsys):
         assert payload["ok"] is False
 
 
+def test_cli_tds_bmp_rejects_tcpip_before_open(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(
+        runtime.Oscilloscope,
+        "open",
+        staticmethod(lambda *args, **kwargs: pytest.fail("opened live backend")),
+    )
+
+    assert cli.main([
+        "screenshot", "--format", "bmp", "--output", str(tmp_path / "screen.bmp"),
+        "--resource", "TCPIP0::192.0.2.1::INSTR",
+    ]) == 1
+    assert "requires a USBTMC resource" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
-def test_phase2_cli_periodic_measurement_admission(mode, capsys):
+def test_cli_periodic_measurement_admission(mode, capsys):
     common = [mode, "--model", "tektronix-tbs2074b", "--json"]
     assert cli.main(["measure-install", "--source-channel", "1", "--item", "vpp", *common]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -317,7 +331,7 @@ def test_phase2_cli_periodic_measurement_admission(mode, capsys):
 
 
 @pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
-def test_phase2_cli_legacy_cursor_and_timed_persistence(mode, capsys):
+def test_cli_legacy_cursor_and_timed_persistence(mode, capsys):
     common = [mode, "--model", "tektronix-tds2024b", "--json"]
     for args in (["cursor", "--source-channel", "1", "--x1", "0.02", "--auto-timebase"],
                  ["cursor", "--source-channel", "1", "--y1", "0.2"],
@@ -329,7 +343,7 @@ def test_phase2_cli_legacy_cursor_and_timed_persistence(mode, capsys):
         assert not any(command.startswith(":MARKer") or "YUNit " in command for command in commands)
 
 
-def test_phase2_cli_metadata_uses_driver_commands(capsys):
+def test_cli_metadata_uses_driver_commands(capsys):
     cases = [
         ("tbs2074b", ["channel-units", "--channel", "1", "--units", "amp"]),
         ("tbs2074b", ["math-display", "--function", "1", "--on"]),

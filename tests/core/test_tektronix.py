@@ -368,7 +368,75 @@ def test_header_on_query_normalization(model_id, command, response, method, args
     assert backend.history == ["*IDN?", command]
 
 
-def test_phase2_high_risk_subsets_reject_before_scpi():
+@pytest.mark.parametrize("model_id,raw_source", [
+    ("tektronix-tbs2074b", "AUX"),
+    ("tektronix-tds2024b", "EXT5"),
+])
+def test_edge_source_query_preserves_unsupported_readback(model_id, raw_source):
+    root = "TRIGger:A" if model_id == "tektronix-tbs2074b" else "TRIGger:MAIn"
+    command = f"{root}:EDGE:SOUrce?"
+    scope, backend = make_scope(model_id, {command: raw_source})
+
+    state = scope.query_trigger_edge_source()
+
+    assert (state.source, state.source_channel, state.raw_source) == (None, None, raw_source)
+    history = list(backend.history)
+    with pytest.raises(ParameterValidationError):
+        scope.configure_trigger_edge_source(source=raw_source.lower())
+    assert backend.history == history
+
+
+def test_tv_query_preserves_unsupported_readbacks_and_linenum():
+    responses = {
+        "TRIGger:MAIn:TYPe?": "VIDEO",
+        "TRIGger:MAIn:VIDeo:SOUrce?": "EXT",
+        "TRIGger:MAIn:VIDeo:STANdard?": "SECAM",
+        "TRIGger:MAIn:VIDeo:SYNC?": "LINENUM",
+        "TRIGger:MAIn:VIDeo:POLarity?": "UNKNOWN",
+        "TRIGger:MAIn:VIDeo:LINE?": "525",
+    }
+    scope, backend = make_scope("tektronix-tds2024b", responses)
+
+    state = scope.query_tv_trigger()
+
+    assert state.mode == "tv"
+    assert (state.source_raw, state.source_channel) == ("EXT", None)
+    assert (state.standard_raw, state.standard) == ("SECAM", None)
+    assert (state.tv_mode_raw, state.tv_mode) == ("LINENUM", None)
+    assert (state.line_raw, state.line) == ("525", 525)
+    assert (state.polarity_raw, state.polarity) == ("UNKNOWN", None)
+    assert backend.history[-1] == "TRIGger:MAIn:VIDeo:LINE?"
+
+    responses["TRIGger:MAIn:VIDeo:SYNC?"] = "FRAME"
+    scope, backend = make_scope("tektronix-tds2024b", responses)
+    state = scope.query_tv_trigger()
+    assert (state.tv_mode_raw, state.tv_mode, state.line_raw, state.line) == (
+        "FRAME", None, "", None,
+    )
+    assert "TRIGger:MAIn:VIDeo:LINE?" not in backend.history
+
+
+@pytest.mark.parametrize("qualifier", ["EQUAL", "UNEQUAL"])
+def test_runt_query_preserves_out_of_subset_qualifier(qualifier):
+    scope, _ = make_scope(responses={
+        "TRIGger:A:TYPe?": "PULSE",
+        "TRIGger:A:PULSe:CLAss?": "RUNT",
+        "TRIGger:A:RUNT:SOUrce?": "CH1",
+        "TRIGger:A:RUNT:POLarity?": "POSITIVE",
+        "TRIGger:A:RUNT:WHEn?": qualifier,
+        "TRIGger:A:RUNT:WIDth?": "1e-6",
+        "TRIGger:A:LOWerthreshold:CH1?": "-0.1",
+        "TRIGger:A:UPPerthreshold:CH1?": "0.1",
+    })
+
+    state = scope.query_runt_trigger()
+
+    assert state.qualifier is None
+    assert state.raw["qualifier"] == qualifier
+    assert (state.channel, state.polarity) == (1, "positive")
+
+
+def test_high_risk_subsets_reject_before_scpi():
     scope, backend = make_scope(responses={"CH1:YUNit?": "V", "CH2:YUNit?": "A"})
     for channel, units in ((1, "volt"), (2, "amp")):
         scope.set_channel_units(channel, units)
@@ -391,7 +459,7 @@ def test_phase2_high_risk_subsets_reject_before_scpi():
 
 
 @pytest.mark.parametrize("model_id", ["tektronix-tds2024b", "tektronix-tbs1052b"])
-def test_phase2_legacy_subsets(model_id):
+def test_legacy_subsets(model_id):
     scope, backend = make_scope(model_id)
     for value in ("minimum", "infinite", 1, 2, 5):
         scope.set_display_persistence(value)
@@ -409,7 +477,7 @@ def test_phase2_legacy_subsets(model_id):
 
 
 @pytest.mark.parametrize("model_id,_,__", MODELS)
-def test_phase2_measurement_results_and_png_stay_fail_closed(model_id, _, __):
+def test_measurement_results_and_png_stay_fail_closed(model_id, _, __):
     scope, backend = make_scope(model_id)
     for action in (scope.query_measurement_results, scope.capture_screenshot_png, scope.query_hardcopy_state,
                    lambda: scope.capture_screenshot(options=ScreenshotOptions()),
@@ -419,7 +487,7 @@ def test_phase2_measurement_results_and_png_stay_fail_closed(model_id, _, __):
 
 
 @pytest.mark.parametrize("failure", [None, "signature", "transfer", "setup"])
-def test_phase2_tds_bmp_restores_state_and_timeout(monkeypatch, failure):
+def test_tds_bmp_restores_state_and_timeout(monkeypatch, failure):
     scope, backend = make_scope("tektronix-tds2024b", {
         "HARDCopy:FORMat?": "RLE", "HARDCopy:PORT?": "FILE",
         "HARDCopy:INKSaver?": "OFF", "HARDCopy:LAYout?": "PORTRAIT",
@@ -449,7 +517,7 @@ def test_phase2_tds_bmp_restores_state_and_timeout(monkeypatch, failure):
     assert backend.history[-4:] == ["HARDCopy:LAYout PORTRAIT", "HARDCopy:INKSaver OFF", "HARDCopy:PORT FILE", "HARDCopy:FORMat RLE"]
 
 
-def test_phase2_save_uses_actual_readback_completion_and_restores_timeout():
+def test_save_uses_actual_readback_completion_and_restores_timeout():
     scope, backend = make_scope(responses={"SAVe:IMAge:FILEFormat?": "BMP", "SAVe:WAVEform:FILEFormat?": "SPREADSHEET"})
     scope.configure_save_image_format("png")
     assert scope.query_save_image_format().format == "bmp"
@@ -467,7 +535,7 @@ def test_phase2_save_uses_actual_readback_completion_and_restores_timeout():
 
 
 @pytest.mark.parametrize("model_id,_,__", MODELS)
-def test_phase2_simulator_roundtrips_and_slot_safety(model_id, _, __):
+def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
     with simulated_scope(model_id) as scope:
         scope.set_channel_units(1, "amp")
         assert scope.query_channel_units(1) == "amp"
@@ -510,7 +578,7 @@ def test_phase2_simulator_roundtrips_and_slot_safety(model_id, _, __):
 
 
 @pytest.mark.parametrize("model_id,_,__", MODELS)
-def test_phase2_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
+def test_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
     with simulated_scope(model_id) as scope:
         scope.backend.history.clear()
         channels = scope.query_channel_summary()
@@ -542,7 +610,7 @@ def test_phase2_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
 
 
 @pytest.mark.parametrize("model_id,_,__", MODELS)
-def test_phase2_cursor_projection_skips_inactive_and_non_voltage_axes(model_id, _, __):
+def test_cursor_projection_skips_inactive_and_non_voltage_axes(model_id, _, __):
     with simulated_scope(model_id) as scope:
         b2 = model_id == "tektronix-tbs2074b"
         scope.backend.tek_settings["CURSOR:FUNCTION"] = "TIME" if b2 else "VBARS"
@@ -563,7 +631,7 @@ def test_phase2_cursor_projection_skips_inactive_and_non_voltage_axes(model_id, 
             assert all(command.endswith("?") for command in scope.backend.history)
 
 
-def test_phase2_measurement_item_subset_rejects_before_scpi():
+def test_measurement_item_subset_rejects_before_scpi():
     scope, backend = make_scope("tektronix-tds2024b")
     with pytest.raises(ParameterValidationError):
         scope.install_measurement(1, "vrms")
