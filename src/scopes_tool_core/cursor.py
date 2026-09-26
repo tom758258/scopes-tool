@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .capabilities import ScopeCapabilities
+from .capabilities import ScopeCapabilities, operation_supported
 from .channel import (
     channel_offset_command,
     channel_offset_query,
@@ -173,6 +173,26 @@ class CursorController:
             dydx=values.get(":MARKer:DYDX?"),
         )
 
+def validate_cursor_request(capabilities: ScopeCapabilities, *, x1_seconds=None,
+                            x2_seconds=None, y1_volts=None, y2_volts=None,
+                            auto_timebase=False, auto_vertical=False) -> None:
+    if not operation_supported(capabilities, "cursor-set"):
+        raise ParameterValidationError("cursor-set is unsupported for this model")
+    x_axis = x1_seconds is not None or x2_seconds is not None
+    y_axis = y1_volts is not None or y2_volts is not None
+    if not x_axis and not y_axis:
+        raise ParameterValidationError("cursor set requires at least one position")
+    for name, value in (("--x1", x1_seconds), ("--x2", x2_seconds), ("--y1", y1_volts), ("--y2", y2_volts)):
+        if value is not None:
+            validate_finite_number(value, name)
+    if capabilities.cursor_single_axis_only and x_axis and y_axis:
+        raise ParameterValidationError("cursor set supports a single axis only")
+    if auto_vertical and not capabilities.cursor_auto_vertical:
+        raise ParameterValidationError("cursor auto-vertical is unsupported for this model")
+    if auto_timebase and not x_axis:
+        raise ParameterValidationError("cursor auto-timebase requires X positions")
+
+
 def cursor_configure_commands(
     source_channel: int,
     *,
@@ -182,6 +202,9 @@ def cursor_configure_commands(
     y2_volts: float | None = None,
     capabilities: ScopeCapabilities | None = None,
 ) -> list[str]:
+    if capabilities is not None:
+        validate_cursor_request(capabilities, x1_seconds=x1_seconds, x2_seconds=x2_seconds,
+                                y1_volts=y1_volts, y2_volts=y2_volts)
     channel = (
         validate_analog_channel(source_channel, capabilities)
         if capabilities is not None

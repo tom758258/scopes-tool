@@ -25,6 +25,7 @@ from scopes_tool_core.channel import (
     validate_probe_ratio,
     validate_probe_skew,
 )
+from scopes_tool_core.cursor import validate_cursor_request
 from scopes_tool_core.display import (
     normalize_annotation_background,
     normalize_annotation_color,
@@ -40,6 +41,7 @@ from scopes_tool_core.dvm import normalize_dvm_mode
 from scopes_tool_core.fft import fft_configure_commands
 from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.math import (
+    math_operator_commands,
     math_filter_commands,
     math_filter_query_commands,
     math_transform_commands,
@@ -125,6 +127,7 @@ from scopes_tool_core.timebase import (
     validate_timebase_scale,
 )
 from scopes_tool_core.trigger import (
+    runt_trigger_configure_commands, tv_trigger_configure_commands,
     TriggerWaitConfig,
     normalize_delay_slope,
     normalize_edge_burst_slope,
@@ -690,10 +693,15 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
             parameters["time_seconds"] = validate_trigger_time(_finite_number(parameters["time_seconds"], "time_seconds"))
         if "level" in parameters: parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
     elif command == "trigger-runt":
+        runt_trigger_configure_commands(channel=_integer(parameters["channel"], "channel"),
+            polarity=parameters["polarity"], qualifier=parameters["qualifier"],
+            low_level_volts=_finite_number(parameters["low_level"], "low_level"),
+            high_level_volts=_finite_number(parameters["high_level"], "high_level"),
+            time_seconds=parameters.get("time_seconds"), capabilities=capabilities)
         parameters["channel"] = validate_analog_channel(_integer(parameters["channel"], "channel"), capabilities)
-        parameters["polarity"] = normalize_runt_polarity(parameters["polarity"])
+        normalize_runt_polarity(parameters["polarity"])
         qualifier = parameters["qualifier"]
-        parameters["qualifier"] = normalize_runt_qualifier(qualifier)
+        normalize_runt_qualifier(qualifier)
         parameters["low_level"] = validate_trigger_level(_finite_number(parameters["low_level"], "low_level"))
         parameters["high_level"] = validate_trigger_level(_finite_number(parameters["high_level"], "high_level"))
         if qualifier != "none":
@@ -726,10 +734,13 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         parameters["idle_time"] = validate_edge_burst_idle_time(_finite_number(parameters["idle_time"], "idle_time"))
         if "level" in parameters: parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
     elif command == "trigger-tv":
+        tv_trigger_configure_commands(source_channel=_integer(parameters["source_channel"], "source_channel"),
+            standard=parameters["standard"], mode=parameters["mode"], polarity=parameters["polarity"],
+            line=parameters.get("line"), capabilities=capabilities)
         parameters["source_channel"] = validate_tv_source_channel(_integer(parameters["source_channel"], "source_channel"), capabilities)
-        parameters["standard"] = normalize_tv_standard(parameters["standard"])
-        parameters["mode"] = normalize_tv_mode(parameters["mode"])
-        parameters["polarity"] = normalize_tv_polarity(parameters["polarity"])
+        normalize_tv_standard(parameters["standard"])
+        normalize_tv_mode(parameters["mode"])
+        normalize_tv_polarity(parameters["polarity"])
         parameters["line"] = validate_tv_line(parameters["standard"], parameters["mode"], parameters.get("line"))
     elif command == "trigger-mode":
         if capabilities.trigger_modes is not None and parameters["mode"] not in capabilities.trigger_modes:
@@ -1072,6 +1083,9 @@ def _validate_parameters(
         parameters["channel"] = validate_analog_channel(
             _integer(parameters.get("channel", 1), "channel"), capabilities
         )
+        if (command == "channel-units" and capabilities.channel_units_channels is not None
+                and parameters["channel"] not in capabilities.channel_units_channels):
+            raise WebUIRequestError("channel units are unsupported for this channel")
         value_name = {
             "channel-label": "text",
             "channel-offset": "volts",
@@ -1164,7 +1178,7 @@ def _validate_parameters(
                             parameters["seconds"], "seconds"
                         )
                         value = parameters["seconds"]
-                    validate_display_persistence(value)
+                    validate_display_persistence(value, capabilities)
                 elif command == "display-intensity":
                     parameters[value_name] = validate_display_intensity(
                         _integer(parameters[value_name], value_name)
@@ -1343,6 +1357,8 @@ def _validate_parameters(
                     parameters["y1"] = _finite_number(parameters["y1"], "y1")
                 if parameters.get("y2") is not None:
                     parameters["y2"] = _finite_number(parameters["y2"], "y2")
+                validate_cursor_request(capabilities, x1_seconds=parameters.get("x1"), x2_seconds=parameters.get("x2"),
+                    y1_volts=parameters.get("y1"), y2_volts=parameters.get("y2"))
             except Exception as exc:
                 raise WebUIRequestError(str(exc)) from exc
         else:
@@ -1377,6 +1393,8 @@ def _validate_parameters(
                 parameters["y1"] = _finite_number(parameters["y1"], "y1")
             if parameters.get("y2") is not None:
                 parameters["y2"] = _finite_number(parameters["y2"], "y2")
+            validate_cursor_request(capabilities, x1_seconds=parameters.get("x1"), x2_seconds=parameters.get("x2"),
+                y1_volts=parameters.get("y1"), y2_volts=parameters.get("y2"))
         except Exception as exc:
             raise WebUIRequestError(str(exc)) from exc
     elif command == "annotation":
@@ -1586,7 +1604,7 @@ def _validate_parameters(
                 elif command == "save-filename":
                     parameters[value_name] = validate_save_filename_base(parameters[value_name])
                 elif command == "save-image-format":
-                    if parameters[value_name] not in SAVE_IMAGE_FORMATS:
+                    if parameters[value_name] not in (capabilities.save_image_formats or SAVE_IMAGE_FORMATS):
                         raise ValueError(
                             f"image format must be one of: {', '.join(SAVE_IMAGE_FORMATS)}"
                         )
@@ -1598,7 +1616,7 @@ def _validate_parameters(
                 elif command in {"save-image-ink-saver", "save-image-factors"}:
                     _require_boolean(parameters[value_name], value_name)
                 elif command == "save-waveform-format":
-                    if parameters[value_name] not in SAVE_WAVEFORM_FORMATS:
+                    if parameters[value_name] not in (capabilities.save_waveform_formats or SAVE_WAVEFORM_FORMATS):
                         raise ValueError(
                             f"waveform format must be one of: {', '.join(SAVE_WAVEFORM_FORMATS)}"
                         )
@@ -1749,6 +1767,8 @@ def _validate_parameters(
                     parameters["source2"] = normalize_math_source(
                         parameters["source2"], capabilities=capabilities
                     )
+                    math_operator_commands(parameters["function"], parameters["operation"],
+                        parameters["source1"], parameters["source2"], capabilities=capabilities)
                 except Exception as exc:
                     raise WebUIRequestError(str(exc)) from exc
             else:
@@ -1876,6 +1896,8 @@ def _validate_parameters(
         if parameters["format"] == "word" and not capabilities.supports_word_format:
             raise WebUIRequestError("word waveform format is not supported by this model")
     elif command == "screenshot":
+        if not capabilities.supports_screenshot:
+            raise WebUIRequestError("PNG screenshot is unsupported for this model")
         parameters["background"] = str(parameters.get("background", "black")).lower()
         if parameters["background"] not in {"black", "white"}:
             raise WebUIRequestError("background must be black or white")

@@ -158,7 +158,7 @@ def display_persistence_query() -> str:
     return ":DISPlay:PERSistence?"
 
 
-def validate_display_persistence(value: str | float) -> tuple[str | None, float | None]:
+def validate_display_persistence(value: str | float, capabilities: ScopeCapabilities | None = None) -> tuple[str | None, float | None]:
     if isinstance(value, str):
         normalized = value.strip().lower()
         aliases = {
@@ -179,6 +179,8 @@ def validate_display_persistence(value: str | float) -> tuple[str | None, float 
         numeric = float(value)
     if not math.isfinite(numeric) or numeric < 0.1 or numeric > 60.0:
         raise ParameterValidationError("display persistence seconds must be in range 0.1-60.0.")
+    if capabilities is not None and capabilities.display_persistence_seconds is not None and numeric not in capabilities.display_persistence_seconds:
+        raise ParameterValidationError("Display persistence seconds are unsupported for this model")
     return None, numeric
 
 

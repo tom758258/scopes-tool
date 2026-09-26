@@ -24,8 +24,9 @@ def read_static(name: str) -> str:
 def test_hidden_commands_use_model_projection_before_refresh() -> None:
     catalog = {entry["id"]: entry for entry in command_catalog(include_hidden=True)}
     model = "tektronix-tbs2074b"
-    assert catalog["live-data-snapshot"]["presentation"]["models"][model]["supported"] is False
-    for command in ("system-information-snapshot", "doctor", "smoke"):
+    assert catalog["live-data-snapshot"]["presentation"]["models"][model]["supported"] is True
+    assert catalog["system-information-snapshot"]["presentation"]["models"][model]["supported"] is True
+    for command in ("doctor", "smoke"):
         assert catalog[command]["presentation"]["models"][model]["supported"] is False
     app_source = read_static("app.js")
     assert "getCommands(true)" in app_source

@@ -14,15 +14,9 @@ from .acquisition import (
     AcquisitionResponseError,
     acquisition_count_command,
     acquisition_count_query,
-    acquisition_points_query,
     acquisition_type_command,
     acquisition_type_query,
     normalize_acquisition_type,
-    parse_acquisition_points,
-    parse_record_length,
-    parse_sample_rate,
-    record_length_query,
-    sample_rate_query,
     validate_acquisition_count,
 )
 from .batch import (
@@ -1625,6 +1619,10 @@ def query_instrument_summary(scope: Oscilloscope) -> dict[str, object]:
     if scope.capabilities is None:
         raise OscilloscopeError("Capabilities unavailable for this model")
 
+    from .tektronix import TektronixOscilloscope
+    if isinstance(scope, TektronixOscilloscope):
+        return scope._query_instrument_summary()
+
     channel_entries = scope.query_channel_summary()
     channels = [
         {
@@ -1680,6 +1678,9 @@ def query_instrument_summary(scope: Oscilloscope) -> dict[str, object]:
 def query_acquisition_mode_best_effort(scope: Oscilloscope) -> str:
     """Read the acquisition mode without failing the surrounding summary."""
 
+    from .capabilities import operation_supported
+    if scope.capabilities is not None and not operation_supported(scope.capabilities, "segmented-memory"):
+        return "unknown"
     try:
         return parse_acquisition_mode(scope.scpi.query(segmented_mode_query()))
     except Exception:
@@ -1693,17 +1694,19 @@ def query_acquisition_readouts(scope: Oscilloscope) -> dict[str, float | int | N
         "acquisition_points": None,
         "record_length": None,
     }
-    raw_rate = scope.scpi.query(sample_rate_query())
-    result["sample_rate"] = parse_sample_rate(raw_rate)
-    raw_points = scope.scpi.query(acquisition_points_query())
-    result["acquisition_points"] = parse_acquisition_points(raw_points)
-    # Record length: only 4000X profile supports this query.
-    if scope.capabilities is not None and getattr(scope.capabilities, "series", None) == "4000X":
-        raw_length = scope.scpi.query(record_length_query())
-        result["record_length"] = parse_record_length(raw_length)
-    else:
-        # Unsupported: do not send query, do not catch as error.
-        result["record_length"] = None
+    from .capabilities import operation_supported
+    for field, operation in (("sample_rate", "sample-rate"),
+                             ("acquisition_points", "acquisition-points"),
+                             ("record_length", "record-length")):
+        capabilities = scope.capabilities
+        if operation == "record-length" and capabilities is None:
+            continue
+        if capabilities is not None:
+            if not operation_supported(capabilities, operation):
+                continue
+            if operation == "record-length" and capabilities.supported_operations is None and capabilities.series != "4000X":
+                continue
+        result[field] = scope._query_acquisition_readout(operation)[0]
     return result
 
 

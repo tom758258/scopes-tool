@@ -721,6 +721,11 @@ def math_operator_commands(
     operation = normalize_math_operation(operation)
     source1 = normalize_math_source(source1, capabilities=capabilities)
     source2 = normalize_math_source(source2, capabilities=capabilities)
+    if capabilities is not None and capabilities.math_expressions is not None:
+        symbol = {"add": "+", "subtract": "-", "multiply": "*"}.get(operation)
+        expression = f"CH{source1.removeprefix('channel')}{symbol}CH{source2.removeprefix('channel')}"
+        if expression not in capabilities.math_expressions:
+            raise ParameterValidationError("Unsupported Math expression for this model")
     return [
         f"{prefix}:OPERation {_MATH_OPERATION_TOKENS[operation]}",
         f"{prefix}:SOURce1 CHANnel{source1.removeprefix('channel')}",

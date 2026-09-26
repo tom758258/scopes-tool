@@ -12,6 +12,9 @@ from scopes_tool_core.identity import physical_model_for_id, resolve_physical_mo
 from scopes_tool_core.tektronix import TektronixOscilloscope
 from scopes_tool_core.run_config import ResolvedRunConfig, RunModeOptions, open_scope_for_run
 from scopes_tool_core.simulator_backend import SimulatorBackendError
+from scopes_tool_core.operations import query_acquisition_readouts, query_instrument_summary
+from scopes_tool_core.screenshot import ScreenshotOptions
+from scopes_tool_core.errors import ScreenshotResponseError
 
 
 MODELS = (
@@ -64,7 +67,7 @@ def test_tbs2074b_scenario_trigger_level_readback(tmp_path):
 
 def make_scope(model_id="tektronix-tbs2074b", responses=None):
     model = physical_model_for_id(model_id)
-    backend = FakeBackend(responses={"*IDN?": f"TEKTRONIX,{model.canonical_model},SN,1.0", "*ESR?": "0", **(responses or {})})
+    backend = FakeBackend(responses={"*IDN?": f"TEKTRONIX,{model.canonical_model},SN,1.0", "*ESR?": "0", "*OPC?": "1", **(responses or {})})
     scope = TektronixOscilloscope(backend)
     scope.query_idn()
     return scope, backend
@@ -90,8 +93,24 @@ def test_capability_subset_and_unsupported_leaks(model_id, _, __):
     capabilities = capabilities_for_model_id(model_id)
     for operation in ("run", "channel-scale", "setup-save", "trigger-edge", "list-resources"):
         assert operation_supported(capabilities, operation)
-    for operation in ("measure", "capture", "screenshot", "check-error", "single-wait", "trigger-pulse-width"):
+    for operation in ("measure", "measure-sweep", "measure-results", "capture", "check-error", "single-wait", "trigger-pulse-width",
+                      "reference-query", "save-waveform", "doctor", "smoke", "cleanup", "acquisition-check",
+                      "capture-batch", "capture-until", "capture-monitor", "measure-log", "measure-until",
+                      "triggered-measure-loop", "triggered-capture-series", "sequence"):
         assert not operation_supported(capabilities, operation)
+    for operation in ("channel-units", "display-persistence", "cursor-query", "cursor-off", "math-display",
+                      "math-operator", "measure-install", "measure-clear", "save-image", "acquisition-points",
+                      "record-length", "channel-summary", "live-data-snapshot", "system-information-snapshot"):
+        assert operation_supported(capabilities, operation)
+    b2 = model_id == "tektronix-tbs2074b"
+    assert capabilities.trigger_modes == (("edge", "glitch", "runt") if b2 else ("edge", "glitch", "tv"))
+    assert capabilities.trigger_edge_sources == (("analog-channel", "line") if b2 else ("analog-channel", "line", "external"))
+    for operation in (("sample-rate", "trigger-runt", "save-image-format", "save-waveform-format") if b2
+                      else ("cursor-set", "trigger-tv", "save-image-ink-saver")):
+        assert operation_supported(capabilities, operation)
+    assert not capabilities.supports_measure_results_dump
+    assert not capabilities.supports_screenshot
+    assert operation_supported(capabilities, "screenshot") is (model_id == "tektronix-tds2024b")
     assert operation_supported(capabilities, "display-vectors") is (
         model_id in {"tektronix-tds2024b", "tektronix-tbs1052b"}
     )
@@ -143,7 +162,7 @@ def test_reference_setup_and_autoscale_boundaries(model_id, reference):
     scope.recall_setup(slot=1)
     scope.autoscale(None)
     assert backend.history[1:] == [
-        f"SAVe:WAVEform CH1,{reference}", f"SELect:{reference} ON",
+        f"SAVe:WAVEform CH1,{reference}", "*OPC?", f"SELect:{reference} ON",
         "SAVe:SETUp 9", "RECAll:SETUp 1", "AUTOSet EXECute",
     ]
     history = list(backend.history)
@@ -233,7 +252,7 @@ def test_legacy_timebase_probe_reference_and_holdoff(model_id):
     assert backend.history[1:] == [
         "HORizontal:MAIn:POSition 0.25", "CH1:PRObe 20",
         "CH1:BANdwidth ON", "TRIGger:MAIn:HOLDOff:VALue 5e-07",
-        "SAVe:WAVEform CH1,REFB", "SELect:REFB OFF",
+        "SAVe:WAVEform CH1,REFB", "*OPC?", "SELect:REFB OFF",
     ]
 
 
@@ -347,3 +366,205 @@ def test_header_on_query_normalization(model_id, command, response, method, args
         result = result.value
     assert result == expected
     assert backend.history == ["*IDN?", command]
+
+
+def test_phase2_high_risk_subsets_reject_before_scpi():
+    scope, backend = make_scope(responses={"CH1:YUNit?": "V", "CH2:YUNit?": "A"})
+    for channel, units in ((1, "volt"), (2, "amp")):
+        scope.set_channel_units(channel, units)
+        assert scope.query_channel_units(channel) == units
+    for action in (
+        lambda: scope.set_channel_units(3, "volt"), lambda: scope.query_channel_units(4),
+        lambda: scope.configure_save_image_format("bmp8"), lambda: scope.configure_save_image_format("jpg"),
+        lambda: scope.configure_save_waveform_format("binary"), lambda: scope.configure_save_waveform_format("ascii-xy"),
+        lambda: scope.configure_runt_trigger(channel=3, polarity="positive", qualifier="none", low_level_volts=0, high_level_volts=1),
+        lambda: scope.configure_runt_trigger(channel=1, polarity="either", qualifier="none", low_level_volts=0, high_level_volts=1),
+        lambda: scope.configure_cursor(1, x1_seconds=0),
+        lambda: scope.configure_math_operator(1, "add", "channel1", "channel3"),
+        lambda: scope.configure_math_operator(1, "add", "channel1", "channel1"),
+        lambda: scope.configure_math_operator(1, "divide", "channel1", "channel2"),
+        lambda: scope.configure_math_display(2, True),
+    ):
+        before = list(backend.history)
+        with pytest.raises(ParameterValidationError): action()
+        assert backend.history == before
+
+
+@pytest.mark.parametrize("model_id", ["tektronix-tds2024b", "tektronix-tbs1052b"])
+def test_phase2_legacy_subsets(model_id):
+    scope, backend = make_scope(model_id)
+    for value in ("minimum", "infinite", 1, 2, 5):
+        scope.set_display_persistence(value)
+    for action in (
+        *(lambda value=value: scope.set_display_persistence(value) for value in (0.1, 3, 60)),
+        lambda: scope.configure_cursor(1, x1_seconds=0, y1_volts=0),
+        lambda: scope.configure_cursor(1, y1_volts=0, auto_vertical=True),
+        lambda: scope.configure_tv_trigger(source_channel=1, standard="secam", mode="field1", polarity="positive"),
+        lambda: scope.configure_tv_trigger(source_channel=1, standard="ntsc", mode="line-field1", polarity="positive", line=1),
+        lambda: scope.configure_save_image_format("bmp"),
+    ):
+        before = list(backend.history)
+        with pytest.raises(ParameterValidationError): action()
+        assert backend.history == before
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+def test_phase2_measurement_results_and_png_stay_fail_closed(model_id, _, __):
+    scope, backend = make_scope(model_id)
+    for action in (scope.query_measurement_results, scope.capture_screenshot_png, scope.query_hardcopy_state,
+                   lambda: scope.capture_screenshot(options=ScreenshotOptions()),
+                   lambda: scope.capture_screenshot(options=ScreenshotOptions(format="png"))):
+        with pytest.raises(ParameterValidationError): action()
+    assert backend.history == ["*IDN?"]
+
+
+@pytest.mark.parametrize("failure", [None, "signature", "transfer", "setup"])
+def test_phase2_tds_bmp_restores_state_and_timeout(monkeypatch, failure):
+    scope, backend = make_scope("tektronix-tds2024b", {
+        "HARDCopy:FORMat?": "RLE", "HARDCopy:PORT?": "FILE",
+        "HARDCopy:INKSaver?": "OFF", "HARDCopy:LAYout?": "PORTRAIT",
+    })
+    backend.timeout = 2345
+    backend.raw_response = b"BMbitmap" if failure != "signature" else b"not a bitmap"
+    def read():
+        assert backend.timeout == 10000
+        if failure == "transfer": raise OscilloscopeError("transfer failed")
+        return backend.raw_response
+    monkeypatch.setattr(backend, "read_raw", read)
+    original_write = backend.write
+    def write(command):
+        original_write(command)
+        if failure == "setup" and command == "HARDCopy:LAYout LANdscape":
+            raise OscilloscopeError("setup failed")
+    monkeypatch.setattr(backend, "write", write)
+    options = ScreenshotOptions(format="bmp", ink_saver=True, layout="landscape")
+    if failure:
+        with pytest.raises(OscilloscopeError): scope.capture_screenshot(options=options)
+    else:
+        capture = scope.capture_screenshot(options=options)
+        assert capture.format_name == "BMP" and capture.data.startswith(b"BM")
+        assert capture.palette is None
+    assert backend.timeout_history == [10000, 2345]
+    assert backend.timeout == 2345
+    assert backend.history[-4:] == ["HARDCopy:LAYout PORTRAIT", "HARDCopy:INKSaver OFF", "HARDCopy:PORT FILE", "HARDCopy:FORMat RLE"]
+
+
+def test_phase2_save_uses_actual_readback_completion_and_restores_timeout():
+    scope, backend = make_scope(responses={"SAVe:IMAge:FILEFormat?": "BMP", "SAVe:WAVEform:FILEFormat?": "SPREADSHEET"})
+    scope.configure_save_image_format("png")
+    assert scope.query_save_image_format().format == "bmp"
+    scope.configure_save_waveform_format("csv")
+    assert scope.query_save_waveform_format().format == "csv"
+    backend.timeout = 3210
+    result = scope.save_image("caller.bmp")
+    assert result.command == 'SAVe:IMAge "caller.bmp"'
+    assert result.operation == "save-image"
+    assert backend.history[-2:] == ['SAVe:IMAge "caller.bmp"', "*OPC?"]
+    assert backend.timeout_history == [15000, 3210]
+    del backend.responses["*OPC?"]
+    with pytest.raises(OscilloscopeError): scope.save_image("failed.bmp")
+    assert backend.timeout == 3210
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+def test_phase2_simulator_roundtrips_and_slot_safety(model_id, _, __):
+    with simulated_scope(model_id) as scope:
+        scope.set_channel_units(1, "amp")
+        assert scope.query_channel_units(1) == "amp"
+        scope.set_display_persistence(2)
+        assert scope.query_display_persistence().seconds == 2
+        scope.configure_math_operator(1, "subtract", "channel2", "channel1")
+        assert scope.query_math_operator(1).source1 == "channel2"
+        assert scope.query_math_operation(1).operation == "subtract"
+        scope.configure_math_display(1, True)
+        assert scope.query_math_display(1).enabled
+        scope.install_measurement(1, "vpp")
+        assert scope.backend.tek_measurements[1]["TYPE"] == "PK2Pk"
+        start = len(scope.backend.history)
+        scope.install_measurement(1, "vpp")
+        assert all(command.endswith("?") for command in scope.backend.history[start:])
+        for slot in scope.backend.tek_measurements.values():
+            slot.update(TYPE="MEAN", SOURCE="CH2", SOURCE1="CH2", STATE="ON")
+        start = len(scope.backend.history)
+        with pytest.raises(ParameterValidationError, match="full"): scope.install_measurement(1, "vpp")
+        assert all(command.endswith("?") for command in scope.backend.history[start:])
+        scope.clear_measurements()
+        scope.install_measurement(1, "vpp")
+        if model_id == "tektronix-tbs2074b":
+            scope.configure_runt_trigger(channel=2, polarity="negative", qualifier="less-than", time_seconds=1e-6, low_level_volts=-0.1, high_level_volts=0.1)
+            state = scope.query_runt_trigger()
+            assert (state.channel, state.polarity, state.qualifier) == (2, "negative", "less-than")
+            scope.configure_save_image_format("bmp")
+            assert scope.query_save_image_format().format == "bmp"
+            scope.configure_save_waveform_format("csv")
+            assert scope.query_save_waveform_format().format == "csv"
+        else:
+            state = scope.configure_tv_trigger(source_channel=2, standard="PAL", mode="all-fields", polarity="POSITIVE")
+            assert (state.standard, state.tv_mode, state.polarity) == ("pal", "all-fields", "positive")
+            scope.configure_save_image_ink_saver(True)
+            assert scope.query_save_image_ink_saver().enabled
+            scope.configure_cursor(1, x1_seconds=0, x2_seconds=0.001)
+            cursor = scope.query_cursor()
+            assert cursor.x2_seconds == 0.001 and cursor.y1_volts is None
+        scope.save_image("simulated.bmp")
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+def test_phase2_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
+    with simulated_scope(model_id) as scope:
+        scope.backend.history.clear()
+        channels = scope.query_channel_summary()
+        readouts = query_acquisition_readouts(scope)
+        snapshot = query_instrument_summary(scope)
+        assert snapshot["acquisition"]["mode"] == "unknown"
+        assert readouts["record_length"] == readouts["acquisition_points"]
+        history = [command.upper() for command in scope.backend.history]
+        assert not any(":RANGE?" in command or ":IMPEDANCE?" in command or ":VERNIER?" in command for command in history)
+        assert "ACQUIRE:MODE?" not in history
+        if model_id == "tektronix-tbs2074b":
+            assert channels[2].units is None and channels[3].units is None
+            assert "CH3:YUNIT?" not in history and "CH4:YUNIT?" not in history
+            assert snapshot["timebase"]["position"] is None
+            assert not any(command in history for command in ("HORIZONTAL:MAIN:POSITION?", "HORIZONTAL:DELAY:TIME?"))
+            scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
+            scope.backend.tek_settings["HORIZONTAL:DELAY:TIME"] = "0.25"
+            assert query_instrument_summary(scope)["timebase"]["position"] == 0.25
+        else:
+            assert readouts["sample_rate"] is None
+            assert not any("SAMPLERATE" in command for command in history)
+            for channel in channels:
+                assert all(getattr(channel, name) is None for name in ("offset", "label", "probe_skew", "range", "impedance", "vernier"))
+            assert not any(":OFFSET?" in command or ":LABEL?" in command or ":DESKEW?" in command for command in history)
+        scope.configure_trigger_mode("glitch")
+        scope.backend.history.clear()
+        assert query_instrument_summary(scope)["trigger"]["level"] is None
+        assert not any(":EDGE:" in command or ":LEVel" in command for command in scope.backend.history)
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+def test_phase2_cursor_projection_skips_inactive_and_non_voltage_axes(model_id, _, __):
+    with simulated_scope(model_id) as scope:
+        b2 = model_id == "tektronix-tbs2074b"
+        scope.backend.tek_settings["CURSOR:FUNCTION"] = "TIME" if b2 else "VBARS"
+        scope.backend.history.clear()
+        state = scope.query_cursor()
+        assert state.x1_seconds is not None and state.y1_volts is None
+        assert not any("HBARS" in command.upper() for command in scope.backend.history)
+        scope.backend.tek_settings["CURSOR:FUNCTION"] = "AMPLITUDE" if b2 else "HBARS"
+        scope.set_channel_units(1, "amp")
+        scope.backend.history.clear()
+        state = scope.query_cursor()
+        assert state.x1_seconds is None and state.y1_volts is None
+        assert not any("POSITION" in command.upper() or "DELTA" in command.upper() or "VBARS" in command.upper()
+                       for command in scope.backend.history)
+        if not b2:
+            with pytest.raises(ParameterValidationError, match="volt"):
+                scope.configure_cursor(1, y1_volts=0)
+            assert all(command.endswith("?") for command in scope.backend.history)
+
+
+def test_phase2_measurement_item_subset_rejects_before_scpi():
+    scope, backend = make_scope("tektronix-tds2024b")
+    with pytest.raises(ParameterValidationError):
+        scope.install_measurement(1, "vrms")
+    assert backend.history == ["*IDN?"]

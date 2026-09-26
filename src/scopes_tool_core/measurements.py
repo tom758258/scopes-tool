@@ -727,6 +727,20 @@ def parse_statistics_boolean(raw: str, setting: str) -> bool:
     )
 
 
+def validate_measurement_install_item(item: str, capabilities: ScopeCapabilities) -> str:
+    item = normalize_measurement_item(item)
+    if capabilities.measurement_install_items is not None:
+        if item not in capabilities.measurement_install_items:
+            raise ParameterValidationError(f"{item} measurement installation is unsupported for this model")
+    else:
+        validate_measurements_supported(capabilities)
+        if item == "area":
+            _validate_area_measurement_supported(capabilities)
+    if item not in _MEASUREMENT_QUERY_TEMPLATES:
+        raise ParameterValidationError(f"{item} cannot be installed as a single-channel front-panel measurement.")
+    return item
+
+
 def measurement_install_command(
     item: str,
     *,
@@ -736,9 +750,7 @@ def measurement_install_command(
 
     item = normalize_measurement_item(item)
     if capabilities is not None:
-        validate_measurements_supported(capabilities)
-    if item == "area":
-        _validate_area_measurement_supported(capabilities)
+        validate_measurement_install_item(item, capabilities)
     if item not in _MEASUREMENT_QUERY_TEMPLATES:
         raise ParameterValidationError(
             f"{item} cannot be installed as a single-channel front-panel measurement."

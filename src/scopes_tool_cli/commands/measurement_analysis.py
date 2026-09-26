@@ -5,11 +5,11 @@ from typing import Sequence
 
 from scopes_tool_core.cursor import (
     cursor_auto_timebase_json,
+    validate_cursor_request,
     cursor_auto_timebase_plan,
     cursor_auto_vertical_json,
     cursor_auto_vertical_plan,
     cursor_configure_commands,
-    cursor_query_commands,
 )
 from scopes_tool_core.fft import (
     fft_advanced_query_commands,
@@ -20,12 +20,8 @@ from scopes_tool_core.math import (
     math_clear_command,
     math_composite_source_commands,
     math_composite_source_query_commands,
-    math_display_command,
-    math_display_query,
     math_filter_commands,
     math_filter_query_commands,
-    math_operator_commands,
-    math_operator_query_commands,
     math_transform_commands,
     math_transform_query_commands,
     math_vertical_commands,
@@ -130,6 +126,11 @@ def _measurement_control_plan(
     if args.command == "measure-menu":
         command = measurement_menu_command(capabilities)
         return [command], {"operation": "open-menu", "command": command}
+    if args.command == "measure-install" and capabilities.measurement_install_items is not None:
+        from scopes_tool_core.measurements import validate_measurement_install_item
+        return [], {"operation": "install", "commands": [],
+                    "source_channel": validate_analog_channel(args.source_channel, capabilities),
+                    "item": validate_measurement_install_item(args.item, capabilities)}
     if args.command == "measure-install":
         channel = validate_analog_channel(args.source_channel, capabilities)
         item = normalize_measurement_item(args.item)
@@ -208,6 +209,7 @@ def _cursor_range_diagnostic(args: argparse.Namespace, entry) -> str | None:
         getattr(args, "command", None) != "cursor"
         or getattr(args, "cursor_query", False)
         or getattr(args, "cursor_off", False)
+        or not getattr(entry, "is_system_error_queue", True)
         or entry.code != -222
         or "data out of range" not in entry.message.lower()
     ):
@@ -305,6 +307,7 @@ def _cmd_measurement_control(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
         commands, result = _measurement_control_plan(args, scope.capabilities)
+        history_start = len(scope.backend.history)
         if args.command == "measure-clear":
             scope.clear_measurements()
         elif args.command == "measure-menu":
@@ -335,6 +338,10 @@ def _cmd_measurement_control(args: argparse.Namespace) -> int:
                 result.update(window=state.window, raw_window=state.raw_window)
             else:
                 scope.configure_measurement_window(args.window)
+        if scope.capabilities.measurement_install_items is not None:
+            commands = scope.backend.history[history_start:]
+            result.pop("command", None)
+            result["commands"] = list(commands)
         runtime._json_update_result(**result)
         for command in commands:
             print(f"Command: {command}")
@@ -384,6 +391,8 @@ def _cmd_reference_waveform(args: argparse.Namespace) -> int:
         commands = runtime._driver_business_commands(scope, args, commands)
         if "command" in result:
             result["command"] = commands[0]
+        if len(commands) > 1:
+            result["commands"] = commands
         runtime._json_update_result(**result)
         for command in commands:
             print(f"Command: {command}")
@@ -843,14 +852,11 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
         if scope.capabilities is None:
             print("Capabilities: unavailable for this model")
             return 1
+        history_start = len(scope.backend.history)
         if args.cursor_query:
             state = scope.query_cursor()
             runtime._json_update_result(operation="query", **state.__dict__)
-            commands = (
-                [":MARKer:MODE?"]
-                if state.mode.strip().lower() == "off"
-                else cursor_query_commands(scope.capabilities)
-            )
+            commands = scope.backend.history[history_start:]
             for command in commands:
                 print(f"Command: {command}")
             print(f"Mode: {state.mode}")
@@ -858,8 +864,28 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             print(f"Y delta V: {_format_optional_number(state.y_delta_volts)}")
         elif args.cursor_off:
             scope.cursor_off()
-            runtime._json_update_result(operation="off", command=":MARKer:MODE OFF")
-            print("Command: :MARKer:MODE OFF")
+            command = scope.backend.history[-1]
+            runtime._json_update_result(operation="off", command=command)
+            print(f"Command: {command}")
+        elif scope.capabilities.cursor_single_axis_only:
+            validate_cursor_request(scope.capabilities, x1_seconds=args.x1, x2_seconds=args.x2,
+                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=args.auto_timebase, auto_vertical=args.auto_vertical)
+            auto_timebase = None
+            if args.auto_timebase:
+                auto_timebase = cursor_auto_timebase_plan(scope.query_timebase_scale(), scope.query_timebase_position(),
+                    x1_seconds=args.x1, x2_seconds=args.x2)
+            scope.configure_cursor(args.source_channel, x1_seconds=args.x1, x2_seconds=args.x2,
+                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=args.auto_timebase, auto_vertical=args.auto_vertical)
+            state = scope.query_cursor()
+            commands = scope.backend.history[history_start:]
+            result = dict(operation="set", commands=commands, source_channel=args.source_channel,
+                          x1_seconds=state.x1_seconds, x2_seconds=state.x2_seconds,
+                          y1_volts=state.y1_volts, y2_volts=state.y2_volts)
+            if auto_timebase is not None:
+                result["auto_timebase"] = cursor_auto_timebase_json(auto_timebase)
+            runtime._json_update_result(**result)
+            for command in commands:
+                print(f"Command: {command}")
         else:
             channel = validate_analog_channel(args.source_channel, scope.capabilities)
             cursor_configure_commands(
@@ -870,6 +896,9 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
                 y2_volts=args.y2,
                 capabilities=scope.capabilities,
             )
+            validate_cursor_request(scope.capabilities, x1_seconds=args.x1, x2_seconds=args.x2,
+                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=getattr(args, "auto_timebase", False),
+                auto_vertical=getattr(args, "auto_vertical", False))
             auto_timebase = None
             if getattr(args, "auto_timebase", False):
                 scale = scope.query_timebase_scale()
@@ -1082,15 +1111,13 @@ def _cmd_math_display(args: argparse.Namespace) -> int:
                 raw=state.raw,
             )
             print(
-                f"Command: {math_display_query(args.function, capabilities=scope.capabilities)}"
+                f"Command: {scope.backend.history[-1]}"
             )
             print(f"Math display: {'ON' if state.enabled else 'OFF'}")
         else:
             enabled = args.math_display_action == "on"
             scope.configure_math_display(args.function, enabled)
-            command = math_display_command(
-                args.function, enabled, capabilities=scope.capabilities
-            )
+            command = scope.backend.history[-1]
             runtime._json_update_result(
                 operation="set",
                 function=args.function,
@@ -1171,6 +1198,7 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
         runtime._json_record_scope(scope, idn)
         runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
+        history_start = len(scope.backend.history)
         if args.math_operator_query:
             state = scope.query_math_operator(args.function)
             runtime._json_update_result(
@@ -1183,9 +1211,7 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
                 source2=state.source2,
                 source2_raw=state.source2_raw,
             )
-            commands = math_operator_query_commands(
-                args.function, capabilities=scope.capabilities
-            )
+            commands = scope.backend.history[history_start:]
             for command in commands:
                 print(f"Command: {command}")
             print(f"Math operation: {state.operation}")
@@ -1198,13 +1224,7 @@ def _cmd_math_operator(args: argparse.Namespace) -> int:
                 args.source1,
                 args.source2,
             )
-            commands = math_operator_commands(
-                args.function,
-                args.math_operation,
-                args.source1,
-                args.source2,
-                capabilities=scope.capabilities,
-            )
+            commands = scope.backend.history[history_start:]
             runtime._json_update_result(
                 operation="set",
                 function=args.function,

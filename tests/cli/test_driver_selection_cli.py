@@ -151,7 +151,7 @@ def test_tek_simulator_unsupported_command_fails_without_business_scpi(capsys):
 def test_tek_live_run_uses_esr_without_system_error_queue(monkeypatch, capsys):
     backend = FakeBackend(responses={
         "*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0",
-        "*ESR?": "0",
+        "*ESR?": "0", "*OPC?": "1",
     })
     monkeypatch.setattr(
         runtime.Oscilloscope,
@@ -217,7 +217,7 @@ def test_tek_invalid_average_count_does_not_change_mode(monkeypatch, capsys):
 
 @pytest.mark.parametrize("command,args,expected", [
     ("channel-scale", ["--channel", "1", "--volts-per-division", "0.2"], ["CH1:SCAle 0.2"]),
-    ("reference-save", ["--slot", "1", "--source-channel", "1"], ["SAVe:WAVEform CH1,REF1"]),
+    ("reference-save", ["--slot", "1", "--source-channel", "1"], ["SAVe:WAVEform CH1,REF1", "*OPC?"]),
     ("save-pwd", ["--path", "C:/data"], ['FILESystem:CWD "C:/data"']),
     ("trigger-edge", ["--source-channel", "1", "--level", "0.5", "--slope", "positive"], [
         "TRIGger:A:EDGE:SOUrce CH1", "TRIGger:A:LEVel:CH1 0.5", "TRIGger:A:EDGE:SLOpe RISe",
@@ -226,7 +226,7 @@ def test_tek_invalid_average_count_does_not_change_mode(monkeypatch, capsys):
 def test_tek_live_metadata_matches_sent_business_commands(monkeypatch, capsys, command, args, expected):
     backend = FakeBackend(responses={
         "*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0",
-        "*ESR?": "0",
+        "*ESR?": "0", "*OPC?": "1",
     })
     monkeypatch.setattr(
         runtime.Oscilloscope,
@@ -244,7 +244,7 @@ def test_tek_legacy_display_vectors_metadata_matches_sent_command(monkeypatch, c
     backend = FakeBackend(responses={
         "*IDN?": "TEKTRONIX,TDS2024B,SN1,1.0",
         "DISPlay:STYle?": ":DISPLAY:STYLE VECTORS",
-        "*ESR?": "0",
+        "*ESR?": "0", "*OPC?": "1",
     })
     monkeypatch.setattr(
         runtime.Oscilloscope,
@@ -281,3 +281,68 @@ def test_live_resource_discovery_reports_unknown_tek_as_unsupported(monkeypatch,
     assert backend.history == ["*IDN?"]
     assert payload["result"]["live_resources"] == []
     assert payload["result"]["verification_failures"][0]["detail"] == "Unsupported physical oscilloscope model"
+
+
+@pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
+def test_phase2_cli_tds_explicit_bmp_only(mode, tmp_path, capsys):
+    output = tmp_path / "screen.bmp"
+    common = [mode, "--model", "tektronix-tds2024b", "--json"]
+    assert cli.main(["screenshot", "--format", "bmp", "--output", str(output), *common]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    if mode == "--simulate":
+        assert output.read_bytes().startswith(b"BM")
+        assert payload["result"]["format"] == "BMP"
+        assert payload["result"]["files"][0]["kind"] == "bmp"
+    else:
+        assert not output.exists()
+        assert "HARDCopy STARt" in payload["scpi"]["planned"]
+    for options in ([], ["--format", "png"], ["--query-hardcopy"]):
+        assert cli.main(["screenshot", *options, *common]) != 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is False
+
+
+@pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
+def test_phase2_cli_periodic_measurement_admission(mode, capsys):
+    common = [mode, "--model", "tektronix-tbs2074b", "--json"]
+    assert cli.main(["measure-install", "--source-channel", "1", "--item", "vpp", *common]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    commands = payload["scpi"]["sent" if mode == "--simulate" else "planned"]
+    assert "MEASUrement:MEAS1:TYPe PK2Pk" in commands
+    assert not any(command.startswith(":MEAS") for command in commands)
+    assert cli.main(["measure-clear", *common]) == 0
+    capsys.readouterr()
+    assert cli.main(["measure-results", *common]) != 0
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
+def test_phase2_cli_legacy_cursor_and_timed_persistence(mode, capsys):
+    common = [mode, "--model", "tektronix-tds2024b", "--json"]
+    for args in (["cursor", "--source-channel", "1", "--x1", "0.02", "--auto-timebase"],
+                 ["cursor", "--source-channel", "1", "--y1", "0.2"],
+                 ["display-persistence", "--seconds", "2"]):
+        assert cli.main([*args, *common]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        commands = payload["scpi"]["sent" if mode == "--simulate" else "planned"]
+        assert not any(command.startswith(":MARKer") or "YUNit " in command for command in commands)
+
+
+def test_phase2_cli_metadata_uses_driver_commands(capsys):
+    cases = [
+        ("tbs2074b", ["channel-units", "--channel", "1", "--units", "amp"]),
+        ("tbs2074b", ["math-display", "--function", "1", "--on"]),
+        ("tbs2074b", ["math-operator", "--function", "1", "--operation", "add", "--source1", "channel1", "--source2", "channel2"]),
+        ("tbs2074b", ["trigger-runt", "--query"]),
+        ("tds2024b", ["trigger-tv", "--source-channel", "1", "--standard", "pal", "--mode", "all-lines", "--polarity", "negative"]),
+        ("tbs2074b", ["save-image-format", "--format", "bmp"]),
+        ("tbs2074b", ["save-waveform-format", "--format", "csv"]),
+    ]
+    for model, args in cases:
+        assert cli.main([*args, "--simulate", "--model", "tektronix-" + model, "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        result = payload["result"]
+        commands = result.get("commands", [result.get("command")])
+        sent = payload["scpi"]["sent"][1:-1]
+        assert commands == (sent if "commands" in result else sent[:1])

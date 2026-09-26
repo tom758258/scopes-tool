@@ -256,7 +256,7 @@ def test_trigger_channel_fields_follow_the_existing_model_projection() -> None:
             assert presentation["supported"] is expected_supported
             if not expected_supported:
                 continue
-            expected = capabilities.analog_channels
+            expected = max(capabilities.runt_channels) if command_id == "trigger-runt" and capabilities.runt_channels else capabilities.analog_channels
             for name in field_names:
                 assert presentation["fields"][name]["maximum"] == expected
                 assert presentation["fields"][name]["options"] == list(range(1, expected + 1))

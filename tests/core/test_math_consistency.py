@@ -30,6 +30,8 @@ from scopes_tool_core.identity import (
     physical_model_for_id,
 )
 from scopes_tool_core.scope import Oscilloscope
+from scopes_tool_core.drivers import scope_for_physical_model
+from scopes_tool_core.run_config import RunModeOptions, make_simulator_backend
 from scopes_tool_core.simulator_backend import SimulatorBackend
 
 
@@ -130,12 +132,13 @@ def test_math_profile_operation_and_dialect_consistency_gate():
         assert physical_model.model_id == model_id
         assert capabilities.series == physical_model.series
         if physical_model.series not in _PROFILE_MATRIX:
-            assert capabilities.math_function_count == 0
+            enabled = {"math-display", "math-operator"} if capabilities.math_expressions else set()
+            assert capabilities.math_function_count == (1 if enabled else 0)
             assert capabilities.supports_math_goft is False
             assert capabilities.supports_math_cascade is False
             assert capabilities.supports_advanced_fft is False
             for operation in _EXPECTED_MATH_WORKER_COMMANDS:
-                assert not operation_supported(capabilities, operation)
+                assert operation_supported(capabilities, operation) is (operation in enabled)
             continue
 
         expected = _PROFILE_MATRIX[physical_model.series]
@@ -270,12 +273,22 @@ def test_math_cli_worker_schema_absence_consistency_gate():
 
 @pytest.mark.parametrize("model", _MATH_SIMULATOR_MODEL_IDS)
 def test_math_enabled_operations_have_simulator_round_trip(model):
-    backend = SimulatorBackend(physical_model_id=model)
-    scope = Oscilloscope(backend)
+    backend = make_simulator_backend(
+        RunModeOptions(simulate=True, planning_physical_model_id=model), f"SIM::{model}::INSTR")
+    scope = scope_for_physical_model(physical_model_for_id(model), backend)
     scope.query_idn()
     capabilities = scope.capabilities
 
     scope.configure_math_display(1, True)
+    if capabilities.math_expressions is not None:
+        assert scope.query_math_display(1).enabled is True
+        for operation in ("add", "subtract", "multiply"):
+            scope.configure_math_operator(1, operation, "channel1", "channel2")
+            assert scope.query_math_operator(1).operation == operation
+            assert scope.query_math_operation(1).operation == operation
+        with pytest.raises(ParameterValidationError):
+            scope.configure_math_vertical(1, scale=2.0, offset=0.25)
+        return
     scope.configure_math_vertical(1, scale=2.0, offset=0.25)
     assert scope.query_math_display(1).enabled is True
     vertical = scope.query_math_vertical(1)

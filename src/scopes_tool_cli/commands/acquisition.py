@@ -5,14 +5,9 @@ import argparse
 from scopes_tool_core.acquisition import (
     acquisition_count_command,
     acquisition_count_query,
-    acquisition_points_query,
     acquisition_type_command,
     acquisition_type_query,
     normalize_acquisition_type,
-    parse_acquisition_points,
-    parse_record_length,
-    parse_sample_rate,
-    record_length_query,
     sample_rate_maximum_query,
     sample_rate_query,
 )
@@ -44,13 +39,12 @@ def _cmd_sample_rate(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
 
-        query_command = _sample_rate_query_command(args)
+        sample_rate_hz, raw, query_command = scope._query_acquisition_readout(
+            "sample-rate", maximum=getattr(args, "sample_rate_maximum", False))
         if getattr(args, "sample_rate_maximum", False):
             print("Planned query: maximum analog acquisition sample rate")
         else:
             print("Planned query: analog acquisition sample rate")
-        raw = scope.scpi.query(query_command)
-        sample_rate_hz = parse_sample_rate(raw)
         print("Command: " + query_command)
         if getattr(args, "sample_rate_maximum", False):
             print("Maximum sample rate: " + f"{sample_rate_hz:.6e}" + " Hz")
@@ -139,9 +133,8 @@ def _cmd_acquisition_points(args: argparse.Namespace) -> int:
             return 1
 
         print("Planned query: analog acquisition points")
-        raw = scope.scpi.query(acquisition_points_query())
-        acquisition_points = parse_acquisition_points(raw)
-        print("Command: " + acquisition_points_query())
+        acquisition_points, raw, query_command = scope._query_acquisition_readout("acquisition-points")
+        print("Command: " + query_command)
         print("Acquisition points: " + str(acquisition_points) + " points")
         print("Raw value: " + raw.strip())
         runtime._json_update_result(
@@ -149,7 +142,7 @@ def _cmd_acquisition_points(args: argparse.Namespace) -> int:
             acquisition_points=acquisition_points,
             raw_value=raw.strip(),
             unit="points",
-            scpi_command=acquisition_points_query(),
+            scpi_command=query_command,
         )
         entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
@@ -174,15 +167,9 @@ def _cmd_record_length(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
 
-        if scope.capabilities.series != "4000X":
-            raise ParameterValidationError(
-                "record-length requires a 4000X capability profile."
-            )
-
         print("Planned query: analog acquisition record length")
-        raw = scope.scpi.query(record_length_query())
-        record_length_points = parse_record_length(raw)
-        print("Command: " + record_length_query())
+        record_length_points, raw, query_command = scope._query_acquisition_readout("record-length")
+        print("Command: " + query_command)
         print("Record length: " + str(record_length_points) + " points")
         print("Raw value: " + raw.strip())
         runtime._json_update_result(
@@ -190,7 +177,7 @@ def _cmd_record_length(args: argparse.Namespace) -> int:
             record_length_points=record_length_points,
             raw_value=raw.strip(),
             unit="points",
-            scpi_command=record_length_query(),
+            scpi_command=query_command,
         )
         entry = scope.post_command_status()
         runtime._json_record_system_error(entry)

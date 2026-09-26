@@ -2400,6 +2400,25 @@ def _model_command_presentation(
                 override["maximum"] = max(capabilities.setup_slots)
             elif name == "file" and not capabilities.supports_setup_file_target:
                 override["hidden"] = True
+        subset = {
+            ("channel-units", "channel"): capabilities.channel_units_channels,
+            ("measure-install", "item"): capabilities.measurement_install_items,
+            ("display-persistence", "seconds"): capabilities.display_persistence_seconds,
+            ("save-image-format", "format"): capabilities.save_image_formats,
+            ("save-waveform-format", "format"): capabilities.save_waveform_formats,
+            ("trigger-runt", "channel"): capabilities.runt_channels,
+            ("trigger-runt", "polarity"): capabilities.runt_polarities,
+            ("trigger-runt", "qualifier"): capabilities.runt_qualifiers,
+            ("trigger-tv", "standard"): capabilities.tv_standards,
+            ("trigger-tv", "mode"): capabilities.tv_modes,
+        }.get((entry["id"], name))
+        if subset is not None:
+            override["options"] = subset
+            if field.get("type") in {"integer", "number"}:
+                override["minimum"], override["maximum"] = min(subset), max(subset)
+        if entry["id"] == "cursor" and name == "action":
+            override["options"] = tuple(action for action in field.get("options", ())
+                if operation_supported(capabilities, "cursor-" + action))
         if entry["id"] == "trigger-mode" and name == "mode" and capabilities.trigger_modes is not None:
             override["options"] = capabilities.trigger_modes
         if entry["id"] == "trigger-sweep" and name == "mode" and capabilities.trigger_sweep_modes is not None:
@@ -2558,7 +2577,7 @@ def _model_command_presentation(
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"
             )
-        if name in ("item", "items") and not capabilities.supports_area_measurement:
+        if name in ("item", "items") and not capabilities.supports_area_measurement and not (entry["id"] == "measure-install" and capabilities.measurement_install_items is not None):
             base_options = override.get("options", field.get("options", ()))
             if "area" in base_options:
                 override["options"] = tuple(
@@ -2574,7 +2593,7 @@ _PRESENTATION_OPERATIONS = {
     "channel-scale-range": ("channel-scale", "channel-range"),
     "reference-waveform": ("reference-query", "reference-save", "reference-clear"),
     "reference-labels": ("reference-query", "reference-label", "display-label"),
-    "front-panel-measurements": ("measure", "measure-results"),
+    "front-panel-measurements": ("measure", "measure-results", "measure-install", "measure-clear"),
     "system-information": ("system-information-snapshot",),
     "diagnostics": ("doctor", "smoke"),
     "external-trigger-range-level": ("external-trigger-range", "trigger-edge-external-level"),
@@ -2596,6 +2615,10 @@ def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: A
         return capabilities.supports_measure_results_dump
     if command_id == "measurement-statistics":
         return capabilities.supports_measure_statistics
+    if command_id == "screenshot":
+        return capabilities.supports_screenshot
+    if command_id in {"measure-install", "measure-clear"} and capabilities.measurement_install_items is not None:
+        return True
     if category == "Measurement":
         return capabilities.supports_measurements
     if command_id == "channel-label":

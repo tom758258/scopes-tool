@@ -6,7 +6,7 @@ from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.tektronix import TektronixOscilloscope
 from scopes_tool_webui import command_execution
 from scopes_tool_webui.command_catalog import command_catalog
-from scopes_tool_webui.command_validation import WebUIRequestError
+from scopes_tool_webui.command_validation import WebUIRequestError, _validate_parameters
 
 
 def test_catalog_admits_only_registered_tek_operations():
@@ -46,12 +46,12 @@ def test_catalog_admits_only_registered_tek_operations():
     assert setup[b2]["fields"]["file"]["hidden"] is True
 
     trigger_mode = catalog["trigger-mode"]["presentation"]["models"]
-    assert trigger_mode[b2]["fields"]["mode"]["options"] == ["edge"]
-    assert trigger_mode[b1]["fields"]["mode"]["options"] == ["edge"]
+    assert trigger_mode[b2]["fields"]["mode"]["options"] == ["edge", "glitch", "runt"]
+    assert trigger_mode[b1]["fields"]["mode"]["options"] == ["edge", "glitch", "tv"]
 
     trigger_source = catalog["trigger-edge-source"]["presentation"]["models"]
-    assert trigger_source[b2]["fields"]["source"]["options"] == ["analog-channel"]
-    assert trigger_source[b1]["fields"]["source"]["options"] == ["analog-channel"]
+    assert trigger_source[b2]["fields"]["source"]["options"] == ["analog-channel", "line"]
+    assert trigger_source[b1]["fields"]["source"]["options"] == ["analog-channel", "line", "external"]
 
     trigger_slope = catalog["trigger-edge-slope"]["presentation"]["models"]
     assert trigger_slope[b2]["fields"]["slope"]["options"] == ["positive", "negative"]
@@ -93,6 +93,7 @@ def test_webui_legacy_display_vectors_uses_b1_style_command(monkeypatch, tmp_pat
     "command,parameters,message",
     [
         ("autoscale", {"channels": [1]}, "optional controls"),
+        ("channel-units", {"action": "set", "channel": 3, "units": "volt"}, "unsupported for this channel"),
         ("setup-save", {"target": "file", "file": "x.scp"}, "file target"),
         (
             "trigger-edge-source",
@@ -175,3 +176,17 @@ def test_webui_invalid_acquisition_values_do_not_change_mode(monkeypatch, tmp_pa
             parameters=parameters, artifact_dir=tmp_path,
         )
     assert backend.history == ["*IDN?"]
+
+
+@pytest.mark.parametrize("model_id", ["tektronix-tbs2074b", "tektronix-tds2024b", "tektronix-tbs1052b"])
+def test_phase2_webui_install_does_not_enable_direct_results_or_png(model_id, tmp_path):
+    catalog = {entry["id"]: entry for entry in command_catalog()}
+    for command in ("measure-install", "measure-clear"):
+        assert catalog[command]["presentation"]["models"][model_id]["supported"]
+        result = command_execution.execute_command(command, mode="simulate", resource=None, model_id=model_id,
+            parameters={"source_channel": 1, "item": "vpp"} if command == "measure-install" else {}, artifact_dir=tmp_path)
+        assert result["exit_code"] == 0
+    for command in ("measure", "measure-results", "screenshot"):
+        assert not catalog[command]["presentation"]["models"][model_id]["supported"]
+        with pytest.raises(WebUIRequestError, match="unsupported"):
+            _validate_parameters(command, {}, "simulate", model_id)

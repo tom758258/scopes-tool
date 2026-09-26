@@ -68,6 +68,20 @@ class ScopeCapabilities:
     autoscale_supports_optional_controls: bool = True
     setup_slots: tuple[int, ...] | None = None
     supports_setup_file_target: bool = True
+    screenshot_formats: tuple[str, ...] | None = None
+    channel_units_channels: tuple[int, ...] | None = None
+    display_persistence_seconds: tuple[float, ...] | None = None
+    measurement_install_items: tuple[str, ...] | None = None
+    math_expressions: tuple[str, ...] | None = None
+    save_image_formats: tuple[str, ...] | None = None
+    save_waveform_formats: tuple[str, ...] | None = None
+    runt_channels: tuple[int, ...] | None = None
+    runt_polarities: tuple[str, ...] | None = None
+    runt_qualifiers: tuple[str, ...] | None = None
+    tv_standards: tuple[str, ...] | None = None
+    tv_modes: tuple[str, ...] | None = None
+    cursor_single_axis_only: bool = False
+    cursor_auto_vertical: bool = True
 
 
 _TEK_COMMON_OPERATIONS = frozenset({
@@ -79,7 +93,11 @@ _TEK_COMMON_OPERATIONS = frozenset({
     "system-status-byte", "system-clear-status", "system-opc",
     "system-standard-event", "trigger-edge", "trigger-edge-source",
     "trigger-edge-slope", "trigger-edge-coupling", "trigger-mode",
-    "trigger-sweep", "trigger-holdoff",
+    "trigger-sweep", "trigger-holdoff", "channel-units", "display-persistence",
+    "cursor", "cursor-query", "cursor-off", "math-display", "math-operator",
+    "measure-install", "measure-clear", "save-image", "acquisition-points",
+    "record-length", "channel-summary", "live-data-snapshot",
+    "system-information-snapshot",
 })
 
 
@@ -103,6 +121,18 @@ _DEMO_3000X_EXTENSIONS = frozenset(
 )
 
 
+_TEK_MATH_EXPRESSIONS = ("CH1+CH2", "CH1-CH2", "CH2-CH1", "CH1*CH2")
+_TEK_LEGACY_INSTALL_ITEMS = (
+    "vpp", "vavg", "frequency", "period", "minimum", "maximum",
+    "rise_time", "fall_time", "positive_width", "negative_width",
+)
+_TEK_INSTALL_ITEMS = _TEK_LEGACY_INSTALL_ITEMS + (
+    "vrms", "amplitude", "top", "base", "overshoot", "preshoot",
+    "duty_cycle", "negative_duty_cycle", "area", "positive_edges",
+    "negative_edges", "positive_pulses", "negative_pulses",
+)
+
+
 _CAPABILITY_PROFILES = {
     "tektronix-tbs2074b": ScopeCapabilities(
         series="TBS2000B", analog_channels=4,
@@ -111,12 +141,19 @@ _CAPABILITY_PROFILES = {
         supports_measurements=False, supports_delay_measurement=False,
         supports_screenshot=False, supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
-        supports_simulator=True,
+        supports_simulator=True, math_function_count=1,
+        screenshot_formats=(), cursor_auto_vertical=False,
+        channel_units_channels=(1, 2),
+        measurement_install_items=_TEK_INSTALL_ITEMS,
+        math_expressions=_TEK_MATH_EXPRESSIONS,
+        save_image_formats=("png", "bmp"), save_waveform_formats=("csv",),
+        runt_channels=(1, 2), runt_polarities=("positive", "negative"),
+        runt_qualifiers=("none", "less-than", "greater-than"),
         acquisition_modes=("normal", "peak", "average", "high_resolution"),
         average_counts=(2, 4, 8, 16, 32, 64, 128, 256, 512),
-        trigger_modes=("edge",),
+        trigger_modes=("edge", "glitch", "runt"),
         trigger_sweep_modes=("auto", "normal"),
-        trigger_edge_sources=("analog-channel",),
+        trigger_edge_sources=("analog-channel", "line"),
         trigger_edge_slopes=("positive", "negative"),
         trigger_edge_couplings=("dc", "lf-reject"),
         trigger_holdoff_min_seconds=40e-9,
@@ -127,22 +164,30 @@ _CAPABILITY_PROFILES = {
         supports_channel_label=True, channel_label_max_length=30,
         supported_operations=_TEK_COMMON_OPERATIONS | {
             "channel-offset", "channel-label", "channel-probe-skew",
-            "trigger-edge-level",
+            "trigger-edge-level", "trigger-runt", "sample-rate",
+            "save-image-format", "save-waveform-format",
         },
     ),
     "tektronix-tds2024b": ScopeCapabilities(
         series="TDS2000B", analog_channels=4,
+        measurement_install_items=_TEK_LEGACY_INSTALL_ITEMS,
+        math_expressions=_TEK_MATH_EXPRESSIONS + ("CH3+CH4", "CH3-CH4", "CH4-CH3", "CH3*CH4"),
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=False, supports_delay_measurement=False,
         supports_screenshot=False, supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
-        supports_simulator=True,
+        supports_simulator=True, math_function_count=1,
+        screenshot_formats=("bmp",), cursor_auto_vertical=False,
+        display_persistence_seconds=(1.0, 2.0, 5.0),
+        cursor_single_axis_only=True,
+        tv_standards=("ntsc", "pal"),
+        tv_modes=("field1", "field2", "all-fields", "all-lines"),
         acquisition_modes=("normal", "peak", "average"),
         average_counts=(4, 16, 64, 128),
-        trigger_modes=("edge",),
+        trigger_modes=("edge", "glitch", "tv"),
         trigger_sweep_modes=("auto", "normal"),
-        trigger_edge_sources=("analog-channel",),
+        trigger_edge_sources=("analog-channel", "line", "external"),
         trigger_edge_slopes=("positive", "negative"),
         trigger_edge_couplings=("ac", "dc", "lf-reject"),
         trigger_holdoff_min_seconds=500e-9,
@@ -151,22 +196,30 @@ _CAPABILITY_PROFILES = {
         setup_slots=tuple(range(1, 10)),
         supports_setup_file_target=False,
         supported_operations=_TEK_COMMON_OPERATIONS | {
-            "timebase-position", "display-vectors",
+            "timebase-position", "display-vectors", "cursor-set",
+            "trigger-tv", "save-image-ink-saver", "screenshot",
         },
     ),
     "tektronix-tbs1052b": ScopeCapabilities(
         series="TBS1000B", analog_channels=2,
+        measurement_install_items=_TEK_INSTALL_ITEMS,
+        math_expressions=_TEK_MATH_EXPRESSIONS,
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=False, supports_delay_measurement=False,
         supports_screenshot=False, supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
-        supports_simulator=True,
+        supports_simulator=True, math_function_count=1,
+        screenshot_formats=(), cursor_auto_vertical=False,
+        display_persistence_seconds=(1.0, 2.0, 5.0),
+        cursor_single_axis_only=True,
+        tv_standards=("ntsc", "pal"),
+        tv_modes=("field1", "field2", "all-fields", "all-lines"),
         acquisition_modes=("normal", "peak", "average"),
         average_counts=(4, 16, 64, 128),
-        trigger_modes=("edge",),
+        trigger_modes=("edge", "glitch", "tv"),
         trigger_sweep_modes=("auto", "normal"),
-        trigger_edge_sources=("analog-channel",),
+        trigger_edge_sources=("analog-channel", "line", "external"),
         trigger_edge_slopes=("positive", "negative"),
         trigger_edge_couplings=("ac", "dc", "lf-reject"),
         trigger_holdoff_min_seconds=500e-9,
@@ -175,7 +228,8 @@ _CAPABILITY_PROFILES = {
         setup_slots=tuple(range(1, 10)),
         supports_setup_file_target=False,
         supported_operations=_TEK_COMMON_OPERATIONS | {
-            "timebase-position", "display-vectors",
+            "timebase-position", "display-vectors", "cursor-set",
+            "trigger-tv", "save-image-ink-saver",
         },
     ),
     "keysight-infiniivision-2000x": ScopeCapabilities(

@@ -61,8 +61,6 @@ from scopes_tool_core.trigger import (
     pattern_trigger_configure_commands,
     pattern_trigger_query_commands,
     runt_trigger_configure_commands,
-    runt_trigger_high_level_query,
-    runt_trigger_low_level_query,
     runt_trigger_query_commands,
     setup_hold_trigger_configure_commands,
     setup_hold_trigger_query_commands,
@@ -891,18 +889,12 @@ def _cmd_trigger_runt(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
 
+        history_start = len(scope.backend.history)
         if args.runt_query:
             commands = runt_trigger_query_commands()
             print("Planned query: runt trigger state")
             state = scope.query_runt_trigger()
-            commands = [command for command in commands if "<source>" not in command]
-            if state.channel is not None:
-                commands.extend(
-                    [
-                        runt_trigger_low_level_query(state.channel),
-                        runt_trigger_high_level_query(state.channel),
-                    ]
-                )
+            commands = scope.backend.history[history_start:]
             runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
@@ -942,6 +934,7 @@ def _cmd_trigger_runt(args: argparse.Namespace) -> int:
                 low_level_volts=args.low_level_volts,
                 high_level_volts=args.high_level_volts,
             )
+            commands = scope.backend.history[history_start:]
             runtime._json_update_result(
                 operation="set",
                 commands=commands,
@@ -1328,10 +1321,12 @@ def _cmd_trigger_tv(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
 
+        history_start = len(scope.backend.history)
         if args.tv_query:
             commands = tv_trigger_query_commands()
             print("Planned query: TV trigger state")
             state = scope.query_tv_trigger()
+            commands = scope.backend.history[history_start:]
             runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
@@ -1363,6 +1358,7 @@ def _cmd_trigger_tv(args: argparse.Namespace) -> int:
                 polarity=args.polarity,
                 line=args.line,
             )
+            commands = scope.backend.history[history_start:]
             result = state.to_json()
             result.update(
                 {

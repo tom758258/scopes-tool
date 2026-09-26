@@ -113,6 +113,7 @@ from scopes_tool_core.serial import (
 from scopes_tool_core.screenshot import (
     ScreenshotOptions,
     normalize_screenshot_options,
+    validate_screenshot_capability,
 )
 from scopes_tool_core.trigger import (
     TriggerWaitConfig,
@@ -187,15 +188,10 @@ def _validate_screenshot_args(args: argparse.Namespace) -> None:
             raise ParameterValidationError(
                 f"--format {options.format} requires an output path ending in {expected}."
             )
-    if _uses_screenshot_hardcopy_controls(args):
-        capabilities = _pre_open_capabilities(args)
-        if (
-            capabilities is not None
-            and not capabilities.supports_screenshot_hardcopy_controls
-        ):
-            raise ParameterValidationError(
-                "Screenshot hardcopy controls require a 4000X model profile."
-            )
+    capabilities = _pre_open_capabilities(args)
+    if capabilities is not None:
+        validate_screenshot_capability(capabilities, options,
+                                      query_hardcopy=getattr(args, "query_hardcopy", False))
 
 def _validate_fft_args(args: argparse.Namespace) -> None:
     capabilities = _pre_open_capabilities(args)

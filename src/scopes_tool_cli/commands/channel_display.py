@@ -585,6 +585,7 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_units_query(channel)
                 print(f"Planned query: CH{channel} units")
                 units = scope.query_channel_units(channel)
+                scpi = runtime._driver_business_commands(scope, args, [scpi])[0]
                 runtime._json_update_result(channel=channel, operation="query", command=scpi, units=units)
                 print(f"Command: {scpi}")
                 print(f"Units: {units}")
@@ -593,6 +594,7 @@ def _cmd_channel_advanced_setting(args: argparse.Namespace) -> int:
                 scpi = channel_units_command(channel, units)
                 print(f"Planned change: CH{channel} units {units}")
                 scope.set_channel_units(channel, units)
+                scpi = runtime._driver_business_commands(scope, args, [scpi])[0]
                 runtime._json_update_result(channel=channel, operation="set", command=scpi, units=units)
                 print(f"Command: {scpi}")
         elif command == "channel-vernier":

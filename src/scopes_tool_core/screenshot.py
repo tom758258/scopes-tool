@@ -58,6 +58,21 @@ class ScreenshotCapture:
     background: str
 
 
+def validate_screenshot_capability(capabilities: ScopeCapabilities, options: ScreenshotOptions,
+                                  *, query_hardcopy: bool = False) -> None:
+    options = normalize_screenshot_options(options)
+    if capabilities.screenshot_formats is not None:
+        if query_hardcopy or options.format not in capabilities.screenshot_formats or options.palette is not None:
+            raise ParameterValidationError("Requested screenshot format or hardcopy controls are unsupported for this model")
+        return
+    controls = query_hardcopy or any(value is not None for value in (
+        options.format, options.ink_saver, options.palette, options.layout))
+    if controls and not capabilities.supports_screenshot_hardcopy_controls:
+        raise ParameterValidationError("Screenshot hardcopy controls require a 4000X capability profile.")
+    if not query_hardcopy and not capabilities.supports_screenshot:
+        raise ParameterValidationError("Screenshot capture is unsupported for this model")
+
+
 class ScreenshotController:
     """Controls for current screen image capture."""
 

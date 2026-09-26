@@ -62,9 +62,6 @@ from scopes_tool_core.screenshot import (
     SCREENSHOT_TIMEOUT_MS,
     hardcopy_inksaver_command,
     hardcopy_inksaver_for_background,
-    hardcopy_layout_command,
-    hardcopy_palette_command,
-    hardcopy_screen_dump_data_query,
     screenshot_data_query,
     write_screenshot,
     write_screenshot_png,
@@ -197,6 +194,7 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
         runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         target, result, waits_for_completion = _save_export_plan(args)
+        history_start = len(scope.backend.history)
 
         if args.command == "save-pwd":
             if args.query:
@@ -221,7 +219,10 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
                 print(f"Instrument image save format: {state.format}")
             else:
                 scope.configure_save_image_format(args.format)
-                print(f"Instrument image save format: {args.format}")
+                if scope.capabilities.save_image_formats is not None:
+                    state = scope.query_save_image_format()
+                    result.update(state.to_json())
+                print(f"Instrument image save format: {result['format']}")
         elif args.command == "save-image-palette":
             if args.query:
                 state = scope.query_save_image_palette()
@@ -257,7 +258,10 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
                 print(f"Instrument waveform save format: {state.format}")
             else:
                 scope.configure_save_waveform_format(args.format)
-                print(f"Instrument waveform save format: {args.format}")
+                if scope.capabilities.save_waveform_formats is not None:
+                    state = scope.query_save_waveform_format()
+                    result.update(state.to_json())
+                print(f"Instrument waveform save format: {result['format']}")
         elif args.command == "save-waveform-length":
             if args.query:
                 state = scope.query_save_waveform_length()
@@ -275,9 +279,8 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
             result.update(operation.to_json(), state_changing=True)
             print(f"Instrument-side waveform saved as: {args.filename}")
 
-        if args.command == "save-pwd":
-            target = runtime._driver_business_commands(scope, args, [target])[0]
-            result["command"] = target
+        target = scope.backend.history[history_start]
+        result["command"] = target
         runtime._json_update_result(**result)
         print(f"Command: {target}")
         if waits_for_completion:
@@ -824,21 +827,10 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         )
         print(f"Screenshot timeout ms: {SCREENSHOT_TIMEOUT_MS} (temporary)")
         if preflight._uses_screenshot_hardcopy_controls(args):
+            history_start = len(scope.backend.history)
             capture = scope.capture_screenshot(options=options, background=background)
-            if options.ink_saver is not None:
-                print(f"Command: {hardcopy_inksaver_command(options.ink_saver)}")
-            else:
-                print(
-                    "Command: "
-                    + hardcopy_inksaver_command(
-                        hardcopy_inksaver_for_background(background)
-                    )
-                )
-            if options.palette is not None:
-                print(f"Command: {hardcopy_palette_command(options.palette)}")
-            if options.layout is not None:
-                print(f"Command: {hardcopy_layout_command(options.layout)}")
-            print(f"Command: {hardcopy_screen_dump_data_query(format_name)}")
+            for command in scope.backend.history[history_start:]:
+                print(f"Command: {command}")
             written_image = _write_screenshot(capture, output_path, format_name)
         else:
             capture = scope.capture_screenshot_png(background=background)

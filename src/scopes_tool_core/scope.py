@@ -2127,6 +2127,21 @@ class Oscilloscope:
             )
         return ReferenceWaveformController(self.scpi, self.capabilities)
 
+    def _query_acquisition_readout(self, operation: str, *, maximum: bool = False) -> tuple[float | int, str, str]:
+        from .acquisition import (
+            sample_rate_query, sample_rate_maximum_query, acquisition_points_query,
+            record_length_query, parse_sample_rate, parse_acquisition_points, parse_record_length,
+        )
+        if operation == "record-length" and self.capabilities.series != "4000X":
+            raise ParameterValidationError("record-length requires a 4000X capability profile.")
+        command, parse = {
+            "sample-rate": (sample_rate_maximum_query() if maximum else sample_rate_query(), parse_sample_rate),
+            "acquisition-points": (acquisition_points_query(), parse_acquisition_points),
+            "record-length": (record_length_query(), parse_record_length),
+        }[operation]
+        raw = self.scpi.query(command)
+        return parse(raw), raw, command
+
     def _cursor_controller(self) -> CursorController:
         if self.capabilities is None:
             raise ParameterValidationError(

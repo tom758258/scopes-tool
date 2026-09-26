@@ -2616,6 +2616,11 @@ def runt_trigger_configure_commands(
     """Return the analog runt trigger configure SCPI sequence."""
 
     channel = validate_analog_channel(channel, capabilities)
+    for value, choices in ((channel, capabilities.runt_channels),
+                           (polarity.strip().lower(), capabilities.runt_polarities),
+                           (qualifier.strip().lower(), capabilities.runt_qualifiers)):
+        if choices is not None and value not in choices:
+            raise ParameterValidationError("Unsupported runt trigger option for this model")
     polarity_command = normalize_runt_polarity(polarity)
     qualifier_command = normalize_runt_qualifier(qualifier)
     low_level = validate_trigger_level(low_level_volts)
@@ -3231,6 +3236,9 @@ def tv_trigger_configure_commands(
 ) -> list[str]:
     """Return the DSO analog basic TV trigger configure SCPI sequence."""
 
+    for value, choices in ((standard.strip().lower(), capabilities.tv_standards), (mode.strip().lower(), capabilities.tv_modes)):
+        if choices is not None and value not in choices:
+            raise ParameterValidationError("Unsupported TV trigger option for this model")
     channel = validate_tv_source_channel(source_channel, capabilities)
     standard_value = validate_tv_standard(standard)
     standard_command = normalize_tv_standard(standard)

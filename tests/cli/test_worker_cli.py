@@ -3361,3 +3361,14 @@ def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
     assert result["result"]["completed_count"] == 1
     assert manifest["status"] == "cancelled"
     assert not list(tmp_path.rglob("result.json"))
+
+
+def test_worker_tek_periodic_install_uses_core_capability():
+    runtime = _runtime(model="tektronix-tbs2074b")
+    job, result = _execute_worker_job(runtime, "measure-install", {"source_channel": 1, "item": "vpp"})
+    assert result["state"] == "succeeded"
+    assert "MEASUrement:MEAS1:TYPe PK2Pk" in job.result["scpi"]["sent"]
+    job, result = _execute_worker_job(runtime, "measure-results", {})
+    assert result["state"] == "failed"
+    assert "unsupported" in result["error"]["message"]
+    assert job.result is None
