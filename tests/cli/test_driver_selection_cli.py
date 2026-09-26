@@ -302,17 +302,75 @@ def test_cli_tds_explicit_bmp_only(mode, tmp_path, capsys):
         assert payload["ok"] is False
 
 
-def test_cli_tds_bmp_rejects_tcpip_before_open(monkeypatch, tmp_path, capsys):
+def test_cli_keysight_tcpip_bmp_reaches_detected_driver(monkeypatch, tmp_path, capsys):
+    output = tmp_path / "screen.bmp"
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,SN1,1.0",
+            ":HARDcopy:INKSaver?": "0",
+            ":SYSTem:ERRor?": '+0,"No error"',
+        },
+        binary_responses={":HCOPY:SDUMp:DATA? BMP": list(b"BMbitmap")},
+    )
     monkeypatch.setattr(
         runtime.Oscilloscope,
         "open",
-        staticmethod(lambda *args, **kwargs: pytest.fail("opened live backend")),
+        staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
+    )
+
+    assert cli.main([
+        "screenshot", "--format", "bmp", "--output", str(output),
+        "--resource", "TCPIP0::192.0.2.1::INSTR",
+    ]) == 0
+    assert output.read_bytes().startswith(b"BM")
+    assert backend.history[0] == "*IDN?"
+    assert ":HCOPY:SDUMp:DATA? BMP" in backend.history
+    capsys.readouterr()
+
+
+def test_cli_tds_bmp_allows_usbtmc_after_detected_driver(monkeypatch, tmp_path, capsys):
+    output = tmp_path / "screen.bmp"
+    backend = FakeBackend(
+        responses={
+            "*IDN?": "TEKTRONIX,TDS2024B,SN1,1.0",
+            "HARDCopy:FORMat?": "RLE",
+            "HARDCopy:PORT?": "FILE",
+            "HARDCopy:INKSaver?": "OFF",
+            "*ESR?": "0",
+        },
+        raw_response=b"BMbitmap",
+    )
+    monkeypatch.setattr(
+        runtime.Oscilloscope,
+        "open",
+        staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
+    )
+
+    assert cli.main([
+        "screenshot", "--format", "bmp", "--output", str(output),
+        "--resource", "USB0::FAKE::INSTR",
+    ]) == 0
+    assert output.read_bytes().startswith(b"BM")
+    assert backend.history[0] == "*IDN?"
+    assert "HARDCopy STARt" in backend.history
+    capsys.readouterr()
+
+
+def test_cli_tds_bmp_rejects_tcpip_after_detected_driver(monkeypatch, tmp_path, capsys):
+    backend = FakeBackend(
+        responses={"*IDN?": "TEKTRONIX,TDS2024B,SN1,1.0"}
+    )
+    monkeypatch.setattr(
+        runtime.Oscilloscope,
+        "open",
+        staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
     )
 
     assert cli.main([
         "screenshot", "--format", "bmp", "--output", str(tmp_path / "screen.bmp"),
-        "--resource", "TCPIP0::192.0.2.1::INSTR",
+        "--resource", "TCPIP0::192.0.2.1::INSTR", "--model", "keysight-dsox4024a",
     ]) == 1
+    assert backend.history == ["*IDN?"]
     assert "requires a USBTMC resource" in capsys.readouterr().err
 
 

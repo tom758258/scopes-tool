@@ -32,13 +32,14 @@ class TektronixSimulatorBackend(SimulatorBackend):
             "CURSOR:VBARS:POSITION1": "0", "CURSOR:VBARS:POSITION2": "0.001",
             "CURSOR:HBARS:POSITION1": "0", "CURSOR:HBARS:POSITION2": "1",
             "SELECT:MATH": "OFF", "MATH:DEFINE": '"CH1+CH2"',
-            "DISPLAY:PERSISTENCE": "OFF", "DISPLAY:PERSISTENCE:STATE": "OFF", "DISPLAY:PERSISTENCE:VALUE": "1",
+            "DISPLAY:PERSISTENCE": "0", "DISPLAY:PERSISTENCE:STATE": "OFF", "DISPLAY:PERSISTENCE:VALUE": "1",
             "SAVE:IMAGE:FILEFORMAT": "PNG", "SAVE:WAVEFORM:FILEFORMAT": "SPREADSheet",
             "HORIZONTAL:DELAY:MODE": "OFF", "HORIZONTAL:DELAY:TIME": "0",
             "TRIGGER:A:PULSE:CLASS": "WIDTH", "TRIGGER:A:RUNT:SOURCE": "CH1",
             "TRIGGER:A:RUNT:POLARITY": "POSITIVE", "TRIGGER:A:RUNT:WHEN": "OCCURS", "TRIGGER:A:RUNT:WIDTH": "1e-6",
             "TRIGGER:MAIN:VIDEO:SOURCE": "CH1", "TRIGGER:MAIN:VIDEO:STANDARD": "NTSC",
             "TRIGGER:MAIN:VIDEO:POLARITY": "NORMAL", "TRIGGER:MAIN:VIDEO:SYNC": "ODD",
+            "TRIGGER:MAIN:VIDEO:LINE": "1",
             **self.tek_settings,
         }
         slots = 5 if self._capabilities.series == "TDS2000B" else 6
@@ -88,7 +89,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
                 return True
         if header == "DISPLAY:PERSISTENCE" and not b2:
             if token in {"OFF", "INFINITE"} or value in {"1", "2", "5"}:
-                self.tek_settings[header] = value
+                self.tek_settings[header] = {"OFF": "0", "INFINITE": "99"}.get(token, value)
                 return True
         if header == "DISPLAY:PERSISTENCE:VALUE" and b2:
             if token == "INFINITE" or 0.1 <= _parse_scpi_number(value) <= 60:
@@ -199,6 +200,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
         } if b2 else {
             "CURSOR:SELECT:SOURCE", "DISPLAY:PERSISTENCE", "TRIGGER:MAIN:VIDEO:SOURCE",
             "TRIGGER:MAIN:VIDEO:STANDARD", "TRIGGER:MAIN:VIDEO:POLARITY", "TRIGGER:MAIN:VIDEO:SYNC",
+            "TRIGGER:MAIN:VIDEO:LINE",
         })
         if header in supported: return self.tek_settings[header]
         if b2 and re.fullmatch(r"TRIGGER:A:(LOWERTHRESHOLD|UPPERTHRESHOLD):CH[12]", header):

@@ -775,8 +775,17 @@ class TektronixOscilloscope(Oscilloscope):
             return DisplayPersistence("minimum", None, raw)
         if value.upper() in {"INF", "INFI", "INFINITE"}:
             return DisplayPersistence("infinite", None, raw)
+        if not self._b2:
+            seconds = _number(value, "DISPlay:PERSistence?")
+            if seconds == 0:
+                return DisplayPersistence("minimum", None, raw)
+            if seconds == 99:
+                return DisplayPersistence("infinite", None, raw)
+            if seconds not in self.capabilities.display_persistence_seconds:
+                raise OscilloscopeError(f"Unsupported Tek persistence response: {raw!r}")
+            return DisplayPersistence(None, seconds, raw)
         _, seconds = validate_display_persistence(value)
-        if seconds is None or (not self._b2 and seconds not in self.capabilities.display_persistence_seconds):
+        if seconds is None:
             raise OscilloscopeError(f"Unsupported Tek persistence response: {raw!r}")
         return DisplayPersistence(None, seconds, raw)
 
@@ -989,11 +998,13 @@ class TektronixOscilloscope(Oscilloscope):
         background = normalize_screenshot_background(background)
         validate_screenshot_capability(self.capabilities, options)
         desired_ink = options.ink_saver if options.ink_saver is not None else background == "white"
-        settings = [("HARDCopy:FORMat", "BMP"), ("HARDCopy:PORT", "USB"),
-                    ("HARDCopy:INKSaver", "ON" if desired_ink else "OFF")]
-        if options.layout is not None:
-            settings.append(("HARDCopy:LAYout", "LANdscape" if options.layout == "landscape" else "PORTRait"))
-        originals = [(command, self._query(command + "?")[0], desired) for command, desired in settings]
+        temporary_settings = [("HARDCopy:FORMat", "BMP"), ("HARDCopy:PORT", "USB")]
+        if options.ink_saver is None:
+            temporary_settings.append(("HARDCopy:INKSaver", "ON" if desired_ink else "OFF"))
+        originals = [
+            (command, self._query(command + "?")[0], desired)
+            for command, desired in temporary_settings
+        ]
         restore = []
         original_timeout = self.scpi.timeout
         try:
@@ -1004,6 +1015,11 @@ class TektronixOscilloscope(Oscilloscope):
                 if not same:
                     restore.append((command, original))
                     self.scpi.write(f"{command} {desired}")
+            if options.ink_saver is not None:
+                self.scpi.write(f"HARDCopy:INKSaver {'ON' if desired_ink else 'OFF'}")
+            if options.layout is not None:
+                layout = "LANdscape" if options.layout == "landscape" else "PORTRait"
+                self.scpi.write(f"HARDCopy:LAYout {layout}")
             self.scpi.write("HARDCopy STARt")
             data = screenshot_bytes_from_values_for_format(self.scpi.read_raw(), "bmp")
             return ScreenshotCapture("BMP", None, data, "white" if desired_ink else "black")
@@ -1091,11 +1107,8 @@ class TektronixOscilloscope(Oscilloscope):
         standard, standard_raw = self._query(f"{root}:STANdard?")
         sync, sync_raw = self._query(f"{root}:SYNC?")
         polarity, polarity_raw = self._query(f"{root}:POLarity?")
-        line_raw = ""
-        line = None
-        if sync.upper() in {"LINEN", "LINENUM"}:
-            line_value, line_raw = self._query(f"{root}:LINE?")
-            line = parse_tv_line_readback(line_value)
+        line_value, line_raw = self._query(f"{root}:LINE?")
+        line = parse_tv_line_readback(line_value)
         return TvTriggerState(mode.mode, source_raw, channel, standard_raw,
             {"NTSC": "ntsc", "PAL": "pal"}.get(standard.upper()), sync_raw,
             {"ODD": "field1", "EVEN": "field2", "FIELD": "all-fields", "LINE": "all-lines"}.get(sync.upper()),

@@ -777,20 +777,27 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
     resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    if (
-        runtime._resolve_cli_mode(args) == "live"
-        and preflight._screenshot_options(args).format == "bmp"
-        and not resource.strip().upper().startswith("USB")
-    ):
-        raise OscilloscopeError(
-            "TDS2024B explicit BMP screenshot capture requires a USBTMC resource."
-        )
+    mode = runtime._resolve_cli_mode(args)
+    options = preflight._screenshot_options(args)
 
     runtime._configure_scpi_logging(args)
 
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
+        normalized_resource = resource.strip().upper()
+        if (
+            mode == "live"
+            and options.format == "bmp"
+            and idn.model_id == "tektronix-tds2024b"
+            and not (
+                normalized_resource.startswith("USB")
+                and normalized_resource.endswith("::INSTR")
+            )
+        ):
+            raise OscilloscopeError(
+                "TDS2024B explicit BMP screenshot capture requires a USBTMC resource."
+            )
         runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")
@@ -823,7 +830,6 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             print(runtime._post_status_text(entry))
             return 1 if entry.is_error else 0
 
-        options = preflight._screenshot_options(args)
         format_name = options.format or "png"
         output_path = _screenshot_output_path(args, format_name)
         background = args.background or DEFAULT_SCREENSHOT_BACKGROUND

@@ -231,6 +231,24 @@ def test_legacy_display_vectors_query_and_on(model_id):
     assert backend.history[1:] == ["DISPlay:STYle?", "DISPlay:STYle VECtors"]
 
 
+@pytest.mark.parametrize("model_id", ["tektronix-tds2024b", "tektronix-tbs1052b"])
+@pytest.mark.parametrize("raw,mode,seconds", [
+    ("0", "minimum", None),
+    ("1", None, 1),
+    ("2", None, 2),
+    ("5", None, 5),
+    ("99", "infinite", None),
+])
+def test_legacy_display_persistence_parses_hardware_numeric_readbacks(
+    model_id, raw, mode, seconds
+):
+    scope, _ = make_scope(model_id, {"DISplay:PERSistence?": raw})
+
+    state = scope.query_display_persistence()
+
+    assert (state.mode, state.seconds, state.raw_value) == (mode, seconds, raw)
+
+
 def test_b2_display_vectors_rejects_before_scpi():
     scope, backend = make_scope()
     with pytest.raises(ParameterValidationError):
@@ -386,34 +404,41 @@ def test_edge_source_query_preserves_unsupported_readback(model_id, raw_source):
     assert backend.history == history
 
 
-def test_tv_query_preserves_unsupported_readbacks_and_linenum():
+def test_tv_query_always_preserves_line_readback():
     responses = {
         "TRIGger:MAIn:TYPe?": "VIDEO",
-        "TRIGger:MAIn:VIDeo:SOUrce?": "EXT",
-        "TRIGger:MAIn:VIDeo:STANdard?": "SECAM",
-        "TRIGger:MAIn:VIDeo:SYNC?": "LINENUM",
-        "TRIGger:MAIn:VIDeo:POLarity?": "UNKNOWN",
-        "TRIGger:MAIn:VIDeo:LINE?": "525",
+        "TRIGger:MAIn:VIDeo:SOUrce?": "CH1",
+        "TRIGger:MAIn:VIDeo:STANdard?": "NTSC",
+        "TRIGger:MAIn:VIDeo:SYNC?": "ODD",
+        "TRIGger:MAIn:VIDeo:POLarity?": "NORMAL",
+        "TRIGger:MAIn:VIDeo:LINE?": "20",
     }
     scope, backend = make_scope("tektronix-tds2024b", responses)
 
     state = scope.query_tv_trigger()
 
     assert state.mode == "tv"
-    assert (state.source_raw, state.source_channel) == ("EXT", None)
-    assert (state.standard_raw, state.standard) == ("SECAM", None)
-    assert (state.tv_mode_raw, state.tv_mode) == ("LINENUM", None)
-    assert (state.line_raw, state.line) == ("525", 525)
-    assert (state.polarity_raw, state.polarity) == ("UNKNOWN", None)
+    assert (state.source_raw, state.source_channel) == ("CH1", 1)
+    assert (state.standard_raw, state.standard) == ("NTSC", "ntsc")
+    assert (state.tv_mode_raw, state.tv_mode) == ("ODD", "field1")
+    assert (state.line_raw, state.line) == ("20", 20)
+    assert (state.polarity_raw, state.polarity) == ("NORMAL", "negative")
     assert backend.history[-1] == "TRIGger:MAIn:VIDeo:LINE?"
 
+    responses["TRIGger:MAIn:VIDeo:SOUrce?"] = "EXT"
+    responses["TRIGger:MAIn:VIDeo:STANdard?"] = "SECAM"
     responses["TRIGger:MAIn:VIDeo:SYNC?"] = "FRAME"
+    responses["TRIGger:MAIn:VIDeo:POLarity?"] = "UNKNOWN"
+    responses["TRIGger:MAIn:VIDeo:LINE?"] = "CURRENT"
     scope, backend = make_scope("tektronix-tds2024b", responses)
     state = scope.query_tv_trigger()
+    assert (state.source_raw, state.source_channel) == ("EXT", None)
+    assert (state.standard_raw, state.standard) == ("SECAM", None)
     assert (state.tv_mode_raw, state.tv_mode, state.line_raw, state.line) == (
-        "FRAME", None, "", None,
+        "FRAME", None, "CURRENT", None,
     )
-    assert "TRIGger:MAIn:VIDeo:LINE?" not in backend.history
+    assert (state.polarity_raw, state.polarity) == ("UNKNOWN", None)
+    assert backend.history[-1] == "TRIGger:MAIn:VIDeo:LINE?"
 
 
 @pytest.mark.parametrize("qualifier", ["EQUAL", "UNEQUAL"])
@@ -486,35 +511,69 @@ def test_measurement_results_and_png_stay_fail_closed(model_id, _, __):
     assert backend.history == ["*IDN?"]
 
 
-@pytest.mark.parametrize("failure", [None, "signature", "transfer", "setup"])
-def test_tds_bmp_restores_state_and_timeout(monkeypatch, failure):
+@pytest.mark.parametrize("transfer_failure", [False, True])
+def test_tds_bmp_explicit_appearance_persists_and_temporary_state_restores(
+    monkeypatch, transfer_failure
+):
     scope, backend = make_scope("tektronix-tds2024b", {
         "HARDCopy:FORMat?": "RLE", "HARDCopy:PORT?": "FILE",
-        "HARDCopy:INKSaver?": "OFF", "HARDCopy:LAYout?": "PORTRAIT",
     })
     backend.timeout = 2345
-    backend.raw_response = b"BMbitmap" if failure != "signature" else b"not a bitmap"
+    backend.raw_response = b"BMbitmap"
+
     def read():
         assert backend.timeout == 10000
-        if failure == "transfer": raise OscilloscopeError("transfer failed")
+        if transfer_failure:
+            raise OscilloscopeError("transfer failed")
         return backend.raw_response
+
     monkeypatch.setattr(backend, "read_raw", read)
-    original_write = backend.write
-    def write(command):
-        original_write(command)
-        if failure == "setup" and command == "HARDCopy:LAYout LANdscape":
-            raise OscilloscopeError("setup failed")
-    monkeypatch.setattr(backend, "write", write)
     options = ScreenshotOptions(format="bmp", ink_saver=True, layout="landscape")
-    if failure:
-        with pytest.raises(OscilloscopeError): scope.capture_screenshot(options=options)
+
+    if transfer_failure:
+        with pytest.raises(OscilloscopeError):
+            scope.capture_screenshot(options=options)
     else:
         capture = scope.capture_screenshot(options=options)
         assert capture.format_name == "BMP" and capture.data.startswith(b"BM")
         assert capture.palette is None
+
     assert backend.timeout_history == [10000, 2345]
     assert backend.timeout == 2345
-    assert backend.history[-4:] == ["HARDCopy:LAYout PORTRAIT", "HARDCopy:INKSaver OFF", "HARDCopy:PORT FILE", "HARDCopy:FORMat RLE"]
+    assert "HARDCopy:INKSaver?" not in backend.history
+    assert "HARDCopy:LAYout?" not in backend.history
+    assert backend.history.count("HARDCopy:INKSaver ON") == 1
+    assert backend.history.count("HARDCopy:LAYout LANdscape") == 1
+    assert "HARDCopy:INKSaver OFF" not in backend.history
+    assert "HARDCopy:LAYout PORTRait" not in backend.history
+    assert backend.history[-2:] == ["HARDCopy:PORT FILE", "HARDCopy:FORMat RLE"]
+
+
+def test_tds_bmp_background_ink_saver_restores_after_failure(monkeypatch):
+    scope, backend = make_scope("tektronix-tds2024b", {
+        "HARDCopy:FORMat?": "RLE", "HARDCopy:PORT?": "FILE",
+        "HARDCopy:INKSaver?": "OFF",
+    })
+    backend.timeout = 2345
+
+    def fail_transfer():
+        assert backend.timeout == 10000
+        raise OscilloscopeError("transfer failed")
+
+    monkeypatch.setattr(backend, "read_raw", fail_transfer)
+
+    with pytest.raises(OscilloscopeError):
+        scope.capture_screenshot(
+            options=ScreenshotOptions(format="bmp"), background="white"
+        )
+
+    assert backend.timeout_history == [10000, 2345]
+    assert backend.timeout == 2345
+    assert "HARDCopy:LAYout?" not in backend.history
+    assert not any(command.startswith("HARDCopy:LAYout ") for command in backend.history)
+    assert backend.history[-3:] == [
+        "HARDCopy:INKSaver OFF", "HARDCopy:PORT FILE", "HARDCopy:FORMat RLE",
+    ]
 
 
 def test_save_uses_actual_readback_completion_and_restores_timeout():
@@ -539,6 +598,11 @@ def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
     with simulated_scope(model_id) as scope:
         scope.set_channel_units(1, "amp")
         assert scope.query_channel_units(1) == "amp"
+        if model_id != "tektronix-tbs2074b":
+            scope.set_display_persistence("minimum")
+            assert scope.query_display_persistence().raw_value == "0"
+            scope.set_display_persistence("infinite")
+            assert scope.query_display_persistence().raw_value == "99"
         scope.set_display_persistence(2)
         assert scope.query_display_persistence().seconds == 2
         scope.configure_math_operator(1, "subtract", "channel2", "channel1")
