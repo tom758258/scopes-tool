@@ -978,9 +978,9 @@ class TektronixOscilloscope(Oscilloscope):
             self.scpi.write(f"{root}:TYPe {self._measurement_types()[item]}")
             self.scpi.write(f"{root}:{source} CH{channel}")
             raw = self.scpi.query(f"{root}:VALue?")
-            unit = self._query(f"{root}:UNIts?")[0].strip('"')
+            self._query(f"{root}:UNIts?")
             result = parse_measurement_result(_payload(raw, f"{root}:VALue?"), item=item, channel=channel)
-            return replace(result, raw_value=raw, unit=unit)
+            return replace(result, raw_value=raw)
         finally:
             try:
                 self.scpi.write(f"{root}:TYPe {original_type}")

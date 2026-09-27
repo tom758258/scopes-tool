@@ -845,14 +845,15 @@ def test_cli_new_primitives_simulate_and_plan(model_id, _, __, tmp_path):
 
 
 
-def test_immediate_measurement_accepts_abbreviated_native_headers():
+@pytest.mark.parametrize("item,native_unit,canonical_unit", [("vpp", "VOLTS", "V"), ("frequency", "HERTZ", "Hz")])
+def test_immediate_measurement_accepts_abbreviated_native_headers(item, native_unit, canonical_unit):
     scope, backend = make_scope(responses={
         "MEASUrement:IMMed:TYPe?": ":MEASU:IMM:TYP PERIod",
         "MEASUrement:IMMed:SOUrce1?": ":MEASU:IMM:SOU1 CH2",
         "MEASUrement:IMMed:VALue?": ":MEASU:IMM:VAL 0.75",
-        "MEASUrement:IMMed:UNIts?": ':MEASU:IMM:UNI "V"',
+        "MEASUrement:IMMed:UNIts?": f':MEASU:IMM:UNI "{native_unit}"',
     })
-    result = scope.query_measurement(1, "vpp")
-    assert result.value == 0.75 and result.unit == "V"
+    result = scope.query_measurement(1, item)
+    assert result.value == 0.75 and result.unit == canonical_unit
     assert result.raw_value == ":MEASU:IMM:VAL 0.75"
     assert backend.history[-2:] == ["MEASUrement:IMMed:TYPe PERIod", "MEASUrement:IMMed:SOUrce1 CH2"]

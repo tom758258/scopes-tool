@@ -37,6 +37,12 @@ def test_catalog_admits_only_registered_tek_operations():
     for model in (b2, b1):
         assert catalog["trigger-pulse-width"]["presentation"]["models"][model]["fields"]["qualifier"]["options"] == ["less-than", "greater-than"]
     assert supported("capture", keysight)
+    capture = catalog["capture"]["presentation"]["models"]
+    for model in (b2, b1, "tektronix-tbs1052b"):
+        assert capture[model]["fields"]["points"]["options"] == [1000]
+        assert capture[model]["fields"]["format"]["options"] == ["byte"]
+    assert capture[keysight]["fields"]["points"]["options"] == [1000, 5000, 10000]
+    assert capture[keysight]["fields"].get("format", {}).get("options", catalog["capture"]["fields"][-1]["options"]) == ["byte", "word"]
     acquisition = catalog["acquisition"]["presentation"]["models"]
     assert acquisition[b2]["fields"]["type"]["options"] == ["normal", "peak", "average", "high_resolution"]
     assert acquisition[b1]["fields"]["type"]["options"] == ["normal", "peak", "average"]

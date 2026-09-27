@@ -77,7 +77,7 @@ function Add-Case {
 }
 
 function Invoke-Cli {
-    param([string]$Stage, [string]$Command, [string[]]$Options = @(), [switch]$AllowCurrentStateNA)
+    param([string]$Stage, [string]$Command, [string[]]$Options = @(), [switch]$AllowCurrentStateNA, [switch]$ExpectHiddenCaptureRejection)
     $script:CliIndex += 1
     $stem = "cli-{0:D3}-{1}" -f $script:CliIndex, (New-SafeCaseName -Name $Stage)
     $stdoutPath = Join-Path $script:RunPaths.Private "$stem.stdout.txt"
@@ -143,6 +143,17 @@ function Invoke-Cli {
             $invocation.result = "N/A"
             return $null
         }
+    }
+    if ($ExpectHiddenCaptureRejection) {
+        if (-not $timedOut -and $record.exit_code -eq 1 -and $record.json -and
+            $parsed.ok -eq $false -and $null -ne $parsed.PSObject.Properties["error"] -and
+            $parsed.error.type -ceq "WaveformResponseError" -and
+            $parsed.error.message -ceq "CH$($Options[1]) is not displayed; waveform capture requires a displayed analog channel") {
+            $invocation.result = "PASS"
+            return $parsed
+        }
+        $invocation.result = "FAIL"
+        throw "$Stage did not return the expected hidden-channel capture rejection."
     }
     if (-not $record.success -or -not $record.json) {
         $invocation.result = "FAIL"
@@ -575,7 +586,7 @@ try {
                 if ((Get-Readback $display "display") -eq $true) {
                     $measurement = Invoke-Cli -Stage "measure" -Command "measure" -Options @("--channel", "1", "--item", "vpp")
                     if ((Get-Readback $measurement "valid") -ne $true) { throw "Immediate measurement is invalid." }
-                    Add-Case "measure" "PASS" "Immediate TYPE/SOURCE restored by Core"
+                    Add-Case "measure" "PASS" "Immediate measurement completed; Core TYPE/SOURCE restore is covered by hardware-free regression tests"
                     $csv = Join-Path $script:RunPaths.Private "waveform.csv"
                     $meta = Join-Path $script:RunPaths.Private "waveform.json"
                     $capture = Invoke-Cli -Stage "capture-byte" -Command "capture" -Options @(
@@ -584,14 +595,64 @@ try {
                         -not (Test-Path -LiteralPath $csv) -or -not (Test-Path -LiteralPath $meta)) {
                         throw "Missing BYTE waveform artifacts."
                     }
-                    Add-Case "capture-byte" "PASS" "Displayed CH1 only; transfer settings may change; no display enabling"
+                    $actualPoints = [int](Get-Readback $capture "actual_points")
+                    $metadata = Get-Content -LiteralPath $meta -Raw | ConvertFrom-Json
+                    $rows = @(Import-Csv -LiteralPath $csv)
+                    if ($actualPoints -le 0 -or $rows.Count -ne $actualPoints -or
+                        $metadata.actual_points -ne $actualPoints) {
+                        throw "Waveform point count is empty or inconsistent with artifacts."
+                    }
+                    $previousTime = $null
+                    foreach ($row in $rows) {
+                        $columns = @($row.PSObject.Properties)
+                        if ($columns.Count -ne 2 -or $columns[0].Name -cne "time_s") {
+                            throw "Unexpected waveform CSV columns."
+                        }
+                        $time = [double]::Parse($columns[0].Value, [Globalization.CultureInfo]::InvariantCulture)
+                        $vertical = [double]::Parse($columns[1].Value, [Globalization.CultureInfo]::InvariantCulture)
+                        if ([double]::IsNaN($time) -or [double]::IsInfinity($time) -or
+                            [double]::IsNaN($vertical) -or [double]::IsInfinity($vertical)) {
+                            throw "Waveform time or vertical value is not finite."
+                        }
+                        if ($null -ne $previousTime -and $time -le $previousTime) {
+                            throw "Waveform time axis is not strictly increasing."
+                        }
+                        $previousTime = $time
+                    }
+                    Add-Case "capture-byte" "PASS" "Displayed CH1; positive point count, finite values, increasing time axis; transfer settings may change"
                 } else {
                     Add-Case "measure" "N/A" "CH1 is hidden; display state is not changed"
                     Add-Case "capture-byte" "N/A" "CH1 is hidden; display state is not changed"
                 }
             } catch { Add-Case "measure-capture" "FAIL" $_.Exception.Message }
+            try {
+                $hiddenChannel = $null
+                for ($channel = 1; $channel -le $expected.channels; $channel++) {
+                    $display = Invoke-Cli -Stage "hidden-source-display-$channel" -Command "channel-display" `
+                        -Options @("--channel", "$channel", "--query")
+                    $displayed = Get-Readback $display "display"
+                    if ($displayed -isnot [bool]) { throw "Invalid channel display readback." }
+                    if (-not $displayed) { $hiddenChannel = $channel; break }
+                }
+                if ($null -eq $hiddenChannel) {
+                    Add-Case "capture-hidden-channel" "N/A" "All analog channels are displayed; display state is not changed"
+                } else {
+                    try {
+                        $null = Invoke-Cli -Stage "capture-hidden-channel" -Command "capture" `
+                            -Options @("--channel", "$hiddenChannel", "--format", "byte", "--points", "1000") `
+                            -ExpectHiddenCaptureRejection
+                    } finally {
+                        $after = Invoke-Cli -Stage "hidden-source-display-after" -Command "channel-display" `
+                            -Options @("--channel", "$hiddenChannel", "--query")
+                        if ((Get-Readback $after "display") -cne $false) {
+                            throw "Hidden channel display did not remain OFF."
+                        }
+                    }
+                    Add-Case "capture-hidden-channel" "PASS" "Capture rejected; channel display remains OFF"
+                }
+            } catch { Add-Case "capture-hidden-channel" "FAIL" $_.Exception.Message }
         } else {
-            foreach ($name in @("measure", "capture-byte")) {
+            foreach ($name in @("measure", "capture-byte", "capture-hidden-channel")) {
                 Add-Case $name "N/A" "Requires -IncludeConfigurationActions; capture transfer settings are not restored"
             }
         }

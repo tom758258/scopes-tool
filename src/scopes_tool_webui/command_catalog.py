@@ -2383,6 +2383,12 @@ def _model_command_presentation(
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
         if field.get("type") == "multi-enum" and name == "channels":
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
+        if entry["id"] == "capture":
+            if name == "points":
+                override["options"] = tuple(value for value in field["options"]
+                    if value <= capabilities.safe_max_waveform_points)
+            elif name == "format" and not capabilities.supports_word_format:
+                override["options"] = ("byte",)
         if entry["id"] == "acquisition" and name == "type" and capabilities.acquisition_modes is not None:
             override["options"] = capabilities.acquisition_modes
         if entry["id"] == "acquisition" and name == "count" and capabilities.average_counts is not None:

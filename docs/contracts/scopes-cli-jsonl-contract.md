@@ -738,7 +738,9 @@ and ordered canonical `serial_modes`,
 `supports_display_label`, `supports_annotation`,
 `supports_annotation_position`, `annotation_slots`, and
 `supports_indexed_annotation`. Consumers must ignore unknown future capability
-fields under schema version `2`. Search additionally reports
+fields under schema version `2`. Optional, model-specific `measurement_items`
+and `pulse_width_qualifiers` report ordered canonical immediate measurement
+items and pulse-width qualifiers, respectively. Search additionally reports
 `supports_search_basic` and ordered canonical `search_modes`.
 Math additionally reports `supports_math_goft`, `supports_math_cascade`, and
 ordered canonical operation lists. WGEN additionally reports `supports_wgen`

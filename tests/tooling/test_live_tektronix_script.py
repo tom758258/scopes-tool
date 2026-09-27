@@ -127,6 +127,8 @@ def fake_run(
     connection: str = "usb", bad_bmp: bool = False,
     math_error: tuple[str, str] | None = None, cursor_error: tuple[str, str] | None = None,
     vectors_on: bool = False, vectors_mismatch: bool = False,
+    waveform_rows: tuple[str, ...] = ("0,0.5", "0.001,0.6"),
+    actual_points: int | None = None, hidden_outcome: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
@@ -203,9 +205,24 @@ def fake_run(
         " count = int(counter_path.read_text()) + 1 if counter_path.exists() else 1\n"
         " counter_path.write_text(str(count))\n"
         f" if {mismatch!r} and count > 1: values[command]['mode'] = 'glitch'\n"
+        f"hidden_outcome = {hidden_outcome!r}\n"
+        f"hidden_capture = Path({str(tmp_path / 'hidden_capture.txt')!r})\n"
+        "channel = sys.argv[sys.argv.index('--channel') + 1] if '--channel' in sys.argv else None\n"
+        "if command == 'channel-display' and channel == '2' and hidden_outcome:\n"
+        " values[command]['display'] = hidden_outcome == 'display-on' and hidden_capture.exists()\n"
         "if command == 'capture':\n"
-        " for option in ('--csv', '--meta'): Path(sys.argv[sys.argv.index(option) + 1]).write_text('fake')\n"
-        " values[command] = {'format': 'BYTE', 'actual_points': 1000}\n"
+        " if channel == '2' and hidden_outcome:\n"
+        "  hidden_capture.write_text('attempted')\n"
+        "  if hidden_outcome == 'unexpected-success':\n"
+        "   print(json.dumps({'ok': True, 'result': {}})); sys.exit(0)\n"
+        "  error_type = 'OscilloscopeError' if hidden_outcome == 'wrong-error' else 'WaveformResponseError'\n"
+        "  print(json.dumps({'ok': False, 'error': {'type': error_type, 'message': 'CH2 is not displayed; waveform capture requires a displayed analog channel'}}))\n"
+        "  sys.exit(1)\n"
+        f" points = {len(waveform_rows) if actual_points is None else actual_points!r}\n"
+        f" csv_text = {'time_s,ch1_v' + chr(10) + chr(10).join(waveform_rows) + chr(10)!r}\n"
+        " Path(sys.argv[sys.argv.index('--csv') + 1]).write_text(csv_text)\n"
+        " Path(sys.argv[sys.argv.index('--meta') + 1]).write_text(json.dumps({'actual_points': points}))\n"
+        " values[command] = {'format': 'BYTE', 'actual_points': points}\n"
         "if command == 'screenshot':\n"
         " path = sys.argv[sys.argv.index('--output') + 1]\n"
         f" Path(path).write_bytes({'bad' if bad_bmp else 'BMfake'!r}.encode())\n"
@@ -385,6 +402,51 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
     assert cases["cursor-set"]["status"] == ("N/A" if target == TARGETS[0] else "PASS")
     assert cases["screenshot-bmp"]["status"] == ("PASS" if target == TARGETS[1] else "N/A")
     assert report["acquisition_final_state"] == "stopped"
+    assert cases["capture-hidden-channel"]["status"] == "N/A"
+
+
+@requires_windows
+@pytest.mark.parametrize("rows,points,status", [
+    (("0,0.5",), None, "PASS"),
+    ((), 0, "FAIL"),
+    (("0,0.5",), 2, "FAIL"),
+    (("NaN,0.5",), None, "FAIL"),
+    (("0,Infinity",), None, "FAIL"),
+    (("0.001,0.5", "0,0.6"), None, "FAIL"),
+    (("0,0.5", "0,0.6"), None, "FAIL"),
+])
+def test_capture_artifact_validity(tmp_path: Path, rows, points, status) -> None:
+    result, report = fake_run(tmp_path, TARGETS[0], "-IncludeConfigurationActions",
+        waveform_rows=rows, actual_points=points)
+    cases = {case["name"]: case for case in report["cases"]}
+    if status == "PASS":
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert cases["capture-byte"]["status"] == "PASS"
+    else:
+        assert result.returncode != 0
+        assert cases["measure-capture"]["status"] == "FAIL"
+        assert "capture-byte" not in cases
+
+
+@requires_windows
+@pytest.mark.parametrize("outcome,status", [
+    ("rejected", "PASS"), ("unexpected-success", "FAIL"),
+    ("wrong-error", "FAIL"), ("display-on", "FAIL"),
+])
+def test_hidden_capture_rejection_and_display_readback(tmp_path: Path, outcome, status) -> None:
+    result, report = fake_run(tmp_path, TARGETS[0], "-IncludeConfigurationActions",
+        hidden_outcome=outcome)
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["capture-hidden-channel"]["status"] == status
+    assert (result.returncode == 0) == (status == "PASS")
+    invocations = report["invocations"]
+    attempted = next(index for index, invocation in enumerate(invocations)
+        if "capture-hidden-channel" in invocation["stdout"])
+    assert invocations[attempted + 1]["arguments"][2] == "channel-display"
+    assert "--query" in invocations[attempted + 1]["arguments"]
+    for invocation in invocations:
+        if invocation["arguments"][2] == "channel-display" and "2" in invocation["arguments"]:
+            assert "--query" in invocation["arguments"]
 
 
 @requires_windows
