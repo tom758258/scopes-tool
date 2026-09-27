@@ -77,7 +77,7 @@ function Add-Case {
 }
 
 function Invoke-Cli {
-    param([string]$Stage, [string]$Command, [string[]]$Options = @())
+    param([string]$Stage, [string]$Command, [string[]]$Options = @(), [switch]$AllowCurrentStateNA)
     $script:CliIndex += 1
     $stem = "cli-{0:D3}-{1}" -f $script:CliIndex, (New-SafeCaseName -Name $Stage)
     $stdoutPath = Join-Path $script:RunPaths.Private "$stem.stdout.txt"
@@ -130,6 +130,20 @@ function Invoke-Cli {
         json = Get-ArtifactRelativePath -Path ([string]$record.json) -BaseRoot $RepoRoot
     }
     $script:Invocations.Add($invocation)
+    if ($AllowCurrentStateNA -and -not $timedOut -and $record.exit_code -eq 1 -and $record.json -and
+        $parsed.ok -eq $false -and $null -ne $parsed.PSObject.Properties["error"]) {
+        $cliError = $parsed.error
+        # Only these Core preconditions indicate an inapplicable current state.
+        if (($Stage -ceq "math-operator-before" -and $Command -ceq "math-operator" -and
+             $cliError.type -ceq "OscilloscopeError" -and
+             ([string]$cliError.message).StartsWith("Unsupported Tek Math expression: ", [StringComparison]::Ordinal)) -or
+            ($Stage -ceq "cursor-set" -and $Command -ceq "cursor" -and
+             $cliError.type -ceq "ParameterValidationError" -and
+             $cliError.message -ceq "X cursors require existing seconds units")) {
+            $invocation.result = "N/A"
+            return $null
+        }
+    }
     if (-not $record.success -or -not $record.json) {
         $invocation.result = "FAIL"
         throw "$Stage failed (exit $($record.exit_code), timeout=$timedOut); see $stdoutPath and $stderrPath"
@@ -509,11 +523,16 @@ try {
 
         Invoke-RoundTrip "math-display" "math-display" @("--function", "1") "enabled" "--on"
         try {
-            $before = Invoke-Cli -Stage "math-operator-before" -Command "math-operator" -Options @("--function", "1", "--query")
-            Invoke-SameValueCase "math-operator" "math-operator" $before @(
-                "--operation", (Get-Readback $before "math_operation"),
-                "--source1", (Get-Readback $before "source1"), "--source2", (Get-Readback $before "source2")
-            ) @("math_operation", "source1", "source2") @("--function", "1")
+            $before = Invoke-Cli -Stage "math-operator-before" -Command "math-operator" `
+                -Options @("--function", "1", "--query") -AllowCurrentStateNA
+            if ($null -eq $before) {
+                Add-Case "math-operator" "N/A" "Current Math expression is outside the public operator subset; no setter executed"
+            } else {
+                Invoke-SameValueCase "math-operator" "math-operator" $before @(
+                    "--operation", (Get-Readback $before "math_operation"),
+                    "--source1", (Get-Readback $before "source1"), "--source2", (Get-Readback $before "source2")
+                ) @("math_operation", "source1", "source2") @("--function", "1")
+            }
         } catch { Add-Case "math-operator" "FAIL" $_.Exception.Message }
         try {
             $before = Invoke-Cli -Stage "display-persistence-before" -Command "display-persistence" -Options @("--query")
@@ -532,13 +551,17 @@ try {
                 try {
                     $position = Invoke-Cli -Stage "cursor-timebase-position" -Command "timebase-position" -Options @("--query")
                     $x = Get-Readback $position "position_seconds"
-                    $null = Invoke-Cli -Stage "cursor-set" -Command "cursor" -Options @(
-                        "--source-channel", "1", "--x1", (Format-Setting $x), "--x2", (Format-Setting $x))
-                    $after = Invoke-Cli -Stage "cursor-set-after" -Command "cursor" -Options @("--query")
-                    foreach ($field in @("x1_seconds", "x2_seconds")) {
-                        if (-not (Test-ReadbackEqual $x (Get-Readback $after $field))) { throw "Cursor position readback differs." }
+                    $configured = Invoke-Cli -Stage "cursor-set" -Command "cursor" -Options @(
+                        "--source-channel", "1", "--x1", (Format-Setting $x), "--x2", (Format-Setting $x)) -AllowCurrentStateNA
+                    if ($null -eq $configured) {
+                        Add-Case "cursor-set" "N/A" "X cursors require existing seconds units; units were not changed"
+                    } else {
+                        $after = Invoke-Cli -Stage "cursor-set-after" -Command "cursor" -Options @("--query")
+                        foreach ($field in @("x1_seconds", "x2_seconds")) {
+                            if (-not (Test-ReadbackEqual $x (Get-Readback $after $field))) { throw "Cursor position readback differs." }
+                        }
+                        Add-Case "cursor-set" "PASS" "CH1 X cursors at current timebase position; no auto-range changes"
                     }
-                    Add-Case "cursor-set" "PASS" "CH1 X cursors at current timebase position; no auto-range changes"
                 } catch { Add-Case "cursor-set" "FAIL" $_.Exception.Message }
             }
             try {
@@ -578,7 +601,9 @@ try {
                 $isOn = Get-Readback $vectors "value"
                 Add-Case "display-vectors-query" "PASS"
                 if ($isOn -is [bool] -and $isOn) {
-                    Invoke-SimpleCase "display-vectors-on" "display-vectors" @("--on")
+                    try {
+                        Invoke-SameValueCase "display-vectors-on" "display-vectors" $vectors @("--on") @("value")
+                    } catch { Add-Case "display-vectors-on" "FAIL" $_.Exception.Message }
                 } else {
                     Add-Case "display-vectors-on" "N/A" "Current style is dots; no public OFF setter for restore"
                 }

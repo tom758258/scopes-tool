@@ -125,6 +125,8 @@ def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
 def fake_run(
     tmp_path: Path, target: str, *extra: str, mode: str = "edge", mismatch: bool = False,
     connection: str = "usb", bad_bmp: bool = False,
+    math_error: tuple[str, str] | None = None, cursor_error: tuple[str, str] | None = None,
+    vectors_on: bool = False, vectors_mismatch: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
@@ -169,7 +171,7 @@ def fake_run(
         " 'trigger-edge-level': {'level_volts': 0.0},\n"
         " 'trigger-edge': {'source_channel': 1, 'level_volts': 0.0, 'slope': 'positive'},\n"
         " 'save-pwd': {'path': 'C:/scope'},\n"
-        " 'display-vectors': {'value': False},\n"
+        f" 'display-vectors': {{'value': {vectors_on!r}}},\n"
         " 'display-persistence': {'mode': 'minimum', 'seconds': None},\n"
         " 'math-display': {'enabled': False},\n"
         " 'math-operator': {'math_operation': 'add', 'source1': 'channel1', 'source2': 'channel2'},\n"
@@ -180,6 +182,17 @@ def fake_run(
         " 'save-image': {'operation_complete': True, 'raw_operation_complete': '1'},\n"
         " 'reference-display': {'displayed': True},\n"
         "}\n"
+        f"math_error, cursor_error = {math_error!r}, {cursor_error!r}\n"
+        "error = (math_error if command == 'math-operator' and '--query' in sys.argv else\n"
+        "         cursor_error if command == 'cursor' and '--x1' in sys.argv else None)\n"
+        "if error:\n"
+        " print(json.dumps({'ok': False, 'error': {'type': error[0], 'message': error[1]}}))\n"
+        " sys.exit(1)\n"
+        f"vectors_path = Path({str(tmp_path / 'vectors_set.txt')!r})\n"
+        "if command == 'display-vectors':\n"
+        " if '--on' in sys.argv: vectors_path.write_text('on')\n"
+        f" if {vectors_mismatch!r} and '--query' in sys.argv and vectors_path.exists():\n"
+        "  values[command]['value'] = False\n"
         f"counter_path = Path({str(tmp_path / 'mode_queries.txt')!r})\n"
         "if command == 'trigger-mode' and '--query' in sys.argv:\n"
         " count = int(counter_path.read_text()) + 1 if counter_path.exists() else 1\n"
@@ -212,6 +225,78 @@ def fake_run(
         "na": sum(case["status"] == "N/A" for case in report["cases"]),
     }
     return result, report
+
+
+@requires_windows
+def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[0], math_error=("OscilloscopeError", "Unsupported Tek Math expression: 'FFT'"),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["math-operator"]["status"] == "N/A"
+    assert report["status"] == "pass"
+    calls = [inv for inv in report["invocations"] if inv["arguments"][2] == "math-operator"]
+    assert len(calls) == 1
+    assert "--query" in calls[0]["arguments"]
+    assert calls[0]["result"] == "N/A"
+
+
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS[1:])
+def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
+    result, report = fake_run(
+        tmp_path, target, "-IncludeConfigurationActions",
+        cursor_error=("ParameterValidationError", "X cursors require existing seconds units"),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["cursor-set"]["status"] == "N/A"
+    assert cases["cursor-off"]["status"] == "PASS"
+    assert report["status"] == "pass"
+    calls = [inv for inv in report["invocations"] if inv["arguments"][2] == "cursor"]
+    setters = [inv for inv in calls if "--query" not in inv["arguments"]]
+    assert len(setters) == 2  # Rejected X setter and the existing opt-in OFF action.
+    assert "--x1" in setters[0]["arguments"]
+    assert setters[0]["result"] == "N/A"
+    assert "--off" in setters[1]["arguments"]
+    assert "--auto-timebase" not in setters[0]["arguments"]
+    assert "not restored" in result.stdout
+
+
+@requires_windows
+@pytest.mark.parametrize(("command", "error"), [
+    ("math-operator", ("OscilloscopeError", "Math query failed")),
+    ("cursor", ("ParameterValidationError", "X cursor position is outside the graticule")),
+])
+def test_unrelated_math_or_cursor_errors_remain_fail(
+    tmp_path: Path, command: str, error: tuple[str, str],
+) -> None:
+    errors = {"math_error" if command == "math-operator" else "cursor_error": error}
+    result, report = fake_run(tmp_path, TARGETS[1], "-IncludeConfigurationActions", **errors)
+    assert result.returncode != 0
+    assert report["status"] == "fail"
+    assert report["summary_counts"]["failed"] == 1
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["math-operator" if command == "math-operator" else "cursor-set"]["status"] == "FAIL"
+
+
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS[1:])
+@pytest.mark.parametrize("mismatch", (False, True))
+def test_vectors_on_requires_readback(tmp_path: Path, target: str, mismatch: bool) -> None:
+    result, report = fake_run(tmp_path, target, vectors_on=True, vectors_mismatch=mismatch)
+    assert (result.returncode != 0) == mismatch, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["display-vectors-query"]["status"] == "PASS"
+    assert cases["display-vectors-on"]["status"] == ("FAIL" if mismatch else "PASS")
+    assert report["status"] == ("fail" if mismatch else "pass")
+    assert report["summary_counts"]["failed"] == int(mismatch)
+    calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][2] == "display-vectors"]
+    assert len(calls) == 3
+    assert "--query" in calls[0]
+    assert "--on" in calls[1]
+    assert "--query" in calls[2]
 
 
 @requires_windows
