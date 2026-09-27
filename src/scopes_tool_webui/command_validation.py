@@ -1915,7 +1915,11 @@ def _validate_parameters(
         if not (bool(capabilities.screenshot_formats) if capabilities.screenshot_formats is not None else capabilities.supports_screenshot):
             raise WebUIRequestError("screenshot is unsupported for this model")
         parameters["background"] = str(parameters.get("background", "black")).lower()
-        if parameters["background"] not in {"black", "white"}:
+        allowed_backgrounds = capabilities.screenshot_backgrounds
+        if allowed_backgrounds is not None:
+            if parameters["background"] not in allowed_backgrounds:
+                raise WebUIRequestError("background is unsupported for this model")
+        elif parameters["background"] not in {"black", "white"}:
             raise WebUIRequestError("background must be black or white")
     elif command == "autoscale":
         if not capabilities.autoscale_supports_optional_controls:

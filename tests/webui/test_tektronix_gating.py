@@ -48,6 +48,9 @@ def test_catalog_admits_only_registered_tek_operations():
     assert acquisition[b1]["fields"]["type"]["options"] == ["normal", "peak", "average"]
     assert acquisition[b1]["fields"]["count"]["options"] == [4, 16, 64, 128]
 
+    with pytest.raises(WebUIRequestError, match="background is unsupported"):
+        _validate_parameters("screenshot", {"background": "white"}, "simulate", b2)
+
     autoscale = catalog["autoscale"]["presentation"]["models"]
     for model in (b2, b1):
         for field in ("channels", "acquire_mode", "channels_mode"):

@@ -860,6 +860,13 @@ try {
                 Add-Case $name "N/A" "Requires -IncludeStorageWrites and explicit slots"
             }
         }
+
+        try {
+            $event = Invoke-Cli -Stage "final-standard-event" -Command "system-standard-event" -Options @("--query")
+            $bits = [int](Get-Readback -Payload $event -Field "value")
+            if (($bits -band 60) -ne 0) { throw "Final SESR error bits CME/EXE/DDE/QYE set: $bits" }
+            Add-Case -Name "final-standard-event" -Status "PASS" -Detail "No final SESR error bits; raw value $bits"
+        } catch { Add-Case -Name "final-standard-event" -Status "FAIL" -Detail $_.Exception.Message }
     }
 } finally {
     Write-Report

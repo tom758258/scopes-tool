@@ -380,6 +380,8 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
         assert cases[name]["status"] == "PASS", cases[name]
     assert cases["autoscale"]["status"] == "N/A"
     assert cases["setup-save"]["status"] == "N/A"
+    assert cases["final-standard-event"]["status"] == "PASS"
+    assert report["invocations"][-1]["arguments"][2] == "system-standard-event"
     assert not [case for case in report["cases"] if case["status"] == "FAIL"]
     assert report["status"] == "pass"
     assert all(invocation["arguments"][2] not in {
