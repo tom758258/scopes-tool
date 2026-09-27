@@ -138,13 +138,9 @@ def fake_run(
     screenshot_bytes = b"bad" if bad_bmp else (b"\x89PNG\r\n\x1a\nfake" if target == TARGETS[0] else b"BMfake")
     stub = tmp_path / "scopes_tool_cli"
     stub.mkdir()
-    (stub / "__init__.py").write_text(
-        f"__path__.append({str(ROOT / 'src' / 'scopes_tool_cli')!r})\n", encoding="utf-8"
-    )
+    (stub / "__init__.py").write_text("", encoding="utf-8")
     (stub / "cli.py").write_text(
         "import json, sys\nfrom pathlib import Path\n"
-        "from scopes_tool_cli.parser import _build_parser\n"
-        "_build_parser().parse_args()\n"
         "command = sys.argv[1]\n"
         "values = {\n"
         " 'system-standard-event': {'value': 0},\n"
@@ -544,3 +540,33 @@ def test_waveform_storage_inputs_rejected_before_identity(arguments):
     result = run_script("-Target", TARGETS[2], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR", *arguments)
     assert result.returncode != 0
     assert "require" in result.stderr.lower()
+
+
+@requires_windows
+@pytest.mark.parametrize(("target", "mode"), [
+    (TARGETS[0], "edge"),
+    (TARGETS[0], "runt"),
+    (TARGETS[0], "glitch"),
+    (TARGETS[1], "tv"),
+    (TARGETS[2], "edge"),
+])
+def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, mode: str) -> None:
+    from scopes_tool_cli.parser import _build_parser
+
+    result, report = fake_run(
+        tmp_path, target, "-IncludeConfigurationActions", "-IncludeAcquisitionActions",
+        "-IncludeAutoscale", "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
+        "-ImageFilename", "acceptance.png", "-IncludeScreenshot",
+        "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "2",
+        mode=mode, vectors_on=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    # Build once in pytest, not in every fake child CLI process.
+    parser = _build_parser()
+    arguments = {tuple(inv["arguments"][2:]) for inv in report["invocations"]}
+    assert arguments
+    for argv in sorted(arguments):
+        parsed = parser.parse_args(argv)
+        assert parsed.command == argv[0]
+        assert parsed.json_output is True
+        assert parsed.resource == "USB0::FAKE::INSTR"
