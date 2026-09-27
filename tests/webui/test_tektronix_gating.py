@@ -21,7 +21,7 @@ def test_catalog_admits_only_registered_tek_operations():
 
     assert supported("run", b2)
     assert supported("channel-offset", b2)
-    assert not supported("channel-offset", b1)
+    assert supported("channel-offset", b1)
     assert supported("timebase-position", b1)
     assert not supported("timebase-position", b2)
     assert supported("display-vectors", b1)
@@ -30,7 +30,7 @@ def test_catalog_admits_only_registered_tek_operations():
     for command in ("measure", "capture", "single-wait", "trigger-pulse-width", "reference-query"):
         assert supported(command, b2)
         assert supported(command, b1)
-    assert not supported("screenshot", b2)
+    assert supported("screenshot", b2)
     assert supported("screenshot", b1)
     assert not supported("check-error", b2)
     assert not supported("check-error", b1)
@@ -200,7 +200,7 @@ def test_webui_install_does_not_enable_native_results(model_id, tmp_path):
             parameters={"source_channel": 1, "item": "vpp"} if command == "measure-install" else {}, artifact_dir=tmp_path)
         assert result["exit_code"] == 0
     assert not catalog["measure-results"]["presentation"]["models"][model_id]["supported"]
-    assert catalog["screenshot"]["presentation"]["models"][model_id]["supported"] is (model_id == "tektronix-tds2024b")
+    assert catalog["screenshot"]["presentation"]["models"][model_id]["supported"] is (model_id != "tektronix-tbs1052b")
     with pytest.raises(WebUIRequestError, match="unsupported"):
         _validate_parameters("measure-results", {}, "simulate", model_id)
 
@@ -262,3 +262,21 @@ def test_webui_existing_png_models_keep_capture_behavior(model_id, tmp_path):
     assert result["exit_code"] == 0 and result["result"]["format"] == "PNG"
     path = Path(result["artifacts"][0]["path"])
     assert path.suffix == ".png" and path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_waveform_source_projection_and_execution(tmp_path):
+    catalog = {entry["id"]: entry for entry in command_catalog()}
+    models = catalog["save-waveform"]["presentation"]["models"]
+    for model, count in (("tektronix-tbs2074b", 4), ("tektronix-tds2024b", 4), ("tektronix-tbs1052b", 2)):
+        field = models[model]["fields"]["source_channel"]
+        assert field["options"] == list(range(1, count + 1))
+        assert field["required"] and not field["hidden"]
+    assert models["keysight-dsox4024a"]["fields"]["source_channel"]["hidden"]
+    result = command_execution.execute_command("save-waveform", mode="simulate", resource=None,
+        model_id="tektronix-tbs1052b", parameters={"filename": "wave.csv", "source_channel": 2}, artifact_dir=tmp_path)
+    assert result["exit_code"] == 0
+    assert result["result"]["save"]["command"] == 'SAVe:WAVEform CH2,"wave.csv"'
+    png = command_execution.execute_command("screenshot", mode="simulate", resource=None,
+        model_id="tektronix-tbs2074b", parameters={"background": "black"}, artifact_dir=tmp_path)
+    assert png["exit_code"] == 0
+    assert png["result"]["format"] == "PNG"

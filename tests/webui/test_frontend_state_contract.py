@@ -830,10 +830,12 @@ def test_basic_controls_dispatch_screenshot_background() -> None:
         };
         const calls = [];
         let denied = new Set();
+        let deniedBackgrounds = new Set();
         const update = bindBasicControls(
           container,
           (command, parameters) => { calls.push([command, parameters]); },
-          (command) => !denied.has(command),
+          (command, parameters) => !denied.has(command)
+            && !(command === "screenshot" && deniedBackgrounds.has(parameters.background)),
         );
         const click = (button) => listeners.click({ target: { closest: () => button } });
         click(runButton);
@@ -842,6 +844,12 @@ def test_basic_controls_dispatch_screenshot_background() -> None:
         assert.deepStrictEqual(calls[1], ["screenshot", { background: "black" }]);
         click(whiteButton);
         assert.deepStrictEqual(calls[2], ["screenshot", { background: "white" }]);
+
+        deniedBackgrounds = new Set(["white"]);
+        update();
+        assert.equal(runButton.disabled, false);
+        assert.equal(blackButton.disabled, false);
+        assert.equal(whiteButton.disabled, true);
 
         denied = new Set(["screenshot"]);
         update();

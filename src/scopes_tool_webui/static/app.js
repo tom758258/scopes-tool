@@ -1144,8 +1144,14 @@ function commandAvailable(command) {
   return Boolean(deviceResource?.hasCurrentIdentity(context));
 }
 
-function basicAvailable(command) {
-  return !isExecutionBusy() && commandAvailable(command);
+function basicAvailable(command, parameters = {}) {
+  if (isExecutionBusy() || !commandAvailable(command)) return false;
+  if (command === "screenshot" && parameters.background) {
+    const definition = commands.find((item) => item.id === command);
+    const field = catalog.fieldsFor(definition).find((item) => item.name === "background");
+    return !field || catalog.optionsFor(field).includes(parameters.background);
+  }
+  return true;
 }
 
 function updateAvailability() {

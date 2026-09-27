@@ -2244,6 +2244,15 @@ Start commands require an explicit filename:
 {"command": "save-waveform", "arguments": {"filename": "\\usb\\wave.csv"}}
 ```
 
+`save-waveform` additionally accepts integer `source_channel`. It is required
+for Tektronix and validated against the model's analog channel count before
+enqueue or instrument access. Keysight retains filename-only behavior and
+rejects this optional input. For example:
+
+```json
+{"command": "save-waveform", "arguments": {"filename": "wave.csv", "source_channel": 2}}
+```
+
 `save-waveform-format` accepts exactly `{"query": true}` or one canonical
 `format`: `ascii-xy`, `csv`, or `binary`. Format query readbacks may use the
 instrument sentinel `NONE`, which result JSON normalizes to canonical `none`.
@@ -2260,8 +2269,8 @@ only and additionally rejects path and drive separators. The worker never
 trims, sanitizes, escapes, or appends an extension. Start commands send
 `*OPC?` after the SAVE command before reporting success. `save-image`
 temporarily uses a bounded 15-second timeout for that completion query and then
-restores the prior session timeout. `save-waveform` retains the current session
-timeout.
+restores the prior session timeout. `save-waveform` retains the current session timeout on Keysight; Tek uses a
+temporary 15-second completion timeout and restores it in finally.
 
 Unknown keys, aliases, empty arguments, `query: false`, query/configure mixes,
 string or numeric booleans, wrong string types, non-integer points, and values

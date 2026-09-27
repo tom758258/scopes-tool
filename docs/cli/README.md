@@ -2003,9 +2003,19 @@ not trimmed, sanitized, escaped, or given automatic extensions. `save-image`
 and `save-waveform` require an explicit filename for agent safety and
 wait for `*OPC?` after starting the save. `save-image` uses a bounded 15-second
 timeout for this completion query and then restores the prior session timeout;
-`save-waveform` retains the current session timeout.
+`save-waveform` retains the current session timeout on Keysight; Tek uses a
+temporary 15-second completion timeout and restores it in finally.
 
-These commands send `:SAVE...` SCPI so the oscilloscope writes to its own
+`save-waveform --filename ... [--source-channel N]` keeps filename-only
+behavior on Keysight. Tek requires `--source-channel` in the model's analog
+channel range (1..4 or 1..2). B1 saves CSV without a format query/set;
+TBS2074B retains its existing `csv` format control. Use available instrument
+storage and a filename valid for the model (TBS2000B uses 8.3 names).
+TBS2074B `screenshot` retrieves native PNG with black background and no
+appearance controls. TDS2024B retains `--format bmp` over USBTMC;
+TBS1052B screenshot remains unsupported.
+
+These commands send model-specific SAVE SCPI so the oscilloscope writes to its own
 current save directory, internal storage, or attached USB storage. They do not
 create or check host-side files. Existing `capture`, `capture-batch`, and
 `screenshot` continue to retrieve bytes and write PC-side artifacts. Instrument-

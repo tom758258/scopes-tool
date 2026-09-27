@@ -685,6 +685,7 @@ export const zhTW = {
   "description.reference-label": "設定或讀取指定參考波形的標籤。",
   "description.reference-clear": "清除指定的參考波形。",
   "description.reference-query": "讀取指定參考波形的顯示與標籤狀態。",
+  "save-waveform.source_channel": "要儲存至儀器儲存裝置的類比通道。",
   "save-export.editor.title": "儲存 / 匯出",
   "save-export.editor.mode.image": "影像",
   "save-export.editor.mode.waveform": "波形資料",

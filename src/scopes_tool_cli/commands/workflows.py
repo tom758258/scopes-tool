@@ -60,9 +60,6 @@ from scopes_tool_core.status import system_opc_query
 from scopes_tool_core.screenshot import (
     DEFAULT_SCREENSHOT_BACKGROUND,
     SCREENSHOT_TIMEOUT_MS,
-    hardcopy_inksaver_command,
-    hardcopy_inksaver_for_background,
-    screenshot_data_query,
     write_screenshot,
     write_screenshot_png,
 )
@@ -275,7 +272,7 @@ def _cmd_save_export(args: argparse.Namespace) -> int:
             result.update(state.to_json())
             print(f"Maximum waveform save length enabled: {state.enabled}")
         else:
-            operation = scope.save_waveform(args.filename)
+            operation = scope.save_waveform(args.filename, source_channel=args.source_channel)
             result.update(operation.to_json(), state_changing=True)
             print(f"Instrument-side waveform saved as: {args.filename}")
 
@@ -843,16 +840,13 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         if preflight._uses_screenshot_hardcopy_controls(args):
             history_start = len(scope.backend.history)
             capture = scope.capture_screenshot(options=options, background=background)
-            for command in scope.backend.history[history_start:]:
-                print(f"Command: {command}")
             written_image = _write_screenshot(capture, output_path, format_name)
         else:
+            history_start = len(scope.backend.history)
             capture = scope.capture_screenshot_png(background=background)
-            print(
-                f"Command: {hardcopy_inksaver_command(hardcopy_inksaver_for_background(background))}"
-            )
-            print(f"Command: {screenshot_data_query()}")
             written_image = _write_screenshot_png(capture, output_path)
+        for command in scope.backend.history[history_start:]:
+            print(f"Command: {command}")
         file_kind = "png" if format_name == "png" else "bmp"
         files = [{"kind": file_kind, "path": str(written_image)}]
         runtime._json_set_files(files)

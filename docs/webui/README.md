@@ -448,11 +448,14 @@ through the editor.
 Save Image and Save Waveform each use the instrument-side Save / Export editor
 with a shared instrument-side path, a per-save filename, an independent Apply,
 a full-width destination preview, and advanced base filename settings. Each
-requires its own explicit filename and submits only its existing
+requires its own explicit filename. Save Waveform additionally requires a source
+channel on Tektronix, offering CH1..CH4 or CH1..CH2 according to Core capabilities;
+the source field is hidden on Keysight. Each submits only its existing
 instrument-side Save command. They do not inherit
 or update `save-filename`; the editor makes this filename separation explicit.
 They do not add filename extensions, refresh unrelated settings, or create
-local output files on the host computer. Screenshot and Capture remain separate host-side
+local output files on the host computer. Screenshot uses native PNG with black background on TBS2074B and BMP on TDS2024B;
+TBS1052B screenshot remains unavailable. Screenshot and Capture remain separate host-side
 retrieval paths that register downloadable artifacts. The Basic Controls PC
 output folder does not change `save-pwd`, `save-filename`, or any other
 instrument-side `:SAVE:*` behavior.

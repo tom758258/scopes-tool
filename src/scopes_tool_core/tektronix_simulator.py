@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 import re
 
-from .simulator_backend import SimulatorBackend, SimulatorBackendError, _parse_scpi_number, _simulated_screenshot_bmp
+from .simulator_backend import SimulatorBackend, SimulatorBackendError, _parse_scpi_number, _simulated_screenshot_bmp, _simulated_screenshot_png
 
 
 @dataclass
@@ -22,6 +22,8 @@ class TektronixSimulatorBackend(SimulatorBackend):
     tek_measurements: dict[int, dict[str, str]] = field(default_factory=dict)
     hardcopy_port: str = "USB"
     hardcopy_pending: bool = False
+    image_files: dict[str, bytes] = field(default_factory=dict)
+    image_read_pending: str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -157,7 +159,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
         choices = {"SELECT:MATH": {"ON", "OFF"}}
         if b2:
             choices.update({
-                "DISPLAY:PERSISTENCE:STATE": {"ON", "OFF"}, "SAVE:IMAGE:FILEFORMAT": {"PNG", "BMP"},
+                "DISPLAY:PERSISTENCE:STATE": {"ON", "OFF"}, "SAVE:IMAGE:FILEFORMAT": {"PNG", "BMP", "JPG"},
                 "SAVE:WAVEFORM:FILEFORMAT": {"SPREADSHEET"}, "TRIGGER:A:PULSE:CLASS": {"WIDTH", "RUNT"},
                 "TRIGGER:A:RUNT:SOURCE": {"CH1", "CH2"}, "TRIGGER:A:RUNT:POLARITY": {"POSITIVE", "NEGATIVE"},
                 "TRIGGER:A:RUNT:WHEN": {"OCCURS", "LESSTHAN", "MORETHAN"},
@@ -196,6 +198,8 @@ class TektronixSimulatorBackend(SimulatorBackend):
             return True
         if header == "SAVE:IMAGE" and re.fullmatch(r'"[^"\r\n]+"', value):
             self.tek_settings[header] = value
+            if b2:
+                self.image_files[value.strip('"')] = _simulated_screenshot_png(self.model, white_background=False)
             return True
         if header == "HARDCOPY:INKSAVER" and not b2 and token in {"ON", "OFF"}:
             self.hardcopy_inksaver = token == "ON"
@@ -226,7 +230,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             channel = self._channel_number(match[1])
             if match[2] == "YUNIT" and (not b2 or channel in self._capabilities.channel_units_channels):
                 return "A" if self.channel_units.get(channel) == "amp" else "V"
-            if match[2] == "POSITION" and not b2: return "0"
+            if match[2] == "POSITION" and not b2: return self.tek_settings.get(header, "0")
         match = re.fullmatch(r"MEASUREMENT:MEAS(\d+):(TYPE|SOURCE1?|STATE)", header)
         if match and int(match[1]) in self.tek_measurements:
             if match[2] in ({"TYPE", "SOURCE1", "STATE"} if b2 else {"TYPE", "SOURCE"}):
@@ -259,6 +263,11 @@ class TektronixSimulatorBackend(SimulatorBackend):
 
     def read_raw(self) -> bytes:
         self._ensure_open()
+        if self.image_read_pending is not None:
+            filename = self.image_read_pending
+            self.image_read_pending = None
+            self._raise_configured_failure(self.binary_failures, "FILESystem:READFile")
+            return bytes(self.binary_overrides.get("FILESystem:READFile", self.image_files[filename]))
         if not self.hardcopy_pending:
             raise SimulatorBackendError("No supported Tek hardcopy transfer is pending")
         self.hardcopy_pending = False
@@ -288,6 +297,26 @@ class TektronixSimulatorBackend(SimulatorBackend):
             return
         self._record(command, query=False)
         if self._write_supported_settings(command):
+            return
+        match = re.fullmatch(r'CH(\d+):POSITION (.+)', upper)
+        if match and self._capabilities.series != "TBS2000B":
+            self._channel_number(match[1])
+            _parse_scpi_number(match[2])
+            self.tek_settings[upper.partition(" ")[0]] = match[2]
+            return
+        match = re.fullmatch(r'SAVE:WAVEFORM CH(\d+),"([^\"]*)"', command, re.IGNORECASE)
+        if match:
+            self._channel_number(match[1])
+            self.last_save_waveform_filename = match[2]
+            return
+        match = re.fullmatch(r'FILESYSTEM:(READFILE|DELETE) "([^\"]*)"', command, re.IGNORECASE)
+        if match and self._capabilities.series == "TBS2000B":
+            if match[1].upper() == "DELETE":
+                self.image_files.pop(match[2], None)
+            elif match[2] in self.image_files:
+                self.image_read_pending = match[2]
+            else:
+                raise SimulatorBackendError("Image file does not exist")
             return
         match = re.fullmatch(r"ACQUIRE:STOPAFTER (RUNSTOP|SEQUENCE)", upper)
         if match:

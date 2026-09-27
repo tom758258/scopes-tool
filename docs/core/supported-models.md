@@ -78,13 +78,15 @@ when it does not match the detected identity.
 
 The Tektronix profiles admit only their listed existing operations. The shared
 run, acquisition, channel, reference, setup, status, and Edge trigger controls
-follow the [Tektronix support matrix](tektronix-support-matrix.md). Capture,
-measurements, screenshots, and `check-error` are unavailable on these profiles.
+follow the [Tektronix support matrix](tektronix-support-matrix.md). All three
+support waveform capture, model-specific measurements, voltage channel offsets,
+and source-qualified instrument waveform saves. TBS2074B supports native PNG
+screenshots with black background; TDS2024B supports explicit BMP over USBTMC.
+TBS1052B screenshots and normalized `check-error` remain unavailable.
 Tektronix dry-run and the stateful simulator use the Tektronix command dialect
-for the listed operations. The simulator does not add support for capture,
-measurements, screenshots, or `check-error`. Signal presets, system-error queue
-injection, waveform transfer failures, and invalid-measurement injection are
-unavailable for these profiles.
+for the listed operations. Simulation does not establish live hardware support.
+Signal presets and system-error queue
+injection remain unavailable for these profiles.
 
 The following Keysight InfiniiVision capability details apply to the Keysight
 profiles:

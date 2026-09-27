@@ -317,6 +317,8 @@ class TektronixOscilloscope(Oscilloscope):
                     getattr(self, f"query_{suffix}")()
         elif command == "save-image":
             self.save_image(args.filename)
+        elif command == "save-waveform":
+            self.save_waveform(args.filename, source_channel=args.source_channel)
         elif command == "screenshot":
             options = ScreenshotOptions(format=args.format, ink_saver=args.ink_saver,
                                         palette=args.palette, layout=args.layout)
@@ -543,13 +545,19 @@ class TektronixOscilloscope(Oscilloscope):
         return self._float(f"CH{self._channel(channel)}:SCAle?")
 
     def set_channel_offset(self, channel: int, volts: float) -> None:
-        self._b2_only("channel-offset")
         channel = self._channel(channel)
-        self._write_number(f"CH{channel}:OFFSet", validate_channel_offset(volts))
+        volts = validate_channel_offset(volts)
+        if self._b2:
+            self._write_number(f"CH{channel}:OFFSet", volts)
+        else:
+            # B1 positive POSITION raises the signal; offset is the center voltage.
+            self._write_number(f"CH{channel}:POSition", -volts / self.query_channel_scale(channel))
 
     def query_channel_offset(self, channel: int) -> float:
-        self._b2_only("channel-offset")
-        return self._float(f"CH{self._channel(channel)}:OFFSet?")
+        channel = self._channel(channel)
+        if self._b2:
+            return self._float(f"CH{channel}:OFFSet?")
+        return -self._float(f"CH{channel}:POSition?") * self.query_channel_scale(channel)
 
     def set_channel_coupling(self, channel: int, coupling: str) -> None:
         channel = self._channel(channel)
@@ -806,7 +814,7 @@ class TektronixOscilloscope(Oscilloscope):
             channel=channel, display=self.query_channel_display(channel),
             label=self.query_channel_label(channel) if self._b2 else None,
             scale=self.query_channel_scale(channel), range=None,
-            offset=self.query_channel_offset(channel) if self._b2 else None,
+            offset=self.query_channel_offset(channel),
             coupling=self.query_channel_coupling(channel), impedance=None,
             invert=self.query_channel_invert(channel),
             bandwidth_limit=self.query_channel_bandwidth_limit(channel),
@@ -1189,6 +1197,23 @@ class TektronixOscilloscope(Oscilloscope):
         finally:
             self.scpi.set_timeout(original_timeout)
 
+    def save_waveform(self, filename: str, *, source_channel: int | None = None) -> SaveOperationResult:
+        filename = validate_save_quoted_string(filename, label="Save filename")
+        if source_channel is None:
+            raise ParameterValidationError("save-waveform requires source_channel for this model")
+        if isinstance(source_channel, bool) or not isinstance(source_channel, int):
+            raise ParameterValidationError("source_channel must be an integer")
+        channel = self._channel(source_channel)
+        command = f'SAVe:WAVEform CH{channel},"{filename}"'
+        original_timeout = self.scpi.timeout
+        try:
+            self.scpi.set_timeout(_SAVE_COMPLETION_TIMEOUT_MS)
+            self.scpi.write(command)
+            complete = self.query_operation_complete()
+            return SaveOperationResult("save-waveform", filename, command, complete.raw)
+        finally:
+            self.scpi.set_timeout(original_timeout)
+
     def configure_save_waveform_format(self, format: str) -> None:
         self._b2_only("save-waveform-format")
         token = _choice(format, {"csv": "SPREADSheet"}, "save waveform format")
@@ -1203,6 +1228,8 @@ class TektronixOscilloscope(Oscilloscope):
         options = normalize_screenshot_options(options)
         background = normalize_screenshot_background(background)
         validate_screenshot_capability(self.capabilities, options)
+        if self._b2:
+            return self._capture_native_png(options, background)
         from .visa_backend import VisaBackend
         if isinstance(self.backend, VisaBackend):
             resource = self.backend.resource_name.strip().upper()
@@ -1243,6 +1270,33 @@ class TektronixOscilloscope(Oscilloscope):
                         stack.callback(self.scpi.write, f"{command} {original}")
             finally:
                 self.scpi.set_timeout(original_timeout)
+
+    def capture_screenshot_png(self, *, background: str = "black") -> ScreenshotCapture:
+        return self.capture_screenshot(options=ScreenshotOptions(format="png"), background=background)
+
+    def _capture_native_png(self, options: ScreenshotOptions, background: str) -> ScreenshotCapture:
+        if background != "black" or options.ink_saver is not None or options.layout is not None:
+            raise ParameterValidationError("This model screenshot supports black background without appearance controls")
+        from uuid import uuid4
+        from contextlib import ExitStack
+
+        filename = f"{uuid4().hex[:8]}.png"
+        original_timeout = self.scpi.timeout
+        with ExitStack() as restore:
+            restore.callback(self.scpi.set_timeout, original_timeout)
+            self.scpi.set_timeout(SCREENSHOT_TIMEOUT_MS)
+            original_format, _ = self._query("SAVe:IMAge:FILEFormat?")
+            original_format = _choice(original_format, {"PNG": "PNG", "BMP": "BMP", "JPG": "JPG"}, "image format response")
+            if original_format != "PNG":
+                restore.callback(self.scpi.write, f"SAVe:IMAge:FILEFormat {original_format}")
+                self.scpi.write("SAVe:IMAge:FILEFormat PNG")
+            # Register deletion before the save: a failed save may still create a file.
+            restore.callback(self.scpi.write, f'FILESystem:DELEte "{filename}"')
+            self.scpi.write(f'SAVe:IMAge "{filename}"')
+            self.query_operation_complete()
+            self.scpi.write(f'FILESystem:READFile "{filename}"')
+            data = screenshot_bytes_from_values_for_format(self.scpi.read_raw(), "png")
+            return ScreenshotCapture("PNG", None, data, background)
 
     def configure_runt_trigger(self, *, channel: int, polarity: str, qualifier: str,
                                low_level_volts: float, high_level_volts: float,

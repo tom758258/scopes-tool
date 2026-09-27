@@ -1634,6 +1634,17 @@ def _validate_parameters(
         else:
             _reject_query_parameters(parameters, (value_name,), command)
     elif command in {"save-image", "save-waveform"}:
+        if command == "save-waveform":
+            if capabilities.save_waveform_requires_source:
+                _require_parameter(parameters, "source_channel", command)
+            if "source_channel" in parameters:
+                if not capabilities.save_waveform_requires_source:
+                    raise WebUIRequestError("source_channel is unsupported for this model save-waveform")
+                try:
+                    parameters["source_channel"] = validate_analog_channel(
+                        _integer(parameters["source_channel"], "source_channel"), capabilities)
+                except Exception as exc:
+                    raise WebUIRequestError(str(exc)) from exc
         _require_parameter(parameters, "filename", command)
         try:
             parameters["filename"] = validate_save_quoted_string(

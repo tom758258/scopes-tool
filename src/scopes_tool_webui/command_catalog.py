@@ -959,6 +959,7 @@ COMMANDS = (
         "editor": "save-export",
         "fields": (
             {"name": "filename", "type": "string", "required": True, "label_key": "save-waveform.filename", "help_key": "save-waveform.filename"},
+            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "label_key": "source_channel", "option_label": "channel", "help_key": "save-waveform.source_channel"},
         ),
     },
     {
@@ -2383,6 +2384,11 @@ def _model_command_presentation(
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
         if field.get("type") == "multi-enum" and name == "channels":
             override["options"] = tuple(range(1, capabilities.analog_channels + 1))
+        if entry["id"] == "save-waveform" and name == "source_channel":
+            override["hidden"] = not capabilities.save_waveform_requires_source
+            override["required"] = capabilities.save_waveform_requires_source
+        if entry["id"] == "screenshot" and name == "background" and capabilities.screenshot_backgrounds is not None:
+            override["options"] = capabilities.screenshot_backgrounds
         if entry["id"] == "capture":
             if name == "points":
                 override["options"] = tuple(value for value in field["options"]

@@ -1234,6 +1234,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_scope_connection_args(save_waveform_parser)
     save_waveform_parser.add_argument("--filename", required=True)
+    save_waveform_parser.add_argument("--source-channel", type=int)
 
     reference_save_parser = subparsers.add_parser(
         "reference-save", help="copy an analog channel into a reference waveform slot"

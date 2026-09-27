@@ -1198,9 +1198,11 @@ class Oscilloscope:
 
         return self._save_export_controller().query_waveform_length_max()
 
-    def save_waveform(self, filename: str) -> SaveOperationResult:
+    def save_waveform(self, filename: str, *, source_channel: int | None = None) -> SaveOperationResult:
         """Save waveform data on the instrument and wait for completion."""
 
+        if source_channel is not None:
+            raise ParameterValidationError("source_channel is unsupported for this model save-waveform")
         return self._save_export_controller().save_waveform(filename)
 
 

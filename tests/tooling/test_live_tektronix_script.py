@@ -173,6 +173,7 @@ def fake_run(
         " 'trigger-edge-level': {'level_volts': 0.0},\n"
         " 'trigger-edge': {'source_channel': 1, 'level_volts': 0.0, 'slope': 'positive'},\n"
         " 'save-pwd': {'path': 'C:/scope'},\n"
+        " 'save-waveform': {'operation_complete': True},\n"
         f" 'display-vectors': {{'value': {vectors_on!r}}},\n"
         " 'display-persistence': {'mode': 'minimum', 'seconds': None},\n"
         " 'math-display': {'enabled': False},\n"
@@ -225,8 +226,8 @@ def fake_run(
         " values[command] = {'format': 'BYTE', 'actual_points': points}\n"
         "if command == 'screenshot':\n"
         " path = sys.argv[sys.argv.index('--output') + 1]\n"
-        f" Path(path).write_bytes({'bad' if bad_bmp else 'BMfake'!r}.encode())\n"
-        " values[command] = {'format': 'BMP', 'byte_count': Path(path).stat().st_size, 'image_path': path}\n"
+        f" Path(path).write_bytes({b'bad' if bad_bmp else (b'\x89PNG\r\n\x1a\nfake' if target == TARGETS[0] else b'BMfake')!r})\n"
+        f" values[command] = {{'format': {'PNG' if target == TARGETS[0] else 'BMP'!r}, 'byte_count': Path(path).stat().st_size, 'image_path': path}}\n"
         f"print(json.dumps({{'ok': True, 'idn': {{'vendor': 'TEKTRONIX', 'model': '{model}'}}, "
         f"'capabilities': {{'analog_channels': {channels}, 'series': '{series}'}}, "
         "'result': values.get(command, {})}))\n",
@@ -356,7 +357,7 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
                    for inv in report["invocations"])
     unsupported = ({"timebase-position", "trigger-tv", "save-image-ink-saver", "display-vectors"}
                    if target == TARGETS[0] else
-                   {"sample-rate", "channel-offset", "channel-label", "channel-probe-skew",
+                   {"sample-rate", "channel-label", "channel-probe-skew",
                     "trigger-edge-level", "trigger-runt", "save-image-format", "save-waveform-format"})
     assert not unsupported.intersection(inv["arguments"][2] for inv in report["invocations"])
     commands = [inv["arguments"][2] for inv in report["invocations"]]
@@ -392,15 +393,20 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
         tmp_path, target, "-IncludeConfigurationActions", "-IncludeAcquisitionActions",
         "-IncludeAutoscale", "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
         "-ImageFilename", "acceptance.png", "-IncludeScreenshot",
+        "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "2",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     for name in ("cursor-off", "measure-install", "measure-clear", "run", "single", "force-trigger",
-                 "stop-acquisition", "autoscale", "save-image", "setup-save", "setup-recall",
+                 "stop-acquisition", "autoscale", "save-image", "save-waveform", "setup-save", "setup-recall",
                  "reference-save", "reference-display", "reference-query", "measure", "capture-byte", "single-wait-natural", "single-wait-force"):
         assert cases[name]["status"] == "PASS", cases[name]
     assert cases["cursor-set"]["status"] == ("N/A" if target == TARGETS[0] else "PASS")
     assert cases["screenshot-bmp"]["status"] == ("PASS" if target == TARGETS[1] else "N/A")
+    if target == TARGETS[0]:
+        assert cases["screenshot-png"]["status"] == "PASS"
+    save = next(inv for inv in report["invocations"] if inv["arguments"][2] == "save-waveform")
+    assert "--source-channel" in save["arguments"]
     assert report["acquisition_final_state"] == "stopped"
     assert cases["capture-hidden-channel"]["status"] == "N/A"
 
@@ -525,3 +531,15 @@ def test_pulse_width_roundtrip_preserves_current_glitch_mode(tmp_path):
     calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][2] == "trigger-pulse-width"]
     assert len(calls) == 3  # Query, same-value set, and readback preserve the current settings.
     assert all("range" not in call for call in calls)
+
+
+@requires_windows
+@pytest.mark.parametrize("arguments", [
+    ["-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "1"],
+    ["-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1", "-WaveformFilename", "bad;file.csv", "-WaveformSourceChannel", "1"],
+    ["-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1", "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "3"],
+])
+def test_waveform_storage_inputs_rejected_before_identity(arguments):
+    result = run_script("-Target", TARGETS[2], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR", *arguments)
+    assert result.returncode != 0
+    assert "require" in result.stderr.lower()

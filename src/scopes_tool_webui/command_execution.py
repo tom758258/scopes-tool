@@ -833,7 +833,7 @@ def _execute_scope_command(
         return _state_scope_result("state", scope.query_save_waveform_length_max())
     if command == "save-waveform":
         return _state_scope_result(
-            "save", scope.save_waveform(parameters["filename"]).to_json()
+            "save", scope.save_waveform(parameters["filename"], source_channel=parameters.get("source_channel")).to_json()
         )
     if command == "setup-save":
         scope.save_setup(slot=parameters.get("slot"), file_spec=parameters.get("file"))

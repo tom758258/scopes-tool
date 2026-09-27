@@ -92,9 +92,9 @@ def test_unknown_tek_model_fails_closed():
 def test_capability_subset_and_unsupported_leaks(model_id, _, __):
     capabilities = capabilities_for_model_id(model_id)
     for operation in ("run", "channel-scale", "setup-save", "trigger-edge", "list-resources",
-                      "measure", "capture", "single-wait", "trigger-pulse-width", "reference-query"):
+                      "measure", "capture", "single-wait", "trigger-pulse-width", "reference-query", "save-waveform", "channel-offset"):
         assert operation_supported(capabilities, operation)
-    for operation in ("measure-sweep", "measure-results", "check-error", "save-waveform", "doctor", "smoke", "cleanup", "acquisition-check",
+    for operation in ("measure-sweep", "measure-results", "check-error", "doctor", "smoke", "cleanup", "acquisition-check",
                       "capture-batch", "capture-until", "capture-monitor", "measure-log", "measure-until",
                       "triggered-measure-loop", "triggered-capture-series", "sequence"):
         assert not operation_supported(capabilities, operation)
@@ -109,8 +109,8 @@ def test_capability_subset_and_unsupported_leaks(model_id, _, __):
                       else ("cursor-set", "trigger-tv", "save-image-ink-saver")):
         assert operation_supported(capabilities, operation)
     assert not capabilities.supports_measure_results_dump
-    assert not capabilities.supports_screenshot
-    assert operation_supported(capabilities, "screenshot") is (model_id == "tektronix-tds2024b")
+    assert capabilities.supports_screenshot is b2
+    assert operation_supported(capabilities, "screenshot") is (model_id != "tektronix-tbs1052b")
     assert operation_supported(capabilities, "display-vectors") is (
         model_id in {"tektronix-tds2024b", "tektronix-tbs1052b"}
     )
@@ -504,9 +504,12 @@ def test_legacy_subsets(model_id):
 @pytest.mark.parametrize("model_id,_,__", MODELS)
 def test_measurement_results_and_png_stay_fail_closed(model_id, _, __):
     scope, backend = make_scope(model_id)
-    for action in (scope.query_measurement_results, scope.capture_screenshot_png, scope.query_hardcopy_state,
-                   lambda: scope.capture_screenshot(options=ScreenshotOptions()),
-                   lambda: scope.capture_screenshot(options=ScreenshotOptions(format="png"))):
+    actions = [scope.query_measurement_results, scope.query_hardcopy_state]
+    if model_id != "tektronix-tbs2074b":
+        actions.extend([scope.capture_screenshot_png,
+                        lambda: scope.capture_screenshot(options=ScreenshotOptions()),
+                        lambda: scope.capture_screenshot(options=ScreenshotOptions(format="png"))])
+    for action in actions:
         with pytest.raises(ParameterValidationError): action()
     assert backend.history == ["*IDN?"]
 
@@ -665,7 +668,7 @@ def test_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
             assert readouts["sample_rate"] is None
             assert not any("SAMPLERATE" in command for command in history)
             for channel in channels:
-                assert all(getattr(channel, name) is None for name in ("offset", "label", "probe_skew", "range", "impedance", "vernier"))
+                assert all(getattr(channel, name) is None for name in ("label", "probe_skew", "range", "impedance", "vernier"))
             assert not any(":OFFSET?" in command or ":LABEL?" in command or ":DESKEW?" in command for command in history)
         scope.configure_trigger_mode("glitch")
         scope.backend.history.clear()
@@ -857,3 +860,74 @@ def test_immediate_measurement_accepts_abbreviated_native_headers(item, native_u
     assert result.value == 0.75 and result.unit == canonical_unit
     assert result.raw_value == ":MEASU:IMM:VAL 0.75"
     assert backend.history[-2:] == ["MEASUrement:IMMed:TYPe PERIod", "MEASUrement:IMMed:SOUrce1 CH2"]
+
+
+@pytest.mark.parametrize("model_id,_,channels", MODELS)
+def test_model_offset_and_waveform_save(model_id, _, channels):
+    with simulated_scope(model_id) as scope:
+        scope.set_channel_scale(1, 0.5)
+        scope.backend.history.clear()
+        scope.set_channel_offset(1, 0.75)
+        assert scope.query_channel_offset(1) == pytest.approx(0.75)
+        if model_id == "tektronix-tbs2074b":
+            assert "CH1:OFFSet 0.75" in scope.backend.history
+        else:
+            assert "CH1:POSition -1.5" in scope.backend.history
+            scope.set_channel_scale(1, 1.0)
+            assert scope.query_channel_offset(1) == pytest.approx(1.5)
+        for source in (None, 0, channels + 1, True):
+            scope.backend.history.clear()
+            with pytest.raises(ParameterValidationError):
+                scope.save_waveform("wave.csv", source_channel=source)
+            assert not scope.backend.history
+        scope.backend.timeout = 3210
+        scope.backend.history.clear()
+        result = scope.save_waveform("wave.csv", source_channel=channels)
+        assert result.operation == "save-waveform"
+        assert scope.backend.history == [f'SAVe:WAVEform CH{channels},"wave.csv"', "*OPC?"]
+        assert scope.backend.timeout == 3210
+
+
+@pytest.mark.parametrize("failure", [None, "signature", "transfer", "save", "completion", "delete"])
+def test_tbs_native_png_sequence_and_restoration(failure, monkeypatch):
+    with simulated_scope("tektronix-tbs2074b") as scope:
+        scope.backend.tek_settings["SAVE:IMAGE:FILEFORMAT"] = "JPG"
+        scope.backend.timeout = 4321
+        scope.backend.history.clear()
+        if failure == "signature":
+            scope.backend.binary_overrides["FILESystem:READFile"] = b"bad PNG"
+        if failure == "transfer":
+            scope.backend.binary_failures["FILESystem:READFile"] = SimulatorBackendError("transfer failed")
+        original_write = scope.scpi.write
+        original_query = scope.scpi.query
+        def write(command):
+            if ((failure == "save" and command.startswith('SAVe:IMAge "')) or
+                    (failure == "delete" and command.startswith("FILESystem:DELEte"))):
+                raise OscilloscopeError("injected write failure")
+            original_write(command)
+        def query(command):
+            if failure == "completion" and command == "*OPC?":
+                raise OscilloscopeError("injected completion failure")
+            return original_query(command)
+        monkeypatch.setattr(scope.scpi, "write", write)
+        monkeypatch.setattr(scope.scpi, "query", query)
+        if failure:
+            with pytest.raises((OscilloscopeError, SimulatorBackendError)):
+                scope.capture_screenshot_png()
+        else:
+            capture = scope.capture_screenshot_png()
+            assert capture.format_name == "PNG" and capture.data.startswith(b"\x89PNG\r\n\x1a\n")
+            history = scope.backend.history
+            saved = next(command for command in history if command.startswith('SAVe:IMAge "'))
+            filename = saved.split('"')[1]
+            assert history == ["SAVe:IMAge:FILEFormat?", "SAVe:IMAge:FILEFormat PNG", saved,
+                               "*OPC?", f'FILESystem:READFile "{filename}"',
+                               f'FILESystem:DELEte "{filename}"', "SAVe:IMAge:FILEFormat JPG"]
+        assert scope.backend.timeout == 4321
+        assert scope.backend.tek_settings["SAVE:IMAGE:FILEFORMAT"] == "JPG"
+        if failure != "delete":
+            assert not scope.backend.image_files
+        scope.backend.history.clear()
+        with pytest.raises(ParameterValidationError):
+            scope.capture_screenshot_png(background="white")
+        assert not scope.backend.history

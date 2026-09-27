@@ -2473,13 +2473,18 @@ def _normalize_save_export_worker_arguments(
         return {"query": True}
 
     if command in start_commands:
-        if set(arguments) != {"filename"}:
-            unknown = set(arguments) - {"filename"}
+        allowed = {"filename", "source_channel"} if command == "save-waveform" else {"filename"}
+        if "filename" not in arguments or set(arguments) - allowed:
+            unknown = set(arguments) - allowed
             if unknown:
                 raise OscilloscopeError(
                     f"unknown argument for {command}: {sorted(unknown)[0]}"
                 )
             raise OscilloscopeError(f"{command} requires exactly filename")
+        if "source_channel" in arguments:
+            source = arguments["source_channel"]
+            if isinstance(source, bool) or not isinstance(source, int):
+                raise OscilloscopeError("save-waveform source_channel must be an integer")
         filename = arguments["filename"]
         if not isinstance(filename, str):
             raise OscilloscopeError(f"{command} argument filename must be a string")

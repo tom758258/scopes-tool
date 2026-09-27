@@ -10,6 +10,8 @@ param(
     [switch] $IncludeAutoscale,
     [switch] $IncludeStorageWrites,
     [string] $ImageFilename,
+    [string] $WaveformFilename,
+    [ValidateRange(1, 4)][int] $WaveformSourceChannel,
     [switch] $IncludeConfigurationActions,
     [switch] $IncludeScreenshot,
     [ValidateRange(1, 9)][int] $SetupSlot,
@@ -44,8 +46,19 @@ if ($IncludeStorageWrites -and (-not $PSBoundParameters.ContainsKey("SetupSlot")
 }
 if (-not $IncludeStorageWrites -and ($PSBoundParameters.ContainsKey("SetupSlot") -or
                                     $PSBoundParameters.ContainsKey("ReferenceSlot") -or
-                                    $PSBoundParameters.ContainsKey("ImageFilename"))) {
-    Write-LiveUsageError -Domain "tektronix" "Storage slots and image filenames require -IncludeStorageWrites."
+                                    $PSBoundParameters.ContainsKey("ImageFilename") -or
+                                    $PSBoundParameters.ContainsKey("WaveformFilename") -or
+                                    $PSBoundParameters.ContainsKey("WaveformSourceChannel"))) {
+    Write-LiveUsageError -Domain "tektronix" "Storage slots and filenames require -IncludeStorageWrites."
+}
+if ($PSBoundParameters.ContainsKey("WaveformFilename") -or $PSBoundParameters.ContainsKey("WaveformSourceChannel")) {
+    if ([string]::IsNullOrWhiteSpace($WaveformFilename) -or
+        -not $PSBoundParameters.ContainsKey("WaveformSourceChannel") -or
+        $WaveformSourceChannel -gt $targets[$script:Target].channels -or
+        $WaveformFilename -match '[^\x20-\x7E]|[";*?%]' -or
+        $WaveformFilename.EndsWith("/") -or $WaveformFilename.EndsWith("\")) {
+        Write-LiveUsageError -Domain "tektronix" "Waveform save requires a safe explicit filename and a model-valid -WaveformSourceChannel."
+    }
 }
 try {
     $script:LiveArguments = @(Get-LiveConnectionArguments -Resource $Resource -Backend $Backend)
@@ -379,15 +392,15 @@ try {
         if ($script:Target -eq "tektronix-tbs2074b") {
             Invoke-SimpleCase "sample-rate" "sample-rate" @("--query")
             Invoke-SimpleCase "sample-rate-maximum" "sample-rate" @("--query", "--maximum")
-            Invoke-RoundTrip "channel-offset" "channel-offset" $ch "volts" "--volts"
             Invoke-RoundTrip "channel-label" "channel-label" $ch "text" "--text"
             Invoke-RoundTrip "channel-probe-skew" "channel-probe-skew" $ch "probe_skew_seconds" "--seconds"
         } else {
             Add-Case "sample-rate" "N/A" "Unsupported on this model"
-            foreach ($name in @("channel-offset", "channel-label", "channel-probe-skew")) {
+            foreach ($name in @("channel-label", "channel-probe-skew")) {
                 Add-Case $name "N/A" "Unsupported on this model"
             }
         }
+        Invoke-RoundTrip "channel-offset" "channel-offset" $ch "volts" "--volts"
         Invoke-RoundTrip "timebase-scale" "timebase-scale" @() "seconds_per_division" "--seconds-per-division"
         if ($script:Target -eq "tektronix-tbs2074b") {
             Add-Case "timebase-position" "N/A" "Unsupported on this model"
@@ -725,6 +738,23 @@ try {
         }
         Invoke-RoundTrip "save-pwd" "save-pwd" @() "path" "--path"
 
+        if ($script:Target -eq "tektronix-tbs2074b") {
+            if (-not $IncludeScreenshot) {
+                Add-Case "screenshot-png" "N/A" "Requires -IncludeScreenshot; writes a temporary instrument file"
+            } else {
+                try {
+                    $path = Join-Path $script:RunPaths.Private "screenshot.png"
+                    $capture = Invoke-Cli -Stage "screenshot-png" -Command "screenshot" -Options @("--output", $path)
+                    if ((Get-Readback $capture "format") -cne "PNG" -or
+                        [int](Get-Readback $capture "byte_count") -le 0 -or
+                        [string](Get-Readback $capture "image_path") -cne $path) { throw "Invalid PNG artifact metadata." }
+                    $bytes = [IO.File]::ReadAllBytes($path)
+                    if ($bytes.Length -lt 8 -or
+                        [BitConverter]::ToString($bytes, 0, 8) -cne "89-50-4E-47-0D-0A-1A-0A") { throw "Missing PNG signature." }
+                    Add-Case "screenshot-png" "PASS" "Native PNG host artifact; temporary file and settings cleaned by Core"
+                } catch { Add-Case "screenshot-png" "FAIL" $_.Exception.Message }
+            }
+        }
         if ($script:Target -ne "tektronix-tds2024b") {
             Add-Case "screenshot-bmp" "N/A" "Unsupported on this model"
         } elseif (-not $IncludeScreenshot) {
@@ -794,6 +824,17 @@ try {
                     Add-Case "save-image" "PASS" "Caller-selected instrument file; operation complete"
                 } catch { Add-Case "save-image" "FAIL" $_.Exception.Message }
             }
+            if ([string]::IsNullOrWhiteSpace($WaveformFilename)) {
+                Add-Case "save-waveform" "N/A" "Requires explicit -WaveformFilename and -WaveformSourceChannel"
+            } else {
+                Write-Warning "The requested instrument waveform filename may be overwritten."
+                try {
+                    $saved = Invoke-Cli -Stage "save-waveform" -Command "save-waveform" `
+                        -Options @("--filename", $WaveformFilename, "--source-channel", "$WaveformSourceChannel")
+                    if ((Get-Readback $saved "operation_complete") -ne $true) { throw "Waveform save completion was not confirmed." }
+                    Add-Case "save-waveform" "PASS" "Caller-selected channel and instrument file; operation complete"
+                } catch { Add-Case "save-waveform" "FAIL" $_.Exception.Message }
+            }
             Invoke-SimpleCase "setup-save" "setup-save" @("--slot", "$SetupSlot")
             if (@($script:Cases | Where-Object { $_.name -eq "setup-save" -and $_.status -eq "PASS" }).Count -eq 1) {
                 Invoke-SimpleCase "setup-recall" "setup-recall" @("--slot", "$SetupSlot")
@@ -815,7 +856,7 @@ try {
                 Add-Case "reference-display" "N/A" "Reference source precondition could not be checked"
             }
         } else {
-            foreach ($name in @("setup-save", "setup-recall", "reference-save", "reference-display", "save-image")) {
+            foreach ($name in @("setup-save", "setup-recall", "reference-save", "reference-display", "save-image", "save-waveform")) {
                 Add-Case $name "N/A" "Requires -IncludeStorageWrites and explicit slots"
             }
         }

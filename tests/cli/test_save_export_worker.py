@@ -97,3 +97,18 @@ def test_worker_save_waveform_simulator_execution_has_no_command_artifacts(tmp_p
         ":OPERegister:CONDition?",
         ":SYSTem:ERRor?",
     ]
+
+
+def test_worker_tek_waveform_source_forwarded(tmp_path):
+    runtime = _runtime(tmp_path)
+    runtime.model = "tektronix-tbs1052b"
+    parsed = worker.parse_domain_command("save-waveform", {"filename": "wave.csv", "source_channel": 2}, runtime)
+    payload, code = cli._execute_json_command(parsed)
+    assert code == 0
+    assert payload["result"]["command"] == 'SAVe:WAVEform CH2,"wave.csv"'
+    for source in (None, 3):
+        arguments = {"filename": "wave.csv"}
+        if source is not None:
+            arguments["source_channel"] = source
+        with pytest.raises(OscilloscopeError):
+            worker.parse_domain_command("save-waveform", arguments, runtime)

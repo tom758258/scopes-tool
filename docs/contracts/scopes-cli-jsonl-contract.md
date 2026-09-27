@@ -408,6 +408,9 @@ Control and setup:
   value, and preserved `raw_response`. Configure results use
   `operation: "configure"`, the canonical input value, and
   `state_changing: true`.
+  `save-waveform` accepts optional `--source-channel N`; Tek requires a model-valid
+  analog channel, while Keysight retains filename-only behavior. This input does
+  not change the save result schema.
   `save-image` and `save-waveform` results use `instrument_side: true`, their
   command name as `operation`, explicit `filename`, executed `command`,
   `operation_complete: true`, and preserved `raw_operation_complete`. These

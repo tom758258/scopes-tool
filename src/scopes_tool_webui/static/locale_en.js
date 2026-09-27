@@ -712,6 +712,7 @@ export const en = {
   "description.reference-label": "Set or read the label for the selected reference waveform.",
   "description.reference-clear": "Clear the selected reference waveform.",
   "description.reference-query": "Read display and label state for the selected reference waveform.",
+  "save-waveform.source_channel": "Analog channel to save on instrument storage.",
   "save-export.editor.title": "Save / Export",
   "save-export.editor.mode.image": "Image",
   "save-export.editor.mode.waveform": "Waveform data",

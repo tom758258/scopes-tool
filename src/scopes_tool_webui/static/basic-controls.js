@@ -8,7 +8,10 @@ export function bindBasicControls(container, execute, available) {
     execute(button.dataset.command, parameters);
   });
   const update = () => container.querySelectorAll("button[data-command]").forEach((button) => {
-    button.disabled = !available(button.dataset.command);
+    const parameters = button.dataset.command === "screenshot" && button.dataset.background
+      ? { background: button.dataset.background }
+      : {};
+    button.disabled = !available(button.dataset.command, parameters);
   });
   update();
   return update;

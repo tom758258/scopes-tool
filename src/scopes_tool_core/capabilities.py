@@ -77,6 +77,8 @@ class ScopeCapabilities:
     math_expressions: tuple[str, ...] | None = None
     save_image_formats: tuple[str, ...] | None = None
     save_waveform_formats: tuple[str, ...] | None = None
+    save_waveform_requires_source: bool = False
+    screenshot_backgrounds: tuple[str, ...] | None = None
     runt_channels: tuple[int, ...] | None = None
     runt_polarities: tuple[str, ...] | None = None
     runt_qualifiers: tuple[str, ...] | None = None
@@ -100,7 +102,7 @@ _TEK_COMMON_OPERATIONS = frozenset({
     "measure-install", "measure-clear", "save-image", "acquisition-points",
     "record-length", "channel-summary", "live-data-snapshot",
     "system-information-snapshot", "measure", "capture", "single-wait",
-    "trigger-pulse-width", "reference-query",
+    "trigger-pulse-width", "reference-query", "save-waveform", "channel-offset",
 })
 
 
@@ -138,14 +140,15 @@ _TEK_INSTALL_ITEMS = _TEK_LEGACY_INSTALL_ITEMS + (
 
 _CAPABILITY_PROFILES = {
     "tektronix-tbs2074b": ScopeCapabilities(
+        save_waveform_requires_source=True,
         series="TBS2000B", analog_channels=4,
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=True, supports_delay_measurement=False,
-        supports_screenshot=False, supports_segmented_memory=False,
+        supports_screenshot=True, supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
         supports_simulator=True, math_function_count=1,
-        screenshot_formats=(), cursor_auto_vertical=False,
+        screenshot_formats=("png",), screenshot_backgrounds=("black",), cursor_auto_vertical=False,
         channel_units_channels=(1, 2),
         measurement_install_items=_TEK_INSTALL_ITEMS, measurement_items=_TEK_INSTALL_ITEMS,
         pulse_width_qualifiers=("less-than", "greater-than"),
@@ -167,12 +170,13 @@ _CAPABILITY_PROFILES = {
         supports_setup_file_target=False,
         supports_channel_label=True, channel_label_max_length=30,
         supported_operations=_TEK_COMMON_OPERATIONS | {
-            "channel-offset", "channel-label", "channel-probe-skew",
+            "channel-label", "channel-probe-skew",
             "trigger-edge-level", "trigger-runt", "sample-rate",
-            "save-image-format", "save-waveform-format",
+            "save-image-format", "save-waveform-format", "screenshot",
         },
     ),
     "tektronix-tds2024b": ScopeCapabilities(
+        save_waveform_requires_source=True,
         series="TDS2000B", analog_channels=4,
         measurement_install_items=_TEK_LEGACY_INSTALL_ITEMS, measurement_items=_TEK_LEGACY_INSTALL_ITEMS,
         pulse_width_qualifiers=("less-than", "greater-than"),
@@ -206,6 +210,7 @@ _CAPABILITY_PROFILES = {
         },
     ),
     "tektronix-tbs1052b": ScopeCapabilities(
+        save_waveform_requires_source=True,
         series="TBS1000B", analog_channels=2,
         measurement_install_items=_TEK_INSTALL_ITEMS, measurement_items=_TEK_INSTALL_ITEMS,
         pulse_width_qualifiers=("less-than", "greater-than"),

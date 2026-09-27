@@ -1485,6 +1485,8 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         "save-waveform-length-max",
         "save-waveform",
     }:
+        if command == "save-waveform" and args.source_channel is not None:
+            raise ParameterValidationError("source_channel is unsupported for this model save-waveform")
         target, result, waits_for_completion = workflows._save_export_plan(args)
         planned = ["*IDN?", target]
         if waits_for_completion:

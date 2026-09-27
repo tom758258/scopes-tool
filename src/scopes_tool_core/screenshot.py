@@ -62,7 +62,8 @@ def validate_screenshot_capability(capabilities: ScopeCapabilities, options: Scr
                                   *, query_hardcopy: bool = False) -> None:
     options = normalize_screenshot_options(options)
     if capabilities.screenshot_formats is not None:
-        if query_hardcopy or options.format not in capabilities.screenshot_formats or options.palette is not None:
+        format_name = options.format or ("png" if capabilities.supports_screenshot else None)
+        if query_hardcopy or format_name not in capabilities.screenshot_formats or options.palette is not None:
             raise ParameterValidationError("Requested screenshot format or hardcopy controls are unsupported for this model")
         return
     controls = query_hardcopy or any(value is not None for value in (
