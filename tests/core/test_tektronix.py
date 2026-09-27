@@ -91,10 +91,10 @@ def test_unknown_tek_model_fails_closed():
 @pytest.mark.parametrize("model_id,_,__", MODELS)
 def test_capability_subset_and_unsupported_leaks(model_id, _, __):
     capabilities = capabilities_for_model_id(model_id)
-    for operation in ("run", "channel-scale", "setup-save", "trigger-edge", "list-resources"):
+    for operation in ("run", "channel-scale", "setup-save", "trigger-edge", "list-resources",
+                      "measure", "capture", "single-wait", "trigger-pulse-width", "reference-query"):
         assert operation_supported(capabilities, operation)
-    for operation in ("measure", "measure-sweep", "measure-results", "capture", "check-error", "single-wait", "trigger-pulse-width",
-                      "reference-query", "save-waveform", "doctor", "smoke", "cleanup", "acquisition-check",
+    for operation in ("measure-sweep", "measure-results", "check-error", "save-waveform", "doctor", "smoke", "cleanup", "acquisition-check",
                       "capture-batch", "capture-until", "capture-monitor", "measure-log", "measure-until",
                       "triggered-measure-loop", "triggered-capture-series", "sequence"):
         assert not operation_supported(capabilities, operation)
@@ -700,3 +700,159 @@ def test_measurement_item_subset_rejects_before_scpi():
     with pytest.raises(ParameterValidationError):
         scope.install_measurement(1, "vrms")
     assert backend.history == ["*IDN?"]
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+@pytest.mark.parametrize("query_failure", (False, True))
+def test_immediate_measurement_restores_type_and_source(model_id, _, __, query_failure):
+    with simulated_scope(model_id) as scope:
+        source = "SOUrce1" if scope.capabilities.series == "TBS2000B" else "SOUrce"
+        root = "MEASUrement:IMMed"
+        scope.scpi.write(f"{root}:TYPe PERIod")
+        scope.scpi.write(f"{root}:{source} CH2")
+        scope.backend.history.clear()
+        if query_failure:
+            scope.backend.query_failures[f"{root}:VALue?"] = OscilloscopeError("measurement failed")
+            with pytest.raises(OscilloscopeError, match="measurement failed"):
+                scope.query_measurement(1, "vpp")
+        else:
+            result = scope.query_measurement(1, "vpp")
+            assert result.valid and result.item == "vpp" and result.channel == 1
+            assert result.value == pytest.approx(0.5) and result.unit == "V"
+        assert scope.backend.history[-2:] == [f"{root}:TYPe PERIod", f"{root}:{source} CH2"]
+        assert scope.scpi.query(f"{root}:TYPe?") == "PERIod"
+        assert scope.scpi.query(f"{root}:{source}?") == "CH2"
+        assert not any(command.startswith(":MEASure:") for command in scope.backend.history)
+
+
+@pytest.mark.parametrize("model_id,qualifier,when", [
+    ("tektronix-tbs2074b", "less-than", "LESSthan"),
+    ("tektronix-tds2024b", "greater-than", "OUTside"),
+    ("tektronix-tbs1052b", "greater-than", "OUTside"),
+])
+def test_pulse_width_subset_roundtrip_and_range_rejection(model_id, qualifier, when):
+    with simulated_scope(model_id) as scope:
+        scope.configure_glitch_trigger(channel=1, polarity="negative", qualifier=qualifier,
+            time_seconds=2e-6, level_volts=0.25)
+        state = scope.query_glitch_trigger()
+        assert state.mode == "glitch" and state.channel == 1 and state.polarity == "negative"
+        assert state.qualifier == qualifier and state.level_volts == pytest.approx(0.25)
+        assert getattr(state, "less_than_seconds" if qualifier == "less-than" else "greater_than_seconds") == pytest.approx(2e-6)
+        assert state.range_min_seconds is None and state.range_max_seconds is None
+        assert any(command.endswith(f":WHEn {when}") for command in scope.backend.history)
+        before = list(scope.backend.history)
+        with pytest.raises(ParameterValidationError, match="unsupported"):
+            scope.configure_glitch_trigger(channel=1, polarity="positive", qualifier="range",
+                min_time_seconds=1e-6, max_time_seconds=3e-6)
+        assert scope.backend.history == before
+
+
+@pytest.mark.parametrize("model_id,root", [
+    ("tektronix-tbs2074b", "WFMOutpre"), ("tektronix-tds2024b", "WFMPre"),
+])
+def test_byte_capture_uses_native_preamble_and_preserves_hidden_channel(model_id, root):
+    responses = {"SELect:CH1?": "1", "SELect:CH2?": "0"}
+    responses.update({f"{root}:{name}?": value for name, value in {
+        "NR_Pt": "3", "XINcr": "2e-6", "XZEro": "-1e-3", "YMUlt": "0.01",
+        "YZEro": "1", "YOFf": "127.5", "YUNit": '"V"',
+    }.items()})
+    scope, backend = make_scope(model_id, responses)
+    backend.binary_responses["CURVe?"] = (127, 128, 125)
+    capture = scope.capture_waveform_byte(1, 1000)
+    assert capture.raw_samples == (127, 128, 125)
+    assert capture.time_s == pytest.approx((-0.001, -0.000998, -0.000996))
+    assert capture.vertical_values == pytest.approx((0.995, 1.005, 0.975))
+    assert backend.binary_query_kwargs == [{"datatype": "B"}]
+    assert "DATa:ENCdg RPBInary" in backend.history and "DATa:STOP 1000" in backend.history
+    backend.history.clear()
+    with pytest.raises(OscilloscopeError, match="not displayed"):
+        scope.capture_waveform_byte(2)
+    assert backend.history == ["SELect:CH2?"]
+    with pytest.raises(ParameterValidationError):
+        scope.capture_waveform_byte(1, 5000)
+    with pytest.raises(ParameterValidationError):
+        scope.capture_waveform_word(1)
+
+
+@pytest.mark.parametrize("forced", (False, True))
+def test_single_wait_polls_busy_with_finite_force_branch(forced):
+    from scopes_tool_core.trigger import TriggerWaitConfig
+    now = [0.0]
+    def sleep(seconds):
+        now[0] += seconds
+    with simulated_scope("tektronix-tbs2074b") as scope:
+        scope.backend.busy_values = (1,) if forced else (1, 0)
+        config = TriggerWaitConfig(10, 5, forced, clock=lambda: now[0], sleep=sleep)
+        result = scope.single_wait(config)
+        assert result.outcome == ("forced" if forced else "natural")
+        assert result.capture_allowed and result.forced is forced
+        payload = result.to_json(config)
+        assert payload["poll_source"] == "busy" and payload["poll_command"] == "BUSY?"
+        assert payload["elapsed_ms"] <= 15
+        assert ("TRIGger FORCe" in scope.backend.history) is forced
+        assert ":OPERegister:CONDition?" not in scope.backend.history
+
+
+def test_reference_query_returns_real_display_without_label():
+    scope, backend = make_scope(responses={"SELect:REF1?": "1"})
+    state = scope.query_reference_waveform(1)
+    assert state.displayed and state.raw_displayed == "1"
+    assert state.label is None and state.raw_label is None
+    assert backend.history == ["*IDN?", "SELect:REF1?"]
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+def test_primitive_runners_use_native_status_and_capture_wait(model_id, _, __, tmp_path):
+    from scopes_tool_core.operations import CaptureRequest, MeasureRequest, run_capture, run_measure
+    from scopes_tool_core.trigger import TriggerWaitConfig
+    with simulated_scope(model_id) as scope:
+        measured = run_measure(scope, "SIM::SCOPE", MeasureRequest("vpp", channel=1))
+        captured = run_capture(scope, "SIM::SCOPE", CaptureRequest((1, 2), 1000,
+            csv_path=tmp_path / "wave.csv", trigger_wait=TriggerWaitConfig(20, 1)))
+        for result in (measured, captured):
+            assert result.exit_code == 0 and result.system_error is None
+            assert result.result["post_command_status"] == {"raw": "0", "value": 0}
+        assert captured.result["trigger"]["poll_command"] == "BUSY?"
+        assert (tmp_path / "wave.csv").exists()
+        assert not any(command.startswith((":SYSTem", ":WAVeform", ":OPERegister")) for command in scope.backend.history)
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+def test_cli_new_primitives_simulate_and_plan(model_id, _, __, tmp_path):
+    import os
+    import subprocess
+    import sys
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "src"
+    cases = [
+        ["measure", "--item", "vpp", "--channel", "1"],
+        ["capture", "--channel", "1", "--csv", str(tmp_path / "cli.csv"),
+            "--wait-trigger", "--trigger-timeout-ms", "20", "--trigger-poll-interval-ms", "1"],
+        ["single-wait", "--trigger-timeout-ms", "20", "--trigger-poll-interval-ms", "1", "--force-trigger-on-timeout"],
+        ["trigger-pulse-width", "--channel", "1", "--polarity", "positive", "--qualifier", "less-than", "--time-seconds", "1e-6"],
+        ["reference-query", "--slot", "1"],
+    ]
+    for mode in ("--simulate", "--dry-run"):
+        for case in cases:
+            completed = subprocess.run([sys.executable, "-m", "scopes_tool_cli.cli", *case,
+                "--model", model_id, mode, "--json"], capture_output=True, text=True, env=env)
+            assert completed.returncode == 0, completed.stdout + completed.stderr
+            payload = json.loads(completed.stdout)
+            commands = payload["scpi"]["planned" if mode == "--dry-run" else "sent"]
+            assert commands and not any(command.startswith((":MEASure", ":WAVeform", ":SYSTem", ":OPERegister")) for command in commands)
+            if mode == "--dry-run" and case[0] == "capture":
+                assert payload["files"] and payload["result"]["channels"] == [1]
+
+
+
+def test_immediate_measurement_accepts_abbreviated_native_headers():
+    scope, backend = make_scope(responses={
+        "MEASUrement:IMMed:TYPe?": ":MEASU:IMM:TYP PERIod",
+        "MEASUrement:IMMed:SOUrce1?": ":MEASU:IMM:SOU1 CH2",
+        "MEASUrement:IMMed:VALue?": ":MEASU:IMM:VAL 0.75",
+        "MEASUrement:IMMed:UNIts?": ':MEASU:IMM:UNI "V"',
+    })
+    result = scope.query_measurement(1, "vpp")
+    assert result.value == 0.75 and result.unit == "V"
+    assert result.raw_value == ":MEASU:IMM:VAL 0.75"
+    assert backend.history[-2:] == ["MEASUrement:IMMed:TYPe PERIod", "MEASUrement:IMMed:SOUrce1 CH2"]

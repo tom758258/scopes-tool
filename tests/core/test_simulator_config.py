@@ -140,9 +140,9 @@ def test_tek_simulator_config_respects_model_and_rejects_keysight_faults():
     ):
         with pytest.raises(OscilloscopeError):
             parse_config(config, capabilities)
-    with pytest.raises(OscilloscopeError, match="signals are unsupported"):
-        simulator_backend_kwargs(
-            _args(planning_physical_model_id="tektronix-tbs1052b", simulate_preset="noisy-sine"),
-            "SIM::tektronix-tbs1052b::INSTR",
-            capabilities,
-        )
+    kwargs = simulator_backend_kwargs(
+        _args(planning_physical_model_id="tektronix-tbs1052b", simulate_preset="noisy-sine"),
+        "SIM::tektronix-tbs1052b::INSTR",
+        capabilities,
+    )
+    assert kwargs["signals"][1].noise_rms_v > 0

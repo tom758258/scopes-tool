@@ -13,6 +13,9 @@ from .simulator_backend import SimulatorBackend, SimulatorBackendError, _parse_s
 class TektronixSimulatorBackend(SimulatorBackend):
     backend: str = "Tektronix simulator"
     stop_after: str = "RUNSTOP"
+    busy_values: tuple[int, ...] = (1, 0)
+    busy_index: int = 0
+    busy_forced: bool = False
     tek_setups: dict[int, dict[str, object]] = field(default_factory=dict)
 
     tek_settings: dict[str, str] = field(default_factory=dict)
@@ -42,6 +45,14 @@ class TektronixSimulatorBackend(SimulatorBackend):
             "TRIGGER:MAIN:VIDEO:LINE": "1",
             **self.tek_settings,
         }
+        root = "TRIGGER:A" if self._capabilities.series == "TBS2000B" else "TRIGGER:MAIN"
+        self.tek_settings.update({
+            "MEASUREMENT:IMMED:TYPE": "FREQuency",
+            "MEASUREMENT:IMMED:SOURCE1" if self._capabilities.series == "TBS2000B" else "MEASUREMENT:IMMED:SOURCE": "CH1",
+            f"{root}:PULSE:SOURCE": "CH1", f"{root}:PULSE:WIDTH:POLARITY": "POSITIVE",
+            f"{root}:PULSE:WIDTH:WIDTH": "1e-6",
+            f"{root}:PULSE:WIDTH:WHEN": "LESSTHAN" if self._capabilities.series == "TBS2000B" else "INSIDE",
+        })
         slots = 5 if self._capabilities.series == "TDS2000B" else 6
         self.tek_measurements = {i: {"TYPE": "NONE", "SOURCE": "CH1", "SOURCE1": "CH1", "STATE": "OFF"} for i in range(1, slots + 1)}
         if self._capabilities.series != "TBS2000B":
@@ -81,6 +92,40 @@ class TektronixSimulatorBackend(SimulatorBackend):
         header, _, value = command.partition(" ")
         header, token = header.upper(), value.upper()
         b2 = self._capabilities.series == "TBS2000B"
+        root = "TRIGGER:A" if b2 else "TRIGGER:MAIN"
+        source = "MEASUREMENT:IMMED:SOURCE1" if b2 else "MEASUREMENT:IMMED:SOURCE"
+        if header == source or header == f"{root}:PULSE:SOURCE":
+            if re.fullmatch(r"CH\d+", token):
+                self._channel_number(token[2:])
+                self.tek_settings[header] = value
+                return True
+        if header == "MEASUREMENT:IMMED:TYPE":
+            from .tektronix import TektronixOscilloscope
+            scope = TektronixOscilloscope(self)
+            scope.capabilities = self._capabilities
+            if token in {v.upper() for v in scope._measurement_types().values()} | {"NONE"}:
+                self.tek_settings[header] = value
+                return True
+        choices = {
+            f"{root}:PULSE:WIDTH:POLARITY": {"POSITIVE", "NEGATIVE"},
+            f"{root}:PULSE:WIDTH:WHEN": {"LESSTHAN", "MORETHAN"} if b2 else {"INSIDE", "OUTSIDE"},
+        }
+        if header in choices and token in choices[header]:
+            self.tek_settings[header] = value
+            return True
+        if header == f"{root}:PULSE:WIDTH:WIDTH":
+            _parse_scpi_number(value)
+            self.tek_settings[header] = value
+            return True
+        if header == "DATA:SOURCE" and re.fullmatch(r"CH\d+", token):
+            self.waveform_source = self._channel_number(token[2:])
+            return True
+        if (header, token) in {("DATA:ENCDG", "RPBINARY"), ("DATA:WIDTH", "1"), ("DATA:START", "1")}:
+            return True
+        if header == "DATA:STOP":
+            self.waveform_points = int(value)
+            self._validate_waveform_points()
+            return True
         match = re.fullmatch(r"CH(\d+):YUNIT", header)
         if match:
             channel = self._channel_number(match[1])
@@ -222,7 +267,15 @@ class TektronixSimulatorBackend(SimulatorBackend):
 
     def query_binary_values(self, command: str, **kwargs: object) -> tuple:
         self._record(command, query=True)
-        raise SimulatorBackendError(f"Unsupported Tek binary query: {command}")
+        if command.upper() != "CURVE?" or kwargs.get("datatype") != "B":
+            raise SimulatorBackendError(f"Unsupported Tek binary query: {command}")
+        self._raise_configured_failure(self.binary_failures, command)
+        if command in self.binary_overrides:
+            return tuple(self.binary_overrides[command])
+        self._validate_waveform_points()
+        if not self.channel_display.get(self.waveform_source, True):
+            raise SimulatorBackendError("Tek waveform source is not displayed")
+        return tuple(self._encode_byte_sample(self._waveform_voltage_at_index(i)) for i in range(self.waveform_points))
 
     def query_binary_bytes(self, command: str) -> bytes:
         self._record(command, query=True)
@@ -242,11 +295,15 @@ class TektronixSimulatorBackend(SimulatorBackend):
             return
         match = re.fullmatch(r"ACQUIRE:STATE (ON|OFF)", upper)
         if match:
+            self.busy_index = 0
+            self.busy_forced = False
             self.run_state = "stopped" if match.group(1) == "OFF" else (
                 "single" if self.stop_after == "SEQUENCE" else "running"
             )
             return
         if upper == "TRIGGER FORCE":
+            self.busy_forced = True
+            self.busy_index = 0
             return
         match = re.fullmatch(r"ACQUIRE:MODE (SAMPLE|PEAKDETECT|AVERAGE|HIRES)", upper)
         if match:
@@ -365,6 +422,43 @@ class TektronixSimulatorBackend(SimulatorBackend):
             return super().query(command)
         self._record(command, query=True)
         if command in self.query_overrides: return self.query_overrides[command]
+        if upper == "BUSY?":
+            value = self.busy_values[min(self.busy_index, len(self.busy_values) - 1)] if self.run_state == "single" and not self.busy_forced else 0
+            self.busy_index += 1
+            if value == 0 and self.run_state == "single":
+                self.run_state = "stopped"
+            return str(value)
+        b2 = self._capabilities.series == "TBS2000B"
+        source = "MEASUREMENT:IMMED:SOURCE1" if b2 else "MEASUREMENT:IMMED:SOURCE"
+        if upper in {"MEASUREMENT:IMMED:TYPE?", source + "?"}:
+            return self.tek_settings[upper[:-1]]
+        if upper in {"MEASUREMENT:IMMED:VALUE?", "MEASUREMENT:IMMED:UNITS?"}:
+            from .tektronix import TektronixOscilloscope
+            from .measurements import measurement_unit
+            scope = TektronixOscilloscope(self)
+            scope.capabilities = self._capabilities
+            token = self.tek_settings["MEASUREMENT:IMMED:TYPE"].upper()
+            item = next(k for k, v in scope._measurement_types().items() if v.upper() == token)
+            channel = int(self.tek_settings[source][2:])
+            if upper.endswith("UNITS?"):
+                unit = measurement_unit(item)
+                return '"' + ("A" if unit == "V" and self.channel_units.get(channel) == "amp" else unit) + '"'
+            if channel in self.invalid_measurement_channels or not self.channel_display.get(channel, True):
+                return "9.9e37"
+            return str(self._measurement_numeric_value(item, channel, None, {}))
+        root = "TRIGGER:A" if b2 else "TRIGGER:MAIN"
+        if upper[:-1] in {f"{root}:PULSE:SOURCE", f"{root}:PULSE:WIDTH:POLARITY", f"{root}:PULSE:WIDTH:WHEN", f"{root}:PULSE:WIDTH:WIDTH"}:
+            return self.tek_settings[upper[:-1]]
+        preamble = "WFMOUTPRE" if b2 else "WFMPRE"
+        if upper.startswith(preamble + ":"):
+            fields = {
+                "NR_PT": str(self.waveform_points), "XINCR": str(self._waveform_x_increment()),
+                "XZERO": str(self._waveform_x_origin()), "YMULT": str(self._byte_y_increment()),
+                "YZERO": str(self._signal_center_v(self.waveform_source)), "YOFF": "128",
+                "YUNIT": '"A"' if self.channel_units.get(self.waveform_source) == "amp" else '"V"',
+            }
+            if upper[len(preamble) + 1:-1] in fields:
+                return fields[upper[len(preamble) + 1:-1]]
         response = self._query_supported_settings(command)
         if response is not None:
             return response

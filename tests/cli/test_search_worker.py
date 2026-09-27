@@ -128,11 +128,11 @@ def test_worker_search_event_acceptance_and_rejection(tmp_path):
     runtime_4000x = _runtime(tmp_path, "keysight-dsox4034a")
     runtime_2000x = _runtime(tmp_path, "keysight-dsox2004a")
 
-    p1 = worker.parse_domain_command("search-event", {"query": True}, runtime_4000x)
-    assert p1.command == "search-event"
+    parsed_query = worker.parse_domain_command("search-event", {"query": True}, runtime_4000x)
+    assert parsed_query.command == "search-event"
 
-    p2 = worker.parse_domain_command("search-event", {"event": 1}, runtime_4000x)
-    assert p2.command == "search-event"
+    parsed_selection = worker.parse_domain_command("search-event", {"event": 1}, runtime_4000x)
+    assert parsed_selection.command == "search-event"
 
     with pytest.raises(OscilloscopeError, match="must be an integer"):
         worker.parse_domain_command("search-event", {"event": "1"}, runtime_4000x)

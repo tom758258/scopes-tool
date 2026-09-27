@@ -225,6 +225,11 @@ Control and setup:
   `outcome`, `forced`, `timed_out`, `poll_count`, `elapsed_ms`,
   `condition_values`, `raw_values`, `capture_allowed`,
   `capture_block_reason`, and `error`. It has no files or artifacts.
+  Poll/arm/force metadata comes from the Core driver: Keysight retains
+  operation_condition / :OPERegister:CONDition?; Tektronix uses busy / BUSY?.
+- `reference-query`: actual `displayed` and `raw_displayed`, with `label` and
+  `raw_label` nullable when the instrument has no reference label readback.
+  Keysight continues to return its existing string labels.
 - `force-trigger`: `operation`, `forced`, `scpi_command`, and
   `human_output`.
 - `channel-*`: `channel`, `operation`, `command`, and the setting value such as
@@ -576,6 +581,10 @@ Measurement and artifact-producing flows:
 
 - `measure`: `item`, `channel`, optional `reference_channel`, `value`, `unit`,
   `valid`, `raw_value`, `reason`, `parameters`, and `command`.
+  Tektronix single-source measurements temporarily configure immediate TYPE/SOURCE
+  and restore both even after a query failure. measure/capture use the driver
+  post-command status seam; Tek SESR is reported as result.post_command_status
+  with outer system_error null, rather than a normalized error-queue entry.
 - `measure-install`: `operation: "install"`, ordered `commands`, canonical
   `item`, and `source_channel`.
 - `measure-results`: `operation: "query"`, `command` set to

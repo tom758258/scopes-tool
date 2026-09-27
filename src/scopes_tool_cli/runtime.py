@@ -229,6 +229,8 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "supports_word_format": capabilities.supports_word_format,
         "supports_raw_points_mode": capabilities.supports_raw_points_mode,
         "supports_measurements": capabilities.supports_measurements,
+        **({"measurement_items": list(capabilities.measurement_items)} if capabilities.measurement_items is not None else {}),
+        **({"pulse_width_qualifiers": list(capabilities.pulse_width_qualifiers)} if capabilities.pulse_width_qualifiers is not None else {}),
         "supports_delay_measurement": capabilities.supports_delay_measurement,
         "supports_measure_results_dump": capabilities.supports_measure_results_dump,
         "supports_area_measurement": capabilities.supports_area_measurement,

@@ -4,6 +4,7 @@ import pytest
 
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.tektronix import TektronixOscilloscope
+from scopes_tool_core.errors import ParameterValidationError
 from scopes_tool_webui import command_execution
 from scopes_tool_webui.command_catalog import command_catalog
 from scopes_tool_webui.command_validation import WebUIRequestError, _validate_parameters
@@ -26,9 +27,15 @@ def test_catalog_admits_only_registered_tek_operations():
     assert supported("display-vectors", b1)
     assert not supported("trigger-edge-level", b1)
     assert supported("trigger-edge-level", b2)
-    for command in ("measure", "capture", "screenshot", "check-error", "single-wait", "trigger-pulse-width"):
-        assert not supported(command, b2)
-        assert not supported(command, b1)
+    for command in ("measure", "capture", "single-wait", "trigger-pulse-width", "reference-query"):
+        assert supported(command, b2)
+        assert supported(command, b1)
+    assert not supported("screenshot", b2)
+    assert supported("screenshot", b1)
+    assert not supported("check-error", b2)
+    assert not supported("check-error", b1)
+    for model in (b2, b1):
+        assert catalog["trigger-pulse-width"]["presentation"]["models"][model]["fields"]["qualifier"]["options"] == ["less-than", "greater-than"]
     assert supported("capture", keysight)
     acquisition = catalog["acquisition"]["presentation"]["models"]
     assert acquisition[b2]["fields"]["type"]["options"] == ["normal", "peak", "average", "high_resolution"]
@@ -154,7 +161,7 @@ def test_webui_unsupported_tek_command_rejected_before_business_scpi(monkeypatch
 
     with pytest.raises(WebUIRequestError, match="unsupported"):
         command_execution.execute_command(
-            "capture", mode="live", resource="USB0::FAKE::INSTR", model_id=None,
+            "capture-batch", mode="live", resource="USB0::FAKE::INSTR", model_id=None,
             parameters={}, artifact_dir=tmp_path,
         )
     assert backend.history == ["*IDN?"]
@@ -179,14 +186,73 @@ def test_webui_invalid_acquisition_values_do_not_change_mode(monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize("model_id", ["tektronix-tbs2074b", "tektronix-tds2024b", "tektronix-tbs1052b"])
-def test_webui_install_does_not_enable_direct_results_or_png(model_id, tmp_path):
+def test_webui_install_does_not_enable_native_results(model_id, tmp_path):
     catalog = {entry["id"]: entry for entry in command_catalog()}
     for command in ("measure-install", "measure-clear"):
         assert catalog[command]["presentation"]["models"][model_id]["supported"]
         result = command_execution.execute_command(command, mode="simulate", resource=None, model_id=model_id,
             parameters={"source_channel": 1, "item": "vpp"} if command == "measure-install" else {}, artifact_dir=tmp_path)
         assert result["exit_code"] == 0
-    for command in ("measure", "measure-results", "screenshot"):
-        assert not catalog[command]["presentation"]["models"][model_id]["supported"]
-        with pytest.raises(WebUIRequestError, match="unsupported"):
-            _validate_parameters(command, {}, "simulate", model_id)
+    assert not catalog["measure-results"]["presentation"]["models"][model_id]["supported"]
+    assert catalog["screenshot"]["presentation"]["models"][model_id]["supported"] is (model_id == "tektronix-tds2024b")
+    with pytest.raises(WebUIRequestError, match="unsupported"):
+        _validate_parameters("measure-results", {}, "simulate", model_id)
+
+
+
+def test_tds2024b_screenshot_writes_bmp_and_restores_hardcopy(monkeypatch, tmp_path):
+    from pathlib import Path
+    from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
+    backend = TektronixSimulatorBackend(physical_model_id="tektronix-tds2024b",
+        resource_name="USB0::FAKE::INSTR")
+    backend.hardcopy_port = "FILE"
+    backend.hardcopy_format = "EPS"
+    original = (backend.timeout, backend.hardcopy_port, backend.hardcopy_format, backend.hardcopy_inksaver)
+    scope = TektronixOscilloscope(backend)
+    scope.query_idn()
+    monkeypatch.setattr(command_execution, "open_scope_for_run", lambda *args, **kwargs: scope)
+    result = command_execution.execute_command("screenshot", mode="live",
+        resource="USB0::FAKE::INSTR", model_id=None, parameters={"background": "white"}, artifact_dir=tmp_path)
+    assert result["exit_code"] == 0
+    path = Path(result["artifacts"][0]["path"])
+    assert path.suffix == ".bmp" and path.read_bytes().startswith(b"BM")
+    assert (backend.timeout, backend.hardcopy_port, backend.hardcopy_format, backend.hardcopy_inksaver) == original
+
+
+def test_webui_tek_range_rejected_before_writes(monkeypatch, tmp_path):
+    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0"})
+    scope = TektronixOscilloscope(backend)
+    scope.query_idn()
+    monkeypatch.setattr(command_execution, "open_scope_for_run", lambda *args, **kwargs: scope)
+    with pytest.raises((WebUIRequestError, ParameterValidationError), match="unsupported"):
+        command_execution.execute_command("trigger-pulse-width", mode="live", resource="USB0::FAKE::INSTR",
+            model_id=None, parameters={"action": "set", "channel": 1, "polarity": "positive",
+                "qualifier": "range", "min_time_seconds": 1e-6, "max_time_seconds": 2e-6}, artifact_dir=tmp_path)
+    assert backend.history == ["*IDN?"]
+
+
+
+def test_webui_bmp_requires_usbtmc_before_hardcopy_writes(monkeypatch, tmp_path):
+    from scopes_tool_core.visa_backend import VisaBackend
+    from scopes_tool_core.errors import OscilloscopeError
+    class VisaStub(FakeBackend, VisaBackend):
+        pass
+    backend = VisaStub(resource_name="TCPIP0::example::INSTR",
+        responses={"*IDN?": "TEKTRONIX,TDS2024B,SN1,1.0"})
+    scope = TektronixOscilloscope(backend)
+    scope.query_idn()
+    monkeypatch.setattr(command_execution, "open_scope_for_run", lambda *args, **kwargs: scope)
+    with pytest.raises(OscilloscopeError, match="USBTMC"):
+        command_execution.execute_command("screenshot", mode="live", resource=backend.resource_name,
+            model_id=None, parameters={"background": "black"}, artifact_dir=tmp_path)
+    assert backend.history == ["*IDN?"]
+
+
+@pytest.mark.parametrize("model_id", ["keysight-dsox2004a", "keysight-dsox3024a", "keysight-dsox4024a"])
+def test_webui_existing_png_models_keep_capture_behavior(model_id, tmp_path):
+    from pathlib import Path
+    result = command_execution.execute_command("screenshot", mode="simulate", resource=None,
+        model_id=model_id, parameters={"background": "white"}, artifact_dir=tmp_path)
+    assert result["exit_code"] == 0 and result["result"]["format"] == "PNG"
+    path = Path(result["artifacts"][0]["path"])
+    assert path.suffix == ".png" and path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")

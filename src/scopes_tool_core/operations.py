@@ -30,6 +30,7 @@ from .batch import (
     system_error_manifest_dict,
     write_batch_manifest,
 )
+from .capabilities import operation_supported
 from .errors import OscilloscopeError, VisaBackendError
 from .measurements import (
     is_pair_measurement_item,
@@ -208,7 +209,7 @@ def run_capture(
     waveform_format = request.waveform_format.upper()
     if request.waveform_format.lower() == "word":
         validate_word_format_supported(scope.capabilities)
-    if _establish_error_boundary:
+    if _establish_error_boundary and operation_supported(scope.capabilities, "check-error"):
         for _entry in drain_preexisting_system_errors(scope):
             human.append(f"Pre-operation stale system error drained: {_entry.format()}")
     if len(channels) == 1:
@@ -223,17 +224,13 @@ def run_capture(
     trigger_json = None
     if request.trigger_wait is not None:
         human.append(
-            "Trigger wait: arming single acquisition and polling operation condition"
+            "Trigger wait: arming single acquisition and polling for completion"
         )
-        trigger_wait = wait_for_trigger_completion(
-            scope.scpi,
-            request.trigger_wait,
-            classifier_profile=_trigger_wait_classifier_profile(scope),
-        )
+        trigger_wait = scope.single_wait(request.trigger_wait)
         trigger_json = trigger_wait.to_json(request.trigger_wait)
         if not trigger_wait.capture_allowed:
-            entry = scope.query_system_error()
-            system_error = _system_error_json(entry)
+            entry = scope.post_command_status("capture")
+            system_error = _system_error_json(entry) if getattr(entry, "is_system_error_queue", True) else None
             result = {
                 "channels": list(channels),
                 "requested_points": points,
@@ -241,10 +238,12 @@ def run_capture(
                 "files": [],
                 "trigger": trigger_json,
             }
+            if not getattr(entry, "is_system_error_queue", True):
+                result["post_command_status"] = entry.to_json()
             human.extend(
                 [
                     f"Trigger wait outcome: {trigger_wait.outcome}",
-                    f"System error: {entry.format()}",
+                    f"{getattr(entry, 'status_label', 'System error')}: {entry.format()}",
                 ]
             )
             return OperationResult(
@@ -257,7 +256,8 @@ def run_capture(
                 **_scope_backend_json(scope),
             )
     capture = _capture_waveform(scope, channels, request.waveform_format, points)
-    human.extend(_waveform_capture_commands(channels, request.waveform_format, points))
+    if operation_supported(scope.capabilities, "check-error"):
+        human.extend(_waveform_capture_commands(channels, request.waveform_format, points))
 
     time_axis_tolerance = None
     if request.allow_time_axis_tolerance and isinstance(capture, MultiChannelWaveformCapture):
@@ -292,8 +292,10 @@ def run_capture(
         result["trigger"] = trigger_json
     if time_axis_tolerance is not None:
         result["time_axis_tolerance"] = time_axis_tolerance
-    entry = scope.query_system_error()
-    system_error = _system_error_json(entry)
+    entry = scope.post_command_status("capture")
+    system_error = _system_error_json(entry) if getattr(entry, "is_system_error_queue", True) else None
+    if not getattr(entry, "is_system_error_queue", True):
+        result["post_command_status"] = entry.to_json()
     human.extend(
         [
             *([f"Trigger wait outcome: {trigger_json['outcome']}"] if trigger_json is not None else []),
@@ -304,7 +306,7 @@ def run_capture(
     )
     if plot_path is not None:
         human.append(f"Plot: {plot_path}")
-    human.append(f"System error: {entry.format()}")
+    human.append(f"{getattr(entry, 'status_label', 'System error')}: {entry.format()}")
     return OperationResult(
         1 if entry.is_error else 0,
         result,
@@ -704,12 +706,12 @@ def run_measure(
         human.append(f"Planned query: CH{source} to CH{reference} {item} measurement")
     else:
         channel = resolve_single_measurement_channel(request, scope.capabilities)
-        command = measurement_query(item, channel, capabilities=scope.capabilities, **kwargs)
+        command = scope.measurement_query_command(channel, item, **kwargs)
         human.append(
             f"Planned query: CH{channel} {item} measurement"
             f"{_format_measurement_parameters(kwargs)}"
         )
-    if _establish_error_boundary:
+    if _establish_error_boundary and operation_supported(scope.capabilities, "check-error"):
         for _entry in drain_preexisting_system_errors(scope):
             human.append(f"Pre-operation stale system error drained: {_entry.format()}")
     if is_pair_measurement_item(item):
@@ -717,7 +719,9 @@ def run_measure(
     else:
         measurement = scope.query_measurement(channel, item, **kwargs)
     result = {"command": command, **_measurement_result_json(measurement, parameters=kwargs)}
-    entry = scope.query_system_error()
+    entry = scope.post_command_status("measure")
+    if not getattr(entry, "is_system_error_queue", True):
+        result["post_command_status"] = entry.to_json()
     human.extend(
         [
             f"Command: {command}",
@@ -737,12 +741,12 @@ def run_measure(
     human.append(f"Raw response: {measurement.raw_value}")
     if measurement.reason is not None:
         human.append(f"Reason: {measurement.reason}")
-    human.append(f"System error: {entry.format()}")
+    human.append(f"{getattr(entry, 'status_label', 'System error')}: {entry.format()}")
     exit_code = 1 if entry.is_error or not measurement.valid else 0
     return OperationResult(
         exit_code,
         result,
-        system_error=_system_error_json(entry),
+        system_error=_system_error_json(entry) if getattr(entry, "is_system_error_queue", True) else None,
         human_lines=human,
         idn=idn,
         **_scope_backend_json(scope),

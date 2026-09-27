@@ -181,6 +181,11 @@ def fake_run(
         " 'save-image-ink-saver': {'enabled': False},\n"
         " 'save-image': {'operation_complete': True, 'raw_operation_complete': '1'},\n"
         " 'reference-display': {'displayed': True},\n"
+        " 'reference-query': {'displayed': True, 'label': None, 'raw_label': None},\n"
+        " 'measure': {'valid': True, 'value': 0.5, 'unit': 'V'},\n"
+        " 'single-wait': {'poll_source': 'busy', 'poll_command': 'BUSY?', 'outcome': 'natural'},\n"
+        f" 'trigger-pulse-width': {{'mode': {mode!r}, 'channel': 1, 'polarity': 'positive', "
+        "'qualifier': 'less-than', 'less_than_seconds': 1e-6, 'greater_than_seconds': None, 'level_volts': 0.0},\n"
         "}\n"
         f"math_error, cursor_error = {math_error!r}, {cursor_error!r}\n"
         "error = (math_error if command == 'math-operator' and '--query' in sys.argv else\n"
@@ -198,6 +203,9 @@ def fake_run(
         " count = int(counter_path.read_text()) + 1 if counter_path.exists() else 1\n"
         " counter_path.write_text(str(count))\n"
         f" if {mismatch!r} and count > 1: values[command]['mode'] = 'glitch'\n"
+        "if command == 'capture':\n"
+        " for option in ('--csv', '--meta'): Path(sys.argv[sys.argv.index(option) + 1]).write_text('fake')\n"
+        " values[command] = {'format': 'BYTE', 'actual_points': 1000}\n"
         "if command == 'screenshot':\n"
         " path = sys.argv[sys.argv.index('--output') + 1]\n"
         f" Path(path).write_bytes({'bad' if bad_bmp else 'BMfake'!r}.encode())\n"
@@ -324,7 +332,7 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
     assert not [case for case in report["cases"] if case["status"] == "FAIL"]
     assert report["status"] == "pass"
     assert all(invocation["arguments"][2] not in {
-        "autoscale", "setup-save", "run", "screenshot", "measure-install", "measure-clear", "save-image"
+        "autoscale", "setup-save", "run", "screenshot", "measure-install", "measure-clear", "save-image", "measure", "capture", "single-wait"
     }
                for invocation in report["invocations"])
     assert not any(inv["arguments"][2] == "cursor" and "--query" not in inv["arguments"]
@@ -372,7 +380,7 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
     cases = {case["name"]: case for case in report["cases"]}
     for name in ("cursor-off", "measure-install", "measure-clear", "run", "single", "force-trigger",
                  "stop-acquisition", "autoscale", "save-image", "setup-save", "setup-recall",
-                 "reference-save", "reference-display"):
+                 "reference-save", "reference-display", "reference-query", "measure", "capture-byte", "single-wait-natural", "single-wait-force"):
         assert cases[name]["status"] == "PASS", cases[name]
     assert cases["cursor-set"]["status"] == ("N/A" if target == TARGETS[0] else "PASS")
     assert cases["screenshot-bmp"]["status"] == ("PASS" if target == TARGETS[1] else "N/A")
@@ -421,7 +429,7 @@ def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
     commands = re.findall(r'-Command\s+"([a-z][a-z0-9-]+)"', TEXT)
     assert commands
     assert not set(commands) & {
-        "check-error", "capture", "measure", "single-wait",
+        "check-error",
         "doctor", "smoke", "list-resources",
     }
     assert "ProcessStartInfo" in TEXT
@@ -444,3 +452,14 @@ def test_identity_gate_and_vectors_safety_are_explicit() -> None:
     assert 'Invoke-Cli -Stage "display-vectors-query"' in TEXT
     assert "if ($isOn -is [bool] -and $isOn)" in TEXT
     assert "no public OFF setter" in TEXT
+
+
+@requires_windows
+def test_pulse_width_roundtrip_preserves_current_glitch_mode(tmp_path):
+    result, report = fake_run(tmp_path, TARGETS[0], mode="glitch")
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["trigger-pulse-width"]["status"] == "PASS"
+    calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][2] == "trigger-pulse-width"]
+    assert len(calls) == 3  # Query, same-value set, and readback preserve the current settings.
+    assert all("range" not in call for call in calls)

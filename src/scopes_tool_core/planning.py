@@ -107,6 +107,13 @@ def plan_capture(request: CapturePlanRequest, capabilities: ScopeCapabilities) -
         "files": list(files),
         "requested_points": points,
     }
+    if capabilities.series in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+        from .tektronix import TektronixOscilloscope, _PlanningBackend
+        backend = _PlanningBackend(capabilities)
+        scope = TektronixOscilloscope(backend)
+        scope.capabilities = capabilities
+        scope.capture_waveforms_byte(channels, points)
+        return OperationPlan(tuple(backend.commands + ["*ESR?"]), files, result)
     return OperationPlan(
         tuple(planned_waveform_scpi(channels, request.waveform_format, points) + [":SYSTem:ERRor?"]),
         files,
@@ -145,6 +152,14 @@ def plan_measure(request: MeasurePlanRequest, capabilities: ScopeCapabilities) -
         channel = resolve_single_measurement_channel(request, capabilities)
         planned = [measurement_query(item, channel, capabilities=capabilities, **kwargs)]
         result["channel"] = channel
+    if capabilities.series in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+        from .tektronix import TektronixOscilloscope, _PlanningBackend
+        backend = _PlanningBackend(capabilities)
+        scope = TektronixOscilloscope(backend)
+        scope.capabilities = capabilities
+        scope.query_measurement(channel, item, **kwargs)
+        planned = backend.commands
+        return OperationPlan(tuple(planned + ["*ESR?"]), (), result)
     return OperationPlan(tuple(planned + [":SYSTem:ERRor?"]), (), result)
 
 

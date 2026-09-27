@@ -22,8 +22,8 @@ class ReferenceWaveformState:
     slot: int
     displayed: bool
     raw_displayed: str
-    label: str
-    raw_label: str
+    label: str | None
+    raw_label: str | None
 
 
 class ReferenceWaveformController:

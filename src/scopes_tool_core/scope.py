@@ -1456,6 +1456,11 @@ class Oscilloscope:
 
         return self._waveform_controller().capture_channels_word(channels, points=points)
 
+    def measurement_query_command(self, channel: int, item: str, **kwargs: object) -> str:
+        """Return the driver-owned value query for one measurement."""
+        from .measurements import measurement_query
+        return measurement_query(item, channel, capabilities=self.capabilities, **kwargs)
+
     def query_measurement(
         self,
         channel: int,

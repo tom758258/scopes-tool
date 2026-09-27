@@ -132,6 +132,7 @@ from scopes_tool_core.trigger import (
     normalize_delay_slope,
     normalize_edge_burst_slope,
     normalize_edge_slope,
+    glitch_trigger_configure_commands,
     normalize_glitch_polarity,
     normalize_glitch_qualifier,
     normalize_runt_polarity,
@@ -692,6 +693,10 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
             _require_parameter(parameters, "time_seconds", command)
             parameters["time_seconds"] = validate_trigger_time(_finite_number(parameters["time_seconds"], "time_seconds"))
         if "level" in parameters: parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
+        glitch_trigger_configure_commands(channel=parameters["channel"], polarity=parameters["polarity"],
+            qualifier=parameters["qualifier"], time_seconds=parameters.get("time_seconds"),
+            min_time_seconds=parameters.get("min_time_seconds"), max_time_seconds=parameters.get("max_time_seconds"),
+            level_volts=parameters.get("level"), capabilities=capabilities)
     elif command == "trigger-runt":
         runt_trigger_configure_commands(channel=_integer(parameters["channel"], "channel"),
             polarity=parameters["polarity"], qualifier=parameters["qualifier"],
@@ -1896,8 +1901,8 @@ def _validate_parameters(
         if parameters["format"] == "word" and not capabilities.supports_word_format:
             raise WebUIRequestError("word waveform format is not supported by this model")
     elif command == "screenshot":
-        if not capabilities.supports_screenshot:
-            raise WebUIRequestError("PNG screenshot is unsupported for this model")
+        if not (bool(capabilities.screenshot_formats) if capabilities.screenshot_formats is not None else capabilities.supports_screenshot):
+            raise WebUIRequestError("screenshot is unsupported for this model")
         parameters["background"] = str(parameters.get("background", "black")).lower()
         if parameters["background"] not in {"black", "white"}:
             raise WebUIRequestError("background must be black or white")

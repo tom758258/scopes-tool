@@ -143,7 +143,7 @@ def test_tek_simulator_uses_tek_driver_and_status_path(monkeypatch, capsys):
 
 
 def test_tek_simulator_unsupported_command_fails_without_business_scpi(capsys):
-    assert cli.main(["capture", "--channel", "1", "--simulate", "--model", "tektronix-tbs2074b"]) == 1
+    assert cli.main(["measure-results", "--simulate", "--model", "tektronix-tbs2074b"]) == 1
     assert runtime._backend_history() == ["*IDN?"]
     assert "unsupported" in capsys.readouterr().err.lower()
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 import re
 from typing import Mapping, Sequence
@@ -21,7 +21,18 @@ from .errors import OscilloscopeError, ParameterValidationError
 from .cursor import CursorState, cursor_auto_timebase_plan, validate_cursor_request
 from .display import DisplayPersistence, validate_display_persistence
 from .math import MathDisplayState, MathOperationState, MathOperatorState
-from .measurements import validate_measurement_install_item
+from .measurements import (
+    validate_measurement_install_item, measurement_query, normalize_measurement_item,
+    parse_measurement_result, MeasurementResult,
+)
+from .reference import ReferenceWaveformState
+from .waveform import (
+    WaveformCapture, WaveformPreamble, MultiChannelWaveformCapture,
+    validate_waveform_points, validate_waveform_channels, convert_byte_waveform,
+    validate_waveform_vertical_unit,
+)
+from .errors import WaveformResponseError
+from .workflow import StopRequested
 from .save_export import (
     _SAVE_COMPLETION_TIMEOUT_MS, SavePwdState, SaveImageFormatState, SaveBooleanState,
     SaveWaveformFormatState, SaveOperationResult, validate_save_quoted_string,
@@ -38,7 +49,10 @@ from .trigger import (
     EdgeTriggerState, EdgeTriggerSourceState, EdgeTriggerSlopeState,
     EdgeTriggerLevelState, EdgeTriggerCouplingState, TriggerModeState,
     TriggerSweepState, RuntTriggerState, TvTriggerState,
-    parse_tv_line_readback,
+    parse_tv_line_readback, GlitchTriggerState, TriggerWaitConfig, TriggerWaitResult,
+    glitch_trigger_configure_commands, normalize_glitch_qualifier,
+    normalize_glitch_polarity, validate_trigger_wait_config,
+    _trigger_wait_result, _wait_for_trigger_poll,
     runt_trigger_configure_commands, tv_trigger_configure_commands,
 )
 
@@ -81,13 +95,18 @@ def _payload(raw: str, expected_header: str) -> str:
     header, separator, payload = value.partition(" ")
     expected = expected_header.lstrip(":").rstrip("?").split(":")
     actual = header.lstrip(":").split(":")
+    if len(actual) > 2 and actual[2].upper() == "PULSEWIDTH":
+        actual[2:3] = ["PULSE", "WIDTH"]
+        if expected[2:] == ["PULSe", "SOUrce"]:
+            expected.insert(3, "WIDth")
     if expected[:2] in (["HORizontal", "MAIn"], ["TRIGger", "MAIn"]) and len(actual) == len(expected) - 1:
         expected = [expected[0], *expected[2:]]
     if not separator or len(actual) != len(expected):
         raise OscilloscopeError(f"Unexpected Tek response header: {raw!r}")
     for received, command in zip(actual, expected):
         minimum = "".join(char for char in command if char.isupper() or char.isdigit() or char == "*")
-        if not (received.upper().startswith(minimum.upper()) and command.upper().startswith(received.upper())):
+        if not (received.upper() == minimum.upper() or
+                (received.upper().startswith(minimum.upper()) and command.upper().startswith(received.upper()))):
             raise OscilloscopeError(f"Unexpected Tek response header: {raw!r}")
     return payload.strip()
 
@@ -147,6 +166,29 @@ class TektronixOscilloscope(Oscilloscope):
             return ["*IDN?"], [], {"operation": "identify"}
         if command == "list-resources":
             return [], [], {"operation": "list-resources"}
+        if command in {"measure", "capture"}:
+            from .planning import CapturePlanRequest, MeasurePlanRequest, plan_capture, plan_measure
+            if command == "measure":
+                request = MeasurePlanRequest(args.item, args.channel, args.source_channel,
+                    args.reference_channel, args.time_s, args.level, args.slope, args.occurrence)
+                plan = plan_measure(request, capabilities)
+            else:
+                request = CapturePlanRequest(args.channel, args.points, args.waveform_format,
+                    args.csv_path, args.meta_path, args.plot_path)
+                plan = plan_capture(request, capabilities)
+            commands = list(plan.planned_scpi)
+            result = dict(plan.result)
+            if command == "capture" and args.wait_trigger:
+                config = TriggerWaitConfig(args.trigger_timeout_ms, args.trigger_poll_interval_ms, args.force_trigger_on_timeout)
+                validate_trigger_wait_config(config)
+                wait_commands = ["ACQuire:STOPAfter SEQuence", "ACQuire:STATE ON", "BUSY?"]
+                if config.force_on_timeout:
+                    wait_commands.extend(["TRIGger FORCe", "BUSY?"])
+                commands = wait_commands + commands
+                result["trigger"] = TriggerWaitResult("unknown", False, False, 0, 0, capture_block_reason="dry_run",
+                    poll_source="busy", poll_command="BUSY?",
+                    arm_command="ACQuire:STOPAfter SEQuence;ACQuire:STATE ON", force_command="TRIGger FORCe").to_json(config)
+            return commands, list(plan.files), result
         backend = _PlanningBackend(capabilities)
         scope = cls(backend)
         scope.capabilities = capabilities
@@ -155,6 +197,12 @@ class TektronixOscilloscope(Oscilloscope):
         if not explicit_status:
             backend.commands.append("*ESR?")
         business_commands = backend.commands if explicit_status else backend.commands[:-1]
+        if command == "single-wait":
+            config = TriggerWaitConfig(args.trigger_timeout_ms, args.trigger_poll_interval_ms, args.force_trigger_on_timeout)
+            result = TriggerWaitResult("unknown", False, False, 0, 0, capture_block_reason="dry_run",
+                poll_source="busy", poll_command="BUSY?",
+                arm_command="ACQuire:STOPAfter SEQuence;ACQuire:STATE ON", force_command="TRIGger FORCe")
+            return backend.commands, [], {"operation": command, **result.to_json(config)}
         return backend.commands, [], {"operation": command, "commands": list(business_commands)}
 
     def _plan_cli_action(self, args: object) -> None:
@@ -224,6 +272,21 @@ class TektronixOscilloscope(Oscilloscope):
             self.query_math_display(args.function) if args.math_display_action == "query" else self.configure_math_display(args.function, args.math_display_action == "on")
         elif command == "math-operator":
             self.query_math_operator(args.function) if args.math_operator_query else self.configure_math_operator(args.function, args.math_operation, args.source1, args.source2)
+        elif command == "single-wait":
+            config = validate_trigger_wait_config(TriggerWaitConfig(args.trigger_timeout_ms, args.trigger_poll_interval_ms, args.force_trigger_on_timeout))
+            self.single()
+            self.scpi.query("BUSY?")
+            if config.force_on_timeout:
+                self.force_trigger()
+                self.scpi.query("BUSY?")
+        elif command == "trigger-pulse-width":
+            if not args.glitch_query:
+                self.configure_glitch_trigger(channel=args.channel, polarity=args.polarity, qualifier=args.qualifier,
+                    time_seconds=args.time_seconds, min_time_seconds=args.min_time_seconds,
+                    max_time_seconds=args.max_time_seconds, level_volts=args.level_volts)
+            self.query_glitch_trigger()
+        elif command == "reference-query":
+            self.query_reference_waveform(args.slot)
         elif command == "measure-install":
             self.install_measurement(args.source_channel, args.item)
         elif command == "measure-clear":
@@ -899,6 +962,149 @@ class TektronixOscilloscope(Oscilloscope):
         state = self.query_math_operator(function)
         return MathOperationState(function, "operator", state.operation, state.operation_raw)
 
+    def measurement_query_command(self, channel: int, item: str, **kwargs: object) -> str:
+        validate_analog_channel(channel, self.capabilities)
+        measurement_query(item, channel, capabilities=self.capabilities, **kwargs)
+        return "MEASUrement:IMMed:VALue?"
+
+    def query_measurement(self, channel: int, item: str, **kwargs: object) -> MeasurementResult:
+        self.measurement_query_command(channel, item, **kwargs)
+        item = normalize_measurement_item(item)
+        root = "MEASUrement:IMMed"
+        source = "SOUrce1" if self._b2 else "SOUrce"
+        original_type = self._query(f"{root}:TYPe?")[0]
+        original_source = self._query(f"{root}:{source}?")[0]
+        try:
+            self.scpi.write(f"{root}:TYPe {self._measurement_types()[item]}")
+            self.scpi.write(f"{root}:{source} CH{channel}")
+            raw = self.scpi.query(f"{root}:VALue?")
+            unit = self._query(f"{root}:UNIts?")[0].strip('"')
+            result = parse_measurement_result(_payload(raw, f"{root}:VALue?"), item=item, channel=channel)
+            return replace(result, raw_value=raw, unit=unit)
+        finally:
+            try:
+                self.scpi.write(f"{root}:TYPe {original_type}")
+            finally:
+                self.scpi.write(f"{root}:{source} {original_source}")
+
+    def capture_waveform_byte(self, channel: int, points: int = 1000) -> WaveformCapture:
+        channel = validate_analog_channel(channel, self.capabilities)
+        points = validate_waveform_points(points, self.capabilities)
+        if not self.query_channel_display(channel):
+            raise WaveformResponseError(f"CH{channel} is not displayed; waveform capture requires a displayed analog channel")
+        self.scpi.write(f"DATa:SOUrce CH{channel}")
+        self.scpi.write("DATa:ENCdg RPBInary")
+        self.scpi.write("DATa:WIDth 1")
+        self.scpi.write("DATa:STARt 1")
+        self.scpi.write(f"DATa:STOP {points}")
+        root = "WFMOutpre" if self._b2 else "WFMPre"
+        raw = {name: self.scpi.query(f"{root}:{name}?") for name in (
+            "NR_Pt", "XINcr", "XZEro", "YMUlt", "YZEro", "YOFf", "YUNit"
+        )}
+        number = lambda name: _number(raw[name], f"{root}:{name}?")
+        preamble = WaveformPreamble(
+            raw=";".join(raw.values()), format_code=0, type_code=0,
+            points=int(number("NR_Pt")), count=1,
+            x_increment=number("XINcr"), x_origin=number("XZEro"), x_reference=0,
+            y_increment=number("YMUlt"), y_origin=number("YZEro"), y_reference=number("YOFf"),
+        )
+        unit = validate_waveform_vertical_unit(_payload(raw["YUNit"], f"{root}:YUNit?").strip('"'))
+        samples = tuple(int(value) for value in self.scpi.query_binary_values("CURVe?", datatype="B"))
+        if not samples:
+            raise WaveformResponseError("Waveform data query returned no samples.")
+        return convert_byte_waveform(channel, points, preamble, samples, vertical_unit=unit)
+
+    def capture_waveforms_byte(self, channels: Sequence[int], points: int = 1000) -> MultiChannelWaveformCapture:
+        channels = validate_waveform_channels(channels, self.capabilities)
+        validate_waveform_points(points, self.capabilities)
+        return MultiChannelWaveformCapture(tuple(self.capture_waveform_byte(channel, points) for channel in channels))
+
+    def single_wait(self, config: TriggerWaitConfig, *, stop_requested: StopRequested | None = None) -> TriggerWaitResult:
+        config = validate_trigger_wait_config(config)
+        self.single()
+        start = config.clock()
+        raw_values, values = [], []
+
+        def poll() -> tuple[str, str | None]:
+            deadline = config.clock() + config.timeout_ms / 1000.0
+            while True:
+                if stop_requested is not None and stop_requested():
+                    return "cancelled", None
+                try:
+                    raw = self.scpi.query("BUSY?")
+                    value = _number(raw, "BUSY?")
+                    if value not in (0, 1):
+                        return "unknown", f"Invalid Tek BUSY response: {raw!r}"
+                except Exception as exc:
+                    return "unknown", str(exc)
+                raw_values.append(raw)
+                values.append(int(value))
+                if value == 0:
+                    return "complete", None
+                remaining = deadline - config.clock()
+                if remaining <= 0:
+                    return "timeout", None
+                if not _wait_for_trigger_poll(config, min(config.poll_interval_ms / 1000.0, remaining), stop_requested=stop_requested):
+                    return "cancelled", None
+
+        outcome, error = poll()
+        forced = False
+        if outcome == "timeout" and config.force_on_timeout:
+            self.force_trigger()
+            forced = True
+            outcome, error = poll()
+        if outcome == "complete":
+            outcome = "forced" if forced else "natural"
+        result = _trigger_wait_result(outcome, forced, outcome == "timeout", start, config, raw_values, values, error=error)
+        return replace(result, poll_source="busy", poll_command="BUSY?",
+            arm_command="ACQuire:STOPAfter SEQuence;ACQuire:STATE ON", force_command="TRIGger FORCe")
+
+    def configure_glitch_trigger(self, *, channel: int, polarity: str, qualifier: str,
+        time_seconds: float | None = None, min_time_seconds: float | None = None,
+        max_time_seconds: float | None = None, level_volts: float | None = None) -> None:
+        glitch_trigger_configure_commands(channel=channel, polarity=polarity, qualifier=qualifier,
+            time_seconds=time_seconds, min_time_seconds=min_time_seconds, max_time_seconds=max_time_seconds,
+            level_volts=level_volts, capabilities=self.capabilities)
+        qualifier = normalize_glitch_qualifier(qualifier)
+        when = ({"LESSthan": "LESSthan", "GREaterthan": "MOREthan"} if self._b2 else
+                {"LESSthan": "INside", "GREaterthan": "OUTside"})[qualifier]
+        self.configure_trigger_mode("glitch")
+        root = f"{self._trigger_root}:PULSe:WIDth"
+        self.scpi.write(f"{self._trigger_root}:PULSe:SOUrce CH{channel}")
+        self.scpi.write(f"{root}:POLarity {normalize_glitch_polarity(polarity)}")
+        self._write_number(f"{root}:WIDth", time_seconds)
+        self.scpi.write(f"{root}:WHEn {when}")
+        if level_volts is not None:
+            self._write_number(f"{self._trigger_root}:LEVel" + (f":CH{channel}" if self._b2 else ""), level_volts)
+
+    def query_glitch_trigger(self) -> GlitchTriggerState:
+        root = f"{self._trigger_root}:PULSe:WIDth"
+        mode = self.query_trigger_mode()
+        raw = {"source": self.scpi.query(f"{self._trigger_root}:PULSe:SOUrce?")}
+        raw.update({key: self.scpi.query(f"{root}:{command}?") for key, command in
+            (("polarity", "POLarity"), ("qualifier", "WHEn"), ("width", "WIDth"))})
+        source = _payload(raw["source"], f"{self._trigger_root}:PULSe:SOUrce?")
+        match = re.fullmatch(r"CH([1-4])", source.upper())
+        if match is None:
+            raise OscilloscopeError(f"Unsupported Tek pulse source: {source!r}")
+        channel = validate_analog_channel(int(match[1]), self.capabilities)
+        qualifier = _choice(_payload(raw["qualifier"], f"{root}:WHEn?"),
+            {"LESS": "less-than", "LESSTHAN": "less-than", "MORE": "greater-than", "MORETHAN": "greater-than"} if self._b2 else
+            {"IN": "less-than", "INSIDE": "less-than", "OUT": "greater-than", "OUTSIDE": "greater-than"}, "pulse qualifier response")
+        polarity = _choice(_payload(raw["polarity"], f"{root}:POLarity?"),
+            {"POS": "positive", "POSITIVE": "positive", "NEG": "negative", "NEGATIVE": "negative"}, "pulse polarity response")
+        width = _number(raw["width"], f"{root}:WIDth?")
+        command = f"{self._trigger_root}:LEVel" + (f":CH{channel}" if self._b2 else "") + "?"
+        raw["level"] = self.scpi.query(command)
+        raw["mode"] = mode.raw_mode
+        return GlitchTriggerState(mode.mode, source, "analog-channel", channel, None, polarity, qualifier,
+            width if qualifier == "greater-than" else None, width if qualifier == "less-than" else None,
+            None, None, _number(raw["level"], command), raw)
+
+    def query_reference_waveform(self, slot: int) -> ReferenceWaveformState:
+        displayed, raw = self.query_reference_display(slot)
+        return ReferenceWaveformState(slot, displayed, raw, None, None)
+
     def _measurement_types(self) -> dict[str, str]:
         return {
             "vpp": "PK2Pk", "vavg": "MEAN", "vrms": "RMS", "frequency": "FREQuency",
@@ -997,6 +1203,11 @@ class TektronixOscilloscope(Oscilloscope):
         options = normalize_screenshot_options(options)
         background = normalize_screenshot_background(background)
         validate_screenshot_capability(self.capabilities, options)
+        from .visa_backend import VisaBackend
+        if isinstance(self.backend, VisaBackend):
+            resource = self.backend.resource_name.strip().upper()
+            if not (resource.startswith("USB") and resource.endswith("::INSTR")):
+                raise OscilloscopeError("Tek BMP screenshot capture requires a USBTMC resource.")
         desired_ink = options.ink_saver if options.ink_saver is not None else background == "white"
         temporary_settings = [("HARDCopy:FORMat", "BMP"), ("HARDCopy:PORT", "USB")]
         if options.ink_saver is None:

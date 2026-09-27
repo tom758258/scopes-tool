@@ -52,6 +52,7 @@ from scopes_tool_core import (
     run_triggered_measure_loop,
 )
 
+from scopes_tool_core.screenshot import ScreenshotOptions, write_screenshot
 from scopes_tool_core.batch import BATCH_DEFAULT_BASE_DIR, default_batch_output_dir
 from scopes_tool_core.discovery import discover_visa_resources
 from scopes_tool_core.measure_logger import (
@@ -618,10 +619,14 @@ def _execute_scope_command(
         )
         return _operation_payload(result)
     if command == "screenshot":
-        capture = scope.capture_screenshot_png(background=parameters["background"])
-        path = write_screenshot_png_file(
+        formats = scope.capabilities.screenshot_formats
+        format_name = formats[0] if formats else "png"
+        capture = (scope.capture_screenshot_png(background=parameters["background"]) if format_name == "png" else
+            scope.capture_screenshot(options=ScreenshotOptions(format=format_name), background=parameters["background"]))
+        writer = write_screenshot_png_file if capture.format_name == "PNG" else write_screenshot
+        path = writer(
             capture,
-            _next_output_file(artifact_dir, ".png"),
+            _next_output_file(artifact_dir, "." + capture.format_name.lower()),
         )
         return {
             "exit_code": 0,

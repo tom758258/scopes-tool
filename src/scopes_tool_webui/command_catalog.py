@@ -2403,6 +2403,8 @@ def _model_command_presentation(
         subset = {
             ("channel-units", "channel"): capabilities.channel_units_channels,
             ("measure-install", "item"): capabilities.measurement_install_items,
+            ("measure", "item"): capabilities.measurement_items,
+            ("trigger-pulse-width", "qualifier"): capabilities.pulse_width_qualifiers,
             ("display-persistence", "seconds"): capabilities.display_persistence_seconds,
             ("save-image-format", "format"): capabilities.save_image_formats,
             ("save-waveform-format", "format"): capabilities.save_waveform_formats,
@@ -2577,7 +2579,7 @@ def _model_command_presentation(
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"
             )
-        if name in ("item", "items") and not capabilities.supports_area_measurement and not (entry["id"] == "measure-install" and capabilities.measurement_install_items is not None):
+        if name in ("item", "items") and not capabilities.supports_area_measurement and not ((entry["id"] == "measure-install" and capabilities.measurement_install_items is not None) or (entry["id"] == "measure" and capabilities.measurement_items is not None)):
             base_options = override.get("options", field.get("options", ()))
             if "area" in base_options:
                 override["options"] = tuple(
@@ -2616,7 +2618,7 @@ def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: A
     if command_id == "measurement-statistics":
         return capabilities.supports_measure_statistics
     if command_id == "screenshot":
-        return capabilities.supports_screenshot
+        return bool(capabilities.screenshot_formats) if capabilities.screenshot_formats is not None else capabilities.supports_screenshot
     if command_id in {"measure-install", "measure-clear"} and capabilities.measurement_install_items is not None:
         return True
     if category == "Measurement":

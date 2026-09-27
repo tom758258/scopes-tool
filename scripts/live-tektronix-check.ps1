@@ -542,6 +542,59 @@ try {
                 Invoke-SameValueCase "display-persistence" "display-persistence" $before @("--seconds", (Format-Setting $before.result.seconds)) @("seconds")
             } else { throw "Missing persistence mode or seconds readback." }
         } catch { Add-Case "display-persistence" "FAIL" $_.Exception.Message }
+        try {
+            $reference = Invoke-Cli -Stage "reference-query" -Command "reference-query" -Options @("--slot", "1")
+            if ($reference.result.displayed -isnot [bool] -or
+                $null -eq $reference.result.PSObject.Properties["label"] -or
+                $null -eq $reference.result.PSObject.Properties["raw_label"] -or
+                $null -ne $reference.result.label -or $null -ne $reference.result.raw_label) {
+                throw "Reference display or unavailable-label projection is invalid."
+            }
+            Add-Case "reference-query" "PASS"
+        } catch { Add-Case "reference-query" "FAIL" $_.Exception.Message }
+        if ($triggerMode -eq "glitch") {
+            try {
+                $before = Invoke-Cli -Stage "trigger-pulse-width-before" -Command "trigger-pulse-width" -Options @("--query")
+                $state = $before.result
+                $field = if ($state.qualifier -eq "less-than") { "less_than_seconds" } else { "greater_than_seconds" }
+                if ($state.qualifier -notin @("less-than", "greater-than") -or $null -eq $state.channel -or
+                    $state.polarity -notin @("positive", "negative") -or $null -eq $state.$field -or $state.$field -le 0) {
+                    Add-Case "trigger-pulse-width" "N/A" "Current pulse settings are outside the public subset; no setter executed"
+                } else {
+                    Invoke-SameValueCase "trigger-pulse-width" "trigger-pulse-width" $before @(
+                        "--channel", "$($state.channel)", "--polarity", $state.polarity,
+                        "--qualifier", $state.qualifier, "--time-seconds", (Format-Setting $state.$field),
+                        "--level-volts", (Format-Setting $state.level_volts)
+                    ) @("channel", "polarity", "qualifier", $field, "level_volts", "mode")
+                }
+            } catch { Add-Case "trigger-pulse-width" "FAIL" $_.Exception.Message }
+        } else { Add-Case "trigger-pulse-width" "N/A" "Current trigger type is not glitch; no setter executed" }
+        if ($IncludeConfigurationActions) {
+            try {
+                $display = Invoke-Cli -Stage "primitive-source-display" -Command "channel-display" -Options @("--channel", "1", "--query")
+                if ((Get-Readback $display "display") -eq $true) {
+                    $measurement = Invoke-Cli -Stage "measure" -Command "measure" -Options @("--channel", "1", "--item", "vpp")
+                    if ((Get-Readback $measurement "valid") -ne $true) { throw "Immediate measurement is invalid." }
+                    Add-Case "measure" "PASS" "Immediate TYPE/SOURCE restored by Core"
+                    $csv = Join-Path $script:RunPaths.Private "waveform.csv"
+                    $meta = Join-Path $script:RunPaths.Private "waveform.json"
+                    $capture = Invoke-Cli -Stage "capture-byte" -Command "capture" -Options @(
+                        "--channel", "1", "--format", "byte", "--points", "1000", "--csv", $csv, "--meta", $meta)
+                    if ((Get-Readback $capture "format") -cne "BYTE" -or
+                        -not (Test-Path -LiteralPath $csv) -or -not (Test-Path -LiteralPath $meta)) {
+                        throw "Missing BYTE waveform artifacts."
+                    }
+                    Add-Case "capture-byte" "PASS" "Displayed CH1 only; transfer settings may change; no display enabling"
+                } else {
+                    Add-Case "measure" "N/A" "CH1 is hidden; display state is not changed"
+                    Add-Case "capture-byte" "N/A" "CH1 is hidden; display state is not changed"
+                }
+            } catch { Add-Case "measure-capture" "FAIL" $_.Exception.Message }
+        } else {
+            foreach ($name in @("measure", "capture-byte")) {
+                Add-Case $name "N/A" "Requires -IncludeConfigurationActions; capture transfer settings are not restored"
+            }
+        }
         Invoke-SimpleCase "cursor-query" "cursor" @("--query")
         if ($IncludeConfigurationActions) {
             Write-Warning "Cursor and measurement configuration actions are not restored; cursors end off and measurements end cleared."
@@ -634,6 +687,20 @@ try {
             Write-Warning "Acquisition actions change run/stop state; final state is stop."
             $script:AcquisitionFinalState = "stop requested"
             try {
+                foreach ($force in @($false, $true)) {
+                    $name = if ($force) { "single-wait-force" } else { "single-wait-natural" }
+                    try {
+                        $options = @("--trigger-timeout-ms", "1000", "--trigger-poll-interval-ms", "50")
+                        if ($force) { $options += "--force-trigger-on-timeout" }
+                        $wait = Invoke-Cli -Stage $name -Command "single-wait" -Options $options
+                        if ($wait.result.poll_source -cne "busy" -or $wait.result.poll_command -cne "BUSY?" -or
+                            $wait.result.outcome -notin @("natural", "forced") -or
+                            (-not $force -and $wait.result.outcome -ne "natural")) {
+                            throw "Invalid bounded BUSY completion result."
+                        }
+                        Add-Case $name "PASS" "Outcome: $($wait.result.outcome); force only on timeout"
+                    } catch { Add-Case $name "FAIL" $_.Exception.Message }
+                }
                 Invoke-SimpleCase "run" "run"
                 Invoke-SimpleCase "single" "single"
                 if (@($script:Cases | Where-Object { $_.name -eq "single" -and $_.status -eq "PASS" }).Count -eq 1) {
@@ -646,7 +713,7 @@ try {
                 } else { $script:AcquisitionFinalState = "stop failed or unconfirmed" }
             }
         } else {
-            foreach ($name in @("run", "single", "force-trigger", "stop-acquisition")) {
+            foreach ($name in @("run", "single", "force-trigger", "stop-acquisition", "single-wait-natural", "single-wait-force")) {
                 Add-Case $name "N/A" "Requires -IncludeAcquisitionActions"
             }
         }

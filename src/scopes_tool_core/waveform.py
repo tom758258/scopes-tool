@@ -40,7 +40,7 @@ class WaveformPreamble:
     x_reference: int
     y_increment: float
     y_origin: float
-    y_reference: int
+    y_reference: float
 
 
 @dataclass(frozen=True)

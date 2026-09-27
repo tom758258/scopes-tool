@@ -832,16 +832,21 @@ class TriggerWaitResult:
     capture_block_reason: str | None = None
     error: str | None = None
 
+    poll_source: str = "operation_condition"
+    poll_command: str = ":OPERegister:CONDition?"
+    arm_command: str = ":SINGle"
+    force_command: str = ":TRIGger:FORCe"
+
     def to_json(self, config: TriggerWaitConfig) -> dict[str, object]:
         return {
             "wait_enabled": True,
-            "arm_command": single_command(),
-            "poll_source": "operation_condition",
-            "poll_command": operation_condition_query(),
+            "arm_command": self.arm_command,
+            "poll_source": self.poll_source,
+            "poll_command": self.poll_command,
             "timeout_ms": config.timeout_ms,
             "poll_interval_ms": config.poll_interval_ms,
             "force_on_timeout": config.force_on_timeout,
-            "force_command": force_trigger_command(),
+            "force_command": self.force_command,
             "outcome": self.outcome,
             "forced": self.forced,
             "timed_out": self.timed_out,
@@ -2450,6 +2455,9 @@ def glitch_trigger_configure_commands(
     channel = validate_analog_channel(channel, capabilities)
     polarity_command = normalize_glitch_polarity(polarity)
     qualifier_command = normalize_glitch_qualifier(qualifier)
+    canonical_qualifier = {"GREaterthan": "greater-than", "LESSthan": "less-than", "RANGe": "range"}[qualifier_command]
+    if capabilities.pulse_width_qualifiers is not None and canonical_qualifier not in capabilities.pulse_width_qualifiers:
+        raise ParameterValidationError("pulse-width qualifier is unsupported for this model")
     level = validate_trigger_level(level_volts) if level_volts is not None else None
 
     commands = [

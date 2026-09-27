@@ -792,7 +792,10 @@ def measurement_query(
     item = normalize_measurement_item(item)
     if capabilities is not None:
         validate_measurements_supported(capabilities)
-    if item == "area":
+    if capabilities is not None and capabilities.measurement_items is not None:
+        if item not in capabilities.measurement_items:
+            raise ParameterValidationError("measurement item is unsupported for this model")
+    if item == "area" and not (capabilities is not None and capabilities.measurement_items is not None):
         _validate_area_measurement_supported(capabilities)
     if item in _PARAMETERIZED_MEASUREMENT_ITEMS:
         return _parameterized_measurement_query(
@@ -834,6 +837,8 @@ def pair_measurement_query(
     item = normalize_measurement_item(item)
     if capabilities is not None:
         validate_measurements_supported(capabilities)
+    if capabilities is not None and capabilities.measurement_items is not None and item not in capabilities.measurement_items:
+        raise ParameterValidationError(f"{item} measurement is unsupported for this model")
     if item not in _PAIR_MEASUREMENT_QUERY_TEMPLATES:
         raise ParameterValidationError(
             f"{item} measurement uses a single channel; use measurement_query()."

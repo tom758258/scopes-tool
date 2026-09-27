@@ -71,6 +71,8 @@ class ScopeCapabilities:
     screenshot_formats: tuple[str, ...] | None = None
     channel_units_channels: tuple[int, ...] | None = None
     display_persistence_seconds: tuple[float, ...] | None = None
+    measurement_items: tuple[str, ...] | None = None
+    pulse_width_qualifiers: tuple[str, ...] | None = None
     measurement_install_items: tuple[str, ...] | None = None
     math_expressions: tuple[str, ...] | None = None
     save_image_formats: tuple[str, ...] | None = None
@@ -97,7 +99,8 @@ _TEK_COMMON_OPERATIONS = frozenset({
     "cursor", "cursor-query", "cursor-off", "math-display", "math-operator",
     "measure-install", "measure-clear", "save-image", "acquisition-points",
     "record-length", "channel-summary", "live-data-snapshot",
-    "system-information-snapshot",
+    "system-information-snapshot", "measure", "capture", "single-wait",
+    "trigger-pulse-width", "reference-query",
 })
 
 
@@ -138,13 +141,14 @@ _CAPABILITY_PROFILES = {
         series="TBS2000B", analog_channels=4,
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
-        supports_measurements=False, supports_delay_measurement=False,
+        supports_measurements=True, supports_delay_measurement=False,
         supports_screenshot=False, supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
         supports_simulator=True, math_function_count=1,
         screenshot_formats=(), cursor_auto_vertical=False,
         channel_units_channels=(1, 2),
-        measurement_install_items=_TEK_INSTALL_ITEMS,
+        measurement_install_items=_TEK_INSTALL_ITEMS, measurement_items=_TEK_INSTALL_ITEMS,
+        pulse_width_qualifiers=("less-than", "greater-than"),
         math_expressions=_TEK_MATH_EXPRESSIONS,
         save_image_formats=("png", "bmp"), save_waveform_formats=("csv",),
         runt_channels=(1, 2), runt_polarities=("positive", "negative"),
@@ -170,11 +174,12 @@ _CAPABILITY_PROFILES = {
     ),
     "tektronix-tds2024b": ScopeCapabilities(
         series="TDS2000B", analog_channels=4,
-        measurement_install_items=_TEK_LEGACY_INSTALL_ITEMS,
+        measurement_install_items=_TEK_LEGACY_INSTALL_ITEMS, measurement_items=_TEK_LEGACY_INSTALL_ITEMS,
+        pulse_width_qualifiers=("less-than", "greater-than"),
         math_expressions=_TEK_MATH_EXPRESSIONS + ("CH3+CH4", "CH3-CH4", "CH4-CH3", "CH3*CH4"),
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
-        supports_measurements=False, supports_delay_measurement=False,
+        supports_measurements=True, supports_delay_measurement=False,
         supports_screenshot=False, supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
         supports_simulator=True, math_function_count=1,
@@ -202,11 +207,12 @@ _CAPABILITY_PROFILES = {
     ),
     "tektronix-tbs1052b": ScopeCapabilities(
         series="TBS1000B", analog_channels=2,
-        measurement_install_items=_TEK_INSTALL_ITEMS,
+        measurement_install_items=_TEK_INSTALL_ITEMS, measurement_items=_TEK_INSTALL_ITEMS,
+        pulse_width_qualifiers=("less-than", "greater-than"),
         math_expressions=_TEK_MATH_EXPRESSIONS,
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
-        supports_measurements=False, supports_delay_measurement=False,
+        supports_measurements=True, supports_delay_measurement=False,
         supports_screenshot=False, supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
         supports_simulator=True, math_function_count=1,

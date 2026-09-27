@@ -45,6 +45,10 @@ class _DriverContractDummy:
         del operation
         return self.query_system_error()
 
+    def measurement_query_command(self, channel, item, **kwargs):
+        from scopes_tool_core.measurements import measurement_query
+        return measurement_query(item, channel, capabilities=self.capabilities, **kwargs)
+
     def validate_acquisition_count(self, count):
         return validate_acquisition_count(count)
 
