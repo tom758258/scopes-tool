@@ -294,6 +294,13 @@ Control and setup:
 - `external-trigger-settings`: query-only `operation: "query"` and `command:
   ":EXTernal?"`; results include nullable `probe_attenuation`, `range_value`,
   `units`, `bandwidth_limit_enabled`, and stripped `raw_response`.
+- `trigger-mode`: query results include `operation: "query"`, `command`,
+  canonical `mode`, and preserved `raw_mode`. Configure results include
+  `operation: "configure"`, `command`, canonical `mode`, and
+  `state_changing: true`. Some Tektronix modes require multiple SCPI commands;
+  `command` names the first business command, while top-level `scpi` remains
+  authoritative for the complete sent/planned sequence. Dry-run results retain
+  the existing driver planning shape rather than implying instrument readback.
 - `trigger-sweep`: `operation` and `command`. Configure results include
   normalized `mode` (`auto` or `normal`) and `state_changing: true`. Query
   results include normalized `mode` and preserved `raw_value`.

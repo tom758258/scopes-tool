@@ -9,6 +9,9 @@ param(
     [switch] $IncludeAcquisitionActions,
     [switch] $IncludeAutoscale,
     [switch] $IncludeStorageWrites,
+    [string] $ImageFilename,
+    [switch] $IncludeConfigurationActions,
+    [switch] $IncludeScreenshot,
     [ValidateRange(1, 9)][int] $SetupSlot,
     [ValidateRange(1, 2)][int] $ReferenceSlot
 )
@@ -40,8 +43,9 @@ if ($IncludeStorageWrites -and (-not $PSBoundParameters.ContainsKey("SetupSlot")
     Write-LiveUsageError -Domain "tektronix" "Storage writes require explicit -SetupSlot (1..9) and -ReferenceSlot (1..2)."
 }
 if (-not $IncludeStorageWrites -and ($PSBoundParameters.ContainsKey("SetupSlot") -or
-                                    $PSBoundParameters.ContainsKey("ReferenceSlot"))) {
-    Write-LiveUsageError -Domain "tektronix" "Storage slots require -IncludeStorageWrites."
+                                    $PSBoundParameters.ContainsKey("ReferenceSlot") -or
+                                    $PSBoundParameters.ContainsKey("ImageFilename"))) {
+    Write-LiveUsageError -Domain "tektronix" "Storage slots and image filenames require -IncludeStorageWrites."
 }
 try {
     $script:LiveArguments = @(Get-LiveConnectionArguments -Resource $Resource -Backend $Backend)
@@ -240,6 +244,29 @@ function Invoke-SimpleCase {
     }
 }
 
+function Invoke-SameValueCase {
+    param([string]$Name, [string]$Command, [object]$Before,
+          [string[]]$Options, [string[]]$Fields, [string[]]$Base = @())
+    # Callers supply only settings already read from the current instrument state.
+    $null = Invoke-Cli -Stage "$Name-same-value" -Command $Command -Options (@($Base) + $Options)
+    $after = Invoke-Cli -Stage "$Name-after" -Command $Command -Options (@($Base) + "--query")
+    foreach ($field in $Fields) {
+        if (-not (Test-ReadbackEqual (Get-Readback $Before $field) (Get-Readback $after $field))) {
+            throw "$field readback differs after same-value setter."
+        }
+    }
+    Add-Case $Name "PASS" "query, same-value set, and readback"
+}
+
+function Format-Setting {
+    param($Value)
+    if ($Value -is [bool]) { return $Value.ToString().ToLowerInvariant() }
+    if ($Value -is [ValueType]) {
+        return ([double]$Value).ToString("R", [Globalization.CultureInfo]::InvariantCulture)
+    }
+    return [string]$Value
+}
+
 function Write-Report {
     $pass = @($script:Cases | Where-Object { $_.status -eq "PASS" }).Count
     $fail = @($script:Cases | Where-Object { $_.status -eq "FAIL" }).Count
@@ -276,6 +303,10 @@ function Write-Report {
     if ($IncludeStorageWrites) {
         $lines += ""
         $lines += "Requested setup slot $SetupSlot and reference slot $ReferenceSlot may have been overwritten."
+        if ($ImageFilename) { $lines += "The explicitly requested instrument image file may have been overwritten." }
+    }
+    if ($IncludeConfigurationActions) {
+        $lines += "Cursor and measurement configurations were not restored; see individual case outcomes."
     }
     Write-Utf8NoBomLines -LiteralPath (Join-Path $script:RunPaths.Private "summary.md") -Lines $lines
     Write-Host "[live][tektronix] private artifacts: $($script:RunPaths.Private)"
@@ -315,11 +346,19 @@ try {
         Invoke-RoundTrip "channel-probe" "channel-probe" $ch "probe_ratio" "--ratio"
         Invoke-RoundTrip "channel-bandwidth-limit" "channel-bandwidth-limit" $ch "bandwidth_limit" "--on"
         Invoke-RoundTrip "channel-invert" "channel-invert" $ch "invert" "--on"
+        Invoke-RoundTrip "channel-units" "channel-units" $ch "units" "--units" @("volt", "amp")
+        foreach ($name in @("acquisition-points", "record-length")) {
+            Invoke-SimpleCase $name $name @("--query")
+        }
+        Invoke-SimpleCase "channel-summary" "channel-summary"
         if ($script:Target -eq "tektronix-tbs2074b") {
+            Invoke-SimpleCase "sample-rate" "sample-rate" @("--query")
+            Invoke-SimpleCase "sample-rate-maximum" "sample-rate" @("--query", "--maximum")
             Invoke-RoundTrip "channel-offset" "channel-offset" $ch "volts" "--volts"
             Invoke-RoundTrip "channel-label" "channel-label" $ch "text" "--text"
             Invoke-RoundTrip "channel-probe-skew" "channel-probe-skew" $ch "probe_skew_seconds" "--seconds"
         } else {
+            Add-Case "sample-rate" "N/A" "Unsupported on this model"
             foreach ($name in @("channel-offset", "channel-label", "channel-probe-skew")) {
                 Add-Case $name "N/A" "Unsupported on this model"
             }
@@ -370,24 +409,166 @@ try {
             }
         } catch { Add-Case "acquisition-average-count" "FAIL" $_.Exception.Message }
 
-        Add-Case "trigger-mode" "N/A" "No standalone one-shot CLI surface; direct CLI acceptance is not applicable"
+        $triggerMode = $null
+        try {
+            $trigger = Invoke-Cli -Stage "trigger-mode-before" -Command "trigger-mode" -Options @("--query")
+            $triggerMode = [string](Get-Readback $trigger "mode")
+            Invoke-SameValueCase "trigger-mode" "trigger-mode" $trigger @("--mode", $triggerMode) @("mode")
+        } catch {
+            $triggerMode = $null
+            Add-Case "trigger-mode" "FAIL" $_.Exception.Message
+        }
         Invoke-RoundTrip "trigger-sweep" "trigger-sweep" @() "mode" "--mode" @("auto", "normal")
         foreach ($name in @("trigger-edge-source", "trigger-edge-slope", "trigger-edge-coupling")) {
             try {
-                $null = Invoke-Cli -Stage "$name-query" -Command $name -Options @("--query")
-                Add-Case $name "N/A" "query passed; setter requires a public current trigger-type readback"
+                $before = Invoke-Cli -Stage "$name-query" -Command $name -Options @("--query")
+                Add-Case "$name-query" "PASS"
+                if ($triggerMode -ne "edge") {
+                    Add-Case $name "N/A" "Current trigger type is not edge or could not be verified; no setter executed"
+                } elseif ($name -eq "trigger-edge-source") {
+                    $source = $before.result.source
+                    if ($source -eq "analog-channel") {
+                        $channel = Get-Readback $before "source_channel"
+                        Invoke-SameValueCase $name $name $before @("--source-channel", "$channel") @("source", "source_channel")
+                    } elseif ($source -in @("line", "external")) {
+                        Invoke-SameValueCase $name $name $before @("--source", $source) @("source")
+                    } else { Add-Case $name "N/A" "Current source is outside the supported subset" }
+                } elseif ($name -eq "trigger-edge-slope") {
+                    Invoke-SameValueCase $name $name $before @("--slope", (Get-Readback $before "slope")) @("slope")
+                } else {
+                    Invoke-SameValueCase $name $name $before @("--coupling", (Get-Readback $before "coupling")) @("coupling")
+                }
             } catch { Add-Case $name "FAIL" $_.Exception.Message }
         }
         Invoke-RoundTrip "trigger-holdoff" "trigger-holdoff" @() "seconds" "--seconds"
         if ($script:Target -eq "tektronix-tbs2074b") {
-            Invoke-RoundTrip "trigger-edge-level" "trigger-edge-level" @("--source-channel", "1") "level_volts" "--level-volts"
+            Invoke-SimpleCase "trigger-edge-level-query" "trigger-edge-level" @("--source-channel", "1", "--query")
+            if ($triggerMode -eq "edge") {
+                Invoke-RoundTrip "trigger-edge-level" "trigger-edge-level" @("--source-channel", "1") "level_volts" "--level-volts"
+            } else { Add-Case "trigger-edge-level" "N/A" "Current trigger type is not edge or could not be verified; no setter executed" }
         } else {
             Add-Case "trigger-edge-level" "N/A" "Unsupported standalone on this model"
         }
         try {
-            $null = Invoke-Cli -Stage "trigger-edge-query" -Command "trigger-edge" -Options @("--query")
-            Add-Case "trigger-edge" "N/A" "query passed; setter requires a public current trigger-type readback"
+            if ($triggerMode -ne "edge") {
+                Add-Case "trigger-edge" "N/A" "Current trigger type is not edge or could not be verified; no setter executed"
+            } else {
+                $source = Invoke-Cli -Stage "trigger-edge-source-precondition" -Command "trigger-edge-source" -Options @("--query")
+                if ($source.result.source -ne "analog-channel") {
+                    Add-Case "trigger-edge" "N/A" "Combined edge requires a current analog source; source is not changed"
+                } else {
+                    $before = Invoke-Cli -Stage "trigger-edge-before" -Command "trigger-edge" -Options @("--query")
+                    Invoke-SameValueCase "trigger-edge" "trigger-edge" $before @(
+                        "--source-channel", (Format-Setting (Get-Readback $before "source_channel")),
+                        "--level", (Format-Setting (Get-Readback $before "level_volts")),
+                        "--slope", (Get-Readback $before "slope")
+                    ) @("source_channel", "level_volts", "slope")
+                }
+            }
         } catch { Add-Case "trigger-edge" "FAIL" $_.Exception.Message }
+
+        $specialTrigger = if ($script:Target -eq "tektronix-tbs2074b") { "trigger-runt" } else { "trigger-tv" }
+        $specialMode = if ($specialTrigger -eq "trigger-runt") { "runt" } else { "tv" }
+        Add-Case $(if ($specialTrigger -eq "trigger-runt") { "trigger-tv" } else { "trigger-runt" }) "N/A" "Unsupported on this model"
+        try {
+            $before = Invoke-Cli -Stage "$specialTrigger-query" -Command $specialTrigger -Options @("--query")
+            Add-Case "$specialTrigger-query" "PASS"
+            if ($triggerMode -ne $specialMode -or $before.result.mode -ne $specialMode) {
+                Add-Case $specialTrigger "N/A" "Current trigger type is not $specialMode; no setter executed"
+            } elseif ($specialMode -eq "runt") {
+                $state = $before.result
+                if ($state.channel -notin @(1, 2) -or $state.polarity -notin @("positive", "negative") -or
+                    $state.qualifier -notin @("none", "less-than", "greater-than") -or
+                    $null -eq $state.low_level_volts -or $null -eq $state.high_level_volts -or
+                    $state.low_level_volts -ge $state.high_level_volts -or
+                    ($state.qualifier -ne "none" -and ($null -eq $state.time_seconds -or $state.time_seconds -le 0))) {
+                    Add-Case $specialTrigger "N/A" "Current runt settings are outside the public setter subset"
+                } else {
+                    $fields = @("channel", "polarity", "qualifier", "low_level_volts", "high_level_volts", "mode")
+                    if ($null -ne $state.time_seconds) { $fields += "time_seconds" }
+                    $options = @("--channel", "$($state.channel)", "--polarity", $state.polarity,
+                        "--qualifier", $state.qualifier, "--low-level-volts", (Format-Setting $state.low_level_volts),
+                        "--high-level-volts", (Format-Setting $state.high_level_volts))
+                    if ($state.qualifier -ne "none") { $options += @("--time-seconds", (Format-Setting $state.time_seconds)) }
+                    Invoke-SameValueCase $specialTrigger $specialTrigger $before $options $fields
+                }
+            } else {
+                $state = $before.result
+                if ($null -eq $state.source_channel -or $state.standard -notin @("ntsc", "pal") -or
+                    $state.tv_mode -notin @("field1", "field2", "all-fields", "all-lines") -or
+                    $state.polarity -notin @("positive", "negative")) {
+                    Add-Case $specialTrigger "N/A" "Current TV settings are outside the public setter subset"
+                } else {
+                    Invoke-SameValueCase $specialTrigger $specialTrigger $before @(
+                        "--source-channel", "$($state.source_channel)", "--standard", $state.standard,
+                        "--mode", $state.tv_mode, "--polarity", $state.polarity
+                    ) @("source_channel", "standard", "tv_mode", "polarity", "mode")
+                }
+            }
+        } catch { Add-Case $specialTrigger "FAIL" $_.Exception.Message }
+
+        Invoke-RoundTrip "math-display" "math-display" @("--function", "1") "enabled" "--on"
+        try {
+            $before = Invoke-Cli -Stage "math-operator-before" -Command "math-operator" -Options @("--function", "1", "--query")
+            Invoke-SameValueCase "math-operator" "math-operator" $before @(
+                "--operation", (Get-Readback $before "math_operation"),
+                "--source1", (Get-Readback $before "source1"), "--source2", (Get-Readback $before "source2")
+            ) @("math_operation", "source1", "source2") @("--function", "1")
+        } catch { Add-Case "math-operator" "FAIL" $_.Exception.Message }
+        try {
+            $before = Invoke-Cli -Stage "display-persistence-before" -Command "display-persistence" -Options @("--query")
+            if ($before.result.mode -in @("minimum", "infinite")) {
+                Invoke-SameValueCase "display-persistence" "display-persistence" $before @("--mode", $before.result.mode) @("mode")
+            } elseif ($null -ne $before.result.seconds) {
+                Invoke-SameValueCase "display-persistence" "display-persistence" $before @("--seconds", (Format-Setting $before.result.seconds)) @("seconds")
+            } else { throw "Missing persistence mode or seconds readback." }
+        } catch { Add-Case "display-persistence" "FAIL" $_.Exception.Message }
+        Invoke-SimpleCase "cursor-query" "cursor" @("--query")
+        if ($IncludeConfigurationActions) {
+            Write-Warning "Cursor and measurement configuration actions are not restored; cursors end off and measurements end cleared."
+            if ($script:Target -eq "tektronix-tbs2074b") {
+                Add-Case "cursor-set" "N/A" "Unsupported on this model"
+            } else {
+                try {
+                    $position = Invoke-Cli -Stage "cursor-timebase-position" -Command "timebase-position" -Options @("--query")
+                    $x = Get-Readback $position "position_seconds"
+                    $null = Invoke-Cli -Stage "cursor-set" -Command "cursor" -Options @(
+                        "--source-channel", "1", "--x1", (Format-Setting $x), "--x2", (Format-Setting $x))
+                    $after = Invoke-Cli -Stage "cursor-set-after" -Command "cursor" -Options @("--query")
+                    foreach ($field in @("x1_seconds", "x2_seconds")) {
+                        if (-not (Test-ReadbackEqual $x (Get-Readback $after $field))) { throw "Cursor position readback differs." }
+                    }
+                    Add-Case "cursor-set" "PASS" "CH1 X cursors at current timebase position; no auto-range changes"
+                } catch { Add-Case "cursor-set" "FAIL" $_.Exception.Message }
+            }
+            try {
+                $null = Invoke-Cli -Stage "cursor-off" -Command "cursor" -Options @("--off")
+                $after = Invoke-Cli -Stage "cursor-off-after" -Command "cursor" -Options @("--query")
+                if ([string](Get-Readback $after "mode") -ine "off") { throw "Cursors are not off." }
+                Add-Case "cursor-off" "PASS"
+            } catch { Add-Case "cursor-off" "FAIL" $_.Exception.Message }
+            Invoke-SimpleCase "measure-install" "measure-install" @("--source-channel", "1", "--item", "vpp")
+            Invoke-SimpleCase "measure-clear" "measure-clear"
+        } else {
+            Add-Case "cursor-set" "N/A" $(if ($script:Target -eq "tektronix-tbs2074b") { "Unsupported on this model" } else { "Requires -IncludeConfigurationActions; cursor source/mode cannot be restored through public CLI" })
+            foreach ($name in @("cursor-off", "measure-install", "measure-clear")) {
+                Add-Case $name "N/A" "Requires -IncludeConfigurationActions; no public configuration restore path"
+            }
+        }
+
+        if ($script:Target -eq "tektronix-tbs2074b") {
+            Invoke-RoundTrip "save-image-format" "save-image-format" @() "format" "--format" @("png", "bmp")
+            Invoke-RoundTrip "save-waveform-format" "save-waveform-format" @() "format" "--format" @("csv")
+            Add-Case "save-image-ink-saver" "N/A" "Unsupported on this model"
+        } else {
+            Add-Case "save-image-format" "N/A" "Unsupported on this model"
+            Add-Case "save-waveform-format" "N/A" "Unsupported on this model"
+            try {
+                $before = Invoke-Cli -Stage "save-image-ink-saver-before" -Command "save-image-ink-saver" -Options @("--query")
+                Invoke-SameValueCase "save-image-ink-saver" "save-image-ink-saver" $before @(
+                    "--enabled", (Format-Setting (Get-Readback $before "enabled"))) @("enabled")
+            } catch { Add-Case "save-image-ink-saver" "FAIL" $_.Exception.Message }
+        }
 
         if ($script:Target -eq "tektronix-tbs2074b") {
             Add-Case "display-vectors" "N/A" "Unsupported on this model"
@@ -404,6 +585,25 @@ try {
             } catch { Add-Case "display-vectors-query" "FAIL" $_.Exception.Message }
         }
         Invoke-RoundTrip "save-pwd" "save-pwd" @() "path" "--path"
+
+        if ($script:Target -ne "tektronix-tds2024b") {
+            Add-Case "screenshot-bmp" "N/A" "Unsupported on this model"
+        } elseif (-not $IncludeScreenshot) {
+            Add-Case "screenshot-bmp" "N/A" "Requires -IncludeScreenshot"
+        } elseif ($script:Connection -ne "usb" -or $Resource -notmatch '(?i)::INSTR$') {
+            Add-Case "screenshot-bmp" "N/A" "Public BMP capture requires USBTMC"
+        } else {
+            try {
+                $path = Join-Path $script:RunPaths.Private "screenshot.bmp"
+                $capture = Invoke-Cli -Stage "screenshot-bmp" -Command "screenshot" -Options @("--format", "bmp", "--output", $path)
+                if ((Get-Readback $capture "format") -cne "BMP" -or
+                    [int](Get-Readback $capture "byte_count") -le 0 -or
+                    [string](Get-Readback $capture "image_path") -cne $path) { throw "Invalid BMP artifact metadata." }
+                $bytes = [IO.File]::ReadAllBytes($path)
+                if ($bytes.Length -lt 2 -or $bytes[0] -ne 66 -or $bytes[1] -ne 77) { throw "Missing BMP signature." }
+                Add-Case "screenshot-bmp" "PASS" "Explicit BMP host artifact; temporary settings restored by Core"
+            } catch { Add-Case "screenshot-bmp" "FAIL" $_.Exception.Message }
+        }
 
         if ($IncludeAcquisitionActions) {
             Write-Warning "Acquisition actions change run/stop state; final state is stop."
@@ -431,6 +631,16 @@ try {
         } else { Add-Case "autoscale" "N/A" "Requires -IncludeAutoscale" }
         if ($IncludeStorageWrites) {
             Write-Warning "Setup slot $SetupSlot and reference slot $ReferenceSlot may be overwritten."
+            if ([string]::IsNullOrWhiteSpace($ImageFilename)) {
+                Add-Case "save-image" "N/A" "Requires explicit -ImageFilename on available instrument storage"
+            } else {
+                Write-Warning "The requested instrument image filename may be overwritten."
+                try {
+                    $saved = Invoke-Cli -Stage "save-image" -Command "save-image" -Options @("--filename", $ImageFilename)
+                    if ((Get-Readback $saved "operation_complete") -ne $true) { throw "Image save completion was not confirmed." }
+                    Add-Case "save-image" "PASS" "Caller-selected instrument file; operation complete"
+                } catch { Add-Case "save-image" "FAIL" $_.Exception.Message }
+            }
             Invoke-SimpleCase "setup-save" "setup-save" @("--slot", "$SetupSlot")
             if (@($script:Cases | Where-Object { $_.name -eq "setup-save" -and $_.status -eq "PASS" }).Count -eq 1) {
                 Invoke-SimpleCase "setup-recall" "setup-recall" @("--slot", "$SetupSlot")
@@ -452,7 +662,7 @@ try {
                 Add-Case "reference-display" "N/A" "Reference source precondition could not be checked"
             }
         } else {
-            foreach ($name in @("setup-save", "setup-recall", "reference-save", "reference-display")) {
+            foreach ($name in @("setup-save", "setup-recall", "reference-save", "reference-display", "save-image")) {
                 Add-Case $name "N/A" "Requires -IncludeStorageWrites and explicit slots"
             }
         }

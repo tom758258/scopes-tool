@@ -108,7 +108,9 @@ def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     env["PYTHONPATH"] = str(tmp_path)
     result = run_script(
         "-Target", TARGETS[0], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR",
-        "-Python", sys.executable, "-OutputRoot", str(output_root), env=env,
+        "-Python", sys.executable, "-OutputRoot", str(output_root),
+        "-IncludeConfigurationActions", "-IncludeScreenshot", "-IncludeAcquisitionActions",
+        env=env,
     )
     assert result.returncode != 0, result.stdout + result.stderr
     runs = sorted(output_root.glob("run_*/private/report.json"), key=lambda path: path.stat().st_mtime)
@@ -120,23 +122,24 @@ def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     assert report["invocations"][0]["arguments"][2] == "identify"
 
 
-@requires_windows
-@pytest.mark.parametrize(
-    ("target", "model", "channels", "series", "vectors"),
-    [
-        (TARGETS[0], "TBS2074B", 4, "TBS2000B", True),
-        (TARGETS[1], "TDS2024B", 4, "TDS2000B", False),
-        (TARGETS[2], "TBS1052B", 2, "TBS1000B", False),
-    ],
-)
-def test_default_case_flow_with_fake_cli(
-    tmp_path: Path, target: str, model: str, channels: int, series: str, vectors: bool
-) -> None:
+def fake_run(
+    tmp_path: Path, target: str, *extra: str, mode: str = "edge", mismatch: bool = False,
+    connection: str = "usb", bad_bmp: bool = False,
+) -> tuple[subprocess.CompletedProcess[str], dict]:
+    model, channels, series = {
+        TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
+        TARGETS[1]: ("TDS2024B", 4, "TDS2000B"),
+        TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
+    }[target]
     stub = tmp_path / "scopes_tool_cli"
     stub.mkdir()
-    (stub / "__init__.py").write_text("", encoding="utf-8")
+    (stub / "__init__.py").write_text(
+        f"__path__.append({str(ROOT / 'src' / 'scopes_tool_cli')!r})\n", encoding="utf-8"
+    )
     (stub / "cli.py").write_text(
-        "import json, sys\n"
+        "import json, sys\nfrom pathlib import Path\n"
+        "from scopes_tool_cli.parser import _build_parser\n"
+        "_build_parser().parse_args()\n"
         "command = sys.argv[1]\n"
         "values = {\n"
         " 'system-standard-event': {'value': 0},\n"
@@ -146,6 +149,7 @@ def test_default_case_flow_with_fake_cli(
         " 'channel-probe': {'probe_ratio': 10.0},\n"
         " 'channel-bandwidth-limit': {'bandwidth_limit': False},\n"
         " 'channel-invert': {'invert': False},\n"
+        " 'channel-units': {'units': 'volt'},\n"
         " 'channel-offset': {'volts': 0.0},\n"
         " 'channel-label': {'text': 'CH1'},\n"
         " 'channel-probe-skew': {'probe_skew_seconds': 0.0},\n"
@@ -153,6 +157,11 @@ def test_default_case_flow_with_fake_cli(
         " 'timebase-position': {'position_seconds': 0.0},\n"
         " 'acquisition': {'type': 'normal', 'count': 16},\n"
         " 'trigger-sweep': {'mode': 'auto'},\n"
+        f" 'trigger-mode': {{'mode': {mode!r}, 'raw_mode': {mode!r}}},\n"
+        f" 'trigger-runt': {{'mode': {mode!r}, 'channel': 1, 'polarity': 'positive', "
+        "'qualifier': 'none', 'low_level_volts': -0.1, 'high_level_volts': 0.1, 'time_seconds': 1e-6},\n"
+        f" 'trigger-tv': {{'mode': {mode!r}, 'source_channel': 1, 'standard': 'ntsc', "
+        "'tv_mode': 'field1', 'polarity': 'positive', 'line': None},\n"
         " 'trigger-edge-source': {'source': 'analog-channel', 'source_channel': 1},\n"
         " 'trigger-edge-slope': {'slope': 'positive'},\n"
         " 'trigger-edge-coupling': {'coupling': 'dc'},\n"
@@ -160,24 +169,56 @@ def test_default_case_flow_with_fake_cli(
         " 'trigger-edge-level': {'level_volts': 0.0},\n"
         " 'trigger-edge': {'source_channel': 1, 'level_volts': 0.0, 'slope': 'positive'},\n"
         " 'save-pwd': {'path': 'C:/scope'},\n"
-        f" 'display-vectors': {{'value': {vectors}}},\n"
+        " 'display-vectors': {'value': False},\n"
+        " 'display-persistence': {'mode': 'minimum', 'seconds': None},\n"
+        " 'math-display': {'enabled': False},\n"
+        " 'math-operator': {'math_operation': 'add', 'source1': 'channel1', 'source2': 'channel2'},\n"
+        " 'cursor': {'mode': 'OFF', 'x1_seconds': 0.0, 'x2_seconds': 0.0},\n"
+        " 'save-image-format': {'format': 'png'},\n"
+        " 'save-waveform-format': {'format': 'csv'},\n"
+        " 'save-image-ink-saver': {'enabled': False},\n"
+        " 'save-image': {'operation_complete': True, 'raw_operation_complete': '1'},\n"
+        " 'reference-display': {'displayed': True},\n"
         "}\n"
+        f"counter_path = Path({str(tmp_path / 'mode_queries.txt')!r})\n"
+        "if command == 'trigger-mode' and '--query' in sys.argv:\n"
+        " count = int(counter_path.read_text()) + 1 if counter_path.exists() else 1\n"
+        " counter_path.write_text(str(count))\n"
+        f" if {mismatch!r} and count > 1: values[command]['mode'] = 'glitch'\n"
+        "if command == 'screenshot':\n"
+        " path = sys.argv[sys.argv.index('--output') + 1]\n"
+        f" Path(path).write_bytes({'bad' if bad_bmp else 'BMfake'!r}.encode())\n"
+        " values[command] = {'format': 'BMP', 'byte_count': Path(path).stat().st_size, 'image_path': path}\n"
         f"print(json.dumps({{'ok': True, 'idn': {{'vendor': 'TEKTRONIX', 'model': '{model}'}}, "
         f"'capabilities': {{'analog_channels': {channels}, 'series': '{series}'}}, "
         "'result': values.get(command, {})}))\n",
         encoding="utf-8",
     )
-    output_root = ROOT / ".tmp_tests" / "live_tektronix_check" / f"tooling_default_{model.lower()}"
+    output_root = ROOT / ".tmp_tests" / "live_tektronix_check" / tmp_path.name
     env = os.environ.copy()
     env["PYTHONPATH"] = str(tmp_path)
     result = run_script(
-        "-Target", target, "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR",
-        "-Python", sys.executable, "-OutputRoot", str(output_root), env=env,
+        "-Target", target, "-Connection", connection, "-Resource",
+        "USB0::FAKE::INSTR" if connection == "usb" else "TCPIP0::example::INSTR",
+        "-Python", sys.executable, "-OutputRoot", str(output_root), *extra, env=env,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
     runs = sorted(output_root.glob("run_*/private/report.json"), key=lambda path: path.stat().st_mtime)
     assert runs
     report = json.loads(runs[-1].read_text(encoding="utf-8"))
+    counts = report["summary_counts"]
+    assert counts == {
+        "passed": sum(case["status"] == "PASS" for case in report["cases"]),
+        "failed": sum(case["status"] == "FAIL" for case in report["cases"]),
+        "na": sum(case["status"] == "N/A" for case in report["cases"]),
+    }
+    return result, report
+
+
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS)
+def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
+    result, report = fake_run(tmp_path, target)
+    assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["identify"]["status"] == "PASS"
     assert cases["channel-display"]["status"] == "PASS"
@@ -188,20 +229,114 @@ def test_default_case_flow_with_fake_cli(
         assert cases["timebase-position"]["status"] == "PASS"
         assert cases["display-vectors-query"]["status"] == "PASS"
         assert cases["display-vectors-on"]["status"] == "N/A"
-    assert cases["trigger-mode"]["status"] == "N/A"
+    assert cases["trigger-mode"]["status"] == "PASS"
+    for name in ("channel-units", "math-display", "math-operator", "display-persistence",
+                 "cursor-query", "trigger-edge", "trigger-edge-source", "trigger-edge-slope",
+                 "trigger-edge-coupling", "acquisition-points", "record-length"):
+        assert cases[name]["status"] == "PASS", cases[name]
     assert cases["autoscale"]["status"] == "N/A"
     assert cases["setup-save"]["status"] == "N/A"
     assert not [case for case in report["cases"] if case["status"] == "FAIL"]
     assert report["status"] == "pass"
-    assert all(invocation["arguments"][2] not in {"autoscale", "setup-save", "run"}
+    assert all(invocation["arguments"][2] not in {
+        "autoscale", "setup-save", "run", "screenshot", "measure-install", "measure-clear", "save-image"
+    }
                for invocation in report["invocations"])
+    assert not any(inv["arguments"][2] == "cursor" and "--query" not in inv["arguments"]
+                   for inv in report["invocations"])
+    unsupported = ({"timebase-position", "trigger-tv", "save-image-ink-saver", "display-vectors"}
+                   if target == TARGETS[0] else
+                   {"sample-rate", "channel-offset", "channel-label", "channel-probe-skew",
+                    "trigger-edge-level", "trigger-runt", "save-image-format", "save-waveform-format"})
+    assert not unsupported.intersection(inv["arguments"][2] for inv in report["invocations"])
+    commands = [inv["arguments"][2] for inv in report["invocations"]]
+    assert commands.index("trigger-mode") < commands.index("trigger-edge-source")
+    for name in ("sample-rate", "save-image-format", "save-waveform-format", "save-image-ink-saver"):
+        assert cases[name]["status"] == ("N/A" if name in unsupported else "PASS")
+
+
+@requires_windows
+@pytest.mark.parametrize(("target", "mode"), [(TARGETS[0], "runt"), (TARGETS[1], "tv"), (TARGETS[2], "tv")])
+def test_non_edge_mode_preserves_trigger_configuration(tmp_path: Path, target: str, mode: str) -> None:
+    result, report = fake_run(tmp_path, target, mode=mode)
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    special = "trigger-runt" if mode == "runt" else "trigger-tv"
+    assert cases[special]["status"] == "PASS", cases[special]
+    for name in ("trigger-edge", "trigger-edge-source", "trigger-edge-slope", "trigger-edge-coupling"):
+        assert cases[name]["status"] == "N/A"
+    for inv in report["invocations"]:
+        args = inv["arguments"]
+        if args[2].startswith("trigger-edge"):
+            assert "--query" in args
+        if args[2] == "trigger-mode" and "--mode" in args:
+            assert args[args.index("--mode") + 1] == mode
+        if args[2] == "trigger-runt" and "--query" not in args:
+            assert "--time-seconds" not in args  # Unqualified runt preserves dormant width.
+
+
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS)
+def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: str) -> None:
+    result, report = fake_run(
+        tmp_path, target, "-IncludeConfigurationActions", "-IncludeAcquisitionActions",
+        "-IncludeAutoscale", "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
+        "-ImageFilename", "acceptance.png", "-IncludeScreenshot",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    for name in ("cursor-off", "measure-install", "measure-clear", "run", "single", "force-trigger",
+                 "stop-acquisition", "autoscale", "save-image", "setup-save", "setup-recall",
+                 "reference-save", "reference-display"):
+        assert cases[name]["status"] == "PASS", cases[name]
+    assert cases["cursor-set"]["status"] == ("N/A" if target == TARGETS[0] else "PASS")
+    assert cases["screenshot-bmp"]["status"] == ("PASS" if target == TARGETS[1] else "N/A")
+    assert report["acquisition_final_state"] == "stopped"
+
+
+@requires_windows
+def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[1], "-IncludeScreenshot", "-IncludeStorageWrites",
+        "-SetupSlot", "1", "-ReferenceSlot", "1", connection="tcpip",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["screenshot-bmp"]["status"] == "N/A"
+    assert cases["save-image"]["status"] == "N/A"
+    assert not {"screenshot", "save-image"}.intersection(inv["arguments"][2] for inv in report["invocations"])
+
+
+@requires_windows
+@pytest.mark.parametrize("failure", ("mode", "bmp"))
+def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[1], "-IncludeScreenshot", mismatch=failure == "mode", bad_bmp=failure == "bmp",
+    )
+    assert result.returncode != 0
+    assert report["status"] == "fail"
+    assert report["summary_counts"]["failed"] == 1
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["trigger-mode" if failure == "mode" else "screenshot-bmp"]["status"] == "FAIL"
+    if failure == "mode":
+        assert cases["trigger-edge"]["status"] == "N/A"
+
+
+@requires_windows
+def test_image_filename_requires_storage_opt_in() -> None:
+    result = run_script(
+        "-Target", TARGETS[0], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR",
+        "-ImageFilename", "acceptance.png",
+    )
+    assert result.returncode != 0
+    assert "require -IncludeStorageWrites" in result.stderr
 
 
 def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
     commands = re.findall(r'-Command\s+"([a-z][a-z0-9-]+)"', TEXT)
     assert commands
     assert not set(commands) & {
-        "check-error", "capture", "measure", "screenshot", "single-wait",
+        "check-error", "capture", "measure", "single-wait",
         "doctor", "smoke", "list-resources",
     }
     assert "ProcessStartInfo" in TEXT

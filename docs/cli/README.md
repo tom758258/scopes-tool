@@ -2721,22 +2721,35 @@ select pyvisa-py explicitly when needed:
 The runner first checks the detected physical identity against the target and
 stops before state-changing cases on a mismatch. Its default cases query
 supported status and settings and write back current values where the public
-CLI provides a safe path. It skips acquisition actions, autoscale, and storage
-writes by default. `-IncludeAcquisitionActions` leaves acquisition stopped;
+CLI provides a safe path. It skips acquisition actions, autoscale, storage
+writes, cursor/measurement configuration actions, and BMP capture by default.
+`-IncludeAcquisitionActions` leaves acquisition stopped;
 `-IncludeAutoscale` changes front-panel settings without restoring them.
 `-IncludeStorageWrites` requires explicit `-SetupSlot` (1-9) and
 `-ReferenceSlot` (1-2); those slots may be overwritten. The runner does not
-preserve their previous contents.
+preserve their previous contents. Supply `-ImageFilename` with that storage
+opt-in to test image saving on available instrument storage; the requested file
+may be overwritten. Without a filename, image saving remains N/A.
+`-IncludeConfigurationActions` tests supported cursor setting, cursor off,
+measurement installation, and measurement clear. It does not restore previous
+cursor or measurement configurations; successful actions leave cursors off and
+measurements cleared. `-IncludeScreenshot` enables explicit BMP host capture
+only for TDS2024B over USBTMC. Core restores temporary hardcopy settings and
+timeout; the artifact stays in the private run directory.
 
 Results are stored under `.tmp_tests/live_tektronix_check/` in a timestamped
 private directory. The presence of the runner is not hardware validation.
 A PASS case from a run against the specified real resource provides direct
 hardware evidence for that case. N/A cases remain unverified; an overall PASS
 means all applicable runner cases passed, not that every Core/WebUI operation
-has direct one-shot CLI evidence. The current one-shot CLI has no standalone
-trigger-type readback, so the runner marks the `trigger-mode` case N/A without
-failing or blocking the run. It queries Edge source, slope, coupling, and
-combined settings but does not write them back without that precondition.
+has direct one-shot CLI evidence. The runner uses `trigger-mode --query` and
+checks a same-value mode write/readback before testing Edge setters. Edge
+same-value validation requires current Edge mode; combined Edge also requires
+an analog source. Runt and TV setters require their respective current modes
+and settings within the public setter subset. Otherwise those setters remain
+N/A, without switching trigger modes. Read-only supported trigger queries
+remain available. Other N/A cases describe unsupported model operations,
+missing opt-ins, or current settings that cannot safely use a public setter.
 
 ### Live CLI Validation
 
@@ -2761,8 +2774,8 @@ the acquisition type and applicable average count, CH1 display and coupling,
 timebase scale, position, and reference, Edge source and slope, and CH1 Edge
 level. It does not modify the run/stop state.
 
-The original generic trigger mode cannot be restored through the existing
-public CLI, so the instrument may remain in Edge mode. Waveform source, format,
+The original generic trigger mode is not restored by this validator, so the
+instrument may remain in Edge mode. Waveform source, format,
 and points are transfer-session settings without an existing public restore
 path; they are not restored, and the transfer format may remain WORD. These
 documented limitations do not make cleanup fail, but any promised restoration
