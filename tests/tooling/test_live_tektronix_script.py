@@ -23,7 +23,7 @@ TARGETS = (
 requires_windows = pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 
 
-def run_script(*arguments: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def run_script(*arguments: str, env: dict[str, str] | None = None, script: Path = SCRIPT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             "powershell.exe",
@@ -33,7 +33,7 @@ def run_script(*arguments: str, env: dict[str, str] | None = None) -> subprocess
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            str(SCRIPT),
+            str(script),
             *arguments,
         ],
         cwd=ROOT,
@@ -129,6 +129,7 @@ def fake_run(
     vectors_on: bool = False, vectors_mismatch: bool = False,
     waveform_rows: tuple[str, ...] = ("0,0.5", "0.001,0.6"),
     actual_points: int | None = None, hidden_outcome: str | None = None,
+    subprocess_cli: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
@@ -136,57 +137,62 @@ def fake_run(
         TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
     }[target]
     screenshot_bytes = b"bad" if bad_bmp else (b"\x89PNG\r\n\x1a\nfake" if target == TARGETS[0] else b"BMfake")
+    values = {
+        "system-standard-event": {"value": 0},
+        "channel-display": {"display": True},
+        "channel-scale": {"volts_per_division": 1.0},
+        "channel-coupling": {"coupling": "dc"},
+        "channel-probe": {"probe_ratio": 10.0},
+        "channel-bandwidth-limit": {"bandwidth_limit": False},
+        "channel-invert": {"invert": False},
+        "channel-units": {"units": "volt"},
+        "channel-offset": {"volts": 0.0},
+        "channel-label": {"text": "CH1"},
+        "channel-probe-skew": {"probe_skew_seconds": 0.0},
+        "timebase-scale": {"seconds_per_division": 0.001},
+        "timebase-position": {"position_seconds": 0.0},
+        "acquisition": {"type": "normal", "count": 16},
+        "trigger-sweep": {"mode": "auto"},
+        "trigger-mode": {"mode": mode, "raw_mode": mode},
+        "trigger-runt": {"mode": mode, "channel": 1, "polarity": "positive",
+                         "qualifier": "none", "low_level_volts": -0.1,
+                         "high_level_volts": 0.1, "time_seconds": 1e-6},
+        "trigger-tv": {"mode": mode, "source_channel": 1, "standard": "ntsc",
+                       "tv_mode": "field1", "polarity": "positive", "line": None},
+        "trigger-edge-source": {"source": "analog-channel", "source_channel": 1},
+        "trigger-edge-slope": {"slope": "positive"},
+        "trigger-edge-coupling": {"coupling": "dc"},
+        "trigger-holdoff": {"seconds": 0.000001},
+        "trigger-edge-level": {"level_volts": 0.0},
+        "trigger-edge": {"source_channel": 1, "level_volts": 0.0, "slope": "positive"},
+        "save-pwd": {"path": "C:/scope"},
+        "save-waveform": {"operation_complete": True},
+        "display-vectors": {"value": vectors_on},
+        "display-persistence": {"mode": "minimum", "seconds": None},
+        "math-display": {"enabled": False},
+        "math-operator": {"math_operation": "add", "source1": "channel1", "source2": "channel2"},
+        "cursor": {"mode": "OFF", "x1_seconds": 0.0, "x2_seconds": 0.0},
+        "save-image-format": {"format": "png"},
+        "save-waveform-format": {"format": "csv"},
+        "save-image-ink-saver": {"enabled": False},
+        "save-image": {"operation_complete": True, "raw_operation_complete": "1"},
+        "reference-display": {"displayed": True},
+        "reference-query": {"displayed": True, "label": None, "raw_label": None},
+        "measure": {"valid": True, "value": 0.5, "unit": "V"},
+        "single-wait": {"poll_source": "busy", "poll_command": "BUSY?", "outcome": "natural"},
+        "trigger-pulse-width": {"mode": mode, "channel": 1, "polarity": "positive",
+                                "qualifier": "less-than", "less_than_seconds": 1e-6,
+                                "greater_than_seconds": None, "level_volts": 0.0},
+    }
     stub = tmp_path / "scopes_tool_cli"
     stub.mkdir()
     (stub / "__init__.py").write_text("", encoding="utf-8")
     (stub / "cli.py").write_text(
         "import json, sys\nfrom pathlib import Path\n"
+        f"with Path({str(tmp_path / 'argv.jsonl')!r}).open('a', encoding='utf-8') as log:\n"
+        " log.write(json.dumps(sys.argv[1:]) + '\\n')\n"
         "command = sys.argv[1]\n"
-        "values = {\n"
-        " 'system-standard-event': {'value': 0},\n"
-        " 'channel-display': {'display': True},\n"
-        " 'channel-scale': {'volts_per_division': 1.0},\n"
-        " 'channel-coupling': {'coupling': 'dc'},\n"
-        " 'channel-probe': {'probe_ratio': 10.0},\n"
-        " 'channel-bandwidth-limit': {'bandwidth_limit': False},\n"
-        " 'channel-invert': {'invert': False},\n"
-        " 'channel-units': {'units': 'volt'},\n"
-        " 'channel-offset': {'volts': 0.0},\n"
-        " 'channel-label': {'text': 'CH1'},\n"
-        " 'channel-probe-skew': {'probe_skew_seconds': 0.0},\n"
-        " 'timebase-scale': {'seconds_per_division': 0.001},\n"
-        " 'timebase-position': {'position_seconds': 0.0},\n"
-        " 'acquisition': {'type': 'normal', 'count': 16},\n"
-        " 'trigger-sweep': {'mode': 'auto'},\n"
-        f" 'trigger-mode': {{'mode': {mode!r}, 'raw_mode': {mode!r}}},\n"
-        f" 'trigger-runt': {{'mode': {mode!r}, 'channel': 1, 'polarity': 'positive', "
-        "'qualifier': 'none', 'low_level_volts': -0.1, 'high_level_volts': 0.1, 'time_seconds': 1e-6},\n"
-        f" 'trigger-tv': {{'mode': {mode!r}, 'source_channel': 1, 'standard': 'ntsc', "
-        "'tv_mode': 'field1', 'polarity': 'positive', 'line': None},\n"
-        " 'trigger-edge-source': {'source': 'analog-channel', 'source_channel': 1},\n"
-        " 'trigger-edge-slope': {'slope': 'positive'},\n"
-        " 'trigger-edge-coupling': {'coupling': 'dc'},\n"
-        " 'trigger-holdoff': {'seconds': 0.000001},\n"
-        " 'trigger-edge-level': {'level_volts': 0.0},\n"
-        " 'trigger-edge': {'source_channel': 1, 'level_volts': 0.0, 'slope': 'positive'},\n"
-        " 'save-pwd': {'path': 'C:/scope'},\n"
-        " 'save-waveform': {'operation_complete': True},\n"
-        f" 'display-vectors': {{'value': {vectors_on!r}}},\n"
-        " 'display-persistence': {'mode': 'minimum', 'seconds': None},\n"
-        " 'math-display': {'enabled': False},\n"
-        " 'math-operator': {'math_operation': 'add', 'source1': 'channel1', 'source2': 'channel2'},\n"
-        " 'cursor': {'mode': 'OFF', 'x1_seconds': 0.0, 'x2_seconds': 0.0},\n"
-        " 'save-image-format': {'format': 'png'},\n"
-        " 'save-waveform-format': {'format': 'csv'},\n"
-        " 'save-image-ink-saver': {'enabled': False},\n"
-        " 'save-image': {'operation_complete': True, 'raw_operation_complete': '1'},\n"
-        " 'reference-display': {'displayed': True},\n"
-        " 'reference-query': {'displayed': True, 'label': None, 'raw_label': None},\n"
-        " 'measure': {'valid': True, 'value': 0.5, 'unit': 'V'},\n"
-        " 'single-wait': {'poll_source': 'busy', 'poll_command': 'BUSY?', 'outcome': 'natural'},\n"
-        f" 'trigger-pulse-width': {{'mode': {mode!r}, 'channel': 1, 'polarity': 'positive', "
-        "'qualifier': 'less-than', 'less_than_seconds': 1e-6, 'greater_than_seconds': None, 'level_volts': 0.0},\n"
-        "}\n"
+        f"values = {values!r}\n"
         f"math_error, cursor_error = {math_error!r}, {cursor_error!r}\n"
         "error = (math_error if command == 'math-operator' and '--query' in sys.argv else\n"
         "         cursor_error if command == 'cursor' and '--x1' in sys.argv else None)\n"
@@ -233,14 +239,41 @@ def fake_run(
     output_root = ROOT / ".tmp_tests" / "live_tektronix_check" / tmp_path.name
     env = os.environ.copy()
     env["PYTHONPATH"] = str(tmp_path)
-    result = run_script(
+    arguments = [
         "-Target", target, "-Connection", connection, "-Resource",
         "USB0::FAKE::INSTR" if connection == "usb" else "TCPIP0::example::INSTR",
-        "-Python", sys.executable, "-OutputRoot", str(output_root), *extra, env=env,
-    )
-    runs = sorted(output_root.glob("run_*/private/report.json"), key=lambda path: path.stat().st_mtime)
-    assert runs
-    report = json.loads(runs[-1].read_text(encoding="utf-8"))
+        "-Python", sys.executable, "-OutputRoot", str(output_root), *extra,
+    ]
+    previous_runs = set(output_root.glob("run_*/private/report.json"))
+    if subprocess_cli:
+        result = run_script(*arguments, env=env)
+    else:
+        fixture = tmp_path / "scenario.json"
+        fixture.write_text(json.dumps({
+            "values": values,
+            "idn": {"vendor": "TEKTRONIX", "model": model},
+            "capabilities": {"analog_channels": channels, "series": series},
+            "math_error": math_error, "cursor_error": cursor_error,
+            "mismatch": mismatch, "vectors_mismatch": vectors_mismatch,
+            "hidden_outcome": hidden_outcome,
+            "points": len(waveform_rows) if actual_points is None else actual_points,
+            "csv_text": "time_s,ch1_v\n" + "\n".join(waveform_rows) + "\n",
+            "screenshot_bytes": list(screenshot_bytes),
+            "screenshot_format": "PNG" if target == TARGETS[0] else "BMP",
+            "arguments": arguments,
+        }), encoding="utf-8")
+        result = run_script(
+            "-ScriptPath", str(SCRIPT), "-FixturePath", str(fixture),
+            script=Path(__file__).with_name("tektronix_function_harness.ps1"), env=env,
+        )
+    runs = set(output_root.glob("run_*/private/report.json")) - previous_runs
+    assert len(runs) == 1, result.stdout + result.stderr
+    report = json.loads(runs.pop().read_text(encoding="utf-8"))
+    if subprocess_cli:
+        received = [json.loads(line) for line in (tmp_path / "argv.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert received == [inv["arguments"][2:] for inv in report["invocations"]]
+    else:
+        assert not (tmp_path / "argv.jsonl").exists()
     counts = report["summary_counts"]
     assert counts == {
         "passed": sum(case["status"] == "PASS" for case in report["cases"]),
@@ -296,7 +329,10 @@ def test_unrelated_math_or_cursor_errors_remain_fail(
     tmp_path: Path, command: str, error: tuple[str, str],
 ) -> None:
     errors = {"math_error" if command == "math-operator" else "cursor_error": error}
-    result, report = fake_run(tmp_path, TARGETS[1], "-IncludeConfigurationActions", **errors)
+    result, report = fake_run(
+        tmp_path, TARGETS[1], "-IncludeConfigurationActions",
+        subprocess_cli=command == "math-operator", **errors,
+    )
     assert result.returncode != 0
     assert report["status"] == "fail"
     assert report["summary_counts"]["failed"] == 1
@@ -391,6 +427,7 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
         "-IncludeAutoscale", "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
         "-ImageFilename", "acceptance.png", "-IncludeScreenshot",
         "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "2",
+        subprocess_cli=target in TARGETS[:2],
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
