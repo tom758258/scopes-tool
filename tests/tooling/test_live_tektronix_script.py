@@ -135,6 +135,7 @@ def fake_run(
         TARGETS[1]: ("TDS2024B", 4, "TDS2000B"),
         TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
     }[target]
+    screenshot_bytes = b"bad" if bad_bmp else (b"\x89PNG\r\n\x1a\nfake" if target == TARGETS[0] else b"BMfake")
     stub = tmp_path / "scopes_tool_cli"
     stub.mkdir()
     (stub / "__init__.py").write_text(
@@ -226,7 +227,7 @@ def fake_run(
         " values[command] = {'format': 'BYTE', 'actual_points': points}\n"
         "if command == 'screenshot':\n"
         " path = sys.argv[sys.argv.index('--output') + 1]\n"
-        f" Path(path).write_bytes({b'bad' if bad_bmp else (b'\x89PNG\r\n\x1a\nfake' if target == TARGETS[0] else b'BMfake')!r})\n"
+        f" Path(path).write_bytes({screenshot_bytes!r})\n"
         f" values[command] = {{'format': {'PNG' if target == TARGETS[0] else 'BMP'!r}, 'byte_count': Path(path).stat().st_size, 'image_path': path}}\n"
         f"print(json.dumps({{'ok': True, 'idn': {{'vendor': 'TEKTRONIX', 'model': '{model}'}}, "
         f"'capabilities': {{'analog_channels': {channels}, 'series': '{series}'}}, "

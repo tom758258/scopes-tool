@@ -3013,6 +3013,7 @@ def test_capture_cli_rejects_channel_above_detected_capabilities(monkeypatch, ca
 
 def test_screenshot_cli_writes_png_then_checks_error(monkeypatch, capsys, tmp_path):
     class DummyBackend:
+        history = ()
         backend = "backend"
         timeout = 2000
 
@@ -3036,6 +3037,10 @@ def test_screenshot_cli_writes_png_then_checks_error(monkeypatch, capsys, tmp_pa
 
         def capture_screenshot_png(self, *, background="black"):
             self.calls.append(("capture_screenshot_png", background))
+            self.backend.history += (
+                f":HARDcopy:INKSaver {'ON' if background == 'white' else 'OFF'}",
+                ":DISPlay:DATA? PNG, COLor",
+            )
             return ScreenshotCapture(
                 format_name="PNG",
                 palette="COLor",
@@ -3083,6 +3088,7 @@ def test_screenshot_cli_writes_png_then_checks_error(monkeypatch, capsys, tmp_pa
 
 def test_screenshot_cli_uses_timestamped_default_output_when_omitted(monkeypatch, capsys, tmp_path):
     class DummyBackend:
+        history = ()
         backend = "backend"
         timeout = None
 
@@ -3106,6 +3112,10 @@ def test_screenshot_cli_uses_timestamped_default_output_when_omitted(monkeypatch
 
         def capture_screenshot_png(self, *, background="black"):
             self.calls.append(("capture_screenshot_png", background))
+            self.backend.history += (
+                f":HARDcopy:INKSaver {'ON' if background == 'white' else 'OFF'}",
+                ":DISPlay:DATA? PNG, COLor",
+            )
             return ScreenshotCapture(
                 format_name="PNG",
                 palette="COLor",
@@ -3132,6 +3142,7 @@ def test_screenshot_cli_uses_timestamped_default_output_when_omitted(monkeypatch
 
 def test_screenshot_cli_supports_white_background(monkeypatch, capsys, tmp_path):
     class DummyBackend:
+        history = ()
         backend = "backend"
         timeout = None
 
@@ -3155,6 +3166,10 @@ def test_screenshot_cli_supports_white_background(monkeypatch, capsys, tmp_path)
 
         def capture_screenshot_png(self, *, background="black"):
             self.calls.append(("capture_screenshot_png", background))
+            self.backend.history += (
+                f":HARDcopy:INKSaver {'ON' if background == 'white' else 'OFF'}",
+                ":DISPlay:DATA? PNG, COLor",
+            )
             return ScreenshotCapture(
                 format_name="PNG",
                 palette="COLor",
@@ -3200,6 +3215,7 @@ def test_default_screenshot_path_matches_capture_timestamp_format():
 
 def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypatch, capsys, tmp_path):
     class DummyBackend:
+        history = ()
         backend = "backend"
         timeout = None
 
@@ -3223,6 +3239,10 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
 
         def capture_screenshot_png(self, *, background="black"):
             self.calls.append(("capture_screenshot_png", background))
+            self.backend.history += (
+                f":HARDcopy:INKSaver {'ON' if background == 'white' else 'OFF'}",
+                ":DISPlay:DATA? PNG, COLor",
+            )
             return ScreenshotCapture(
                 format_name="PNG",
                 palette="COLor",
