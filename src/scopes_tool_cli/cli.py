@@ -325,6 +325,7 @@ from scopes_tool_core.trigger import (
     transition_trigger_configure_commands,
     transition_trigger_query_commands,
     trigger_mode_edge_command,
+    trigger_mode_command,
     trigger_mode_query,
     trigger_hf_reject_command,
     trigger_hf_reject_query,
@@ -1637,6 +1638,20 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         return [command_text, ":SYSTem:ERRor?"], [], {
             "operation": "query",
             "command": command_text,
+        }
+    if command == "trigger-mode":
+        if args.query:
+            command_text = trigger_mode_query()
+            return [command_text, ":SYSTem:ERRor?"], [], {
+                "operation": "query",
+                "command": command_text,
+            }
+        command_text = trigger_mode_command(args.mode)
+        return [command_text, ":SYSTem:ERRor?"], [], {
+            "operation": "configure",
+            "command": command_text,
+            "mode": args.mode,
+            "state_changing": True,
         }
     if command == "trigger-sweep":
         if args.trigger_sweep_query:

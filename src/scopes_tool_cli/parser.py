@@ -76,7 +76,7 @@ from scopes_tool_core.timebase import (
     validate_timebase_position,
     validate_timebase_scale,
 )
-from scopes_tool_core.trigger import validate_trigger_level
+from scopes_tool_core.trigger import TRIGGER_MODES, validate_trigger_level
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 
 
@@ -1538,6 +1538,24 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
         help="query aggregate External trigger input settings",
+    )
+
+    trigger_mode_parser = subparsers.add_parser(
+        "trigger-mode",
+        allow_abbrev=False,
+        help="configure or query trigger type",
+    )
+    _add_scope_connection_args(trigger_mode_parser)
+    trigger_mode_parser.add_argument(
+        "--query",
+        action="store_true",
+        help="query trigger type",
+    )
+    trigger_mode_parser.add_argument(
+        "--mode",
+        choices=TRIGGER_MODES,
+        default=None,
+        help="canonical trigger type",
     )
 
     trigger_sweep_parser = subparsers.add_parser(

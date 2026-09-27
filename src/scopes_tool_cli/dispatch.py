@@ -196,6 +196,7 @@ def _dispatch_command(
     }:
         return trigger_search._cmd_external_trigger_input(args)
     if args.command in {
+        "trigger-mode",
         "trigger-sweep",
         "trigger-noise-reject",
         "trigger-hf-reject",

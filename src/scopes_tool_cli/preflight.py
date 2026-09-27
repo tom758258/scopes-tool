@@ -125,6 +125,7 @@ from scopes_tool_core.trigger import (
     normalize_transition_qualifier,
     normalize_transition_slope,
     normalize_trigger_sweep,
+    trigger_mode_command,
     tv_trigger_configure_commands,
     validate_delay_trigger_count,
     validate_delay_trigger_time,
@@ -447,6 +448,8 @@ def _validate_pre_open_args(args: argparse.Namespace) -> None:
         _validate_external_trigger_units_args(args)
     if getattr(args, "command", None) == "external-trigger-settings":
         _validate_external_trigger_settings_args(args)
+    if getattr(args, "command", None) == "trigger-mode":
+        _validate_trigger_mode_args(args)
     if getattr(args, "command", None) == "trigger-sweep":
         _validate_trigger_sweep_args(args)
     if getattr(args, "command", None) == "trigger-noise-reject":
@@ -1312,6 +1315,24 @@ def _validate_external_trigger_units_args(args: argparse.Namespace) -> None:
 def _validate_external_trigger_settings_args(args: argparse.Namespace) -> None:
     if not getattr(args, "query", False):
         raise ParameterValidationError("external-trigger-settings requires --query.")
+
+def _validate_trigger_mode_args(args: argparse.Namespace) -> None:
+    if args.query:
+        if args.mode is not None:
+            raise ParameterValidationError(
+                "trigger-mode --query cannot be combined with configure options."
+            )
+        return
+    if args.mode is None:
+        raise ParameterValidationError("trigger-mode configure requires --mode.")
+    trigger_mode_command(args.mode)
+    capabilities = _pre_open_capabilities(args)
+    if capabilities is not None and capabilities.trigger_modes is not None:
+        if args.mode not in capabilities.trigger_modes:
+            raise ParameterValidationError(
+                f"trigger-mode {args.mode} is unsupported for {args.model}."
+            )
+
 
 def _validate_trigger_sweep_args(args: argparse.Namespace) -> None:
     if getattr(args, "trigger_sweep_query", False):

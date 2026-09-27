@@ -77,6 +77,8 @@ from scopes_tool_core.trigger import (
     trigger_high_level_query,
     trigger_low_level_query,
     trigger_mode_edge_command,
+    trigger_mode_command,
+    trigger_mode_query,
     trigger_noise_reject_command,
     trigger_noise_reject_query,
     trigger_sweep_command,
@@ -679,7 +681,28 @@ def _cmd_trigger_common(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
 
-        if args.command == "trigger-sweep":
+        if args.command == "trigger-mode":
+            if args.query:
+                command = trigger_mode_query()
+                print("Planned query: trigger type")
+                state = scope.query_trigger_mode()
+                command = runtime._driver_business_commands(scope, args, [command])[0]
+                runtime._json_update_result(operation="query", command=command, **state.to_json())
+                print(f"Command: {command}")
+                print(f"Mode: {state.mode}")
+            else:
+                command = trigger_mode_command(args.mode)
+                print(f"Planned change: trigger type {args.mode}")
+                scope.configure_trigger_mode(args.mode)
+                command = runtime._driver_business_commands(scope, args, [command])[0]
+                runtime._json_update_result(
+                    operation="configure",
+                    command=command,
+                    mode=args.mode,
+                    state_changing=True,
+                )
+                print(f"Command: {command}")
+        elif args.command == "trigger-sweep":
             if args.trigger_sweep_query:
                 command = trigger_sweep_query()
                 print("Planned query: trigger sweep mode")
