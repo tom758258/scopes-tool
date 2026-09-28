@@ -24,6 +24,8 @@ class SystemErrorEntry:
     code: int
     message: str
     raw: str
+    status_label = "System error"
+    is_system_error_queue = True
 
     @property
     def is_error(self) -> bool:
@@ -35,6 +37,53 @@ class SystemErrorEntry:
         """Return a stable human-readable representation."""
 
         return f'{self.code:+d}, "{self.message}"'
+
+    def to_json(self) -> dict[str, object]:
+        """Return the queue entry using the common instrument-status shape."""
+
+        return {
+            "code": self.code,
+            "message": self.message,
+            "raw": self.raw,
+            "is_error": self.is_error,
+        }
+
+
+@dataclass(frozen=True)
+class StandardEventStatusEntry:
+    """One IEEE-488.2 standard-event status sample used as an operation boundary."""
+
+    value: int
+    raw: str
+    status_label = "Standard event status"
+    is_system_error_queue = False
+
+    @property
+    def error_bits(self) -> int:
+        """Return CME/EXE/DDE/QYE bits from the standard event status register."""
+
+        return self.value & 0x3C
+
+    @property
+    def is_error(self) -> bool:
+        """Return whether the standard event status contains an error-class bit."""
+
+        return bool(self.error_bits)
+
+    def format(self) -> str:
+        """Return a stable human-readable representation."""
+
+        return f"SESR {self.raw} (error bits {self.error_bits})"
+
+    def to_json(self) -> dict[str, object]:
+        """Return the status sample without pretending it is an error-queue entry."""
+
+        return {
+            "raw": self.raw,
+            "value": self.value,
+            "error_bits": self.error_bits,
+            "is_error": self.is_error,
+        }
 
 
 @dataclass(frozen=True)
