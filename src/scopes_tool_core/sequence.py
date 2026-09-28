@@ -723,19 +723,22 @@ def _execute_step(
         return _StepOutcome({"seconds": seconds})
     if step.action == "single":
         scope.single()
-        entry = scope.query_system_error()
-        system_error = _system_error_json(entry)
+        entry = scope.post_command_status("sequence")
+        status_fields = instrument_status_fields(entry)
+        system_error = status_fields.get("system_error")
+        result = {
+            "action": "single",
+            **status_fields,
+        }
         return _StepOutcome(
-            {"action": "single", "command": ":SINGle", "system_error": system_error},
-            system_error=system_error,
+            result,
+            system_error=system_error if isinstance(system_error, dict) else None,
             status="instrument_error" if entry.is_error else "completed",
         )
     if step.action == "wait-trigger":
         config = _trigger_wait_config(step)
-        result = wait_for_current_trigger_completion(
-            scope.scpi,
+        result = scope.wait_for_current_trigger(
             config,
-            classifier_profile=_trigger_classifier_profile(scope),
             stop_requested=stop_requested,
         )
         if result.outcome == "cancelled":
@@ -743,18 +746,19 @@ def _execute_step(
 
         trigger_result = result.to_json(config)
         trigger_result["arm_command"] = None
-        entry = scope.query_system_error()
-        system_error = _system_error_json(entry)
+        entry = scope.post_command_status("sequence")
+        status_fields = instrument_status_fields(entry)
+        system_error = status_fields.get("system_error")
         if entry.is_error:
             return _StepOutcome(
-                {"trigger": trigger_result, "system_error": system_error},
-                system_error=system_error,
+                {"trigger": trigger_result, **status_fields},
+                system_error=system_error if isinstance(system_error, dict) else None,
                 status="instrument_error",
             )
         status = "completed" if result.outcome in {"natural", "forced"} else "error"
         return _StepOutcome(
-            {"trigger": trigger_result, "system_error": system_error},
-            system_error=system_error,
+            {"trigger": trigger_result, **status_fields},
+            system_error=system_error if isinstance(system_error, dict) else None,
             status=status,
         )
     if step.action == "measure":
@@ -798,8 +802,9 @@ def _execute_step(
         output_path = _screenshot_path(output_dir, document, loop_index, step_index)
         capture = scope.capture_screenshot_png(background=str(step.parameters["background"]))
         written = write_screenshot_png_file(capture, output_path)
-        entry = scope.query_system_error()
-        system_error = _system_error_json(entry)
+        entry = scope.post_command_status("sequence")
+        status_fields = instrument_status_fields(entry)
+        system_error = status_fields.get("system_error")
         file_info = {"kind": "png", "path": str(written)}
         return _StepOutcome(
             {
@@ -809,10 +814,10 @@ def _execute_step(
                 "byte_count": len(capture.data),
                 "image_path": str(written),
                 "files": [file_info],
-                "system_error": system_error,
+                **status_fields,
             },
             (file_info,),
-            system_error,
+            system_error if isinstance(system_error, dict) else None,
             "instrument_error" if entry.is_error else "completed",
         )
     if step.action == "cleanup":
