@@ -11,7 +11,7 @@ from pathlib import Path
 import time
 from typing import Mapping
 
-from .capabilities import ScopeCapabilities
+from .capabilities import ScopeCapabilities, operation_supported
 from .cleanup import CLEANUP_PROFILES, execute_cleanup, plan_cleanup
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import is_pair_measurement_item, normalize_measurement_item
@@ -31,6 +31,9 @@ from .planning import (
     measurement_query_kwargs,
     plan_capture,
     plan_measure,
+    planned_current_trigger_wait_scpi,
+    planned_single_scpi,
+    planned_status_query,
 )
 from .screenshot import (
     DEFAULT_SCREENSHOT_BACKGROUND,
@@ -52,6 +55,7 @@ from .workflow import (
     StopRequested,
     WorkflowProgress,
     drain_preexisting_system_errors,
+    instrument_status_fields,
     interruptible_wait,
     workflow_scpi_logging,
 )
