@@ -24,9 +24,14 @@ from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import measurement_query, pair_measurement_query
 from .operations import OperationResult, _trigger_wait_classifier_profile
 from .planning import (
+    MeasurePlanRequest,
     OperationPlan,
     parse_measurement_item_list,
     parse_pair_specs,
+    plan_measure,
+    planned_current_trigger_wait_scpi,
+    planned_single_scpi,
+    planned_status_query,
     resolve_sweep_channels,
 )
 from .scope import Oscilloscope
@@ -91,9 +96,12 @@ def plan_triggered_measure_loop(
         for kind, path in (("csv", csv_path), ("manifest", manifest_path), ("scpi_log", scpi_log_path))
         if path is not None
     )
-    planned = [single_command(), operation_condition_query()]
+    planned = [
+        *planned_single_scpi(capabilities),
+        *planned_current_trigger_wait_scpi(capabilities),
+    ]
     planned.extend(_measurement_queries(normalized, capabilities))
-    planned.append(":SYSTem:ERRor?")
+    planned.append(planned_status_query(capabilities))
     result = {
         "status": "planned",
         **_selection_result(normalized),
@@ -477,17 +485,32 @@ def _measurement_queries(
     capabilities: ScopeCapabilities,
 ) -> list[str]:
     planned: list[str] = []
+    status_query = planned_status_query(capabilities)
+
+    def extend_without_post_status(plan: OperationPlan) -> None:
+        commands = list(plan.planned_scpi)
+        if commands and commands[-1] == status_query:
+            commands.pop()
+        planned.extend(commands)
+
     for channel in normalized["channels"]:
         for item in normalized["items"]:
-            planned.append(measurement_query(item, channel, capabilities=capabilities))
+            extend_without_post_status(
+                plan_measure(
+                    MeasurePlanRequest(item=item, channel=channel),
+                    capabilities,
+                )
+            )
     for source, reference in normalized["pairs"]:
         for item in normalized["pair_items"]:
-            planned.append(
-                pair_measurement_query(
-                    item,
-                    source,
-                    reference,
-                    capabilities=capabilities,
+            extend_without_post_status(
+                plan_measure(
+                    MeasurePlanRequest(
+                        item=item,
+                        source_channel=source,
+                        reference_channel=reference,
+                    ),
+                    capabilities,
                 )
             )
     return planned
