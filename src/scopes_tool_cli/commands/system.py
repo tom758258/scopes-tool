@@ -119,7 +119,7 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
             f"{len(result.skipped)} skipped; "
             f"final error queue clean: {result.final_error_queue_clean}"
         )
-        return 0 if result.final_error_queue_clean else 1
+        return 1 if result.final_error.is_error else 0
 
 
 def _cmd_system_status(args: argparse.Namespace) -> int:

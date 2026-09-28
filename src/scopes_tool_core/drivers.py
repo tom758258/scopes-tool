@@ -50,3 +50,13 @@ def scope_for_physical_model(
             None,
         )
     return selected_scope
+
+
+def driver_for_capabilities(capabilities):
+    """Resolve a selected physical identity; legacy profiles use the base driver."""
+    if capabilities.physical_model_id is None:
+        if capabilities.series not in {"2000X", "3000X", "4000X", "6000X"}:
+            raise UnsupportedModelError("Planning requires a registered physical model")
+        return Oscilloscope
+    from .identity import physical_model_for_id
+    return driver_for_physical_model(physical_model_for_id(capabilities.physical_model_id))

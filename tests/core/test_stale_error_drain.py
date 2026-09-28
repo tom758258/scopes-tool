@@ -57,6 +57,8 @@ def test_drain_with_query_only_fake_scope():
     from scopes_tool_core.status import parse_system_error
 
     class FakeScope:
+        preflight_status = Oscilloscope.preflight_status
+
         def __init__(self, responses):
             self._responses = [parse_system_error(r) for r in responses]
             self.read_count = 0
@@ -76,6 +78,8 @@ def test_drain_rejects_max_reads_zero():
     from scopes_tool_core.status import parse_system_error
 
     class FakeScope:
+        preflight_status = Oscilloscope.preflight_status
+
         def query_system_error(self):
             return parse_system_error('0,"No error"')
 

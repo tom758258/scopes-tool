@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .status import status_fields
+
 import copy
 import csv
 from contextlib import nullcontext
@@ -21,10 +23,10 @@ from .batch import (
 )
 from .capabilities import ScopeCapabilities
 from .errors import OscilloscopeError, ParameterValidationError
-from .measurements import measurement_query, pair_measurement_query
-from .operations import OperationResult, _trigger_wait_classifier_profile
+from .measurements import pair_measurement_query
+from .operations import OperationResult
 from .planning import (
-    OperationPlan,
+    OperationPlan, MeasurePlanRequest, plan_measure, workflow_step_scpi,
     parse_measurement_item_list,
     parse_pair_specs,
     resolve_sweep_channels,
@@ -32,9 +34,6 @@ from .planning import (
 from .scope import Oscilloscope
 from .trigger import (
     TriggerWaitConfig,
-    operation_condition_query,
-    single_command,
-    wait_for_current_trigger_completion,
 )
 from .workflow import (
     ProgressReporter,
@@ -90,9 +89,9 @@ def plan_triggered_measure_loop(
         for kind, path in (("csv", csv_path), ("manifest", manifest_path), ("scpi_log", scpi_log_path))
         if path is not None
     )
-    planned = [single_command(), operation_condition_query()]
+    planned = workflow_step_scpi(capabilities, "single") + workflow_step_scpi(capabilities, "wait-trigger")
     planned.extend(_measurement_queries(normalized, capabilities))
-    planned.append(":SYSTem:ERRor?")
+    planned.extend(workflow_step_scpi(capabilities, "status"))
     result = {
         "status": "planned",
         **_selection_result(normalized),
@@ -213,10 +212,8 @@ def run_triggered_measure_loop(
 
                     scope.single()
                     trigger_config = _trigger_wait_config(request.trigger_timeout_seconds)
-                    trigger = wait_for_current_trigger_completion(
-                        scope.scpi,
+                    trigger = scope.wait_for_current_trigger_completion(
                         trigger_config,
-                        classifier_profile=_trigger_wait_classifier_profile(scope),
                         stop_requested=stop_requested,
                     )
                     if trigger.outcome == "cancelled":
@@ -280,7 +277,7 @@ def run_triggered_measure_loop(
                                     scope, error=None,
                                 )
 
-                    entry = scope.query_system_error()
+                    entry = scope.workflow_status()
                     last_system_error = system_error_manifest_dict(entry)
                     if entry.is_error:
                         error = {
@@ -312,7 +309,7 @@ def run_triggered_measure_loop(
                         "elapsed_seconds": elapsed_seconds,
                         "trigger_elapsed_seconds": trigger_elapsed_seconds,
                         "values": dict(values),
-                        "system_error": dict(last_system_error),
+                        **status_fields(dict(last_system_error)),
                     }
                     if manifest_path is not None:
                         cycle = {
@@ -320,7 +317,7 @@ def run_triggered_measure_loop(
                             "timestamp_iso": timestamp_iso,
                             "elapsed_seconds": elapsed_seconds,
                             "trigger_elapsed_seconds": trigger_elapsed_seconds,
-                            "system_error": dict(last_system_error),
+                            **status_fields(dict(last_system_error)),
                         }
                         candidate = copy.deepcopy(manifest)
                         candidate["completed_count"] = index
@@ -479,7 +476,7 @@ def _measurement_queries(
     planned: list[str] = []
     for channel in normalized["channels"]:
         for item in normalized["items"]:
-            planned.append(measurement_query(item, channel, capabilities=capabilities))
+            planned.extend(plan_measure(MeasurePlanRequest(item, channel), capabilities).planned_scpi[:-1])
     for source, reference in normalized["pairs"]:
         for item in normalized["pair_items"]:
             planned.append(
@@ -627,7 +624,7 @@ def _finish_result(
         "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
         "error": error,
     }
-    return OperationResult(
+    return OperationResult.from_status(
         exit_code,
         result,
         files,
@@ -659,7 +656,7 @@ def _pre_start_cancelled_result(
         "scpi_log_path": None,
         "error": None,
     }
-    return OperationResult(130, result, human_lines=["Triggered measurement loop cancelled."])
+    return OperationResult.from_status(130, result, human_lines=["Triggered measurement loop cancelled."])
 
 
 def _stop_requested(callback: StopRequested | None) -> bool:

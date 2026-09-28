@@ -1,6 +1,9 @@
 """Finite ordered Generic Sequence v1 workflow support."""
 
 from __future__ import annotations
+
+from .status import status_payload, status_fields
+from .planning import workflow_step_scpi
 import copy
 
 from dataclasses import dataclass
@@ -36,15 +39,11 @@ from .screenshot import (
     DEFAULT_SCREENSHOT_BACKGROUND,
     hardcopy_inksaver_command,
     hardcopy_inksaver_for_background,
-    hardcopy_inksaver_query,
     normalize_screenshot_background,
-    screenshot_data_query,
 )
 from .scope import Oscilloscope
 from .trigger import (
     TriggerWaitConfig,
-    operation_condition_query,
-    wait_for_current_trigger_completion,
 )
 from .waveform import SUPPORTED_WAVEFORM_POINTS
 from .workflow import (
@@ -614,15 +613,17 @@ def _plan_steps(
     step_plans: list[dict[str, object]] = []
     planned_scpi: list[str] = []
     for index, step in enumerate(document.steps, start=1):
+        if capabilities.supported_sequence_actions is not None and step.action not in capabilities.supported_sequence_actions:
+            raise ParameterValidationError(f"sequence step {index} {step.action} is not supported by this model")
         step_scpi: list[str] = []
         artifact_template: str | None = None
         if step.action == "single":
-            step_scpi = [":SINGle", ":SYSTem:ERRor?"]
+            step_scpi = workflow_step_scpi(capabilities, "single") + workflow_step_scpi(capabilities, "status")
         elif step.action == "wait-trigger":
             _trigger_wait_config(step)
-            step_scpi = [operation_condition_query(), ":SYSTem:ERRor?"]
+            step_scpi = workflow_step_scpi(capabilities, "wait-trigger") + workflow_step_scpi(capabilities, "status")
         elif step.action == "measure":
-            plan = plan_measure(_measure_plan_request(step.parameters), capabilities)
+            plan = plan_measure(_measure_plan_request(step.parameters), capabilities, workflow=True)
             step_scpi = list(plan.planned_scpi)
         elif step.action == "capture":
             assert output_dir is not None
@@ -635,7 +636,7 @@ def _plan_steps(
                     csv_path=csv_path,
                     meta_path=meta_path,
                 ),
-                capabilities,
+                capabilities, workflow=True,
             )
             step_scpi = list(plan.planned_scpi)
             artifact_template = _artifact_template(document, index, "capture")
@@ -644,11 +645,7 @@ def _plan_steps(
                 raise ParameterValidationError(
                     f"sequence step {index} screenshot is not supported by this model"
                 )
-            step_scpi = [
-                hardcopy_inksaver_query(),
-                screenshot_data_query(),
-                ":SYSTem:ERRor?",
-            ]
+            step_scpi = workflow_step_scpi(capabilities, "screenshot", background=step.parameters["background"]) + workflow_step_scpi(capabilities, "status")
             artifact_template = _artifact_template(document, index, "screenshot")
         elif step.action == "cleanup":
             plan = plan_cleanup(str(step.parameters["profile"]), capabilities)
@@ -684,19 +681,17 @@ def _execute_step(
         return _StepOutcome({"seconds": seconds})
     if step.action == "single":
         scope.single()
-        entry = scope.query_system_error()
+        entry = scope.workflow_status()
         system_error = _system_error_json(entry)
         return _StepOutcome(
-            {"action": "single", "command": ":SINGle", "system_error": system_error},
+            {"action": "single", "command": ";".join(workflow_step_scpi(scope.capabilities, "single")), **status_fields(system_error)},
             system_error=system_error,
             status="instrument_error" if entry.is_error else "completed",
         )
     if step.action == "wait-trigger":
         config = _trigger_wait_config(step)
-        result = wait_for_current_trigger_completion(
-            scope.scpi,
+        result = scope.wait_for_current_trigger_completion(
             config,
-            classifier_profile=_trigger_classifier_profile(scope),
             stop_requested=stop_requested,
         )
         if result.outcome == "cancelled":
@@ -704,17 +699,17 @@ def _execute_step(
 
         trigger_result = result.to_json(config)
         trigger_result["arm_command"] = None
-        entry = scope.query_system_error()
+        entry = scope.workflow_status()
         system_error = _system_error_json(entry)
         if entry.is_error:
             return _StepOutcome(
-                {"trigger": trigger_result, "system_error": system_error},
+                {"trigger": trigger_result, **status_fields(system_error)},
                 system_error=system_error,
                 status="instrument_error",
             )
         status = "completed" if result.outcome in {"natural", "forced"} else "error"
         return _StepOutcome(
-            {"trigger": trigger_result, "system_error": system_error},
+            {"trigger": trigger_result, **status_fields(system_error)},
             system_error=system_error,
             status=status,
         )
@@ -729,7 +724,7 @@ def _execute_step(
         return _StepOutcome(
             dict(operation.result),
             tuple(operation.files),
-            operation.system_error,
+            operation.result.get("post_command_status") or operation.system_error,
             status,
         )
     if step.action == "capture":
@@ -751,7 +746,7 @@ def _execute_step(
         return _StepOutcome(
             dict(operation.result),
             tuple(operation.files),
-            operation.system_error,
+            operation.result.get("post_command_status") or operation.system_error,
             _operation_status(operation),
         )
     if step.action == "screenshot":
@@ -759,7 +754,7 @@ def _execute_step(
         output_path = _screenshot_path(output_dir, document, loop_index, step_index)
         capture = scope.capture_screenshot_png(background=str(step.parameters["background"]))
         written = write_screenshot_png_file(capture, output_path)
-        entry = scope.query_system_error()
+        entry = scope.workflow_status()
         system_error = _system_error_json(entry)
         file_info = {"kind": "png", "path": str(written)}
         return _StepOutcome(
@@ -770,7 +765,7 @@ def _execute_step(
                 "byte_count": len(capture.data),
                 "image_path": str(written),
                 "files": [file_info],
-                "system_error": system_error,
+                **status_fields(system_error),
             },
             (file_info,),
             system_error,
@@ -780,7 +775,7 @@ def _execute_step(
         result = execute_cleanup(scope, str(step.parameters["profile"]))
         system_error = _system_error_json(result.final_error)
         return _StepOutcome(
-            {**result.to_json(), "system_error": system_error},
+            {**result.to_json(), **status_fields(system_error)},
             system_error=system_error,
             status="instrument_error" if result.final_error.is_error else "completed",
         )
@@ -845,7 +840,7 @@ def _finish_sequence(
         "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
         "error": error,
     }
-    return OperationResult(
+    return OperationResult.from_status(
         exit_code,
         result,
         list(files),
@@ -892,7 +887,8 @@ def _trigger_wait_config(step: SequenceStep) -> TriggerWaitConfig:
 def _operation_status(operation: OperationResult) -> str:
     if operation.exit_code == 0:
         return "completed"
-    if isinstance(operation.system_error, dict) and operation.system_error.get("is_error") is True:
+    status = operation.result.get("post_command_status") or operation.system_error
+    if isinstance(status, dict) and status.get("is_error") is True:
         return "instrument_error"
     return "error"
 
@@ -1009,12 +1005,7 @@ def _idn_json(idn: object) -> dict[str, object]:
 
 
 def _system_error_json(entry: object) -> dict[str, object]:
-    return {
-        "code": getattr(entry, "code"),
-        "message": getattr(entry, "message"),
-        "raw": getattr(entry, "raw"),
-        "is_error": bool(getattr(entry, "is_error")),
-    }
+    return status_payload(entry)
 
 
 def _trigger_classifier_profile(scope: Oscilloscope) -> str:
@@ -1148,7 +1139,7 @@ def _pre_start_cancelled_result(document: SequenceDocument) -> OperationResult:
         "scpi_log_path": None,
         "error": None,
     }
-    return OperationResult(
+    return OperationResult.from_status(
         130,
         result,
         [],

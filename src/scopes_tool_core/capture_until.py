@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import copy
 from dataclasses import dataclass
 import math
@@ -23,7 +24,7 @@ from .channel import validate_analog_channel
 from .errors import OscilloscopeError, ParameterValidationError
 from .operations import OperationResult, _capture_waveform
 from .output_files import write_capture_csv_file, write_capture_metadata_file
-from .planning import OperationPlan, planned_waveform_scpi, resolve_capture_channels
+from .planning import workflow_step_scpi, OperationPlan, planned_waveform_scpi, resolve_capture_channels
 from .scope import Oscilloscope
 from .waveform import MultiChannelWaveformCapture, WaveformCapture, validate_waveform_points, validate_word_format_supported
 from .waveform_analysis import (
@@ -89,9 +90,10 @@ def plan_capture_until(
             normalized["channels"],
             normalized["waveform_format"],
             normalized["points"],
+            capabilities,
         )
     )
-    planned.append(":SYSTem:ERRor?")
+    planned.extend(workflow_step_scpi(capabilities, "status"))
     return OperationPlan(
         tuple(planned),
         files,
@@ -202,7 +204,7 @@ def run_capture_until(
 
                 current_capture += 1
                 capture = _capture_waveform(scope, channels, waveform_format, points)
-                entry = scope.query_system_error()
+                entry = scope.workflow_status()
                 last_system_error = system_error_manifest_dict(entry)
                 manifest["capture_count"] = current_capture
                 if entry.is_error:
@@ -517,7 +519,7 @@ def _finish_result(
     )
     result["manifest_path"] = str(manifest_path)
     result["scpi_log_path"] = str(scpi_log_path)
-    return OperationResult(
+    return OperationResult.from_status(
         exit_code,
         result,
         files,
@@ -563,7 +565,7 @@ def _result_shape(
 
 
 def _pre_start_cancelled_result(request: CaptureUntilRequest) -> OperationResult:
-    return OperationResult(
+    return OperationResult.from_status(
         130,
         {
             "status": "cancelled",

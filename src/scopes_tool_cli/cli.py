@@ -937,7 +937,8 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 check_only=bool(getattr(args, "check_only", False)),
                 stop_on_error=bool(getattr(args, "stop_on_error", False)),
                 restore_type=bool(getattr(args, "restore_type", False)),
-            )
+            ),
+            capabilities,
         )
         return list(plan.planned_scpi), list(plan.files), plan.result
     if command == "identify":
@@ -2046,7 +2047,7 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
         points = validate_waveform_points(args.points, capabilities)
         if args.waveform_format == "word":
             validate_word_format_supported(capabilities)
-        planned = _planned_waveform_scpi(channels, args.waveform_format, points) + [":SYSTem:ERRor?"]
+        planned = list(plan_capture(CapturePlanRequest(channels, points, args.waveform_format), capabilities, workflow=True).planned_scpi)
         files = _planned_capture_files(args, command)
         result = {"channels": list(channels), "points": points, "format": args.waveform_format.upper(), "files": files}
         if command == "capture":
@@ -2657,33 +2658,8 @@ def _planned_waveform_scpi(channels: Sequence[int], waveform_format: str, points
 
 
 def _doctor_planned_scpi(capabilities: ScopeCapabilities) -> list[str]:
-    planned = [
-        "*IDN?",
-        acquisition_type_query(),
-        acquisition_count_query(),
-    ]
-    for channel in range(1, capabilities.analog_channels + 1):
-        planned.extend(
-            [
-                channel_display_query(channel),
-                channel_scale_query(channel),
-                channel_offset_query(channel),
-                channel_coupling_query(channel),
-                channel_probe_ratio_query(channel),
-                channel_bandwidth_limit_query(channel),
-            ]
-        )
-    planned.extend(
-        [
-            timebase_scale_query(),
-            timebase_position_query(),
-            edge_trigger_source_query(),
-            edge_trigger_level_query(),
-            edge_trigger_slope_query(),
-            ":SYSTem:ERRor?",
-        ]
-    )
-    return planned
+    from scopes_tool_core.planning import doctor_planned_scpi
+    return doctor_planned_scpi(capabilities)
 
 
 def _measure_sweep_planned_scpi(
@@ -2693,26 +2669,8 @@ def _measure_sweep_planned_scpi(
     pair_items: Sequence[str],
     capabilities: ScopeCapabilities,
 ) -> list[str]:
-    planned = ["*IDN?"]
-    for channel in channels:
-        for item in items:
-            planned.append(measurement_query(item, channel, capabilities=capabilities))
-            planned.append(":SYSTem:ERRor?")
-    for source_channel, reference_channel in pairs:
-        for item in pair_items:
-            try:
-                planned.append(
-                    pair_measurement_query(
-                        item,
-                        source_channel,
-                        reference_channel,
-                        capabilities=capabilities,
-                    )
-                )
-                planned.append(":SYSTem:ERRor?")
-            except OscilloscopeError:
-                continue
-    return planned
+    from scopes_tool_core.planning import measure_sweep_planned_scpi
+    return measure_sweep_planned_scpi(channels, items, pairs, pair_items, capabilities)
 
 
 def _planned_capture_files(args: argparse.Namespace, command: str) -> list[dict[str, str]]:
@@ -2754,22 +2712,15 @@ def _measure_log_planned_scpi(
     pair_items: Sequence[str],
     capabilities: ScopeCapabilities,
 ) -> list[str]:
+    from scopes_tool_core.planning import plan_measure, MeasurePlanRequest, workflow_step_scpi
     planned = []
     for channel in channels:
         for item in items:
-            planned.append(measurement_query(item, channel, capabilities=capabilities))
-    for source_channel, reference_channel in pairs:
+            planned.extend(plan_measure(MeasurePlanRequest(item, channel), capabilities).planned_scpi[:-1])
+    for source, reference in pairs:
         for item in pair_items:
-            planned.append(
-                pair_measurement_query(
-                    item,
-                    source_channel,
-                    reference_channel,
-                    capabilities=capabilities,
-                )
-            )
-    planned.append(":SYSTem:ERRor?")
-    return planned
+            planned.append(pair_measurement_query(item, source, reference, capabilities=capabilities))
+    return planned + workflow_step_scpi(capabilities, "status")
 
 
 def _idn_json(raw: str) -> dict[str, str | None]:

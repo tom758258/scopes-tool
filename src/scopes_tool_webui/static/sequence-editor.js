@@ -1,4 +1,5 @@
 import { hasTranslation, translate } from "/static/i18n.js";
+import { modelPresentation } from "/static/command-support.js";
 import { applyNumericFieldConstraints } from "/static/numeric-input.js";
 
 const ARTIFACT_ACTIONS = new Set(["capture", "screenshot"]);
@@ -80,7 +81,8 @@ export class SequenceEditor {
   }
 
   metadata() {
-    return this.selectedDefinition()?.sequence || {};
+    const command = this.selectedDefinition();
+    return modelPresentation(command, this.hooks.modelId?.())?.sequence || command?.sequence || {};
   }
 
   appendTranslatedHelp(container, key) {
@@ -414,6 +416,10 @@ export class SequenceEditor {
     let input;
     if (field.type === "enum" || (field.type === "integer" && field.options)) {
       input = document.createElement("select");
+      if (field.type === "integer" && field.default === undefined
+          && !field.required && !field.required_if?.length) {
+        input.append(new Option("", ""));
+      }
       for (const option of field.options || []) {
         const display = field.type === "enum"
           ? sequenceValueLabel(field.name, option)
@@ -519,6 +525,8 @@ export class SequenceEditor {
           if (value === "" || value === undefined || !Number.isFinite(Number(value))) return null;
           parameters[field.name] = Number(value);
         } else if (field.type === "integer" && field.options) {
+          if ((value === "" || value === undefined) && field.required !== true) continue;
+          if (value === "" || value === undefined || !Number.isFinite(Number(value))) return null;
           parameters[field.name] = Number(value);
         } else {
           parameters[field.name] = clone(value);

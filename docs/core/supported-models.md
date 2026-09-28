@@ -83,6 +83,12 @@ support waveform capture, model-specific measurements, voltage channel offsets,
 and source-qualified instrument waveform saves. TBS2074B supports native PNG
 screenshots with black background; TDS2024B supports explicit BMP over USBTMC.
 TBS1052B screenshots and normalized `check-error` remain unavailable.
+The three profiles also support native-status diagnostic, capture and
+single-source measurement workflows, capability-driven acquisition checks and
+cleanup, and a model-specific sequence action subset. Smoke and sequence PNG
+screenshots are available only on TBS2074B. Workflow status preserves Tek
+SESR/events separately from the normalized Keysight system-error queue.
+See [Adding a model](adding-a-model.md) for the Core extension boundary.
 Tektronix dry-run and the stateful simulator use the Tektronix command dialect
 for the listed operations. Simulation does not establish live hardware support.
 Signal presets and system-error queue

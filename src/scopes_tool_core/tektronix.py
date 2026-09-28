@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import csv
 import math
 import re
 from typing import Mapping, Sequence
@@ -63,26 +64,41 @@ class TekPostStatus:
 
     value: int
     raw: str
+    event_raw: str | None = None
+    events: tuple[dict[str, object], ...] = ()
+    complete: bool = True
     status_label = "Standard event status"
     is_system_error_queue = False
 
     @property
     def is_error(self) -> bool:
-        return bool(self.value & 0x3C)
+        return not self.complete or bool(self.value & 0x3C) or any(
+            event["category"] == "error" for event in self.events
+        )
 
     def format(self) -> str:
-        return f"SESR {self.raw} (error bits {self.value & 0x3C})"
+        summary = f"SESR {self.raw} (error bits {self.value & 0x3C})"
+        return summary if self.event_raw is None else f"{summary}; events {self.event_raw}"
 
-    def to_json(self) -> dict[str, int | str]:
-        return {"raw": self.raw, "value": self.value}
+    def to_json(self) -> dict[str, object]:
+        result = {"raw": self.raw, "value": self.value}
+        if self.event_raw is not None:
+            result.update(source="tektronix-sesr", event_raw=self.event_raw,
+                          events=list(self.events), complete=self.complete,
+                          destructive_read=True, is_error=self.is_error)
+        return result
 
 
 class _PlanningBackend(TektronixSimulatorBackend):
     """Plan using the same bounded dialect as simulated execution."""
 
     def __init__(self, capabilities: ScopeCapabilities) -> None:
-        models = {"TBS2000B": "TBS2074B", "TDS2000B": "TDS2024B", "TBS1000B": "TBS1052B"}
-        super().__init__(physical_model_id="tektronix-" + models[capabilities.series].lower())
+        if capabilities.physical_model_id is None:
+            raise ParameterValidationError("Tek planning requires a registered physical model")
+        from .capabilities import capabilities_for_model_id
+        if capabilities != capabilities_for_model_id(capabilities.physical_model_id):
+            raise ParameterValidationError("Planning capabilities do not match the registered physical model")
+        super().__init__(physical_model_id=capabilities.physical_model_id)
         self.commands = self.history
 
 
@@ -158,10 +174,40 @@ class TektronixOscilloscope(Oscilloscope):
         return backend.commands
 
     @classmethod
-    def plan_cli_operation(cls, args: object, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
+    def plan_workflow_step(cls, action, capabilities, **parameters) -> list[str]:
+        backend = _PlanningBackend(capabilities)
+        scope = cls(backend)
+        scope.capabilities = capabilities
+        if action == "status":
+            scope.workflow_status()
+        elif action == "single":
+            scope.single()
+        elif action == "wait-trigger":
+            backend.query("BUSY?")
+        elif action == "acquisition-query":
+            scope.query_acquisition_config()
+        elif action == "acquisition-set":
+            if parameters.get("count") is not None:
+                scope.validate_acquisition_count(parameters["count"])
+            scope.set_acquisition_type(parameters["type"])
+            if parameters.get("count") is not None:
+                scope.set_acquisition_count(parameters["count"])
+        elif action == "screenshot":
+            scope.capture_screenshot_png(background=parameters.get("background", "black"))
+        elif action == "doctor":
+            from .operations import run_doctor
+            run_doctor(scope, "")
+        else:
+            raise ParameterValidationError(f"Unsupported workflow planning step: {action}")
+        return backend.commands
+
+    @classmethod
+    def plan_cli_operation(cls, args: object, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]] | None:
         command = getattr(args, "command")
         if not operation_supported(capabilities, command):
             raise ParameterValidationError(f"{command} is unsupported for this Tektronix model")
+        if command in {"doctor", "capture-batch", "capture-until", "capture-monitor", "measure-sweep", "measure-log", "measure-until", "triggered-capture-series", "triggered-measure-loop", "acquisition-check", "cleanup", "sequence", "smoke"}:
+            return None
         if command == "identify":
             return ["*IDN?"], [], {"operation": "identify"}
         if command == "list-resources":
@@ -419,7 +465,60 @@ class TektronixOscilloscope(Oscilloscope):
             raise OscilloscopeError(f"Tek command failed: raw SESR {raw!r}, error bits {value & 0x3C}")
         return TekPostStatus(value, raw)
 
-    def post_webui_operation_status(self, operation: str) -> TekPostStatus:
+    def doctor_trigger_snapshot(self) -> dict[str, object]:
+        trigger = self._query_instrument_summary()["trigger"]
+        result = {"type": trigger["type"], "source": trigger["source"],
+                  "source_channel": trigger["source_channel"],
+                  "level_volts": trigger["level"], "slope": trigger["slope"]}
+        if trigger["type"] != "edge":
+            result["unavailable_reason"] = "current_trigger_is_not_edge"
+        elif trigger["source_channel"] is None:
+            result["unavailable_reason"] = "current_source_is_not_an_analog_channel"
+        return result
+
+    def workflow_status(self) -> TekPostStatus:
+        """Consume one SESR summary and its events before another SESR read."""
+        mask = _number(re.sub(r"^:?(?:DESE)\s+", "", self.scpi.query("DESE?"), flags=re.IGNORECASE), "DESE?")
+        if not mask.is_integer() or not 0 <= mask <= 255 or int(mask) & 0x3C != 0x3C:
+            raise OscilloscopeError("Tek status reporting is incomplete: DESE must enable error bits 2..5")
+        raw = self.scpi.query("*ESR?")
+        number = _number(raw, "*ESR?")
+        if not number.is_integer() or not 0 <= number <= 255:
+            raise OscilloscopeError(f"Invalid Tek SESR response: {raw!r}")
+        event_raw = self.scpi.query("ALLEv?")
+        payload = re.sub(r"^:?(?:ALLEV|ALLEVENTS)\s+", "", event_raw.strip(), flags=re.IGNORECASE)
+        try:
+            values = next(csv.reader([payload], skipinitialspace=True, strict=True))
+            if len(values) % 2 or not values or len(values) > 40:
+                raise ValueError("expected at most 20 event code/message pairs")
+            events = []
+            for i in range(0, len(values), 2):
+                code = int(values[i])
+                if code < 0:
+                    raise ValueError("negative event code")
+                if code:
+                    category = "warning" if code in {528, 532, 533, *range(540, 550)} else "event"
+                    if 100 <= code < 400 or code in {404, 410, 420, 430, 440}:
+                        category = "error"
+                    events.append({"code": code, "message": values[i + 1], "category": category})
+        except (ValueError, csv.Error) as exc:
+            raise OscilloscopeError(f"Invalid Tek event response: {event_raw!r}") from exc
+        complete = not any(event["code"] == 350 for event in events)
+        if int(number) & 0x3C and not events:
+            complete = False
+        return TekPostStatus(int(number), raw, event_raw, tuple(events), complete)
+
+    def preflight_status(self, *, diagnostic: bool = False, max_reads: int = 30) -> tuple:
+        if max_reads < 1:
+            raise ValueError("max_reads must be at least 1.")
+        status = self.workflow_status()
+        if not status.complete:
+            raise OscilloscopeError(f"Incomplete Tek pre-operation status: {status.format()}")
+        return (status,) if diagnostic or status.events or status.is_error else ()
+
+    def post_webui_operation_status(self, operation: str) -> TekPostStatus | None:
+        if operation in {"doctor", "capture-batch", "capture-until", "capture-monitor", "measure-sweep", "measure-log", "measure-until", "triggered-capture-series", "triggered-measure-loop", "acquisition-check", "cleanup", "sequence", "smoke", "measure", "capture"}:
+            return None
         return self.post_command_status(operation)
 
     def uses_autoscale_error_recovery(self) -> bool:
@@ -1050,6 +1149,11 @@ class TektronixOscilloscope(Oscilloscope):
     def single_wait(self, config: TriggerWaitConfig, *, stop_requested: StopRequested | None = None) -> TriggerWaitResult:
         config = validate_trigger_wait_config(config)
         self.single()
+        result = self.wait_for_current_trigger_completion(config, stop_requested=stop_requested)
+        return replace(result, arm_command="ACQuire:STOPAfter SEQuence;ACQuire:STATE ON")
+
+    def wait_for_current_trigger_completion(self, config: TriggerWaitConfig, *, stop_requested=None) -> TriggerWaitResult:
+        config = validate_trigger_wait_config(config)
         start = config.clock()
         raw_values, values = [], []
 
@@ -1085,7 +1189,7 @@ class TektronixOscilloscope(Oscilloscope):
             outcome = "forced" if forced else "natural"
         result = _trigger_wait_result(outcome, forced, outcome == "timeout", start, config, raw_values, values, error=error)
         return replace(result, poll_source="busy", poll_command="BUSY?",
-            arm_command="ACQuire:STOPAfter SEQuence;ACQuire:STATE ON", force_command="TRIGger FORCe")
+            arm_command=None, force_command="TRIGger FORCe")
 
     def configure_glitch_trigger(self, *, channel: int, polarity: str, qualifier: str,
         time_seconds: float | None = None, min_time_seconds: float | None = None,
@@ -1441,7 +1545,7 @@ def _unsupported(self: TektronixOscilloscope, *args: object, **kwargs: object) -
 _SUPPORTED_METHODS = {
     "query_idn", "close", "post_command_status", "post_webui_operation_status",
     "uses_autoscale_error_recovery",
-    "validate_acquisition_count",
+    "validate_acquisition_count", "cleanup",
     "run", "stop", "single",
     "force_trigger", "set_acquisition_type", "query_acquisition_type",
     "set_acquisition_count", "query_acquisition_count", "query_acquisition_config",

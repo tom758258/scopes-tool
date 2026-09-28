@@ -176,6 +176,7 @@ from .trigger import (
     TvTriggerState,
     force_trigger_command,
     wait_for_trigger_completion,
+    wait_for_current_trigger_completion,
 )
 from .visa_backend import VisaBackend
 from .waveform import MultiChannelWaveformCapture, WaveformCapture, WaveformController
@@ -227,6 +228,34 @@ class Oscilloscope:
 
         return self.query_system_error()
 
+    def doctor_trigger_snapshot(self) -> dict[str, object]:
+        trigger = self.query_trigger_edge()
+        return {"source_channel": trigger.source_channel,
+                "level_volts": trigger.level_volts, "slope": trigger.slope}
+
+    def workflow_status(self):
+        """Read one driver-native status checkpoint without normalizing events."""
+        return self.post_command_status()
+
+    def preflight_status(self, *, diagnostic: bool = False, max_reads: int = 30) -> tuple:
+        """Collect existing status before a diagnostic or a finite workflow."""
+        if diagnostic:
+            return (self.query_system_error(),)
+        from .workflow import _drain_preexisting_system_errors
+        return _drain_preexisting_system_errors(self, max_reads=max_reads)
+
+    def wait_for_current_trigger_completion(self, config, *, stop_requested=None):
+        """Wait for an already armed acquisition without rearming it."""
+        if getattr(self.backend, "backend", None) == "Keysight simulator":
+            profile = "simulator"
+        elif self.capabilities is not None and self.capabilities.series in {"2000X", "3000X", "4000X"}:
+            profile = self.capabilities.series.lower()
+        else:
+            profile = "live"
+        return wait_for_current_trigger_completion(
+            self.scpi, config, classifier_profile=profile, stop_requested=stop_requested,
+        )
+
     def post_webui_operation_status(self, operation: str) -> object | None:
         """Check a completed WebUI operation when required by this driver."""
 
@@ -243,6 +272,23 @@ class Oscilloscope:
         from .acquisition import validate_acquisition_count
 
         return validate_acquisition_count(count)
+
+    @classmethod
+    def plan_workflow_step(cls, action, capabilities, **parameters) -> list[str]:
+        from .acquisition import acquisition_type_command, acquisition_count_command
+        from .screenshot import hardcopy_inksaver_query, screenshot_data_query
+        commands = {
+            "status": [":SYSTem:ERRor?"], "single": [":SINGle"],
+            "wait-trigger": [":OPERegister:CONDition?"],
+            "acquisition-query": [":ACQuire:TYPE?", ":ACQuire:COUNt?"],
+            "screenshot": [hardcopy_inksaver_query(), screenshot_data_query()],
+        }
+        if action == "acquisition-set":
+            result = [acquisition_type_command(parameters["type"])]
+            if parameters.get("count") is not None:
+                result.append(acquisition_count_command(parameters["count"]))
+            return result
+        return commands[action]
 
     @classmethod
     def plan_cli_operation(cls, args: object, capabilities: ScopeCapabilities) -> tuple[list[str], list[dict[str, str]], dict[str, object]] | None:

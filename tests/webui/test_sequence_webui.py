@@ -721,3 +721,22 @@ def test_sequence_capture_step_shows_existing_waveform_guidance_only_for_capture
         ), false);
         ''',
     )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+def test_sequence_optional_channel_choices_remain_optional() -> None:
+    run_editor_behavior(
+        r'''
+        const field = metadata.parameters.measure.find((f) => f.name === "source_channel");
+        field.options = [1, 2];
+        state.steps = [{ action: "measure", parameters: { item: "vpp", channel: "1", slope: "positive" }, expanded: true }];
+        const control = editor.renderParameter(state.steps[0], 0, field).children[1];
+        assert.equal(control.children[0].value, "");
+        assert.equal(Object.hasOwn(editor.localDocument().steps[0].parameters, "source_channel"), false);
+        state.steps[0].parameters.source_channel = "";
+        assert.equal(Object.hasOwn(editor.localDocument().steps[0].parameters, "source_channel"), false);
+        delete state.steps[0].parameters.channel;
+        state.steps[0].parameters.source_channel = "2";
+        assert.equal(editor.localDocument().steps[0].parameters.source_channel, 2);
+        ''',
+    )

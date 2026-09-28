@@ -121,10 +121,9 @@ def test_capability_subset_and_unsupported_leaks(model_id, _, __):
     for operation in ("run", "channel-scale", "setup-save", "trigger-edge", "list-resources",
                       "measure", "capture", "single-wait", "trigger-pulse-width", "reference-query", "save-waveform", "channel-offset"):
         assert operation_supported(capabilities, operation)
-    for operation in ("measure-sweep", "measure-results", "check-error", "doctor", "smoke", "cleanup", "acquisition-check",
-                      "capture-batch", "capture-until", "capture-monitor", "measure-log", "measure-until",
-                      "triggered-measure-loop", "triggered-capture-series", "sequence"):
+    for operation in ("measure-results", "check-error", "system-operation-status"):
         assert not operation_supported(capabilities, operation)
+    assert operation_supported(capabilities, "smoke") == (model_id == "tektronix-tbs2074b")
     for operation in ("channel-units", "display-persistence", "cursor-query", "cursor-off", "math-display",
                       "math-operator", "measure-install", "measure-clear", "save-image", "acquisition-points",
                       "record-length", "channel-summary", "live-data-snapshot", "system-information-snapshot"):

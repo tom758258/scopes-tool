@@ -2389,7 +2389,7 @@ def _model_command_presentation(
             override["required"] = capabilities.save_waveform_requires_source
         if entry["id"] == "screenshot" and name == "background" and capabilities.screenshot_backgrounds is not None:
             override["options"] = capabilities.screenshot_backgrounds
-        if entry["id"] == "capture":
+        if entry["id"] in {"capture", "capture-batch", "capture-until", "capture-monitor", "triggered-capture-series"}:
             if name == "points":
                 override["options"] = tuple(value for value in field["options"]
                     if value <= capabilities.safe_max_waveform_points)
@@ -2508,7 +2508,7 @@ def _model_command_presentation(
             )
         if name == "segments" and entry["id"] in {"segmented-memory", "segmented-capture"}:
             override["maximum"] = capabilities.segmented_max_segments
-        if entry["id"] == "measure" and name == "item" and not capabilities.supports_delay_measurement:
+        if entry["id"] == "measure" and name == "item" and capabilities.measurement_items is None and not capabilities.supports_delay_measurement:
             override["options"] = tuple(
                 option for option in field.get("options", ()) if option != "delay"
             )
@@ -2597,9 +2597,38 @@ def _model_command_presentation(
                 override["options"] = tuple(
                     option for option in base_options if option != "area"
                 )
+        if entry["id"] in {"measure-sweep", "measure-log", "measure-until", "triggered-measure-loop"} and capabilities.measurement_items is not None:
+            if name in {"item", "items"}:
+                override["options"] = capabilities.measurement_items
+            if name in {"pairs", "pair_items"}:
+                override["hidden"] = True
         if override:
             fields[name] = override
-    return {"supported": supported, "fields": fields}
+    result = {"supported": supported, "fields": fields}
+    if entry["id"] == "sequence" and capabilities.supported_sequence_actions is not None:
+        metadata = entry["sequence"]
+        parameters = {}
+        for action in capabilities.supported_sequence_actions:
+            projected = []
+            for field in metadata["parameters"][action]:
+                value = dict(field)
+                name = value["name"]
+                if name in {"channel", "source_channel", "reference_channel"}:
+                    value.update(maximum=capabilities.analog_channels, options=tuple(range(1, capabilities.analog_channels + 1)))
+                elif name == "channels":
+                    value["options"] = tuple(range(1, capabilities.analog_channels + 1))
+                elif name == "item" and capabilities.measurement_items is not None:
+                    value["options"] = capabilities.measurement_items
+                elif name == "points":
+                    value["options"] = tuple(v for v in value["options"] if v <= capabilities.safe_max_waveform_points)
+                elif name == "waveform_format" and not capabilities.supports_word_format:
+                    value["options"] = ("byte",)
+                elif name == "background" and capabilities.screenshot_backgrounds is not None:
+                    value["options"] = capabilities.screenshot_backgrounds
+                projected.append(value)
+            parameters[action] = projected
+        result["sequence"] = {**metadata, "actions": capabilities.supported_sequence_actions, "parameters": parameters}
+    return result
 
 
 _PRESENTATION_OPERATIONS = {

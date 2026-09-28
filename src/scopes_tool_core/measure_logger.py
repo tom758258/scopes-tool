@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .status import status_fields
+
 import csv
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
@@ -13,7 +15,8 @@ import time
 from typing import Callable, Mapping
 
 from .batch import idn_manifest_dict, relative_manifest_path, system_error_manifest_dict
-from .errors import OscilloscopeError
+from .errors import OscilloscopeError, VisaBackendError
+from .capabilities import operation_supported
 from .scope import Oscilloscope
 from .workflow import (
     ProgressReporter,
@@ -340,6 +343,8 @@ def log_measurements_workflow(
                                     f"  {col}: NaN ({res.reason or 'invalid sentinel'})"
                                 )
                         except OscilloscopeError as exc:
+                            if isinstance(exc, VisaBackendError) and not operation_supported(scope.capabilities, "check-error"):
+                                raise
                             LOGGER.warning("%s: NaN (query failed: %s)", col, exc)
                         row_data[col] = val
                         if stop_requested is not None and stop_requested():
@@ -364,6 +369,8 @@ def log_measurements_workflow(
                                     f"  {col}: NaN ({res.reason or 'invalid sentinel'})"
                                 )
                         except OscilloscopeError as exc:
+                            if isinstance(exc, VisaBackendError) and not operation_supported(scope.capabilities, "check-error"):
+                                raise
                             LOGGER.warning("%s: NaN (query failed: %s)", col, exc)
                         row_data[col] = val
                         if stop_requested is not None and stop_requested():
@@ -374,7 +381,7 @@ def log_measurements_workflow(
                                 last_system_error,
                             )
 
-                system_err = scope.query_system_error()
+                system_err = scope.workflow_status()
 
                 row_vals = [row_data[h] for h in headers]
                 if writer is not None:
@@ -388,7 +395,7 @@ def log_measurements_workflow(
                             "index": row_index,
                             "timestamp_iso": iso_now,
                             "elapsed_seconds": elapsed_now,
-                            "system_error": system_error_manifest_dict(system_err),
+                            **status_fields(system_error_manifest_dict(system_err)),
                         }
                     )
                 last_system_error = system_error_manifest_dict(system_err)
@@ -397,7 +404,7 @@ def log_measurements_workflow(
                     "timestamp_iso": iso_now,
                     "elapsed_seconds": elapsed_now,
                     "values": {header: row_data[header] for header in headers[2:]},
-                    "system_error": dict(last_system_error),
+                    **status_fields(dict(last_system_error)),
                 }
                 manifest.last_measurement = sample
                 _persist_measure_log_manifest(manifest, manifest_path)
@@ -416,7 +423,7 @@ def log_measurements_workflow(
                     reporter_failed = True
                     raise
 
-                if stop_on_error and system_err.is_error:
+                if (stop_on_error and system_err.is_error) or not getattr(system_err, "complete", True):
                     LOGGER.error(
                         "stop-on-error triggered by system error: %s",
                         system_err.format(),

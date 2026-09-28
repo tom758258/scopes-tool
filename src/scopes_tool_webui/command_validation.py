@@ -338,8 +338,9 @@ def _validate_measure_sweep_parameters(
         )
         for item in parameters["items"].split(","):
             measurement_query(item, 1, capabilities=capabilities)
-        for item in pair_items:
-            pair_measurement_query(item, 1, 2, capabilities=capabilities)
+        if parameters["pairs"] or capabilities.measurement_items is None:
+            for item in pair_items:
+                pair_measurement_query(item, 1, 2, capabilities=capabilities)
     except Exception as exc:
         raise WebUIRequestError(str(exc)) from exc
     parameters["pair_items"] = ",".join(pair_items)

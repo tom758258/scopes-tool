@@ -70,6 +70,11 @@ def workflow_scpi_logging(
 
 
 def drain_preexisting_system_errors(scope, *, max_reads: int = 30) -> tuple:
+    """Collect stale status through the instrument driver's native boundary."""
+    return scope.preflight_status(max_reads=max_reads)
+
+
+def _drain_preexisting_system_errors(scope, *, max_reads: int = 30) -> tuple:
     """Drain stale system errors before a top-level operation.
 
     Reads the system error queue until code 0 is reached or ``max_reads``

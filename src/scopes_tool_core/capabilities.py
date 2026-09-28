@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .errors import UnsupportedModelError
 from .identity import physical_model_for_id, resolve_registered_model_name
@@ -86,9 +86,12 @@ class ScopeCapabilities:
     tv_modes: tuple[str, ...] | None = None
     cursor_single_axis_only: bool = False
     cursor_auto_vertical: bool = True
+    physical_model_id: str | None = None
+    supported_sequence_actions: tuple[str, ...] | None = None
 
 
 _TEK_COMMON_OPERATIONS = frozenset({
+    "doctor", "capture-batch", "capture-until", "capture-monitor", "measure-sweep", "measure-log", "measure-until", "triggered-capture-series", "triggered-measure-loop", "acquisition-check", "cleanup", "sequence",
     "identify", "list-resources", "run", "stop-acquisition", "single",
     "force-trigger", "acquisition", "autoscale", "timebase-scale",
     "channel-display", "channel-scale", "channel-coupling", "channel-probe",
@@ -140,6 +143,7 @@ _TEK_INSTALL_ITEMS = _TEK_TDS2000B_INSTALL_ITEMS + (
 
 _CAPABILITY_PROFILES = {
     "tektronix-tbs2074b": ScopeCapabilities(
+        supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup", "screenshot"),
         save_waveform_requires_source=True,
         series="TBS2000B", analog_channels=4,
         default_waveform_points=1000, safe_max_waveform_points=1000,
@@ -172,10 +176,11 @@ _CAPABILITY_PROFILES = {
         supported_operations=_TEK_COMMON_OPERATIONS | {
             "channel-label", "channel-probe-skew", "timebase-position",
             "trigger-edge-level", "trigger-runt", "sample-rate",
-            "save-image-format", "save-waveform-format", "screenshot",
+            "save-image-format", "save-waveform-format", "screenshot", "smoke",
         },
     ),
     "tektronix-tds2024b": ScopeCapabilities(
+        supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup"),
         save_waveform_requires_source=True,
         series="TDS2000B", analog_channels=4,
         measurement_install_items=_TEK_TDS2000B_INSTALL_ITEMS, measurement_items=_TEK_TDS2000B_INSTALL_ITEMS,
@@ -210,6 +215,7 @@ _CAPABILITY_PROFILES = {
         },
     ),
     "tektronix-tbs1052b": ScopeCapabilities(
+        supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup"),
         save_waveform_requires_source=True,
         series="TBS1000B", analog_channels=2,
         measurement_install_items=_TEK_INSTALL_ITEMS, measurement_items=_TEK_INSTALL_ITEMS,
@@ -420,7 +426,7 @@ def capabilities_for_model_id(model_id: str) -> ScopeCapabilities:
             f"Physical model {model_id} references missing capability profile: "
             f"{physical_model.capability_profile_id}"
         )
-    return profile
+    return replace(profile, physical_model_id=physical_model.model_id) if physical_model.driver_id == "tektronix" else profile
 
 
 def capabilities_for_model(model: str) -> ScopeCapabilities:

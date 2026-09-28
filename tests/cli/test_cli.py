@@ -34,7 +34,12 @@ from scopes_tool_core.waveform import (
 class _DriverContractDummy:
     """Minimal current driver contract for duck-typed CLI test scopes."""
 
+    from scopes_tool_core.scope import Oscilloscope
+
     capabilities = None
+    preflight_status = Oscilloscope.preflight_status
+    workflow_status = Oscilloscope.workflow_status
+    doctor_trigger_snapshot = Oscilloscope.doctor_trigger_snapshot
 
     @classmethod
     def plan_cli_operation(cls, args, capabilities):

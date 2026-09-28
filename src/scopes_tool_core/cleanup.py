@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .capabilities import ScopeCapabilities
+from .capabilities import ScopeCapabilities, operation_supported
 from .demo import demo_output_command
 from .display import annotation_clear_command, display_clear_command
 from .dvm import dvm_enable_command
@@ -54,7 +54,9 @@ class CleanupResult:
     final_error: SystemErrorEntry
 
     @property
-    def final_error_queue_clean(self) -> bool:
+    def final_error_queue_clean(self) -> bool | None:
+        if not getattr(self.final_error, "is_system_error_queue", True):
+            return None
         return not self.final_error.is_error
 
     def to_json(self) -> dict[str, object]:
@@ -64,6 +66,9 @@ class CleanupResult:
             "skipped": [item.to_json() for item in self.skipped],
             "final_error_queue_clean": self.final_error_queue_clean,
         }
+        if not getattr(self.final_error, "is_system_error_queue", True):
+            result["post_command_status"] = self.final_error.to_json()
+            return result
         if self.final_error.is_error:
             result["errors"] = [
                 {
@@ -83,8 +88,8 @@ def plan_cleanup(profile: str, capabilities: ScopeCapabilities) -> CleanupPlan:
             f"cleanup profile must be one of: {', '.join(CLEANUP_PROFILES)}."
         )
 
-    actions = ["clear_status", "clear_display"]
-    commands = [system_clear_status_command(), display_clear_command()]
+    actions = ["clear_status"]
+    commands = [system_clear_status_command()]
     skipped = [
         CleanupSkip(
             "clear_display_persistence",
@@ -92,9 +97,18 @@ def plan_cleanup(profile: str, capabilities: ScopeCapabilities) -> CleanupPlan:
         )
     ]
 
+    if operation_supported(capabilities, "display-clear"):
+        actions.append("clear_display")
+        commands.append(display_clear_command())
+    else:
+        skipped.append(CleanupSkip("clear_display", "display_clear_not_supported"))
+
     if profile == "safe":
-        actions.append("disable_dvm")
-        commands.append(dvm_enable_command(False))
+        if operation_supported(capabilities, "dvm"):
+            actions.append("disable_dvm")
+            commands.append(dvm_enable_command(False))
+        else:
+            skipped.append(CleanupSkip("disable_dvm", "dvm_not_supported"))
 
         if capabilities.supports_search_basic:
             actions.append("disable_search")
@@ -119,7 +133,9 @@ def plan_cleanup(profile: str, capabilities: ScopeCapabilities) -> CleanupPlan:
         skipped.append(CleanupSkip("disable_wgen", "wgen_not_implemented"))
 
     actions.extend(("wait_operation_complete", "final_error_check"))
-    commands.extend((system_opc_query(), ":SYSTem:ERRor?"))
+    from .planning import workflow_step_scpi
+    commands.append(system_opc_query())
+    commands.extend(workflow_step_scpi(capabilities, "status"))
     return CleanupPlan(
         profile=profile,
         actions=tuple(actions),
@@ -138,10 +154,12 @@ def execute_cleanup(scope: Oscilloscope, profile: str) -> CleanupResult:
 
     plan = plan_cleanup(profile, scope.capabilities)
     scope.clear_status()
-    scope.clear_display()
+    if "clear_display" in plan.actions:
+        scope.clear_display()
 
     if profile == "safe":
-        scope.configure_dvm_enable(False)
+        if "disable_dvm" in plan.actions:
+            scope.configure_dvm_enable(False)
         if scope.capabilities.supports_search_basic:
             scope.configure_search_state(False)
         if scope.capabilities.supports_annotation:
@@ -150,7 +168,7 @@ def execute_cleanup(scope: Oscilloscope, profile: str) -> CleanupResult:
             scope.configure_demo_output(False)
 
     scope.query_operation_complete()
-    final_error = scope.query_system_error()
+    final_error = scope.workflow_status()
     return CleanupResult(
         profile=plan.profile,
         actions=plan.actions,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .status import status_fields
+
 import copy
 from dataclasses import dataclass
 import math
@@ -24,16 +26,10 @@ from .errors import OscilloscopeError, ParameterValidationError
 from .operations import (
     OperationResult,
     _capture_waveform,
-    _trigger_wait_classifier_profile,
 )
 from .output_files import write_capture_csv_file, write_capture_metadata_file
-from .planning import OperationPlan, planned_waveform_scpi, resolve_capture_channels
+from .planning import workflow_step_scpi, OperationPlan, planned_waveform_scpi, resolve_capture_channels
 from .scope import Oscilloscope
-from .trigger import (
-    operation_condition_query,
-    single_command,
-    wait_for_current_trigger_completion,
-)
 from .triggered_measurement import _trigger_failure, _trigger_wait_config
 from .waveform import validate_waveform_points, validate_word_format_supported
 from .workflow import (
@@ -81,15 +77,16 @@ def plan_triggered_capture_series(
         else TRIGGERED_CAPTURE_SERIES_DEFAULT_BASE_DIR / "DRY-RUN"
     )
     files = _planned_files(output_dir, request.count)
-    planned = [single_command(), operation_condition_query()]
+    planned = workflow_step_scpi(capabilities, "single") + workflow_step_scpi(capabilities, "wait-trigger")
     planned.extend(
         planned_waveform_scpi(
             normalized["channels"],
             normalized["waveform_format"],
             normalized["points"],
+            capabilities,
         )
     )
-    planned.append(":SYSTem:ERRor?")
+    planned.extend(workflow_step_scpi(capabilities, "status"))
     result = {
         "status": "planned",
         "channels": list(normalized["channels"]),
@@ -192,10 +189,8 @@ def run_triggered_capture_series(
                     )
 
                 scope.single()
-                trigger = wait_for_current_trigger_completion(
-                    scope.scpi,
+                trigger = scope.wait_for_current_trigger_completion(
                     _trigger_wait_config(request.trigger_timeout_seconds),
-                    classifier_profile=_trigger_wait_classifier_profile(scope),
                     stop_requested=stop_requested,
                 )
                 if trigger.outcome == "cancelled":
@@ -241,7 +236,7 @@ def run_triggered_capture_series(
                 )
                 files.append({"kind": "metadata", "path": str(written_metadata)})
 
-                entry = scope.query_system_error()
+                entry = scope.workflow_status()
                 last_system_error = system_error_manifest_dict(entry)
                 if entry.is_error:
                     error = {
@@ -265,7 +260,7 @@ def run_triggered_capture_series(
                     "csv": relative_manifest_path(written_csv, output_dir),
                     "metadata": relative_manifest_path(written_metadata, output_dir),
                     "actual_points": capture_actual_points(capture),
-                    "system_error": dict(last_system_error),
+                    **status_fields(dict(last_system_error)),
                 }
                 candidate = copy.deepcopy(manifest)
                 candidate["completed_count"] = index
@@ -501,7 +496,7 @@ def _finish_result(
         "scpi_log_path": str(scpi_log_path),
         "error": error,
     }
-    return OperationResult(
+    return OperationResult.from_status(
         exit_code,
         result,
         files,
@@ -531,7 +526,7 @@ def _pre_start_cancelled_result(
         "scpi_log_path": None,
         "error": None,
     }
-    return OperationResult(130, result, human_lines=["Triggered capture series cancelled."])
+    return OperationResult.from_status(130, result, human_lines=["Triggered capture series cancelled."])
 
 
 def _stop_requested(callback: StopRequested | None) -> bool:

@@ -25,6 +25,12 @@ class _BatchDummyBackend:
 
 
 class _BatchDummyScope:
+    from scopes_tool_core.scope import Oscilloscope
+
+    preflight_status = Oscilloscope.preflight_status
+    workflow_status = Oscilloscope.workflow_status
+    post_command_status = Oscilloscope.post_command_status
+
     backend = _BatchDummyBackend()
 
     def __init__(self, *, model="DSOX4024A", system_errors=None):

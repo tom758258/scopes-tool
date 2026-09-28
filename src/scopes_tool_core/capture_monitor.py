@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import csv
 from collections import deque
 from dataclasses import dataclass
@@ -21,7 +22,7 @@ from .batch import (
 from .capabilities import ScopeCapabilities
 from .errors import OscilloscopeError, ParameterValidationError
 from .operations import OperationResult, _capture_waveform
-from .planning import OperationPlan, planned_waveform_scpi, resolve_capture_channels
+from .planning import workflow_step_scpi, OperationPlan, planned_waveform_scpi, resolve_capture_channels
 from .scope import Oscilloscope
 from .waveform import (
     MultiChannelWaveformCapture,
@@ -107,9 +108,10 @@ def plan_capture_monitor(
             normalized["channels"],
             normalized["waveform_format"],
             normalized["points"],
+            capabilities,
         )
     )
-    planned.append(":SYSTem:ERRor?")
+    planned.extend(workflow_step_scpi(capabilities, "status"))
     return OperationPlan(
         tuple(planned),
         files,
@@ -235,7 +237,7 @@ def run_capture_monitor(
                     )
 
                 capture = _capture_waveform(scope, channels, waveform_format, points)
-                entry = scope.query_system_error()
+                entry = scope.workflow_status()
                 last_system_error = system_error_manifest_dict(entry)
                 if entry.is_error:
                     return _finish_result(
@@ -660,7 +662,7 @@ def _finish_result(
         output_dir=manifest_path.parent if manifest_path is not None else None,
         error=error,
     )
-    return OperationResult(
+    return OperationResult.from_status(
         exit_code,
         result,
         files,
@@ -715,7 +717,7 @@ def _result_shape(
 
 
 def _pre_start_cancelled_result(request: CaptureMonitorRequest) -> OperationResult:
-    return OperationResult(
+    return OperationResult.from_status(
         130,
         {
             "status": "cancelled",

@@ -15,6 +15,9 @@ class TektronixSimulatorBackend(SimulatorBackend):
     stop_after: str = "RUNSTOP"
     busy_values: tuple[int, ...] = (1, 0)
     busy_index: int = 0
+    device_event_enable: int = 255
+    pending_events: list[tuple[int, str]] = field(default_factory=list)
+    readable_events: list[tuple[int, str]] = field(default_factory=list)
     busy_forced: bool = False
     tek_setups: dict[int, dict[str, object]] = field(default_factory=dict)
 
@@ -67,6 +70,25 @@ class TektronixSimulatorBackend(SimulatorBackend):
         self.trigger_slope = "FALL" if self.trigger_slope.upper().startswith("NEG") else "RISE"
         if self._capabilities.series == "TBS2000B":
             self.trigger_levels.setdefault(self.trigger_source, self.trigger_level)
+
+    def inject_event(self, code: int, message: str) -> None:
+        """Queue a manual-defined event through the device-event filter."""
+        bit = (5 if 100 <= code < 200 else 4 if 200 <= code < 300 or code in {528, 532, 533, *range(540, 550)}
+               else 3 if 300 <= code < 400 or code == 404 else 2 if code in {410, 420, 430, 440}
+               else {401: 7, 402: 0, 403: 6}.get(code))
+        if bit is not None:
+            if not self.device_event_enable & (1 << bit):
+                return
+            self.standard_event_status |= 1 << bit
+        if len(self.pending_events) + len(self.readable_events) >= 20:
+            self.standard_event_status |= 8
+            if not any(value == 350 for value, _ in self.pending_events):
+                if self.pending_events:
+                    self.pending_events[-1] = (350, "Too many events")
+                else:
+                    self.readable_events[-1] = (350, "Too many events")
+            return
+        self.pending_events.append((code, message))
 
     def _record(self, command: str, *, query: bool) -> None:
         self._ensure_open()
@@ -296,6 +318,8 @@ class TektronixSimulatorBackend(SimulatorBackend):
     def write(self, command: str) -> None:
         upper = command.upper().replace("HORIZONTAL:MAIN:DELAY:", "HORIZONTAL:DELAY:")
         if upper == "*CLS":
+            self.pending_events.clear()
+            self.readable_events.clear()
             super().write(command)
             return
         self._record(command, query=False)
@@ -461,10 +485,23 @@ class TektronixSimulatorBackend(SimulatorBackend):
 
     def query(self, command: str) -> str:
         upper = command.upper().replace("HORIZONTAL:MAIN:DELAY:", "HORIZONTAL:DELAY:")
-        if upper in {"*IDN?", "*OPC?", "*STB?", "*ESR?"}:
+        if upper == "*ESR?":
+            self.readable_events = list(self.pending_events)
+            self.pending_events.clear()
+            return super().query(command)
+        if upper in {"*IDN?", "*OPC?", "*STB?"}:
             return super().query(command)
         self._record(command, query=True)
         if command in self.query_overrides: return self.query_overrides[command]
+        if upper == "DESE?":
+            return str(self.device_event_enable)
+        if upper == "ALLEV?":
+            import csv
+            import io
+            events, self.readable_events = self.readable_events, []
+            output = io.StringIO()
+            csv.writer(output).writerow([value for event in (events or [(0, "No events")]) for value in event])
+            return output.getvalue().strip()
         if self._capabilities.series == "TBS2000B" and upper in {
             "HORIZONTAL:DELAY:MODE?", "HORIZONTAL:DELAY:TIME?", "HORIZONTAL:POSITION?",
         }:

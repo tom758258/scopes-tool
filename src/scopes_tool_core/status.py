@@ -189,3 +189,18 @@ def parse_system_error(response: str) -> SystemErrorEntry:
         raise SystemErrorParseError(f"Invalid system error code: {code_text!r}") from exc
 
     return SystemErrorEntry(code=code, message=message, raw=raw)
+
+
+def status_payload(entry) -> dict[str, object]:
+    """Serialize a queue entry or a driver's native status checkpoint."""
+    if not getattr(entry, "is_system_error_queue", True):
+        return entry.to_json()
+    return {"code": entry.code, "message": entry.message,
+            "raw": entry.raw, "is_error": entry.is_error}
+
+
+def status_fields(payload: dict[str, object] | None) -> dict[str, object]:
+    """Keep native status separate from the public system-error queue field."""
+    if payload is not None and payload.get("source") == "tektronix-sesr":
+        return {"system_error": None, "post_command_status": payload}
+    return {"system_error": payload}

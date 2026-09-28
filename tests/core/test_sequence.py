@@ -522,7 +522,7 @@ def test_wait_trigger_cancellation_does_not_query_system_error_or_execute_next_s
         from scopes_tool_core.trigger import TriggerWaitResult
         return TriggerWaitResult("cancelled", False, False, 1, 100.0)
 
-    monkeypatch.setattr(sequence, "wait_for_current_trigger_completion", fake_wait)
+    monkeypatch.setattr(Oscilloscope, "wait_for_current_trigger_completion", fake_wait)
 
     doc = _document(
         _step("wait-trigger", timeout_seconds=1),

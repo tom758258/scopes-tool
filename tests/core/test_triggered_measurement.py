@@ -192,7 +192,7 @@ def test_trigger_timeout_preserves_previous_cycle_and_stops(monkeypatch, tmp_pat
         ]
     )
     monkeypatch.setattr(
-        triggered_measurement,
+        Oscilloscope,
         "wait_for_current_trigger_completion",
         lambda *args, **kwargs: next(outcomes),
     )
@@ -240,7 +240,7 @@ def test_system_error_fails_before_cycle_persistence(tmp_path):
 
 def test_trigger_wait_cancellation_preserves_empty_artifacts(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        triggered_measurement,
+        Oscilloscope,
         "wait_for_current_trigger_completion",
         lambda *args, **kwargs: TriggerWaitResult(
             "cancelled", False, False, 1, 10.0
@@ -309,7 +309,7 @@ def test_keyboard_interrupt_uses_shared_interrupted_contract(monkeypatch, tmp_pa
         raise KeyboardInterrupt()
 
     monkeypatch.setattr(
-        triggered_measurement,
+        Oscilloscope,
         "wait_for_current_trigger_completion",
         _raise_keyboard_interrupt,
     )

@@ -206,15 +206,22 @@ Discovery and identification:
   produces `options: ["0"]`.
 - `cleanup`: `profile`, ordered `actions`, reported `skipped` actions with
   reasons, and `final_error_queue_clean`. Dry-run reports planned actions and
-  uses `null` for the final error state. `errors` is present only when the final
-  error check reports an instrument error.
+  uses `null` for the final error state. Native-status models also leave
+  `final_error_queue_clean` null and return `post_command_status`; this field
+  does not assert normalized queue cleanliness. `errors` is present only when
+  the final error check reports an instrument error.
 - `doctor`: `backend`, `timeout_ms`, `acquisition`, `channels`, `timebase`,
-  and `edge_trigger` when a snapshot is taken. Before the snapshot, Doctor reads
-  one system-error entry. If it reports an error, Doctor fails immediately with
+  and `edge_trigger` when a snapshot is taken. On Keysight, Doctor reads
+  one system-error entry before the snapshot. If it reports an error, Doctor fails immediately with
   `result.failure_reason: "preexisting_system_error"`, preserves that entry in
   the outer `system_error`, and omits the snapshot fields. It does not clear
   status or drain the error queue. Otherwise, the snapshot and final
-  system-error check proceed as usual.
+  system-error check proceed as usual. Tektronix uses its native workflow
+  status preflight and final checkpoint instead. A preexisting error retains
+  the same failure reason, with outer `system_error: null` and the native
+  status in `result.post_command_status`. Non-edge or non-analog trigger
+  details are nullable with `edge_trigger.unavailable_reason`; the snapshot
+  does not change trigger type/source to obtain those details.
 
 Control and setup:
 
@@ -579,6 +586,23 @@ Control and setup:
 These Math result shapes are instrument-side contracts. No bus-operation result
 shape, host-side Math execution mode, waveform Math artifact, or generic
 expression result is defined.
+
+Tektronix composed workflows use a native status checkpoint after each unit
+of work. The outer `system_error` remains null; `result.post_command_status`
+contains `source: "tektronix-sesr"`, integer `value`, SESR `raw`, `event_raw`,
+`events` (code/message/category), `complete`, `destructive_read: true`, and
+`is_error`. Sample, measurement and step records expose the same status beside
+`system_error: null` where applicable. These fields describe a consumed native
+SESR/event cohort, not a normalized system-error queue. Invalid responses,
+overflow or incomplete status fail closed. Preflight stale events are reported;
+Doctor stops on preexisting errors, while other workflows may proceed after a
+complete preflight. See the [Tektronix status boundary](../core/tektronix-support-matrix.md#native-workflow-status).
+
+Acquisition-check reports unsupported profile modes as skipped. For native
+status models, requested restoration includes a status checkpoint and actual
+readback in `restore`; `succeeded` requires both to pass. Sequence accepts only
+Core's `supported_sequence_actions` and validates every step before writes.
+These result additions do not change JSONL lifecycle or exit-code meanings.
 
 Measurement and artifact-producing flows:
 

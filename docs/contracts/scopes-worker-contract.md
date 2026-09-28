@@ -25,6 +25,14 @@ codes, and structured artifacts. Scopes-specific command names, simulator/VISA
 session behavior, SCPI side effects, and waveform/measurement artifacts belong
 to this document.
 
+Tektronix workflow results preserve native SESR/event status as
+`result.post_command_status`, with outer `system_error: null`. Per-sample and
+per-step records retain the same distinction. The [CLI result contract](scopes-cli-jsonl-contract.md)
+defines these payload fields; they do not change Common queue admission,
+HTTP responses, lifecycle events, run correlation, or exit-code meanings.
+Core model capabilities determine admissible workflow options and sequence
+actions before instrument execution.
+
 ## Runtime
 
 Start the worker with:

@@ -27,7 +27,7 @@ def test_hidden_commands_use_model_projection_before_refresh() -> None:
     assert catalog["live-data-snapshot"]["presentation"]["models"][model]["supported"] is True
     assert catalog["system-information-snapshot"]["presentation"]["models"][model]["supported"] is True
     for command in ("doctor", "smoke"):
-        assert catalog[command]["presentation"]["models"][model]["supported"] is False
+        assert catalog[command]["presentation"]["models"][model]["supported"] is True
     app_source = read_static("app.js")
     assert "getCommands(true)" in app_source
     assert "catalog.supported(definition)" in extract_function_declaration(app_source, "function commandAvailable(command)")

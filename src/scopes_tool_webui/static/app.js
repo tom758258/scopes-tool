@@ -390,6 +390,7 @@ async function initialize() {
       return Boolean(selected && commandAvailable(selected.id));
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    modelId: currentModelId,
     selectedCommand: () => catalog.selected(),
   });
   measurementEditor = new MeasurementEditor(elements.measurementEditor, catalog, {

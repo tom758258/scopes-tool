@@ -170,7 +170,7 @@ def test_webui_unsupported_tek_command_rejected_before_business_scpi(monkeypatch
 
     with pytest.raises(WebUIRequestError, match="unsupported"):
         command_execution.execute_command(
-            "capture-batch", mode="live", resource="USB0::FAKE::INSTR", model_id=None,
+            "smoke", mode="live", resource="USB0::FAKE::INSTR", model_id=None,
             parameters={}, artifact_dir=tmp_path,
         )
     assert backend.history == ["*IDN?"]

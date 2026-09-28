@@ -135,7 +135,7 @@ def test_later_trigger_timeout_preserves_previous_cycle_and_stops(monkeypatch, t
         ]
     )
     monkeypatch.setattr(
-        triggered_capture,
+        Oscilloscope,
         "wait_for_current_trigger_completion",
         lambda *args, **kwargs: next(outcomes),
     )
@@ -165,7 +165,7 @@ def test_later_trigger_timeout_preserves_previous_cycle_and_stops(monkeypatch, t
 
 def test_trigger_wait_cancellation_does_not_capture_cycle(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        triggered_capture,
+        Oscilloscope,
         "wait_for_current_trigger_completion",
         lambda *args, **kwargs: TriggerWaitResult(
             "cancelled", False, False, 1, 10.0
@@ -255,7 +255,7 @@ def test_waveform_failure_does_not_commit_cycle(monkeypatch, tmp_path):
 
 def test_keyboard_interrupt_uses_interrupted_terminal_status(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        triggered_capture,
+        Oscilloscope,
         "wait_for_current_trigger_completion",
         lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt()),
     )

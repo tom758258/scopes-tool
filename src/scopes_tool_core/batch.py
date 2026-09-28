@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .status import status_payload
+
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 import json
@@ -197,12 +199,7 @@ def idn_manifest_dict(idn: IDN) -> dict[str, object]:
 def system_error_manifest_dict(entry: SystemErrorEntry) -> dict[str, object]:
     """Return one system error entry for manifest JSON."""
 
-    return {
-        "code": entry.code,
-        "message": entry.message,
-        "raw": entry.raw,
-        "is_error": entry.is_error,
-    }
+    return status_payload(entry)
 
 
 def capture_actual_points(

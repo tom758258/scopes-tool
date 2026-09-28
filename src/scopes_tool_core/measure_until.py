@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .status import status_fields
+
 import copy
 import csv
 from contextlib import nullcontext
@@ -24,7 +26,7 @@ from .channel import validate_analog_channel
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import measurement_query, validate_statistics_items
 from .operations import OperationResult
-from .planning import OperationPlan
+from .planning import OperationPlan, MeasurePlanRequest, plan_measure
 from .scope import Oscilloscope
 from .workflow import (
     ProgressReporter,
@@ -82,14 +84,7 @@ def plan_measure_until(
         )
         if path is not None
     )
-    planned = (
-        measurement_query(
-            normalized["item"],
-            normalized["channel"],
-            capabilities=capabilities,
-        ),
-        ":SYSTem:ERRor?",
-    )
+    planned = plan_measure(MeasurePlanRequest(normalized["item"], normalized["channel"]), capabilities, workflow=True).planned_scpi
     result = {
         "status": "planned",
         "channel": normalized["channel"],
@@ -232,7 +227,7 @@ def run_measure_until(
 
                     current_sample = int(manifest["completed_count"]) + 1
                     measurement = scope.query_measurement(channel, item)
-                    entry = scope.query_system_error()
+                    entry = scope.workflow_status()
                     last_system_error = system_error_manifest_dict(entry)
                     if entry.is_error:
                         error = {
@@ -287,7 +282,7 @@ def run_measure_until(
                         "elapsed_seconds": elapsed_seconds,
                         "value": value_text,
                         "matched": matched,
-                        "system_error": dict(last_system_error),
+                        **status_fields(dict(last_system_error)),
                     }
                     candidate["last_measurement"] = sample
                     if manifest_path is not None:
@@ -558,7 +553,7 @@ def _finish_result(
         "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
         "error": error,
     }
-    return OperationResult(
+    return OperationResult.from_status(
         exit_code,
         result,
         files,
@@ -590,7 +585,7 @@ def _pre_start_cancelled_result(request: MeasureUntilRequest) -> OperationResult
         "scpi_log_path": None,
         "error": None,
     }
-    return OperationResult(130, result, human_lines=["Measure until cancelled."])
+    return OperationResult.from_status(130, result, human_lines=["Measure until cancelled."])
 
 
 def _stop_requested(callback: StopRequested | None) -> bool:

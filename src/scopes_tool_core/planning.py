@@ -13,7 +13,8 @@ from .acquisition import (
     acquisition_type_query,
     validate_acquisition_count,
 )
-from .capabilities import ScopeCapabilities
+from .capabilities import ScopeCapabilities, operation_supported
+from .drivers import driver_for_capabilities
 from .channel import channel_units_query, validate_analog_channel
 from .errors import OscilloscopeError
 from .measurements import (
@@ -92,7 +93,7 @@ class AcquisitionCheckPlanRequest:
     restore_type: bool = False
 
 
-def plan_capture(request: CapturePlanRequest, capabilities: ScopeCapabilities) -> OperationPlan:
+def plan_capture(request: CapturePlanRequest, capabilities: ScopeCapabilities, *, workflow: bool = False) -> OperationPlan:
     """Plan a waveform capture without opening an instrument."""
 
     channels = resolve_capture_channels(request.channels, capabilities)
@@ -113,7 +114,7 @@ def plan_capture(request: CapturePlanRequest, capabilities: ScopeCapabilities) -
         scope = TektronixOscilloscope(backend)
         scope.capabilities = capabilities
         scope.capture_waveforms_byte(channels, points)
-        return OperationPlan(tuple(backend.commands + ["*ESR?"]), files, result)
+        return OperationPlan(tuple(backend.commands + (workflow_step_scpi(capabilities, "status") if workflow else ["*ESR?"])), files, result)
     return OperationPlan(
         tuple(planned_waveform_scpi(channels, request.waveform_format, points) + [":SYSTem:ERRor?"]),
         files,
@@ -138,7 +139,7 @@ def plan_doctor(capabilities: ScopeCapabilities) -> OperationPlan:
     )
 
 
-def plan_measure(request: MeasurePlanRequest, capabilities: ScopeCapabilities) -> OperationPlan:
+def plan_measure(request: MeasurePlanRequest, capabilities: ScopeCapabilities, *, workflow: bool = False) -> OperationPlan:
     """Plan one read-only measurement query."""
 
     item = normalize_measurement_item(request.item)
@@ -159,7 +160,7 @@ def plan_measure(request: MeasurePlanRequest, capabilities: ScopeCapabilities) -
         scope.capabilities = capabilities
         scope.query_measurement(channel, item, **kwargs)
         planned = backend.commands
-        return OperationPlan(tuple(planned + ["*ESR?"]), (), result)
+        return OperationPlan(tuple(planned + (workflow_step_scpi(capabilities, "status") if workflow else ["*ESR?"])), (), result)
     return OperationPlan(tuple(planned + [":SYSTem:ERRor?"]), (), result)
 
 
@@ -213,6 +214,16 @@ def plan_smoke(request: SmokePlanRequest, capabilities: ScopeCapabilities) -> Op
             ":SYSTem:ERRor?",
         ]
     )
+    if not operation_supported(capabilities, "smoke"):
+        raise OscilloscopeError("smoke is unsupported for this model")
+    from .scope import Oscilloscope
+    if driver_for_capabilities(capabilities) is not Oscilloscope:
+        planned = doctor_planned_scpi(capabilities)
+        for item in ("vpp", "vrms"):
+            planned += list(plan_measure(MeasurePlanRequest(item, 1), capabilities).planned_scpi[:-1])
+        planned += planned_waveform_scpi((1,), "byte", 1000, capabilities)
+        planned += workflow_step_scpi(capabilities, "screenshot", background="black")
+        planned += workflow_step_scpi(capabilities, "status")
     return OperationPlan(
         tuple(planned),
         files,
@@ -229,7 +240,7 @@ def plan_smoke(request: SmokePlanRequest, capabilities: ScopeCapabilities) -> Op
     )
 
 
-def plan_acquisition_check(request: AcquisitionCheckPlanRequest) -> OperationPlan:
+def plan_acquisition_check(request: AcquisitionCheckPlanRequest, capabilities: ScopeCapabilities | None = None) -> OperationPlan:
     """Plan an acquisition configuration check workflow."""
 
     average_count = validate_acquisition_count(request.average_count)
@@ -248,6 +259,7 @@ def plan_acquisition_check(request: AcquisitionCheckPlanRequest) -> OperationPla
                 check_only=request.check_only,
                 stop_on_error=request.stop_on_error,
                 restore_type=request.restore_type,
+                capabilities=capabilities,
             )
         ),
         files,
@@ -280,7 +292,26 @@ def acquisition_check_planned_scpi(
     check_only: bool = False,
     stop_on_error: bool = False,
     restore_type: bool = False,
+    capabilities: ScopeCapabilities | None = None,
 ) -> list[str]:
+    if capabilities is not None and capabilities.acquisition_modes is not None:
+        if average_count not in capabilities.average_counts:
+            raise OscilloscopeError("Unsupported acquisition count for this model")
+        status = workflow_step_scpi(capabilities, "status")
+        query = workflow_step_scpi(capabilities, "acquisition-query") + status
+        planned = ["*IDN?", *status, *query]
+        if not check_only:
+            for mode in ("normal", "average", "high_resolution", "peak"):
+                if mode not in capabilities.acquisition_modes:
+                    continue
+                planned += workflow_step_scpi(capabilities, "acquisition-set", type=mode,
+                                               count=average_count if mode == "average" else None) + status
+                if mode == "average":
+                    planned += query
+            planned += query
+            if restore_type:
+                planned += workflow_step_scpi(capabilities, "acquisition-set", type="normal") + query
+        return planned
     del stop_on_error, restore_type
     if check_only:
         return ["*IDN?", acquisition_type_query(), acquisition_count_query(), ":SYSTem:ERRor?"]
@@ -311,7 +342,10 @@ def planned_waveform_scpi(
     channels: Sequence[int],
     waveform_format: str,
     points: int,
+    capabilities: ScopeCapabilities | None = None,
 ) -> list[str]:
+    if capabilities is not None:
+        return list(plan_capture(CapturePlanRequest(channels, points, waveform_format), capabilities).planned_scpi[:-1])
     planned: list[str] = []
     for channel in channels:
         planned.append(waveform_source_command(channel))
@@ -348,6 +382,10 @@ def doctor_planned_scpi(capabilities: ScopeCapabilities) -> list[str]:
         edge_trigger_source_query,
     )
 
+    driver = driver_for_capabilities(capabilities)
+    from .scope import Oscilloscope
+    if driver is not Oscilloscope:
+        return driver.plan_workflow_step("doctor", capabilities)
     planned = ["*IDN?", acquisition_type_query(), acquisition_count_query()]
     for channel in range(1, capabilities.analog_channels + 1):
         planned.extend(
@@ -383,8 +421,7 @@ def measure_sweep_planned_scpi(
     planned = ["*IDN?"]
     for channel in channels:
         for item in items:
-            planned.append(measurement_query(item, channel, capabilities=capabilities))
-            planned.append(":SYSTem:ERRor?")
+            planned.extend(plan_measure(MeasurePlanRequest(item, channel), capabilities, workflow=True).planned_scpi)
     for source_channel, reference_channel in pairs:
         for item in pair_items:
             try:
@@ -449,6 +486,10 @@ def parse_pair_specs(
     values: Sequence[str],
     capabilities: ScopeCapabilities,
 ) -> tuple[tuple[int, int], ...]:
+    if values and capabilities.measurement_items is not None and not any(
+        item in capabilities.measurement_items for item in ("phase", "delay")
+    ):
+        raise OscilloscopeError("Pair measurements are unsupported for this model")
     pairs = []
     for value in values:
         parts = value.split(":")
@@ -593,3 +634,7 @@ def _capture_files(request: CapturePlanRequest) -> tuple[dict[str, str], ...]:
     if plot_path is not None:
         files.append({"kind": "plot_png", "path": str(plot_path)})
     return tuple(files)
+
+
+def workflow_step_scpi(capabilities: ScopeCapabilities, action: str, **parameters) -> list[str]:
+    return driver_for_capabilities(capabilities).plan_workflow_step(action, capabilities, **parameters)
