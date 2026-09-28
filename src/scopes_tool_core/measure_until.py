@@ -31,7 +31,9 @@ from .workflow import (
     StopRequested,
     WorkflowProgress,
     drain_preexisting_system_errors,
+    instrument_status_fields,
     interruptible_wait,
+    status_human_label,
     workflow_scpi_logging,
 )
 
@@ -197,7 +199,10 @@ def run_measure_until(
             echo_to_stderr=request.log_scpi,
         ):
             for _entry in drain_preexisting_system_errors(scope):
-                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
+                human.append(
+                    f"Pre-operation stale {status_human_label(_entry).lower()} cleared: "
+                    f"{_entry.format()}"
+                )
             csv_context = (
                 csv_path.open("w", newline="", encoding="utf-8")
                 if csv_path is not None
@@ -232,8 +237,14 @@ def run_measure_until(
 
                     current_sample = int(manifest["completed_count"]) + 1
                     measurement = scope.query_measurement(channel, item)
-                    entry = scope.query_system_error()
-                    last_system_error = system_error_manifest_dict(entry)
+                    entry = scope.post_command_status("measure-until")
+                    status_fields = instrument_status_fields(entry)
+                    candidate_error = status_fields.get("system_error")
+                    last_system_error = (
+                        dict(candidate_error)
+                        if isinstance(candidate_error, dict)
+                        else None
+                    )
                     if entry.is_error:
                         error = {
                             "type": "instrument_error",
@@ -287,7 +298,7 @@ def run_measure_until(
                         "elapsed_seconds": elapsed_seconds,
                         "value": value_text,
                         "matched": matched,
-                        "system_error": dict(last_system_error),
+                        **status_fields,
                     }
                     candidate["last_measurement"] = sample
                     if manifest_path is not None:
