@@ -193,10 +193,8 @@ def run_triggered_capture_series(
                     )
 
                 scope.single()
-                trigger = wait_for_current_trigger_completion(
-                    scope.scpi,
+                trigger = scope.wait_for_current_trigger(
                     _trigger_wait_config(request.trigger_timeout_seconds),
-                    classifier_profile=_trigger_wait_classifier_profile(scope),
                     stop_requested=stop_requested,
                 )
                 if trigger.outcome == "cancelled":
