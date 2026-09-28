@@ -11,7 +11,7 @@ from pathlib import Path
 import time
 from typing import Mapping
 
-from .capabilities import ScopeCapabilities, operation_supported
+from .capabilities import ScopeCapabilities, is_tektronix_capabilities, operation_supported
 from .cleanup import CLEANUP_PROFILES, execute_cleanup, plan_cleanup
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import is_pair_measurement_item, normalize_measurement_item
