@@ -69,6 +69,44 @@ def workflow_scpi_logging(
         logger.propagate = old_propagate
 
 
+def establish_instrument_status_boundary(scope, *, max_reads: int = 30) -> tuple:
+    """Clear stale status using the active driver's native status model."""
+
+    return tuple(scope.establish_status_boundary(max_reads=max_reads))
+
+
+def instrument_status_fields(entry) -> dict[str, object]:
+    """Serialize one driver status sample without conflating SESR with an error queue."""
+
+    if getattr(entry, "is_system_error_queue", True):
+        return {
+            "system_error": {
+                "code": entry.code,
+                "message": entry.message,
+                "raw": entry.raw,
+                "is_error": entry.is_error,
+            }
+        }
+    payload = dict(entry.to_json())
+    payload.setdefault("is_error", entry.is_error)
+    return {
+        "system_error": None,
+        "post_command_status": payload,
+    }
+
+
+def system_error_from_status(entry) -> dict[str, object] | None:
+    """Return legacy system-error JSON only for queue-based status models."""
+
+    return instrument_status_fields(entry)["system_error"]
+
+
+def status_human_label(entry) -> str:
+    """Return a human-facing label for one native status sample."""
+
+    return str(getattr(entry, "status_label", "Instrument status"))
+
+
 def drain_preexisting_system_errors(scope, *, max_reads: int = 30) -> tuple:
     """Drain stale system errors before a top-level operation.
 
