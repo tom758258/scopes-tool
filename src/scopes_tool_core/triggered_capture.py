@@ -265,7 +265,7 @@ def run_triggered_capture_series(
                     "csv": relative_manifest_path(written_csv, output_dir),
                     "metadata": relative_manifest_path(written_metadata, output_dir),
                     "actual_points": capture_actual_points(capture),
-                    "system_error": dict(last_system_error),
+                    **status_fields,
                 }
                 candidate = copy.deepcopy(manifest)
                 candidate["completed_count"] = index
