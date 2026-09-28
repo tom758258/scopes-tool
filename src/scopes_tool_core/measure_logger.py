@@ -19,7 +19,9 @@ from .workflow import (
     ProgressReporter,
     StopRequested,
     WorkflowProgress,
+    instrument_status_fields,
     interruptible_wait,
+    status_human_label,
 )
 
 LOGGER_SCHEMA_VERSION = 1
@@ -374,7 +376,8 @@ def log_measurements_workflow(
                                 last_system_error,
                             )
 
-                system_err = scope.query_system_error()
+                status = scope.post_command_status("measure-log")
+                status_fields = instrument_status_fields(status)
 
                 row_vals = [row_data[h] for h in headers]
                 if writer is not None:
@@ -388,16 +391,21 @@ def log_measurements_workflow(
                             "index": row_index,
                             "timestamp_iso": iso_now,
                             "elapsed_seconds": elapsed_now,
-                            "system_error": system_error_manifest_dict(system_err),
+                            **status_fields,
                         }
                     )
-                last_system_error = system_error_manifest_dict(system_err)
+                candidate_error = status_fields.get("system_error")
+                last_system_error = (
+                    dict(candidate_error)
+                    if isinstance(candidate_error, dict)
+                    else None
+                )
                 sample = {
                     "index": row_index,
                     "timestamp_iso": iso_now,
                     "elapsed_seconds": elapsed_now,
                     "values": {header: row_data[header] for header in headers[2:]},
-                    "system_error": dict(last_system_error),
+                    **status_fields,
                 }
                 manifest.last_measurement = sample
                 _persist_measure_log_manifest(manifest, manifest_path)
@@ -416,13 +424,14 @@ def log_measurements_workflow(
                     reporter_failed = True
                     raise
 
-                if stop_on_error and system_err.is_error:
+                if stop_on_error and status.is_error:
                     LOGGER.error(
-                        "stop-on-error triggered by system error: %s",
-                        system_err.format(),
+                        "stop-on-error triggered by %s: %s",
+                        status_human_label(status).lower(),
+                        status.format(),
                     )
                     manifest.status = "instrument_error"
-                    manifest.error = f"SystemError: {system_err.format()}"
+                    manifest.error = f"InstrumentStatus: {status.format()}"
                     manifest.end_time = logger_iso_timestamp()
                     _persist_measure_log_manifest(manifest, manifest_path)
                     _append_last_measurement(human, manifest)
