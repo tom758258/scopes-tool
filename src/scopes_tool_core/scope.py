@@ -50,7 +50,7 @@ from .demo import (
     DemoPhaseState,
     DemoState,
 )
-from .errors import ParameterValidationError, UnsupportedModelError
+from .errors import OscilloscopeError, ParameterValidationError, UnsupportedModelError
 from .idn import IDN, parse_idn
 from .measurements import (
     MeasurementController,
@@ -108,6 +108,7 @@ from .screenshot import HardcopyState, ScreenshotCapture, ScreenshotController, 
 from .status import (
     OperationCompleteState,
     StatusController,
+    StandardEventStatusEntry,
     StatusRegisterState,
     SystemErrorEntry,
     SystemOptionsState,
@@ -175,6 +176,7 @@ from .trigger import (
     TvTriggerController,
     TvTriggerState,
     force_trigger_command,
+    wait_for_current_trigger_completion,
     wait_for_trigger_completion,
 )
 from .visa_backend import VisaBackend
@@ -222,10 +224,32 @@ class Oscilloscope:
 
         return parse_system_error(self.scpi.query(":SYSTem:ERRor?"))
 
+    def pre_operation_status(self, operation: str | None = None) -> SystemErrorEntry:
+        """Read one pre-operation status sample using this driver's native model."""
+
+        return self.query_system_error()
+
     def post_command_status(self, operation: str | None = None) -> SystemErrorEntry:
         """Check the result of an ordinary command using this driver's status path."""
 
         return self.query_system_error()
+
+    def establish_status_boundary(self, max_reads: int = 30) -> tuple[object, ...]:
+        """Clear stale status before a top-level operation.
+
+        Queue-based instruments drain through their no-error sentinel. Drivers
+        with destructive status registers override this method with the
+        corresponding native boundary.
+        """
+
+        if max_reads < 1:
+            raise ValueError("max_reads must be at least 1.")
+        entries = self.drain_system_errors(max_reads=max_reads)
+        if not entries or entries[-1].is_error:
+            raise OscilloscopeError(
+                f"System error queue did not reach code 0 within {max_reads} reads."
+            )
+        return tuple(entry for entry in entries if entry.is_error)
 
     def post_webui_operation_status(self, operation: str) -> object | None:
         """Check a completed WebUI operation when required by this driver."""
@@ -339,6 +363,31 @@ class Oscilloscope:
         else:
             classifier_profile = "live"
         return wait_for_trigger_completion(
+            self.scpi,
+            config,
+            classifier_profile=classifier_profile,
+            stop_requested=stop_requested,
+        )
+
+    def wait_for_current_trigger(
+        self,
+        config: TriggerWaitConfig,
+        *,
+        stop_requested: Callable[[], bool] | None = None,
+    ) -> TriggerWaitResult:
+        """Wait finitely for an acquisition already armed by this driver."""
+
+        if getattr(self.backend, "backend", None) == "Keysight simulator":
+            classifier_profile = "simulator"
+        elif self.capabilities is not None and self.capabilities.series in {
+            "2000X",
+            "3000X",
+            "4000X",
+        }:
+            classifier_profile = self.capabilities.series.lower()
+        else:
+            classifier_profile = "live"
+        return wait_for_current_trigger_completion(
             self.scpi,
             config,
             classifier_profile=classifier_profile,
