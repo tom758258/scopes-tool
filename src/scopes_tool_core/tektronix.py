@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 import math
 import re
 from typing import Mapping, Sequence
@@ -44,7 +44,7 @@ from .screenshot import (
 )
 from .scope import Oscilloscope
 from .tektronix_simulator import TektronixSimulatorBackend
-from .status import OperationCompleteState, StatusRegisterState
+from .status import OperationCompleteState, StandardEventStatusEntry, StatusRegisterState
 from .trigger import (
     EdgeTriggerState, EdgeTriggerSourceState, EdgeTriggerSlopeState,
     EdgeTriggerLevelState, EdgeTriggerCouplingState, TriggerModeState,
@@ -57,24 +57,8 @@ from .trigger import (
 )
 
 
-@dataclass(frozen=True)
-class TekPostStatus:
-    """Internal standard-event post-check result, distinct from an error queue."""
-
-    value: int
-    raw: str
-    status_label = "Standard event status"
-    is_system_error_queue = False
-
-    @property
-    def is_error(self) -> bool:
-        return bool(self.value & 0x3C)
-
-    def format(self) -> str:
-        return f"SESR {self.raw} (error bits {self.value & 0x3C})"
-
-    def to_json(self) -> dict[str, int | str]:
-        return {"raw": self.raw, "value": self.value}
+# Backward-compatible name for the Tek driver status sample.
+TekPostStatus = StandardEventStatusEntry
 
 
 class _PlanningBackend(TektronixSimulatorBackend):
@@ -401,6 +385,26 @@ class TektronixOscilloscope(Oscilloscope):
             raise ParameterValidationError("value must be a finite number")
         self.scpi.write(f"{command} {value:.12g}")
 
+    def _standard_event_status(self) -> TekPostStatus:
+        raw = self.scpi.query("*ESR?")
+        number = _number(raw, "*ESR?")
+        if not number.is_integer() or not 0 <= number <= 255:
+            raise OscilloscopeError(f"Invalid Tek SESR response: {raw!r}")
+        return TekPostStatus(int(number), raw)
+
+    def pre_operation_status(self, operation: str | None = None) -> TekPostStatus:
+        """Read and clear one pre-operation SESR sample."""
+
+        return self._standard_event_status()
+
+    def establish_status_boundary(self, max_reads: int = 30) -> tuple[TekPostStatus, ...]:
+        """Establish a Tek operation boundary with one destructive SESR read."""
+
+        if max_reads < 1:
+            raise ValueError("max_reads must be at least 1.")
+        entry = self._standard_event_status()
+        return (entry,) if entry.is_error else ()
+
     def post_command_status(self, operation: str | None = None) -> TekPostStatus:
         """Read one SESR after an ordinary completed business operation."""
 
@@ -410,14 +414,7 @@ class TektronixOscilloscope(Oscilloscope):
             "system-standard-event",
         }:
             return TekPostStatus(0, "not read after explicit status operation")
-        raw = self.scpi.query("*ESR?")
-        number = _number(raw, "*ESR?")
-        if not number.is_integer() or not 0 <= number <= 255:
-            raise OscilloscopeError(f"Invalid Tek SESR response: {raw!r}")
-        value = int(number)
-        if value & 0x3C:
-            raise OscilloscopeError(f"Tek command failed: raw SESR {raw!r}, error bits {value & 0x3C}")
-        return TekPostStatus(value, raw)
+        return self._standard_event_status()
 
     def post_webui_operation_status(self, operation: str) -> TekPostStatus:
         return self.post_command_status(operation)
@@ -770,16 +767,74 @@ class TektronixOscilloscope(Oscilloscope):
             choices["AC"] = "ac"
         return EdgeTriggerCouplingState(_choice(value, choices, "edge coupling response"), raw)
 
+    def _restore_trigger_edge_source(self, state: EdgeTriggerSourceState) -> None:
+        if state.source == "analog-channel" and state.source_channel is not None:
+            self.configure_trigger_edge_source(
+                source="analog-channel",
+                source_channel=state.source_channel,
+            )
+            return
+        if state.source in {"line", "external"}:
+            self.configure_trigger_edge_source(source=state.source)
+            return
+        raise OscilloscopeError(
+            f"Cannot restore unsupported Tek edge source response: {state.raw!r}"
+        )
+
     def configure_trigger_edge_level(self, *, source_channel: int, level_volts: float) -> None:
-        self._require_tbs2000b("trigger-edge-level")
-        self._write_number(f"{self._trigger_root}:LEVel:CH{self._channel(source_channel)}", level_volts)
+        channel = self._channel(source_channel)
+        if isinstance(level_volts, bool) or not isinstance(level_volts, (int, float)) or not math.isfinite(level_volts):
+            raise ParameterValidationError("value must be a finite number")
+        if self._is_tbs2000b:
+            self._write_number(f"{self._trigger_root}:LEVel:CH{channel}", level_volts)
+            return
+        previous = self.query_trigger_edge_source()
+        if previous.source is None:
+            raise OscilloscopeError(
+                f"Cannot preserve unsupported Tek edge source response: {previous.raw!r}"
+            )
+        changed = not (
+            previous.source == "analog-channel"
+            and previous.source_channel == channel
+        )
+        try:
+            if changed:
+                self.configure_trigger_edge_source(
+                    source="analog-channel",
+                    source_channel=channel,
+                )
+            self._write_number(f"{self._trigger_root}:LEVel", level_volts)
+        finally:
+            if changed:
+                self._restore_trigger_edge_source(previous)
 
     def query_trigger_edge_level(self, *, source_channel: int) -> EdgeTriggerLevelState:
-        self._require_tbs2000b("trigger-edge-level")
         channel = self._channel(source_channel)
-        command = f"{self._trigger_root}:LEVel:CH{channel}?"
-        raw = self.scpi.query(command)
-        return EdgeTriggerLevelState(channel, _number(raw, command), raw)
+        if self._is_tbs2000b:
+            command = f"{self._trigger_root}:LEVel:CH{channel}?"
+            raw = self.scpi.query(command)
+            return EdgeTriggerLevelState(channel, _number(raw, command), raw)
+        previous = self.query_trigger_edge_source()
+        if previous.source is None:
+            raise OscilloscopeError(
+                f"Cannot preserve unsupported Tek edge source response: {previous.raw!r}"
+            )
+        changed = not (
+            previous.source == "analog-channel"
+            and previous.source_channel == channel
+        )
+        try:
+            if changed:
+                self.configure_trigger_edge_source(
+                    source="analog-channel",
+                    source_channel=channel,
+                )
+            command = f"{self._trigger_root}:LEVel?"
+            raw = self.scpi.query(command)
+            return EdgeTriggerLevelState(channel, _number(raw, command), raw)
+        finally:
+            if changed:
+                self._restore_trigger_edge_source(previous)
 
     def configure_trigger_edge(self, source_channel: int, level_volts: float, slope: str) -> None:
         channel = self._channel(source_channel)
@@ -1047,9 +1102,15 @@ class TektronixOscilloscope(Oscilloscope):
         validate_waveform_points(points, self.capabilities)
         return MultiChannelWaveformCapture(tuple(self.capture_waveform_byte(channel, points) for channel in channels))
 
-    def single_wait(self, config: TriggerWaitConfig, *, stop_requested: StopRequested | None = None) -> TriggerWaitResult:
+    def wait_for_current_trigger(
+        self,
+        config: TriggerWaitConfig,
+        *,
+        stop_requested: StopRequested | None = None,
+    ) -> TriggerWaitResult:
+        """Wait for an already-armed Tek acquisition using BUSY?."""
+
         config = validate_trigger_wait_config(config)
-        self.single()
         start = config.clock()
         raw_values, values = [], []
 
@@ -1072,7 +1133,11 @@ class TektronixOscilloscope(Oscilloscope):
                 remaining = deadline - config.clock()
                 if remaining <= 0:
                     return "timeout", None
-                if not _wait_for_trigger_poll(config, min(config.poll_interval_ms / 1000.0, remaining), stop_requested=stop_requested):
+                if not _wait_for_trigger_poll(
+                    config,
+                    min(config.poll_interval_ms / 1000.0, remaining),
+                    stop_requested=stop_requested,
+                ):
                     return "cancelled", None
 
         outcome, error = poll()
@@ -1083,9 +1148,37 @@ class TektronixOscilloscope(Oscilloscope):
             outcome, error = poll()
         if outcome == "complete":
             outcome = "forced" if forced else "natural"
-        result = _trigger_wait_result(outcome, forced, outcome == "timeout", start, config, raw_values, values, error=error)
-        return replace(result, poll_source="busy", poll_command="BUSY?",
-            arm_command="ACQuire:STOPAfter SEQuence;ACQuire:STATE ON", force_command="TRIGger FORCe")
+        result = _trigger_wait_result(
+            outcome,
+            forced,
+            outcome == "timeout",
+            start,
+            config,
+            raw_values,
+            values,
+            error=error,
+        )
+        return replace(
+            result,
+            poll_source="busy",
+            poll_command="BUSY?",
+            arm_command=None,
+            force_command="TRIGger FORCe",
+        )
+
+    def single_wait(
+        self,
+        config: TriggerWaitConfig,
+        *,
+        stop_requested: StopRequested | None = None,
+    ) -> TriggerWaitResult:
+        config = validate_trigger_wait_config(config)
+        self.single()
+        result = self.wait_for_current_trigger(config, stop_requested=stop_requested)
+        return replace(
+            result,
+            arm_command="ACQuire:STOPAfter SEQuence;ACQuire:STATE ON",
+        )
 
     def configure_glitch_trigger(self, *, channel: int, polarity: str, qualifier: str,
         time_seconds: float | None = None, min_time_seconds: float | None = None,
