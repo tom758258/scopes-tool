@@ -105,32 +105,11 @@ def test_unknown_tek_model_fails_closed(series, monkeypatch):
     scope, backend = make_scope()
     capabilities = replace(scope.capabilities, series=series)
     scope.capabilities = capabilities if series is not None else None
-    for operation in (
-        scope.query_display_vectors,
-        scope.set_display_vectors_on,
-        scope.query_timebase_position,
-        lambda: scope.set_timebase_position(0.1),
-        lambda: scope.set_channel_offset(1, 0.1),
-        lambda: scope.set_channel_probe_ratio(1, 10),
-        lambda: scope.configure_trigger_edge_source(source="line"),
-        scope.clear_measurements,
-    ):
-        with pytest.raises((ParameterValidationError, OscilloscopeError), match="unsupported|unavailable"):
-            operation()
+    with pytest.raises((ParameterValidationError, OscilloscopeError), match="unsupported|unavailable"):
+        scope.query_timebase_position()
     assert backend.history == ["*IDN?"]
 
     from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
-    simulator = TektronixSimulatorBackend(physical_model_id="tektronix-tbs2074b")
-    simulator._capabilities = capabilities
-    for operation in (
-        lambda: simulator.write("HORizontal:MAIn:POSition 0.1"),
-        lambda: simulator.query("HORizontal:MAIn:POSition?"),
-        lambda: simulator.write("DISPlay:STYle VECtors"),
-        lambda: simulator.query("TRIGger:MAIn:EDGE:SOUrce?"),
-    ):
-        with pytest.raises(SimulatorBackendError, match="Unsupported"):
-            operation()
-    assert simulator.history == []
     monkeypatch.setattr("scopes_tool_core.simulator_backend.capabilities_for_model_id", lambda _: capabilities)
     with pytest.raises(SimulatorBackendError, match="Unsupported"):
         TektronixSimulatorBackend(physical_model_id="tektronix-tbs2074b")

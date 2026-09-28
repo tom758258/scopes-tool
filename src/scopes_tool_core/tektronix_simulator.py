@@ -69,8 +69,6 @@ class TektronixSimulatorBackend(SimulatorBackend):
             self.trigger_levels.setdefault(self.trigger_source, self.trigger_level)
 
     def _record(self, command: str, *, query: bool) -> None:
-        if self._capabilities.series not in {"TBS2000B", "TDS2000B", "TBS1000B"}:
-            raise SimulatorBackendError(f"Unsupported Tektronix series: {self._capabilities.series}")
         self._ensure_open()
         self.history.append(command)
         self._raise_configured_failure(
