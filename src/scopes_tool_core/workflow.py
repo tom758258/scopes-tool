@@ -108,26 +108,9 @@ def status_human_label(entry) -> str:
 
 
 def drain_preexisting_system_errors(scope, *, max_reads: int = 30) -> tuple:
-    """Drain stale system errors before a top-level operation.
+    """Compatibility alias for the driver-owned pre-operation status boundary."""
 
-    Reads the system error queue until code 0 is reached or ``max_reads``
-    is exhausted. Returns non-zero entries for human diagnostics.
-    """
-
-    if max_reads < 1:
-        raise ValueError("max_reads must be at least 1.")
-    entries: list = []
-    for _ in range(max_reads):
-        entry = scope.query_system_error()
-        entries.append(entry)
-        if not entry.is_error:
-            break
-    entries_tuple = tuple(entries)
-    if not entries_tuple or entries_tuple[-1].is_error:
-        raise OscilloscopeError(
-            f"System error queue did not reach code 0 within {max_reads} reads."
-        )
-    return tuple(entry for entry in entries_tuple if entry.is_error)
+    return establish_instrument_status_boundary(scope, max_reads=max_reads)
 
 
 def interruptible_wait(
