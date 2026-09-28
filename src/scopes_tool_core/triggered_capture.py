@@ -240,7 +240,7 @@ def run_triggered_capture_series(
                 )
                 files.append({"kind": "metadata", "path": str(written_metadata)})
 
-                entry = scope.query_system_error()
+                entry = scope.post_command_status("triggered-capture-series")
                 last_system_error = system_error_manifest_dict(entry)
                 if entry.is_error:
                     error = {
