@@ -610,21 +610,56 @@ def _normalize_step_parameters(
     raise AssertionError(f"unsupported normalized sequence action: {action}")
 
 
+_SEQUENCE_ACTION_OPERATIONS = {
+    "single": "single",
+    "wait-trigger": "single-wait",
+    "measure": "measure",
+    "capture": "capture",
+    "screenshot": "screenshot",
+    "cleanup": "cleanup",
+}
+
+
+def _validate_step_capabilities(
+    document: SequenceDocument,
+    capabilities: ScopeCapabilities,
+) -> None:
+    """Reject only steps whose public semantic the selected model cannot provide."""
+
+    for index, step in enumerate(document.steps, start=1):
+        operation = _SEQUENCE_ACTION_OPERATIONS.get(step.action)
+        if operation is not None and not operation_supported(capabilities, operation):
+            raise ParameterValidationError(
+                f"sequence step {index} {step.action} is not supported by this model"
+            )
+        if step.action == "screenshot" and "png" not in (capabilities.screenshot_formats or ()):
+            raise ParameterValidationError(
+                f"sequence step {index} screenshot requires PNG output on this model"
+            )
+
+
 def _plan_steps(
     document: SequenceDocument,
     capabilities: ScopeCapabilities,
     output_dir: Path | None,
 ) -> tuple[list[dict[str, object]], list[str]]:
+    _validate_step_capabilities(document, capabilities)
     step_plans: list[dict[str, object]] = []
     planned_scpi: list[str] = []
     for index, step in enumerate(document.steps, start=1):
         step_scpi: list[str] = []
         artifact_template: str | None = None
         if step.action == "single":
-            step_scpi = [":SINGle", ":SYSTem:ERRor?"]
+            step_scpi = [
+                *planned_single_scpi(capabilities),
+                planned_status_query(capabilities),
+            ]
         elif step.action == "wait-trigger":
             _trigger_wait_config(step)
-            step_scpi = [operation_condition_query(), ":SYSTem:ERRor?"]
+            step_scpi = [
+                *planned_current_trigger_wait_scpi(capabilities),
+                planned_status_query(capabilities),
+            ]
         elif step.action == "measure":
             plan = plan_measure(_measure_plan_request(step.parameters), capabilities)
             step_scpi = list(plan.planned_scpi)
