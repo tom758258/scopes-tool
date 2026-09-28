@@ -445,6 +445,10 @@ class TektronixSimulatorBackend(SimulatorBackend):
                     return
                 if header == "EDGE:SOURCE" and re.fullmatch(r"CH\d+", value, re.IGNORECASE):
                     self.trigger_source = self._channel_number(value[2:])
+                    self.trigger_level = self.trigger_levels.get(
+                        self.trigger_source,
+                        self.trigger_level,
+                    )
                     return
                 if header in {"LEVEL", "HOLDOFF:TIME", "HOLDOFF:VALUE"} or re.fullmatch(r"LEVEL:CH\d+", header):
                     is_tbs2000b = self._capabilities.series == "TBS2000B"
