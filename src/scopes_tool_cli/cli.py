@@ -937,7 +937,8 @@ def _dry_run_plan(args: argparse.Namespace, capabilities: ScopeCapabilities) -> 
                 check_only=bool(getattr(args, "check_only", False)),
                 stop_on_error=bool(getattr(args, "stop_on_error", False)),
                 restore_type=bool(getattr(args, "restore_type", False)),
-            )
+            ),
+            capabilities,
         )
         return list(plan.planned_scpi), list(plan.files), plan.result
     if command == "identify":
