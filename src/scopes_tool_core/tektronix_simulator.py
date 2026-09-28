@@ -29,6 +29,8 @@ class TektronixSimulatorBackend(SimulatorBackend):
         super().__post_init__()
         if self.physical_model.vendor_id != "tektronix":
             raise SimulatorBackendError("Tektronix simulator requires a Tektronix model")
+        if self._capabilities.series not in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+            raise SimulatorBackendError(f"Unsupported Tektronix series: {self._capabilities.series}")
         if self.acquisition_count not in (self._capabilities.average_counts or ()):
             self.acquisition_count = self._capabilities.average_counts[0]
         self.tek_settings = {
@@ -67,6 +69,8 @@ class TektronixSimulatorBackend(SimulatorBackend):
             self.trigger_levels.setdefault(self.trigger_source, self.trigger_level)
 
     def _record(self, command: str, *, query: bool) -> None:
+        if self._capabilities.series not in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+            raise SimulatorBackendError(f"Unsupported Tektronix series: {self._capabilities.series}")
         self._ensure_open()
         self.history.append(command)
         self._raise_configured_failure(

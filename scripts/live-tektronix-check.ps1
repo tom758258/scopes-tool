@@ -292,7 +292,7 @@ function Invoke-RoundTrip {
         } elseif ($Name -eq "channel-probe" -and $script:Target -ne "tektronix-tbs2074b" -and
                   [double]$original -notin @(1, 10, 20, 50, 100, 500, 1000)) {
             $status = "N/A"
-            $detail = "current probe ratio is outside the legacy supported subset"
+            $detail = "current probe ratio is outside the TDS2000B/TBS1000B supported subset"
         } else {
             if ($original -is [bool]) {
                 $setValue = if ($original) { "--on" } else { "--off" }

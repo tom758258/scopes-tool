@@ -2,7 +2,6 @@ import { translate } from "/static/i18n.js";
 import { formatEngineering } from "/static/live-data.js";
 
 const DIV_STEPS = [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5];
-const HORIZONTAL_DIVISIONS = 10;
 
 function divLabel(div) {
   return div > 0 ? `+${div}` : String(div);
@@ -187,6 +186,7 @@ export class TimebasePositionEditor {
     }
     this.stateKey = key;
     this.positionInput.value = "";
+    this.lastPosition = null;
     this.divIncomplete = false;
     this.clearDivState();
     this.rebuild();
@@ -200,7 +200,6 @@ export class TimebasePositionEditor {
   clearDivState() {
     this.divScale = null;
     this.divReference = null;
-    this.lastPosition = null;
     this.selectedDiv = null;
     this.syncInfo();
   }
@@ -211,11 +210,13 @@ export class TimebasePositionEditor {
       this.info.textContent = "";
     } else {
       const scaleText = formatEngineering(this.divScale, "s", { perDivision: true });
+      const divisions = this.hooks.modelInfo?.()?.series === "TBS2000B" ? 15 : 10;
       this.info.textContent = translate("timebase-position.editor.currentSettings", {
         scale: scaleText,
         reference: translate(`enum.${this.divReference}`),
         position: formatEngineering(this.lastPosition, "s", { signed: true }),
-        span: formatEngineering(Number(cleanFloatText(this.divScale * HORIZONTAL_DIVISIONS)), "s", {}),
+        span: formatEngineering(Number(cleanFloatText(this.divScale * divisions)), "s", {}),
+        divisions,
       });
     }
     if (this.selectedDiv === null || this.divScale === null) {
@@ -248,27 +249,6 @@ export class TimebasePositionEditor {
     this.busy = true;
     this.applyBusyState();
     try {
-      const scaleJob = await this.hooks.executeCommand(
-        "timebase-scale",
-        { action: "query" },
-        { intent: "readback" },
-      );
-      if (this.hooks.contextKey() !== contextKey || !this.selectedDefinition()) {
-        return scaleJob;
-      }
-      if (scaleJob?.status !== "completed") {
-        this.divIncomplete = true;
-        this.clearDivState();
-        return scaleJob;
-      }
-      const scale = scaleJob?.result?.result?.timebase?.seconds_per_division
-        ?? scaleJob?.result?.timebase?.seconds_per_division;
-      if (typeof scale !== "number" || !Number.isFinite(scale) || scale <= 0) {
-        this.divIncomplete = true;
-        this.clearDivState();
-        return scaleJob;
-      }
-
       const positionJob = await this.hooks.executeCommand(
         "timebase-position",
         { action: "query" },
@@ -290,35 +270,64 @@ export class TimebasePositionEditor {
         return positionJob;
       }
 
-      const referenceJob = await this.hooks.executeCommand(
-        "timebase-reference",
+      this.positionInput.value = String(position);
+      this.lastPosition = position;
+      this.divIncomplete = false;
+      this.clearDivState();
+
+      const scaleJob = await this.hooks.executeCommand(
+        "timebase-scale",
         { action: "query" },
         { intent: "readback" },
       );
       if (this.hooks.contextKey() !== contextKey || !this.selectedDefinition()) {
-        return referenceJob;
+        return positionJob;
       }
-      if (referenceJob?.status !== "completed") {
+      if (scaleJob?.status !== "completed") {
         this.divIncomplete = true;
         this.clearDivState();
-        return referenceJob;
+        return positionJob;
       }
-      const reference = referenceJob?.result?.result?.timebase?.reference
-        ?? referenceJob?.result?.timebase?.reference;
-      if (reference !== "left" && reference !== "center" && reference !== "right") {
+      const scale = scaleJob?.result?.result?.timebase?.seconds_per_division
+        ?? scaleJob?.result?.timebase?.seconds_per_division;
+      if (typeof scale !== "number" || !Number.isFinite(scale) || scale <= 0) {
         this.divIncomplete = true;
         this.clearDivState();
-        return referenceJob;
+        return positionJob;
       }
 
-      this.positionInput.value = String(position);
+      const series = this.hooks.modelInfo?.()?.series;
+      // Tektronix position seconds are relative to the fixed screen center.
+      let reference = "center";
+      if (!["TBS2000B", "TDS2000B", "TBS1000B"].includes(series)) {
+        const referenceJob = await this.hooks.executeCommand(
+          "timebase-reference",
+          { action: "query" },
+          { intent: "readback" },
+        );
+        if (this.hooks.contextKey() !== contextKey || !this.selectedDefinition()) {
+          return positionJob;
+        }
+        if (referenceJob?.status !== "completed") {
+          this.divIncomplete = true;
+          this.clearDivState();
+          return positionJob;
+        }
+        reference = referenceJob?.result?.result?.timebase?.reference
+          ?? referenceJob?.result?.timebase?.reference;
+        if (reference !== "left" && reference !== "center" && reference !== "right") {
+          this.divIncomplete = true;
+          this.clearDivState();
+          return positionJob;
+        }
+      }
+
       this.divScale = scale;
       this.divReference = reference;
-      this.lastPosition = position;
       this.selectedDiv = null;
       this.divIncomplete = false;
       this.syncInfo();
-      return referenceJob;
+      return positionJob;
     } finally {
       this.busy = false;
       this.applyBusyState();

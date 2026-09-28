@@ -118,7 +118,7 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
           async executeCommand(id, parameters, options) {
             calls.push([id, parameters, options]);
             if (id === failId) return { status: "failed" };
-            if (id === "timebase-scale" && deferredResolve !== null) {
+            if (id === "timebase-position" && deferredResolve !== null) {
               return new Promise((resolve) => { deferredResolve = resolve; });
             }
             if (id === "timebase-scale") {
@@ -187,8 +187,8 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         editor.readButton.on_click();
         await drain();
         assert.equal(calls.length, 3);
-        assert.deepEqual(calls[0][0], "timebase-scale");
-        assert.deepEqual(calls[1][0], "timebase-position");
+        assert.deepEqual(calls[0][0], "timebase-position");
+        assert.deepEqual(calls[1][0], "timebase-scale");
         assert.deepEqual(calls[2][0], "timebase-reference");
         assert.equal(editor.positionInput.value, "0.0001");
         assert.equal(editor.divSlider.disabled, false);
@@ -215,7 +215,7 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         assert.equal(editor.divSlider.disabled, false);
 
         // 5. A failed read keeps the slider disabled, keeps the draft, shows feedback.
-        failId = "timebase-scale";
+        failId = "timebase-position";
         editor.readButton.on_click();
         await drain();
         assert.equal(editor.divSlider.disabled, true);
@@ -259,7 +259,7 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         assert.equal(editor.divStatus.textContent, "");
 
         // 8. A successful Apply does not clear a read-incomplete state.
-        failId = "timebase-scale";
+        failId = "timebase-position";
         editor.readButton.on_click();
         await drain();
         failId = null;
@@ -280,7 +280,7 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         const pendingResolve = deferredResolve;
         assert.equal(typeof pendingResolve, "function");
         deferredResolve = null;
-        pendingResolve({ status: "completed", result: { result: { timebase: { seconds_per_division: 0.001 } } } });
+        pendingResolve({ status: "completed", result: { result: { timebase: { position_seconds: 0.001 } } } });
         await drain();
         assert.equal(editor.positionInput.value, "0.0009");
         assert.equal(editor.divSlider.disabled, true);

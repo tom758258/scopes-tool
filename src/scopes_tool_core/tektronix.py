@@ -368,7 +368,9 @@ class TektronixOscilloscope(Oscilloscope):
 
     @property
     def _is_tbs2000b(self) -> bool:
-        return self.capabilities is not None and self.capabilities.series == "TBS2000B"
+        if self.capabilities is None or self.capabilities.series not in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+            raise ParameterValidationError("Tektronix series is unsupported for this model")
+        return self.capabilities.series == "TBS2000B"
 
     @property
     def _trigger_root(self) -> str:
@@ -384,7 +386,7 @@ class TektronixOscilloscope(Oscilloscope):
             raise ParameterValidationError(f"{operation} is unsupported for this model")
 
     def _require_tds2000b_or_tbs1000b(self, operation: str) -> None:
-        if self._is_tbs2000b:
+        if self.capabilities is None or self.capabilities.series not in {"TDS2000B", "TBS1000B"}:
             raise ParameterValidationError(f"{operation} is unsupported for this model")
 
     def _query(self, command: str) -> tuple[str, str]:
@@ -593,7 +595,7 @@ class TektronixOscilloscope(Oscilloscope):
             self._write_number(f"CH{channel}:PRObe:GAIN", 1 / ratio)
         else:
             if ratio not in {1, 10, 20, 50, 100, 500, 1000}:
-                raise ParameterValidationError("Unsupported legacy Tek probe ratio")
+                raise ParameterValidationError("Unsupported TDS2000B/TBS1000B probe ratio")
             self._write_number(f"CH{channel}:PRObe", ratio)
 
     def query_channel_probe_ratio(self, channel: int) -> float:
@@ -1144,6 +1146,8 @@ class TektronixOscilloscope(Oscilloscope):
         }
 
     def _measurement_slots(self) -> range:
+        if self.capabilities is None or self.capabilities.series not in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+            raise ParameterValidationError("Tektronix measurement slots are unsupported for this model")
         return range(1, 6 if self.capabilities.series == "TDS2000B" else 7)
 
     def install_measurement(self, channel: int, item: str) -> None:

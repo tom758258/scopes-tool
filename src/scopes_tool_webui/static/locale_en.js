@@ -1864,7 +1864,7 @@ export const en = {
   "timebase-position.editor.divHeading": "Quick Div adjust",
   "timebase-position.editor.divHint": "Read current settings first to enable Div quick-fill. The Div slider only fills the field; Apply writes to the instrument.",
   "timebase-position.editor.referenceNote": "0 div means the trigger event coincides with the current display reference point; it matches the screen center only when the reference is Center.",
-  "timebase-position.editor.currentSettings": "Time/div {{scale}}, reference {{reference}}, position {{position}}. Display span {{span}} (derived from {{scale}} × 10 divisions).",
+  "timebase-position.editor.currentSettings": "Time/div {{scale}}, reference {{reference}}, position {{position}}. Display span {{span}} (derived from {{scale}} × {{divisions}} divisions).",
   "timebase-position.editor.divSelection": "Selected {{div}} div = {{value}}",
   "timebase-position.editor.divReadIncomplete": "Could not read the complete timebase settings; Div quick-fill is currently unavailable.",
   "timebase-position.editor.positionHelp": "Set the horizontal timebase offset relative to the reference position, in seconds.",

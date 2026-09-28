@@ -127,11 +127,11 @@ _DEMO_3000X_EXTENSIONS = frozenset(
 
 
 _TEK_MATH_EXPRESSIONS = ("CH1+CH2", "CH1-CH2", "CH2-CH1", "CH1*CH2")
-_TEK_LEGACY_INSTALL_ITEMS = (
+_TEK_TDS2000B_INSTALL_ITEMS = (
     "vpp", "vavg", "frequency", "period", "minimum", "maximum",
     "rise_time", "fall_time", "positive_width", "negative_width",
 )
-_TEK_INSTALL_ITEMS = _TEK_LEGACY_INSTALL_ITEMS + (
+_TEK_INSTALL_ITEMS = _TEK_TDS2000B_INSTALL_ITEMS + (
     "vrms", "amplitude", "top", "base", "overshoot", "preshoot",
     "duty_cycle", "negative_duty_cycle", "area", "positive_edges",
     "negative_edges", "positive_pulses", "negative_pulses",
@@ -178,7 +178,7 @@ _CAPABILITY_PROFILES = {
     "tektronix-tds2024b": ScopeCapabilities(
         save_waveform_requires_source=True,
         series="TDS2000B", analog_channels=4,
-        measurement_install_items=_TEK_LEGACY_INSTALL_ITEMS, measurement_items=_TEK_LEGACY_INSTALL_ITEMS,
+        measurement_install_items=_TEK_TDS2000B_INSTALL_ITEMS, measurement_items=_TEK_TDS2000B_INSTALL_ITEMS,
         pulse_width_qualifiers=("less-than", "greater-than"),
         math_expressions=_TEK_MATH_EXPRESSIONS + ("CH3+CH4", "CH3-CH4", "CH4-CH3", "CH3*CH4"),
         default_waveform_points=1000, safe_max_waveform_points=1000,

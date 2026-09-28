@@ -240,7 +240,7 @@ def test_tek_live_metadata_matches_sent_business_commands(monkeypatch, capsys, c
     assert payload["result"].get("commands", [payload["result"].get("command")]) == expected
 
 
-def test_tek_legacy_display_vectors_metadata_matches_sent_command(monkeypatch, capsys):
+def test_tds2000b_display_vectors_metadata_matches_sent_command(monkeypatch, capsys):
     backend = FakeBackend(responses={
         "*IDN?": "TEKTRONIX,TDS2024B,SN1,1.0",
         "DISPlay:STYle?": ":DISPLAY:STYLE VECTORS",
@@ -389,7 +389,7 @@ def test_cli_periodic_measurement_admission(mode, capsys):
 
 
 @pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
-def test_cli_legacy_cursor_and_timed_persistence(mode, capsys):
+def test_cli_tds2000b_cursor_and_timed_persistence(mode, capsys):
     common = [mode, "--model", "tektronix-tds2024b", "--json"]
     for args in (["cursor", "--source-channel", "1", "--x1", "0.02", "--auto-timebase"],
                  ["cursor", "--source-channel", "1", "--y1", "0.2"],

@@ -1864,7 +1864,7 @@ export const zhTW = {
   "timebase-position.editor.divHeading": "快速 Div 調整",
   "timebase-position.editor.divHint": "需先成功讀取目前設定才能使用 Div 快速填入；Div 只填入欄位，按套用才會寫入。",
   "timebase-position.editor.referenceNote": "0 div 表示觸發事件與目前顯示參考點重合；只有參考點為中央時才等同於畫面中央。",
-  "timebase-position.editor.currentSettings": "每格時間 {{scale}}，參考位置 {{reference}}，時間偏移 {{position}}。顯示範圍 {{span}}（依 {{scale}} × 10 格計算）。",
+  "timebase-position.editor.currentSettings": "每格時間 {{scale}}，參考位置 {{reference}}，時間偏移 {{position}}。顯示範圍 {{span}}（依 {{scale}} × {{divisions}} 格計算）。",
   "timebase-position.editor.divSelection": "選擇值：{{div}} div = {{value}}",
   "timebase-position.editor.divReadIncomplete": "無法取得完整的目前時間軸設定，Div 快速填入目前不可用。",
   "timebase-position.editor.positionHelp": "設定水平時間基準相對於參考位置的偏移量，單位為秒。",

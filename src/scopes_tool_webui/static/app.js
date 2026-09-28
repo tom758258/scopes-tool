@@ -443,6 +443,7 @@ async function initialize() {
     },
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     selectedCommand: () => catalog.selected(),
+    modelInfo: () => models.find((model) => model.id === currentModelId()),
   });
   channelOffsetEditor = new ChannelOffsetEditor(elements.channelOffsetEditor, catalog, {
     executeCommand,

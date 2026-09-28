@@ -2743,7 +2743,11 @@ may be overwritten. Without a filename, image saving remains N/A.
 `-IncludeConfigurationActions` tests supported cursor setting, cursor off,
 measurement installation, and measurement clear. It does not restore previous
 cursor or measurement configurations; successful actions leave cursors off and
-measurements cleared. `-IncludeScreenshot` enables explicit BMP host capture
+measurements cleared. For TBS2074B, it also temporarily switches Horizontal
+Delay Mode ON/OFF and sets POSITION to 50 for timebase-position validation.
+The runner restores the original POSITION, DELAY:TIME, and DELAY:MODE values;
+a restore mismatch makes validation FAIL.
+`-IncludeScreenshot` enables explicit BMP host capture
 only for TDS2024B over USBTMC. Core restores temporary hardcopy settings and
 timeout; the artifact stays in the private run directory.
 
