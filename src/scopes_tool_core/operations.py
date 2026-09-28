@@ -85,7 +85,10 @@ from .workflow import (
     StopRequested,
     WorkflowProgress,
     drain_preexisting_system_errors,
+    instrument_status_fields,
     interruptible_wait,
+    status_human_label,
+    system_error_from_status,
     workflow_scpi_logging,
 )
 
@@ -209,9 +212,12 @@ def run_capture(
     waveform_format = request.waveform_format.upper()
     if request.waveform_format.lower() == "word":
         validate_word_format_supported(scope.capabilities)
-    if _establish_error_boundary and operation_supported(scope.capabilities, "check-error"):
+    if _establish_error_boundary:
         for _entry in drain_preexisting_system_errors(scope):
-            human.append(f"Pre-operation stale system error drained: {_entry.format()}")
+            human.append(
+                f"Pre-operation stale {status_human_label(_entry).lower()} cleared: "
+                f"{_entry.format()}"
+            )
     if len(channels) == 1:
         human.append(
             f"Planned capture: CH{channels[0]}, {points} points, {waveform_format} format"
@@ -644,20 +650,44 @@ def run_doctor(scope: Oscilloscope, resource: str) -> OperationResult:
     if scope.capabilities is None:
         human.append("Capabilities: unavailable for this model")
         return OperationResult(1, {}, human_lines=human, idn=idn, **_scope_backend_json(scope))
-    entry = scope.query_system_error()
+
+    entry = scope.pre_operation_status("doctor")
+    pre_fields = instrument_status_fields(entry)
     if entry.is_error:
-        human.append(f"System error: {entry.format()}")
+        human.append(f"{status_human_label(entry)}: {entry.format()}")
+        result: dict[str, object] = {
+            "failure_reason": (
+                "preexisting_system_error"
+                if getattr(entry, "is_system_error_queue", True)
+                else "preexisting_instrument_status"
+            ),
+        }
+        if "post_command_status" in pre_fields:
+            result["pre_operation_status"] = pre_fields["post_command_status"]
         return OperationResult(
             1,
-            {"failure_reason": "preexisting_system_error"},
-            system_error=_system_error_json(entry),
+            result,
+            system_error=system_error_from_status(entry),
             human_lines=human,
             idn=idn,
             **_scope_backend_json(scope),
         )
+
     snapshot = doctor_snapshot(scope)
-    entry = scope.query_system_error()
+    entry = scope.post_command_status("doctor")
+    post_fields = instrument_status_fields(entry)
+    if "post_command_status" in post_fields:
+        snapshot["post_command_status"] = post_fields["post_command_status"]
     trigger = snapshot["edge_trigger"]
+    trigger_parts = [str(trigger.get("type") or "unknown")]
+    if trigger.get("source") is not None:
+        trigger_parts.append(str(trigger["source"]))
+    if trigger.get("source_channel") is not None:
+        trigger_parts.append(f"CH{trigger['source_channel']}")
+    if trigger.get("level_volts") is not None:
+        trigger_parts.append(f"{float(trigger['level_volts']):.12g} V")
+    if trigger.get("slope") is not None:
+        trigger_parts.append(str(trigger["slope"]))
     human.extend(
         [
             "Doctor snapshot:",
@@ -666,16 +696,14 @@ def run_doctor(scope: Oscilloscope, resource: str) -> OperationResult:
             f"Channels: {_format_channel_list([item['channel'] for item in snapshot['channels']])}",
             f"Timebase scale: {snapshot['timebase']['scale_seconds_per_division']}",
             f"Timebase position: {snapshot['timebase']['position_seconds']}",
-            "Edge trigger: "
-            f"CH{trigger['source_channel']}, {trigger['level_volts']:.12g} V, "
-            f"{trigger['slope']}",
-            f"System error: {entry.format()}",
+            f"Trigger: {', '.join(trigger_parts)}",
+            f"{status_human_label(entry)}: {entry.format()}",
         ]
     )
     return OperationResult(
         1 if entry.is_error else 0,
         snapshot,
-        system_error=_system_error_json(entry),
+        system_error=system_error_from_status(entry),
         human_lines=human,
         idn=idn,
         **_scope_backend_json(scope),
@@ -778,7 +806,10 @@ def run_measure_sweep(
         for item in items:
             measurement_query(item, channel, capabilities=scope.capabilities)
     for _entry in drain_preexisting_system_errors(scope):
-        human.append(f"Pre-operation stale system error drained: {_entry.format()}")
+        human.append(
+            f"Pre-operation stale {status_human_label(_entry).lower()} cleared: "
+            f"{_entry.format()}"
+        )
     measurements: list[dict[str, object]] = []
     human.append(f"Planned sweep: {_format_channel_list(channels)}; items {', '.join(items)}")
     cancelled = False
@@ -829,7 +860,7 @@ def run_measure_sweep(
                         reference_channel=reference_channel,
                         command=None,
                         exc=exc,
-                        system_error=None,
+                        status=None,
                     )
                     measurements.append(record)
                     if record.get("error", {}).get("type") == "VisaBackendError":  # type: ignore[union-attr]
@@ -1274,7 +1305,12 @@ def run_acquisition_check(
             if scope.capabilities is None:
                 raise OscilloscopeError("Capabilities unavailable for this model")
             for _entry in drain_preexisting_system_errors(scope):
-                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
+                human.append(
+                    f"Pre-operation stale {status_human_label(_entry).lower()} cleared: "
+                    f"{_entry.format()}"
+                )
+            average_count = scope.validate_acquisition_count(average_count)
+            report["average_count"] = average_count
             steps: list[dict[str, object]] = []
             if request.check_only:
                 initial_step = _run_acquisition_query_step(scope, "initial-query", human)
@@ -1287,12 +1323,15 @@ def run_acquisition_check(
                 steps.append(initial_step)
                 report["initial_acquisition"] = initial_step.get("readback")
                 final_step = initial_step
-                for step_name, acquisition_type, step_count in (
-                    ("set-normal", "normal", None),
-                    ("set-average", "average", average_count),
-                    ("set-high-resolution", "high_resolution", None),
-                    ("set-peak", "peak", None),
-                ):
+                modes = scope.capabilities.acquisition_modes or (
+                    "normal",
+                    "average",
+                    "high_resolution",
+                    "peak",
+                )
+                for acquisition_type in modes:
+                    step_name = "set-" + acquisition_type.replace("_", "-")
+                    step_count = average_count if acquisition_type == "average" else None
                     step = _run_acquisition_type_step(
                         scope,
                         step_name,
@@ -1306,7 +1345,7 @@ def run_acquisition_check(
                         report["termination_reason"] = "stopped_on_error"
                         final_step = step
                         break
-                    if step_name == "set-average":
+                    if acquisition_type == "average":
                         steps.append(_run_acquisition_query_step(scope, "post-average-query", human))
                     final_step = step
                 if report["termination_reason"] is None:
@@ -1603,17 +1642,34 @@ def doctor_snapshot(scope: Oscilloscope) -> dict[str, object]:
         "scale_seconds_per_division": scope.query_timebase_scale(),
         "position_seconds": scope.query_timebase_position(),
     }
-    trigger = scope.query_trigger_edge()
+    mode = scope.query_trigger_mode()
+    trigger: dict[str, object] = {
+        "type": mode.mode,
+        "source": None,
+        "source_channel": None,
+        "level_volts": None,
+        "slope": None,
+    }
+    if mode.mode == "edge":
+        source = scope.query_trigger_edge_source()
+        slope = scope.query_trigger_edge_slope()
+        trigger["source"] = source.source or source.raw_source
+        trigger["source_channel"] = source.source_channel
+        trigger["slope"] = slope.slope or slope.raw_slope
+        if (
+            source.source == "analog-channel"
+            and source.source_channel is not None
+        ):
+            level = scope.query_trigger_edge_level(
+                source_channel=source.source_channel
+            )
+            trigger["level_volts"] = level.level_volts
     return {
         **_scope_backend_json(scope),
         "acquisition": {"type": acquisition.type, "count": acquisition.count},
         "channels": channels,
         "timebase": timebase,
-        "edge_trigger": {
-            "source_channel": trigger.source_channel,
-            "level_volts": trigger.level_volts,
-            "slope": trigger.slope,
-        },
+        "edge_trigger": trigger,
     }
 
 
@@ -1755,21 +1811,27 @@ def _run_sweep_measurement(
 ) -> dict[str, object]:
     try:
         result = scope.query_measurement(channel, item)
-        system_error = scope.query_system_error()
-        return {
+        status = scope.post_command_status("measure-sweep")
+        record = {
             "command": command,
             **_measurement_result_json(result, parameters={}),
-            "system_error": _system_error_json(system_error),
+            **instrument_status_fields(status),
         }
+        if status.is_error:
+            record["error"] = {
+                "type": "instrument_error",
+                "message": status.format(),
+            }
+        return record
     except OscilloscopeError as exc:
-        system_error = _query_system_error_best_effort(scope)
+        status = _post_status_best_effort(scope, "measure-sweep")
         return _sweep_error_record(
             item=item,
             channel=channel,
             reference_channel=None,
             command=command,
             exc=exc,
-            system_error=system_error,
+            status=status,
         )
 
 
@@ -1782,27 +1844,33 @@ def _run_sweep_pair_measurement(
 ) -> dict[str, object]:
     try:
         result = scope.query_pair_measurement(source_channel, reference_channel, item)
-        system_error = scope.query_system_error()
-        return {
+        status = scope.post_command_status("measure-sweep")
+        record = {
             "command": command,
             **_measurement_result_json(result, parameters={}),
-            "system_error": _system_error_json(system_error),
+            **instrument_status_fields(status),
         }
+        if status.is_error:
+            record["error"] = {
+                "type": "instrument_error",
+                "message": status.format(),
+            }
+        return record
     except OscilloscopeError as exc:
-        system_error = _query_system_error_best_effort(scope)
+        status = _post_status_best_effort(scope, "measure-sweep")
         return _sweep_error_record(
             item=item,
             channel=source_channel,
             reference_channel=reference_channel,
             command=command,
             exc=exc,
-            system_error=system_error,
+            status=status,
         )
 
 
-def _query_system_error_best_effort(scope: Oscilloscope):
+def _post_status_best_effort(scope: Oscilloscope, operation: str):
     try:
-        return scope.query_system_error()
+        return scope.post_command_status(operation)
     except OscilloscopeError:
         return None
 
@@ -1814,8 +1882,13 @@ def _sweep_error_record(
     reference_channel: int | None,
     command: str | None,
     exc: OscilloscopeError,
-    system_error,
+    status,
 ) -> dict[str, object]:
+    fields = (
+        {"system_error": None}
+        if status is None
+        else instrument_status_fields(status)
+    )
     return {
         "item": item,
         "channel": channel,
@@ -1826,7 +1899,7 @@ def _sweep_error_record(
         "raw_value": None,
         "reason": str(exc),
         "command": command,
-        "system_error": None if system_error is None else _system_error_json(system_error),
+        **fields,
         "error": {"type": type(exc).__name__, "message": str(exc)},
     }
 
@@ -1854,23 +1927,21 @@ def _run_acquisition_query_step(
     name: str,
     human: list[str],
 ) -> dict[str, object]:
-    commands = [acquisition_type_query(), acquisition_count_query(), ":SYSTem:ERRor?"]
-    human.extend([f"Step: {name}", f"Command: {commands[0]}", f"Command: {commands[1]}"])
+    human.append(f"Step: {name}")
     config = scope.query_acquisition_config()
-    entry = scope.query_system_error()
+    entry = scope.post_command_status("acquisition-check")
     human.extend(
         [
             f"Acquisition type: {config.type}",
             f"Average count: {config.count}",
-            f"System error: {entry.format()}",
+            f"{status_human_label(entry)}: {entry.format()}",
         ]
     )
     return {
         "name": name,
         "operation": "query",
-        "commands": commands,
         "readback": {"type": config.type, "count": config.count},
-        "system_error": _system_error_json(entry),
+        **instrument_status_fields(entry),
         "status": "instrument_error" if entry.is_error else "completed",
     }
 
@@ -1883,27 +1954,19 @@ def _run_acquisition_type_step(
     *,
     count: int | None = None,
 ) -> dict[str, object]:
-    normalized = normalize_acquisition_type(acquisition_type)
-    commands = [acquisition_type_command(normalized)]
-    if count is not None:
-        commands.append(acquisition_count_command(count))
-    commands.append(":SYSTem:ERRor?")
     human.append(f"Step: {name}")
-    human.extend(f"Command: {command}" for command in commands[:-1])
     scope.set_acquisition_type(acquisition_type)
     if count is not None:
         scope.set_acquisition_count(count)
-    entry = scope.query_system_error()
-    human.append(f"System error: {entry.format()}")
+    entry = scope.post_command_status("acquisition-check")
+    human.append(f"{status_human_label(entry)}: {entry.format()}")
     return {
         "name": name,
         "operation": "set",
         "type": acquisition_type,
-        "scpi_type": normalized,
         "count": count,
-        "commands": commands,
         "readback": {"type": acquisition_type, "count": count},
-        "system_error": _system_error_json(entry),
+        **instrument_status_fields(entry),
         "status": "instrument_error" if entry.is_error else "completed",
     }
 
@@ -1918,8 +1981,11 @@ def _restore_acquisition_type(scope: Oscilloscope, initial) -> None:
 
 
 def _step_has_system_error(step: dict[str, object]) -> bool:
-    system_error = step.get("system_error")
-    return isinstance(system_error, dict) and bool(system_error.get("is_error"))
+    for key in ("system_error", "post_command_status"):
+        status = step.get(key)
+        if isinstance(status, dict) and bool(status.get("is_error")):
+            return True
+    return False
 
 
 def _system_error_from_step(step: dict[str, object]) -> dict[str, object] | None:
