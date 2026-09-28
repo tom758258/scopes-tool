@@ -13,7 +13,7 @@ from .acquisition import (
     acquisition_type_query,
     validate_acquisition_count,
 )
-from .capabilities import ScopeCapabilities
+from .capabilities import ScopeCapabilities, is_tektronix_capabilities
 from .channel import channel_units_query, validate_analog_channel
 from .errors import OscilloscopeError
 from .measurements import (
@@ -92,6 +92,33 @@ class AcquisitionCheckPlanRequest:
     restore_type: bool = False
 
 
+def planned_status_query(capabilities: ScopeCapabilities) -> str:
+    """Return the native post-operation status query for one model."""
+
+    return "*ESR?" if is_tektronix_capabilities(capabilities) else ":SYSTem:ERRor?"
+
+
+def planned_single_scpi(capabilities: ScopeCapabilities) -> list[str]:
+    """Return the driver's single-acquisition command sequence."""
+
+    if is_tektronix_capabilities(capabilities):
+        return [
+            "ACQuire:STATE OFF",
+            "ACQuire:STOPAfter SEQuence",
+            "ACQuire:STATE ON",
+        ]
+    return [":SINGle"]
+
+
+def planned_current_trigger_wait_scpi(capabilities: ScopeCapabilities) -> list[str]:
+    """Return one representative poll for an already-armed acquisition."""
+
+    if is_tektronix_capabilities(capabilities):
+        return ["BUSY?"]
+    from .trigger import operation_condition_query
+    return [operation_condition_query()]
+
+
 def plan_capture(request: CapturePlanRequest, capabilities: ScopeCapabilities) -> OperationPlan:
     """Plan a waveform capture without opening an instrument."""
 
@@ -107,7 +134,7 @@ def plan_capture(request: CapturePlanRequest, capabilities: ScopeCapabilities) -
         "files": list(files),
         "requested_points": points,
     }
-    if capabilities.series in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+    if is_tektronix_capabilities(capabilities):
         from .tektronix import TektronixOscilloscope, _PlanningBackend
         backend = _PlanningBackend(capabilities)
         scope = TektronixOscilloscope(backend)
@@ -152,7 +179,7 @@ def plan_measure(request: MeasurePlanRequest, capabilities: ScopeCapabilities) -
         channel = resolve_single_measurement_channel(request, capabilities)
         planned = [measurement_query(item, channel, capabilities=capabilities, **kwargs)]
         result["channel"] = channel
-    if capabilities.series in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+    if is_tektronix_capabilities(capabilities):
         from .tektronix import TektronixOscilloscope, _PlanningBackend
         backend = _PlanningBackend(capabilities)
         scope = TektronixOscilloscope(backend)
@@ -173,7 +200,25 @@ def plan_measure_sweep(
     items = parse_measurement_item_list(request.items, allow_pair=False)
     pairs = parse_pair_specs(request.pairs, capabilities)
     pair_items = parse_measurement_item_list(request.pair_items, allow_pair=True)
-    planned = measure_sweep_planned_scpi(channels, items, pairs, pair_items, capabilities)
+    if is_tektronix_capabilities(capabilities):
+        from .tektronix import TektronixOscilloscope, _PlanningBackend
+        backend = _PlanningBackend(capabilities)
+        scope = TektronixOscilloscope(backend)
+        scope.capabilities = capabilities
+        scope.establish_status_boundary()
+        for channel in channels:
+            for item in items:
+                scope.query_measurement(channel, item)
+                scope.post_command_status("measure-sweep")
+        for source_channel, reference_channel in pairs:
+            for item in pair_items:
+                scope.query_pair_measurement(source_channel, reference_channel, item)
+                scope.post_command_status("measure-sweep")
+        planned = ["*IDN?", *backend.commands]
+    else:
+        planned = measure_sweep_planned_scpi(
+            channels, items, pairs, pair_items, capabilities
+        )
     return OperationPlan(
         tuple(planned),
         (),
@@ -229,7 +274,10 @@ def plan_smoke(request: SmokePlanRequest, capabilities: ScopeCapabilities) -> Op
     )
 
 
-def plan_acquisition_check(request: AcquisitionCheckPlanRequest) -> OperationPlan:
+def plan_acquisition_check(
+    request: AcquisitionCheckPlanRequest,
+    capabilities: ScopeCapabilities | None = None,
+) -> OperationPlan:
     """Plan an acquisition configuration check workflow."""
 
     average_count = validate_acquisition_count(request.average_count)
@@ -241,15 +289,38 @@ def plan_acquisition_check(request: AcquisitionCheckPlanRequest) -> OperationPla
         else Path("data") / "hardware_acquisition" / "DRY-RUN"
     )
     files = acquisition_check_file_list(output_dir)
+    if capabilities is not None and is_tektronix_capabilities(capabilities):
+        from .tektronix import TektronixOscilloscope, _PlanningBackend
+        backend = _PlanningBackend(capabilities)
+        scope = TektronixOscilloscope(backend)
+        scope.capabilities = capabilities
+        average_count = scope.validate_acquisition_count(average_count)
+        scope.establish_status_boundary()
+        initial = scope.query_acquisition_config()
+        scope.post_command_status("acquisition-check")
+        if not request.check_only:
+            for mode in capabilities.acquisition_modes or ():
+                scope.set_acquisition_type(mode)
+                if mode == "average":
+                    scope.set_acquisition_count(average_count)
+                scope.post_command_status("acquisition-check")
+                if mode == "average":
+                    scope.query_acquisition_config()
+                    scope.post_command_status("acquisition-check")
+            scope.query_acquisition_config()
+            scope.post_command_status("acquisition-check")
+            if request.restore_type:
+                scope.set_acquisition_type(initial.type)
+        planned = ["*IDN?", *backend.commands]
+    else:
+        planned = acquisition_check_planned_scpi(
+            average_count,
+            check_only=request.check_only,
+            stop_on_error=request.stop_on_error,
+            restore_type=request.restore_type,
+        )
     return OperationPlan(
-        tuple(
-            acquisition_check_planned_scpi(
-                average_count,
-                check_only=request.check_only,
-                stop_on_error=request.stop_on_error,
-                restore_type=request.restore_type,
-            )
-        ),
+        tuple(planned),
         files,
         {
             "status": "planned",
@@ -333,6 +404,31 @@ def planned_waveform_scpi(
 
 
 def doctor_planned_scpi(capabilities: ScopeCapabilities) -> list[str]:
+    if is_tektronix_capabilities(capabilities):
+        from .tektronix import TektronixOscilloscope, _PlanningBackend
+        backend = _PlanningBackend(capabilities)
+        scope = TektronixOscilloscope(backend)
+        scope.capabilities = capabilities
+        scope.pre_operation_status("doctor")
+        scope.query_acquisition_config()
+        for channel in range(1, capabilities.analog_channels + 1):
+            scope.query_channel_display(channel)
+            scope.query_channel_scale(channel)
+            scope.query_channel_offset(channel)
+            scope.query_channel_coupling(channel)
+            scope.query_channel_probe_ratio(channel)
+            scope.query_channel_bandwidth_limit(channel)
+        scope.query_timebase_scale()
+        scope.query_timebase_position()
+        mode = scope.query_trigger_mode()
+        if mode.mode == "edge":
+            source = scope.query_trigger_edge_source()
+            scope.query_trigger_edge_slope()
+            if source.source == "analog-channel" and source.source_channel is not None:
+                scope.query_trigger_edge_level(source_channel=source.source_channel)
+        scope.post_command_status("doctor")
+        return ["*IDN?", *backend.commands]
+
     from .channel import (
         channel_bandwidth_limit_query,
         channel_coupling_query,
