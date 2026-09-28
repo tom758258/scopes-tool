@@ -27,7 +27,14 @@ from .operations import (
     _trigger_wait_classifier_profile,
 )
 from .output_files import write_capture_csv_file, write_capture_metadata_file
-from .planning import OperationPlan, planned_waveform_scpi, resolve_capture_channels
+from .planning import (
+    CapturePlanRequest,
+    OperationPlan,
+    plan_capture,
+    planned_current_trigger_wait_scpi,
+    planned_single_scpi,
+    resolve_capture_channels,
+)
 from .scope import Oscilloscope
 from .trigger import (
     operation_condition_query,
@@ -82,15 +89,19 @@ def plan_triggered_capture_series(
         else TRIGGERED_CAPTURE_SERIES_DEFAULT_BASE_DIR / "DRY-RUN"
     )
     files = _planned_files(output_dir, request.count)
-    planned = [single_command(), operation_condition_query()]
-    planned.extend(
-        planned_waveform_scpi(
-            normalized["channels"],
-            normalized["waveform_format"],
-            normalized["points"],
-        )
+    planned = [
+        *planned_single_scpi(capabilities),
+        *planned_current_trigger_wait_scpi(capabilities),
+    ]
+    capture_plan = plan_capture(
+        CapturePlanRequest(
+            channels=normalized["channels"],
+            points=normalized["points"],
+            waveform_format=normalized["waveform_format"],
+        ),
+        capabilities,
     )
-    planned.append(":SYSTem:ERRor?")
+    planned.extend(capture_plan.planned_scpi)
     result = {
         "status": "planned",
         "channels": list(normalized["channels"]),
