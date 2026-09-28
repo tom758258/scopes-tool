@@ -464,14 +464,20 @@ def run_capture_batch(
                     idn=idn,
                     resource=resource,
                 )
-                entry = scope.query_system_error()
-                last_system_error = system_error_manifest_dict(entry)
+                entry = scope.post_command_status("capture-batch")
+                status_fields = instrument_status_fields(entry)
+                candidate_error = status_fields.get("system_error")
+                last_system_error = (
+                    dict(candidate_error)
+                    if isinstance(candidate_error, dict)
+                    else None
+                )
                 capture_entry = {
                     "index": index,
                     "csv": relative_manifest_path(written_csv, output_dir),
                     "metadata": relative_manifest_path(written_meta, output_dir),
                     "actual_points": capture_actual_points(capture),
-                    "system_error": dict(last_system_error),
+                    **status_fields,
                 }
                 manifest.captures.append(capture_entry)
                 files.extend(
@@ -487,7 +493,7 @@ def run_capture_batch(
                         _format_actual_points(capture),
                         f"CSV: {written_csv}",
                         f"Metadata: {written_meta}",
-                        f"System error: {entry.format()}",
+                        f"{status_human_label(entry)}: {entry.format()}",
                     ]
                 )
 
