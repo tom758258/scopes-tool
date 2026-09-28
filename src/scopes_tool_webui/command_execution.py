@@ -236,7 +236,8 @@ def _execute_dry_run(
             AcquisitionCheckPlanRequest(
                 average_count=parameters.get("count", 16),
                 check_only=True,
-            )
+            ),
+            capabilities,
         )
     elif command == "measure-until":
         save_results = parameters.get("save_results", True)
