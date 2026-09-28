@@ -88,6 +88,15 @@ class ScopeCapabilities:
     cursor_auto_vertical: bool = True
 
 
+TEKTRONIX_SERIES = frozenset({"TBS2000B", "TDS2000B", "TBS1000B"})
+
+
+def is_tektronix_capabilities(capabilities: ScopeCapabilities) -> bool:
+    """Return whether the profile belongs to a registered Tektronix series."""
+
+    return capabilities.series in TEKTRONIX_SERIES
+
+
 _TEK_COMMON_OPERATIONS = frozenset({
     "identify", "list-resources", "run", "stop-acquisition", "single",
     "force-trigger", "acquisition", "autoscale", "timebase-scale",
