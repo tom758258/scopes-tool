@@ -237,7 +237,8 @@ def run_capture_monitor(
 
                 capture = _capture_waveform(scope, channels, waveform_format, points)
                 entry = scope.post_command_status("capture-monitor")
-                last_system_error = system_error_manifest_dict(entry)
+                status_fields = instrument_status_fields(entry)
+                last_system_error = status_fields.get("system_error")
                 if entry.is_error:
                     return _finish_result(
                         "instrument_error", 1, manifest, retained, csv_path,
