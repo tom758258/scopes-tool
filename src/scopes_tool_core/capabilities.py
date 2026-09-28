@@ -20,9 +20,9 @@ class ScopeCapabilities:
     supports_raw_points_mode: bool
     supports_measurements: bool
     supports_delay_measurement: bool
-    supports_screenshot: bool
-    supports_segmented_memory: bool
-    supports_serial_decode: bool
+    supports_screenshot: bool = False  # Compatibility flag for the PNG command.
+    supports_segmented_memory: bool = False
+    supports_serial_decode: bool = False
     supports_screenshot_hardcopy_controls: bool = False
     reference_waveforms: int = 0
     supports_channel_label: bool = False
@@ -88,6 +88,29 @@ class ScopeCapabilities:
     cursor_auto_vertical: bool = True
     physical_model_id: str | None = None
     supported_sequence_actions: tuple[str, ...] | None = None
+    horizontal_display_divisions: int = 10
+    timebase_reference_mode: str = "configurable"
+
+    def __post_init__(self) -> None:
+        if self.screenshot_formats is not None:
+            object.__setattr__(self, "supports_screenshot", "png" in self.screenshot_formats)
+
+    @property
+    def supported_screenshot_formats(self) -> tuple[str, ...]:
+        """Resolve explicit formats or the legacy PNG/hardcopy profile."""
+        if self.screenshot_formats is not None:
+            return self.screenshot_formats
+        if not self.supports_screenshot:
+            return ()
+        return ("png", "bmp", "bmp8bit") if self.supports_screenshot_hardcopy_controls else ("png",)
+
+    @property
+    def supports_png_screenshot(self) -> bool:
+        return "png" in self.supported_screenshot_formats
+
+    @property
+    def supports_any_screenshot(self) -> bool:
+        return bool(self.supported_screenshot_formats)
 
 
 _TEK_COMMON_OPERATIONS = frozenset({
@@ -144,12 +167,14 @@ _TEK_INSTALL_ITEMS = _TEK_TDS2000B_INSTALL_ITEMS + (
 _CAPABILITY_PROFILES = {
     "tektronix-tbs2074b": ScopeCapabilities(
         supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup", "screenshot"),
+        timebase_reference_mode="fixed-center",
         save_waveform_requires_source=True,
+        horizontal_display_divisions=15,
         series="TBS2000B", analog_channels=4,
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=True, supports_delay_measurement=False,
-        supports_screenshot=True, supports_segmented_memory=False,
+        supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
         supports_simulator=True, math_function_count=1,
         screenshot_formats=("png",), screenshot_backgrounds=("black",), cursor_auto_vertical=False,
@@ -181,6 +206,7 @@ _CAPABILITY_PROFILES = {
     ),
     "tektronix-tds2024b": ScopeCapabilities(
         supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup"),
+        timebase_reference_mode="fixed-center",
         save_waveform_requires_source=True,
         series="TDS2000B", analog_channels=4,
         measurement_install_items=_TEK_TDS2000B_INSTALL_ITEMS, measurement_items=_TEK_TDS2000B_INSTALL_ITEMS,
@@ -189,7 +215,7 @@ _CAPABILITY_PROFILES = {
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=True, supports_delay_measurement=False,
-        supports_screenshot=False, supports_segmented_memory=False,
+        supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
         supports_simulator=True, math_function_count=1,
         screenshot_formats=("bmp",), cursor_auto_vertical=False,
@@ -216,6 +242,7 @@ _CAPABILITY_PROFILES = {
     ),
     "tektronix-tbs1052b": ScopeCapabilities(
         supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup"),
+        timebase_reference_mode="fixed-center",
         save_waveform_requires_source=True,
         series="TBS1000B", analog_channels=2,
         measurement_install_items=_TEK_INSTALL_ITEMS, measurement_items=_TEK_INSTALL_ITEMS,
@@ -224,7 +251,7 @@ _CAPABILITY_PROFILES = {
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=True, supports_delay_measurement=False,
-        supports_screenshot=False, supports_segmented_memory=False,
+        supports_segmented_memory=False,
         supports_serial_decode=False, reference_waveforms=2,
         supports_simulator=True, math_function_count=1,
         screenshot_formats=(), cursor_auto_vertical=False,

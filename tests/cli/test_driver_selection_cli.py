@@ -329,8 +329,12 @@ def test_cli_keysight_tcpip_bmp_reaches_detected_driver(monkeypatch, tmp_path, c
 
 
 def test_cli_tds_bmp_allows_usbtmc_after_detected_driver(monkeypatch, tmp_path, capsys):
+    from scopes_tool_core.visa_backend import VisaBackend
+    class VisaStub(FakeBackend, VisaBackend):
+        pass
     output = tmp_path / "screen.bmp"
-    backend = FakeBackend(
+    backend = VisaStub(
+        resource_name="USB0::FAKE::INSTR",
         responses={
             "*IDN?": "TEKTRONIX,TDS2024B,SN1,1.0",
             "HARDCopy:FORMat?": "RLE",
@@ -356,8 +360,13 @@ def test_cli_tds_bmp_allows_usbtmc_after_detected_driver(monkeypatch, tmp_path, 
     capsys.readouterr()
 
 
-def test_cli_tds_bmp_rejects_tcpip_after_detected_driver(monkeypatch, tmp_path, capsys):
-    backend = FakeBackend(
+@pytest.mark.parametrize("resource", ["TCPIP0::192.0.2.1::INSTR", "ASRL1::INSTR", "USB0::FAKE::RAW"])
+def test_cli_tds_bmp_rejects_other_transports_after_detected_driver(monkeypatch, tmp_path, capsys, resource):
+    from scopes_tool_core.visa_backend import VisaBackend
+    class VisaStub(FakeBackend, VisaBackend):
+        pass
+    backend = VisaStub(
+        resource_name=resource,
         responses={"*IDN?": "TEKTRONIX,TDS2024B,SN1,1.0"}
     )
     monkeypatch.setattr(
@@ -368,7 +377,7 @@ def test_cli_tds_bmp_rejects_tcpip_after_detected_driver(monkeypatch, tmp_path, 
 
     assert cli.main([
         "screenshot", "--format", "bmp", "--output", str(tmp_path / "screen.bmp"),
-        "--resource", "TCPIP0::192.0.2.1::INSTR", "--model", "keysight-dsox4024a",
+        "--resource", resource, "--model", "keysight-dsox4024a",
     ]) == 1
     assert backend.history == ["*IDN?"]
     assert "requires a USBTMC resource" in capsys.readouterr().err

@@ -39,6 +39,10 @@ export class TimebasePositionEditor {
     return selected?.editor === "timebase-position" ? selected : null;
   }
 
+  presentation() {
+    return this.definition()?.presentation?.models?.[this.hooks.modelId?.()]?.timebase_position;
+  }
+
   currentStateKey() {
     return `${this.hooks.contextKey()}|${this.selectedDefinition()?.id || ""}`;
   }
@@ -210,7 +214,7 @@ export class TimebasePositionEditor {
       this.info.textContent = "";
     } else {
       const scaleText = formatEngineering(this.divScale, "s", { perDivision: true });
-      const divisions = this.hooks.modelInfo?.()?.series === "TBS2000B" ? 15 : 10;
+      const divisions = this.presentation()?.display_divisions;
       this.info.textContent = translate("timebase-position.editor.currentSettings", {
         scale: scaleText,
         reference: translate(`enum.${this.divReference}`),
@@ -296,10 +300,15 @@ export class TimebasePositionEditor {
         return positionJob;
       }
 
-      const series = this.hooks.modelInfo?.()?.series;
-      // Tektronix position seconds are relative to the fixed screen center.
+      const metadata = this.presentation();
+      if (!Number.isFinite(metadata?.display_divisions) || metadata.display_divisions <= 0
+          || !["fixed-center", "configurable"].includes(metadata.reference_mode)) {
+        this.divIncomplete = true;
+        this.clearDivState();
+        return positionJob;
+      }
       let reference = "center";
-      if (!["TBS2000B", "TDS2000B", "TBS1000B"].includes(series)) {
+      if (metadata.reference_mode === "configurable") {
         const referenceJob = await this.hooks.executeCommand(
           "timebase-reference",
           { action: "query" },

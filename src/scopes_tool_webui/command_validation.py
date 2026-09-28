@@ -1913,7 +1913,7 @@ def _validate_parameters(
         if parameters["format"] == "word" and not capabilities.supports_word_format:
             raise WebUIRequestError("word waveform format is not supported by this model")
     elif command == "screenshot":
-        if not (bool(capabilities.screenshot_formats) if capabilities.screenshot_formats is not None else capabilities.supports_screenshot):
+        if not capabilities.supports_any_screenshot:
             raise WebUIRequestError("screenshot is unsupported for this model")
         parameters["background"] = str(parameters.get("background", "black")).lower()
         allowed_backgrounds = capabilities.screenshot_backgrounds

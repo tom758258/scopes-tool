@@ -153,6 +153,7 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         "supports_wgen": True,
         "wgen_scpi_root": ":WGEN1",
         "supports_screenshot": True,
+        "screenshot_formats": ["png", "bmp", "bmp8bit"],
         "supports_screenshot_hardcopy_controls": True,
         "supports_segmented_memory": True,
         "segmented_max_segments": 1000,

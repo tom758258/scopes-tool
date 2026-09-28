@@ -2605,6 +2605,11 @@ def _model_command_presentation(
         if override:
             fields[name] = override
     result = {"supported": supported, "fields": fields}
+    if entry["id"] == "timebase-position":
+        result["timebase_position"] = {
+            "display_divisions": capabilities.horizontal_display_divisions,
+            "reference_mode": capabilities.timebase_reference_mode,
+        }
     if entry["id"] == "sequence" and capabilities.supported_sequence_actions is not None:
         metadata = entry["sequence"]
         parameters = {}
@@ -2659,7 +2664,7 @@ def _command_supported_by_capabilities(entry: Mapping[str, Any], capabilities: A
     if command_id == "measurement-statistics":
         return capabilities.supports_measure_statistics
     if command_id == "screenshot":
-        return bool(capabilities.screenshot_formats) if capabilities.screenshot_formats is not None else capabilities.supports_screenshot
+        return capabilities.supports_any_screenshot
     if command_id in {"measure-install", "measure-clear"} and capabilities.measurement_install_items is not None:
         return True
     if category == "Measurement":

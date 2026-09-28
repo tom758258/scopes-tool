@@ -641,7 +641,7 @@ def _plan_steps(
             step_scpi = list(plan.planned_scpi)
             artifact_template = _artifact_template(document, index, "capture")
         elif step.action == "screenshot":
-            if not capabilities.supports_screenshot:
+            if not capabilities.supports_png_screenshot:
                 raise ParameterValidationError(
                     f"sequence step {index} screenshot is not supported by this model"
                 )

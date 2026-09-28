@@ -101,6 +101,13 @@ class _PlanningBackend(TektronixSimulatorBackend):
         super().__init__(physical_model_id=capabilities.physical_model_id)
         self.commands = self.history
 
+    def write(self, command: str) -> None:
+        if re.fullmatch(r"RECALL:SETUP [1-9]", command, re.IGNORECASE):
+            # A plan cannot inspect the instrument's stored setups.
+            self.history.append(command)
+            return
+        super().write(command)
+
 
 def _payload(raw: str, expected_header: str) -> str:
     """Strip only the expected optional Tek command header from a query response."""
@@ -174,12 +181,32 @@ class TektronixOscilloscope(Oscilloscope):
         return backend.commands
 
     @classmethod
+    def plan_capture_scpi(cls, channels, points, waveform_format, capabilities) -> list[str]:
+        backend = _PlanningBackend(capabilities)
+        scope = cls(backend)
+        scope.capabilities = capabilities
+        scope.capture_waveforms_byte(channels, points)
+        return backend.commands
+
+    @classmethod
+    def plan_measure_scpi(cls, item, channel, reference_channel, capabilities, **parameters) -> list[str]:
+        backend = _PlanningBackend(capabilities)
+        scope = cls(backend)
+        scope.capabilities = capabilities
+        if reference_channel is not None:
+            raise ParameterValidationError("Pair measurements are unsupported for this model")
+        scope.query_measurement(channel, item, **parameters)
+        return backend.commands
+
+    @classmethod
     def plan_workflow_step(cls, action, capabilities, **parameters) -> list[str]:
         backend = _PlanningBackend(capabilities)
         scope = cls(backend)
         scope.capabilities = capabilities
         if action == "status":
             scope.workflow_status()
+        elif action == "command-status":
+            scope.post_command_status()
         elif action == "single":
             scope.single()
         elif action == "wait-trigger":

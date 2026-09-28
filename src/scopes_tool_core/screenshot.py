@@ -62,7 +62,7 @@ def validate_screenshot_capability(capabilities: ScopeCapabilities, options: Scr
                                   *, query_hardcopy: bool = False) -> None:
     options = normalize_screenshot_options(options)
     if capabilities.screenshot_formats is not None:
-        format_name = options.format or ("png" if capabilities.supports_screenshot else None)
+        format_name = options.format or ("png" if capabilities.supports_png_screenshot else None)
         if query_hardcopy or format_name not in capabilities.screenshot_formats or options.palette is not None:
             raise ParameterValidationError("Requested screenshot format or hardcopy controls are unsupported for this model")
         return
@@ -70,7 +70,7 @@ def validate_screenshot_capability(capabilities: ScopeCapabilities, options: Scr
         options.format, options.ink_saver, options.palette, options.layout))
     if controls and not capabilities.supports_screenshot_hardcopy_controls:
         raise ParameterValidationError("Screenshot hardcopy controls require a 4000X capability profile.")
-    if not query_hardcopy and not capabilities.supports_screenshot:
+    if not query_hardcopy and not capabilities.supports_png_screenshot:
         raise ParameterValidationError("Screenshot capture is unsupported for this model")
 
 
@@ -89,7 +89,7 @@ class ScreenshotController:
     ) -> ScreenshotCapture:
         """Capture the current screen as a color PNG image."""
 
-        if not self.capabilities.supports_screenshot:
+        if not self.capabilities.supports_png_screenshot:
             raise ParameterValidationError(
                 f"screenshot capture is not enabled for {self.capabilities.series} capabilities."
             )
@@ -113,7 +113,7 @@ class ScreenshotController:
     ) -> ScreenshotCapture:
         """Capture a screen image with optional 4000X hardcopy controls."""
 
-        if not self.capabilities.supports_screenshot:
+        if not self.capabilities.supports_png_screenshot:
             raise ParameterValidationError(
                 f"screenshot capture is not enabled for {self.capabilities.series} capabilities."
             )

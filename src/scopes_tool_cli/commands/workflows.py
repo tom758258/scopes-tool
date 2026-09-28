@@ -782,19 +782,6 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
         runtime._json_record_scope(scope, idn)
-        normalized_resource = resource.strip().upper()
-        if (
-            mode == "live"
-            and options.format == "bmp"
-            and idn.model_id == "tektronix-tds2024b"
-            and not (
-                normalized_resource.startswith("USB")
-                and normalized_resource.endswith("::INSTR")
-            )
-        ):
-            raise OscilloscopeError(
-                "TDS2024B explicit BMP screenshot capture requires a USBTMC resource."
-            )
         runtime._print_session_header(scope, resource)
         print(f"Model: {idn.model}")
         print(f"Series: {idn.series or 'unknown'}")

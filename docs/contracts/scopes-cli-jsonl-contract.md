@@ -756,7 +756,7 @@ Capability JSON currently includes `series`, `analog_channels`,
 `default_waveform_points`, `safe_max_waveform_points`,
 `supports_word_format`, `supports_raw_points_mode`, `supports_measurements`,
 `supports_delay_measurement`, `supports_measure_results_dump`,
-`supports_screenshot`,
+`supports_screenshot`, ordered `screenshot_formats`,
 `supports_screenshot_hardcopy_controls`,
   `supports_segmented_memory`, `segmented_max_segments`,
   `supports_segmented_waveform_all`, `supports_serial_decode`, `serial_bus_count`,
@@ -772,6 +772,13 @@ items and pulse-width qualifiers, respectively. Search additionally reports
 Math additionally reports `supports_math_goft`, `supports_math_cascade`, and
 ordered canonical operation lists. WGEN additionally reports `supports_wgen`
 and the model's `wgen_scpi_root`.
+
+`screenshot_formats` lists the supported host image encodings; an empty list
+means no screenshot capture. The compatibility field `supports_screenshot`
+retains its original PNG meaning. It can be false when explicit BMP capture is
+available. PNG workflows require PNG support, while the screenshot command can
+use an explicitly requested supported format. Optional hardcopy controls and
+transport restrictions remain validated by Core.
 
 ## Artifact JSON
 

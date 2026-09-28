@@ -620,8 +620,7 @@ def _execute_scope_command(
         )
         return _operation_payload(result)
     if command == "screenshot":
-        formats = scope.capabilities.screenshot_formats
-        format_name = formats[0] if formats else "png"
+        format_name = scope.capabilities.supported_screenshot_formats[0]
         capture = (scope.capture_screenshot_png(background=parameters["background"]) if format_name == "png" else
             scope.capture_screenshot(options=ScreenshotOptions(format=format_name), background=parameters["background"]))
         writer = write_screenshot_png_file if capture.format_name == "PNG" else write_screenshot

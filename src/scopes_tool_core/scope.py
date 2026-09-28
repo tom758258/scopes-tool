@@ -274,11 +274,23 @@ class Oscilloscope:
         return validate_acquisition_count(count)
 
     @classmethod
+    def plan_capture_scpi(cls, channels, points, waveform_format, capabilities) -> list[str]:
+        from .planning import planned_waveform_scpi
+        return planned_waveform_scpi(channels, waveform_format, points)
+
+    @classmethod
+    def plan_measure_scpi(cls, item, channel, reference_channel, capabilities, **parameters) -> list[str]:
+        from .measurements import measurement_query, pair_measurement_query
+        if reference_channel is not None:
+            return [pair_measurement_query(item, channel, reference_channel, capabilities=capabilities, **parameters)]
+        return [measurement_query(item, channel, capabilities=capabilities, **parameters)]
+
+    @classmethod
     def plan_workflow_step(cls, action, capabilities, **parameters) -> list[str]:
         from .acquisition import acquisition_type_command, acquisition_count_command
         from .screenshot import hardcopy_inksaver_query, screenshot_data_query
         commands = {
-            "status": [":SYSTem:ERRor?"], "single": [":SINGle"],
+            "status": [":SYSTem:ERRor?"], "command-status": [":SYSTem:ERRor?"], "single": [":SINGle"],
             "wait-trigger": [":OPERegister:CONDition?"],
             "acquisition-query": [":ACQuire:TYPE?", ":ACQuire:COUNt?"],
             "screenshot": [hardcopy_inksaver_query(), screenshot_data_query()],

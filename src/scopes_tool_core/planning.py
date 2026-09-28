@@ -108,18 +108,10 @@ def plan_capture(request: CapturePlanRequest, capabilities: ScopeCapabilities, *
         "files": list(files),
         "requested_points": points,
     }
-    if capabilities.series in {"TBS2000B", "TDS2000B", "TBS1000B"}:
-        from .tektronix import TektronixOscilloscope, _PlanningBackend
-        backend = _PlanningBackend(capabilities)
-        scope = TektronixOscilloscope(backend)
-        scope.capabilities = capabilities
-        scope.capture_waveforms_byte(channels, points)
-        return OperationPlan(tuple(backend.commands + (workflow_step_scpi(capabilities, "status") if workflow else ["*ESR?"])), files, result)
-    return OperationPlan(
-        tuple(planned_waveform_scpi(channels, request.waveform_format, points) + [":SYSTem:ERRor?"]),
-        files,
-        result,
-    )
+    driver = driver_for_capabilities(capabilities)
+    planned = driver.plan_capture_scpi(channels, points, request.waveform_format, capabilities)
+    planned += driver.plan_workflow_step("status" if workflow else "command-status", capabilities)
+    return OperationPlan(tuple(planned), files, result)
 
 
 def plan_doctor(capabilities: ScopeCapabilities) -> OperationPlan:
@@ -145,23 +137,17 @@ def plan_measure(request: MeasurePlanRequest, capabilities: ScopeCapabilities, *
     item = normalize_measurement_item(request.item)
     kwargs = measurement_query_kwargs(request, item)
     result: dict[str, object] = {"item": item, "parameters": kwargs}
+    reference = None
     if is_pair_measurement_item(item):
-        source, reference = resolve_pair_measurement_channels(request, capabilities, item)
-        planned = [pair_measurement_query(item, source, reference, capabilities=capabilities, **kwargs)]
-        result.update({"channel": source, "reference_channel": reference})
+        channel, reference = resolve_pair_measurement_channels(request, capabilities, item)
+        result.update({"channel": channel, "reference_channel": reference})
     else:
         channel = resolve_single_measurement_channel(request, capabilities)
-        planned = [measurement_query(item, channel, capabilities=capabilities, **kwargs)]
         result["channel"] = channel
-    if capabilities.series in {"TBS2000B", "TDS2000B", "TBS1000B"}:
-        from .tektronix import TektronixOscilloscope, _PlanningBackend
-        backend = _PlanningBackend(capabilities)
-        scope = TektronixOscilloscope(backend)
-        scope.capabilities = capabilities
-        scope.query_measurement(channel, item, **kwargs)
-        planned = backend.commands
-        return OperationPlan(tuple(planned + (workflow_step_scpi(capabilities, "status") if workflow else ["*ESR?"])), (), result)
-    return OperationPlan(tuple(planned + [":SYSTem:ERRor?"]), (), result)
+    driver = driver_for_capabilities(capabilities)
+    planned = driver.plan_measure_scpi(item, channel, reference, capabilities, **kwargs)
+    planned += driver.plan_workflow_step("status" if workflow else "command-status", capabilities)
+    return OperationPlan(tuple(planned), (), result)
 
 
 def plan_measure_sweep(

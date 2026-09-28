@@ -112,6 +112,7 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         const hooks = {
           headerActions: new FakeNode("div"),
           contextKey: () => currentContext,
+          modelId: () => currentContext.split("|").at(-1),
           selectedCommand: () => ({ id: "timebase-position", editor: "timebase-position" }),
           isAvailable: () => true,
           isExecutionBusy: () => false,
@@ -285,6 +286,27 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
         assert.equal(editor.positionInput.value, "0.0009");
         assert.equal(editor.divSlider.disabled, true);
         assert.equal(editor.divStatus.textContent, "timebase-position.editor.divReadIncomplete");
+
+        // Metadata, rather than series names, determines reference reads and span.
+        const definition = catalog.commands.find((entry) => entry.id === "timebase-position");
+        for (const [model, span] of [["tektronix-tbs2074b", 0.003], ["tektronix-tds2024b", 0.002], ["tektronix-tbs1052b", 0.002]]) {
+          currentContext = `simulate||${model}`;
+          calls.length = 0;
+          await editor.read();
+          assert.deepEqual(calls.map((call) => call[0]), ["timebase-position", "timebase-scale"]);
+          assert.ok(editor.info.textContent.endsWith(`SPAN=F:${span}:s`));
+        }
+        definition.presentation.models["new-model"] = definition.presentation.models["tektronix-tbs2074b"];
+        currentContext = "simulate||new-model";
+        calls.length = 0;
+        await editor.read();
+        assert.deepEqual(calls.map((call) => call[0]), ["timebase-position", "timebase-scale"]);
+        assert.ok(editor.info.textContent.endsWith("SPAN=F:0.003:s"));
+        currentContext = "simulate||missing-model";
+        calls.length = 0;
+        await editor.read();
+        assert.equal(calls.some((call) => call[0] === "timebase-reference"), false);
+        assert.equal(editor.divSlider.disabled, true);
 
         console.log(JSON.stringify({ ok: true }));
         '''
