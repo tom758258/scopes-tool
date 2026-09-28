@@ -279,7 +279,7 @@ def run_triggered_measure_loop(
                                     scope, error=None,
                                 )
 
-                    entry = scope.query_system_error()
+                    entry = scope.post_command_status("triggered-measure-loop")
                     last_system_error = system_error_manifest_dict(entry)
                     if entry.is_error:
                         error = {
