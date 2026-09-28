@@ -170,7 +170,7 @@ _CAPABILITY_PROFILES = {
         supports_setup_file_target=False,
         supports_channel_label=True, channel_label_max_length=30,
         supported_operations=_TEK_COMMON_OPERATIONS | {
-            "channel-label", "channel-probe-skew",
+            "channel-label", "channel-probe-skew", "timebase-position",
             "trigger-edge-level", "trigger-runt", "sample-rate",
             "save-image-format", "save-waveform-format", "screenshot",
         },

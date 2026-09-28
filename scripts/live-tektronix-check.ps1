@@ -180,6 +180,67 @@ function Invoke-Cli {
     return $payload
 }
 
+function Invoke-PositionProbe {
+    param([ValidateSet("read", "on", "off", "center", "restore")][string]$Action, [object]$Original = $null)
+    # Validation-only raw access; public commands keep all mode handling in Core.
+    $probePath = Join-Path $script:RunPaths.Private "position-probe.py"
+    $source = @'
+import json, math, sys
+from scopes_tool_core.visa_backend import VisaBackend
+
+resource, library, action, original_path = sys.argv[1:]
+from pathlib import Path
+backend = VisaBackend(resource, visa_library=None if library == "system_visa" else library)
+try:
+    identity = backend.query("*IDN?").strip().upper().split(",")
+    if identity[:2] != ["TEKTRONIX", "TBS2074B"]:
+        raise ValueError("Position probe requires the expected TBS2074B identity")
+    def number(command):
+        value = float(backend.query(command).strip().split()[-1])
+        if not math.isfinite(value):
+            raise ValueError("Non-finite horizontal readback")
+        return value
+    def snapshot():
+        mode = backend.query("HORizontal:MAIn:DELay:MODe?").strip().split()[-1].upper()
+        if mode not in {"ON", "OFF", "1", "0"}:
+            raise ValueError("Invalid delay mode readback")
+        return dict(mode="ON" if mode in {"ON", "1"} else "OFF",
+                    delay=number("HORizontal:MAIn:DELay:TIMe?"),
+                    position=number("HORizontal:POSition?"),
+                    length=number("HORizontal:RECOrdlength?"),
+                    rate=number("HORizontal:SAMPLERate?"))
+    if action in {"on", "off"}:
+        backend.write("HORizontal:MAIn:DELay:MODe " + action.upper())
+    elif action == "center":
+        backend.write("HORizontal:POSition 50")
+    elif action == "restore":
+        original = json.loads(Path(original_path).read_text(encoding="utf-8"))
+        failures = []
+        for command, value in (("HORizontal:POSition", int(original["position"])),
+                               ("HORizontal:MAIn:DELay:TIMe", original["delay"]),
+                               ("HORizontal:MAIn:DELay:MODe", original["mode"])):
+            try:
+                backend.write(f"{command} {value}")
+            except Exception as exc:
+                failures.append(str(exc))
+        if failures:
+            raise RuntimeError("; ".join(failures))
+    print(json.dumps(snapshot()))
+finally:
+    backend.close()
+'@
+    Write-Utf8NoBomText -LiteralPath $probePath -Text $source
+    $originalJson = if ($null -eq $Original) { "null" } else { $Original | ConvertTo-Json -Compress }
+    $originalPath = Join-Path $script:RunPaths.Private "position-original.json"
+    Write-Utf8NoBomText -LiteralPath $originalPath -Text $originalJson
+    $library = if ($script:LiveArguments -contains "--visa-library") { "@py" } else { "system_visa" }
+    $stderrPath = Join-Path $script:RunPaths.Private "position-$Action.stderr.txt"
+    $output = & $pythonPath $probePath $Resource $library $Action $originalPath 2> $stderrPath
+    if ($LASTEXITCODE -ne 0) { throw "Position probe $Action failed; see $stderrPath" }
+    Write-Utf8NoBomText -LiteralPath (Join-Path $script:RunPaths.Private "position-$Action.json") -Text ($output -join "`n")
+    return ($output -join "`n" | ConvertFrom-Json)
+}
+
 function Get-Readback {
     param([object]$Payload, [string]$Field)
     if ($null -eq $Payload.result) { throw "Missing result object." }
@@ -402,10 +463,46 @@ try {
         }
         Invoke-RoundTrip "channel-offset" "channel-offset" $ch "volts" "--volts"
         Invoke-RoundTrip "timebase-scale" "timebase-scale" @() "seconds_per_division" "--seconds-per-division"
+        Invoke-RoundTrip "timebase-position" "timebase-position" @() "position_seconds" "--seconds"
         if ($script:Target -eq "tektronix-tbs2074b") {
-            Add-Case "timebase-position" "N/A" "Unsupported on this model"
-        } else {
-            Invoke-RoundTrip "timebase-position" "timebase-position" @() "position_seconds" "--seconds"
+            if (-not $IncludeConfigurationActions) {
+                Add-Case "timebase-position-modes" "N/A" "Requires -IncludeConfigurationActions; temporarily switches Delay Mode"
+            } else {
+                $originalPosition = $null
+                try {
+                    $originalPosition = Invoke-PositionProbe "read"
+                    foreach ($positionMode in @("on", "off")) {
+                        $positionRaw = Invoke-PositionProbe $positionMode
+                        if ($positionRaw.mode -ne $positionMode.ToUpperInvariant()) { throw "Delay Mode did not change to $positionMode" }
+                        if ($positionRaw.length -le 0 -or $positionRaw.rate -le 0) { throw "Invalid horizontal record geometry" }
+                        $positionExpected = if ($positionMode -eq "on") { $positionRaw.delay } else { (50 - $positionRaw.position) / 100 * ($positionRaw.length / $positionRaw.rate) }
+                        $positionBefore = Invoke-Cli "position-$positionMode-query" "timebase-position" @("--query")
+                        $positionSeconds = Get-Readback $positionBefore "position_seconds"
+                        if (-not (Test-ReadbackEqual $positionSeconds $positionExpected)) { throw "Public position differs from raw $positionMode position" }
+                        $null = Invoke-Cli "position-$positionMode-set" "timebase-position" @("--seconds", (Format-Setting $positionSeconds))
+                        $positionAfter = Invoke-PositionProbe "read"
+                        if ($positionAfter.mode -ne $positionRaw.mode) { throw "Public position setter changed Delay Mode" }
+                        if ($positionMode -eq "on" -and -not (Test-ReadbackEqual $positionAfter.delay $positionRaw.delay)) { throw "Delay time changed" }
+                        if ($positionMode -eq "off" -and $positionAfter.position -ne [math]::Round($positionRaw.position)) { throw "Integer position changed" }
+                    }
+                    $positionCenter = Invoke-PositionProbe "center"
+                    if ($positionCenter.mode -ne "OFF" -or $positionCenter.position -ne 50) { throw "Center setup failed" }
+                    $positionPublic = Invoke-Cli "position-center-query" "timebase-position" @("--query")
+                    if (-not (Test-ReadbackEqual (Get-Readback $positionPublic "position_seconds") 0)) { throw "Center is not zero seconds" }
+                    Add-Case "timebase-position-modes" "PASS" "Delay seconds and record percentage agree with public readback"
+                } catch { Add-Case "timebase-position-modes" "FAIL" $_.Exception.Message }
+                finally {
+                    if ($null -ne $originalPosition) {
+                        try {
+                            $positionRestored = Invoke-PositionProbe "restore" $originalPosition
+                            foreach ($positionField in @("position", "delay", "mode")) {
+                                if (-not (Test-ReadbackEqual $positionRestored.$positionField $originalPosition.$positionField)) { throw "Position restore mismatch: $positionField" }
+                            }
+                            Add-Case "timebase-position-restore" "PASS"
+                        } catch { Add-Case "timebase-position-restore" "FAIL" $_.Exception.Message }
+                    }
+                }
+            }
         }
         Invoke-RoundTrip "acquisition" "acquisition" @() "type" "--type" `
             $(if ($script:Target -eq "tektronix-tbs2074b") { @("normal", "average", "peak", "high_resolution") } else { @("normal", "average", "peak") })

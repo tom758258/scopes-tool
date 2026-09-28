@@ -8,6 +8,19 @@ $script:ModeQueries = 0
 $script:VectorsSet = $false
 $script:HiddenCaptured = $false
 $script:ValidatorRoot = Split-Path -Parent $ScriptPath
+$script:PositionState = $null
+
+function Invoke-FakePositionProbe {
+    param([string]$Action, [object]$Original = $null)
+    if ($null -eq $script:PositionState) {
+        $script:PositionState = @{ mode = "OFF"; delay = 0.003; position = 40; length = 1000; rate = 1000 }
+    }
+    if ($Action -in @("on", "off")) { $script:PositionState.mode = $Action.ToUpperInvariant() }
+    if ($Action -eq "center") { $script:PositionState.position = 50 }
+    if ($Action -eq "restore") { $script:PositionState = $Original.Clone() }
+    [IO.File]::WriteAllText((Join-Path (Split-Path $FixturePath) "position-state.json"), ($script:PositionState | ConvertTo-Json))
+    return $script:PositionState.Clone()
+}
 
 function Invoke-FakeTransport {
     param([string]$Command, [string[]]$Options)
@@ -16,6 +29,12 @@ function Invoke-FakeTransport {
     $scenario = $script:FixtureJson | ConvertFrom-Json
     $property = $scenario.values.PSObject.Properties[$Command]
     $value = if ($null -eq $property) { [pscustomobject]@{} } else { $property.Value }
+    if ($Command -eq "timebase-position" -and $null -ne $script:PositionState) {
+        $value.position_seconds = if ($script:PositionState.mode -eq "ON") { $script:PositionState.delay } else {
+            (50 - $script:PositionState.position) / 100 * ($script:PositionState.length / $script:PositionState.rate)
+        }
+        if ($scenario.position_mismatch) { $value.position_seconds += 1 }
+    }
     $payload = @{ ok = $true; idn = $scenario.idn; capabilities = $scenario.capabilities; result = $value }
     $fakeError = $null
     if ($Command -eq "math-operator" -and $Options -contains "--query") { $fakeError = $scenario.math_error }
@@ -89,6 +108,12 @@ $start = Get-Date
     $stderr = ""
 '@
 $source = $ast.Extent.Text
+$probe = $ast.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Invoke-PositionProbe"
+}, $true)
+$source = $source.Remove($probe.Extent.StartOffset, $probe.Extent.EndOffset - $probe.Extent.StartOffset).Insert(
+    $probe.Extent.StartOffset, 'function Invoke-PositionProbe { param($Action, $Original) Invoke-FakePositionProbe $Action $Original }')
 $offset = $first[0].Extent.StartOffset
 $source = $source.Remove($offset, $last[0].Extent.EndOffset - $offset).Insert($offset, $transport)
 # The in-memory script retains the validator's helper and repository locations.

@@ -2008,7 +2008,7 @@ temporary 15-second completion timeout and restores it in finally.
 
 `save-waveform --filename ... [--source-channel N]` keeps filename-only
 behavior on Keysight. Tek requires `--source-channel` in the model's analog
-channel range (1..4 or 1..2). B1 saves CSV without a format query/set;
+channel range (1..4 or 1..2). TDS2000B and TBS1000B models save CSV without a format query/set;
 TBS2074B retains its existing `csv` format control. Use available instrument
 storage and a filename valid for the model (TBS2000B uses 8.3 names).
 TBS2074B `screenshot` retrieves native PNG with black background and no

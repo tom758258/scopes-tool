@@ -367,24 +367,24 @@ class TektronixOscilloscope(Oscilloscope):
             raise ParameterValidationError(f"No Tek dry-run plan for {command}")
 
     @property
-    def _b2(self) -> bool:
+    def _is_tbs2000b(self) -> bool:
         return self.capabilities is not None and self.capabilities.series == "TBS2000B"
 
     @property
     def _trigger_root(self) -> str:
-        return "TRIGger:A" if self._b2 else "TRIGger:MAIn"
+        return "TRIGger:A" if self._is_tbs2000b else "TRIGger:MAIn"
 
     def _channel(self, channel: int) -> int:
         if self.capabilities is None:
             raise OscilloscopeError("Tek capabilities unavailable")
         return validate_analog_channel(channel, self.capabilities)
 
-    def _b2_only(self, operation: str) -> None:
-        if not self._b2:
+    def _require_tbs2000b(self, operation: str) -> None:
+        if not self._is_tbs2000b:
             raise ParameterValidationError(f"{operation} is unsupported for this model")
 
-    def _b1_only(self, operation: str) -> None:
-        if self._b2:
+    def _require_tds2000b_or_tbs1000b(self, operation: str) -> None:
+        if self._is_tbs2000b:
             raise ParameterValidationError(f"{operation} is unsupported for this model")
 
     def _query(self, command: str) -> tuple[str, str]:
@@ -485,7 +485,7 @@ class TektronixOscilloscope(Oscilloscope):
         except KeyError as exc:
             raise OscilloscopeError(f"Invalid Tek acquisition mode: {value!r}") from exc
         if result == "high_resolution":
-            self._b2_only("high-resolution acquisition")
+            self._require_tbs2000b("high-resolution acquisition")
         return result
 
     def validate_acquisition_count(self, count: int) -> int:
@@ -523,13 +523,31 @@ class TektronixOscilloscope(Oscilloscope):
     def query_timebase_scale(self) -> float:
         return self._float("HORizontal:MAIn:SCAle?")
 
+    def _timebase_record_duration(self) -> float:
+        length = self._float("HORizontal:RECOrdlength?")
+        rate = self._float("HORizontal:SAMPLERate?")
+        if length <= 0 or rate <= 0:
+            raise OscilloscopeError("Invalid Tek horizontal record geometry")
+        return length / rate
+
     def set_timebase_position(self, seconds: float) -> None:
-        self._b1_only("timebase-position")
-        self._write_number("HORizontal:MAIn:POSition", seconds)
+        if isinstance(seconds, bool) or not isinstance(seconds, (float, int)) or not math.isfinite(seconds):
+            raise ParameterValidationError("value must be a finite number")
+        if not self._is_tbs2000b:
+            self._write_number("HORizontal:MAIn:POSition", seconds)
+        elif _boolean(self.scpi.query("HORizontal:MAIn:DELay:MODe?"), "HORizontal:MAIn:DELay:MODe?"):
+            self._write_number("HORizontal:MAIn:DELay:TIMe", seconds)
+        else:
+            percent = 50.0 - seconds / self._timebase_record_duration() * 100.0
+            self._write_number("HORizontal:POSition", round(percent))
 
     def query_timebase_position(self) -> float:
-        self._b1_only("timebase-position")
-        return self._float("HORizontal:MAIn:POSition?")
+        if not self._is_tbs2000b:
+            return self._float("HORizontal:MAIn:POSition?")
+        if _boolean(self.scpi.query("HORizontal:MAIn:DELay:MODe?"), "HORizontal:MAIn:DELay:MODe?"):
+            return self._float("HORizontal:MAIn:DELay:TIMe?")
+        percent = self._float("HORizontal:POSition?")
+        return (50.0 - percent) / 100.0 * self._timebase_record_duration()
 
     def set_channel_display(self, channel: int, enabled: bool) -> None:
         self.scpi.write(f"SELect:CH{self._channel(channel)} {'ON' if enabled else 'OFF'}")
@@ -547,15 +565,15 @@ class TektronixOscilloscope(Oscilloscope):
     def set_channel_offset(self, channel: int, volts: float) -> None:
         channel = self._channel(channel)
         volts = validate_channel_offset(volts)
-        if self._b2:
+        if self._is_tbs2000b:
             self._write_number(f"CH{channel}:OFFSet", volts)
         else:
-            # B1 positive POSITION raises the signal; offset is the center voltage.
+            # TDS2000B/TBS1000B positive POSITION raises the signal; offset is the center voltage.
             self._write_number(f"CH{channel}:POSition", -volts / self.query_channel_scale(channel))
 
     def query_channel_offset(self, channel: int) -> float:
         channel = self._channel(channel)
-        if self._b2:
+        if self._is_tbs2000b:
             return self._float(f"CH{channel}:OFFSet?")
         return -self._float(f"CH{channel}:POSition?") * self.query_channel_scale(channel)
 
@@ -571,7 +589,7 @@ class TektronixOscilloscope(Oscilloscope):
         channel = self._channel(channel)
         if isinstance(ratio, bool) or not isinstance(ratio, (int, float)) or not math.isfinite(ratio) or ratio <= 0:
             raise ParameterValidationError("probe ratio must be positive and finite")
-        if self._b2:
+        if self._is_tbs2000b:
             self._write_number(f"CH{channel}:PRObe:GAIN", 1 / ratio)
         else:
             if ratio not in {1, 10, 20, 50, 100, 500, 1000}:
@@ -580,19 +598,19 @@ class TektronixOscilloscope(Oscilloscope):
 
     def query_channel_probe_ratio(self, channel: int) -> float:
         channel = self._channel(channel)
-        value = self._float(f"CH{channel}:PRObe:GAIN?" if self._b2 else f"CH{channel}:PRObe?")
+        value = self._float(f"CH{channel}:PRObe:GAIN?" if self._is_tbs2000b else f"CH{channel}:PRObe?")
         if value <= 0:
             raise OscilloscopeError("Invalid Tek probe response")
-        return 1 / value if self._b2 else value
+        return 1 / value if self._is_tbs2000b else value
 
     def set_channel_bandwidth_limit(self, channel: int, enabled: bool) -> None:
         channel = self._channel(channel)
-        token = ("TWEnty" if enabled else "FULl") if self._b2 else ("ON" if enabled else "OFF")
+        token = ("TWEnty" if enabled else "FULl") if self._is_tbs2000b else ("ON" if enabled else "OFF")
         self.scpi.write(f"CH{channel}:BANdwidth {token}")
 
     def query_channel_bandwidth_limit(self, channel: int) -> bool:
         value, _ = self._query(f"CH{self._channel(channel)}:BANdwidth?")
-        valid = {"TWE": True, "TWENTY": True, "FULL": False, "FUL": False} if self._b2 else {"ON": True, "OFF": False, "1": True, "0": False}
+        valid = {"TWE": True, "TWENTY": True, "FULL": False, "FUL": False} if self._is_tbs2000b else {"ON": True, "OFF": False, "1": True, "0": False}
         try:
             return valid[value.upper()]
         except KeyError as exc:
@@ -605,7 +623,7 @@ class TektronixOscilloscope(Oscilloscope):
         return _boolean(self.scpi.query(f"CH{self._channel(channel)}:INVert?"), f"CH{channel}:INVert?")
 
     def set_channel_label(self, channel: int, text: str) -> None:
-        self._b2_only("channel-label")
+        self._require_tbs2000b("channel-label")
         channel = self._channel(channel)
         if self.capabilities is None:
             raise OscilloscopeError("Tek capabilities unavailable")
@@ -613,27 +631,27 @@ class TektronixOscilloscope(Oscilloscope):
         self.scpi.write(f'CH{channel}:LABel "{text}"')
 
     def query_channel_label(self, channel: int) -> str:
-        self._b2_only("channel-label")
+        self._require_tbs2000b("channel-label")
         value, _ = self._query(f"CH{self._channel(channel)}:LABel?")
         return value.strip('"')
 
     def set_channel_probe_skew(self, channel: int, seconds: float) -> None:
-        self._b2_only("channel-probe-skew")
+        self._require_tbs2000b("channel-probe-skew")
         channel = self._channel(channel)
         if not -100e-9 <= seconds <= 100e-9:
             raise ParameterValidationError("Tek probe skew must be within -100 to 100 ns")
         self._write_number(f"CH{channel}:DESKew", seconds)
 
     def query_channel_probe_skew(self, channel: int) -> float:
-        self._b2_only("channel-probe-skew")
+        self._require_tbs2000b("channel-probe-skew")
         return self._float(f"CH{self._channel(channel)}:DESKew?")
 
     def set_display_vectors_on(self) -> None:
-        self._b1_only("display-vectors")
+        self._require_tds2000b_or_tbs1000b("display-vectors")
         self.scpi.write("DISPlay:STYle VECtors")
 
     def query_display_vectors(self) -> tuple[bool, str]:
-        self._b1_only("display-vectors")
+        self._require_tds2000b_or_tbs1000b("display-vectors")
         value, raw = self._query("DISPlay:STYle?")
         normalized = value.upper()
         if normalized in {"VEC", "VECTOR", "VECTORS"}:
@@ -645,7 +663,7 @@ class TektronixOscilloscope(Oscilloscope):
     def _reference(self, slot: int) -> str:
         if slot not in {1, 2} or isinstance(slot, bool):
             raise ParameterValidationError("Tek reference slot must be 1 or 2")
-        return f"REF{slot}" if self._b2 else ("REFA" if slot == 1 else "REFB")
+        return f"REF{slot}" if self._is_tbs2000b else ("REFA" if slot == 1 else "REFB")
 
     def save_reference_waveform(self, slot: int, source_channel: int) -> None:
         reference = self._reference(slot)
@@ -682,19 +700,19 @@ class TektronixOscilloscope(Oscilloscope):
 
     def configure_trigger_mode(self, mode: str) -> None:
         choices = {"edge": "EDGE", "glitch": "PULSE"}
-        choices.update({"runt": "PULSE"} if self._b2 else {"tv": "VIDeo"})
+        choices.update({"runt": "PULSE"} if self._is_tbs2000b else {"tv": "VIDeo"})
         token = _choice(mode, choices, "trigger type")
         self.scpi.write(f"{self._trigger_root}:TYPe {token}")
-        if self._b2 and token == "PULSE":
+        if self._is_tbs2000b and token == "PULSE":
             self.scpi.write(f"{self._trigger_root}:PULSe:CLAss {'RUNT' if mode.lower() == 'runt' else 'WIDth'}")
 
     def query_trigger_mode(self) -> TriggerModeState:
         value, raw = self._query(f"{self._trigger_root}:TYPe?")
         choices = {"EDGE": "edge", "PULS": "glitch", "PULSE": "glitch"}
-        if not self._b2:
+        if not self._is_tbs2000b:
             choices.update({"VID": "tv", "VIDEO": "tv"})
         mode = _choice(value, choices, "trigger type response")
-        if self._b2 and mode == "glitch":
+        if self._is_tbs2000b and mode == "glitch":
             pulse, pulse_raw = self._query(f"{self._trigger_root}:PULSe:CLAss?")
             mode = _choice(pulse, {"WID": "glitch", "WIDTH": "glitch", "RUNT": "runt"}, "pulse class response")
             raw = f"{raw};{pulse_raw}"
@@ -711,7 +729,7 @@ class TektronixOscilloscope(Oscilloscope):
         if source == "analog-channel" and source_channel is not None:
             token = f"CH{self._channel(source_channel)}"
         elif source_channel is None:
-            choices = {"line": "LINE"} if self._b2 else {"line": "ACLine", "external": "EXT"}
+            choices = {"line": "LINE"} if self._is_tbs2000b else {"line": "ACLine", "external": "EXT"}
             token = _choice(source, choices, "edge source")
         else:
             raise ParameterValidationError("Tek non-channel source rejects source_channel")
@@ -725,7 +743,7 @@ class TektronixOscilloscope(Oscilloscope):
             if channel <= self.capabilities.analog_channels:
                 return EdgeTriggerSourceState("analog-channel", channel, raw)
             return EdgeTriggerSourceState(None, None, raw)
-        choices = {"LINE": "line"} if self._b2 else {"ACL": "line", "ACLINE": "line", "EXT": "external"}
+        choices = {"LINE": "line"} if self._is_tbs2000b else {"ACL": "line", "ACLINE": "line", "EXT": "external"}
         return EdgeTriggerSourceState(choices.get(value.upper()), None, raw)
 
     def configure_trigger_edge_slope(self, *, slope: str) -> None:
@@ -738,7 +756,7 @@ class TektronixOscilloscope(Oscilloscope):
 
     def configure_trigger_edge_coupling(self, coupling: str) -> None:
         choices = {"dc": "DC", "lf-reject": "LFRej"}
-        if not self._b2:
+        if not self._is_tbs2000b:
             choices["ac"] = "AC"
         token = _choice(coupling, choices, "edge coupling")
         self.scpi.write(f"{self._trigger_root}:EDGE:COUPling {token}")
@@ -746,16 +764,16 @@ class TektronixOscilloscope(Oscilloscope):
     def query_trigger_edge_coupling(self) -> EdgeTriggerCouplingState:
         value, raw = self._query(f"{self._trigger_root}:EDGE:COUPling?")
         choices = {"DC": "dc", "LFREJ": "lf-reject", "LFREJECT": "lf-reject"}
-        if not self._b2:
+        if not self._is_tbs2000b:
             choices["AC"] = "ac"
         return EdgeTriggerCouplingState(_choice(value, choices, "edge coupling response"), raw)
 
     def configure_trigger_edge_level(self, *, source_channel: int, level_volts: float) -> None:
-        self._b2_only("trigger-edge-level")
+        self._require_tbs2000b("trigger-edge-level")
         self._write_number(f"{self._trigger_root}:LEVel:CH{self._channel(source_channel)}", level_volts)
 
     def query_trigger_edge_level(self, *, source_channel: int) -> EdgeTriggerLevelState:
-        self._b2_only("trigger-edge-level")
+        self._require_tbs2000b("trigger-edge-level")
         channel = self._channel(source_channel)
         command = f"{self._trigger_root}:LEVel:CH{channel}?"
         raw = self.scpi.query(command)
@@ -767,7 +785,7 @@ class TektronixOscilloscope(Oscilloscope):
         if not math.isfinite(level_volts):
             raise ParameterValidationError("edge level must be finite")
         self.configure_trigger_edge_source(source="analog-channel", source_channel=channel)
-        command = f"{self._trigger_root}:LEVel:CH{channel}" if self._b2 else f"{self._trigger_root}:LEVel"
+        command = f"{self._trigger_root}:LEVel:CH{channel}" if self._is_tbs2000b else f"{self._trigger_root}:LEVel"
         self._write_number(command, level_volts)
         self.scpi.write(f"{self._trigger_root}:EDGE:SLOpe {token}")
 
@@ -775,25 +793,25 @@ class TektronixOscilloscope(Oscilloscope):
         source = self.query_trigger_edge_source()
         if source.source_channel is None:
             raise ParameterValidationError("Combined Tek edge trigger requires an analog source")
-        command = f"{self._trigger_root}:LEVel:CH{source.source_channel}?" if self._b2 else f"{self._trigger_root}:LEVel?"
+        command = f"{self._trigger_root}:LEVel:CH{source.source_channel}?" if self._is_tbs2000b else f"{self._trigger_root}:LEVel?"
         level = self._float(command)
         slope = self.query_trigger_edge_slope().slope
         assert slope is not None
         return EdgeTriggerState(source.source_channel, level, slope)
 
     def set_trigger_holdoff(self, seconds: float) -> None:
-        minimum, maximum = (40e-9, 8.0) if self._b2 else (500e-9, 10.0)
+        minimum, maximum = (40e-9, 8.0) if self._is_tbs2000b else (500e-9, 10.0)
         if not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not minimum <= seconds <= maximum:
             raise ParameterValidationError("Unsupported Tek trigger holdoff")
-        command = f"{self._trigger_root}:HOLDOff:TIMe" if self._b2 else f"{self._trigger_root}:HOLDOff:VALue"
+        command = f"{self._trigger_root}:HOLDOff:TIMe" if self._is_tbs2000b else f"{self._trigger_root}:HOLDOff:VALue"
         self._write_number(command, seconds)
 
     def query_trigger_holdoff(self) -> float:
-        command = f"{self._trigger_root}:HOLDOff:TIMe?" if self._b2 else f"{self._trigger_root}:HOLDOff:VALue?"
+        command = f"{self._trigger_root}:HOLDOff:TIMe?" if self._is_tbs2000b else f"{self._trigger_root}:HOLDOff:VALue?"
         return self._float(command)
 
     def _units_available(self, channel: int) -> bool:
-        return not self._b2 or channel in (1, 2)
+        return not self._is_tbs2000b or channel in (1, 2)
 
     def set_channel_units(self, channel: int, units: str) -> None:
         channel = self._channel(channel)
@@ -812,7 +830,7 @@ class TektronixOscilloscope(Oscilloscope):
     def query_channel_summary(self) -> tuple[ChannelSummaryEntry, ...]:
         return tuple(ChannelSummaryEntry(
             channel=channel, display=self.query_channel_display(channel),
-            label=self.query_channel_label(channel) if self._b2 else None,
+            label=self.query_channel_label(channel) if self._is_tbs2000b else None,
             scale=self.query_channel_scale(channel), range=None,
             offset=self.query_channel_offset(channel),
             coupling=self.query_channel_coupling(channel), impedance=None,
@@ -820,13 +838,13 @@ class TektronixOscilloscope(Oscilloscope):
             bandwidth_limit=self.query_channel_bandwidth_limit(channel),
             units=self.query_channel_units(channel) if self._units_available(channel) else None,
             vernier=None, probe_ratio=self.query_channel_probe_ratio(channel),
-            probe_skew=self.query_channel_probe_skew(channel) if self._b2 else None,
+            probe_skew=self.query_channel_probe_skew(channel) if self._is_tbs2000b else None,
         ) for channel in range(1, self.capabilities.analog_channels + 1))
 
     def set_display_persistence(self, value: str | float) -> None:
         mode, seconds = validate_display_persistence(value, self.capabilities)
         token = "OFF" if mode == "minimum" else "INFInite" if mode == "infinite" else f"{seconds:g}"
-        if self._b2:
+        if self._is_tbs2000b:
             if mode != "minimum":
                 self.scpi.write(f"DISplay:PERSistence:VALUe {token}")
             self.scpi.write(f"DISplay:PERSistence:STATe {'OFF' if mode == 'minimum' else 'ON'}")
@@ -834,7 +852,7 @@ class TektronixOscilloscope(Oscilloscope):
             self.scpi.write(f"DISplay:PERSistence {token}")
 
     def query_display_persistence(self) -> DisplayPersistence:
-        if self._b2:
+        if self._is_tbs2000b:
             state, state_raw = self._query("DISplay:PERSistence:STATe?")
             value, raw = self._query("DISplay:PERSistence:VALUe?")
             if not _boolean(state, "DISplay:PERSistence:STATe?"):
@@ -846,7 +864,7 @@ class TektronixOscilloscope(Oscilloscope):
             return DisplayPersistence("minimum", None, raw)
         if value.upper() in {"INF", "INFI", "INFINITE"}:
             return DisplayPersistence("infinite", None, raw)
-        if not self._b2:
+        if not self._is_tbs2000b:
             seconds = _number(value, "DISPlay:PERSistence?")
             if seconds == 0:
                 return DisplayPersistence("minimum", None, raw)
@@ -869,22 +887,22 @@ class TektronixOscilloscope(Oscilloscope):
         active = mode.upper()
         if active == "OFF":
             return CursorState(mode, x1, x2, y1, y2, dx, dy, None)
-        source, _ = self._query("SELect:CONTROl?" if self._b2 else "CURSor:SELect:SOUrce?")
+        source, _ = self._query("SELect:CONTROl?" if self._is_tbs2000b else "CURSor:SELect:SOUrce?")
         # FFT positions remain frequency-valued even when the unit selector says seconds.
         time_source = source.upper() in {"CH1", "CH2", "CH3", "CH4", "MATH", "REF1", "REF2", "REFA", "REFB"}
         if source.upper() == "MATH":
             expression, _ = self._query("MATH:DEFINE?")
             time_source = not expression.strip('"').upper().startswith("FFT")
-        if active in ({"TIME", "SCREEN"} if self._b2 else {"VBA", "VBARS"}) and time_source:
+        if active in ({"TIME", "SCREEN"} if self._is_tbs2000b else {"VBA", "VBARS"}) and time_source:
             units, _ = self._query("CURSor:VBArs:UNIts?")
             if units.upper() in {"SECO", "SECONDS"}:
                 x1 = self._float("CURSor:VBArs:POSITION1?")
                 x2 = self._float("CURSor:VBArs:POSITION2?")
                 dx = self._float("CURSor:VBArs:DELTa?")
-        if active in ({"AMPL", "AMPLITUDE", "SCREEN"} if self._b2 else {"HBA", "HBARS"}):
+        if active in ({"AMPL", "AMPLITUDE", "SCREEN"} if self._is_tbs2000b else {"HBA", "HBARS"}):
             units, _ = self._query("CURSor:HBArs:UNIts?")
             volts = False
-            voltage_units = {"BASE", "BAS"} if self._b2 else {"VOLTS", "V"}
+            voltage_units = {"BASE", "BAS"} if self._is_tbs2000b else {"VOLTS", "V"}
             voltage_sources = {f"CH{channel}" for channel in range(1, self.capabilities.analog_channels + 1)
                                if self._units_available(channel)}
             if units.upper() in voltage_units and source.upper() in voltage_sources:
@@ -979,7 +997,7 @@ class TektronixOscilloscope(Oscilloscope):
         self.measurement_query_command(channel, item, **kwargs)
         item = normalize_measurement_item(item)
         root = "MEASUrement:IMMed"
-        source = "SOUrce1" if self._b2 else "SOUrce"
+        source = "SOUrce1" if self._is_tbs2000b else "SOUrce"
         original_type = self._query(f"{root}:TYPe?")[0]
         original_source = self._query(f"{root}:{source}?")[0]
         try:
@@ -1005,7 +1023,7 @@ class TektronixOscilloscope(Oscilloscope):
         self.scpi.write("DATa:WIDth 1")
         self.scpi.write("DATa:STARt 1")
         self.scpi.write(f"DATa:STOP {points}")
-        root = "WFMOutpre" if self._b2 else "WFMPre"
+        root = "WFMOutpre" if self._is_tbs2000b else "WFMPre"
         raw = {name: self.scpi.query(f"{root}:{name}?") for name in (
             "NR_Pt", "XINcr", "XZEro", "YMUlt", "YZEro", "YOFf", "YUNit"
         )}
@@ -1074,7 +1092,7 @@ class TektronixOscilloscope(Oscilloscope):
             time_seconds=time_seconds, min_time_seconds=min_time_seconds, max_time_seconds=max_time_seconds,
             level_volts=level_volts, capabilities=self.capabilities)
         qualifier = normalize_glitch_qualifier(qualifier)
-        when = ({"LESSthan": "LESSthan", "GREaterthan": "MOREthan"} if self._b2 else
+        when = ({"LESSthan": "LESSthan", "GREaterthan": "MOREthan"} if self._is_tbs2000b else
                 {"LESSthan": "INside", "GREaterthan": "OUTside"})[qualifier]
         self.configure_trigger_mode("glitch")
         root = f"{self._trigger_root}:PULSe:WIDth"
@@ -1083,7 +1101,7 @@ class TektronixOscilloscope(Oscilloscope):
         self._write_number(f"{root}:WIDth", time_seconds)
         self.scpi.write(f"{root}:WHEn {when}")
         if level_volts is not None:
-            self._write_number(f"{self._trigger_root}:LEVel" + (f":CH{channel}" if self._b2 else ""), level_volts)
+            self._write_number(f"{self._trigger_root}:LEVel" + (f":CH{channel}" if self._is_tbs2000b else ""), level_volts)
 
     def query_glitch_trigger(self) -> GlitchTriggerState:
         root = f"{self._trigger_root}:PULSe:WIDth"
@@ -1097,12 +1115,12 @@ class TektronixOscilloscope(Oscilloscope):
             raise OscilloscopeError(f"Unsupported Tek pulse source: {source!r}")
         channel = validate_analog_channel(int(match[1]), self.capabilities)
         qualifier = _choice(_payload(raw["qualifier"], f"{root}:WHEn?"),
-            {"LESS": "less-than", "LESSTHAN": "less-than", "MORE": "greater-than", "MORETHAN": "greater-than"} if self._b2 else
+            {"LESS": "less-than", "LESSTHAN": "less-than", "MORE": "greater-than", "MORETHAN": "greater-than"} if self._is_tbs2000b else
             {"IN": "less-than", "INSIDE": "less-than", "OUT": "greater-than", "OUTSIDE": "greater-than"}, "pulse qualifier response")
         polarity = _choice(_payload(raw["polarity"], f"{root}:POLarity?"),
             {"POS": "positive", "POSITIVE": "positive", "NEG": "negative", "NEGATIVE": "negative"}, "pulse polarity response")
         width = _number(raw["width"], f"{root}:WIDth?")
-        command = f"{self._trigger_root}:LEVel" + (f":CH{channel}" if self._b2 else "") + "?"
+        command = f"{self._trigger_root}:LEVel" + (f":CH{channel}" if self._is_tbs2000b else "") + "?"
         raw["level"] = self.scpi.query(command)
         raw["mode"] = mode.raw_mode
         return GlitchTriggerState(mode.mode, source, "analog-channel", channel, None, polarity, qualifier,
@@ -1120,8 +1138,8 @@ class TektronixOscilloscope(Oscilloscope):
             "rise_time": "RISe", "fall_time": "FALL", "positive_width": "PWIdth", "negative_width": "NWIdth",
             "amplitude": "AMPlitude", "top": "HIGH", "base": "LOW", "overshoot": "POVERshoot", "preshoot": "NOVERshoot",
             "duty_cycle": "PDUty", "negative_duty_cycle": "NDUty", "area": "AREA",
-            "positive_edges": "PEDGECount" if self._b2 else "REDGECount",
-            "negative_edges": "NEDGECount" if self._b2 else "FEDGECount",
+            "positive_edges": "PEDGECount" if self._is_tbs2000b else "REDGECount",
+            "negative_edges": "NEDGECount" if self._is_tbs2000b else "FEDGECount",
             "positive_pulses": "PPULSECount", "negative_pulses": "NPULSECount",
         }
 
@@ -1132,17 +1150,17 @@ class TektronixOscilloscope(Oscilloscope):
         channel = self._channel(channel)
         item = validate_measurement_install_item(item, self.capabilities)
         token = self._measurement_types()[item]
-        source_name = "SOUrce1" if self._b2 else "SOUrce"
+        source_name = "SOUrce1" if self._is_tbs2000b else "SOUrce"
         unused = matching = None
         for slot in self._measurement_slots():
             root = f"MEASUrement:MEAS{slot}"
-            if self._b2:
+            if self._is_tbs2000b:
                 available = not _boolean(self.scpi.query(f"{root}:STATE?"), f"{root}:STATE?")
                 if available:
                     unused = unused or slot
                     continue
             kind, _ = self._query(f"{root}:TYPe?")
-            if not self._b2 and kind.upper() == "NONE":
+            if not self._is_tbs2000b and kind.upper() == "NONE":
                 unused = unused or slot
                 continue
             # Match documented abbreviated or full type readbacks.
@@ -1159,29 +1177,29 @@ class TektronixOscilloscope(Oscilloscope):
             root = f"MEASUrement:MEAS{slot}"
             self.scpi.write(f"{root}:{source_name} CH{channel}")
             self.scpi.write(f"{root}:TYPe {token}")
-            if self._b2:
+            if self._is_tbs2000b:
                 self.scpi.write(f"{root}:STATE ON")
 
     def clear_measurements(self) -> None:
         for slot in self._measurement_slots():
-            self.scpi.write(f"MEASUrement:MEAS{slot}:" + ("STATE OFF" if self._b2 else "TYPe NONE"))
+            self.scpi.write(f"MEASUrement:MEAS{slot}:" + ("STATE OFF" if self._is_tbs2000b else "TYPe NONE"))
 
     def configure_save_image_format(self, format: str) -> None:
-        self._b2_only("save-image-format")
+        self._require_tbs2000b("save-image-format")
         token = _choice(format, {"png": "PNG", "bmp": "BMP"}, "save image format")
         self.scpi.write(f"SAVe:IMAge:FILEFormat {token}")
 
     def query_save_image_format(self) -> SaveImageFormatState:
-        self._b2_only("save-image-format")
+        self._require_tbs2000b("save-image-format")
         value, raw = self._query("SAVe:IMAge:FILEFormat?")
         return SaveImageFormatState(_choice(value, {"PNG": "png", "BMP": "bmp"}, "save image format response"), raw)
 
     def configure_save_image_ink_saver(self, enabled: bool) -> None:
-        self._b1_only("save-image-ink-saver")
+        self._require_tds2000b_or_tbs1000b("save-image-ink-saver")
         self.scpi.write(f"HARDCopy:INKSaver {'ON' if enabled else 'OFF'}")
 
     def query_save_image_ink_saver(self) -> SaveBooleanState:
-        self._b1_only("save-image-ink-saver")
+        self._require_tds2000b_or_tbs1000b("save-image-ink-saver")
         raw = self.scpi.query("HARDCopy:INKSaver?")
         return SaveBooleanState(_boolean(raw, "HARDCopy:INKSaver?"), raw)
 
@@ -1215,12 +1233,12 @@ class TektronixOscilloscope(Oscilloscope):
             self.scpi.set_timeout(original_timeout)
 
     def configure_save_waveform_format(self, format: str) -> None:
-        self._b2_only("save-waveform-format")
+        self._require_tbs2000b("save-waveform-format")
         token = _choice(format, {"csv": "SPREADSheet"}, "save waveform format")
         self.scpi.write(f"SAVe:WAVEform:FILEFormat {token}")
 
     def query_save_waveform_format(self) -> SaveWaveformFormatState:
-        self._b2_only("save-waveform-format")
+        self._require_tbs2000b("save-waveform-format")
         value, raw = self._query("SAVe:WAVEform:FILEFormat?")
         return SaveWaveformFormatState(_choice(value, {"SPREADS": "csv", "SPREADSHEET": "csv"}, "waveform format response"), raw)
 
@@ -1228,7 +1246,7 @@ class TektronixOscilloscope(Oscilloscope):
         options = normalize_screenshot_options(options)
         background = normalize_screenshot_background(background)
         validate_screenshot_capability(self.capabilities, options)
-        if self._b2:
+        if self._is_tbs2000b:
             return self._capture_native_png(options, background)
         from .visa_backend import VisaBackend
         if isinstance(self.backend, VisaBackend):
@@ -1301,7 +1319,7 @@ class TektronixOscilloscope(Oscilloscope):
     def configure_runt_trigger(self, *, channel: int, polarity: str, qualifier: str,
                                low_level_volts: float, high_level_volts: float,
                                time_seconds: float | None = None) -> None:
-        self._b2_only("trigger-runt")
+        self._require_tbs2000b("trigger-runt")
         polarity, qualifier = polarity.strip().lower(), qualifier.strip().lower()
         runt_trigger_configure_commands(channel=channel, polarity=polarity, qualifier=qualifier,
             low_level_volts=low_level_volts, high_level_volts=high_level_volts,
@@ -1317,7 +1335,7 @@ class TektronixOscilloscope(Oscilloscope):
         self.scpi.write(f"TRIGger:A:RUNT:WHEn {token}")
 
     def query_runt_trigger(self) -> RuntTriggerState:
-        self._b2_only("trigger-runt")
+        self._require_tbs2000b("trigger-runt")
         mode = self.query_trigger_mode()
         source, source_raw = self._query("TRIGger:A:RUNT:SOUrce?")
         match = re.fullmatch(r"CH([12])", source.upper())
@@ -1348,7 +1366,7 @@ class TektronixOscilloscope(Oscilloscope):
 
     def configure_tv_trigger(self, *, source_channel: int, standard: str, mode: str,
                              polarity: str, line: int | None = None) -> TvTriggerState:
-        self._b1_only("trigger-tv")
+        self._require_tds2000b_or_tbs1000b("trigger-tv")
         standard, mode, polarity = standard.strip().lower(), mode.strip().lower(), polarity.strip().lower()
         tv_trigger_configure_commands(source_channel=source_channel, standard=standard, mode=mode,
             polarity=polarity, line=line, capabilities=self.capabilities)
@@ -1361,7 +1379,7 @@ class TektronixOscilloscope(Oscilloscope):
         return self.query_tv_trigger()
 
     def query_tv_trigger(self) -> TvTriggerState:
-        self._b1_only("trigger-tv")
+        self._require_tds2000b_or_tbs1000b("trigger-tv")
         mode = self.query_trigger_mode()
         root = "TRIGger:MAIn:VIDeo"
         source, source_raw = self._query(f"{root}:SOUrce?")
@@ -1405,13 +1423,9 @@ class TektronixOscilloscope(Oscilloscope):
                            slope=self.query_trigger_edge_slope().slope)
             if source.source_channel is not None:
                 channel = source.source_channel
-                trigger['level'] = self._float(f"{self._trigger_root}:LEVel:CH{channel}?" if self._b2 else f"{self._trigger_root}:LEVel?")
+                trigger['level'] = self._float(f"{self._trigger_root}:LEVel:CH{channel}?" if self._is_tbs2000b else f"{self._trigger_root}:LEVel?")
                 trigger['units'] = entries[channel - 1].units
-        position = None
-        if not self._b2:
-            position = self.query_timebase_position()
-        elif _boolean(self.scpi.query("HORizontal:DELay:MODe?"), "HORizontal:DELay:MODe?"):
-            position = self._float("HORizontal:DELay:TIMe?")
+        position = self.query_timebase_position()
         return dict(channels=channels, timebase=dict(scale=self.query_timebase_scale(), position=position),
                     trigger=trigger, acquisition={"mode": "unknown"})
 

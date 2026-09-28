@@ -129,7 +129,7 @@ def fake_run(
     vectors_on: bool = False, vectors_mismatch: bool = False,
     waveform_rows: tuple[str, ...] = ("0,0.5", "0.001,0.6"),
     actual_points: int | None = None, hidden_outcome: str | None = None,
-    subprocess_cli: bool = False,
+    subprocess_cli: bool = False, position_mismatch: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
@@ -184,6 +184,29 @@ def fake_run(
                                 "qualifier": "less-than", "less_than_seconds": 1e-6,
                                 "greater_than_seconds": None, "level_volts": 0.0},
     }
+    raw_state = tmp_path / "position-state.json"
+    core_stub = tmp_path / "scopes_tool_core"
+    core_stub.mkdir()
+    (core_stub / "__init__.py").write_text("", encoding="utf-8")
+    (core_stub / "visa_backend.py").write_text(
+        "import json\nfrom pathlib import Path\n"
+        f"state_path = Path({str(raw_state)!r})\n"
+        "class VisaBackend:\n"
+        " def __init__(self, resource, visa_library=None):\n"
+        "  self.state = json.loads(state_path.read_text()) if state_path.exists() else "
+        "{'mode': 'OFF', 'delay': 0.003, 'position': 40, 'length': 1000, 'rate': 1000}\n"
+        " def query(self, command):\n"
+        "  if command == '*IDN?': return 'TEKTRONIX,TBS2074B,FAKE,1'\n"
+        "  key = {'MODE': 'mode', 'TIME': 'delay', 'POSITION': 'position', "
+        "'RECORDLENGTH': 'length', 'SAMPLERATE': 'rate'}[command.rstrip('?').split(':')[-1].upper()]\n"
+        "  return str(self.state[key])\n"
+        " def write(self, command):\n"
+        "  header, value = command.rsplit(' ', 1)\n"
+        "  key = {'MODE': 'mode', 'TIME': 'delay', 'POSITION': 'position'}[header.split(':')[-1].upper()]\n"
+        "  self.state[key] = value if key == 'mode' else float(value)\n"
+        " def close(self): state_path.write_text(json.dumps(self.state))\n",
+        encoding="utf-8",
+    )
     stub = tmp_path / "scopes_tool_cli"
     stub.mkdir()
     (stub / "__init__.py").write_text("", encoding="utf-8")
@@ -193,6 +216,11 @@ def fake_run(
         " log.write(json.dumps(sys.argv[1:]) + '\\n')\n"
         "command = sys.argv[1]\n"
         f"values = {values!r}\n"
+        f"raw_state = Path({str(raw_state)!r})\n"
+        "if command == 'timebase-position' and raw_state.exists():\n"
+        " state = json.loads(raw_state.read_text())\n"
+        " values[command]['position_seconds'] = (state['delay'] if state['mode'] == 'ON' else "
+        "(50 - state['position']) / 100 * state['length'] / state['rate'])\n"
         f"math_error, cursor_error = {math_error!r}, {cursor_error!r}\n"
         "error = (math_error if command == 'math-operator' and '--query' in sys.argv else\n"
         "         cursor_error if command == 'cursor' and '--x1' in sys.argv else None)\n"
@@ -255,6 +283,7 @@ def fake_run(
             "capabilities": {"analog_channels": channels, "series": series},
             "math_error": math_error, "cursor_error": cursor_error,
             "mismatch": mismatch, "vectors_mismatch": vectors_mismatch,
+            "position_mismatch": position_mismatch,
             "hidden_outcome": hidden_outcome,
             "points": len(waveform_rows) if actual_points is None else actual_points,
             "csv_text": "time_s,ch1_v\n" + "\n".join(waveform_rows) + "\n",
@@ -368,11 +397,12 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
     assert cases["channel-display"]["status"] == "PASS"
     if target == TARGETS[0]:
         assert cases["channel-probe-skew"]["status"] == "PASS"
+        assert cases["timebase-position-modes"]["status"] == "N/A"
         assert cases["display-vectors"]["status"] == "N/A"
     else:
-        assert cases["timebase-position"]["status"] == "PASS"
         assert cases["display-vectors-query"]["status"] == "PASS"
         assert cases["display-vectors-on"]["status"] == "N/A"
+    assert cases["timebase-position"]["status"] == "PASS"
     assert cases["trigger-mode"]["status"] == "PASS"
     for name in ("channel-units", "math-display", "math-operator", "display-persistence",
                  "cursor-query", "trigger-edge", "trigger-edge-source", "trigger-edge-slope",
@@ -390,7 +420,7 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
                for invocation in report["invocations"])
     assert not any(inv["arguments"][2] == "cursor" and "--query" not in inv["arguments"]
                    for inv in report["invocations"])
-    unsupported = ({"timebase-position", "trigger-tv", "save-image-ink-saver", "display-vectors"}
+    unsupported = ({"trigger-tv", "save-image-ink-saver", "display-vectors"}
                    if target == TARGETS[0] else
                    {"sample-rate", "channel-label", "channel-probe-skew",
                     "trigger-edge-level", "trigger-runt", "save-image-format", "save-waveform-format"})
@@ -433,6 +463,11 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
+    if target == TARGETS[0]:
+        assert cases["timebase-position-modes"]["status"] == "PASS"
+        assert cases["timebase-position-restore"]["status"] == "PASS"
+        state = json.loads((tmp_path / "position-state.json").read_text())
+        assert (state["mode"], state["delay"], state["position"]) == ("OFF", 0.003, 40)
     for name in ("cursor-off", "measure-install", "measure-clear", "run", "single", "force-trigger",
                  "stop-acquisition", "autoscale", "save-image", "save-waveform", "setup-save", "setup-recall",
                  "reference-save", "reference-display", "reference-query", "measure", "capture-byte", "single-wait-natural", "single-wait-force"):
@@ -505,16 +540,23 @@ def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path)
 
 
 @requires_windows
-@pytest.mark.parametrize("failure", ("mode", "bmp"))
+@pytest.mark.parametrize("failure", ("mode", "bmp", "position"))
 def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[1], "-IncludeScreenshot", mismatch=failure == "mode", bad_bmp=failure == "bmp",
+        tmp_path, TARGETS[0] if failure == "position" else TARGETS[1], "-IncludeScreenshot",
+        *(["-IncludeConfigurationActions"] if failure == "position" else []),
+        mismatch=failure == "mode", bad_bmp=failure == "bmp", position_mismatch=failure == "position",
     )
     assert result.returncode != 0
     assert report["status"] == "fail"
     assert report["summary_counts"]["failed"] == 1
     cases = {case["name"]: case for case in report["cases"]}
-    assert cases["trigger-mode" if failure == "mode" else "screenshot-bmp"]["status"] == "FAIL"
+    failed_case = {"mode": "trigger-mode", "bmp": "screenshot-bmp", "position": "timebase-position-modes"}[failure]
+    assert cases[failed_case]["status"] == "FAIL"
+    if failure == "position":
+        assert cases["timebase-position-restore"]["status"] == "PASS"
+        state = json.loads((tmp_path / "position-state.json").read_text())
+        assert (state["mode"], state["delay"], state["position"]) == ("OFF", 0.003, 40)
     if failure == "mode":
         assert cases["trigger-edge"]["status"] == "N/A"
 
@@ -538,7 +580,8 @@ def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
     }
     assert "ProcessStartInfo" in TEXT
     assert '"-m", "scopes_tool_cli.cli"' in TEXT
-    assert not re.search(r"(?i)(?:\bACQuire:|\bTRIGger:|\bCH\d+:|\*ESR\?|\*IDN\?)", TEXT)
+    public_script = re.sub(r"(?s)function Invoke-PositionProbe \{.*?\nfunction Get-Readback", "function Get-Readback", TEXT)
+    assert not re.search(r"(?i)(?:\bACQuire:|\bTRIGger:|\bCH\d+:|\*ESR\?|\*IDN\?)", public_script)
     assert not re.search(r"(?i)(?:EVENT\?|EVMsg\?|ALLEv\?|EVQty\?|DISPLAY:STYLE\s+DOTS)", TEXT)
     assert "-IncludeAcquisitionActions" in TEXT
     assert "-IncludeAutoscale" in TEXT
