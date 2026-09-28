@@ -21,7 +21,7 @@ from .batch import (
 from .capabilities import ScopeCapabilities
 from .errors import OscilloscopeError, ParameterValidationError
 from .operations import OperationResult, _capture_waveform
-from .planning import OperationPlan, planned_waveform_scpi, resolve_capture_channels
+from .planning import CapturePlanRequest, OperationPlan, plan_capture, resolve_capture_channels
 from .scope import Oscilloscope
 from .waveform import (
     MultiChannelWaveformCapture,
@@ -103,14 +103,15 @@ def plan_capture_monitor(
         )
         if path is not None
     )
-    planned = list(
-        planned_waveform_scpi(
-            normalized["channels"],
-            normalized["waveform_format"],
-            normalized["points"],
-        )
+    capture_plan = plan_capture(
+        CapturePlanRequest(
+            channels=normalized["channels"],
+            points=normalized["points"],
+            waveform_format=normalized["waveform_format"],
+        ),
+        capabilities,
     )
-    planned.append(":SYSTem:ERRor?")
+    planned = list(capture_plan.planned_scpi)
     return OperationPlan(
         tuple(planned),
         files,
