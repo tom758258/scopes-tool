@@ -35,6 +35,7 @@ from .workflow import (
     StopRequested,
     WorkflowProgress,
     drain_preexisting_system_errors,
+    instrument_status_fields,
     interruptible_wait,
     workflow_scpi_logging,
 )
