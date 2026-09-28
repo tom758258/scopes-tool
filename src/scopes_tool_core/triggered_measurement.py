@@ -214,10 +214,8 @@ def run_triggered_measure_loop(
 
                     scope.single()
                     trigger_config = _trigger_wait_config(request.trigger_timeout_seconds)
-                    trigger = wait_for_current_trigger_completion(
-                        scope.scpi,
+                    trigger = scope.wait_for_current_trigger(
                         trigger_config,
-                        classifier_profile=_trigger_wait_classifier_profile(scope),
                         stop_requested=stop_requested,
                     )
                     if trigger.outcome == "cancelled":
