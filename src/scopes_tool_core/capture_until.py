@@ -205,7 +205,7 @@ def run_capture_until(
                 current_capture += 1
                 capture = _capture_waveform(scope, channels, waveform_format, points)
                 entry = scope.post_command_status("capture-until")
-                last_system_error = system_error_manifest_dict(entry)
+                last_system_error = instrument_status_fields(entry).get("system_error")
                 manifest["capture_count"] = current_capture
                 if entry.is_error:
                     return _finish_result(
