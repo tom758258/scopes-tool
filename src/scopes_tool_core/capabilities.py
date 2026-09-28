@@ -103,6 +103,14 @@ _TEK_COMMON_OPERATIONS = frozenset({
     "record-length", "channel-summary", "live-data-snapshot",
     "system-information-snapshot", "measure", "capture", "single-wait",
     "trigger-pulse-width", "reference-query", "save-waveform", "channel-offset",
+    "trigger-edge-level",
+})
+
+_TEK_WORKFLOW_OPERATIONS = frozenset({
+    "measure-sweep", "doctor", "acquisition-check",
+    "capture-batch", "capture-until", "capture-monitor",
+    "measure-log", "measure-until",
+    "triggered-measure-loop", "triggered-capture-series", "sequence",
 })
 
 
@@ -169,7 +177,7 @@ _CAPABILITY_PROFILES = {
         setup_slots=tuple(range(1, 10)),
         supports_setup_file_target=False,
         supports_channel_label=True, channel_label_max_length=30,
-        supported_operations=_TEK_COMMON_OPERATIONS | {
+        supported_operations=_TEK_COMMON_OPERATIONS | _TEK_WORKFLOW_OPERATIONS | {
             "channel-label", "channel-probe-skew", "timebase-position",
             "trigger-edge-level", "trigger-runt", "sample-rate",
             "save-image-format", "save-waveform-format", "screenshot",
@@ -204,7 +212,7 @@ _CAPABILITY_PROFILES = {
         autoscale_supports_optional_controls=False,
         setup_slots=tuple(range(1, 10)),
         supports_setup_file_target=False,
-        supported_operations=_TEK_COMMON_OPERATIONS | {
+        supported_operations=_TEK_COMMON_OPERATIONS | _TEK_WORKFLOW_OPERATIONS | {
             "timebase-position", "display-vectors", "cursor-set",
             "trigger-tv", "save-image-ink-saver", "screenshot",
         },
@@ -238,7 +246,7 @@ _CAPABILITY_PROFILES = {
         autoscale_supports_optional_controls=False,
         setup_slots=tuple(range(1, 10)),
         supports_setup_file_target=False,
-        supported_operations=_TEK_COMMON_OPERATIONS | {
+        supported_operations=_TEK_COMMON_OPERATIONS | _TEK_WORKFLOW_OPERATIONS | {
             "timebase-position", "display-vectors", "cursor-set",
             "trigger-tv", "save-image-ink-saver",
         },
