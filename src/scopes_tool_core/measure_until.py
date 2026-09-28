@@ -24,7 +24,7 @@ from .channel import validate_analog_channel
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import measurement_query, validate_statistics_items
 from .operations import OperationResult
-from .planning import OperationPlan
+from .planning import MeasurePlanRequest, OperationPlan, plan_measure
 from .scope import Oscilloscope
 from .workflow import (
     ProgressReporter,
@@ -84,14 +84,14 @@ def plan_measure_until(
         )
         if path is not None
     )
-    planned = (
-        measurement_query(
-            normalized["item"],
-            normalized["channel"],
-            capabilities=capabilities,
+    measure_plan = plan_measure(
+        MeasurePlanRequest(
+            item=normalized["item"],
+            channel=normalized["channel"],
         ),
-        ":SYSTem:ERRor?",
+        capabilities,
     )
+    planned = measure_plan.planned_scpi
     result = {
         "status": "planned",
         "channel": normalized["channel"],
