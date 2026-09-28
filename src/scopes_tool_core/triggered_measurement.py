@@ -280,7 +280,8 @@ def run_triggered_measure_loop(
                                 )
 
                     entry = scope.post_command_status("triggered-measure-loop")
-                    last_system_error = system_error_manifest_dict(entry)
+                    status_fields = instrument_status_fields(entry)
+                    last_system_error = status_fields.get("system_error")
                     if entry.is_error:
                         error = {
                             "type": "instrument_error",
@@ -311,7 +312,7 @@ def run_triggered_measure_loop(
                         "elapsed_seconds": elapsed_seconds,
                         "trigger_elapsed_seconds": trigger_elapsed_seconds,
                         "values": dict(values),
-                        "system_error": dict(last_system_error),
+                        **status_fields,
                     }
                     if manifest_path is not None:
                         cycle = {
@@ -319,7 +320,7 @@ def run_triggered_measure_loop(
                             "timestamp_iso": timestamp_iso,
                             "elapsed_seconds": elapsed_seconds,
                             "trigger_elapsed_seconds": trigger_elapsed_seconds,
-                            "system_error": dict(last_system_error),
+                            **status_fields,
                         }
                         candidate = copy.deepcopy(manifest)
                         candidate["completed_count"] = index
