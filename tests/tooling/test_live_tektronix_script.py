@@ -130,6 +130,8 @@ def fake_run(
     waveform_rows: tuple[str, ...] = ("0,0.5", "0.001,0.6"),
     actual_points: int | None = None, hidden_outcome: str | None = None,
     subprocess_cli: bool = False, position_mismatch: bool = False,
+    summary_mode: str = "realtime", summary_type: str | None = None,
+    core_supported_operations: tuple[str, ...] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
@@ -137,6 +139,39 @@ def fake_run(
         TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
     }[target]
     screenshot_bytes = b"bad" if bad_bmp else (b"\x89PNG\r\n\x1a\nfake" if target == TARGETS[0] else b"BMfake")
+    default_supported_operations = {
+        TARGETS[0]: (
+            "cursor-set", "sample-rate", "channel-label", "channel-probe-skew",
+            "trigger-edge-level", "trigger-runt", "save-image-format",
+            "save-waveform-format", "screenshot",
+        ),
+        TARGETS[1]: (
+            "cursor-set", "trigger-tv", "save-image-ink-saver",
+            "display-vectors", "screenshot",
+        ),
+        TARGETS[2]: (
+            "cursor-set", "trigger-tv", "save-image-ink-saver", "display-vectors",
+        ),
+    }[target]
+    supported_operations = (
+        tuple(core_supported_operations)
+        if core_supported_operations is not None
+        else default_supported_operations
+    )
+    acquisition_modes = (
+        ("normal", "average", "peak", "high_resolution")
+        if target == TARGETS[0]
+        else ("normal", "average", "peak")
+    )
+    average_counts = (
+        (2, 4, 8, 16, 32, 64, 128, 256, 512)
+        if target == TARGETS[0]
+        else (4, 16, 64, 128)
+    )
+    effective_summary_type = summary_type if summary_type is not None else "normal"
+    cursor_source_selection = (
+        "selected-waveform" if target == TARGETS[0] else "independent"
+    )
     values = {
         "system-standard-event": {"value": 0},
         "channel-display": {"display": True},
@@ -171,7 +206,11 @@ def fake_run(
         "display-persistence": {"mode": "minimum", "seconds": None},
         "math-display": {"enabled": False},
         "math-operator": {"math_operation": "add", "source1": "channel1", "source2": "channel2"},
-        "cursor": {"mode": "OFF", "x1_seconds": 0.0, "x2_seconds": 0.0},
+        "cursor": {
+            "mode": "OFF", "source_channel": None,
+            "x1_seconds": 0.0, "x2_seconds": 0.0,
+            "y1_volts": 0.0, "y2_volts": 0.0,
+        },
         "save-image-format": {"format": "png"},
         "save-waveform-format": {"format": "csv"},
         "save-image-ink-saver": {"enabled": False},
@@ -185,9 +224,36 @@ def fake_run(
                                 "greater_than_seconds": None, "level_volts": 0.0},
     }
     raw_state = tmp_path / "position-state.json"
+    cursor_state = tmp_path / "cursor-state.json"
     core_stub = tmp_path / "scopes_tool_core"
     core_stub.mkdir()
     (core_stub / "__init__.py").write_text("", encoding="utf-8")
+    (core_stub / "capabilities.py").write_text(
+        "from types import SimpleNamespace\n"
+        f"supported_operations = {supported_operations!r}\n"
+        f"acquisition_modes = {acquisition_modes!r}\n"
+        f"average_counts = {average_counts!r}\n"
+        f"cursor_source_selection = {cursor_source_selection!r}\n"
+        "def capabilities_for_model_id(model_id):\n"
+        " return SimpleNamespace(supported_operations=frozenset(supported_operations), "
+        "cursor_source_selection=cursor_source_selection, fixed_acquisition_memory_mode='realtime', "
+        "acquisition_modes=acquisition_modes, average_counts=average_counts)\n",
+        encoding="utf-8",
+    )
+    (core_stub / "run_config.py").write_text(
+        "class RunModeOptions:\n"
+        " def __init__(self, **kwargs): self.__dict__.update(kwargs)\n"
+        "class ResolvedRunConfig:\n"
+        " def __init__(self, **kwargs): self.__dict__.update(kwargs)\n"
+        "class FakeScope:\n"
+        " def close(self): pass\n"
+        "def open_scope_for_run(config): return FakeScope()\n",
+        encoding="utf-8",
+    )
+    (core_stub / "operations.py").write_text(
+        f"def query_acquisition_summary(scope): return {{'mode': {summary_mode!r}, 'type': {effective_summary_type!r}}}\n",
+        encoding="utf-8",
+    )
     (core_stub / "visa_backend.py").write_text(
         "import json\nfrom pathlib import Path\n"
         f"state_path = Path({str(raw_state)!r})\n"
@@ -227,6 +293,21 @@ def fake_run(
         "if error:\n"
         " print(json.dumps({'ok': False, 'error': {'type': error[0], 'message': error[1]}}))\n"
         " sys.exit(1)\n"
+        f"cursor_state = Path({str(cursor_state)!r})\n"
+        "if command == 'cursor':\n"
+        " if '--off' in sys.argv:\n"
+        "  cursor_state.write_text(json.dumps({'mode': 'OFF', 'source_channel': None, 'x1_seconds': None, 'x2_seconds': None, 'y1_volts': None, 'y2_volts': None}))\n"
+        " elif '--query' not in sys.argv:\n"
+        "  state = json.loads(cursor_state.read_text()) if cursor_state.exists() else {'mode': 'OFF', 'source_channel': None, 'x1_seconds': None, 'x2_seconds': None, 'y1_volts': None, 'y2_volts': None}\n"
+        "  if '--source-channel' in sys.argv: state['source_channel'] = int(sys.argv[sys.argv.index('--source-channel') + 1])\n"
+        "  has_x = has_y = False\n"
+        "  for option, field, axis in (('--x1', 'x1_seconds', 'x'), ('--x2', 'x2_seconds', 'x'), ('--y1', 'y1_volts', 'y'), ('--y2', 'y2_volts', 'y')):\n"
+        "   if option in sys.argv:\n"
+        "    state[field] = float(sys.argv[sys.argv.index(option) + 1])\n"
+        "    has_x = has_x or axis == 'x'; has_y = has_y or axis == 'y'\n"
+        "  state['mode'] = 'SCREEN' if has_x and has_y else 'TIME' if has_x else 'AMPLITUDE' if has_y else 'OFF'\n"
+        "  cursor_state.write_text(json.dumps(state))\n"
+        " elif cursor_state.exists(): values[command] = json.loads(cursor_state.read_text())\n"
         f"vectors_path = Path({str(tmp_path / 'vectors_set.txt')!r})\n"
         "if command == 'display-vectors':\n"
         " if '--on' in sys.argv: vectors_path.write_text('on')\n"
@@ -328,6 +409,79 @@ def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
 
 
 @requires_windows
+def test_tbs2074b_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Path) -> None:
+    result, report = fake_run(tmp_path, TARGETS[0], "-IncludeConfigurationActions")
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["cursor-set"]["status"] == "PASS"
+    assert cases["cursor-set-y"]["status"] == "PASS"
+    assert cases["cursor-set-screen"]["status"] == "PASS"
+    calls = [
+        inv["arguments"]
+        for inv in report["invocations"]
+        if inv["arguments"][2] == "cursor" and "--query" not in inv["arguments"]
+    ]
+    assert any("--x1" in args and "--y1" not in args for args in calls)
+    assert any("--y1" in args and "--x1" not in args for args in calls)
+    assert any("--x1" in args and "--y1" in args for args in calls)
+    assert any("--off" in args for args in calls)
+
+
+@requires_windows
+def test_tbs2074b_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) -> None:
+    result, report = fake_run(
+        tmp_path,
+        TARGETS[0],
+        "-IncludeConfigurationActions",
+        cursor_error=("OscilloscopeError", "Cursor X setter failed"),
+    )
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["cursor-set"]["status"] == "FAIL"
+    assert cases["cursor-set-y"]["status"] == "N/A"
+    assert cases["cursor-set-screen"]["status"] == "N/A"
+    setters = [
+        inv["arguments"]
+        for inv in report["invocations"]
+        if inv["arguments"][2] == "cursor" and "--query" not in inv["arguments"]
+    ]
+    assert sum("--x1" in args for args in setters) == 1
+    assert not any("--y1" in args for args in setters)
+
+
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize(
+    ("summary_mode", "summary_type"),
+    [("unknown", "normal"), ("realtime", "peak")],
+)
+def test_acquisition_summary_mismatch_is_fail(
+    tmp_path: Path, target: str, summary_mode: str, summary_type: str,
+) -> None:
+    result, report = fake_run(
+        tmp_path, target, summary_mode=summary_mode, summary_type=summary_type,
+    )
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["acquisition-summary"]["status"] == "FAIL"
+    assert report["status"] == "fail"
+
+
+@requires_windows
+def test_live_runner_rejects_stale_unsupported_operation_policy(tmp_path: Path) -> None:
+    result, report = fake_run(
+        tmp_path,
+        TARGETS[1],
+        core_supported_operations=("sample-rate",),
+    )
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["sample-rate"]["status"] == "FAIL"
+    assert "runner drift" in cases["sample-rate"]["detail"].lower()
+    assert report["status"] == "fail"
+
+
+@requires_windows
 @pytest.mark.parametrize("target", TARGETS[1:])
 def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
     result, report = fake_run(
@@ -403,6 +557,7 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
         assert cases["display-vectors-query"]["status"] == "PASS"
         assert cases["display-vectors-on"]["status"] == "N/A"
     assert cases["timebase-position"]["status"] == "PASS"
+    assert cases["acquisition-summary"]["status"] == "PASS"
     assert cases["trigger-mode"]["status"] == "PASS"
     for name in ("channel-units", "math-display", "math-operator", "display-persistence",
                  "cursor-query", "trigger-edge", "trigger-edge-source", "trigger-edge-slope",
@@ -472,9 +627,11 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
                  "stop-acquisition", "autoscale", "save-image", "save-waveform", "setup-save", "setup-recall",
                  "reference-save", "reference-display", "reference-query", "measure", "capture-byte", "single-wait-natural", "single-wait-force"):
         assert cases[name]["status"] == "PASS", cases[name]
-    assert cases["cursor-set"]["status"] == ("N/A" if target == TARGETS[0] else "PASS")
+    assert cases["cursor-set"]["status"] == "PASS"
     assert cases["screenshot-bmp"]["status"] == ("PASS" if target == TARGETS[1] else "N/A")
     if target == TARGETS[0]:
+        assert cases["cursor-set-y"]["status"] == "PASS"
+        assert cases["cursor-set-screen"]["status"] == "PASS"
         assert cases["screenshot-png"]["status"] == "PASS"
     save = next(inv for inv in report["invocations"] if inv["arguments"][2] == "save-waveform")
     assert "--source-channel" in save["arguments"]

@@ -95,6 +95,30 @@ class ScopeCapabilities:
     fixed_acquisition_memory_mode: str | None = None
 
     def __post_init__(self) -> None:
+        for name, value in (
+            ("horizontal_display_divisions", self.horizontal_display_divisions),
+            ("vertical_display_divisions", self.vertical_display_divisions),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
+        if self.timebase_reference_mode not in {"configurable", "fixed-center"}:
+            raise ValueError(
+                "timebase_reference_mode must be 'configurable' or 'fixed-center'"
+            )
+        if self.cursor_source_selection not in {"independent", "selected-waveform"}:
+            raise ValueError(
+                "cursor_source_selection must be 'independent' or 'selected-waveform'"
+            )
+        if self.fixed_acquisition_memory_mode not in {
+            None,
+            "realtime",
+            "segmented",
+            "equivalent_time",
+        }:
+            raise ValueError(
+                "fixed_acquisition_memory_mode must be realtime, segmented, "
+                "equivalent_time, or None"
+            )
         if self.screenshot_formats is not None:
             object.__setattr__(self, "supports_screenshot", "png" in self.screenshot_formats)
 

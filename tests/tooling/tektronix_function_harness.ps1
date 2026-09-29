@@ -7,6 +7,7 @@ $fixture = $script:FixtureJson | ConvertFrom-Json
 $script:ModeQueries = 0
 $script:VectorsSet = $false
 $script:HiddenCaptured = $false
+$script:CursorState = $null
 $script:ValidatorRoot = Split-Path -Parent $ScriptPath
 $script:PositionState = $null
 
@@ -41,6 +42,45 @@ function Invoke-FakeTransport {
     if ($Command -eq "cursor" -and $Options -contains "--x1") { $fakeError = $scenario.cursor_error }
     if ($null -ne $fakeError) {
         return @{ ExitCode = 1; Payload = @{ ok = $false; error = @{ type = $fakeError[0]; message = $fakeError[1] } } }
+    }
+    if ($Command -eq "cursor") {
+        if ($Options -contains "--off") {
+            $script:CursorState = [pscustomobject]@{
+                mode = "OFF"; source_channel = $null
+                x1_seconds = $null; x2_seconds = $null
+                y1_volts = $null; y2_volts = $null
+            }
+        } elseif ($Options -notcontains "--query") {
+            $state = [ordered]@{
+                mode = "OFF"; source_channel = $null
+                x1_seconds = $null; x2_seconds = $null
+                y1_volts = $null; y2_volts = $null
+            }
+            if ($null -ne $script:CursorState) {
+                foreach ($name in @("source_channel", "x1_seconds", "x2_seconds", "y1_volts", "y2_volts")) {
+                    $state[$name] = $script:CursorState.$name
+                }
+            }
+            if ($Options -contains "--source-channel") {
+                $state.source_channel = [int]$Options[[Array]::IndexOf($Options, "--source-channel") + 1]
+            }
+            $hasX = $false
+            $hasY = $false
+            foreach ($mapping in @(
+                @("--x1", "x1_seconds", "x"), @("--x2", "x2_seconds", "x"),
+                @("--y1", "y1_volts", "y"), @("--y2", "y2_volts", "y")
+            )) {
+                if ($Options -contains $mapping[0]) {
+                    $state[$mapping[1]] = [double]$Options[[Array]::IndexOf($Options, $mapping[0]) + 1]
+                    if ($mapping[2] -eq "x") { $hasX = $true } else { $hasY = $true }
+                }
+            }
+            $state.mode = if ($hasX -and $hasY) { "SCREEN" } elseif ($hasX) { "TIME" } elseif ($hasY) { "AMPLITUDE" } else { "OFF" }
+            $script:CursorState = [pscustomobject]$state
+        } elseif ($null -ne $script:CursorState) {
+            $value = $script:CursorState
+            $payload.result = $value
+        }
     }
     if ($Command -eq "display-vectors") {
         if ($Options -contains "--on") { $script:VectorsSet = $true }
