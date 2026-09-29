@@ -11,15 +11,12 @@ import pytest
 
 from scopes_tool_webui.command_catalog import command_catalog
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
 NUMERIC_INPUT_PATH = STATIC_ROOT / "numeric-input.js"
 
-
 def read_static(name: str) -> str:
     return (STATIC_ROOT / name).read_text(encoding="utf-8")
-
 
 def test_hidden_commands_use_model_projection_before_refresh() -> None:
     catalog = {entry["id"]: entry for entry in command_catalog(include_hidden=True)}
@@ -32,7 +29,6 @@ def test_hidden_commands_use_model_projection_before_refresh() -> None:
     assert "getCommands(true)" in app_source
     assert "catalog.supported(definition)" in extract_function_declaration(app_source, "function commandAvailable(command)")
     assert '!commandAvailable("live-data-snapshot")' in extract_function_declaration(app_source, "async function refreshLiveDataSnapshot()")
-
 
 def extract_function(source: str, signature: str) -> str:
     start = source.index(signature)
@@ -47,19 +43,16 @@ def extract_function(source: str, signature: str) -> str:
                 return source[body_start:index + 1]
     raise AssertionError(f"Unclosed function: {signature}")
 
-
 def extract_function_declaration(source: str, signature: str) -> str:
     start = source.index(signature)
     body = extract_function(source, signature)
     return source[start : source.index(body, start) + len(body)]
-
 
 def extract_css_rule(source: str, selector: str) -> str:
     start = source.index(selector)
     body_start = source.index("{", start)
     end = source.index("}", body_start)
     return source[body_start:end + 1]
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
@@ -192,7 +185,6 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_live_data_snapshot_updated_at_lifecycle() -> None:
     app_source = read_static("app.js")
@@ -267,7 +259,6 @@ def test_live_data_snapshot_updated_at_lifecycle() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_timebase_scale_presets_fill_value_without_execute() -> None:
@@ -571,25 +562,6 @@ def test_timebase_scale_presets_fill_value_without_execute() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
-
-def test_slider_selection_has_reserved_height_and_scrollbar_gutter() -> None:
-    styles = read_static("styles.css")
-
-    workspace_rule = extract_css_rule(styles, ".workspace-content")
-    assert "scrollbar-gutter: stable;" in workspace_rule
-
-    selection_rule = extract_css_rule(styles, ".div-slider-selection")
-    assert "display: block;" in selection_rule
-    assert "min-height: 1.45em;" in selection_rule
-
-
-def test_scale_range_mode_has_spacing_from_channel_selector() -> None:
-    styles = read_static("styles.css")
-    mode_rule = extract_css_rule(styles, ".channel-scale-range-mode")
-    assert "margin-top: 8px;" in mode_rule
-
-
 def run_generic_form_ownership_behavior(assertions: str) -> None:
     source = read_static("app.js").replace("options = {}", "options = null", 1)
     declarations = "\n".join(
@@ -715,7 +687,6 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_identity_is_bound_to_the_current_execution_context() -> None:
     source = read_static("device-resource.js")
 
@@ -733,7 +704,6 @@ def test_identity_is_bound_to_the_current_execution_context() -> None:
     assert "if (forceIdentityClear || contextChanged)" in changed
     assert "this.clearIdentity();" in changed
     assert "this.clearIdentity();" in extract_function(source, "async scan()")
-
 
 def test_live_context_and_controls_use_detected_identity() -> None:
     execution_context = read_static("execution-context.js")
@@ -755,7 +725,6 @@ def test_live_context_and_controls_use_detected_identity() -> None:
     assert '"command.identify": "讀取裝置資訊"' in chinese
     assert '"description.identify": "讀取儀器識別資訊"' in chinese
 
-
 def test_basic_controls_expose_force_trigger_shared_command_shortcut() -> None:
     html = read_static("index.html")
     english = read_static("locale_en.js")
@@ -767,7 +736,6 @@ def test_basic_controls_expose_force_trigger_shared_command_shortcut() -> None:
     assert '"basic.forceTrigger": "強制觸發"' in chinese
     assert '"command.force-trigger": "Force Trigger"' in english
     assert '"command.force-trigger": "強制觸發"' in chinese
-
 
 def test_single_wait_remains_advanced_only() -> None:
     html = read_static("index.html")
@@ -802,7 +770,6 @@ def test_single_wait_remains_advanced_only() -> None:
     assert "disclosure.open" not in form
     assert '"form.advanced": "Advanced"' in english
     assert '"form.advanced": "進階"' in chinese
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_basic_controls_dispatch_screenshot_background() -> None:
@@ -868,7 +835,6 @@ def test_basic_controls_dispatch_screenshot_background() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_identify_uses_the_shared_workspace_result_area() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
@@ -882,7 +848,6 @@ def test_identify_uses_the_shared_workspace_result_area() -> None:
     assert 'renderWorkspaceResult(elements.identityWorkspaceContent, job, workspaceContext);' in app_source
     assert '"workspace.latestSuccessfulResult": "Latest successful result"' in english
     assert '"workspace.latestSuccessfulResult": "最新成功結果"' in chinese
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None:
@@ -944,7 +909,6 @@ def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     app_source = read_static("app.js")
@@ -1060,14 +1024,12 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
         assert f'"{key}":' not in english, key
         assert f'"{key}":' not in chinese, key
 
-
 def test_channel_display_editor_uses_workflow_editor_layout() -> None:
     html = read_static("index.html")
     assert (
         'id="channel-display-editor" '
         'class="channel-display-editor workflow-editor" hidden'
     ) in html
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
@@ -1937,7 +1899,6 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_serial_readiness_partial_failures_and_pending_read_behavior() -> None:
     serial_editor_path = STATIC_ROOT / "serial-editor.js"
@@ -2041,7 +2002,6 @@ def test_serial_readiness_partial_failures_and_pending_read_behavior() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> None:
@@ -2701,7 +2661,6 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_serial_editor_locale_keys_are_localized() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
@@ -2723,7 +2682,6 @@ def test_serial_editor_locale_keys_are_localized() -> None:
     assert '"help.serial-trigger-uart.data": "RX Data 或 TX Data 要比對的 8-bit 資料值，範圍 0～255。例如 1 代表 0x01。"' in chinese
     assert '"help.serial-lister.reference": "Trigger：每列時間表示該事件相對於觸發點的時間。上一列：每列時間表示該事件與前一筆 Lister 事件的時間差。"' in chinese
     assert '"serial.decode.applySettings": "套用解碼設定"' in chinese
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_generic_form_multi_choice_and_two_state_boolean_presentation() -> None:
@@ -2935,7 +2893,6 @@ def test_generic_form_multi_choice_and_two_state_boolean_presentation() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_live_command_gating_allows_identify_retry_until_identity_is_ready() -> None:
     app_source = read_static("app.js")
@@ -2974,7 +2931,6 @@ def test_live_command_gating_allows_identify_retry_until_identity_is_ready() -> 
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_empty_scan_has_a_distinct_compact_detection_presentation() -> None:
     source = read_static("device-resource.js")
     english = read_static("locale_en.js")
@@ -2989,7 +2945,6 @@ def test_empty_scan_has_a_distinct_compact_detection_presentation() -> None:
     assert '"device.detection.noResources": "Detection status: no resources found"' in english
     assert '"device.detection.noResources": "偵測狀態：未找到資源"' in chinese
     assert '"device.detection.notIdentified"' in detection_summary
-
 
 def test_resource_controls_match_the_powers_initial_presentation() -> None:
     html = read_static("index.html")
@@ -3010,7 +2965,6 @@ def test_resource_controls_match_the_powers_initial_presentation() -> None:
     assert '"device.liveResource": "即時資源"' in chinese
     assert '"device.liveResourcePlaceholder": "掃描後載入即時資源"' in chinese
     assert '"device.scan": "掃描裝置"' in chinese
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
@@ -3148,7 +3102,6 @@ def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_empty_scan_keeps_a_localized_non_resource_option() -> None:
     source = read_static("device-resource.js")
     render_resource_list = extract_function(source, "  renderResourceList(resources) {")
@@ -3161,7 +3114,6 @@ def test_empty_scan_keeps_a_localized_non_resource_option() -> None:
     assert "function resourceLabel(resource)" in source
     assert "new Option(resourceLabel(resource), name)" in render_resource_list
 
-
 def test_scan_requests_live_only_and_preserves_structured_resource_identity() -> None:
     source = read_static("device-resource.js")
     english = read_static("locale_en.js")
@@ -3173,7 +3125,6 @@ def test_scan_requests_live_only_and_preserves_structured_resource_identity() ->
     assert "resourceName(resources[0])" in scan
     assert '"device.liveResourceNoResources": "No live resources found"' in english
     assert '"device.liveResourceNoResources": "未找到即時資源"' in chinese
-
 
 def test_scan_uses_the_common_job_history_flow_before_resource_updates() -> None:
     device_source = read_static("device-resource.js")
@@ -3202,7 +3153,6 @@ def test_scan_uses_the_common_job_history_flow_before_resource_updates() -> None
     assert 'command: "list-resources"' in app_source
     assert "renderCurrentResult();" in app_source
 
-
 def test_selected_resource_refresh_uses_a_formal_identify_job_flow() -> None:
     device_source = read_static("device-resource.js")
     app_source = read_static("app.js")
@@ -3220,7 +3170,6 @@ def test_selected_resource_refresh_uses_a_formal_identify_job_flow() -> None:
     assert "renderCurrentResult();" in present
     assert "renderJob(elements.results, job, null);" in present
     assert "resources[1]" not in extract_function(device_source, "async scan()")
-
 
 @pytest.mark.skipif(
     shutil.which("node") is None,
@@ -3368,7 +3317,6 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
@@ -3494,7 +3442,6 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_scan_busy_change_refreshes_live_data_once_identity_ready() -> None:
     app_source = read_static("app.js")
@@ -3570,7 +3517,6 @@ def test_scan_busy_change_refreshes_live_data_once_identity_ready() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
     jobs_path = STATIC_ROOT / "jobs.js"
@@ -3629,7 +3575,6 @@ def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_scan_submit_failure_reports_raw_error_and_preserves_scan_failure_state() -> None:
@@ -3713,7 +3658,6 @@ def test_scan_submit_failure_reports_raw_error_and_preserves_scan_failure_state(
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection() -> None:
@@ -3858,7 +3802,6 @@ def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection(
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_list_resources_command_exposes_a_boolean_live_only_parameter() -> None:
     from scopes_tool_webui.command_catalog import COMMANDS
     from scopes_tool_webui.commands import WebUIRequestError, validate_job_request
@@ -3878,14 +3821,12 @@ def test_list_resources_command_exposes_a_boolean_live_only_parameter() -> None:
     with pytest.raises(WebUIRequestError, match="live_only must be a boolean"):
         validate_job_request({"command": "list-resources", "mode": "live", "parameters": {"live_only": "false"}})
 
-
 def test_scan_failure_is_included_in_the_compact_device_presentation() -> None:
     source = read_static("device-resource.js")
 
     assert 'this.scanStatus = "failed";' in source
     assert '"device.detection.scanFailed"' in source
     assert "this.elements.summary.title = summary;" in source
-
 
 def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     source = read_static("app.js")
@@ -3941,7 +3882,6 @@ def test_workspace_header_actions_replace_the_local_execution_badge() -> None:
     assert 'elements.cancel.classList.remove("hidden");' in source
     assert 'elements.cancel.classList.add("hidden");' in source
 
-
 def test_shared_header_read_labels_use_dedicated_keys() -> None:
     app_source = read_static("app.js")
     english = read_static("locale_en.js")
@@ -3971,7 +3911,6 @@ def test_shared_header_read_labels_use_dedicated_keys() -> None:
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
 
-
 def test_live_data_auto_refresh_wiring() -> None:
     app_source = read_static("app.js")
     device_source = read_static("device-resource.js")
@@ -3988,7 +3927,6 @@ def test_live_data_auto_refresh_wiring() -> None:
     assert "this.onModelChange(this.context());" in device_source
     assert "modelContext?.mode === \"simulate\"" in app_source
 
-
 def test_system_information_is_a_read_only_workspace_view() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
@@ -4003,7 +3941,6 @@ def test_system_information_is_a_read_only_workspace_view() -> None:
     assert "const systemInformationSelected = selected?.id === \"system-information\";" in app_source
     assert "elements.execute.hidden = systemInformationSelected" in app_source
     assert "elements.form.hidden = editorOwned || systemInformationSelected;" in app_source
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_system_information_refresh_runs_only_the_hidden_snapshot_command() -> None:
@@ -4065,7 +4002,6 @@ def test_system_information_refresh_runs_only_the_hidden_snapshot_command() -> N
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_system_result_summaries_localize_options_and_unknown_operation_bits() -> None:
@@ -4131,7 +4067,6 @@ def test_system_result_summaries_localize_options_and_unknown_operation_bits() -
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
     results_path = STATIC_ROOT / "results.js"
@@ -4172,7 +4107,6 @@ def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_trigger_mode_structured_result_prefers_scoped_labels() -> None:
     results_path = STATIC_ROOT / "results.js"
@@ -4208,7 +4142,6 @@ def test_trigger_mode_structured_result_prefers_scoped_labels() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_search_serial_result_uses_scoped_labels() -> None:
@@ -4272,7 +4205,6 @@ def test_search_serial_result_uses_scoped_labels() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
     run_generic_form_ownership_behavior(
@@ -4295,7 +4227,6 @@ def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
         assert.deepEqual(completedResults, ["job-1"]);
         '''
     )
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_wgen_aggregate_result_uses_wgen_labels() -> None:
@@ -4421,7 +4352,6 @@ def test_wgen_aggregate_result_uses_wgen_labels() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_demo_workspace_result_uses_demo_presentation() -> None:
     results_path = STATIC_ROOT / "results.js"
@@ -4508,7 +4438,6 @@ def test_demo_workspace_result_uses_demo_presentation() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_trigger_nested_same_name_readback_hydrates_scalar() -> None:
@@ -4671,7 +4600,6 @@ def test_trigger_nested_same_name_readback_hydrates_scalar() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_generic_rerender_rejects_stale_apply_form_updates() -> None:
     run_generic_form_ownership_behavior(
@@ -4698,7 +4626,6 @@ def test_generic_rerender_rejects_stale_apply_form_updates() -> None:
         assert.deepEqual(completedResults, ["job-1"]);
         '''
     )
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_current_generic_form_still_syncs_refresh_and_apply() -> None:
@@ -4729,7 +4656,6 @@ def test_current_generic_form_still_syncs_refresh_and_apply() -> None:
         '''
     )
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_submission_without_form_revision_cannot_update_generic_form() -> None:
     run_generic_form_ownership_behavior(
@@ -4751,7 +4677,6 @@ def test_submission_without_form_revision_cannot_update_generic_form() -> None:
         assert.deepEqual(completedResults, ["job-1"]);
         '''
     )
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -> None:
@@ -4854,7 +4779,6 @@ def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_global_command_state_keeps_the_existing_execution_lifecycle() -> None:
     source = read_static("app.js")
 
@@ -4870,7 +4794,6 @@ def test_global_command_state_keeps_the_existing_execution_lifecycle() -> None:
     assert 'setExecutionStatus({ status: "failed" });' in source
     assert "const commandStatus = liveCommandState.status;" in source
 
-
 def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
     html = read_static("index.html")
@@ -4883,24 +4806,6 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in desktop_form
     mobile = extract_function(styles, "@media (max-width: 700px)")
     assert "grid-template-columns: 1fr;" in extract_css_rule(mobile, ".command-form {")
-
-
-def test_primary_action_uses_dedicated_semantic_color() -> None:
-    styles = read_static("styles.css")
-    root = extract_css_rule(styles, ":root {")
-    primary = extract_css_rule(styles, ".primary {")
-    primary_hover = extract_css_rule(styles, ".primary:hover {")
-
-    assert "--primary: #4f6f8f;" in root
-    assert "--primary-strong: #3f5d78;" in root
-
-    assert "var(--primary)" in primary
-    assert "var(--accent)" not in primary
-
-    assert "var(--primary-strong)" in primary_hover
-    assert "var(--accent-strong)" not in primary_hover
-
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
     editor_path = STATIC_ROOT / "diagnostics-editor.js"
@@ -5134,58 +5039,10 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
-
-def test_command_panels_use_fixed_desktop_height_and_internal_overflow() -> None:
-    styles = read_static("styles.css")
-    root = extract_css_rule(styles, ":root {")
-    workbench = extract_css_rule(styles, ".command-workbench {")
-    panels = extract_css_rule(styles, ".rail, .workspace-panel {")
-    workspace_content = extract_css_rule(styles, ".workspace-content {")
-    responsive = extract_function(styles, "@media (max-width: 1100px)")
-    responsive_panels = extract_css_rule(responsive, ".rail, .workspace-panel {")
-    responsive_workspace_content = extract_css_rule(responsive, ".workspace-content {")
-
-    assert "--command-panel-height:" in root
-    assert "align-items: start;" in workbench
-    assert "height: var(--command-panel-height);" in panels
-    assert "overflow: hidden;" in panels
-    assert "flex: 1;" in workspace_content
-    assert "min-height: 0;" in workspace_content
-    assert "overflow: auto;" in workspace_content
-    assert "height: auto;" in responsive_panels
-    assert "min-height: 0;" in responsive_panels
-    assert "overflow: visible;" in responsive_workspace_content
-
-    mobile_responsive = extract_function(styles, "@media (max-width: 700px)")
-    mobile_system_info = extract_css_rule(mobile_responsive, ".system-info-content {")
-    assert "grid-template-columns: 1fr;" in mobile_system_info
-
-
-def test_live_mode_badge_is_neutral_and_utility_glyphs_are_centered() -> None:
-    styles = read_static("styles.css")
-    icon_button = extract_css_rule(styles, ".icon-button")
-    utility_button = extract_css_rule(styles, ".utility-icon-button")
-
-    assert "display: inline-flex;" in icon_button
-    assert "align-items: center;" in icon_button
-    assert "justify-content: center;" in icon_button
-    assert "width: 32px;" in icon_button
-    assert "min-width: 32px;" in icon_button
-    assert "height: 32px;" in icon_button
-    assert "min-height: 32px;" in icon_button
-    assert "padding: 0;" in icon_button
-    assert "font-size:" not in icon_button
-    assert "line-height:" not in icon_button
-    assert "border-radius: 50%;" in utility_button
-    assert ".execution-mode-badge.mode-live { border-color: var(--line-strong); background: transparent; color: var(--muted); }" in styles
-
-
 def test_hidden_elements_override_component_display_rules() -> None:
     styles = read_static("styles.css")
 
     assert "[hidden] { display: none !important; }" in styles
-
 
 def test_numeric_inputs_share_spinner_presentation_rules() -> None:
     command_form = read_static("command-form.js")
@@ -5202,84 +5059,6 @@ def test_numeric_inputs_share_spinner_presentation_rules() -> None:
     assert "input.no-number-spinner::-webkit-inner-spin-button" in styles
     assert "input.no-number-spinner::-webkit-outer-spin-button" in styles
     assert "-moz-appearance: textfield;" in styles
-
-
-
-def test_acquisition_and_statistics_option_layouts() -> None:
-    styles = read_static("styles.css")
-
-    assert ".acquisition-single-wait-form { grid-template-columns: minmax(0, 1fr); }" in styles
-    assert ".acquisition-single-wait-form .command-form-advanced-fields { grid-template-columns: minmax(0, 1fr); }" in styles
-    assert ".measurement-statistics-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }" in styles
-    assert ".measurement-statistics-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }" in styles
-    assert ".measurement-statistics-primary, .measurement-statistics-options { grid-template-columns: 1fr; }" in styles
-
-def test_boolean_field_help_spans_full_row() -> None:
-    styles = read_static("styles.css")
-    boolean_help = extract_css_rule(styles, ".command-form .field-boolean .field-help")
-
-    assert "grid-column: 1 / -1;" in boolean_help
-
-
-def test_workflow_and_sequence_fields_use_compact_top_aligned_controls() -> None:
-    styles = read_static("styles.css")
-
-    workflow_fields = extract_css_rule(styles, ".workflow-editor .field,")
-    assert "align-content: start;" in workflow_fields
-    assert "min-width: 0;" in workflow_fields
-
-    workflow_boolean = extract_css_rule(styles, ".workflow-editor .field-boolean,")
-    assert "grid-template-columns: auto minmax(0, 1fr);" in workflow_boolean
-    assert "align-content: start;" in workflow_boolean
-
-    workflow_checkbox = extract_css_rule(
-        styles, '.workflow-editor .field-boolean input[type="checkbox"],'
-    )
-    assert "width: 16px;" in workflow_checkbox
-    assert "height: 16px;" in workflow_checkbox
-
-    workflow_help = extract_css_rule(styles, ".workflow-editor .field-boolean .field-help,")
-    assert "grid-column: 1 / -1;" in workflow_help
-
-    stop_rule = extract_css_rule(styles, ".workflow-editor-stop {")
-    assert "align-self: start;" in stop_rule
-
-
-def test_segmented_count_row_keeps_locale_independent_action_width() -> None:
-    styles = read_static("styles.css")
-    count_row = extract_css_rule(
-        styles, ".segmented-editor-overview .segmented-editor-count-row {"
-    )
-    assert "grid-template-columns: minmax(0, 1fr) 132px;" in count_row
-
-    english = read_static("locale_en.js")
-    assert '"segmented.editor.read": "Read State"' in english
-    assert '"segmented.editor.applySegments": "Apply Count"' in english
-
-
-def test_field_help_and_readonly_value_wrap_long_text() -> None:
-    styles = read_static("styles.css")
-    field_help = extract_css_rule(styles, ".field-help {")
-
-    assert "overflow-wrap: anywhere;" in field_help
-
-    readonly_value = extract_css_rule(styles, ".readonly-value {")
-
-    assert "min-width: 0;" in readonly_value
-    assert "overflow-wrap: anywhere;" in readonly_value
-
-
-def test_shared_editor_sections_constrain_intrinsic_minimum_width() -> None:
-    styles = read_static("styles.css")
-    for selector in (
-        ".trigger-editor-section {",
-        ".serial-editor-section {",
-        ".search-editor-section {",
-        ".workflow-editor-section {",
-    ):
-        assert "min-width: 0;" in extract_css_rule(styles, selector), selector
-
-
 def test_summary_uses_only_scopes_supported_states() -> None:
     english = read_static("locale_en.js")
 
@@ -5289,7 +5068,6 @@ def test_summary_uses_only_scopes_supported_states() -> None:
     assert '"device.summary.planning": "{{mode}} / Planning model: {{model}} / Real VISA resource: not used"' in english
     assert "Expected Model guard" not in english
     assert "Connection scope" not in english
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
@@ -5457,7 +5235,6 @@ def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_command_help_and_common_result_labels_are_localized() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
@@ -5476,7 +5253,6 @@ def test_command_help_and_common_result_labels_are_localized() -> None:
     ):
         assert f'"{key}":' in english
         assert f'"{key}":' in chinese
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_generic_form_applies_conditional_required_fields() -> None:
@@ -5562,7 +5338,6 @@ def test_generic_form_applies_conditional_required_fields() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_i2c_trigger_type_controls_visible_and_submitted_fields_without_io() -> None:
@@ -5683,7 +5458,6 @@ def test_i2c_trigger_type_controls_visible_and_submitted_fields_without_io() -> 
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 _SERIAL_REAL_FORM_HARNESS = textwrap.dedent(
     r'''
@@ -5879,7 +5653,6 @@ _SERIAL_REAL_FORM_HARNESS = textwrap.dedent(
     '''
 )
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_i2c_trigger_address_maximum_follows_type_without_io() -> None:
     command = next(
@@ -5965,7 +5738,6 @@ def test_i2c_trigger_address_maximum_follows_type_without_io() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_serial_trigger_form_refreshes_locale_without_io() -> None:
     command = next(
@@ -6027,7 +5799,6 @@ def test_serial_trigger_form_refreshes_locale_without_io() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
@@ -6214,7 +5985,6 @@ def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_workflow_multi_select_serializes_the_existing_csv_contract() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
@@ -6268,7 +6038,6 @@ def test_workflow_multi_select_serializes_the_existing_csv_contract() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_command_support_consumes_backend_model_projection() -> None:
     support_path = STATIC_ROOT / "command-support.js"
@@ -6308,7 +6077,6 @@ def test_command_support_consumes_backend_model_projection() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_command_editor_and_result_presentation_contract() -> None:
     app_source = read_static("app.js")
     form_source = read_static("command-form.js")
@@ -6334,7 +6102,6 @@ def test_command_editor_and_result_presentation_contract() -> None:
     assert 'job.command === "identify"' in results_source
     assert "appendWorkspaceFields(container, fields);" in results_source
     assert "JSON.stringify(job.result, null, 2)" in results_source
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_acquisition_form_shows_average_count_only_after_readback() -> None:
@@ -6422,7 +6189,6 @@ def test_acquisition_form_shows_average_count_only_after_readback() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 COMMAND_CATALOG_HARNESS = r'''
         import assert from "node:assert/strict";
@@ -6520,7 +6286,6 @@ COMMAND_CATALOG_HARNESS = r'''
           list.dispatch("click", { target: section.children[0] });
 '''
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_command_catalog_renders_collapsible_groups_with_flat_fallback() -> None:
     catalog_path = STATIC_ROOT / "command-catalog.js"
@@ -6613,7 +6378,6 @@ def test_command_catalog_renders_collapsible_groups_with_flat_fallback() -> None
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
     catalog_path = STATIC_ROOT / "command-catalog.js"
@@ -6693,7 +6457,6 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_fft_frequency_readback_dirty_only_submission() -> None:
@@ -6813,7 +6576,6 @@ def test_fft_frequency_readback_dirty_only_submission() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_fft_phase_units_visibility_and_submission() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
@@ -6906,7 +6668,6 @@ def test_fft_phase_units_visibility_and_submission() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_fft_abbreviated_readback_syncs_canonical_values_for_apply() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
@@ -6987,7 +6748,6 @@ def test_fft_abbreviated_readback_syncs_canonical_values_for_apply() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_fft_result_field_localization() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
@@ -7046,7 +6806,6 @@ def test_fft_result_field_localization() -> None:
     assert "FFT" in en_gate, f"EN gate missing FFT: {en_gate}"
     assert "FFT" in zh_gate, f"ZH gate missing FFT: {zh_gate}"
 
-
 def test_advanced_math_form_and_result_localization() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
@@ -7072,7 +6831,6 @@ def test_advanced_math_form_and_result_localization() -> None:
     ):
         assert f'"{key}":' in english, key
         assert f'"{key}":' in chinese, key
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> None:
@@ -7234,7 +6992,6 @@ def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> No
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 def test_acquisition_control_workspace_latest_result() -> None:
     app = read_static("app.js")

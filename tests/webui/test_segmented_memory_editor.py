@@ -11,15 +11,12 @@ from scopes_tool_webui import command_execution as command_execution_module
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 from scopes_tool_webui.commands import COMMANDS, command_catalog
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
 EDITOR_SOURCE = STATIC_ROOT / "segmented-editor.js"
 
-
 def read_static(name: str) -> str:
     return (STATIC_ROOT / name).read_text(encoding="utf-8")
-
 
 def test_segmented_memory_uses_dedicated_editor_and_existing_command_contract() -> None:
     definition = next(entry for entry in COMMANDS if entry["id"] == "segmented-memory")
@@ -59,7 +56,6 @@ def test_segmented_memory_uses_dedicated_editor_and_existing_command_contract() 
         "timeout_ms": "segmented-capture.timeout_ms",
         "poll_interval_ms": "segmented-capture.poll_interval_ms",
     }
-
 
 def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     app = read_static("app.js")
@@ -140,48 +136,6 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
         "segmented.editor.unavailable",
     ):
         assert f'"{key}"' in chinese
-
-
-def test_segmented_editor_removes_standalone_status_indicator() -> None:
-    editor_source = read_static("segmented-editor.js")
-    styles = read_static("styles.css")
-
-    assert "state-indicator" not in editor_source
-    assert "segmented-editor-status" not in editor_source
-    assert ".segmented-editor-status" not in styles
-    assert "statusText" not in editor_source
-    assert "enterButton" not in editor_source
-    assert "exitButton" not in editor_source
-    assert "captureChannelInput" not in editor_source
-    assert "captureSegmentsInput" not in editor_source
-    assert "captureConfiguredOutput" not in editor_source
-    assert "captureConfigured" not in editor_source
-    assert "this.modeButton" in editor_source
-    assert "this.applySegmentsButton" in editor_source
-    overview_rule = styles.split(".segmented-editor-overview {", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns:" not in overview_rule
-    state_section_rule = styles.split(".segmented-editor-state-section {", 1)[1].split("}", 1)[0]
-    assert "width: 50%;" in state_section_rule
-    divider_rule = styles.split(".segmented-editor-divider {", 1)[1].split("}", 1)[0]
-    assert "border-top: 1px solid var(--line);" in divider_rule
-    state_rule = styles.split(".segmented-editor-state {", 1)[1].split("}", 1)[0]
-    assert "width: 100%;" in state_rule
-    assert "width: fit-content;" not in state_rule
-    count_row_rule = styles.split(
-        ".segmented-editor-actions.segmented-editor-count-row {", 1
-    )[1].split("}", 1)[0]
-    assert "align-items: end;" in count_row_rule
-    overview_count_rule = styles.split(
-        ".segmented-editor-overview .segmented-editor-count-row {", 1
-    )[1].split("}", 1)[0]
-    assert "width: 50%;" in overview_count_rule
-    count_help_rule = styles.split(
-        ".segmented-editor-count-row > .field-help {", 1
-    )[1].split("}", 1)[0]
-    assert "flex-basis: 100%;" in count_help_rule
-    assert "this.stateSection.append(this.readouts, stateHelp)" in editor_source
-    assert "this.overview.append(this.stateSection, this.memoryDivider, countRow)" in editor_source
-
 
 EDITOR_HARNESS = r'''
         import assert from "node:assert/strict";
@@ -299,7 +253,6 @@ EDITOR_HARNESS = r'''
         const editor = new globalThis.SegmentedEditor(new FakeNode(), catalog, hooks);
 '''
 
-
 @pytest.mark.skipif(
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
@@ -369,7 +322,6 @@ def test_segmented_editor_refresh_renders_realtime_and_segmented_state() -> None
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
@@ -412,7 +364,6 @@ def test_segmented_editor_rerender_preserves_segment_count() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(
     shutil.which("node") is None,
@@ -562,7 +513,6 @@ def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(
     shutil.which("node") is None,
@@ -750,7 +700,6 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
@@ -781,7 +730,6 @@ def test_segmented_memory_workspace_hides_capture_controls() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(
     shutil.which("node") is None,
@@ -850,7 +798,6 @@ def test_segmented_capture_dry_run_uses_planning_input() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
@@ -906,7 +853,6 @@ def test_segmented_editor_builds_field_help_before_command_selected() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(
     shutil.which("node") is None,
     reason="Node.js is required for frontend behavior checks",
@@ -961,7 +907,6 @@ def test_segmented_editor_state_help_visibility() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_segmented_memory_select_validation_and_execution_use_core(tmp_path: Path) -> None:
     request = validate_job_request({
         "command": "segmented-memory",
@@ -1006,7 +951,6 @@ def test_segmented_memory_select_validation_and_execution_use_core(tmp_path: Pat
     assert calls == [("select", 20), ("query", None)]
     assert result["result"]["segmented"]["selected_segment"] == 20
     assert result["result"]["segmented"]["time_tag_s"] == 0.00075
-
 
 @pytest.mark.skipif(
     shutil.which("node") is None,

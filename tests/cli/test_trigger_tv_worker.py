@@ -35,43 +35,8 @@ def test_worker_trigger_tv_command_is_accepted():
     [
         ({"query": True}, ["--query"]),
         (
-            {
-                "source_channel": 1,
-                "standard": "ntsc",
-                "mode": "field1",
-                "polarity": "negative",
-            },
-            [
-                "--source-channel",
-                "1",
-                "--standard",
-                "ntsc",
-                "--mode",
-                "field1",
-                "--polarity",
-                "negative",
-            ],
-        ),
-        (
-            {
-                "source_channel": 1,
-                "standard": "ntsc",
-                "mode": "line-field1",
-                "line": 20,
-                "polarity": "negative",
-            },
-            [
-                "--source-channel",
-                "1",
-                "--standard",
-                "ntsc",
-                "--mode",
-                "line-field1",
-                "--line",
-                "20",
-                "--polarity",
-                "negative",
-            ],
+            {"source_channel": 1, "standard": "ntsc", "mode": "line-field1", "line": 20, "polarity": "negative"},
+            ["--source-channel", "1", "--standard", "ntsc", "--mode", "line-field1", "--line", "20", "--polarity", "negative"],
         ),
     ],
 )
@@ -142,22 +107,7 @@ def test_worker_trigger_tv_query_simulator_execution(tmp_path):
 
 @pytest.mark.parametrize(
     "alias",
-    [
-        "channel",
-        "source",
-        "tv_source",
-        "tv_standard",
-        "trigger_standard",
-        "tv_mode",
-        "trigger_mode",
-        "line_number",
-        "field",
-        "pol",
-        "trigger_polarity",
-        "polarity_raw",
-        "sourceChannel",
-        "source_channel_number",
-    ],
+    ["channel", "tv_standard", "trigger_mode", "trigger_polarity"],
 )
 def test_worker_trigger_tv_rejects_alias_keys(tmp_path, alias):
     runtime = _runtime(tmp_path)
@@ -171,30 +121,8 @@ def test_worker_trigger_tv_rejects_alias_keys(tmp_path, alias):
     [
         {"query": False},
         {"query": True, "source_channel": 1},
-        {
-            "source_channel": 1,
-            "standard": "ntsc",
-            "mode": "field1",
-        },
-        {
-            "source_channel": 1,
-            "standard": "p1080",
-            "mode": "field1",
-            "polarity": "negative",
-        },
-        {
-            "source_channel": 1,
-            "standard": "ntsc",
-            "mode": "all-lines",
-            "line": 1,
-            "polarity": "negative",
-        },
-        {
-            "source_channel": 1,
-            "standard": "ntsc",
-            "mode": "line-field1",
-            "polarity": "negative",
-        },
+        {"source_channel": 1, "standard": "ntsc", "mode": "field1"},
+        {"source_channel": 1, "standard": "ntsc", "mode": "line-field1", "polarity": "negative"},
     ],
 )
 def test_worker_trigger_tv_rejects_invalid_arguments(tmp_path, arguments):

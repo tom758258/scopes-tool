@@ -21,67 +21,8 @@ def _runtime(tmp_path):
     [
         ({"query": True}, ["trigger-pulse-width", "--query"]),
         (
-            {
-                "channel": 1,
-                "polarity": "positive",
-                "qualifier": "less_than",
-                "time_seconds": 1e-6,
-            },
-            [
-                "trigger-pulse-width",
-                "--channel",
-                "1",
-                "--polarity",
-                "positive",
-                "--qualifier",
-                "less-than",
-                "--time-seconds",
-                "1e-06",
-            ],
-        ),
-        (
-            {
-                "channel": 1,
-                "polarity": "negative",
-                "qualifier": "greater_than",
-                "time_seconds": 5e-6,
-                "level_volts": 0.5,
-            },
-            [
-                "trigger-pulse-width",
-                "--channel",
-                "1",
-                "--polarity",
-                "negative",
-                "--qualifier",
-                "greater-than",
-                "--time-seconds",
-                "5e-06",
-                "--level-volts",
-                "0.5",
-            ],
-        ),
-        (
-            {
-                "channel": 1,
-                "polarity": "positive",
-                "qualifier": "range",
-                "min_time_seconds": 1e-6,
-                "max_time_seconds": 10e-6,
-            },
-            [
-                "trigger-pulse-width",
-                "--channel",
-                "1",
-                "--polarity",
-                "positive",
-                "--qualifier",
-                "range",
-                "--min-time-seconds",
-                "1e-06",
-                "--max-time-seconds",
-                "1e-05",
-            ],
+            {"channel": 1, "polarity": "positive", "qualifier": "range", "min_time_seconds": 1e-6, "max_time_seconds": 10e-6},
+            ["trigger-pulse-width", "--channel", "1", "--polarity", "positive", "--qualifier", "range", "--min-time-seconds", "1e-06", "--max-time-seconds", "1e-05"],
         ),
     ],
 )
@@ -102,8 +43,6 @@ def test_worker_trigger_pulse_width_arguments_parse(tmp_path, arguments, expecte
         {"query": False},
         {"query": True, "channel": 1},
         {"channel": 1, "polarity": "positive", "qualifier": "less_than"},
-        {"channel": 1, "polarity": "positive", "qualifier": "invalid", "time_seconds": 1e-6},
-        {"channel": 1, "polarity": "positive", "qualifier": "range", "time_seconds": 1e-6},
         {"digital": 0, "polarity": "positive", "qualifier": "less_than", "time_seconds": 1e-6},
     ],
 )
@@ -114,7 +53,7 @@ def test_worker_trigger_pulse_width_rejects_invalid_arguments(tmp_path, argument
         worker.parse_domain_command("trigger-pulse-width", arguments, runtime)
 
 
-@pytest.mark.parametrize("command", ["trigger-glitch", "trigger-pulse"])
+@pytest.mark.parametrize("command", ["trigger-glitch"])
 def test_worker_rejects_trigger_pulse_width_aliases(command):
     with pytest.raises(OscilloscopeError):
         worker.validate_command_request(

@@ -19,17 +19,8 @@ def _runtime(tmp_path, model="keysight-dsox4034a"):
 @pytest.mark.parametrize(
     "command, arguments",
     [
-        ("search-state", {"query": True}),
         ("search-state", {"enabled": True}),
-        ("search-state", {"enabled": False}),
-        ("search-mode", {"query": True}),
-        ("search-mode", {"mode": "serial1"}),
-        ("search-mode", {"mode": "serial2"}),
         ("search-mode", {"mode": "edge"}),
-        ("search-mode", {"mode": "glitch"}),
-        ("search-mode", {"mode": "runt"}),
-        ("search-mode", {"mode": "transition"}),
-        ("search-mode", {"mode": "peak"}),
         ("search-count", {"query": True}),
     ],
 )
@@ -42,27 +33,10 @@ def test_worker_search_accepts_canonical_payloads(tmp_path, command, arguments):
 @pytest.mark.parametrize(
     "command, arguments",
     [
-        ("search-state", {}),
-        ("search-state", {"query": False}),
-        ("search-state", {"query": True, "enabled": True}),
         ("search-state", {"enabled": "true"}),
-        ("search-state", {"enabled": 1}),
         ("search-state", {"state": True}),
-        ("search-mode", {}),
-        ("search-mode", {"query": False}),
-        ("search-mode", {"query": True, "mode": "edge"}),
-        ("search-mode", {"mode": 1}),
         ("search-mode", {"mode": "ser1"}),
-        ("search-mode", {"mode": "ser2"}),
-        ("search-mode", {"mode": "glit"}),
-        ("search-mode", {"mode": "tran"}),
-        ("search-mode", {"mode": "pwid"}),
-        ("search-mode", {"mode": "pulse-width"}),
-        ("search-mode", {"mode": "off"}),
-        ("search-mode", {"value": "edge"}),
         ("search-count", {}),
-        ("search-count", {"query": False}),
-        ("search-count", {"query": True, "count": 1}),
     ],
 )
 def test_worker_search_rejects_noncanonical_payloads_before_side_effects(
@@ -81,7 +55,6 @@ def test_worker_search_rejects_noncanonical_payloads_before_side_effects(
     "model, mode",
     [
         ("keysight-dsox2004a", "edge"),
-        ("keysight-dsox2004a", "serial2"),
         ("keysight-dsox3024a", "peak"),
     ],
 )

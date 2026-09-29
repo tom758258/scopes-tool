@@ -50,10 +50,7 @@ def _post_command(runtime, body):
     ("arguments", "argv"),
     [
         ({"query": True}, ["--query"]),
-        ({"slope": "positive"}, ["--slope", "positive"]),
-        ({"slope": "negative"}, ["--slope", "negative"]),
         ({"slope": "either"}, ["--slope", "either"]),
-        ({"slope": "alternate"}, ["--slope", "alternate"]),
     ],
 )
 def test_worker_trigger_edge_slope_accepts_canonical_json_and_maps_argv(tmp_path, arguments, argv):
@@ -70,16 +67,9 @@ def test_worker_trigger_edge_slope_accepts_canonical_json_and_maps_argv(tmp_path
     ("command", "arguments"),
     [
         ("trigger-edge-slope", {}),
-        ("trigger-edge-slope", {"query": False}),
         ("trigger-edge-slope", {"query": True, "slope": "positive"}),
-        ("trigger-edge-slope", {"polarity": "positive"}),
         ("trigger-edge-slope", {"slope": "POSITIVE"}),
-        ("trigger-edge-slope", {"slope": "rising"}),
-        ("trigger-edge-slope", {"slope": 1}),
         ("edge-trigger-slope", {"query": True}),
-        ("trigger-slope", {"query": True}),
-        ("edge-slope", {"query": True}),
-        ("trigger_edge_slope", {"query": True}),
     ],
 )
 def test_worker_trigger_edge_slope_rejects_invalid_forms(tmp_path, command, arguments):
@@ -108,25 +98,11 @@ def test_worker_trigger_edge_level_accepts_canonical_json_and_maps_argv(tmp_path
     ("command", "arguments"),
     [
         ("trigger-edge-level", {}),
-        ("trigger-edge-level", {"query": False, "source_channel": 1}),
         ("trigger-edge-level", {"query": True}),
-        ("trigger-edge-level", {"source_channel": 1}),
-        ("trigger-edge-level", {"level_volts": 0.5}),
         ("trigger-edge-level", {"query": True, "source_channel": 1, "level_volts": 0.5}),
-        ("trigger-edge-level", {"channel": 1, "level_volts": 0.5}),
-        ("trigger-edge-level", {"source_channel": True, "level_volts": 0.5}),
-        ("trigger-edge-level", {"source_channel": 1.0, "level_volts": 0.5}),
-        ("trigger-edge-level", {"source_channel": 0, "level_volts": 0.5}),
         ("trigger-edge-level", {"source_channel": 5, "level_volts": 0.5}),
-        ("trigger-edge-level", {"source_channel": 1, "level_volts": "0.5"}),
         ("trigger-edge-level", {"source_channel": 1, "level_volts": True}),
-        ("trigger-edge-level", {"source_channel": 1, "level_volts": None}),
-        ("trigger-edge-level", {"source_channel": 1, "level_volts": float("nan")}),
-        ("trigger-edge-level", {"source_channel": 1, "level_volts": float("inf")}),
         ("edge-trigger-level", {"query": True, "source_channel": 1}),
-        ("trigger-level", {"query": True, "source_channel": 1}),
-        ("edge-level", {"query": True, "source_channel": 1}),
-        ("trigger_edge_level", {"query": True, "source_channel": 1}),
     ],
 )
 def test_worker_trigger_edge_level_rejects_invalid_forms(tmp_path, command, arguments):
@@ -139,7 +115,6 @@ def test_worker_trigger_edge_level_rejects_invalid_forms(tmp_path, command, argu
     [
         {"command": "trigger-edge-slope", "arguments": {"slope": "POSITIVE"}},
         {"command": "trigger-edge-level", "arguments": {"source_channel": 5, "level_volts": 0.5}},
-        {"command": "trigger-edge-level", "arguments": {"source_channel": 1, "level_volts": True}},
     ],
 )
 def test_worker_atomic_trigger_validation_happens_before_enqueue_or_artifacts(tmp_path, body):

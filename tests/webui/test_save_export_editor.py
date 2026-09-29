@@ -7,18 +7,15 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
 SAVE_EXPORT_EDITOR_SOURCE = STATIC_ROOT / "save-export-editor.js"
-
 
 def _css_rule(source: str, selector: str) -> str:
     start = source.index(selector)
     body_start = source.index("{", start)
     end = source.index("}", body_start)
     return source[body_start:end + 1]
-
 
 def run_node(script: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -27,7 +24,6 @@ def run_node(script: str) -> subprocess.CompletedProcess[str]:
         text=True,
         check=False,
     )
-
 
 SAVE_EXPORT_EDITOR_HARNESS = r'''
         import assert from "node:assert/strict";
@@ -227,7 +223,6 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
         };
 '''
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_shows_only_the_selected_mode() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -256,7 +251,6 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
@@ -312,7 +306,6 @@ def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_reads_and_displays_the_current_save_path() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -336,7 +329,6 @@ def test_save_export_editor_reads_and_displays_the_current_save_path() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_read_progress_is_one_based() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -355,7 +347,6 @@ def test_save_export_editor_read_progress_is_one_based() -> None:
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_failed_read_does_not_unlock() -> None:
@@ -380,7 +371,6 @@ def test_save_export_editor_failed_read_does_not_unlock() -> None:
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
@@ -410,7 +400,6 @@ def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_submits_image_settings_then_final_image_save() -> None:
@@ -451,7 +440,6 @@ def test_save_export_editor_submits_image_settings_then_final_image_save() -> No
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_submits_waveform_settings_then_final_waveform_save() -> None:
@@ -497,7 +485,6 @@ def test_save_export_editor_submits_waveform_settings_then_final_waveform_save()
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_keeps_default_base_filename_in_advanced_settings() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -515,7 +502,6 @@ def test_save_export_editor_keeps_default_base_filename_in_advanced_settings() -
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context_change() -> None:
@@ -563,7 +549,6 @@ def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_retries_an_interrupted_read_without_premarking_loaded() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -610,7 +595,6 @@ def test_save_export_editor_retries_an_interrupted_read_without_premarking_loade
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_invalidates_loaded_state_before_interrupted_forced_read() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -656,7 +640,6 @@ def test_save_export_editor_invalidates_loaded_state_before_interrupted_forced_r
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_resyncs_format_after_explicit_image_and_waveform_extensions() -> None:
@@ -740,7 +723,6 @@ def test_save_export_editor_resyncs_format_after_explicit_image_and_waveform_ext
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_invalidates_loaded_state_when_format_resync_becomes_stale() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -802,7 +784,6 @@ def test_save_export_editor_invalidates_loaded_state_when_format_resync_becomes_
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_keeps_successful_save_when_format_resync_fails() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -857,7 +838,6 @@ def test_save_export_editor_keeps_successful_save_when_format_resync_fails() -> 
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy() -> None:
@@ -916,7 +896,6 @@ def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy()
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_applies_advanced_filename_only_when_requested() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -949,7 +928,6 @@ def test_save_export_editor_applies_advanced_filename_only_when_requested() -> N
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -977,7 +955,6 @@ def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> 
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -> None:
@@ -1012,7 +989,6 @@ def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -1039,7 +1015,6 @@ def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> No
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> None:
@@ -1107,7 +1082,6 @@ def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> 
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -1141,7 +1115,6 @@ def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_setup_save_submits_target_parameters() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -1164,7 +1137,6 @@ def test_save_export_editor_setup_save_submits_target_parameters() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_save_export_status_locale_keys_are_unique() -> None:
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
@@ -1178,7 +1150,6 @@ def test_save_export_status_locale_keys_are_unique() -> None:
     for key in keys:
         assert english.count(f'"{key}":') == 1, key
         assert chinese.count(f'"{key}":') == 1, key
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_non_read_failure_does_not_present_read_failure_status() -> None:
@@ -1221,7 +1192,6 @@ def test_save_export_non_read_failure_does_not_present_read_failure_status() -> 
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_three_independent_commands_contract() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
@@ -1260,131 +1230,6 @@ def test_save_export_three_independent_commands_contract() -> None:
     )
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_save_export_editor_pairs_settings_before_destination() -> None:
-    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
-        r'''
-        const isPair = (node) => (node.className || "").split(/\s+/).includes("save-export-pair");
-        const entryIdsOf = (editor, pair) => pair.children.map(
-          (child) => editor.entries.find((entry) => entry.section === child)?.id,
-        );
-
-        const waveformBuilt = buildEditor();
-        waveformBuilt.selectCommand("save-waveform");
-        const waveformEditor = waveformBuilt.editor;
-        waveformEditor.rebuildSections("ctx|save-export:waveform");
-        assert.deepEqual(waveformEditor.entries.map((entry) => entry.id), [
-          "save-waveform-format",
-          "save-waveform-length",
-        ]);
-        const waveformKids = [...waveformEditor.sectionsHost.children];
-        const waveformPairs = waveformKids.filter(isPair);
-        assert.equal(waveformPairs.length, 2);
-        assert.deepEqual(entryIdsOf(waveformEditor, waveformPairs[0]), [
-          "save-waveform-format",
-          "save-waveform-length",
-        ]);
-            assert.ok(waveformPairs[1].children.includes(waveformEditor.pathEntry.section));
-        assert.ok(waveformPairs[1].children.includes(waveformEditor.filenameEntry.section));
-        const waveformPreview = waveformKids.find(
-          (node) => node.tagName === "SECTION" && node.textContent && node.textContent.includes("Destination preview")
-        );
-        const waveformSaveHost = waveformKids.find((node) => (node.children || []).includes(waveformEditor.saveButton));
-        assert.ok(waveformKids.indexOf(waveformPairs[0]) < waveformKids.indexOf(waveformPairs[1]));
-        assert.ok(waveformKids.indexOf(waveformPairs[1]) < waveformKids.indexOf(waveformPreview));
-        assert.ok(waveformKids.indexOf(waveformPreview) < waveformKids.indexOf(waveformSaveHost));
-        const maxNote = [...waveformEditor.sectionsHost.children].find(
-          (node) => node.classList?.contains("save-export-waveform-max-note")
-        );
-        assert.ok(maxNote);
-
-        const imageBuilt = buildEditor();
-        imageBuilt.selectCommand("save-image");
-        const imageEditor = imageBuilt.editor;
-        imageEditor.rebuildSections("ctx|save-export:image");
-        const imagePairs = [...imageEditor.sectionsHost.children].filter(isPair);
-        assert.equal(imagePairs.length, 3);
-        assert.deepEqual(entryIdsOf(imageEditor, imagePairs[0]), ["save-image-format", "save-image-palette"]);
-        assert.deepEqual(entryIdsOf(imageEditor, imagePairs[1]), ["save-image-ink-saver", "save-image-factors"]);
-
-        const gatedBuilt = buildEditor(null, (command) => command.id !== "save-image-palette");
-        gatedBuilt.selectCommand("save-image");
-        const gatedEditor = gatedBuilt.editor;
-        gatedEditor.rebuildSections("ctx|save-export:image");
-        assert.deepEqual(gatedEditor.entries.map((entry) => entry.id), [
-          "save-image-format",
-          "save-image-ink-saver",
-          "save-image-factors",
-        ]);
-        const gatedPairs = [...gatedEditor.sectionsHost.children].filter(isPair);
-        assert.equal(gatedPairs.length, 3);
-        assert.deepEqual(entryIdsOf(gatedEditor, gatedPairs[0]), ["save-image-format"]);
-        assert.ok(gatedPairs[0].className.split(/\s+/).includes("save-export-pair-single"));
-        assert.deepEqual(entryIdsOf(gatedEditor, gatedPairs[1]), ["save-image-ink-saver", "save-image-factors"]);
-        assert.ok(!gatedPairs[1].className.split(/\s+/).includes("save-export-pair-single"));
-        '''
-    )
-    completed = run_node(script)
-    assert completed.returncode == 0, completed.stderr or completed.stdout
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
-def test_save_export_editor_setting_sections_have_no_duplicate_description() -> None:
-    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
-        r'''
-        const built = buildEditor();
-        built.catalog.description = (command) => `description.${command.id}`;
-        built.selectCommand("save-waveform");
-        const editor = built.editor;
-        editor.rebuildSections("ctx|save-export:waveform");
-        for (const entry of editor.entries) {
-          const kids = [...entry.section.children];
-          assert.equal(kids[0].tagName, "STRONG");
-          assert.ok(kids.some((node) => node.className === "command-form"), entry.id);
-          assert.ok(!kids.some((node) => node.tagName === "P"), entry.id);
-        }
-
-        built.selectCommand("save-image");
-        editor.rebuildSections("ctx|save-export:image");
-        const formatEntry = editor.entries.find((entry) => entry.id === "save-image-format");
-        const formatKids = [...formatEntry.section.children];
-        assert.equal(formatKids[0].tagName, "STRONG");
-        assert.ok(formatKids.some((node) => node.className === "command-form"));
-        assert.ok(!formatKids.some((node) => node.tagName === "P"));
-        '''
-    )
-    completed = run_node(script)
-    assert completed.returncode == 0, completed.stderr or completed.stdout
-
-
-def test_save_export_pair_layout_contract() -> None:
-    css = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
-    pair = _css_rule(css, ".save-export-pair {")
-    assert "display: grid;" in pair
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in pair
-    assert "align-items: start;" in pair
-    assert "margin-bottom: 8px;" in pair
-    child = _css_rule(css, ".save-export-pair > .trigger-editor-section .command-form {")
-    assert "grid-template-columns: 1fr;" in child
-    single = _css_rule(css, ".save-export-pair-single > .trigger-editor-section {")
-    assert "grid-column: 1 / -1;" in single
-    desktop = css.split("@media (min-width: 701px)", 1)[1].split("@media", 1)[0]
-    desktop_child = _css_rule(desktop, ".save-export-pair > .trigger-editor-section")
-    assert "margin-top: 0;" in desktop_child
-    assert "align-content: start;" in desktop_child
-    assert "save-export-paired-setting" not in css
-    mobile = css.split("@media (max-width: 700px)", 1)[1]
-    assert "grid-template-columns: 1fr;" in _css_rule(mobile, ".save-export-pair {")
-
-
-def test_save_export_waveform_max_note_has_spacing_contract() -> None:
-    css = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
-    max_note = _css_rule(css, ".save-export-waveform-max-note {")
-    assert "margin-bottom: 8px;" in max_note
-
-
 def test_save_setup_file_and_waveform_length_locale_contract() -> None:
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")

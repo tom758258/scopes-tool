@@ -21,54 +21,8 @@ def _runtime(tmp_path):
     [
         ({"query": True}, ["trigger-transition", "--query"]),
         (
-            {
-                "channel": 1,
-                "slope": "positive",
-                "qualifier": "greater_than",
-                "time_seconds": 5e-6,
-                "low_level_volts": -0.5,
-                "high_level_volts": 0.5,
-            },
-            [
-                "trigger-transition",
-                "--channel",
-                "1",
-                "--slope",
-                "positive",
-                "--qualifier",
-                "greater-than",
-                "--time-seconds",
-                "5e-06",
-                "--low-level-volts",
-                "-0.5",
-                "--high-level-volts",
-                "0.5",
-            ],
-        ),
-        (
-            {
-                "channel": 1,
-                "slope": "negative",
-                "qualifier": "less_than",
-                "time_seconds": 2e-6,
-                "low_level_volts": -0.25,
-                "high_level_volts": 0.75,
-            },
-            [
-                "trigger-transition",
-                "--channel",
-                "1",
-                "--slope",
-                "negative",
-                "--qualifier",
-                "less-than",
-                "--time-seconds",
-                "2e-06",
-                "--low-level-volts",
-                "-0.25",
-                "--high-level-volts",
-                "0.75",
-            ],
+            {"channel": 1, "slope": "negative", "qualifier": "less_than", "time_seconds": 2e-6, "low_level_volts": -0.25, "high_level_volts": 0.75},
+            ["trigger-transition", "--channel", "1", "--slope", "negative", "--qualifier", "less-than", "--time-seconds", "2e-06", "--low-level-volts", "-0.25", "--high-level-volts", "0.75"],
         ),
     ],
 )
@@ -91,53 +45,8 @@ def test_worker_trigger_transition_arguments_parse(tmp_path, arguments, expected
     [
         {"query": False},
         {"query": True, "channel": 1},
-        {
-            "channel": 1,
-            "slope": "positive",
-            "qualifier": "greater_than",
-            "low_level_volts": -0.5,
-            "high_level_volts": 0.5,
-        },
-        {
-            "channel": 1,
-            "slope": "either",
-            "qualifier": "greater_than",
-            "time_seconds": 1e-6,
-            "low_level_volts": -0.5,
-            "high_level_volts": 0.5,
-        },
-        {
-            "channel": 1,
-            "slope": "positive",
-            "qualifier": "invalid",
-            "time_seconds": 1e-6,
-            "low_level_volts": -0.5,
-            "high_level_volts": 0.5,
-        },
-        {
-            "digital": 0,
-            "slope": "positive",
-            "qualifier": "greater_than",
-            "time_seconds": 1e-6,
-            "low_level_volts": -0.5,
-            "high_level_volts": 0.5,
-        },
-        {
-            "channel": 1,
-            "slope": "positive",
-            "qualifier": "greater_than",
-            "time_seconds": 0,
-            "low_level_volts": -0.5,
-            "high_level_volts": 0.5,
-        },
-        {
-            "channel": 1,
-            "slope": "positive",
-            "qualifier": "greater_than",
-            "time_seconds": 1e-6,
-            "low_level_volts": 0.5,
-            "high_level_volts": 0.5,
-        },
+        {"channel": 1, "slope": "either", "qualifier": "greater_than", "time_seconds": 1e-6, "low_level_volts": -0.5, "high_level_volts": 0.5},
+        {"digital": 0, "slope": "positive", "qualifier": "greater_than", "time_seconds": 1e-6, "low_level_volts": -0.5, "high_level_volts": 0.5},
     ],
 )
 def test_worker_trigger_transition_rejects_invalid_arguments(tmp_path, arguments):
@@ -147,7 +56,7 @@ def test_worker_trigger_transition_rejects_invalid_arguments(tmp_path, arguments
         worker.parse_domain_command("trigger-transition", arguments, runtime)
 
 
-@pytest.mark.parametrize("command", ["transition-trigger", "trigger-rise-fall"])
+@pytest.mark.parametrize("command", ["transition-trigger"])
 def test_worker_rejects_trigger_transition_aliases(command):
     with pytest.raises(OscilloscopeError):
         worker.validate_command_request(

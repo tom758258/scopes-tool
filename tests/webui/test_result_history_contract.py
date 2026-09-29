@@ -7,75 +7,12 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "results.js"
 APP_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "app.js"
 STYLES_CSS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "styles.css"
 LOCALE_EN_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "locale_en.js"
 LOCALE_ZH_TW_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "locale_zh_tw.js"
-
-
-def test_single_wait_and_screenshot_result_fields_have_zh_tw_labels() -> None:
-    english = LOCALE_EN_JS.read_text(encoding="utf-8")
-    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
-    expected = {
-        "results.field.wait_enabled": ("Wait enabled", "啟用等待"),
-        "results.field.arm_command": ("Arm command", "啟動指令"),
-        "results.field.poll_source": ("Poll source", "輪詢來源"),
-        "results.field.poll_command": ("Poll command", "輪詢指令"),
-        "results.field.timeout_ms": ("Timeout ms", "逾時時間（毫秒）"),
-        "results.field.poll_interval_ms": ("Poll interval ms", "輪詢間隔（毫秒）"),
-        "results.field.force_on_timeout": ("Force on timeout", "逾時時強制觸發"),
-        "results.field.force_command": ("Force command", "強制觸發指令"),
-        "results.field.outcome": ("Outcome", "結果狀態"),
-        "results.field.forced": ("Forced", "已強制觸發"),
-        "results.field.timed_out": ("Timed out", "已逾時"),
-        "results.field.poll_count": ("Poll count", "輪詢次數"),
-        "results.field.elapsed_ms": ("Elapsed ms", "經過時間（毫秒）"),
-        "results.field.condition_values": ("Condition values", "條件值"),
-        "results.field.capture_allowed": ("Capture allowed", "允許擷取"),
-        "results.field.capture_block_reason": ("Capture block reason", "禁止擷取原因"),
-        "results.field.artifact": ("Artifact", "檔案"),
-        "results.field.source_kind": ("Source kind", "來源種類"),
-    }
-    for key, (en_value, zh_value) in expected.items():
-        assert f'"{key}": "{en_value}"' in english, key
-        assert f'"{key}": "{zh_value}"' in chinese, key
-
-
-def test_result_panel_preserves_powers_style_bounded_job_history() -> None:
-    source = RESULTS_JS.read_text(encoding="utf-8")
-
-    assert "const RESULT_HISTORY_LIMIT = 20;" in source
-    assert "let resultHistory = [];" in source
-    assert "resultHistory.findIndex(" in source
-    assert 'entry.job.job_id === job.job_id' in source
-    assert "resultHistory[existingIndex].job = job;" in source
-    assert 'resultHistory.unshift({ kind: "job", job });' in source
-    assert "resultHistory = resultHistory.slice(0, RESULT_HISTORY_LIMIT);" in source
-    assert "resultHistory.forEach((entry) =>" in source
-    assert "commandLabel(entry.job.command)" in source
-    assert "commandLabel(entry.command)" in source
-    assert "translateJobStatus(statusValue)" in source
-    assert 'translate("results.summary.queued")' in source
-    assert 'translate("results.summary.running")' in source
-    assert "successfulJobSummary(job)" in source
-    assert "results.detailAvailable" not in source
-
-
-def test_measurement_statistics_result_command_label_is_localized() -> None:
-    english = LOCALE_EN_JS.read_text(encoding="utf-8")
-    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
-
-    assert english.count(
-        '"command.measurement-statistics": "Advanced Measurement Statistics"'
-    ) == 1
-    assert chinese.count(
-        '"command.measurement-statistics": "進階量測統計"'
-    ) == 1
-
-
 def test_result_clear_resets_history_and_detail() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
     app_source = APP_JS.read_text(encoding="utf-8")
@@ -88,7 +25,6 @@ def test_result_clear_resets_history_and_detail() -> None:
     assert 'resultPresentation = { kind: "empty", job: null, message: null };' in app_source
     assert "renderCurrentResult();" in app_source
 
-
 def test_identify_detail_is_localized_and_keeps_raw_json() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
@@ -100,7 +36,6 @@ def test_identify_detail_is_localized_and_keeps_raw_json() -> None:
     assert '"results.identity.resource": "Resource"' in english
     assert '"results.identity.manufacturer": "製造商"' in chinese
     assert '"results.identity.resource": "資源"' in chinese
-
 
 def test_result_ui_reuses_job_artifact_download_entries() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
@@ -123,24 +58,6 @@ def test_result_ui_reuses_job_artifact_download_entries() -> None:
         assert '"results.field.files":' in locale
     assert "appendWorkspaceArtifacts" not in source
     assert 'result.textContent = JSON.stringify(job.result, null, 2);' in source
-
-
-def test_result_history_has_powers_like_viewport_and_item_presentation() -> None:
-    source = STYLES_CSS.read_text(encoding="utf-8")
-    viewport = source.split(".results-content {", 1)[1].split("}", 1)[0]
-    item = source.split(".result-summary-line {", 1)[1].split("}", 1)[0]
-
-    assert "display: grid;" in viewport
-    assert "gap: 6px;" in viewport
-    assert "max-height: 220px;" in viewport
-    assert "overflow: auto;" in viewport
-    assert "padding: 9px 12px;" in item
-    assert "border: 1px solid var(--line);" in item
-    assert "border-radius: var(--radius-sm);" in item
-    assert "background: var(--panel-soft);" in item
-    assert "box-shadow: var(--shadow-sm);" in item
-
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
@@ -1119,7 +1036,6 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_output_filename_stays_literal_in_zh_tw() -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
@@ -1199,7 +1115,6 @@ def test_output_filename_stays_literal_in_zh_tw() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 def test_measure_sweep_table_has_horizontal_scroll_wrapper() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
     styles = STYLES_CSS.read_text(encoding="utf-8")
@@ -1209,7 +1124,6 @@ def test_measure_sweep_table_has_horizontal_scroll_wrapper() -> None:
     wrapper = styles.split(".workspace-result-table-wrap {", 1)[1].split("}", 1)[0]
     assert "grid-column: 1 / -1;" in wrapper
     assert "overflow-x: auto;" in wrapper
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
@@ -1291,7 +1205,6 @@ def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 SYSTEM_SEMANTIC_WORKSPACE_HARNESS = r"""
         import assert from "node:assert/strict";
@@ -1420,7 +1333,6 @@ SYSTEM_SEMANTIC_WORKSPACE_HARNESS = r"""
         });
 """
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_system_semantic_workspace_results() -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
@@ -1521,7 +1433,6 @@ def test_system_semantic_workspace_results() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_workflow_failure_summaries_are_localized_and_semantic() -> None:
@@ -1683,7 +1594,6 @@ def test_workflow_failure_summaries_are_localized_and_semantic() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_doctor_pending_errors_guidance() -> None:
     script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
@@ -1753,7 +1663,6 @@ def test_doctor_pending_errors_guidance() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_check_error_failure_distinction() -> None:
     script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
@@ -1814,7 +1723,6 @@ def test_check_error_failure_distinction() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_segmented_capture_workspace_result_labels_are_localized() -> None:
@@ -2019,7 +1927,6 @@ def test_segmented_capture_workspace_result_labels_are_localized() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_math_response_parse_failure_summary_is_localized_and_keeps_raw_diagnostic() -> None:

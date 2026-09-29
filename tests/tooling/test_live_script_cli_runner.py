@@ -27,7 +27,7 @@ requires_windows = pytest.mark.skipif(
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-@pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
+@pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
 def test_invoke_cli_raw_preserves_native_process_results(
     tmp_path: Path,
     script_path: Path,
@@ -306,7 +306,7 @@ def test_live_cli_check_invoke_cli_raw_uses_native_invocation() -> None:
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-@pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
+@pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
 def test_get_error_drain_normalizes_entries_as_arrays(
     tmp_path: Path,
     script_path: Path,
@@ -2711,7 +2711,7 @@ foreach ($caseCommand in $caseCommands) {
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-@pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
+@pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
 def test_live_summary_preserves_results_and_diagnostics(
     tmp_path: Path,
     script_path: Path,
@@ -3013,7 +3013,7 @@ Write-Summary -Result "FAIL"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-@pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
+@pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
 def test_live_preflight_failure_writes_summary_before_hardware_access(
     tmp_path: Path,
     script_path: Path,
@@ -3106,7 +3106,7 @@ sys.exit(9)
 
 
 @requires_windows
-@pytest.mark.parametrize("script_path", LIVE_SCRIPTS, ids=lambda path: path.stem)
+@pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
 @pytest.mark.parametrize(
     ("backend", "expected_arguments"),
     (

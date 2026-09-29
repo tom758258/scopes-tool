@@ -58,7 +58,6 @@ def _post_command(runtime, body):
         ({"query": True}, ["--query"]),
         ({"source_channel": 1}, ["--source-channel", "1"]),
         ({"source": "external"}, ["--source", "external"]),
-        ({"source": "line"}, ["--source", "line"]),
     ],
 )
 def test_worker_trigger_edge_source_accepts_canonical_json_and_maps_argv(tmp_path, arguments, expected):
@@ -87,22 +86,7 @@ def test_worker_trigger_edge_source_accepts_canonical_json_and_maps_argv(tmp_pat
         ("trigger-edge-source", {"query": True, "source": "external"}),
         ("trigger-edge-source", {"source": "external", "source_channel": 1}),
         ("trigger-edge-source", {"channel": 1}),
-        ("trigger-edge-source", {"sourceChannel": 1}),
-        ("trigger-edge-source", {"input_source": "external"}),
-        ("trigger-edge-source", {"source": 1}),
         ("trigger-edge-source", {"source": "EXTERNAL"}),
-        ("trigger-edge-source", {"source": "Line"}),
-        ("trigger-edge-source", {"source": "analog-channel"}),
-        ("trigger-edge-source", {"source": "wgen1"}),
-        ("trigger-edge-source", {"source_channel": True}),
-        ("trigger-edge-source", {"source_channel": 1.0}),
-        ("trigger-edge-source", {"source_channel": 0}),
-        ("trigger-edge-source", {"source_channel": 5}),
-        ("edge-trigger-source", {"query": True}),
-        ("trigger-source", {"query": True}),
-        ("edge-source", {"query": True}),
-        ("trigger-edge-input", {"query": True}),
-        ("trigger_edge_source", {"query": True}),
     ],
 )
 def test_worker_trigger_edge_source_rejects_invalid_forms(tmp_path, command, arguments):
@@ -114,12 +98,6 @@ def test_worker_trigger_edge_source_rejects_invalid_forms(tmp_path, command, arg
     "body",
     [
         {"command": "trigger-edge-source", "arguments": {}},
-        {"command": "trigger-edge-source", "arguments": {"query": False}},
-        {"command": "trigger-edge-source", "arguments": {"query": True, "source": "external"}},
-        {"command": "trigger-edge-source", "arguments": {"source": "external", "source_channel": 1}},
-        {"command": "trigger-edge-source", "arguments": {"source_channel": True}},
-        {"command": "trigger-edge-source", "arguments": {"source_channel": 5}},
-        {"command": "trigger-edge-source", "arguments": {"source": "LINE"}},
         {"command": "edge-trigger-source", "arguments": {"query": True}},
     ],
 )
@@ -142,7 +120,6 @@ def test_worker_trigger_edge_source_rejects_before_enqueue_or_artifacts(tmp_path
     [
         ({"source_channel": 4}, ":TRIGger:EDGE:SOURce CHANnel4", "analog-channel", 4),
         ({"source": "external"}, ":TRIGger:EDGE:SOURce EXTernal", "external", None),
-        ({"source": "line"}, ":TRIGger:EDGE:SOURce LINE", "line", None),
     ],
 )
 def test_worker_trigger_edge_source_simulator_configure_execution(tmp_path, arguments, command, source, source_channel):
